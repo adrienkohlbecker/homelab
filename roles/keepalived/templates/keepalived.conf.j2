@@ -1,3 +1,9 @@
+global_defs {
+  # Run scripts as nobody unless a vrrp_script explicitly opts up.
+  enable_script_security
+  script_user nobody
+}
+
 vrrp_script adguard_healthcheck {
   script    /usr/local/bin/adguard_healthcheck
   interval  1
@@ -57,7 +63,7 @@ vrrp_instance dns {
   # No explicit track_interface: keepalived tracks the instance's own
   # `interface` for link state, so re-listing eth0 is redundant — keepalived
   # ignores it ("since own interface") and the warning makes `keepalived -t`
-  # exit non-zero, failing the ExecReload validate gate. With use_vmac the
+  # reject the rendered configuration. With use_vmac the
   # instance rides a vmac child of eth0; if eth0 drops, the vmac follows.
 
   virtual_ipaddress {

@@ -1,4 +1,4 @@
-# _setup imports the full keepalived role, so the fragment is actually
+# _setup imports the full keepalived role, so its DNS VRRP configuration is
 # loaded by a running daemon here. The vmac child existing is the live
 # proof of `use_vmac` + `vmac_xmit_base`: without them the VIP would ride
 # eth0's primary MAC and UniFi's per-MAC client tracker would flip the

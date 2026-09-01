@@ -145,21 +145,6 @@
   tags:
     - adguard
 
-# No restart wiring on change: keepalived re-execs the script by path
-# every check interval, so a new rendering takes effect on its own.
-- name: Configure health script
-  template:
-    src: adguard_healthcheck.sh.j2
-    dest: /usr/local/bin/adguard_healthcheck
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - adguard
-
 - name: Create adguard podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
@@ -212,56 +197,6 @@
       subdomain: adguard
       proxy_pass: http://127.0.0.1:{{ service_ports.adguard }}/
       auth: true
-  tags:
-    - adguard
-
-- name: Render the DNS keepalived fragment  # noqa: require-validate
-  template:
-    src: keepalived.conf.j2
-    dest: /etc/keepalived/conf.d/adguard.conf
-    owner: root
-    group: root
-    mode: "0640"
-    backup: true
-  register: adguard_keepalived_cfg
-  become: true
-  tags:
-    - adguard
-
-- name: Check whether keepalived is installed
-  stat:
-    path: /usr/sbin/keepalived
-  register: adguard_keepalived
-  tags:
-    - adguard
-
-# SIGHUP-reload (hitless) for the common edits: priority, VIP, peers,
-# healthcheck params, notify hooks. Structural changes (interface, VRID)
-# need a manual `systemctl restart keepalived`. throttle: 1 serializes
-# across dns_keepalived_peers so that even on the rare manual restart,
-# only one peer is unavailable at a time.
-#
-# enabled: true is load-bearing on a fresh host. The keepalived role
-# runs before adguard and, finding conf.d empty, disables the unit; once
-# we drop our fragment it must be enabled again or a reboot before the
-# next converge (which re-enables it) silently loses the VIP. On an
-# inactive unit `state: reloaded` also starts it, so this brings the VIP
-# up on the first converge.
-#
-# No fragment-restore rescue (unlike roles/keepalived's base-conf block):
-# roles/keepalived's ExecReload drop-in runs `keepalived -t` before the
-# SIGHUP, so a malformed fragment fails this task with the live daemon
-# untouched, and the same validate on ExecStartPre refuses to boot on it
-# -- the VIP stays with the throttled-out peer while the operator fixes
-# the template, with the previous rendering preserved by backup: true.
-- name: Reload keepalived
-  when: not (ansible_check_mode and not adguard_keepalived.stat.exists) and adguard_keepalived_cfg.changed
-  systemd:
-    name: keepalived
-    state: reloaded
-    enabled: true
-  become: true
-  throttle: 1
   tags:
     - adguard
 

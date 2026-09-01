@@ -1,64 +1,3 @@
-# Multi-tenant keepalived runtime — tenant contract:
-#
-# 1. Tenants drop a self-contained config fragment at
-#    /etc/keepalived/conf.d/<tenant>.conf and own its lifecycle.
-# 2. Tenants own their own reload: after rendering the fragment, reload
-#    keepalived with `throttle: 1` so peers reload one at a time and the
-#    VIP doesn't flap on both nodes at once. `enabled: true` is part of the
-#    contract, not optional: this role runs first and disables the unit
-#    while conf.d is empty, so the tenant must re-enable it or a reboot
-#    before the next converge loses the VIP (on an inactive unit
-#    `state: reloaded` also starts it, bringing the VIP up the same
-#    converge). Copy the "Reload keepalived" task from
-#    roles/adguard/tasks/main.yml verbatim:
-#
-#        - name: Reload keepalived
-#          when: <tenant>_keepalived_cfg.changed
-#          systemd:
-#            name: keepalived
-#            state: reloaded
-#            enabled: true
-#          become: true
-#          throttle: 1
-#
-#    The tenant reload above is throttled; THIS role's own base-conf
-#    reload is NOT, so a `files/keepalived.conf` edit SIGHUPs every peer at
-#    once. That is tolerable because base-conf edits are rare (a static
-#    file) and SIGHUP-reload is hitless (see _verify branch C: the VIP
-#    does not flap on reload); if a base-conf change ever risks a VRRP
-#    transition, roll it out with `--limit` one host at a time. Structural
-#    changes (interface, VRID, vmac) need a manual restart — reload won't
-#    pick those up.
-# 3. Retiring a tenant: drop a `file: state=absent` task targeting
-#    its conf.d/<tenant>.conf and KEEP it as a tombstone in the role
-#    until you're sure every host has converged. This role does not
-#    GC stale fragments — without the tombstone, an old tenant config
-#    silently keeps running. Retire on the BACKUP node first: stopping
-#    keepalived while it holds the VIP as MASTER can strand the VIP on
-#    the interface until a peer/kernel notices, so converge the
-#    non-MASTER host before the one currently holding the VIP.
-# 4. This role gates `keepalived.service` on conf.d having ≥1
-#    fragment (Type=notify wedges for ~90s on empty conf), and
-#    explicitly stops the unit when the last tenant leaves.
-# 5. Base-conf edits to `files/keepalived.conf` trigger a `reload`;
-#    edits that affect script execution semantics (global_defs
-#    toggles like `enable_script_security` / `script_user`) may
-#    need a manual `systemctl restart keepalived` — SIGHUP-reload
-#    semantics for global_defs are flaky in 2.2.x.
-# 6. site.yml runs `keepalived` BEFORE its tenants (see site.yml:58),
-#    so on a fresh host the base conf + conf.d dir + sysctl are in
-#    place by the time tenant roles render fragments. Keep that order:
-#    the gate snapshots the conf.d count once per converge, so a tenant
-#    that renders its fragment AFTER keepalived has counted (wrong
-#    site.yml order, or a tags-limited run) leaves the unit gated-off
-#    until the next converge.
-#
-# Current tenants: roles/adguard (lab/pug) and roles/udm_dns_failover
-# (same VRRP group from the UDM side). Adding a new tenant (e.g. the
-# wireguard-VIP follow-up): mirror the keepalived block in
-# roles/adguard/tasks/main.yml and roles/adguard/templates/
-# keepalived.conf.j2 — the conf.d fragment format is unconstrained by
-# this role.
 - name: Install keepalived
   apt:
     pkg:
@@ -70,12 +9,7 @@
   tags:
     - keepalived
 
-# Without ip_nonlocal_bind=1 a service can only bind on IPs present
-# on a local interface, so on the keepalived secondary (where the
-# VIP isn't currently held) the bind fails with "cannot assign
-# requested address". Setting this once globally lets services
-# (e.g. adguard on the keepalived VIP) bind regardless of who owns
-# the VIP at any given moment.
+# Services must bind the DNS VIP on a BACKUP node before it owns the address.
 - name: Install ip_nonlocal_bind sysctl
   ansible.posix.sysctl:
     name: net.ipv4.ip_nonlocal_bind
@@ -86,10 +20,7 @@
   tags:
     - keepalived
 
-# Disable martian-source logging on keepalived's vmac (vrrp.<VRID>) interface.
-# The interface only exists once keepalived starts, so this rides a udev rule
-# that fires on interface creation rather than a boot-time sysctl. Rationale in
-# the rule file.
+# The vmac exists only after keepalived starts, so configure it at creation.
 - name: Install vrrp martian-logging udev rule  # noqa: require-validate
   copy:
     src: 99-vrrp-martians.rules
@@ -111,15 +42,8 @@
   tags:
     - keepalived
 
-# The udev rule only fires when keepalived (re)creates the vmac iface; apply the
-# same setting once to any vrrp interface already up so an existing flood stops
-# at converge instead of waiting for the next keepalived restart or reboot.
-# No-op (nullglob) on hosts without a vmac iface.
+# Apply the udev-owned value immediately to an already-running vmac.
 - name: Silence martian logging on any running vrrp interface
-  # The echoed status token is "applied=1", not "changed=1": the harness
-  # idempotence check greps every output line for `\bchanged=\d+`, so a literal
-  # changed=N in this script's echoed cmd would read as a false non-idempotent
-  # task.
   shell: |
     set -euo pipefail
     shopt -s nullglob
@@ -139,153 +63,69 @@
   tags:
     - keepalived
 
-- name: Create configuration directory
+- name: Remove the retired tenant configuration paths
   file:
-    dest: /etc/keepalived/conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0750"
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/keepalived/conf.d
+    - /etc/systemd/system/keepalived.service.d/override.conf
+  register: keepalived_tenant_paths
   become: true
   tags:
     - keepalived
+    - adguard
 
-# No inline `validate:` here (unlike most config-writing tasks): the
-# validator is `keepalived -t`, which needs the package installed (it may
-# not exist yet on a fresh host, esp. in check mode) and parses the whole
-# assembled config including conf.d. Both conditions are handled by the
-# gated "Validate assembled keepalived config" block below, so validation
-# lives there rather than on this task.
-- name: Copy the configuration  # noqa: require-validate
-  copy:
-    src: keepalived.conf
-    dest: /etc/keepalived/keepalived.conf
-    mode: "0640"
+- name: Reload systemd after removing the keepalived drop-in
+  when: keepalived_tenant_paths.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - keepalived
+    - adguard
+
+- name: Configure the AdGuard health script
+  template:
+    src: adguard_healthcheck.sh.j2
+    dest: /usr/local/bin/adguard_healthcheck
     owner: root
     group: root
+    mode: "0755"
     backup: true
-  register: keepalived_base_conf
+    validate: bash -n %s
   become: true
   tags:
     - keepalived
+    - adguard
 
-# keepalived.service is Type=notify and only sends READY=1 once it has at
-# least one vrrp_instance to manage. With empty conf.d the unit wedges
-# until TimeoutStartSec (~90s) and then fails — at first start AND at
-# every reboot if it's left enabled. So we gate the whole systemd_unit
-# invocation on conf.d having a tenant, and explicitly tear down when
-# the last tenant leaves so the unit doesn't auto-start broken.
-#
-# The override_keepalived.conf drop-in below is NOT a redundant copy of
-# this gate — the two cover disjoint triggers, so don't delete either as
-# "belt-and-braces". This converge-time logic validates (keepalived -t)
-# and, on tenant retirement, explicitly stops + disables the running
-# unit — the drop-in does neither. The drop-in's ConditionPathExistsGlob
-# is the only gate at an out-of-band / boot-time start (conf.d emptied
-# between converges, unit still enabled), where this ansible logic isn't
-# running; systemd then silently skips the start instead of wedging.
-- name: Install conf.d-gating drop-in for keepalived.service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: override_keepalived.conf
-      for: keepalived.service
-  tags:
-    - keepalived
-
-# size: '1' so a zero-byte placeholder doesn't trip the gate — plain
-# `include` still loads it and then wedges, since `include` neither
-# validates nor skips empty matches. The `.*` exclude skips editor/dot
-# tempfiles; `*.conf` already ignores the `.bak~`-style backups ansible
-# leaves on a fragment edit.
-- name: Count number of configurations
-  find:
-    paths: /etc/keepalived/conf.d
-    patterns: '*.conf'
-    excludes: [ '.*' ]
-    size: '1'
-  register: keepalived_confs
+- name: Render the DNS keepalived configuration
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+    validate: >-
+      {{ '/usr/sbin/keepalived -t -f %s'
+         if not (ansible_check_mode and keepalived_apt.changed)
+         else omit }}
+  register: keepalived_config
   become: true
   tags:
     - keepalived
+    - adguard
 
-# Catches base-conf typos and stale tenant fragments before they
-# propagate to the running daemon via SIGHUP-reload. Skipped when conf.d
-# is empty (matched == 0): the unit isn't started then, so there's
-# nothing to validate, and on a fresh host the keepalived binary may not
-# exist yet. Also skipped in check-mode when apt would have installed the
-# package this run (binary doesn't exist yet).
-- name: Validate assembled keepalived config
-  when:
-    - keepalived_confs.matched > 0
-    - not (ansible_check_mode and keepalived_apt.changed)
-  tags:
-    - keepalived
-  block:
-    - name: Run keepalived -t on the assembled config
-      command: keepalived -t -f /etc/keepalived/keepalived.conf
-      changed_when: false
-      become: true
-  rescue:
-    # keepalived -t reads the assembled config in place, so a bad base
-    # conf is already on disk; restore the previous version from the
-    # backup the copy above made so the next SIGHUP-reload cannot pick up
-    # the broken file. A bad *tenant* fragment trips the same validate but
-    # is not ours to roll back (restore is a no-op then) — the fail still
-    # aborts the run.
-    - name: Restore previous base configuration after failed validation  # noqa: require-backup require-validate
-      when: '"backup_file" in keepalived_base_conf'
-      copy:
-        remote_src: true
-        src: "{{ keepalived_base_conf.backup_file }}"
-        dest: /etc/keepalived/keepalived.conf
-        mode: "0640"
-        owner: root
-        group: root
-      become: true
-    - name: Remove the base configuration backup
-      when: '"backup_file" in keepalived_base_conf'
-      file:
-        path: "{{ keepalived_base_conf.backup_file }}"
-        state: absent
-      become: true
-    # First-ever write on a fresh host has no backup to restore; drop the
-    # broken file so a SIGHUP-reload / boot-time start can't pick it up.
-    # (A committed-bad base conf is a CI failure, but this completes the
-    # nginx mirror rather than leaving a half-rescue.)
-    - name: Remove the freshly-added base configuration
-      when: keepalived_base_conf.changed and "backup_file" not in keepalived_base_conf
-      file:
-        path: /etc/keepalived/keepalived.conf
-        state: absent
-      become: true
-    - name: Fail after restoring base configuration
-      fail:
-        msg: >-
-          keepalived -t failed on the assembled config; the previous base
-          conf was restored. Inspect the validate output above — a tenant
-          fragment in /etc/keepalived/conf.d/ or files/keepalived.conf is
-          malformed.
-
+# Serialize config reloads so the DNS peers never release the VIP together.
 - name: Enable keepalived service
-  when: not (ansible_check_mode and keepalived_apt.changed) and keepalived_confs.matched > 0
+  when: not (ansible_check_mode and keepalived_apt.changed)
   systemd:
     name: keepalived.service
     enabled: true
-    state: "{{ 'reloaded' if keepalived_base_conf.changed else 'started' }}"
+    state: "{{ 'reloaded' if keepalived_config.changed else 'started' }}"
   become: true
+  throttle: 1
   tags:
     - keepalived
-
-- name: Disable keepalived service when no tenants
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: keepalived.service
-      condition: "{{ keepalived_confs.matched == 0 and not (ansible_check_mode and keepalived_apt.changed) }}"
-  tags:
-    - keepalived
+    - adguard
