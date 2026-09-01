@@ -15,17 +15,14 @@
   import_role:
     name: fluentbit
 
-- name: _setup | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
+- name: _setup | Ensure test mountpoints exist
   file:
     path: "{{ item }}"
     state: directory
     mode: "0755"
   loop:
     - /mnt/services
-    - /mnt/scratch
-    # sonarr scopes its bind-mount to /mnt/scratch/sonarr (the category dir
-    # sabnzbd creates on prod, before sonarr starts); the container won't
-    # start without the source. Create it here for the isolated test.
+    # SABnzbd creates this category directory before Sonarr starts in prod.
     - /mnt/scratch/sonarr
     - /mnt/media
   become: true

@@ -11,17 +11,14 @@
     name: podman
     tasks_from: install
 
-- name: _setup | Ensure /mnt/services, /mnt/scratch, and /mnt/media exist
+- name: _setup | Ensure test mountpoints exist
   file:
     path: "{{ item }}"
     state: directory
     mode: "0755"
   loop:
     - /mnt/services
-    - /mnt/scratch
-    # radarr scopes its bind-mount to /mnt/scratch/radarr (the category dir
-    # sabnzbd creates on prod, before radarr starts); the container won't
-    # start without the source. Create it here for the isolated test.
+    # SABnzbd creates this category directory before Radarr starts in prod.
     - /mnt/scratch/radarr
     - /mnt/media
   become: true
