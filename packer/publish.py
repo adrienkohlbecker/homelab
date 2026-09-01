@@ -79,6 +79,17 @@ def main() -> None:
     fd = os.open(lockfile, os.O_RDONLY | os.O_CREAT, 0o640)
     try:
         acquire_exclusive(fd, lockfile, LOCK_TIMEOUT_SEC)
+        # A fixed outgoing path makes an interrupted swap recoverable on the
+        # next publish. Under this lock, an outgoing tree with no destination
+        # is the last known-good artifact; with a destination it is debris from
+        # a completed swap.
+        outgoing = f"{dst}.outgoing"
+        if os.path.exists(outgoing):
+            if os.path.exists(dst):
+                shutil.rmtree(outgoing)
+            else:
+                os.replace(outgoing, dst)
+
         # Atomic 3-step publish: park the current tree under .outgoing
         # before swapping in the new one. Each rename is rename(2) on
         # the same filesystem (mise-tasks/packer/build.sh builds src under
@@ -88,7 +99,6 @@ def main() -> None:
         # staging on a different fs fails loud with EXDEV instead of
         # silently turning the publish into a multi-GB copy inside the
         # exclusive lock window.
-        outgoing = f"{dst}.outgoing.{os.getpid()}"
         if os.path.exists(dst):
             os.replace(dst, outgoing)
         try:

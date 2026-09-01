@@ -82,6 +82,50 @@ class TestMainAtomicPublish:
         assert not src.exists()
         assert not any(p.name.startswith("dst.outgoing") for p in artifact_dir.iterdir())
 
+    def test_prunes_completed_swap_debris(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "image.qcow2").write_text("v2")
+        dst = tmp_path / "dst"
+        dst.mkdir()
+        (dst / "image.qcow2").write_text("v1")
+        outgoing = tmp_path / "dst.outgoing"
+        outgoing.mkdir()
+        (outgoing / "image.qcow2").write_text("v0")
+        lockfile = tmp_path / ".publish-lock"
+
+        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
+        pub.main()
+
+        assert (dst / "image.qcow2").read_text() == "v2"
+        assert not outgoing.exists()
+
+    def test_restores_interrupted_swap_before_retry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "image.qcow2").write_text("new")
+        dst = tmp_path / "dst"
+        outgoing = tmp_path / "dst.outgoing"
+        outgoing.mkdir()
+        (outgoing / "image.qcow2").write_text("old")
+        lockfile = tmp_path / ".publish-lock"
+        real_replace = os.replace
+
+        def fail_new_swap(source: str, destination: str) -> None:
+            if source == str(src) and destination == str(dst):
+                raise OSError("swap failed")
+            real_replace(source, destination)
+
+        monkeypatch.setattr(pub.os, "replace", fail_new_swap)
+        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
+
+        with pytest.raises(OSError, match="swap failed"):
+            pub.main()
+
+        assert (dst / "image.qcow2").read_text() == "old"
+        assert not outgoing.exists()
+        assert (src / "image.qcow2").read_text() == "new"
+
     def test_uses_existing_read_only_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         src = tmp_path / "src"
         src.mkdir()
