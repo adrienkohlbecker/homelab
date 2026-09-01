@@ -1,6 +1,6 @@
 # Functional checks for the hostname role. The converge proves the
 # hostname/template tasks exited cleanly; these checks verify that
-# (a) the kernel transient + /etc/hostname match inventory_hostname,
+# (a) the transient and persistent hostnames match inventory_hostname,
 # (b) /etc/hosts resolves the short form to 127.0.1.1 locally without a
 # DNS round-trip (FQDN is deliberately not in /etc/hosts — see hosts.j2),
 # (c) the IPv6 ::1 alias for `localhost` is in place, and
@@ -10,11 +10,6 @@
   command: hostname
   register: _hostname_hostname
   changed_when: false
-
-- name: _verify | Read /etc/hostname
-  slurp:
-    src: /etc/hostname
-  register: _hostname_etc_hostname
 
 - name: _verify | Read static hostname (systemd)
   # The transient kernel hostname can match by DHCP coincidence even when
@@ -29,12 +24,10 @@
     quiet: true
     that:
       - _hostname_hostname.stdout == inventory_hostname
-      - (_hostname_etc_hostname.content | b64decode).strip() == inventory_hostname
       - _hostname_hostnamectl_static.stdout == inventory_hostname
     fail_msg: |
       Hostname state mismatch:
         running: {{ _hostname_hostname.stdout }}
-        /etc/hostname: {{ (_hostname_etc_hostname.content | b64decode).strip() }}
         static:  {{ _hostname_hostnamectl_static.stdout }}
         expected: {{ inventory_hostname }}
 
