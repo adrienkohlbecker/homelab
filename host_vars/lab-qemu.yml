@@ -7,20 +7,15 @@ qemu_test: true
 # Inherits prod lab's podman partition backend: the rebuilt host and fixture
 # both use the same /dev/md/podman RAID5 geometry.
 
-# Same block formula as host_vars/lab.yml; only `parent` differs (the
-# QEMU NIC isn't named eth0 and isn't VLAN-trunked, so all macvlan
-# children sit on the single en* user-net iface). The harness pins
+# Same block as host_vars/lab.yml; only `parent` differs because the
+# QEMU NIC is not VLAN-trunked. The harness pins
 # qemu's user-net to the gsub'd test supernet (10.234.0.0/18 — see
 # test/machine.py's qemu_user_net_args) and test/inventory.ini puts
 # lab in [test] so `network.*` is also gsub'd to 10.234 — the parent
 # NIC's subnet then contains every per-host /28 the topology emits.
-qemu_macvlan_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
 macvlan_blocks:
-  - name: mac_mgmt
-    parent: "{{ qemu_macvlan_parent }}"
-    vlan: management
   - name: mac_iot
-    parent: "{{ qemu_macvlan_parent }}"
+    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     vlan: iot
     podman_network: true
 

@@ -7,15 +7,6 @@ qemu_test: true
 # Inherits prod pug's dedicated Podman device; the rebuilt host and fixture both
 # use /dev/disk/by-partlabel/podman.
 
-# Same block formula as host_vars/pug.yml; only `parent` differs (the
-# QEMU NIC isn't named eth0). See host_vars/lab-qemu.yml for the
-# rationale around qemu's user-net being pinned to the topology
-# supernet by test/machine.py.
-macvlan_blocks:
-  - name: mac_mgmt
-    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    vlan: management
-
 # Override prod's pug.yml netplan: it matches by physical NIC MAC + r8169
 # driver, but the QEMU VM ships a single virtio-net with a different MAC,
 # so `netplan apply` finds no matching interface and brings the only link
