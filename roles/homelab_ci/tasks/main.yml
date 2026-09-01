@@ -31,21 +31,15 @@
   tags:
     - homelab_ci
 
-# Both the operator (ak) running packer:build locally and the CI runner
-# (gitlab_runner) publish qemu test-fixture artifacts here, so a tree one
-# identity built must be fully manageable by the other. The setgid group and
-# default ACL propagate the shared identity into new trees. A creator-supplied
-# mode can still narrow the ACL mask, so publish.py grants group rwx on every
-# staged directory before installation. The x is load-bearing: publish.py needs
-# to traverse and remove the previous tree.
+# The operator and CI runner replace each other's QEMU artifacts. Setgid and the
+# default ACL share new trees; publish.py repairs explicitly narrowed modes.
 - name: Create /mnt/scratch/homelab_ci packer artifacts dir
   file:
     path: /mnt/scratch/homelab_ci
     state: directory
     owner: root
     group: homelab_ci
-    # No world bits: published trees are whole converged root filesystems, and
-    # every consumer (operator, gitlab_runner, the qemu cells) is a group member.
+    # Published artifacts are whole converged root filesystems, so keep them private.
     mode: "02770"
   become: true
   register: homelab_ci_dir
@@ -67,10 +61,8 @@
     not (ansible_check_mode and
     (homelab_ci_dir.changed or homelab_ci_packages.changed))
   loop:
-    # Owning group keeps rwx so either publisher can traverse and rmtree the
-    # other's tree. The other class is emptied explicitly: setfacl would
-    # otherwise back-fill it from the directory mode and leak read access to
-    # every local account on the host.
+    # Owning-group rwx supports cross-publisher replacement. Pin other to no
+    # access to repair stale or drifted default ACLs.
     - entity: ""
       etype: group
       permissions: rwx
