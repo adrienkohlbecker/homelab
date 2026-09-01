@@ -12,7 +12,6 @@ PEER_IPS=(
 )
 
 LOCK_PID=
-JCTL_PID=
 
 take_lock() {
   if [ -z "${LOCK_PID:-}" ]; then
@@ -47,51 +46,12 @@ update_lock() {
 }
 
 cleanup() {
-  exec 3<&- 2>/dev/null || true
-  if [ -n "${JCTL_PID:-}" ]; then
-    kill "${JCTL_PID}" 2>/dev/null || true
-    wait "${JCTL_PID}" 2>/dev/null || true
-  fi
   release_lock
   exit 0
 }
 trap cleanup SIGTERM SIGINT
 
-update_lock
-
 while true; do
-  exec 3< <(exec journalctl _SYSTEMD_UNIT=keepalived.service \
-    SYSLOG_IDENTIFIER=adguard-keepalived -f -n 0 -o cat 2>/dev/null)
-  JCTL_PID=$!
-
-  # read -t returns >128 on timeout, and 1 on EOF. A timeout is the normal
-  # idle path (keepalived quiet for 30s): re-check peer health and keep
-  # reading from the same follower. Only a real EOF -- journalctl actually
-  # died -- falls through to the teardown/backoff/respawn below. Folding
-  # the two (a plain `while read -t`) respawns the follower and logs a
-  # spurious "exited" line every 35s around the clock.
-  while true; do
-    if IFS= read -r -t 30 line <&3; then
-      case "$line" in
-        *BACKUP*|*MASTER*|*FAULT*|*STOP*)
-          update_lock
-          ;;
-      esac
-    else
-      rc=$?
-      if [ "$rc" -le 128 ]; then
-        break
-      fi
-      update_lock
-    fi
-  done
-
-  exec 3<&-
-  kill "${JCTL_PID}" 2>/dev/null || true
-  wait "${JCTL_PID}" 2>/dev/null || true
-  JCTL_PID=
-
-  echo "journal follower exited - restarting after backoff" >&2
-  sleep 5
   update_lock
+  sleep 30
 done

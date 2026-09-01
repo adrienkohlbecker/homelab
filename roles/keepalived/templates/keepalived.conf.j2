@@ -55,7 +55,4 @@ vrrp_instance dns {
   track_script {
     adguard_healthcheck
   }
-
-  # The reboot guard follows transition logs to re-check peer health.
-  notify "/usr/bin/logger -t adguard-keepalived"
 }

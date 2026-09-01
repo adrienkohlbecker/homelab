@@ -1,8 +1,8 @@
 [Unit]
 Description=DNS reboot guard
 Documentation=file:///usr/local/sbin/adguard_reboot_guard
-After=network-online.target keepalived.service
-Wants=network-online.target keepalived.service
+After=network-online.target
+Wants=network-online.target
 StartLimitInterval=600
 StartLimitBurst=3
 
