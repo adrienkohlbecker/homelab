@@ -4,13 +4,8 @@
 local here = arg[0]:match("^(.*/)") or "./"
 dofile(here .. "conmon_partial_message.lua")
 
-local failures = 0
-
 local function check(label, got, want)
-    if got ~= want then
-        failures = failures + 1
-        print(string.format("FAIL  %s\n        got:  %s\n        want: %s", label, tostring(got), tostring(want)))
-    end
+    assert(got == want, string.format("%s: got %s, want %s", label, tostring(got), tostring(want)))
 end
 
 local container_id = string.rep("1", 64)
@@ -64,12 +59,4 @@ do
     local code = reassemble_conmon_message("svc.nexus.service", 5, record)
     check("native.code", code, 0)
     check("native.message", record.MESSAGE, "native journal message")
-end
-
-if failures == 0 then
-    print("conmon_partial_message: all assertions passed")
-    os.exit(0)
-else
-    print(string.format("conmon_partial_message: %d assertion(s) failed", failures))
-    os.exit(1)
 end

@@ -4,13 +4,8 @@
 local here = arg[0]:match("^(.*/)") or "./"
 dofile(here .. "lnav_shape.lua")
 
-local failures = 0
-
 local function check(label, got, want)
-    if got ~= want then
-        failures = failures + 1
-        print(string.format("FAIL  %s\n        got:  %s\n        want: %s", label, tostring(got), tostring(want)))
-    end
+    assert(got == want, string.format("%s: got %s, want %s", label, tostring(got), tostring(want)))
 end
 
 local function shape(tag, record, level)
@@ -164,12 +159,4 @@ do
     check("certbot.stream", rec.stream, "certbot_file")
     check("certbot.unit", rec.unit, "certbot.service")
     check("certbot.identifier", rec.identifier, "certbot")
-end
-
-if failures == 0 then
-    print("lnav_shape: all assertions passed")
-    os.exit(0)
-else
-    print(string.format("lnav_shape: %d assertion(s) failed", failures))
-    os.exit(1)
 end

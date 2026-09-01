@@ -4,13 +4,8 @@
 local here = arg[0]:match("^(.*/)") or "./"
 dofile(here .. "strip_ansi.lua")
 
-local failures = 0
-
 local function check(label, got, want)
-    if got ~= want then
-        failures = failures + 1
-        print(string.format("FAIL  %s\n        got:  %s\n        want: %s", label, tostring(got), tostring(want)))
-    end
+    assert(got == want, string.format("%s: got %s, want %s", label, tostring(got), tostring(want)))
 end
 
 -- seerr (jellyseerr) wraps its level token in SGR colour codes.
@@ -48,12 +43,4 @@ do
     local rec = { log = 42 }
     local code = strip_ansi("svc.x.service", 0, rec)
     check("nonstring.code", code, 0)
-end
-
-if failures == 0 then
-    print("strip_ansi: all assertions passed")
-    os.exit(0)
-else
-    print(string.format("strip_ansi: %d assertion(s) failed", failures))
-    os.exit(1)
 end

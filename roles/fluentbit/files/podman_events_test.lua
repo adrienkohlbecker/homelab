@@ -3,13 +3,8 @@
 local here = arg[0]:match("^(.*/)") or "./"
 dofile(here .. "podman_events.lua")
 
-local failures = 0
-
 local function check(label, got, want)
-    if got ~= want then
-        failures = failures + 1
-        print(string.format("FAIL  %s\n        got:  %s\n        want: %s", label, tostring(got), tostring(want)))
-    end
+    assert(got == want, string.format("%s: got %s, want %s", label, tostring(got), tostring(want)))
 end
 
 local function normalize(record)
@@ -112,12 +107,4 @@ do
     check("non_podman.code", code, 0)
     check("non_podman.message", rec.MESSAGE, "application record")
     check("non_podman.event_preserved", rec.PODMAN_EVENT, "start")
-end
-
-if failures == 0 then
-    print("podman_events: all assertions passed")
-    os.exit(0)
-else
-    print(string.format("podman_events: %d assertion(s) failed", failures))
-    os.exit(1)
 end

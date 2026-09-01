@@ -11,13 +11,8 @@
 local here = arg[0]:match("^(.*/)") or "./"
 dofile(here .. "level_from_message.lua")
 
-local failures = 0
-
 local function check(label, got, want)
-    if got ~= want then
-        failures = failures + 1
-        print(string.format("FAIL  %s\n        got:  %s\n        want: %s", label, tostring(got), tostring(want)))
-    end
+    assert(got == want, string.format("%s: got %s, want %s", label, tostring(got), tostring(want)))
 end
 
 -- Run a log line through the filter (default tag svc.test.service, no extra
@@ -256,12 +251,4 @@ do
     local code = set_priority("svc.x.service", 0, record)
     check("nonstring.code", code, 0)
     check("nonstring.nolevel", record["_level"], nil)
-end
-
-if failures == 0 then
-    print("level_from_message: all assertions passed")
-    os.exit(0)
-else
-    print(string.format("level_from_message: %d assertion(s) failed", failures))
-    os.exit(1)
 end
