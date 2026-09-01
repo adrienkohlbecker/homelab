@@ -6,7 +6,7 @@
 #USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to build multiple releases" default="noble"
 #USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
-#USAGE flag "--no-publish" help="Build and verify-boot but skip the install (publish) step. Used by feature-branch CI to validate packer changes without overwriting master's published artifacts."
+#USAGE flag "--no-publish" help="Build and verify-boot without replacing the published test fixtures. Useful for safe local Packer validation."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 # Group-write so every homelab_ci-group member can mutually delete each
