@@ -114,12 +114,6 @@
   until: _influxdb_lnav_record.rc == 0
   become: true
 
-# The influxdb vhost is browser-only (auth: true, no token injection): no
-# upstream_authorization map is rendered, so there is no conf.d/upstream_auth
-# file to assert on. The gate-redirect probe above already proves the vhost is
-# Authelia-gated; machine clients reach influxd off-vhost over the podman network
-# (covered by roles/homeassistant/_verify).
-
 # Exercise bucket.yml end-to-end with a throwaway tenant, then verify its
 # authorization metadata and the bucket's write path.
 - name: _verify | Provision throwaway influxdb tenant via bucket.yml

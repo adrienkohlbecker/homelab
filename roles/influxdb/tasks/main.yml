@@ -8,19 +8,9 @@
   tags:
     - influxdb
 
-# data/ -- BoltDB + TSM engine state, 0700 owned by influxdb. The
-# image's entrypoint chmod 700s the bolt_dir / ENGINE_PATH subdirs
-# inside this on every boot; matching the parent's mode here keeps
-# ansible idempotent across container restarts.
-#
-# config/ -- /etc/influxdb2 (influx-configs CLI config with admin
-# token, configd-init-config.json, etc.), 0775 owned by influxdb.
-# The image's entrypoint actively chmod 775s this on every boot
-# (create_directories() in docker-entrypoint.sh runs unconditionally),
-# so any tighter mode here would flap back-and-forth between every
-# ansible re-apply and every container restart. The token file inside
-# is 0600 from `influx setup`; the 0775 parent only widens *traversal*
-# to the host group, which has only the influxdb user as a member.
+# The image enforces data=0700 and config=0775 on every boot; matching those
+# modes prevents Ansible/container flapping. Token files inside config remain
+# 0600, and the host group contains only the influxdb user.
 - name: Create influxdb config and data directories
   when: not ansible_check_mode or influxdb_user.uid is defined
   file:
@@ -44,12 +34,8 @@
   tags:
     - influxdb
 
-# Initial bootstrap (org/user/bucket) is done by the image's entrypoint
-# via DOCKER_INFLUXDB_INIT_* env on first start -- it checks for a
-# populated BoltDB and skips if one is present, so it's naturally
-# idempotent without a sentinel file. Both secrets are mounted via
-# --secret and consumed via *_FILE env so the password never lands on
-# any command line or in `podman inspect` / /proc/<pid>/environ.
+# The image bootstraps org/user/bucket only while BoltDB is empty. Mounted
+# *_FILE secrets keep credentials out of command lines and the environment.
 - name: Check whether podman is installed
   stat:
     path: /usr/bin/podman
@@ -77,20 +63,13 @@
   tags:
     - influxdb
 
-# Operator token (instance-wide; carries write:users / write:orgs, which an
-# all-access token does NOT -- bucket.yml's per-tenant `influx user/auth create`
-# needs them). influxdb_root_token is the single source for two consumers: this
-# first-boot seed and the CLI default config templated below. Seeding it into the
-# BoltDB via DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE makes the value the CLI config
-# carries actually exist in the database; without it a fresh bootstrap would mint
-# a *random* operator token and the managed config would 401. Honored only on
-# first boot (BoltDB empty); on existing hosts setup is skipped and it's a no-op.
+# `bucket.yml` needs an operator token's write:users/write:orgs permissions;
+# all-access tokens lack them. Seeding `influxdb_root_token` on first boot keeps
+# BoltDB and the managed CLI config on the same token instead of a random one.
 #
-# Rotate: mint a fresh operator token offline with `influxd recovery auth
-# create-operator` (stop the container first; the UI / `influx auth create` only
-# make all-access tokens, which lack write:users), set influxdb_root_token in
-# vault, and re-apply. The CLI config template re-points and the auth check below
-# confirms the running BoltDB accepts it.
+# Rotate offline with the container stopped using `influxd recovery auth
+# create-operator`, update the vault, and re-apply; the authenticated readiness
+# check confirms the new value.
 - name: Create influxdb_admin_token secret
   when: not ansible_check_mode or influxdb_podman.stat.exists
   containers.podman.podman_secret:
@@ -194,13 +173,8 @@
   tags:
     - influxdb
 
-# Manage the CLI default config so `influx ...` inside the container
-# authenticates with the vaulted operator token. influx setup writes this file
-# on first boot, but on every later boot (BoltDB already populated) setup is
-# skipped -- so a token regenerated in the UI, or any drift, leaves the file
-# pointing at a dead token (401). Templating it here makes influxdb_root_token
-# the single source of truth; influxd does not read it (the CLI reads it
-# per-exec) so no restart is needed.
+# Keep the per-exec CLI on the vaulted operator token across bootstrap and
+# rotation. Influxd does not read this file, so updates need no restart.
 - name: Template the influx CLI default config
   when: not ansible_check_mode or influxdb_user.uid is defined
   template:
@@ -214,11 +188,8 @@
   tags:
     - influxdb
 
-# This authenticated query is the readiness barrier for `tasks_from: bucket`
-# callers later in the play. failed_when:false + until lets retries ride
-# cold-start; the assert turns a persistent 401 into a loud, actionable failure.
-# Skipped under --check: `command` does not run there, so there is no rc to
-# assert on.
+# Authenticated readiness barrier for later `tasks_from: bucket` callers.
+# The separate assertion turns a persistent 401 into actionable guidance.
 - name: Wait for the influx default config to authenticate
   command:
     argv:
@@ -256,17 +227,9 @@
   tags:
     - influxdb
 
-# auth: true puts Authelia in front of the InfluxDB UI. Browser users
-# authenticate at Authelia, then again at InfluxDB's own SPA login form -- a
-# deliberate double login. nginx does NOT inject an Authorization header: the
-# previous per-user token injection handed a full operator token to the browser
-# on every request, which buys little for an operator-only service behind
-# Authelia and is more exposure than it's worth (the homelab posture favours
-# keeping the operator token out of the browser).
-#
-# Machine clients never touch this vhost: HomeAssistant reaches influxd directly
-# over the shared podman backend network (influxdb.dns.podman:8086) with its own
-# bucket-scoped write-auth, so the UI gate doesn't apply to it.
+# The browser UI uses Authelia plus InfluxDB's own login; nginx never injects
+# the operator token. Machine clients use bucket-scoped tokens directly over
+# `influxdb.dns.podman:8086`, outside this vhost.
 - name: Configure nginx
   import_role:
     name: nginx

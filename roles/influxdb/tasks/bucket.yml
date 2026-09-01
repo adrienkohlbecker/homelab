@@ -1,39 +1,12 @@
-# Provision a per-tenant (org, user, bucket, write-auth) into a
-# running influxdb container. Idempotent via query-then-create
-# pairs. Each task uses `influx ... --json` and parses via
-# `from_json` to avoid the column-shape drift that tab-cut parsing
-# carries across influxdb-cli versions.
+# Provision a user, bucket, and bucket-scoped write authorization in
+# `influxdb_root_org`. Required `influxdb_bucket_args` keys: `user`, `bucket`.
 #
-# Inputs flow through `influxdb_bucket_args` (dict) per the
-# helper-role pattern in CLAUDE.md so each call replaces the dict
-# wholesale and inter-call vars-leak can't happen.
+# The token is printed only by the first `auth create`; InfluxDB redacts it from
+# later listings, so this task neither publishes nor persists it. Delete the
+# authorization and re-run to recover a lost token. The main role must have
+# authenticated its managed CLI config before this entry point runs.
 #
-# Required keys:
-#   user   -- user name (created if missing)
-#   bucket -- bucket name (created if missing)
-#
-# Tenants belong to the role-managed `influxdb_root_org`.
-#
-# Outputs:
-#   (none.) The bucket-scoped write-auth token is the one secret this
-#   file mints, and it is deliberately NOT surfaced as a fact or written
-#   to disk: influxd 2.8+ redacts the token from `influx auth list`
-#   (returned only here, at `auth create`), so there is no reliable
-#   re-read path and no value worth persisting. On the converge that
-#   first creates the auth, `auth create --json` prints the token to the
-#   interactive converge output -- the operator copies it from there for
-#   the one-time consumer setup (e.g. the HA UI influxdb integration).
-#   A later converge finds the auth present, skips the create, and prints
-#   nothing. To recover a lost token, delete the auth and re-run -- a
-#   fresh one is minted and printed.
-#
-# Assumes the influxdb role's main.yml has already authenticated its
-# managed CLI config in the same play; this file doesn't repeat that barrier.
-# argv form across this file: each user-controlled value lands in its
-# own argv slot, so a name containing a space or a leading dash can't
-# argv-inject if a future caller feeds untrusted input. Today every
-# caller passes inventory literals, but the shape is the cheap
-# foot-gun fix.
+# JSON output avoids table-shape drift; argv slots keep tenant names inert.
 
 - name: bucket | Assert args
   assert:
@@ -80,20 +53,12 @@
   register: _influxdb_bucket_org_query
   changed_when: false
   check_mode: false
-  # Tolerate "org not found" (influx-cli 2.7 exits non-zero on no-match
-  # for --name) so the assert below fires with its helpful operator
-  # message instead of failing as a bare "command returned non-zero".
-  # Matches the user/bucket/auth queries downstream.
+  # Let the assertion below report a missing org with recovery guidance.
   failed_when: false
   become: true
 
-# selectattr('name','equalto', ...) is defensive: influx-cli 2.x's
-# `--name` is an exact filter today, but `length > 0` against the
-# bare result would silently accept a future patch that turned the
-# filter into a prefix/substring match. The org is bootstrapped only
-# via DOCKER_INFLUXDB_INIT_ORG. First
-# `that:` clause short-circuits the from_json filter when stdout is
-# non-JSON (rc != 0 case).
+# Match the returned name exactly rather than relying on CLI filter semantics.
+# The rc check short-circuits JSON parsing on command failure.
 - name: "bucket | Assert org exists: {{ influxdb_root_org }}"
   when: _influxdb_bucket_api_available
   assert:
@@ -107,10 +72,7 @@
       Managed influxdb org '{{ influxdb_root_org }}' not found.
       Reapply the influxdb role's main.yml to bootstrap it.
 
-# block-scoped lazy vars replace the earlier set_fact pattern. Each
-# reference re-evaluates from the relevant query register; values
-# never enter host-fact scope, so a subsequent import_role with
-# different inputs can't pick up the previous call's ids.
+# Keep derived IDs block-scoped so repeated imports cannot leak tenant state.
 - name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_root_org }}
   when: _influxdb_bucket_api_available
   vars:
@@ -197,10 +159,7 @@
           - "{{ influxdb_bucket_args.bucket }}"
       become: true
 
-    # Re-query post-create so the auth task always sees a concrete bucket
-    # id. The conditional create above doesn't emit a usable id (the
-    # upstream `influx bucket create` output schema changed across 2.x
-    # patch releases).
+    # Re-query because create output does not expose a stable ID schema.
     - name: bucket | Query bucket id for {{ influxdb_bucket_args.bucket }}
       command:
         argv:
@@ -244,19 +203,8 @@
       failed_when: false
       become: true
 
-    # Create the bucket-scoped write-auth only if one doesn't already
-    # exist. Identify an existing auth by its bucket-scoped write
-    # permission: `influx auth list --json` emits permissions as bare
-    # strings shaped `write:orgs/<orgid>/buckets/<bucketid>` (NOT the
-    # {action, resource} dict the HTTP API returns), anchored on BOTH ids
-    # so a cross-org perm reusing the bucket id can't false-match.
-    #
-    # The token secret is never surfaced or persisted (see this file's
-    # header): influxd 2.8+ redacts it from `auth list`, returning it only
-    # here at `auth create`. `--json` prints it to the interactive converge
-    # output on the run that first mints it -- the operator copies it from
-    # there for the one-time consumer setup. A later converge finds the
-    # auth present, skips, and prints nothing.
+    # Match the CLI's exact write permission string on both org and bucket IDs.
+    # `auth create --json` prints the token only when this task first runs.
     - name: bucket | Create write-auth for bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
       when: >-
         ((_influxdb_bucket_auth_query.stdout | default('[]') | from_json)
