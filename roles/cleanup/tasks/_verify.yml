@@ -144,8 +144,3 @@
     path: /etc/_verify_prune
     state: absent
   become: true
-
-- name: _verify | Power group exists for thermald D-Bus policy
-  getent:
-    database: group
-    key: power
