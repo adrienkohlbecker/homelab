@@ -99,7 +99,17 @@
     - gitea
 
 - name: Install gitea binary
-  import_tasks: install.yml
+  get_url:
+    url: "{{ gitea_release[ansible_architecture].url }}"
+    checksum: "sha256:{{ gitea_release[ansible_architecture].sha256 }}"
+    dest: /usr/local/bin/gitea
+    mode: "0755"
+    owner: root
+    group: root
+    # Keep the temporary file on the destination filesystem for atomic rename.
+    tmp_dest: /usr/local/bin
+  register: gitea_installed
+  become: true
   tags:
     - gitea
 
