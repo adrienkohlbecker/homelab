@@ -44,6 +44,8 @@ mkdir -p "${base}"
 # we just rmdir the (empty) tmpdir afterwards. On failure the tmpdir
 # is left behind for inspection (cleanup via packer:clean).
 tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-XXXXXX")
+# mktemp uses 0700 regardless of umask; restore the shared-workspace contract.
+chmod 2770 "${tmp}"
 
 # Upload the Git-visible working tree as one archive so chroot.sh can consume
 # the same role-owned files Ansible installs. Ignored private clones, caches,
