@@ -5,7 +5,7 @@ set -euo pipefail
 # Homebrew's qemu (through 11.0.1) bundles edk2-stable202408, whose DXE pool
 # allocator hits a heap ASSERT (MdeModulePkg/Core/Dxe/Mem/Pool.c) when rEFInd
 # boots the OS across an aarch64 *warm* reboot -- so any test that reboots
-# (hwe_kernel seed, reboot/kdump/console _verify) wedges the firmware and times
+# (reboot/kdump/console _verify) wedges the firmware and times
 # out. edk2-stable202511 fixes it. There is no Homebrew formula for a newer
 # build and qemu has not bumped its bundled blob, so source it from Debian's
 # edk2 package (qemu-efi-aarch64) and drop it where test/arch.py looks first.

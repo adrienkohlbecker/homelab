@@ -8,16 +8,10 @@
   hosts: all
   become: true
   tasks:
-    # This seed runs outside site.yml, so it never gets the apt role's
-    # mirror rewrite that every normal converge does first. The packer
-    # image ships /etc/apt/sources.list pointing at upstream
-    # archive.ubuntu.com; the build VM reaches that on a fresh boot, but
-    # loses external egress through its nested SLIRP-over-slirp4netns NAT
-    # after the in-guest reboot below (lab-internal Nexus stays reachable).
-    # Point apt at the Nexus mirror up front so neither the HWE install nor
-    # the post-reboot podman step depends on external
-    # connectivity. The qemu image has no cloud-init, so the rewritten
-    # sources.list survives the reboot.
+    # This seed runs outside site.yml, so configure the same Nexus-backed apt
+    # sources that normal converges get before installing the baked dependencies.
+    # The qemu image has no cloud-init, so the rewrite persists until sanitized
+    # back to upstream below.
     - name: Configure apt to use the Nexus mirror
       import_role:
         name: apt
@@ -36,11 +30,9 @@
       import_role:
         name: fluentbit
 
-    # Everything above wrote its apt sources through the lab Nexus: test
-    # hosts set nexus_url, and the bake needs Nexus because external egress
-    # dies after the in-guest reboot. Rewrite each shared apt mirror to the
-    # value it has without Nexus before shipping the fixture so AWS
-    # nested-qemu cells do not try to route through the lab.
+    # Everything above wrote its apt sources through the lab Nexus. Rewrite each
+    # shared apt mirror to its value without Nexus before shipping the fixture so
+    # AWS nested-qemu cells do not try to route through the lab.
     - name: Assert the source Nexus URL is defined
       assert:
         that:

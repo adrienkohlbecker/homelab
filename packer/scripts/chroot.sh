@@ -774,9 +774,8 @@ write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
 
 # Refresh /var/lib/apt/lists/ under the upstream URLs (write_sources_list
 # just cleared the build-time Nexus lists) so the shipped image carries a
-# coherent cache: a role doing `apt: pkg:` with cache_valid_time set
-# (hwe_kernel in packer/seed_deps.yml) skips its own update and would
-# otherwise find no candidate.
+# coherent cache: package tasks using cache_valid_time may skip their own update
+# and would otherwise find no candidate.
 apt_update
 
 # Drop the downloaded .deb cache (build-only, ~hundreds of MB) so it doesn't

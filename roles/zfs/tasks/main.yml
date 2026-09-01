@@ -32,7 +32,7 @@
 #     refresh until reboot, mismatch is expected for the rest of this
 #     play.
 #   - reboot-required: a kernel upgrade is pending elsewhere (e.g.
-#     hwe_kernel earlier in site.yml), so the loaded kmod is stale by
+#     cleanup earlier in site.yml), so the loaded kmod is stale by
 #     definition and the comparison would false-positive.
 - name: Stat /var/run/reboot-required
   stat:

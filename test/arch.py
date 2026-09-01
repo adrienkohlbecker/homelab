@@ -16,7 +16,7 @@ from pathlib import Path
 # bundles edk2-stable202408, whose DXE pool allocator hits a heap ASSERT in
 # MdeModulePkg/Core/Dxe/Mem/Pool.c when rEFInd boots the OS across an aarch64
 # *warm* reboot (`systemctl reboot`) -- the cold first boot is fine, so it only
-# bites tests that reboot (hwe_kernel seed, reboot/kdump/console _verify).
+# bites tests that reboot (reboot/kdump/console _verify).
 # edk2-stable202511 fixes it. Required on aarch64 (set as required_firmware
 # below): uefi_code_path_for raises with fetch guidance when it is absent rather
 # than silently falling back to Homebrew's broken blob. macOS-only concern:
@@ -146,7 +146,7 @@ def uefi_code_path_for(profile: ArchProfile) -> Path:
             f"Required {profile.name} UEFI firmware is missing: {profile.required_firmware}\n"
             "Run `mise run test:firmware` to fetch it. Homebrew's bundled "
             "edk2-stable202408 ASSERTs in rEFInd across a warm reboot, wedging "
-            "any role that reboots (hwe_kernel seed, reboot/kdump/console _verify)."
+            "any role that reboots (reboot/kdump/console _verify)."
         )
     for c in profile.uefi_code_candidates:
         if Path(c).exists():
