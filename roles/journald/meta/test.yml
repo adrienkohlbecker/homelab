@@ -1,6 +1,3 @@
-# Compress= in the rendered drop-in flips per zfs_root: 'no' on ZFS
-# (dataset already compresses), 'yes' on ext4. The minimal cell
-# exercises the ext4+volatile path.
+# Box covers the volatile storage configuration used by test hosts.
 machines:
   box:
-  minimal:
