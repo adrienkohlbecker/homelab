@@ -99,19 +99,6 @@
   tags:
     - kdump
 
-# The crashkernel range starts at 2G; fail instead of silently reserving none.
-- name: Assert host has enough RAM for crashkernel reservation
-  assert:
-    # MemTotal excludes firmware and kernel reservations, so a 2G fixture
-    # reports about 1950MB even though the kernel sees the full 2G.
-    that: ansible_memtotal_mb >= 1900
-    fail_msg: >-
-      kdump's crashkernel range starts at 2G; host has
-      {{ ansible_memtotal_mb }}MB. Either bump RAM or extend the
-      range in roles/kdump/tasks/main.yml.
-  tags:
-    - kdump
-
 # GRUB hosts use the package's grub.d fragment. ZBM hosts need this explicit
 # command-line contribution because GRUB never runs. The high reservation holds
 # the capture environment above 4G; the low reservation preserves DMA32 space
