@@ -154,7 +154,7 @@
     - transmission
 
 - name: Create transmission rpc-password secret
-  when: not ansible_check_mode or transmission_podman.stat.exists
+  when: not ansible_check_mode or transmission_podman_available
   containers.podman.podman_secret:
     name: transmission_rpc_password
     data: "{{ transmission_rpc_password }}"

@@ -137,7 +137,7 @@
 - name: Create headscale OIDC client secret
   when:
     - _headscale_oidc_configured
-    - not ansible_check_mode or headscale_podman.stat.exists
+    - not ansible_check_mode or headscale_podman_available
   containers.podman.podman_secret:
     name: headscale_oidc_secret
     data: "{{ headscale_oidc_client_secret }}"
@@ -216,7 +216,7 @@
     - not ansible_check_mode
     - >-
       headscale_config_result.changed
-      or (headscale_image_pull.changed | default(false))
+      or headscale_image_changed
       or (_headscale_oidc_secret.changed | default(false))
   command:
     argv: >-

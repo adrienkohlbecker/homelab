@@ -63,7 +63,7 @@
     - authelia
 
 - name: Create authelia JWT secret
-  when: not ansible_check_mode or authelia_podman.stat.exists
+  when: not ansible_check_mode or authelia_podman_available
   containers.podman.podman_secret:
     name: authelia_jwt_secret
     data: "{{ authelia_jwt_secret }}"
@@ -73,7 +73,7 @@
     - authelia
 
 - name: Create authelia session secret
-  when: not ansible_check_mode or authelia_podman.stat.exists
+  when: not ansible_check_mode or authelia_podman_available
   containers.podman.podman_secret:
     name: authelia_session_secret
     data: "{{ authelia_session_secret }}"
@@ -83,7 +83,7 @@
     - authelia
 
 - name: Create authelia storage encryption key
-  when: not ansible_check_mode or authelia_podman.stat.exists
+  when: not ansible_check_mode or authelia_podman_available
   containers.podman.podman_secret:
     name: authelia_storage_encryption_key
     data: "{{ authelia_storage_encryption_key }}"
@@ -93,7 +93,7 @@
     - authelia
 
 - name: Create authelia SMTP password secret
-  when: not ansible_check_mode or authelia_podman.stat.exists
+  when: not ansible_check_mode or authelia_podman_available
   containers.podman.podman_secret:
     name: authelia_smtp_password
     data: "{{ authelia_smtp_password }}"
@@ -103,7 +103,7 @@
     - authelia
 
 - name: Create authelia OIDC HMAC secret
-  when: not ansible_check_mode or authelia_podman.stat.exists
+  when: not ansible_check_mode or authelia_podman_available
   containers.podman.podman_secret:
     name: authelia_oidc_hmac_secret
     data: "{{ authelia_oidc_hmac_secret }}"

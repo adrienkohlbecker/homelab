@@ -48,7 +48,7 @@
     - influxdb
 
 - name: Create influxdb_root_user secret
-  when: not ansible_check_mode or influxdb_podman.stat.exists
+  when: not ansible_check_mode or influxdb_podman_available
   containers.podman.podman_secret:
     name: influxdb_root_user
     data: "{{ influxdb_root_user }}"
@@ -58,7 +58,7 @@
     - influxdb
 
 - name: Create influxdb_root_password secret
-  when: not ansible_check_mode or influxdb_podman.stat.exists
+  when: not ansible_check_mode or influxdb_podman_available
   containers.podman.podman_secret:
     name: influxdb_root_password
     data: "{{ influxdb_root_password }}"
@@ -75,7 +75,7 @@
 # create-operator`, update the vault, and re-apply; the authenticated readiness
 # check confirms the new value.
 - name: Create influxdb_admin_token secret
-  when: not ansible_check_mode or influxdb_podman.stat.exists
+  when: not ansible_check_mode or influxdb_podman_available
   containers.podman.podman_secret:
     name: influxdb_admin_token
     data: "{{ influxdb_root_token }}"

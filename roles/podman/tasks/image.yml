@@ -1,6 +1,6 @@
 # `podman_image_args` contract:
-#   name       required caller name; publishes `<name>_podman` and
-#              `<name>_image_pull`
+#   name       required caller name; publishes `<name>_podman_available` and
+#              `<name>_image_changed`
 #   image      required image reference
 #   condition  optional bool, default true
 - name: image | Validate arguments
@@ -50,13 +50,10 @@
 
 - name: image | Publish results for {{ podman_image_args.name }}
   set_fact:
-    "{{ podman_image_args.name | ansible_var_key }}_podman": >-
-      {{ _podman_image_binary
-         if _podman_image_condition
-         else {'changed': false, 'stat': {'exists': false}} }}
-    "{{ podman_image_args.name | ansible_var_key }}_image_pull": >-
-      {{ _podman_image_result
-         if _podman_image_condition
-         else {'changed': false} }}
+    "{{ podman_image_args.name | ansible_var_key }}_podman_available": >-
+      {{ _podman_image_binary.stat.exists if _podman_image_condition else false }}
+    "{{ podman_image_args.name | ansible_var_key }}_image_changed": >-
+      {{ (_podman_image_result.changed | default(false))
+         if _podman_image_condition else false }}
   tags:
     - podman
