@@ -60,11 +60,11 @@
 # out of the source tree. The two-step (create user, mint token) shape
 # is retained on purpose -- `--access-token` only prints a token on
 # fresh create, which would break --keep re-runs.
-- name: _verify | Create throwaway admin user
+- name: _verify | Create throwaway user
   command: >-
     /usr/local/bin/gitea admin user create
     --username verify --random-password
-    --email verify@verify.invalid --admin
+    --email verify@verify.invalid
     --config /etc/gitea/app.ini
   environment:
     GITEA_WORK_DIR: /mnt/services/gitea
