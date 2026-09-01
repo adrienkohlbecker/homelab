@@ -71,9 +71,7 @@ macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     vlan: management
-    # No podman_network: covers the iface-only path;
-    # mac_iot below still exercises the podman macvlan path.
-    podman_network: false
+    # Omitting podman_network exercises the iface-only default.
   - name: mac_iot
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     vlan: iot
