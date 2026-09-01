@@ -115,30 +115,24 @@
       changed_when: true
       become: true
 
-    - name: _verify | First seed pass mutates (changes()=1)
-      command: >-
-        sqlite3 -cmd ".timeout 30000" /tmp/_verify_kuma_seed.db
-        "INSERT INTO setting (key, value, type)
-           SELECT 'disableAuth', 'true', 'general' WHERE EXISTS (SELECT 1 FROM user)
-         ON CONFLICT(key) DO UPDATE SET value='true', type='general'
-           WHERE setting.value != 'true';
-         SELECT changes();"
-      register: _kuma_seed_first
+    - name: _verify | DisableAuth seed mutates once, then is idempotent
+      command:
+        argv:
+          - sqlite3
+          - -cmd
+          - .timeout 30000
+          - /tmp/_verify_kuma_seed.db
+      args:
+        stdin: "{{ lookup('file', 'disable_auth.sql') }}"
+      loop:
+        - "1"
+        - "0"
+      loop_control:
+        loop_var: kuma_seed_expected_changes
+        label: "changes()={{ kuma_seed_expected_changes }}"
+      register: _kuma_seed
       changed_when: false
-      failed_when: (_kuma_seed_first.stdout | trim) != '1'
-      become: true
-
-    - name: _verify | Second seed pass is a no-op (changes()=0)
-      command: >-
-        sqlite3 -cmd ".timeout 30000" /tmp/_verify_kuma_seed.db
-        "INSERT INTO setting (key, value, type)
-           SELECT 'disableAuth', 'true', 'general' WHERE EXISTS (SELECT 1 FROM user)
-         ON CONFLICT(key) DO UPDATE SET value='true', type='general'
-           WHERE setting.value != 'true';
-         SELECT changes();"
-      register: _kuma_seed_second
-      changed_when: false
-      failed_when: (_kuma_seed_second.stdout | trim) != '0'
+      failed_when: (_kuma_seed.stdout | trim) != kuma_seed_expected_changes
       become: true
   always:
     - name: _verify | Drop the synthetic DB
