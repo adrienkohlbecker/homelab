@@ -7,17 +7,14 @@
 # source, not at the intake) and would pin the fan at high PWM nonstop.
 # Package id 0 is a more honest "is the CPU actually warm?" signal.
 #
-# Rotational disks are pulled from group_vars/all.yml:rotational_disks_by_id
+# Rotational disks are pulled from group_vars/all/main.yml:rotational_disks_by_id
 # (computed at apply time from ansible_devices) and aggregated via a
 # max-function curve. Same rationale as lab.yaml.j2 -- "platform: drivetemp"
 # binds to whichever drivetemp libsensors enumerates first.
 
 dbPath: /var/lib/fan2go/fan2go.db
 
-# fan2go-tui (interactive, ssh-in-and-run) talks to the daemon over
-# this loopback HTTP API. Port pinned from
-# group_vars/all.yml:service_ports.fan2go_api; the matching tui side
-# lives in roles/fan2go/templates/fan2go-tui.yaml.j2.
+# Loopback API for fan2go-tui.
 api:
   enabled: true
   host: 127.0.0.1
