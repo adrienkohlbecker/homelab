@@ -42,6 +42,7 @@
   file:
     path: /mnt/scratch/homelab_ci
     state: directory
+    owner: root
     group: homelab_ci
     # No world bits: published trees are whole converged root filesystems, and
     # every consumer (operator, gitlab_runner, the qemu cells) is a group member.
