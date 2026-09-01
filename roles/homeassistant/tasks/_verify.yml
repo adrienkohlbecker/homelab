@@ -7,14 +7,10 @@
     or _homeassistant_unit.status.ActiveState != "active"
   become: true
 
-# HA falls back to "recovery mode" -- ignoring configuration.yaml entirely
-# and reverting every option to its built-in default -- when it can't parse
-# the config, e.g. a `!include` target the role forgot to pre-touch. That
-# silently drops use_x_forwarded_for, so the nginx probe below fails with an
-# opaque 400 (HA rejecting the proxied request); assert the real cause here
-# first. Guards against a new `!include` landing in configuration.yaml
-# without a matching stub in main.yml's "Ensure files exist" list.
-- name: _verify | Homeassistant did not fall back to recovery mode
+# HA enters recovery mode for a broken include but silently drops a malformed
+# notify platform. Catch both managed-configuration failures before the HTTP
+# probes obscure them behind secondary symptoms.
+- name: _verify | Homeassistant loaded managed configuration without error
   command:
     argv:
       - journalctl
@@ -22,30 +18,14 @@
       - homeassistant
       - -b
       - --no-pager
-      - --grep=Activating recovery mode
-  register: _homeassistant_recovery_mode
-  changed_when: false
-  failed_when: '"Activating recovery mode" in _homeassistant_recovery_mode.stdout'
-  become: true
-
-# A malformed notify platform (e.g. bad SMTP config or a password that broke
-# YAML quoting) makes HA log "Invalid config for 'notify'" and silently drop the
-# platform WITHOUT entering recovery mode -- so the checks above pass while
-# notify.email never registers. Assert no notify config error in this boot.
-- name: _verify | Homeassistant loaded the notify config without error
-  command:
-    argv:
-      - journalctl
-      - -u
-      - homeassistant
-      - -b
-      - --no-pager
-      - --grep=Invalid config for .notify
-  register: _homeassistant_notify_config
+      - --grep=Activating recovery mode|Invalid config for .notify
+  register: _homeassistant_config_errors
   changed_when: false
   # journalctl --grep prints "-- No entries --" (and exits 1) when nothing
   # matches, so match the message text rather than testing stdout length.
-  failed_when: '"Invalid config" in _homeassistant_notify_config.stdout'
+  failed_when: >-
+    "Activating recovery mode" in _homeassistant_config_errors.stdout
+    or "Invalid config" in _homeassistant_config_errors.stdout
   become: true
 
 # Functional probe of HA itself. /manifest.json is the same endpoint
