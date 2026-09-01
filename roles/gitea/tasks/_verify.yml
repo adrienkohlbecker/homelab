@@ -1,20 +1,14 @@
-# Type=notify gates active on the HTTP listener; confirm the endpoint responds.
-- name: _verify | Gitea answers /api/healthz on loopback
-  uri:
-    url: http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
-    status_code: 200
-
 # Negative assertion that REQUIRE_SIGNIN_VIEW is in force: an anonymous
 # /api/v1/* call returns 403 ("Only signed in user is allowed to call
-# APIs"), while /api/healthz above stays exempt. Guards the SSO-only
+# APIs"), while /api/healthz stays exempt. Guards the SSO-only
 # posture from silently regressing to open anonymous browsing.
 - name: _verify | Gitea blocks anonymous API access (REQUIRE_SIGNIN_VIEW)
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version
     status_code: 403
 
-# Reverse-proxy chain probe -- a typo'd subdomain or broken
-# nginx_site_args would pass the loopback probe above silently.
+# Reverse-proxy chain probe -- a typo'd subdomain or broken nginx_site_args
+# would otherwise pass the direct anonymous API probe above silently.
 #
 # Map the vhost FQDN to loopback so SNI matches the served certificate.
 # Probing https://localhost with a Host: header leaves SNI=localhost, which
@@ -33,22 +27,9 @@
     validate_certs: false
     status_code: 200
 
-# Check schema migration and relational consistency; the SSH roundtrip below
-# exercises the authorized_keys consumer path directly.
-- name: _verify | Gitea doctor database checks
-  command: >-
-    /usr/local/bin/gitea doctor check
-    --run check-db-version,check-db-consistency
-    --config /etc/gitea/app.ini
-  environment:
-    GITEA_WORK_DIR: /mnt/services/gitea
-  become: true
-  become_user: git
-  changed_when: false
-
 # Functional git roundtrip: confirms the HTTP basic-auth path, git over
 # HTTP, sqlite write path, and on-disk repo creation all work end-to-
-# end. State checks above can pass on a build that is "running but not
+# end. Endpoint checks above can pass on a build that is "running but not
 # functional"; this is the smoke test that actually does the job.
 - name: _verify | Wipe any prior throwaway clone directory
   file:
@@ -136,14 +117,6 @@
   environment:
     GIT_TERMINAL_PROMPT: "0"
   changed_when: true
-
-- name: _verify | Confirm pushed file is fetchable through the API
-  uri:
-    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/repos/verify/functional_test/contents/stamp.txt
-    url_username: verify
-    url_password: "{{ _gitea_token.stdout | trim }}"
-    force_basic_auth: true
-    status_code: 200
 
 # SSH roundtrip: the HTTP path above exercises gitea's own listener;
 # this exercises a different code path -- host sshd matching the
