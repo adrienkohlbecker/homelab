@@ -133,6 +133,15 @@
 
 - name: UDM appliance services
   hosts: udm
+  pre_tasks:
+    # Remove stale systemd wiring before the active role starts keepalived.
+    - name: Retire obsolete UDM DNS failover state
+      import_role:
+        name: retired_services
+        tasks_from: udm_dns_failover
+      tags:
+        - retired_services
+        - udm_dns_failover
   roles:
     - role: udm_on_boot
       tags:

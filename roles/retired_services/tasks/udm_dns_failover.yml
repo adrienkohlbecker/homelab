@@ -1,0 +1,65 @@
+---
+- name: Remove retired UDM DNS failover files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /data/keepalived/cache
+    - /data/keepalived/dns.conf
+    - /data/keepalived/pihole.conf
+    - /data/keepalived/override.conf
+    - /usr/local/bin/pihole_healthcheck
+    - /etc/keepalived/conf.d
+  become: true
+  tags:
+    - retired_services
+    - udm_dns_failover
+
+- name: Remove retired UDM keepalived drop-in
+  file:
+    path: /etc/systemd/system/keepalived.service.d
+    state: absent
+  register: retired_services_udm_keepalived_dropin
+  become: true
+  tags:
+    - retired_services
+    - udm_dns_failover
+
+- name: Remove retired per-peer UDM VRRP rules
+  iptables:
+    chain: INPUT
+    in_interface: "{{ udm_dns_failover_interface }}"
+    protocol: "112"
+    source: "{{ item }}"
+    comment: keepalived VRRP
+    jump: ACCEPT
+    wait: "5"
+    state: absent
+  loop: "{{ dns_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
+  become: true
+  tags:
+    - retired_services
+    - udm_dns_failover
+
+- name: Remove retired unscoped UDM VRRP rule
+  iptables:
+    chain: INPUT
+    in_interface: "{{ udm_dns_failover_interface }}"
+    protocol: "112"
+    comment: keepalived VRRP
+    jump: ACCEPT
+    wait: "5"
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - udm_dns_failover
+
+- name: Reload systemd after removing retired UDM keepalived drop-in
+  when: retired_services_udm_keepalived_dropin.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - retired_services
+    - udm_dns_failover

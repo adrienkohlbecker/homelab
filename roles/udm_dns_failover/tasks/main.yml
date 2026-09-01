@@ -58,14 +58,6 @@
   tags:
     - udm_dns_failover
 
-- name: Remove obsolete keepalived package cache
-  file:
-    path: /data/keepalived/cache
-    state: absent
-  become: true
-  tags:
-    - udm_dns_failover
-
 # -- keepalived (apt) -----------------------------------------------------
 
 # The install must skip check mode outright: no roles/apt maintains the
@@ -142,21 +134,6 @@
   tags:
     - udm_dns_failover
 
-- name: Remove obsolete split-config artifacts
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /data/keepalived/dns.conf
-    - /etc/keepalived/conf.d/dns.conf
-    - /data/keepalived/pihole.conf
-    - /etc/keepalived/conf.d/pihole.conf
-    - /usr/local/bin/pihole_healthcheck
-    - /etc/keepalived/conf.d
-  become: true
-  tags:
-    - udm_dns_failover
-
 # -- sysctl ----------------------------------------------------------------
 
 - name: Enable ip_nonlocal_bind
@@ -165,42 +142,6 @@
     value: '1'
     sysctl_file: /etc/sysctl.d/30-keepalived.conf
     sysctl_set: true
-  become: true
-  tags:
-    - udm_dns_failover
-
-# -- iptables VRRP accept tombstones ---------------------------------------
-# No ACCEPT rules of our own: UniFi keeps the INPUT policy ACCEPT with all
-# verdicts inside its own jumped chains, so an appended accept can never
-# change a packet's fate -- proven live (rule counters stayed 0 across live
-# VRRP traffic). Peer scoping is enforced by keepalived itself
-# (check_unicast_src against unicast_peer). These tombstones clear the
-# per-peer rules earlier deployments appended, and the pre-scoping blanket
-# proto-112 rule before them.
-- name: Remove per-peer VRRP iptables rules
-  iptables:
-    chain: INPUT
-    in_interface: "{{ udm_dns_failover_interface }}"
-    protocol: "112"
-    source: "{{ item }}"
-    comment: keepalived VRRP
-    jump: ACCEPT
-    wait: "5"
-    state: absent
-  loop: "{{ dns_keepalived_peers | select('ne', inventory_hostname) | map('extract', external_ips) | sort }}"
-  become: true
-  tags:
-    - udm_dns_failover
-
-- name: Remove legacy unscoped VRRP iptables rule
-  iptables:
-    chain: INPUT
-    in_interface: "{{ udm_dns_failover_interface }}"
-    protocol: "112"
-    comment: keepalived VRRP
-    jump: ACCEPT
-    wait: "5"
-    state: absent
   become: true
   tags:
     - udm_dns_failover
@@ -277,26 +218,12 @@
   tags:
     - udm_dns_failover
 
-- name: Remove obsolete keepalived validate drop-in
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/systemd/system/keepalived.service.d/override.conf
-    - /data/keepalived/override.conf
-    - /etc/systemd/system/keepalived.service.d
-  register: udm_dns_failover_dropin_removal
-  become: true
-  tags:
-    - udm_dns_failover
-
 - name: Reload systemd
   when: >-
     udm_dns_failover_heartbeat_service.changed or
     udm_dns_failover_heartbeat_timer.changed or
     udm_dns_failover_heartbeat_service_link.changed or
-    udm_dns_failover_heartbeat_timer_link.changed or
-    udm_dns_failover_dropin_removal.changed
+    udm_dns_failover_heartbeat_timer_link.changed
   systemd:
     daemon_reload: true
   become: true
