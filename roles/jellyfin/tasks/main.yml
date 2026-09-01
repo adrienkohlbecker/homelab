@@ -51,7 +51,6 @@
     - jellyfin
 
 - name: Install tmpfiles.d entries for log and transcode reaping
-  when: not ansible_check_mode or jellyfin_user.uid is defined
   template:
     src: jellyfin.tmpfiles.conf.j2
     dest: /etc/tmpfiles.d/jellyfin.conf
@@ -59,13 +58,7 @@
     group: root
     mode: "0644"
     backup: true
-    # --dry-run (validate without the --create side effect) landed in systemd
-    # 256, so only resolute (26.04, systemd 259) has it; noble (255) lacks it
-    # and errors on the flag. Gate on major >= 26, not the codename.
-    validate: >-
-      systemd-tmpfiles
-      {{ '--dry-run' if ansible_distribution_major_version | int >= 26 else '' }}
-      --create %s
+    validate: systemd-tmpfiles --create %s
   become: true
   tags:
     - jellyfin

@@ -3,10 +3,3 @@
 # podman + nginx install on every test run.
 machines:
   box_deps:
-
-# Release-divergent: the tmpfiles.d validate adds `systemd-tmpfiles --dry-run`,
-# which landed in systemd 256 -- only resolute (26.04, systemd 259) has it;
-# noble (255) renders like the default cell. The resolute cell validates that
-# branch on box_deps (seed-deps builds per release).
-ubuntu:
-  - resolute
