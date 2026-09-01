@@ -13,10 +13,8 @@ authentication. The netdata vhost forwards that credential only to Authelia,
 then strips it before proxying the request to netdata itself.
 
 Inputs (env):
-- NETDATA_HOSTS: comma-separated list of `<name>=<query-url>[=<click-url>]`
-  triples. The query-url is fetched server-side; the click-url is the public
-  netdata vhost a browser can navigate to. If only one URL is given, both are
-  set to it.
+- NETDATA_HOSTS: comma-separated list of `<name>=<url>` pairs. Each URL is
+  fetched server-side and used for browser click-through.
   Example: "lab=https://netdata.lab.fahm.fr,pug=https://netdata.pug.fahm.fr"
 - OUTPUT_DIR: directory to write the files into (default
   /var/www/homepage_alerts). Must be writable by the unit's User=.
@@ -82,31 +80,19 @@ STATUS_ICONS = {
 }
 
 
-def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
-    """Parse `NETDATA_HOSTS` env into (name, query_url, click_url) tuples.
-
-    Format per entry: `name=query[=click]`, entries comma-separated. `click`
-    can itself contain `=` (e.g. cloud URLs with query strings); `query`
-    cannot — keep query URLs path-only or url-encode any `=` they need.
-    Malformed entries are skipped with a stderr warning so a single typo
-    doesn't take the whole render offline.
-    """
+def parse_hosts(spec: str) -> list[tuple[str, str]]:
+    """Parse comma-separated `name=url` entries from `NETDATA_HOSTS`."""
     out = []
     for chunk in spec.split(","):
         chunk = chunk.strip()
         if not chunk:
             continue
-        # split capped at 3 so click can carry its own `=` (URL query strings).
-        parts = [p.strip() for p in chunk.split("=", 2)]
-        if len(parts) == 2:
-            name, query = parts
-            click = query
-        elif len(parts) == 3:
-            name, query, click = parts
-        else:
-            print(f"NETDATA_HOSTS skipping malformed entry: {chunk!r}", file=sys.stderr)
-            continue
-        out.append((name, query.rstrip("/"), click.rstrip("/")))
+        name, separator, url = chunk.partition("=")
+        name = name.strip()
+        url = url.strip()
+        if not separator or not name or not url:
+            raise ValueError(f"malformed NETDATA_HOSTS entry: {chunk!r}")
+        out.append((name, url.rstrip("/")))
     return out
 
 
@@ -249,11 +235,11 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
-def _fetch_one(name: str, query_url: str, click_url: str, authorization: str) -> dict:
+def _fetch_one(name: str, url: str, authorization: str) -> dict:
     entry: dict = {"name": name}
     client = None
     try:
-        client = _HostClient(query_url, authorization)
+        client = _HostClient(url, authorization)
         alarms = normalize(client.alarms())
         # A transitions miss is non-fatal: the alarm row falls back to the
         # alerts list URL.
@@ -270,7 +256,7 @@ def _fetch_one(name: str, query_url: str, click_url: str, authorization: str) ->
         # list URL.
         for a in alarms:
             a["transition_id"] = tid_by_key.get((a["name"], a["chart"]), "")
-            a["href"] = alarm_href(click_url, name, a)
+            a["href"] = alarm_href(url, name, a)
         entry["alarms"] = alarms
     except Exception as e:
         # Bare except so one host's transport quirk never disappears the rest
@@ -285,7 +271,7 @@ def _fetch_one(name: str, query_url: str, click_url: str, authorization: str) ->
     return entry
 
 
-def collect(hosts: list[tuple[str, str, str]], authorization: str) -> list[dict]:
+def collect(hosts: list[tuple[str, str]], authorization: str) -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
     # worst-case render is bounded by FETCH_TIMEOUT, not summed across hosts.
     # Iterating futures in submit order preserves the configured host order in
@@ -294,7 +280,7 @@ def collect(hosts: list[tuple[str, str, str]], authorization: str) -> list[dict]
     if not hosts:
         return []
     with ThreadPoolExecutor(max_workers=min(len(hosts), MAX_FETCH_WORKERS)) as pool:
-        futures = [pool.submit(_fetch_one, n, q, c, authorization) for n, q, c in hosts]
+        futures = [pool.submit(_fetch_one, name, url, authorization) for name, url in hosts]
         return [f.result() for f in futures]
 
 

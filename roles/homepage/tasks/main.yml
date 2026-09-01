@@ -211,14 +211,6 @@
     name: systemd_timer
     tasks_from: install
   vars:
-    # NETDATA_HOSTS env value: one public HTTPS netdata vhost per host. The
-    # same URL is used for the authenticated API query and browser click-through.
-    systemd_timer_homepage_alerts_netdata_hosts_env: >-
-      {%- set ents = [] -%}
-      {%- for h in homepage_netdata_hosts -%}
-      {%- set _ = ents.append(h ~ '=https://netdata.' ~ h ~ '.' ~ domain) -%}
-      {%- endfor -%}
-      {{ ents | join(',') }}
     systemd_timer_args:
       name: homepage_alerts
       description: Generate homepage alerts panel static files
@@ -234,7 +226,10 @@
       # even when the transition response is large.
       timeout_start_sec: 25s
       environment:
-        NETDATA_HOSTS: "{{ systemd_timer_homepage_alerts_netdata_hosts_env }}"
+        NETDATA_HOSTS: >-
+          {%- for host in homepage_netdata_hosts -%}
+          {{ ("," if not loop.first else "") ~ host ~ "=https://netdata." ~ host ~ "." ~ domain }}
+          {%- endfor -%}
         OUTPUT_DIR: /var/www/homepage_alerts
         NETDATA_BASIC_AUTH_USERNAME: homepage_alerts
         NETDATA_BASIC_AUTH_PASSWORD_FILE: /opt/homepage_alerts/authelia_password

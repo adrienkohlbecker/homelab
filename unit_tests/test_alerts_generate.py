@@ -30,13 +30,9 @@ ag = _load()
 
 
 class TestParseHosts:
-    def test_two_url_format(self) -> None:
+    def test_name_url_format(self) -> None:
         result = ag.parse_hosts("lab=http://localhost:19999")
-        assert result == [("lab", "http://localhost:19999", "http://localhost:19999")]
-
-    def test_three_url_format(self) -> None:
-        result = ag.parse_hosts("lab=http://localhost:19999=https://netdata.lab.fahm.fr")
-        assert result == [("lab", "http://localhost:19999", "https://netdata.lab.fahm.fr")]
+        assert result == [("lab", "http://localhost:19999")]
 
     def test_multiple_hosts(self) -> None:
         result = ag.parse_hosts("lab=http://a,pug=https://b")
@@ -45,9 +41,8 @@ class TestParseHosts:
         assert result[1][0] == "pug"
 
     def test_strips_trailing_slash(self) -> None:
-        result = ag.parse_hosts("lab=http://a/=https://b/")
-        assert result[0][1] == "http://a"
-        assert result[0][2] == "https://b"
+        result = ag.parse_hosts("lab=https://b/")
+        assert result[0][1] == "https://b"
 
     def test_empty_string(self) -> None:
         assert ag.parse_hosts("") == []
@@ -56,13 +51,18 @@ class TestParseHosts:
         result = ag.parse_hosts(",lab=http://a,,")
         assert len(result) == 1
 
-    def test_click_url_with_equals(self) -> None:
-        result = ag.parse_hosts("lab=http://a=https://cloud.netdata.cloud/spaces?id=1")
-        assert result[0][2] == "https://cloud.netdata.cloud/spaces?id=1"
+    def test_url_with_equals(self) -> None:
+        result = ag.parse_hosts("lab=https://cloud.netdata.cloud/spaces?id=1")
+        assert result[0][1] == "https://cloud.netdata.cloud/spaces?id=1"
 
     def test_whitespace_stripped(self) -> None:
         result = ag.parse_hosts("  lab = http://a  ")
-        assert result[0] == ("lab", "http://a", "http://a")
+        assert result[0] == ("lab", "http://a")
+
+    @pytest.mark.parametrize("spec", ["lab", "=https://netdata.lab", "lab="])
+    def test_malformed_entry_rejected(self, spec: str) -> None:
+        with pytest.raises(ValueError, match="malformed NETDATA_HOSTS entry"):
+            ag.parse_hosts(spec)
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ class TestFetchOne:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         class FakeClient:
-            def __init__(self, query_url: str, authorization: str) -> None:
+            def __init__(self, url: str, authorization: str) -> None:
                 pass
 
             def alarms(self) -> dict:
@@ -152,7 +152,7 @@ class TestFetchOne:
 
         monkeypatch.setattr(ag, "_HostClient", FakeClient)
 
-        result = ag._fetch_one("lab", "https://netdata.lab", "https://netdata.lab", "Basic credential")
+        result = ag._fetch_one("lab", "https://netdata.lab", "Basic credential")
 
         assert result["alarms"][0]["href"] == "https://netdata.lab/v2/spaces/lab/rooms/local/alerts"
         assert capsys.readouterr().err == ""
@@ -161,7 +161,7 @@ class TestFetchOne:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         class FakeClient:
-            def __init__(self, query_url: str, authorization: str) -> None:
+            def __init__(self, url: str, authorization: str) -> None:
                 pass
 
             def alarms(self) -> dict:
@@ -175,7 +175,7 @@ class TestFetchOne:
 
         monkeypatch.setattr(ag, "_HostClient", FakeClient)
 
-        ag._fetch_one("lab", "https://netdata.lab", "https://netdata.lab", "Basic credential")
+        ag._fetch_one("lab", "https://netdata.lab", "Basic credential")
 
         assert "alert_transitions parse failed" in capsys.readouterr().err
 
