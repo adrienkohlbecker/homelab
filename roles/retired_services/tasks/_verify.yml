@@ -16,6 +16,38 @@
   failed_when: retired_services_podman_socket_dropin.stat.exists
   become: true
 
+- name: _verify | Resolve retained GitLab Runner uid
+  command: id -u gitlab_runner
+  register: retired_services_gitlab_runner_uid
+  changed_when: false
+  become: true
+
+- name: _verify | Retired GitLab Runner rootless state is absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /var/lib/systemd/linger/gitlab_runner
+    - /etc/systemd/user/gitlab_runner_podman_prune.service
+    - /etc/systemd/user/gitlab_runner_podman_prune.timer
+    - /mnt/services/gitlab_runner/.config/systemd/user/sockets.target.wants/podman.socket
+    - /mnt/services/gitlab_runner/.config/systemd/user/timers.target.wants/gitlab_runner_podman_prune.timer
+    - /etc/systemd/system/user-{{ retired_services_gitlab_runner_uid.stdout }}.slice.d/override.conf
+    - /etc/systemd/system/user-{{ retired_services_gitlab_runner_uid.stdout }}.slice.d/50-memory.conf
+    - /var/lib/containers/rootless/gitlab_runner
+  register: retired_services_gitlab_runner_rootless_state
+  failed_when: retired_services_gitlab_runner_rootless_state.stat.exists
+  become: true
+
+- name: _verify | Retired GitLab Runner subordinate IDs are absent
+  command: grep -E '^gitlab_runner:' /etc/{{ item }}
+  loop:
+    - subuid
+    - subgid
+  register: retired_services_gitlab_runner_subids
+  changed_when: false
+  failed_when: retired_services_gitlab_runner_subids.rc != 1
+  become: true
+
 - name: _verify | Retired NUT driver drop-in is absent
   stat:
     path: /etc/systemd/system/nut-driver@eaton.service.d/override.conf

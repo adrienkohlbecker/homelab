@@ -87,6 +87,121 @@
     - retired_services
     - macvlan
 
+- name: Resolve the retired GitLab Runner rootless account
+  command: id -u gitlab_runner
+  register: retired_services_gitlab_runner_uid
+  changed_when: false
+  failed_when: retired_services_gitlab_runner_uid.rc not in [0, 1]
+  check_mode: false
+  become: true
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Inspect retired GitLab Runner linger state
+  when: retired_services_gitlab_runner_uid.rc == 0
+  stat:
+    path: /var/lib/systemd/linger/gitlab_runner
+  register: retired_services_gitlab_runner_linger
+  become: true
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Remove retired GitLab Runner prune timer
+  when:
+    - retired_services_gitlab_runner_uid.rc == 0
+    - retired_services_gitlab_runner_linger.stat.exists
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: gitlab_runner_podman_prune
+      user: gitlab_runner
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Remove retired GitLab Runner rootless Podman socket
+  when:
+    - retired_services_gitlab_runner_uid.rc == 0
+    - retired_services_gitlab_runner_linger.stat.exists
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: podman.socket
+      user: gitlab_runner
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Disable retired GitLab Runner linger
+  when: retired_services_gitlab_runner_uid.rc == 0
+  import_role:
+    name: linger
+    tasks_from: disable
+  vars:
+    linger_args:
+      name: gitlab_runner
+      uid: "{{ retired_services_gitlab_runner_uid.stdout }}"
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Remove retired GitLab Runner subordinate IDs
+  lineinfile:
+    path: /etc/{{ item }}
+    regexp: '^gitlab_runner:'
+    state: absent
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
+  loop:
+    - subuid
+    - subgid
+  become: true
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Remove retired GitLab Runner slice caps
+  when: retired_services_gitlab_runner_uid.rc == 0
+  file:
+    path: >-
+      /etc/systemd/system/user-{{ retired_services_gitlab_runner_uid.stdout }}.slice.d/{{ item }}
+    state: absent
+  loop:
+    - override.conf
+    - 50-memory.conf
+  register: retired_services_gitlab_runner_slice_caps
+  become: true
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Reload systemd after removing retired GitLab Runner slice caps
+  when: retired_services_gitlab_runner_slice_caps.changed | default(false)
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - retired_services
+    - gitlab_runner
+
+- name: Remove retired GitLab Runner rootless Podman storage
+  file:
+    path: /var/lib/containers/rootless/gitlab_runner
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - gitlab_runner
+
 - name: Find retired Apport log files
   find:
     paths: /var/log

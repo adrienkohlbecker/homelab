@@ -38,6 +38,80 @@
   import_role:
     name: macvlan
 
+- name: _setup | Create retired GitLab Runner account
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: gitlab_runner
+      home: /mnt/services/gitlab_runner
+
+- name: _setup | Enable retired GitLab Runner linger
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: gitlab_runner
+      uid: "{{ gitlab_runner_user.uid }}"
+
+- name: _setup | Install retired GitLab Runner prune timer
+  import_role:
+    name: podman
+    tasks_from: prune
+  vars:
+    podman_prune_args:
+      name: gitlab_runner_podman_prune
+      user: gitlab_runner
+
+- name: _setup | Enable retired GitLab Runner rootless Podman socket
+  systemd:
+    name: podman.socket
+    enabled: true
+    state: started
+    scope: user
+  become: true
+  become_user: gitlab_runner
+
+- name: _setup | Install retired GitLab Runner subordinate IDs
+  lineinfile:
+    path: /etc/{{ item }}
+    regexp: '^gitlab_runner:'
+    line: 'gitlab_runner:165536:65536'
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - subuid
+    - subgid
+  become: true
+
+- name: _setup | Create retired GitLab Runner slice drop-in directory
+  file:
+    path: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Install retired GitLab Runner slice caps
+  copy:
+    content: |
+      [Slice]
+      MemoryHigh=512M
+      MemoryMax=1G
+    dest: >-
+      /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d/{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - override.conf
+    - 50-memory.conf
+  become: true
+
 - name: _setup | Install retired Netplan rollback fixtures
   copy:
     dest: "{{ item.path }}"
