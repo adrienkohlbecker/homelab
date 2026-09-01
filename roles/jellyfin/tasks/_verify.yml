@@ -1,17 +1,3 @@
-# Loopback probe through the host-side published port -- confirms
-# /System/Info/Public returns valid JSON, not just that the container's
-# own healthcheck passes (which the unit's --sdnotify=healthy already
-# gates the "active" state on).
-- name: _verify | Jellyfin /System/Info/Public over loopback
-  uri:
-    url: http://localhost:{{ service_ports.jellyfin }}/System/Info/Public
-    status_code: 200
-  register: _jellyfin_http
-  retries: 30
-  delay: 2
-  until: _jellyfin_http.status == 200
-  failed_when: not ((_jellyfin_http.json.ProductName | default('')) is search('^Jellyfin'))
-
 # Map the vhost FQDN to loopback so SNI matches the served certificate.
 # Probing https://localhost with a Host: header leaves SNI=localhost, which
 # OpenSSL 3.x rejects this as a fatal unrecognized_name alert (status -1).
@@ -24,18 +10,28 @@
     state: present
   become: true
 
-# Exercise the nginx-proxied path -- catches typo'd subdomain or
-# proxy_pass regressions that the loopback probe would miss.
-- name: _verify | Jellyfin /System/Info/Public via nginx vhost
+# Exercise both the published host port and nginx vhost. Together they verify
+# valid Jellyfin JSON and catch proxy routing regressions that the container
+# healthcheck cannot see.
+- name: _verify | Jellyfin public API through each ingress path
   uri:
-    url: https://jellyfin.{{ inventory_hostname }}.{{ domain }}/System/Info/Public
-    validate_certs: false
+    url: "{{ item.url }}"
+    validate_certs: "{{ item.validate_certs }}"
     status_code: 200
-  register: _jellyfin_http_nginx
+  register: _jellyfin_http
   retries: 30
   delay: 2
-  until: _jellyfin_http_nginx.status == 200
-  failed_when: not ((_jellyfin_http_nginx.json.ProductName | default('')) is search('^Jellyfin'))
+  until: _jellyfin_http.status == 200
+  failed_when: not ((_jellyfin_http.json.ProductName | default('')) is search('^Jellyfin'))
+  loop:
+    - name: loopback
+      url: http://localhost:{{ service_ports.jellyfin }}/System/Info/Public
+      validate_certs: true
+    - name: nginx
+      url: https://jellyfin.{{ inventory_hostname }}.{{ domain }}/System/Info/Public
+      validate_certs: false
+  loop_control:
+    label: "{{ item.name }}"
 
 # Jellyfin's operator-managed library options write beside media (trickplay
 # images, downloaded subtitles). Exercise a full create/remove round-trip
