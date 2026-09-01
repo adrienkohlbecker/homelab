@@ -8,7 +8,7 @@ Type=simple
 User=root
 Group=root
 ExecStart=/usr/local/bin/fan2go -c /etc/fan2go/fan2go.yaml --no-style
-Restart=on-failure
+Restart=always
 RestartSec=10
 # fan2go ~50s init for fan-curve learning + sanity checks; widen
 # default 90s only if observed too tight.
