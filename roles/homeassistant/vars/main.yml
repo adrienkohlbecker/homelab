@@ -15,15 +15,9 @@ homeassistant_networks:
   # which names work. Discovery/zeroconf is intentionally NOT enabled on this
   # adapter (see core.network.j2 + main.yml).
   - name: homeassistant
-  # mac_iot: HA's L2 presence on the IoT VLAN (10.123.4.0/24). No IP
-  # pin — HA is the only container on this network, netavark allocates
-  # deterministically from ip_range .136/29 (upper /29 of lab's IoT
-  # macvlan_block; see data/network_topology.yml). Nothing downstream
-  # keys on a specific address: HomeKit/Sonos discovery uses mDNS/UPnP
-  # identity, no DNS A-record points at this IP, no firewall rule keys
-  # on it. Re-introduce a pin (add `ip: <addr>`) if either of those
-  # changes, or if a second container joins this network and starts
-  # contending for slot assignments.
+  # mac_iot: HA's L2 presence on the IoT VLAN. Netavark allocates its address
+  # from the role-derived /29; discovery uses mDNS/UPnP identity and nothing
+  # downstream keys on a specific IP.
   #
   # mac IS pinned: without it podman mints a fresh random MAC every
   # container recreate (unit restart / image bump), UniFi sees that as
