@@ -119,16 +119,6 @@ local EXCLUDE_FROM_FIELDS = {
     parse_error = true,
 }
 
--- Tags whose tail input has a dedicated parser. Each parser sets a signature
--- field only on a successful match, so its presence is the discriminant for
--- "this line parsed". A record that reaches the shaper on one of these tags
--- WITHOUT the field slipped past the regex unparsed -- surfaced below as
--- parse_error so a drifting parser is visible instead of the raw line quietly
--- masquerading as a plain message. parser names the file/stanza to fix.
-local PARSE_DISCRIMINANT = {
-    ["nginx.access"] = { field = "status", parser = "nginx_access_custom" },
-}
-
 function shape_lnav(tag, ts, record)
     local source_shape = SOURCE_SHAPES[tag] or {}
     local unit = source_shape.unit or record["SYSTEMD_UNIT"] or record["UNIT"] or unit_from_tag(tag)
@@ -159,16 +149,12 @@ function shape_lnav(tag, ts, record)
         level = "error"
     end
 
-    -- Parse-failure detection: a record on a parsed tag (PARSE_DISCRIMINANT)
-    -- that is missing its parser's signature field never matched the regex.
-    -- Flag it with parse_error (the parser to fix; queryable as
-    -- `... WHERE parse_error IS NOT NULL`) and raise it to warn so a silently
-    -- drifting parser is loud in the stream rather than blending into info. The
-    -- raw line stays the message (Preserve_Key kept it under log).
+    -- The nginx access parser always produces status. Surface a missing status
+    -- as a warning instead of letting a drifting parser masquerade as a plain
+    -- message; Preserve_Key keeps the raw line under log.
     local parse_error = record["parse_error"]
-    local discriminant = PARSE_DISCRIMINANT[tag]
-    if parse_error == nil and discriminant ~= nil and record[discriminant.field] == nil then
-        parse_error = discriminant.parser
+    if parse_error == nil and tag == "nginx.access" and record["status"] == nil then
+        parse_error = "nginx_access_custom"
         level = "warn"
     end
 
