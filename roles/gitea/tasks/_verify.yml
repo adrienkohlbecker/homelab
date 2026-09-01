@@ -1,14 +1,8 @@
-# Loopback probe -- confirms gitea is serving. Type=notify already gates
-# "active" on the HTTP listener being bound, so the retries here are
-# mostly belt-and-suspenders for slow-cold-DB cases.
+# Type=notify gates active on the HTTP listener; confirm the endpoint responds.
 - name: _verify | Gitea answers /api/healthz on loopback
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
     status_code: 200
-  register: _gitea_healthz
-  retries: 30
-  delay: 2
-  until: _gitea_healthz.status == 200
 
 # Negative assertion that REQUIRE_SIGNIN_VIEW is in force: an anonymous
 # /api/v1/* call returns 403 ("Only signed in user is allowed to call
