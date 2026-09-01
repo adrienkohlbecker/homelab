@@ -138,7 +138,6 @@
     tasks_from: bucket
   vars:
     influxdb_bucket_args:
-      org: "{{ influxdb_root_org }}"
       user: verify_user
       bucket: verify_bucket
 
@@ -290,38 +289,6 @@
           Write-bucket token successfully read from verify_bucket --
           bucket.yml's --write-bucket invocation appears to grant read
           perms, which is a scope regression.
-
-# Negative-org test: bucket.yml asserts the requested org exists (only
-# influxdb_root_org is bootstrapped). A typo in a caller's
-# influxdb_bucket_args.org should hit that assert with a concrete
-# next-step message; exercise the path so a regression in the selectattr
-# expression or assert wording is loud here rather than misleading on a
-# real prod apply.
-- name: _verify | Bucket.yml against a nonexistent org fails at the assert
-  block:
-    - name: _verify | Call bucket.yml with definitely_not_here org
-      import_role:
-        name: influxdb
-        tasks_from: bucket
-      vars:
-        influxdb_bucket_args:
-          org: definitely_not_here
-          user: verify_user
-          bucket: verify_bucket
-    - name: _verify | Reaching this means assert-org-exists didn't fire
-      fail:
-        msg: bucket.yml accepted org=definitely_not_here -- assert-org-exists is broken.
-  rescue:
-    - name: _verify | Confirm the rescue caught assert-org-exists, not some other failure
-      assert:
-        that:
-          - ansible_failed_task.action == 'assert'
-          - ansible_failed_task.name is search('Assert org')
-          - ansible_failed_result.msg is search('influxdb org')
-        fail_msg: >-
-          bucket.yml failed under definitely_not_here, but not at the expected
-          assert-org-exists task. Failed task: {{ ansible_failed_task.name }}
-          (action={{ ansible_failed_task.action }})
 
 # Ownership assertion -- catches a regression where data/ or config/ ends
 # up owned by a different host uid (e.g. a future uidmap change that

@@ -9,9 +9,10 @@
 # wholesale and inter-call vars-leak can't happen.
 #
 # Required keys:
-#   org    -- influxdb org name (must already exist; not created here)
-#   user   -- user name (created if missing, attached to <org>)
-#   bucket -- bucket name (created under <org> if missing)
+#   user   -- user name (created if missing)
+#   bucket -- bucket name (created if missing)
+#
+# Tenants belong to the role-managed `influxdb_root_org`.
 #
 # Outputs:
 #   (none.) The bucket-scoped write-auth token is the one secret this
@@ -38,11 +39,10 @@
 - name: bucket | Assert args
   assert:
     that:
-      - influxdb_bucket_args.org    is defined
       - influxdb_bucket_args.user   is defined
       - influxdb_bucket_args.bucket is defined
     fail_msg: >-
-      influxdb_bucket requires influxdb_bucket_args.{org,user,bucket}.
+      influxdb_bucket requires influxdb_bucket_args.{user,bucket}.
 
 - name: bucket | Check whether podman is installed
   stat:
@@ -65,7 +65,7 @@
          or (_influxdb_bucket_podman.stat.exists
              and (_influxdb_bucket_container.rc | default(1)) == 0) }}
 
-- name: bucket | Query org {{ influxdb_bucket_args.org }}
+- name: bucket | Query org {{ influxdb_root_org }}
   when: _influxdb_bucket_api_available
   command:
     argv:
@@ -76,7 +76,7 @@
       - org
       - list
       - --name
-      - "{{ influxdb_bucket_args.org }}"
+      - "{{ influxdb_root_org }}"
       - --json
   register: _influxdb_bucket_org_query
   changed_when: false
@@ -92,37 +92,33 @@
 # `--name` is an exact filter today, but `length > 0` against the
 # bare result would silently accept a future patch that turned the
 # filter into a prefix/substring match. The org is bootstrapped only
-# via DOCKER_INFLUXDB_INIT_ORG; any other org has to exist already,
-# so the assert gives the operator a concrete next step. First
+# via DOCKER_INFLUXDB_INIT_ORG. First
 # `that:` clause short-circuits the from_json filter when stdout is
 # non-JSON (rc != 0 case).
-- name: "bucket | Assert org exists: {{ influxdb_bucket_args.org }}"
+- name: "bucket | Assert org exists: {{ influxdb_root_org }}"
   when: _influxdb_bucket_api_available
   assert:
     that:
       - _influxdb_bucket_org_query.rc == 0
       - (_influxdb_bucket_org_query.stdout
           | from_json
-          | matching_by_attr('name', influxdb_bucket_args.org)
+          | matching_by_attr('name', influxdb_root_org)
           | length) > 0
     fail_msg: >-
-      influxdb org '{{ influxdb_bucket_args.org }}' not found.
-      The influxdb role's main.yml bootstraps only `{{ influxdb_root_org }}`
-      (via DOCKER_INFLUXDB_INIT_ORG); any other org must be pre-created
-      out-of-band with `podman exec influxdb influx org create
-      --name {{ influxdb_bucket_args.org }}`.
+      Managed influxdb org '{{ influxdb_root_org }}' not found.
+      Reapply the influxdb role's main.yml to bootstrap it.
 
 # block-scoped lazy vars replace the earlier set_fact pattern. Each
 # reference re-evaluates from the relevant query register; values
 # never enter host-fact scope, so a subsequent import_role with
 # different inputs can't pick up the previous call's ids.
-- name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_bucket_args.org }}
+- name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_root_org }}
   when: _influxdb_bucket_api_available
   vars:
     _influxdb_org_id: >-
       {{ (_influxdb_bucket_org_query.stdout
           | from_json
-          | one_by_attr('name', influxdb_bucket_args.org)).id }}
+          | one_by_attr('name', influxdb_root_org)).id }}
     _influxdb_bucket_id: >-
       {{ (_influxdb_bucket_bucket_id_query.stdout
           | from_json
@@ -145,51 +141,6 @@
       check_mode: false
       failed_when: false
       become: true
-
-    # Users in influx 2.x aren't tied to orgs in `influx user list`;
-    # org membership is a separate relationship. Detect a cross-org
-    # collision: a same-name user that exists but isn't a member of
-    # the target org. Failing fast here surfaces the manual fix
-    # (`influx org members add`) instead of letting the rest of the
-    # block silently proceed with a user attached to the wrong org.
-    - name: bucket | Query org members
-      command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - org
-          - members
-          - list
-          - --id
-          - "{{ _influxdb_org_id }}"
-          - --json
-      register: _influxdb_bucket_members_query
-      changed_when: false
-      check_mode: false
-      failed_when: false
-      become: true
-
-    - name: bucket | Assert pre-existing user is a member of org {{ influxdb_bucket_args.org }}
-      vars:
-        _user_exists: >-
-          {{ _influxdb_bucket_user_query.rc == 0
-             and (_influxdb_bucket_user_query.stdout | from_json | length) > 0 }}
-        _user_in_org: >-
-          {{ ((_influxdb_bucket_members_query.stdout | default('[]') | from_json)
-              | matching_by_attr('name', influxdb_bucket_args.user)
-              | length) > 0 }}
-      assert:
-        that:
-          - not (_user_exists | bool) or (_user_in_org | bool)
-        fail_msg: >-
-          influxdb user '{{ influxdb_bucket_args.user }}' already exists but is
-          not a member of org '{{ influxdb_bucket_args.org }}'. Attach manually:
-            podman exec influxdb sh -c 'influx org members add \
-              --id {{ _influxdb_org_id }} \
-              --member $(influx user list --name {{ influxdb_bucket_args.user }} --json | jq -r ".[0].id")'
-          Then re-run this play.
 
     - name: bucket | Create user {{ influxdb_bucket_args.user }}  # noqa: no-changed-when -- when: gates execution, like creates: did
       when: >-

@@ -61,7 +61,6 @@
     tasks_from: bucket
   vars:
     influxdb_bucket_args:
-      org: "{{ influxdb_root_org }}"
       user: homeassistant
       bucket: homeassistant
 
