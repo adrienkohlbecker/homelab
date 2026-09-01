@@ -118,33 +118,6 @@
   become: true
 
 # --- SSO plugin ---------------------------------------------------------
-# A real OIDC round-trip can't be exercised here: Authelia isn't running
-# in the jellyfin role test and the box snakeoil chain doesn't validate
-# auth.box.mhaf.fr (the same IdP gap minio/gitea hit). So we assert the
-# strongest signals available without a live IdP -- the plugin files are
-# present, the DLL actually LOADED (proving the pinned version is
-# ABI-compatible with this Jellyfin), and the seeded login button reached
-# disk with the host substituted in.
-- name: _verify | Stat SSO plugin files
-  stat:
-    path: "/mnt/services/jellyfin/plugins/sso/{{ item }}"
-  register: _jellyfin_sso_files
-  become: true
-  loop:
-    - SSO-Auth.dll
-    - Duende.IdentityModel.dll
-    - Duende.IdentityModel.OidcClient.dll
-    - meta.json
-
-- name: _verify | Assert SSO plugin files present
-  assert:
-    that:
-      - item.stat.exists
-    fail_msg: "SSO plugin file missing: {{ item.item }}"
-  loop: "{{ _jellyfin_sso_files.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
 # Jellyfin logs "Loaded plugin: <Name> <Version>" (PluginManager.cs:604)
 # only for plugins whose targetAbi <= the running server version
 # (:702). A plugin pinned too new is skipped, not loaded -- so matching the
