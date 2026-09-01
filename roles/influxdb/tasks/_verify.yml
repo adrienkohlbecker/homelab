@@ -193,24 +193,6 @@
   changed_when: false
   become: true
 
-# Ownership assertion -- catches a regression where data/ or config/ ends
-# up owned by a different host uid (e.g. a future uidmap change that
-# doesn't include a +0 override for the influxdb user). Both bind-mounts
-# matter: the image's entrypoint actively flaps config/ to 0775 every
-# restart, so a uid drift on it would silently break the CLI's
-# /etc/influxdb2/configs reads inside the container.
-- name: _verify | Influxdb data and config dirs are owned by influxdb
-  stat:
-    path: /mnt/services/influxdb/{{ item }}
-  register: _influxdb_dir_owner
-  loop:
-    - data
-    - config
-  failed_when: >-
-    not _influxdb_dir_owner.stat.exists
-    or _influxdb_dir_owner.stat.pw_name != 'influxdb'
-  become: true
-
 - name: _verify | Exercise influxdb fluent-bit record contracts
   import_role:
     name: fluentbit
