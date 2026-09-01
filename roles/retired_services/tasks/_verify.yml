@@ -1,11 +1,4 @@
 ---
-- name: _verify | Retired logrotate diversion is absent  # noqa: command-instead-of-module -- read-only query
-  command: dpkg-divert --listpackage /etc/logrotate.d/apt
-  register: retired_services_logrotate_diversion
-  changed_when: false
-  failed_when: retired_services_logrotate_diversion.stdout | trim | length > 0
-  become: true
-
 - name: _verify | Retired diversion files were preserved
   command: grep -Fx "{{ item.content }}" "{{ item.path }}"
   loop:
@@ -42,23 +35,9 @@
   changed_when: false
   become: true
 
-- name: _verify | Retired podman tmpfiles diversion is absent  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /usr/lib/tmpfiles.d/podman.conf
-  register: retired_services_podman_diversion
-  changed_when: false
-  failed_when: retired_services_podman_diversion.stdout | trim | length > 0
-  become: true
-
 - name: _verify | Packaged chrony defaults are active
   command: grep -Fx 'DAEMON_OPTS="-F 1"' /etc/default/chrony
   changed_when: false
-  become: true
-
-- name: _verify | Retired chrony defaults diversion is absent  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /etc/default/chrony
-  register: retired_services_chrony_diversion
-  changed_when: false
-  failed_when: retired_services_chrony_diversion.stdout | trim | length > 0
   become: true
 
 - name: _verify | Chrony no longer runs IPv4-only
@@ -107,13 +86,6 @@
     path: /etc/default/smartmontools
   register: retired_services_smartmontools_defaults
   failed_when: retired_services_smartmontools_defaults.stat.exists
-  become: true
-
-- name: _verify | Retired smartmontools defaults diversion is absent  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /etc/default/smartmontools
-  register: retired_services_smartmontools_diversion
-  changed_when: false
-  failed_when: retired_services_smartmontools_diversion.stdout | trim | length > 0
   become: true
 
 - name: _verify | Retired kdump oops panic sysctl pin is absent

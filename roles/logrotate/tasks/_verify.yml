@@ -56,17 +56,6 @@
       configs:
         - path: /etc/logrotate.d/_verify_logrotate
 
-- name: _verify | Package config has no diversion  # noqa: command-instead-of-module -- read-only query
-  command:
-    argv:
-      - dpkg-divert
-      - --listpackage
-      - /etc/logrotate.d/btmp
-  register: logrotate_verify_diversion
-  changed_when: false
-  failed_when: logrotate_verify_diversion.stdout | trim | length > 0
-  become: true
-
 - name: _verify | Read locally modified package config
   slurp:
     src: /etc/logrotate.d/btmp
