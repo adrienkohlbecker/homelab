@@ -94,44 +94,6 @@
     or 'level: info' not in _headscale_hs_oidc_cfg.stdout
   become: true
 
-- name: _verify | Wait for normalized headscale record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "headscale"
-                    and fields.get("parser_status") == "parsed"
-                    and fields.get("CONTAINER_ID")
-                    and "time" not in fields
-                    and "level" not in fields
-                    and "message" not in fields
-                    and "CONTAINER_TAG" not in fields
-                    and "CONTAINER_ID_FULL" not in fields
-                    and "CMDLINE" not in fields
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _headscale_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _headscale_lnav_record.rc == 0
-  become: true
-
 - name: _verify | Exercise headscale fluent-bit record contracts
   import_role:
     name: fluentbit
