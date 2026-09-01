@@ -270,26 +270,15 @@
     - fan2go
 
 # ---- disabled-host cleanup ----
-# Only acts on hosts that previously had fan2go enabled. Stat-first to
-# avoid systemctl ENOENT noise on hosts where fan2go was never installed.
 
-- name: Stat fan2go service unit (disabled)
-  when: not fan2go_enabled
-  stat:
-    path: /etc/systemd/system/fan2go.service
-  register: fan2go_unit_stat
-  tags:
-    - fan2go
-
-- name: Stop and disable fan2go service (disabled, previously installed)
-  when:
-    - not fan2go_enabled
-    - fan2go_unit_stat.stat.exists
-  systemd:
-    name: fan2go
-    state: stopped
-    enabled: false
-  become: true
+- name: Remove fan2go systemd unit (disabled)
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: fan2go.service
+      condition: "{{ not fan2go_enabled }}"
   tags:
     - fan2go
 

@@ -5,20 +5,9 @@
   register: fan2go_config_absent
   failed_when: fan2go_config_absent.stat.exists
 
-- name: _verify | Stat fan2go service unit (disabled)
+- name: _verify | Assert fan2go service unit is absent (disabled)
   when: not fan2go_enabled
   stat:
     path: /etc/systemd/system/fan2go.service
   register: fan2go_unit_stat_verify
-
-- name: _verify | Assert fan2go service is inactive and disabled (disabled, previously installed)
-  when:
-    - not fan2go_enabled
-    - fan2go_unit_stat_verify.stat.exists
-  systemd:
-    name: fan2go
-  register: fan2go_unit_disabled
-  failed_when: >-
-    fan2go_unit_disabled.status.ActiveState == "active"
-    or fan2go_unit_disabled.status.UnitFileState != "disabled"
-  become: true
+  failed_when: fan2go_unit_stat_verify.stat.exists
