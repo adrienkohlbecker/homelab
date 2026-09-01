@@ -97,15 +97,6 @@
   tags:
     - jellyfin
 
-- name: Remove jellyfin logging system override
-  file:
-    path: /mnt/services/jellyfin/config/logging.json
-    state: absent
-  register: jellyfin_logging_json
-  become: true
-  tags:
-    - jellyfin
-
 - name: Install jellyfin fluent-bit extension
   import_role:
     name: fluentbit
@@ -317,7 +308,6 @@
         {{ jellyfin_user.changed
            or media_group.changed
            or jellyfin_logging_default_json.changed | default(false)
-           or jellyfin_logging_json.changed | default(false)
            or jellyfin_sso_extract.changed | default(false)
            or jellyfin_branding.changed | default(false)
            or jellyfin_network.changed | default(false) }}
