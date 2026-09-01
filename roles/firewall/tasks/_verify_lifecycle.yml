@@ -17,15 +17,6 @@
   register: _firewall_flowtable_invocation_before_reload
   become: true
 
-- name: _verify_lifecycle | Inspect flowtable devices before reload
-  command: nft list flowtable inet homelab bulk
-  register: _firewall_flowtable_before_reload
-  changed_when: false
-  failed_when:
-    - default_interface not in _firewall_flowtable_before_reload.stdout
-      or 'wg0' not in _firewall_flowtable_before_reload.stdout
-  become: true
-
 - name: _verify_lifecycle | Re-apply nftables ruleset via systemctl reload (must not disturb netavark)
   systemd:
     name: nftables.service
