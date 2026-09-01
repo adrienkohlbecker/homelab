@@ -19,14 +19,6 @@
   failed_when: "'crashkernel=' not in (kdump_verify_grub_cfg.content | b64decode)"
   become: true
 
-- name: _verify | NMI watchdog re-arm timer is enabled on x86
-  when: ansible_architecture == 'x86_64'
-  systemd:
-    name: kdump_nmi_watchdog.timer
-  register: kdump_verify_nmi_watchdog_timer
-  failed_when: kdump_verify_nmi_watchdog_timer.status.UnitFileState != 'enabled'
-  become: true
-
 - name: _verify | Exercise post-reboot kdump state
   when: ansible_architecture != 'aarch64'
   block:
@@ -36,6 +28,19 @@
       import_role:
         name: reboot
         tasks_from: reboot
+
+    # The timer fires three minutes after boot, after KVM and PowerTOP have had
+    # time to disable the detector. Verify the policy outcome rather than the
+    # timer's requested enablement state.
+    - name: _verify | NMI watchdog is armed post-reboot
+      when: ansible_architecture == 'x86_64'
+      command: cat /proc/sys/kernel/nmi_watchdog
+      register: kdump_verify_nmi_watchdog
+      changed_when: false
+      retries: 45
+      delay: 5
+      until: kdump_verify_nmi_watchdog.stdout | trim == '1'
+      become: true
 
     - name: _verify | Crashkernel reservation is non-zero post-reboot
       command: cat /sys/kernel/kexec_crash_size
