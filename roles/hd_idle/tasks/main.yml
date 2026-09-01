@@ -37,8 +37,9 @@
     systemd_unit_args:
       for: hd-idle.service
       src: hd-idle-override.conf
-      condition: "{{ not (ansible_check_mode and hd_idle_apt.changed) }}"
-  when: ansible_distribution_release == 'noble'
+      condition: >-
+        {{ ansible_distribution_release == 'noble'
+           and not (ansible_check_mode and hd_idle_apt.changed) }}
   tags:
     - hd_idle
 
@@ -50,7 +51,7 @@
     state: >-
       {{ 'restarted'
          if hd_idle_apt.changed or hd_idle_conf.changed
-            or (hd_idle_service_d_override_conf_result.changed | default(false))
+            or hd_idle_service_d_override_conf_result.changed
          else 'started' }}
   become: true
   tags:
