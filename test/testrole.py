@@ -254,7 +254,7 @@ async def run_test(
                             async with _phase("bootstrap playbook"):
                                 await m.ansible_command(str(m.workdir_path / "_bootstrap.yml"))
 
-                        if m.machine == "minimal":
+                        if m.machine == "minimal" and m.role != "cleanup":
                             # Fixes systemd-analyze validation error:
                             # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
                             await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")

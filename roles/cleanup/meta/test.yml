@@ -1,6 +1,5 @@
-# Behaviour differs against a host where the upstream-shipped packages this
-# role removes/replaces are actually present (e.g. snap removal only exercises
-# the real path when snapd was preinstalled on the vanilla cloud image).
+# Minimal preserves the vanilla cloud image's snapd and cloud-init state so the
+# role exercises their removal rather than only its no-op path on box.
 machines:
   box:
   minimal:
