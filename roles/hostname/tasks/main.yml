@@ -18,15 +18,6 @@
   tags:
     - hostname
 
-- name: Re-gather facts after hostname change
-  # Downstream roles in site.yml consume ansible_hostname / ansible_fqdn,
-  # populated at play start — before this task ran. Refresh so the rest of
-  # the play sees the new identity.
-  setup:
-  when: hostname_set.changed
-  tags:
-    - hostname
-
 - name: Touch /var/run/reboot-required on hostname change
   # rsyslog, journald, postfix and other daemons cache gethostname() at start;
   # without a reboot they keep the stale label until they're restarted.
