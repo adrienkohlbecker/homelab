@@ -158,21 +158,12 @@
 
 # Start kdump-tools only when the running kernel has reserved crash memory;
 # otherwise enable it for the reboot requested by the command-line change.
-# Kernels without CONFIG_KEXEC_CORE omit kexec_crash_size and degrade to the
-# same enable-only state, while real read errors still fail the play.
-- name: Stat /sys/kernel/kexec_crash_size
-  stat:
-    path: /sys/kernel/kexec_crash_size
-  register: kdump_kexec_crash_size_stat
-  become: true
-  tags:
-    - kdump
-
+# Missing CONFIG_KEXEC_CORE is fatal because the host cannot capture a dump.
 - name: Read /sys/kernel/kexec_crash_size
-  when: kdump_kexec_crash_size_stat.stat.exists
-  slurp:
-    src: /sys/kernel/kexec_crash_size
+  command: cat /sys/kernel/kexec_crash_size
   register: kdump_kexec_crash_size
+  changed_when: false
+  check_mode: false
   become: true
   tags:
     - kdump
@@ -184,7 +175,7 @@
     enabled: true
     state: >-
       {{ ('restarted' if kdump_tools_cfg.changed else 'started')
-         if (kdump_kexec_crash_size.content | default('') | b64decode | trim | default('0', true) | int) > 0
+         if (kdump_kexec_crash_size.stdout | trim | int) > 0
          else omit }}
   become: true
   tags:
