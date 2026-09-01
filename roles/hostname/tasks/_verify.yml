@@ -53,7 +53,6 @@
         v6    → {{ _hostname_getent_localhost.stdout | replace('\n', ' / ') }}
 
 - name: _verify | Resolve etc_hosts_entries to configured IPs
-  when: etc_hosts_entries | length > 0
   command: getent -s files ahosts {{ item.key }}
   loop: "{{ etc_hosts_entries | dict2items }}"
   register: _hostname_etc_hosts_entries
