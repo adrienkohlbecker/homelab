@@ -31,9 +31,8 @@
 #   - zfs_apt.changed: just upgraded userspace; the loaded kmod won't
 #     refresh until reboot, mismatch is expected for the rest of this
 #     play.
-#   - reboot-required: a kernel upgrade is pending elsewhere (e.g.
-#     cleanup earlier in site.yml), so the loaded kmod is stale by
-#     definition and the comparison would false-positive.
+#   - reboot-required: a kernel upgrade is pending, so the loaded kmod is stale
+#     by definition and the comparison would false-positive.
 - name: Stat /var/run/reboot-required
   stat:
     path: /var/run/reboot-required

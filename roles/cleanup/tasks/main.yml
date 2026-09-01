@@ -106,23 +106,6 @@
   tags:
     - cleanup
 
-# Noble's rolling HWE meta can outrun the pinned ZFS userspace. Remove its
-# package chain, but let apt protect any running HWE kernel; demotion requires
-# a deliberate purge and reboot.
-- name: Remove rolling HWE kernel
-  apt:
-    pkg:
-      - linux-generic-hwe-{{ ansible_distribution_version }}
-      - linux-image-generic-hwe-{{ ansible_distribution_version }}
-      - linux-headers-generic-hwe-{{ ansible_distribution_version }}
-    state: absent
-    autoremove: true
-    purge: true
-  become: true
-  tags:
-    - cleanup
-    - hwe_kernel
-
 # thermald's D-Bus policy grants optional access to Debian's `power` group,
 # which Ubuntu does not create. Keep it empty so access remains root-only while
 # dbus-daemon can resolve the policy group without warning.

@@ -1,13 +1,5 @@
-# Force the opposite starting state so converge must remove the rolling HWE
-# meta-package and recreate the thermald policy group.
-- name: _setup | Install HWE meta-package (converge removes it)
-  apt:
-    pkg:
-      - linux-generic-hwe-{{ ansible_distribution_version }}
-    state: present
-    update_cache: true
-  become: true
-
+# Force the opposite starting state so converge must recreate the thermald
+# policy group.
 - name: _setup | Remove power group (converge recreates it)
   group:
     name: power
