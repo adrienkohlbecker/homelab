@@ -35,7 +35,7 @@
     - influxdb
 
 # The image bootstraps org/user/bucket only while BoltDB is empty. Mounted
-# *_FILE secrets keep credentials out of command lines and the environment.
+# password/token files keep credentials out of command lines and the environment.
 - name: Pull influxdb image
   import_role:
     name: podman
@@ -44,16 +44,6 @@
     podman_image_args:
       name: influxdb
       image: "{{ influxdb_image }}"
-  tags:
-    - influxdb
-
-- name: Create influxdb_root_user secret
-  when: not ansible_check_mode or influxdb_podman_available
-  containers.podman.podman_secret:
-    name: influxdb_root_user
-    data: "{{ influxdb_root_user }}"
-  register: _influxdb_root_user_secret
-  become: true
   tags:
     - influxdb
 
@@ -95,21 +85,15 @@
     - influxdb
 
 # DOCKER_INFLUXDB_INIT_* honors the credentials only on first boot.
-# A changed secret with a pre-existing BoltDB means either a vault rotation or
+# A changed password secret with a pre-existing BoltDB means a vault rotation or
 # a restored host whose empty podman store is recreating the existing secret.
 # Fail once in both cases: a plain rerun clears the restored-host case, while a
 # real rotation still requires the operator procedure below.
-- name: Fail if bootstrap credentials changed with an existing database
+- name: Fail if bootstrap password changed with an existing database
   fail:
     msg: |
-      One or more InfluxDB bootstrap secrets were created or changed while an
-      existing BoltDB is present:
-      {% if _influxdb_root_password_secret.changed | default(false) %}
-        - influxdb_root_password
-      {% endif %}
-      {% if _influxdb_root_user_secret.changed | default(false) %}
-        - influxdb_root_user
-      {% endif %}
+      influxdb_root_password was created or changed while an existing BoltDB
+      is present.
 
       If this host was restored with an empty podman secret store and
       the vault value did not change, re-run this play. The recreated
@@ -118,25 +102,14 @@
       If a vault value changed, ensure the container is running first. A
       restored host may need one rerun to install and start its unit.
 
-      {% if _influxdb_root_password_secret.changed | default(false) %}
       Update the password on the target host:
         podman exec -it influxdb influx user password \
-          --name '{{ influxdb_root_user }}'
-      {% endif %}
-      {% if _influxdb_root_user_secret.changed | default(false) %}
-      Look up the old username in the vault git history, then rename it:
-        podman exec -it influxdb sh -c 'influx user update \
-          --id $(influx user list --name <OLD_USERNAME> --json \
-                 | jq -r ".[0].id") \
-          --name {{ influxdb_root_user }}'
-      {% endif %}
+          --name root
 
       Then re-run this play.
   when:
     - influxdb_bolt_db.stat.exists
-    - >-
-      (_influxdb_root_password_secret.changed | default(false))
-      or (_influxdb_root_user_secret.changed | default(false))
+    - _influxdb_root_password_secret.changed | default(false)
   tags:
     - influxdb
 
@@ -160,7 +133,6 @@
       condition: "{{ not ansible_check_mode or influxdb_user.uid is defined }}"
       restart: >-
         {{ influxdb_network.changed
-           or (_influxdb_root_user_secret.changed | default(false))
            or (_influxdb_root_password_secret.changed | default(false)) }}
   tags:
     - influxdb

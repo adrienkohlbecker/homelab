@@ -134,6 +134,15 @@
     - retired_services
     - podman
 
+- name: Remove retired InfluxDB username secret
+  containers.podman.podman_secret:
+    name: influxdb_root_user
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - influxdb
+
 - name: Restore packaged podman tmpfiles configuration
   lineinfile:
     regexp: '^# (.*) /run/podman (.*)$'
