@@ -69,9 +69,6 @@ ExecStart=/usr/bin/podman run \
     --health-start-period "100s" \
     --stop-timeout 120 \
     {{ homeassistant_image }}
-{# Prefer bridge NAT for off-IoT egress while retaining mac_iot as a fallback. #}
-{# The host-side script discovers the running container's PID and gateway.    #}
-ExecStartPost=/opt/homeassistant/pin_default_route.sh
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

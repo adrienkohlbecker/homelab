@@ -98,35 +98,20 @@
   changed_when: false
   become: true
 
-# Exercise the multi-default branch deterministically by making mac_iot the
-# preferred route, running the real script, then asserting the bridge wins.
-- name: _verify | Pin_default_route down-ranks a preferred mac_iot default so the bridge wins
-  shell: |
-    set -euo pipefail
-    {% raw %}
-    pid="$(podman inspect -f "{{.State.Pid}}" homeassistant)"
-    mac_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.mac_iot.Gateway}}")"
-    br_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.homeassistant.Gateway}}")"
-    nsenter -t "$pid" -n ip route flush default
-    nsenter -t "$pid" -n ip route add default via "$br_gw" metric 100
-    nsenter -t "$pid" -n ip route add default via "$mac_gw" metric 50
-    pre="$(nsenter -t "$pid" -n ip -4 route get 1.1.1.1)"
-    echo "before script (mac_iot preferred): $pre"
-    case "$pre" in
-      *"via $mac_gw"*) ;;
-      *) echo "SETUP FAIL: mac_iot should win egress before the script, got: $pre" >&2; exit 1 ;;
-    esac
-    /opt/homeassistant/pin_default_route.sh
-    post="$(nsenter -t "$pid" -n ip -4 route get 1.1.1.1)"
-    echo "after script (bridge should win): $post"
-    case "$post" in
-      *"via $br_gw"*) ;;
-      *) echo "FAIL: expected bridge gw $br_gw to win egress after down-rank, got: $post" >&2; exit 1 ;;
-    esac
-    {% endraw %}
-  args:
-    executable: /bin/bash
+- name: _verify | Homeassistant uses its bridge for ordinary egress
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - ip
+      - -4
+      - route
+      - get
+      - 1.1.1.1
+  register: _homeassistant_default_route
   changed_when: false
+  failed_when: "' dev eth0 ' not in _homeassistant_default_route.stdout"
   become: true
 
 # Functional HACS check: grep HA's journal for the loader's "We found

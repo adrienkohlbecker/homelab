@@ -271,29 +271,10 @@
   tags:
     - homeassistant
 
-# Reproducible-from-repo helper code, not service state -> /opt, not
-# /mnt/services (see CLAUDE.md service-vs-code split). Invoked by the
-# unit's ExecStartPost to pin HA's default route off the mac_iot macvlan.
-- name: Create /opt/homeassistant for helper scripts
+- name: Remove retired homeassistant route helper
   file:
     path: /opt/homeassistant
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - homeassistant
-
-- name: Deploy homeassistant default-route pin script
-  copy:
-    src: pin_default_route.sh
-    dest: /opt/homeassistant/pin_default_route.sh
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-  register: homeassistant_route_script
+    state: absent
   become: true
   tags:
     - homeassistant
@@ -370,7 +351,7 @@
     systemd_unit_args:
       src: homeassistant.service.j2
       condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
-      restart: "{{ homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_route_script.changed }}"
+      restart: "{{ homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed }}"
   tags:
     - homeassistant
 

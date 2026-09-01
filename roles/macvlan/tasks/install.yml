@@ -45,6 +45,8 @@
       # Must match the host child iface's `mode bridge` (macvlan_iface.service.j2)
       # so containers and the host iface interoperate on the shared parent.
       mode: bridge
+      # Macvlan provides direct LAN presence, not an ordinary egress path.
+      no_default_route: "1"
   become: true
   tags:
     - macvlan
