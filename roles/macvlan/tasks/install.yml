@@ -33,9 +33,7 @@
 # Reserve the lower /29 for the host and libvirt; Podman gets the upper /29.
 # Keep this inline: re-importing macvlan inside the loop shadows macvlan_args.
 - name: install | Create podman macvlan network {{ macvlan_args.name }}
-  when:
-    - macvlan_args.podman_network | default(false)
-    - not ansible_check_mode
+  when: macvlan_args.podman_network | default(false)
   containers.podman.podman_network:
     name: "{{ macvlan_args.name }}"
     driver: macvlan
