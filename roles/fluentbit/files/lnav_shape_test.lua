@@ -156,22 +156,14 @@ do
 end
 
 do
-    local rec = shape("app.file", {
+    local rec = shape("certbot.file", {
         host = "lab",
-        log = "library scan completed",
-        _service = "app",
-        _stream = "app_file",
-        _unit = "app.service",
-        _identifier = "app",
+        log = "certificate renewed",
     }, "info")
-    check("override.service", rec.service, "app")
-    check("override.stream", rec.stream, "app_file")
-    check("override.unit", rec.unit, "app.service")
-    check("override.identifier", rec.identifier, "app")
-    check("override.fields.service", rec.fields._service, nil)
-    check("override.fields.stream", rec.fields._stream, nil)
-    check("override.fields.unit", rec.fields._unit, nil)
-    check("override.fields.identifier", rec.fields._identifier, nil)
+    check("certbot.service", rec.service, "certbot")
+    check("certbot.stream", rec.stream, "certbot_file")
+    check("certbot.unit", rec.unit, "certbot.service")
+    check("certbot.identifier", rec.identifier, "certbot")
 end
 
 if failures == 0 then

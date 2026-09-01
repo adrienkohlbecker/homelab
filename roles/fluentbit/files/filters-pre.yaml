@@ -84,14 +84,6 @@ pipeline:
       reserve_data: true
       preserve_key: true
 
-    - name: modify
-      match: certbot.file
-      add:
-        - _service certbot
-        - _stream certbot_file
-        - _unit certbot.service
-        - _identifier certbot
-
     - name: parser
       match: certbot.file
       key_name: log
