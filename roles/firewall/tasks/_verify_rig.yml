@@ -54,27 +54,14 @@
   changed_when: true
   become: true
 
-# Bring up the extns netns + wg0 veth with only the non-scope primary
-# on veth_ext. Probe-group secondary aliases are added in
+# Configure the probe interfaces created by _setup.yml. Probe-group
+# secondary aliases are added in
 # _verify_input.yml via `Bind probe_X` tasks at the head of each
 # group. Host /32 routes back via wg0 are declared once here
 # (idempotent), regardless of which source is active in the netns.
-- name: _verify_rig | Create probe netns
+- name: _verify_rig | Configure probe netns
   shell: |
     set -euo pipefail
-    # Add-or-verify: succeeds if the netns is freshly added OR
-    # already present. A real failure (e.g. kernel netns support
-    # missing) bubbles up instead of being swallowed by `|| true`.
-    # `-e` not `-d`: ip netns mount points are FILES (bind-mounted
-    # from /proc/<pid>/ns/net), not directories. `[ -d ]` always
-    # returns false post-add, so the `||` branch never recovered --
-    # latent until _setup.yml started pre-creating extns for the
-    # wg0 veth pair.
-    ip netns add extns 2>/dev/null || [ -e /var/run/netns/extns ]
-    if ! ip link show wg0 >/dev/null 2>&1; then
-      ip link add wg0 type veth peer name veth_ext
-      ip link set veth_ext netns extns
-    fi
     if ! ip link show tailscale0 >/dev/null 2>&1; then
       ip link add tailscale0 type veth peer name ts_ext
       ip link set ts_ext netns extns
