@@ -10,40 +10,32 @@
     name: reboot
     tasks_from: reboot
 
-- name: _verify | Assert each iface exists and is UP
-  command: ip -br link show {{ item.name }}
+- name: _verify | Read each macvlan interface
+  command: ip -j -d address show dev {{ item.name }}
   loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
-  register: macvlan_verify_link
+  register: macvlan_verify_ifaces
   become: true
   changed_when: false
-  failed_when: "'UP' not in macvlan_verify_link.stdout"
 
-- name: _verify | Assert each iface carries its derived host IP
+- name: _verify | Assert each interface identity
   vars:
-    _macvlan_block: "{{ network | host_vlan_block(inventory_hostname, item.vlan) }}"
-  command: ip -4 -o addr show dev {{ item.name }}
-  loop: "{{ macvlan_blocks }}"
+    _macvlan_iface: "{{ item.stdout | from_json | first }}"
+    _macvlan_block: "{{ network | host_vlan_block(inventory_hostname, item.item.vlan) }}"
+    _macvlan_host_ip: "{{ _macvlan_block | ansible.utils.ipmath(0) }}"
+    _macvlan_ipv4: "{{ _macvlan_iface.addr_info | selectattr('family', 'equalto', 'inet') | list }}"
+  assert:
+    that:
+      - _macvlan_iface.linkinfo.info_kind == 'macvlan'
+      - "'UP' in _macvlan_iface.flags"
+      - _macvlan_iface.address == ('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ item.item.name)))
+      - _macvlan_ipv4 | length == 1
+      - (_macvlan_ipv4 | first).local == _macvlan_host_ip
+      - (_macvlan_ipv4 | first).prefixlen == 32
+  loop: "{{ macvlan_verify_ifaces.results }}"
   loop_control:
-    label: "{{ item.name }}"
-  register: macvlan_verify_addr
-  become: true
-  changed_when: false
-  failed_when: >-
-    ((_macvlan_block | ansible.utils.ipmath(0)) ~ '/32')
-    not in macvlan_verify_addr.stdout
-
-- name: _verify | Assert each iface carries its seeded MAC
-  command: cat /sys/class/net/{{ item.name }}/address
-  loop: "{{ macvlan_blocks }}"
-  loop_control:
-    label: "{{ item.name }}"
-  register: macvlan_verify_mac
-  changed_when: false
-  failed_when: >-
-    macvlan_verify_mac.stdout !=
-    ('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ item.name)))
+    label: "{{ item.item.name }}"
 
 - name: _verify | Assert the block route points at each iface
   vars:
