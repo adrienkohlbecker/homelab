@@ -217,8 +217,7 @@
 
 # Clone direct from github.com, not mirror_github: the Nexus github proxy is a
 # raw artifact proxy (serves the release-tarball GETs in vars/main.yml) and
-# can't speak git smart-HTTP, so a clone through it 404s. Matches the direct
-# github.com clones in roles/fan2go.
+# can't speak git smart-HTTP, so a clone through it 404s.
 #
 # Skip in check mode when git was only would-be-installed above: the git
 # module shells out to the binary even to read status, so it hard-fails on a
