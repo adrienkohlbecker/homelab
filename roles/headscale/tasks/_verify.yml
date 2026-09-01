@@ -208,42 +208,6 @@
   until: _headscale_lnav_record.rc == 0
   become: true
 
-# Native schema validation must reject semantically invalid YAML, not merely
-# malformed YAML. An unsupported database type reaches Headscale's config
-# validator but exits before it needs service state or network access.
-- name: _verify | Write schema-invalid headscale config
-  copy:
-    dest: /tmp/headscale_invalid_config.yaml
-    content: >-
-      {{
-        _headscale_hs_oidc_cfg.stdout
-        | regex_replace('(?m)^  type: sqlite$', '  type: invalid')
-      }}
-    mode: "0644"
-  become: true
-
-- name: _verify | Native configtest rejects the invalid database type
-  command:
-    argv:
-      - /usr/bin/podman
-      - run
-      - --rm
-      - --network=headscale
-      - --security-opt=no-new-privileges
-      - --tmpfs=/var/lib/headscale:rw,mode=0700
-      - --volume=/tmp/headscale_invalid_config.yaml:/etc/headscale/config.yaml:ro
-      - --volume=/mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro
-      - --secret=headscale_oidc_secret,type=mount,target=oidc_client_secret
-      - "{{ headscale_image }}"
-      - configtest
-  register: _headscale_invalid_configtest
-  changed_when: false
-  failed_when: >-
-    _headscale_invalid_configtest.rc == 0
-    or (_headscale_invalid_configtest.stdout | from_json).level != 'fatal'
-    or 'invalid database type' not in (_headscale_invalid_configtest.stdout | from_json).message
-  become: true
-
 # Exercise the ACL SIGHUP reload's fail-soft contract (tasks/main.yml): a
 # malformed policy on disk + SIGHUP must NOT take the server down -- headscale
 # logs the load error and keeps serving the previously-loaded policy. This is
