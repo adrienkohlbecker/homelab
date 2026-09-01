@@ -115,16 +115,3 @@
   become: true
   tags:
     - fluentbit
-
-- name: extension_remove | Record removal result
-  set_fact:
-    fluentbit_extension_remove_result:
-      changed: >-
-        {{
-          (
-            (fluentbit_extension_remove_configs.changed | default(false))
-            or (fluentbit_extension_remove_manifest.changed | default(false))
-          ) | bool
-        }}
-  tags:
-    - fluentbit
