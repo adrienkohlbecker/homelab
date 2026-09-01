@@ -99,31 +99,17 @@
 # first: linger enabled and podman.socket active under gitlab_runner. These
 # assertions therefore prove the role cleaned up a real executor transition,
 # not merely that a fresh shell host never created Docker state.
-- name: _verify | Shell executor does not leave gitlab_runner linger enabled
+- name: _verify | Shell executor removed Docker runtime artifacts
   when: gitlab_runner_executor != 'docker'
   stat:
-    path: /var/lib/systemd/linger/gitlab_runner
-  register: _gitlab_runner_shell_linger
-  failed_when: _gitlab_runner_shell_linger.stat.exists
-  become: true
-
-- name: _verify | Shell executor does not leave rootless podman.socket enabled
-  when: gitlab_runner_executor != 'docker'
-  stat:
-    path: /mnt/services/gitlab_runner/.config/systemd/user/sockets.target.wants/podman.socket
-  register: _gitlab_runner_shell_podman_socket
-  failed_when: _gitlab_runner_shell_podman_socket.stat.exists
-  become: true
-
-- name: _verify | Shell executor does not leave rootless podman prune units
-  when: gitlab_runner_executor != 'docker'
-  stat:
-    path: /etc/systemd/user/{{ item }}
+    path: "{{ item }}"
   loop:
-    - gitlab_runner_podman_prune.service
-    - gitlab_runner_podman_prune.timer
-  register: _gitlab_runner_shell_podman_prune
-  failed_when: _gitlab_runner_shell_podman_prune.stat.exists
+    - /var/lib/systemd/linger/gitlab_runner
+    - /mnt/services/gitlab_runner/.config/systemd/user/sockets.target.wants/podman.socket
+    - /etc/systemd/user/gitlab_runner_podman_prune.service
+    - /etc/systemd/user/gitlab_runner_podman_prune.timer
+  register: _gitlab_runner_shell_artifacts
+  failed_when: _gitlab_runner_shell_artifacts.stat.exists
   become: true
 
 - name: _verify | Shell executor stopped gitlab_runner user manager  # noqa: command-instead-of-module -- is-active query, not a state change
