@@ -6,6 +6,16 @@
 # unit on the system bus, and there's a single permission/user-mapping
 # model to reason about. The maildir stays operator-owned (0700) so
 # the human can browse it without sudo.
+- name: Validate required getmail inputs
+  assert:
+    quiet: true
+    that:
+      - root_email | default('') | length > 0
+      - gmail_app_password | default('') | trim | replace(' ', '') | length > 0
+    fail_msg: root_email and gmail_app_password must be set
+  tags:
+    - getmail
+
 - name: Install getmail
   apt:
     package:
