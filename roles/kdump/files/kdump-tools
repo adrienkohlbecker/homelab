@@ -38,7 +38,7 @@ KDUMP_COREDIR="/var/crash"
 # Leave a stamped sentinel on capture failure (full disk,
 # capture-kernel OOM, etc.) before the package's default
 # `reboot -f` swallows the only signal an operator has that the
-# chain ran but failed. See notes/kdump_runbook.md
+# chain ran but failed. See notes/runbooks/kdump.md
 # "If kdump didn't fire" for what to check after recovery.
 KDUMP_FAIL_CMD="date >> /var/crash/last_fail.log; reboot -f"
 # Pin to 0 because dmesg.<n> still contains kernel-pointer

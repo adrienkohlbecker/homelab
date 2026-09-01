@@ -1,79 +1,32 @@
-# Capture the next silent kernel hang. The lab box wedged on
-# 2026-05-06 with the journal cut off mid-stream and zero kernel
-# evidence — classic hard-lockup signature. This role installs the
-# two pieces that turn that scenario into something diagnosable:
-#
-# 1. Lockup-panic sysctls so the kernel's own watchdogs escalate to
-#    panic instead of silently spinning. Effective immediately, no
-#    reboot required.
-# 2. kdump-tools + crashkernel= reservation so a panic kexec's into
-#    a second kernel that writes /proc/vmcore to /var/crash for
-#    `crash` post-mortem. Requires reboot to take effect (the
-#    crashkernel= cmdline reserves RAM at boot; can't be added to a
-#    running kernel).
-#
-# Operator runbook (reading dumps, ddebs setup, `crash` cheatsheet) is
-# in notes/kdump_runbook.md.
+# Escalate kernel stalls to panic, then boot a capture kernel that writes the
+# vmcore to /var/crash. Panic sysctls apply immediately; crashkernel memory
+# reservation requires a reboot. Operator procedure: notes/runbooks/kdump.md.
 
-# Stat first because not every kernel exposes all of these. Some arm64
-# kernels have no NMI watchdog, so hardlockup_panic and unknown_nmi_panic
-# are absent and `sysctl -p` errors out trying to reload them. Skip the
-# missing ones and only act on what the running kernel actually has. The
-# stat-probe + selectattr pattern is unique
-# to this role; peers (e.g. roles/keepalived/tasks/main.yml:19) call
-# ansible.posix.sysctl unconditionally because they target sysctls
-# guaranteed to exist across the kernels we run.
+# Some arm64 kernels omit the NMI-related knobs; probing prevents sysctl reload
+# failures while preserving real errors for knobs the kernel does expose.
 - name: Detect available panic sysctls
   stat:
     path: /proc/sys/kernel/{{ item.name }}
   loop:
-    # nmi_watchdog (the prerequisite arm for hardlockup_panic) is handled
-    # separately — on the kernel cmdline below + the kdump_nmi_watchdog.timer
-    # re-arm — not as a sysctl here: on arm64 the knob exists but the write
-    # never sticks (no perf-NMI detector), so ansible.posix.sysctl would report
-    # changed forever.
-    # NMI watchdog: a CPU spinning in interrupt context.
+    # nmi_watchdog is managed through the x86 kernel cmdline and re-arm timer;
+    # writing its ineffective arm64 knob would report changed forever.
     - { name: hardlockup_panic, value: '1' }
-    # Soft watchdog: a task stuck on-CPU for >2*watchdog_thresh.
     - { name: softlockup_panic, value: '1' }
-    # Oops that didn't escalate is the silent-corruption shape.
     - { name: panic_on_oops, value: '1' }
-    # WARN_ON / WARN traces typically precede the cascade-hang;
-    # converting to panic gets a vmcore at the *first* symptom
-    # instead of waiting for the eventual lockup.
     - { name: panic_on_warn, value: '1' }
-    # khungtaskd-detected stalls (default 120s).
     - { name: hung_task_panic, value: '1' }
-    # RCU read-side stuck-forever — distinct shape from soft/hard
-    # lockup. Triggers on the first stall.
     - { name: panic_on_rcu_stall, value: '1' }
-    # Unknown NMIs (PCIe AER, firmware-injected) on hardware where
-    # they signal an unrecoverable fault.
     - { name: unknown_nmi_panic, value: '1' }
-    # IO-channel-check NMI (chipset / PCIe AER signalled). x86 only;
-    # the stat-probe skips it on arm64.
     - { name: panic_on_io_nmi, value: '1' }
-    # When the lockup detectors fire, NMI-poke the other CPUs so
-    # their backtraces also land in the panic log — the lock-holder
-    # usually lives on another CPU, and `bt -a` is "essential for
-    # SMP hangs" per the operator runbook.
+    # Include every CPU backtrace so the lock holder is visible.
     - { name: softlockup_all_cpu_backtrace, value: '1' }
     - { name: hardlockup_all_cpu_backtrace, value: '1' }
     - { name: hung_task_all_cpu_backtrace, value: '1' }
     - { name: oops_all_cpu_backtrace, value: '1' }
-    # Bitmask of extra info to dump into dmesg.<n> *before* kexec:
-    # 1=tasks, 2=mem, 4=timers, 8=locks, 16=ftrace = 31. Lands in
-    # the dmesg the runbook tells the operator to read first, and
-    # subsumes most of the `crash` cheatsheet (ps / log / mod -S)
-    # for the 80% case.
+    # Panic log includes tasks, memory, timers, locks, and ftrace.
     - { name: panic_print, value: '31' }
-    # Auto-reboot 10s after a panic that *didn't* kdump-capture (early
-    # boot before the crashkernel reservation takes, capture kernel
-    # itself panicking, or any oops/panic on a host whose service
-    # hasn't loaded). The kdump capture path reboots itself after
-    # writing vmcore (KDUMP_FAIL_CMD / kdump-tools-dump.service), so
-    # this sysctl is the no-capture fallback, not the post-capture
-    # reboot it reads as.
+    # Reboot after panics outside the kdump capture path; the capture service
+    # performs its own reboot after writing the vmcore.
     - { name: panic, value: '10' }
   register: kdump_panic_sysctls
   become: true
@@ -103,15 +56,8 @@
   tags:
     - kdump
 
-# Apport is Ubuntu's userspace crash reporter, desktop-oriented and
-# unused on our servers. It would also be load-bearing-broken here:
-# its /etc/init.d/apport does `chmod 1777 /var/crash` at every boot
-# (sysv-generator wraps it as apport.service), reverting the lockdown
-# below until the next ansible run. The window where /var/crash sits
-# world-writable is exactly when a panic-time vmcore would land there
-# readable to any user — the leak the lockdown exists to prevent.
-# Purging also drops a setuid coredump handler we don't need; no
-# Depends cascade (only Suggests from grub-common).
+# Apport's boot script makes /var/crash world-writable, exposing vmcores that
+# may contain in-memory secrets. These servers do not use its crash reporter.
 - name: Purge apport (collides with /var/crash lockdown, unused)
   apt:
     pkg:
@@ -125,10 +71,7 @@
   tags:
     - kdump
 
-# vmcore is a copy of all kernel-accessible RAM at panic time —
-# in-memory secrets, vault-decrypted vars, TLS keys. Pin the dump
-# directory to root-only so a package default drift can't silently
-# widen access.
+# vmcores can contain in-memory secrets, so pin the dump directory root-only.
 - name: Lock down /var/crash permissions
   when: not (ansible_check_mode and kdump_apt_tools.changed)
   file:
@@ -141,12 +84,8 @@
   tags:
     - kdump
 
-# Above only pins /var/crash itself; any pre-existing dump
-# subdirs/files (written under earlier package defaults, or by a
-# kdump that preceded this role on the host) keep their own perms.
-# Recurse owner/group to root:root for any contents — mode left
-# untouched so kdump-tools' own 0640 dump.<n> / dmesg.<n> stay as
-# the package writes them.
+# Existing dumps retain their package-owned modes; only correct ownership
+# recursively so old content is protected too.
 - name: Lock down /var/crash contents (recursive)
   when: not (ansible_check_mode and kdump_apt_tools.changed)
   file:
@@ -159,15 +98,8 @@
   tags:
     - kdump
 
-# Copy wholesale rather than lineinfile-per-key — writes are
-# atomic (reader between tasks can't see a half-updated file) and
-# the on-disk diff for a multi-key change is one mtime, not several.
-# The template mirrors upstream's structure and docstrings so an
-# operator grepping for a supported key still sees its docs; our
-# overrides land uncommented inline. Tradeoff vs lineinfile: have to
-# track upstream's shape across kdump-tools versions. validate runs
-# `sh -n` against the rendered file before it lands so quoting bugs
-# don't break the init script's source.
+# Keep the upstream structure and documentation recognizable while applying
+# the local values atomically. Shell validation protects the sourced config.
 - name: Copy /etc/default/kdump-tools
   when: not (ansible_check_mode and kdump_apt_tools.changed)
   copy:
@@ -183,18 +115,11 @@
   tags:
     - kdump
 
-# The crashkernel spec below covers 2G-and-up; on a host with less RAM
-# the kernel reserves nothing and the capture kernel never loads, with
-# no operator-visible signal. Fail loudly instead.
+# The crashkernel range starts at 2G; fail instead of silently reserving none.
 - name: Assert host has enough RAM for crashkernel reservation
   assert:
-    # ansible_memtotal_mb reports MemTotal *after* firmware + kernel
-    # reservations, so qemu -m 2048 (the `minimal` test fixture)
-    # reads as ~1950 here even though the kernel's crashkernel=
-    # parser sees the full 2G and applies the 2G-4G:320M rule.
-    # Floor sits just below 2G to let minimal pass; anything
-    # smaller would silently no-op the reservation, which is what
-    # this assert exists to make loud.
+    # MemTotal excludes firmware and kernel reservations, so a 2G fixture
+    # reports about 1950MB even though the kernel sees the full 2G.
     that: ansible_memtotal_mb >= 1900
     fail_msg: >-
       kdump's crashkernel range starts at 2G; host has
@@ -203,28 +128,10 @@
   tags:
     - kdump
 
-# Thread crashkernel= into whichever boot config the host uses.
-# Split ownership:
-#   - ZBM hosts (lab/box/pug): the role writes the ZFS dataset
-#     property because grub doesn't run, so the package's own grub.d
-#     snippet is dead code there.
-#   - grub-booted hosts (minimal test fixture today, plus any future
-#     grub host): we let the kdump-tools package own its shipped
-#     /etc/default/grub.d/kdump-tools.cfg, and its postinst drives
-#     update-grub. The role no
-#     longer writes a parallel /etc/default/grub.d/99-kdump.cfg —
-#     would stack a duplicate crashkernel= and the rightmost-wins
-#     ordering was a footgun across package upgrades.
-#
-# `,high`/`,low` syntax (kernel >=5.9 on arm64, >=4.6 on x86_64) splits
-# the reservation: 512M in the high region (above 4G) holds the
-# capture kernel + initramfs + dump tools, 128M in the low region
-# (under 4G) is left for capture-kernel devices that need DMA32
-# buffers. Keeping the high chunk above 4G means the running kernel
-# isn't stealing from ZONE_DMA32, which on a busy host can otherwise
-# manifest as GFP_DMA32 allocation failures during normal operation.
-# All current ZBM hosts (lab/pug/box) are >=4G so the fixed
-# reservation lands without needing the older tiered shape.
+# GRUB hosts use the package's grub.d fragment. ZBM hosts need this explicit
+# command-line contribution because GRUB never runs. The high reservation holds
+# the capture environment above 4G; the low reservation preserves DMA32 space
+# for capture-kernel devices.
 - name: Reserve crashkernel memory in ZBM commandline
   when: not grub_bootloader
   import_role:
@@ -237,13 +144,8 @@
   tags:
     - kdump
 
-# Arm the perf-NMI hard-lockup detector at kernel init, before userspace, so it
-# is up from the very first instant of every boot — the boot-time half of the
-# fix (the kdump_nmi_watchdog.timer re-arm below is the other half, for after
-# KVM tears it back down). Unlike crashkernel this carries no grub-package
-# equivalent, so it threads both bootloaders (grub + ZBM). Gated x86_64: that is
-# the whole prod fleet (the arm64 box is test-only), and on arm64 the perf-NMI
-# detector is unavailable so the token is a no-op anyway.
+# Arm the perf-NMI detector before userspace on x86; the delayed timer below
+# restores it after boot-time tuners disable it.
 - name: Enable NMI hard-lockup detector on the kernel commandline
   when: ansible_architecture == 'x86_64'
   import_role:
@@ -256,21 +158,10 @@
   tags:
     - kdump
 
-# kdump-tools.service kexec-loads the capture kernel into the memory
-# region reserved by crashkernel= at boot. If the running kernel
-# wasn't booted with the parameter, /sys/kernel/kexec_crash_size is 0
-# and `kdump-config load` exits non-zero — the unit fails to start.
-# Ship enabled-but-not-started until the next reboot rotates a
-# crashkernel-aware kernel in. The reboot already gets requested by
-# the cmdline writes above, so the site.yml-level reboot check
-# closes the loop.
-#
-# Match the stat-probe pattern used for the panic sysctls above.
-# Kernels without CONFIG_KEXEC_CORE don't expose kexec_crash_size;
-# stat-then-conditional-slurp degrades to enable-only on those
-# rather than aborting the play, and (unlike `command: cat ...
-# failed_when: false`) still surfaces real I/O errors instead of
-# silently treating them as "no reservation".
+# Start kdump-tools only when the running kernel has reserved crash memory;
+# otherwise enable it for the reboot requested by the command-line change.
+# Kernels without CONFIG_KEXEC_CORE omit kexec_crash_size and degrade to the
+# same enable-only state, while real read errors still fail the play.
 - name: Stat /sys/kernel/kexec_crash_size
   stat:
     path: /sys/kernel/kexec_crash_size
@@ -301,23 +192,11 @@
   tags:
     - kdump
 
-# The nmi_watchdog cmdline above brings the hard-lockup detector up at boot,
-# but boot-time tuners can tear it back down — the
-# blind spot behind the 2026-06-14 lab wedge (hardlockup_panic left with nothing
-# to fire on). An early-boot trace on pug (non-hybrid N100) pinned it: watchdog
-# reads 1 for the whole 0-39s pre-kvm window, then 0 within ~3s of qemu-kvm
-# loading the kvm modules, and stays 0 until re-armed. It IS a userspace-visible
-# kernel teardown (not a sysctl.d/unit write) and reproduces at runtime if you
-# reload the kvm modules and wait ~3s for the lag. A oneshot + OnBootSec timer
-# re-arms it once ~3min in (a manual re-arm at t+180s held for the rest of the
-# boot); the ~3s lag is why we use a fixed offset rather than ordering after
-# qemu-kvm.service (which would race the lag). Apply the re-arm to every x86
-# host: pug has no qemu-kvm.service, but PowerTOP still disables the watchdog.
+# KVM and PowerTOP can disable the watchdog after the kernel command line arms
+# it. Re-assert once after boot; the fixed delay clears KVM's asynchronous
+# teardown and also covers x86 hosts without qemu-kvm.service.
 
-# Install the oneshot service first so it is on disk when systemd-analyze
-# verify checks the timer's same-stem service reference. The service is
-# timer-triggered (no [Install]), so install-only here — never enabled or
-# started on its own.
+# Install the timer-triggered service before validating its paired timer.
 - name: Install NMI watchdog re-arm service unit
   import_role:
     name: systemd_unit
@@ -339,7 +218,3 @@
       condition: "{{ ansible_architecture == 'x86_64' }}"
   tags:
     - kdump
-
-# Enable + start the timer (not the service). Starting it now, already past
-# OnBootSec, triggers an immediate re-arm; at every subsequent boot it fires
-# 3min in. The service it pulls is the one installed above.

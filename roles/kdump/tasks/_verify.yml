@@ -1,19 +1,6 @@
-# _verify is contract-against-other-roles only. The pre-reboot state
-# assertions (USE_KDUMP=1, package installed, sysctls live) would be
-# tautologies — main.yml just wrote them in the same play. What's
-# worth verifying:
-#   (a) the cross-role contract with zfsbootmenu / grub.d — did the
-#       crashkernel= write thread the parameter onto the next-boot
-#       config?
-#   (b) post-reboot end-state — did the bootloader honor the cmdline,
-#       did the capture kernel kexec-load, did kdump-tools.service
-#       come up clean?
-#
-# Reboot pattern mirrors roles/console/tasks/_verify.yml:18-32 — the aarch64
-# packer image boots a rEFInd Linux EFI-stub menuentry with a staged command
-# line, so the ZBM crashkernel= write would not reach the running kernel after
-# reboot. Skip the post-reboot block there; the cmdline-source checks still
-# prove the role wrote the next-boot config correctly.
+# Verify the bootloader integration and post-reboot capture state. The aarch64
+# fixture uses a staged EFI-stub command line, so it exercises only the written
+# next-boot source rather than rebooting into it.
 
 - name: _verify | ZBM commandline includes crashkernel
   when: zfs_root and not grub_bootloader
@@ -23,10 +10,7 @@
   failed_when: "'crashkernel=' not in kdump_verify_zbm_cmdline.stdout"
   become: true
 
-# The kdump-tools package's shipped /etc/default/grub.d/kdump-tools.cfg
-# is the canonical crashkernel source on grub hosts (the role doesn't
-# write its own). Verify *that* file exists and carries crashkernel=,
-# which proves the package shipped what we delegated to.
+# GRUB hosts delegate crashkernel configuration to the package-owned fragment.
 - name: _verify | GRUB cmdline file (kdump-tools package's) includes crashkernel
   when: grub_bootloader
   slurp:
