@@ -26,8 +26,8 @@
       assert:
         that:
           - gitlab_runner_aws_qemu_token | length > 0
-          - (qemu_test | bool) or (gitlab_runner_aws_qemu_access_key_id | length > 0)
-          - (qemu_test | bool) or (gitlab_runner_aws_qemu_secret_access_key | length > 0)
+          - gitlab_runner_aws_qemu_access_key_id | length > 0
+          - gitlab_runner_aws_qemu_secret_access_key | length > 0
         fail_msg: >-
           gitlab_runner_aws_qemu_enabled is true but
           gitlab_runner_aws_qemu_token and/or the manager AWS credentials are
