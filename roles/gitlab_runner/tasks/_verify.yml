@@ -128,16 +128,6 @@
     daemon_reload: true
   become: true
 
-- name: _verify | Wait for gitlab_runner.service to reach active
-  systemd:
-    name: gitlab_runner.service
-  register: _gitlab_runner_smoke
-  until: _gitlab_runner_smoke.status.ActiveState == "active"
-  retries: 10
-  delay: 2
-  failed_when: _gitlab_runner_smoke.status.ActiveState != "active"
-  become: true
-
 # Probe the same loopback endpoint netdata scrapes.
 - name: _verify | Runner serves prometheus metrics on its loopback port
   uri:
