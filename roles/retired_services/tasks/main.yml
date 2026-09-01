@@ -1085,6 +1085,21 @@
   tags:
     - retired_services
 
+- name: Remove retired fan2go build artifacts
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /opt/go-1.26.3
+    - /var/cache/go-1.26.3.x86_64.tar.gz
+    - /var/cache/go-1.26.3.aarch64.tar.gz
+    - /var/cache/fan2go-0.13.0-src
+    - /var/cache/fan2go-tui-0.2.1-src
+  become: true
+  tags:
+    - retired_services
+    - fan2go
+
 - name: Lookup retired Netdata poller account
   command:
     argv:

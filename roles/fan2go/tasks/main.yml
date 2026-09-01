@@ -2,71 +2,14 @@
 # opt in must ship a hand-written roles/fan2go/files/<hostname>.yaml
 # alongside the flag; the copy task fails loudly if it's missing.
 
-# ---- Phase 1: build prerequisites ----
-# fan2go-tui ships no binaries (any arch), so source-build always runs
-# on every fan2go_enabled host. amd64 hosts could otherwise skip the Go
-# toolchain (fan2go itself ships an amd64 prebuilt), but tui forces the
-# install regardless. Tarball goes to /opt/go-<version>/ so multiple
-# Go pins can coexist.
+# ---- Phase 1: install binaries ----
 
-- name: Install build deps
-  when: fan2go_enabled
-  apt:
-    pkg:
-      - git
-      - make
-      - gcc
-      - libc6-dev
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - fan2go
-
-- name: Download Go toolchain tarball
+- name: Download fan2go binary
   when: fan2go_enabled
   get_url:
-    url: "{{ fan2go_go_artifacts[ansible_architecture].url }}"
-    dest: "/var/cache/go-{{ fan2go_go_version }}.{{ ansible_architecture }}.tar.gz"
-    checksum: "sha256:{{ fan2go_go_artifacts[ansible_architecture].sha256 }}"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  tags:
-    - fan2go
-
-# tar with --transform so the extracted dir is /opt/go-<version>/
-# (upstream tarball's top dir is just `go/`); lets multiple Go versions
-# coexist if we ever pin a different one.
-- name: Extract Go toolchain
-  when: fan2go_enabled
-  command:
-    argv:
-      - tar
-      - -C
-      - /opt
-      - --transform
-      - "s,^go,go-{{ fan2go_go_version }},"
-      - -xzf
-      - "/var/cache/go-{{ fan2go_go_version }}.{{ ansible_architecture }}.tar.gz"
-  args:
-    creates: "/opt/go-{{ fan2go_go_version }}/bin/go"
-  become: true
-  tags:
-    - fan2go
-
-# ---- Phase 2: install fan2go daemon binary ----
-# amd64 takes the prebuilt download; aarch64 builds from source via the
-# Go toolchain installed above.
-
-- name: Download fan2go prebuilt binary (x86_64)
-  when:
-    - fan2go_enabled
-    - ansible_architecture == "x86_64"
-  get_url:
-    url: "{{ fan2go_artifacts.x86_64.url }}"
+    url: "{{ fan2go_artifacts[ansible_architecture].url }}"
     dest: "/usr/local/bin/fan2go-{{ fan2go_version }}"
-    checksum: "sha256:{{ fan2go_artifacts.x86_64.sha256 }}"
+    checksum: "sha256:{{ fan2go_artifacts[ansible_architecture].sha256 }}"
     owner: root
     group: root
     mode: "0755"
@@ -75,54 +18,10 @@
   tags:
     - fan2go
 
-- name: Build fan2go from source (aarch64)
-  when:
-    - fan2go_enabled
-    - ansible_architecture == "aarch64"
-  tags:
-    - fan2go
-  block:
-    - name: Clone fan2go source (aarch64)
-      git:
-        repo: "{{ fan2go_artifacts.aarch64.repo }}"
-        version: "{{ fan2go_artifacts.aarch64.git_ref }}"
-        dest: "/var/cache/fan2go-{{ fan2go_version }}-src"
-      become: true
-
-    - name: Build fan2go (aarch64)
-      command:
-        chdir: "/var/cache/fan2go-{{ fan2go_version }}-src"
-        argv:
-          - make
-          - build-no-nvml
-      environment:
-        PATH: "/opt/go-{{ fan2go_go_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        GOCACHE: "/var/cache/fan2go-{{ fan2go_version }}-src/.gocache"
-        GOPATH: "/var/cache/fan2go-{{ fan2go_version }}-src/.gopath"
-      args:
-        creates: "/var/cache/fan2go-{{ fan2go_version }}-src/bin/fan2go"
-      become: true
-
-    - name: Install built fan2go binary (aarch64)  # noqa: require-backup
-      copy:
-        src: "/var/cache/fan2go-{{ fan2go_version }}-src/bin/fan2go"
-        dest: "/usr/local/bin/fan2go-{{ fan2go_version }}"
-        owner: root
-        group: root
-        mode: "0755"
-        remote_src: true
-      become: true
-      register: fan2go_binary_build
-
 - name: Symlink /usr/local/bin/fan2go to versioned binary
   when:
     - fan2go_enabled
-    # The versioned binary is downloaded (x86_64) or built (aarch64) above; in a
-    # fresh-host check run those only "would" happen, so the target isn't on disk
-    # yet and `file: state: link` (force off) errors "src does not exist". Skip
-    # the symlink in exactly that case -- a real converge always has the binary
-    # here.
-    - not (ansible_check_mode and (fan2go_binary_download.changed | default(false) or fan2go_binary_build.changed | default(false)))
+    - not (ansible_check_mode and (fan2go_binary_download.changed | default(false)))
   file:
     src: "/usr/local/bin/fan2go-{{ fan2go_version }}"
     dest: /usr/local/bin/fan2go
@@ -134,76 +33,35 @@
   tags:
     - fan2go
 
-# ---- Phase 3: install fan2go-tui binary ----
-# No upstream binaries on any arch; build from source on every
-# fan2go_enabled host. TUI is interactive (no service unit, run by
-# operator over ssh); it talks to the daemon's HTTP API on loopback,
-# which means api: enabled: true must be present in the per-host
-# fan2go.yaml.
-
-- name: Build fan2go-tui from source
+- name: Download fan2go-tui binary
   when: fan2go_enabled
+  get_url:
+    url: "{{ fan2go_tui_artifacts[ansible_architecture].url }}"
+    dest: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
+    checksum: "sha256:{{ fan2go_tui_artifacts[ansible_architecture].sha256 }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: fan2go_tui_binary_download
   tags:
     - fan2go
-  block:
-    - name: Clone fan2go-tui source
-      git:
-        repo: "{{ fan2go_tui_artifacts.repo }}"
-        version: "{{ fan2go_tui_artifacts.git_ref }}"
-        dest: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src"
-      become: true
-      register: fan2go_tui_clone
 
-    - name: Build fan2go-tui
-      # In a fresh-host check run the clone above only "would" happen, so the
-      # source dir isn't on disk and this `command` fails on its chdir before
-      # `creates:` is even consulted (chdir is applied regardless of check mode).
-      # The copy + symlink below likewise have no built binary to act on. Gate
-      # the whole build -> install -> symlink chain on the clone actually being
-      # present (clone.changed is true on a fresh host AND a version bump, when
-      # the versioned src dir won't exist), so a real converge -- and an
-      # unchanged existing host in check mode -- still run.
-      when: not (ansible_check_mode and (fan2go_tui_clone.changed | default(false)))
-      command:
-        chdir: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src"
-        argv:
-          - make
-          - build
-      environment:
-        PATH: "/opt/go-{{ fan2go_go_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        GOCACHE: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/.gocache"
-        GOPATH: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/.gopath"
-      args:
-        creates: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/bin/fan2go-tui"
-      become: true
+- name: Symlink /usr/local/bin/fan2go-tui to versioned binary
+  when:
+    - fan2go_enabled
+    - not (ansible_check_mode and (fan2go_tui_binary_download.changed | default(false)))
+  file:
+    src: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
+    dest: /usr/local/bin/fan2go-tui
+    state: link
+    owner: root
+    group: root
+  become: true
+  tags:
+    - fan2go
 
-    - name: Install built fan2go-tui binary  # noqa: require-backup
-      # Same chain guard: nothing was built in a fresh-host check run, so the
-      # copy's remote_src wouldn't exist to validate.
-      when: not (ansible_check_mode and (fan2go_tui_clone.changed | default(false)))
-      copy:
-        src: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/bin/fan2go-tui"
-        dest: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
-        owner: root
-        group: root
-        mode: "0755"
-        remote_src: true
-      become: true
-      register: fan2go_tui_binary_build
-
-    - name: Symlink /usr/local/bin/fan2go-tui to versioned binary
-      # Tail of the same chain: skip on a fresh-host check run where the source
-      # was only "would"-cloned, so the versioned binary isn't on disk to link.
-      when: not (ansible_check_mode and (fan2go_tui_clone.changed | default(false)))
-      file:
-        src: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
-        dest: /usr/local/bin/fan2go-tui
-        state: link
-        owner: root
-        group: root
-      become: true
-
-# ---- Phase 4: config + service ----
+# ---- Phase 2: config + service ----
 
 - name: Create /etc/fan2go config dir
   when: fan2go_enabled
@@ -307,8 +165,7 @@
       restart: >-
         {{ fan2go_config.changed | default(false)
            or fan2go_symlink.changed | default(false)
-           or fan2go_binary_download.changed | default(false)
-           or fan2go_binary_build.changed | default(false) }}
+           or fan2go_binary_download.changed | default(false) }}
   tags:
     - fan2go
 

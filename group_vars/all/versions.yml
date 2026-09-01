@@ -61,44 +61,27 @@ z2m_image:           ghcr.io/koenkk/zigbee2mqtt:2.12.0  # 2026-06-09
 # Alphabetical by role. URL adjacent to its sha256; per-arch maps keyed by
 # ansible_architecture where upstream ships per-arch assets.
 
-# fan2go fan controller. Upstream ships only linux-amd64; fan2go-tui ships
-# no binaries at all, so both arches always build it from source. That
-# forces the Go toolchain onto every fan2go_enabled host regardless of arch
-# -- documented in roles/fan2go/tasks/main.yml's phase comment.
-fan2go_version: "0.13.0"  # 2026-02-24
+# fan2go fan controller. No-nvml flavor: smaller, no NVIDIA dependency
+# (lab/pug have no GPUs).
+fan2go_version: "0.15.0"  # 2026-06-25
 fan2go_artifacts:
-  # No-nvml flavor: smaller, no NVIDIA dependency (lab/pug have no GPUs).
   x86_64:
     url: "https://github.com/markusressel/fan2go/releases/download/{{ fan2go_version }}/fan2go-linux-amd64-no-nvml"
-    sha256: "7cc9ee0c67ccefa0c5c2e693902f41133c075498360258266a24b7d8886ff155"
-  # No upstream prebuilt -- only repo + git ref. fan2go's go.mod
-  # requires Go >= 1.25, newer than apt's golang-go, so the build path
-  # uses the pinned Go toolchain below.
+    sha256: "7dd0c080d78cd30eb6e1252d5d8caffd91ce871a6729fb4118b5574ec54fd234"
   aarch64:
-    repo: "https://github.com/markusressel/fan2go.git"
-    git_ref: "{{ fan2go_version }}"
+    url: "https://github.com/markusressel/fan2go/releases/download/{{ fan2go_version }}/fan2go-linux-arm64-no-nvml"
+    sha256: "1ae24b86a77bbc84c228b75658ece7ea350448459fe2df731cd3b95e252d9966"
 
 # Official TUI for fan2go. Connects to the daemon's HTTP API over
 # loopback (api: enabled: true required in the per-host fan2go.yaml).
-# No upstream binaries on any arch; pin to the tag's commit SHA so the
-# git fetch is reproducible even if the tag is later moved.
-fan2go_tui_version: "0.2.1"  # 2024-09-25 (tag = commit 30de59be)
+fan2go_tui_version: "0.4.0"  # 2026-05-22
 fan2go_tui_artifacts:
-  repo: "https://github.com/markusressel/fan2go-tui.git"
-  git_ref: "30de59be623559e82900472323d0300dad2fab00"
-
-# Pinned Go toolchain for the source-build paths. Bumping this is
-# decoupled from fan2go_version / fan2go_tui_version: bump Go only when
-# upstream's go.mod raises the floor (fan2go @ 0.13.0 is 1.25;
-# fan2go-tui @ 0.2.1 is 1.24) or to pick up Go security fixes.
-fan2go_go_version: "1.26.3"  # 2026-05-07
-fan2go_go_artifacts:
   x86_64:
-    url: "https://go.dev/dl/go{{ fan2go_go_version }}.linux-amd64.tar.gz"
-    sha256: "2b2cfc7148493da5e73981bffbf3353af381d5f93e789c82c79aff64962eb556"
+    url: "https://github.com/markusressel/fan2go-tui/releases/download/{{ fan2go_tui_version }}/fan2go-tui-linux-amd64"
+    sha256: "f02efe171517285c911f79a9c84b0e1369930a0c3e4f9f423698f79bf0ac86b5"
   aarch64:
-    url: "https://go.dev/dl/go{{ fan2go_go_version }}.linux-arm64.tar.gz"
-    sha256: "9d89a3ea57d141c2b22d70083f2c8459ba3890f2d9e818e7e933b75614936565"
+    url: "https://github.com/markusressel/fan2go-tui/releases/download/{{ fan2go_tui_version }}/fan2go-tui-linux-arm64"
+    sha256: "ac8e853eedc36807680efb1396a04145262c0c1a3d37ae5c1830c1d68655d5be"
 
 # Gitea: single static Go binary installed to /usr/local/bin.
 gitea_version: "1.26.1"  # 2026-04-24
