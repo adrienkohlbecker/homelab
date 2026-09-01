@@ -106,6 +106,7 @@ def test_format_ansible_cmd_default_envelope(
     assert '{"test_in_aws": false}' in cmd
     assert not any("tailscale_wan_direct" in part for part in cmd)
 
+
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
     machine_factory: Callable[..., machine.Machine],
     monkeypatch: pytest.MonkeyPatch,
