@@ -38,7 +38,6 @@ pre {
   border-radius: 6px;
   padding: 0.75rem 1rem;
   overflow-x: auto;
-  line-height: 1.7;
   font: 14px/1.7 ui-monospace, "SF Mono", Menlo, monospace;
   margin: 0;
 }
