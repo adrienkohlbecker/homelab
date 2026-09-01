@@ -37,17 +37,9 @@ test_registry_mirrors: >-
 gitlab_runner_lab_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_aws_qemu_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 
-# Static name → IP overrides for the test environment. Two consumers share
-# this map:
-#   1. roles/hostname/templates/hosts.j2 renders them into /etc/hosts on
-#      every test box, so apt / podman / get_url resolve lab-internal
-#      hostnames to reachable LAN IPs instead of the WAN IP that public
-#      DNS returns (the WAN IP isn't routable from inside qemu user-mode
-#      networking).
-#   2. roles/adguard/templates/adguard.service.j2 plumbs them as podman
-#      --add-host flags, bypassing adguard's own split-horizon rewrites
-#      (which resolve *.lab.fahm.fr to the fake test external_ips.lab).
-# Production keeps the map empty, so both consumers render no overrides.
+# Static name → IP overrides for the test environment. The hostname role
+# renders them into /etc/hosts so apt / podman / get_url resolve lab-internal
+# hostnames to reachable LAN IPs instead of the unroutable public addresses.
 # Values reference `prod_network` (not `network`) because these hostnames
 # MUST point at the live LAN, not the gsub'd test subnet.
 etc_hosts_entries:
