@@ -57,14 +57,17 @@
   tags:
     - fan2go
 
-- name: Create /etc/fan2go config dir
+- name: Create fan2go config directories
   when: fan2go_enabled
   file:
-    path: /etc/fan2go
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - /etc/fan2go
+    - /etc/fan2go-tui
   become: true
   tags:
     - fan2go
@@ -81,18 +84,6 @@
     # The binary may not exist during a fresh check-mode run.
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
   register: fan2go_config
-  become: true
-  tags:
-    - fan2go
-
-- name: Create /etc/fan2go-tui config dir
-  when: fan2go_enabled
-  file:
-    path: /etc/fan2go-tui
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
   become: true
   tags:
     - fan2go
