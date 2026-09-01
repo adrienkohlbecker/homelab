@@ -171,7 +171,7 @@
   changed_when: false
   become: true
 
-- name: _verify | Assert jellyfin emits rendered compact JSON
+- name: _verify | Assert compact JSON and the SSO ABI pin
   command:
     argv:
       - python3
@@ -180,6 +180,9 @@
         import json
         import sys
 
+        has_clef = False
+        has_sso = False
+        expected_version = sys.argv[1]
         for line in sys.stdin:
             try:
                 record = json.loads(line)
@@ -190,10 +193,16 @@
                 and isinstance(record.get("@t"), str)
                 and isinstance(record.get("@m"), str)
             ):
-                sys.exit(0)
-        sys.exit(1)
+                has_clef = True
+            if (
+                record.get("PluginName") == "SSO-Auth"
+                and record.get("PluginVersion") == expected_version
+            ):
+                has_sso = True
+        sys.exit(not (has_clef and has_sso))
+      - "{{ jellyfin_sso_plugin_version }}"
   args:
-    stdin: "{{ _jellyfin_jf_logs.stdout }}"
+    stdin: "{{ _jellyfin_jf_logs.stdout ~ '\n' ~ _jellyfin_jf_logs.stderr }}"
   changed_when: false
 
 - name: _verify | Wait for normalized jellyfin record in lnav store
@@ -230,32 +239,6 @@
   delay: 2
   until: _jellyfin_lnav_record.rc == 0
   become: true
-
-- name: _verify | Assert SSO plugin loaded (ABI-compatible)
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        expected = sys.argv[1]
-        for line in sys.stdin:
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if (
-                record.get("PluginName") == "SSO-Auth"
-                and record.get("PluginVersion") == expected
-            ):
-                sys.exit(0)
-        sys.exit(1)
-      - "{{ jellyfin_sso_plugin_version }}"
-  args:
-    stdin: "{{ _jellyfin_jf_logs.stdout ~ _jellyfin_jf_logs.stderr }}"
-  changed_when: false
 
 - name: _verify | Read seeded branding.xml
   slurp:
