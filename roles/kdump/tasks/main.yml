@@ -18,13 +18,9 @@
     - { name: panic_on_rcu_stall, value: '1' }
     - { name: unknown_nmi_panic, value: '1' }
     - { name: panic_on_io_nmi, value: '1' }
-    # Include every CPU backtrace so the lock holder is visible.
-    - { name: softlockup_all_cpu_backtrace, value: '1' }
-    - { name: hardlockup_all_cpu_backtrace, value: '1' }
-    - { name: hung_task_all_cpu_backtrace, value: '1' }
-    - { name: oops_all_cpu_backtrace, value: '1' }
-    # Panic log includes tasks, memory, timers, locks, and ftrace.
-    - { name: panic_print, value: '31' }
+    # Panic log includes tasks, memory, timers, locks, ftrace, and every CPU
+    # backtrace so the lock holder is visible.
+    - { name: panic_print, value: '95' }
     # Reboot after panics outside the kdump capture path; the capture service
     # performs its own reboot after writing the vmcore.
     - { name: panic, value: '10' }
