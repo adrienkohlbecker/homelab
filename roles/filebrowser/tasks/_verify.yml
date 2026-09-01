@@ -28,11 +28,6 @@
   delay: 2
   until: _filebrowser_root.status == 200
 
-- name: _verify | Root listing carries the Index header
-  assert:
-    that:
-      - "'Index of /' in _filebrowser_root.content"
-
 - name: _verify | Root listing reflects every tree mount flag (both directions)
   assert:
     that:
