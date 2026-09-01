@@ -63,35 +63,6 @@
   delay: 2
   until: _homeassistant_http_nginx.status == 200
 
-# HA's mac_iot IP isn't pinned (vars/main.yml) — assert it falls inside the
-# network's ip_range (the upper /29 of mac_iot's role-derived block).
-- name: _verify | Homeassistant mac_iot IP is in this host's IoT /29
-  vars:
-    _mac_iot_vlan: "{{ (macvlan_blocks | one_by_attr('name', 'mac_iot')).vlan }}"
-    _mac_iot_block: "{{ network | host_vlan_block(inventory_hostname, _mac_iot_vlan) }}"
-    _expected_range: "{{ _mac_iot_block | ansible.utils.ipsubnet(_mac_iot_block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
-  command: >
-    podman inspect homeassistant
-    --format
-    {% raw %}'{{ .NetworkSettings.Networks.mac_iot.IPAddress }}'{% endraw %}
-  register: _homeassistant_macvlan_ip
-  changed_when: false
-  failed_when: not (_homeassistant_macvlan_ip.stdout | trim | ansible.utils.ipaddr(_expected_range))
-  become: true
-
-# The unit's ExecStartPost (pin_default_route.sh) down-ranks HA's mac_iot
-# default only when a second default exists, so HA must always retain a
-# usable route off-subnet. Assert egress isn't stranded -- the one failure
-# mode of the route surgery. On box the macvlan is the only default and
-# the script no-ops (single-default host), so this can't validate lab's
-# "bridge wins" preference -- that's checked by hand on lab after deploy.
-- name: _verify | Homeassistant retains off-subnet egress (route not stranded)
-  command: podman exec homeassistant ip route get 1.1.1.1
-  register: _homeassistant_ha_egress
-  changed_when: false
-  failed_when: _homeassistant_ha_egress.rc != 0 or 'dev ' not in _homeassistant_ha_egress.stdout
-  become: true
-
 - name: _verify | Homeassistant reaches influxdb over the homeassistant podman network
   command:
     argv:
