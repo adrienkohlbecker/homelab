@@ -42,41 +42,23 @@
   failed_when: journald_verify_kmsg.stdout == ''
   become: true
 
-# Auditctl supplies a controlled kernel audit message. Keep its daemon masked
-# so journald remains the only netlink listener during this test-only probe.
-- name: _verify | Mask auditd before installation
-  systemd:
-    name: auditd.service
-    masked: true
-  become: true
-
-- name: _verify | Install auditctl
-  apt:
-    name: auditd
-    state: present
-    install_recommends: false
-    update_cache: true
-    cache_valid_time: 3600
-  become: true
-
-- name: _verify | Enable kernel audit subsystem
-  command: auditctl -e 1
+# PID 1 emits SERVICE_START through the kernel audit path for every service.
+- name: _verify | Run transient service for native audit record
+  command:
+    argv:
+      - systemd-run
+      - --unit=journald_audit_verify
+      - --collect
+      - --wait
+      - /bin/true
   changed_when: false
   become: true
 
-- name: _verify | Emit synthetic audit sentinel
-  command: auditctl -m audit-verify-{{ _journald_audit_token }}
-  vars:
-    _journald_audit_token: "{{ ansible_date_time.epoch }}-{{ 999999 | random }}"
-  register: journald_verify_audit_emit
-  changed_when: false
-  become: true
-
-- name: _verify | Read synthetic audit record through journald
+- name: _verify | Read transient service audit record through journald
   command: journalctl _TRANSPORT=audit --since=-30s --output=cat --no-pager
   register: journald_verify_audit
   changed_when: false
   retries: 5
   delay: 1
-  until: journald_verify_audit_emit.cmd[-1] in journald_verify_audit.stdout
+  until: "'unit=journald_audit_verify' in journald_verify_audit.stdout"
   become: true
