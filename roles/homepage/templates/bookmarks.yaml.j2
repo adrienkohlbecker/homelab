@@ -13,10 +13,10 @@
 {% if item.icon is defined %}
           icon: sh-{{ item.icon }}.png
 {% endif %}
-{% if item.is_root is defined and item.is_root %}
-          href: https://{{ item.sub }}.{{ domain }}{{ item.path | default('/') }}
+{% if item.is_root | default(false) %}
+          href: https://{{ item.sub }}.{{ domain }}/
 {% else %}
-          href: https://{{ item.sub }}.{{ item.host | default(inventory_hostname) }}.{{ domain }}{{ item.path | default('/') }}
+          href: https://{{ item.sub }}.{{ item.host | default(inventory_hostname) }}.{{ domain }}/
 {% endif %}
 {% endfor %}
 {% endfor %}

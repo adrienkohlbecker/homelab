@@ -2,7 +2,7 @@
 # templates/bookmarks.yaml.j2. Each entry needs name + abbr + sub; icon
 # defaults to omitted (selfh.st lookup is `sh-<icon>.png`, so a bare abbr
 # renders when icon: is missing); host: defaults to inventory_hostname
-# (override for cross-host bookmarks like Netdata (pug)); path: defaults to /.
+# (override for cross-host bookmarks like Netdata (pug)).
 homepage_bookmarks:
   Media:
     - { name: Jellyfin,     abbr: JF, sub: jellyfin,     icon: jellyfin }
