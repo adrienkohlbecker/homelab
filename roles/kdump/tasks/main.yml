@@ -328,7 +328,7 @@
     - kdump
 
 # The nmi_watchdog cmdline above brings the hard-lockup detector up at boot,
-# but on our KVM hosts (lab, pug) KVM bring-up tears it back down — the
+# but boot-time tuners can tear it back down — the
 # blind spot behind the 2026-06-14 lab wedge (hardlockup_panic left with nothing
 # to fire on). An early-boot trace on pug (non-hybrid N100) pinned it: watchdog
 # reads 1 for the whole 0-39s pre-kvm window, then 0 within ~3s of qemu-kvm
@@ -337,16 +337,8 @@
 # reload the kvm modules and wait ~3s for the lag. A oneshot + OnBootSec timer
 # re-arms it once ~3min in (a manual re-arm at t+180s held for the rest of the
 # boot); the ~3s lag is why we use a fixed offset rather than ordering after
-# qemu-kvm.service (which would race the lag). Gate on qemu-kvm.service's
-# presence — the disable is KVM's doing, so its absence means no disable to
-# undo, and the gate bounds install scope to exactly the hosts that need it.
-- name: Stat qemu-kvm.service (KVM host detection)
-  stat:
-    path: /lib/systemd/system/qemu-kvm.service
-  register: kdump_qemu_kvm_unit
-  become: true
-  tags:
-    - kdump
+# qemu-kvm.service (which would race the lag). Apply the re-arm to every x86
+# host: pug has no qemu-kvm.service, but PowerTOP still disables the watchdog.
 
 # Install the oneshot service first so it is on disk when systemd-analyze
 # verify checks the timer's same-stem service reference. The service is
@@ -359,7 +351,7 @@
   vars:
     systemd_unit_args:
       src: kdump_nmi_watchdog.service
-      condition: "{{ kdump_qemu_kvm_unit.stat.exists }}"
+      condition: "{{ ansible_architecture == 'x86_64' }}"
   tags:
     - kdump
 
@@ -370,7 +362,7 @@
   vars:
     systemd_unit_args:
       src: kdump_nmi_watchdog.timer
-      condition: "{{ kdump_qemu_kvm_unit.stat.exists }}"
+      condition: "{{ ansible_architecture == 'x86_64' }}"
   tags:
     - kdump
 

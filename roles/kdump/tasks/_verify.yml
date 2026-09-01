@@ -35,6 +35,14 @@
   failed_when: "'crashkernel=' not in (kdump_verify_grub_cfg.content | b64decode)"
   become: true
 
+- name: _verify | NMI watchdog re-arm timer is enabled on x86
+  when: ansible_architecture == 'x86_64'
+  systemd:
+    name: kdump_nmi_watchdog.timer
+  register: kdump_verify_nmi_watchdog_timer
+  failed_when: kdump_verify_nmi_watchdog_timer.status.UnitFileState != 'enabled'
+  become: true
+
 # Reboot so the post-reboot checks below test the kernel the cmdline write
 # actually selected. aarch64 boots with the staged rEFInd EFI-stub cmdline, so
 # the crashkernel= write would not reach the running kernel; skip the reboot
