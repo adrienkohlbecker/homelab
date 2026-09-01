@@ -11,7 +11,7 @@
         that:
           - gitlab_runner_token | default('') | length > 0
           - gitlab_runner_executor in ['docker', 'shell']
-          - not (gitlab_runner_aws_qemu_enabled | default(false) | bool) or gitlab_runner_executor == 'docker'
+          - not (gitlab_runner_aws_qemu_enabled | bool) or gitlab_runner_executor == 'docker'
         fail_msg: >-
           gitlab_runner_token is unset, or gitlab_runner_executor is
           unsupported/incompatible with the AWS qemu runner, for
@@ -25,9 +25,9 @@
       when: gitlab_runner_aws_qemu_enabled
       assert:
         that:
-          - gitlab_runner_aws_qemu_token | default('') | length > 0
-          - (qemu_test | default(false) | bool) or (gitlab_runner_aws_qemu_access_key_id | default('') | length > 0)
-          - (qemu_test | default(false) | bool) or (gitlab_runner_aws_qemu_secret_access_key | default('') | length > 0)
+          - gitlab_runner_aws_qemu_token | length > 0
+          - (qemu_test | bool) or (gitlab_runner_aws_qemu_access_key_id | length > 0)
+          - (qemu_test | bool) or (gitlab_runner_aws_qemu_secret_access_key | length > 0)
         fail_msg: >-
           gitlab_runner_aws_qemu_enabled is true but
           gitlab_runner_aws_qemu_token and/or the manager AWS credentials are
@@ -49,11 +49,11 @@
 
     # _site_test reuses the main AWS plugin and credential profile.
     - name: Assert the AWS qemu site runner inputs are set
-      when: gitlab_runner_aws_qemu_site_enabled | default(false)
+      when: gitlab_runner_aws_qemu_site_enabled
       assert:
         that:
           - gitlab_runner_aws_qemu_enabled | bool
-          - gitlab_runner_aws_qemu_site_token | default('') | length > 0
+          - gitlab_runner_aws_qemu_site_token | length > 0
         fail_msg: >-
           gitlab_runner_aws_qemu_site_enabled is true but either the role-cell
           aws_qemu runner is disabled (the site pool reuses its AWS credentials)
@@ -164,8 +164,8 @@
             backup: true
             content: |
               [{{ gitlab_runner_aws_qemu_profile }}]
-              aws_access_key_id = {{ gitlab_runner_aws_qemu_access_key_id | default('TEST_PLACEHOLDER_DO_NOT_USE') }}
-              aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key | default('TEST_PLACEHOLDER_DO_NOT_USE') }}
+              aws_access_key_id = {{ gitlab_runner_aws_qemu_access_key_id }}
+              aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key }}
           become: true
 
     # crun needs the lingered user manager's D-Bus and cgroup hierarchy before

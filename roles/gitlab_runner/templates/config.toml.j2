@@ -71,7 +71,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     # Jobs orchestrate remote cells without nested containers or devices.
     privileged = false
 {% endif %}
-{% if gitlab_runner_aws_qemu_enabled | default(false) %}
+{% if gitlab_runner_aws_qemu_enabled %}
 
 # AWS qemu runner: an instance executor backed by fleeting-plugin-aws and a
 # dedicated Auto Scaling Group. Jobs run directly on hosts with nested KVM.
@@ -85,7 +85,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
      gitlab_runner_aws_qemu_idle_time
    ) }}
 {% endif %}
-{% if gitlab_runner_aws_qemu_site_enabled | default(false) %}
+{% if gitlab_runner_aws_qemu_site_enabled %}
 
 # Dedicated one-host, one-job pool for the full-site converge cell.
 {{ aws_instance_runner(
