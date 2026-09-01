@@ -1,6 +1,5 @@
-{# Per-block interface unit; inputs and defaults are documented in tasks/main.yml. #}
-{% set _host_ip = macvlan_args.host_ip | default(macvlan_block | ansible.utils.ipmath(0)) %}
-{% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name))) %}
+{# Per-block interface unit; inputs are documented in tasks/main.yml. #}
+{% set _host_ip = macvlan_block | ansible.utils.ipmath(0) %}
 [Unit]
 Description={{ macvlan_args.name }} interface setup
 # Wait for the parent device; network.target does not guarantee it exists.
@@ -20,7 +19,7 @@ SyslogIdentifier=%N
 # A partial start can leave the iface behind without running ExecStop.
 # Ignore a missing iface during cleanup.
 ExecStartPre=-/bin/ip link delete {{ macvlan_args.name }}
-ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} address {{ _mac }} type macvlan mode bridge
+ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} address {{ '82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name)) }} type macvlan mode bridge
 ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
 # Apply before link-up without racing the asynchronous udev event.
 ExecStart=/usr/lib/systemd/systemd-sysctl --prefix=/net/ipv4/conf/{{ macvlan_args.name }} /etc/sysctl.d/30-macvlan.conf

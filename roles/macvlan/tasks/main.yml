@@ -17,13 +17,6 @@
 #               data/network_topology.yml. The iface gets a /32 IP
 #               within the block, plus a route to the whole block via
 #               the iface.
-#   host_ip     optional; IP for the iface. Defaults to
-#               the derived block's first IP, usable as a host slot
-#               only because the iface is /32 + an explicit
-#               route to the whole block (nothing treats it as a subnet).
-#   mac_address optional; MAC for the iface. Defaults to a stable
-#               random MAC seeded by `inventory_hostname_<name>` so
-#               sibling blocks on the same host pick distinct MACs.
 #   podman_network
 #               optional bool, default false. When true the role
 #               also creates a podman macvlan network named after
@@ -54,14 +47,10 @@
       - network.hosts[inventory_hostname].site is defined
       - network.hosts[inventory_hostname].slot is defined
       - network.sites[network.hosts[inventory_hostname].site].vlans[macvlan_args.vlan].cidr is defined
-      # Reject malformed overrides before the unit invokes ip.
-      - macvlan_args.host_ip is not defined or (macvlan_args.host_ip | ansible.utils.ipaddr) != false
-      - "macvlan_args.mac_address is not defined or (macvlan_args.mac_address is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'))"
     fail_msg: >-
       macvlan_args invalid for '{{ macvlan_args.name | default('<no name>') }}':
       name must be a kernel-legal iface name (^[a-z][a-z0-9_]*$, <=15 chars),
-      parent an iface name, vlan a topology VLAN for this host's site, and
-      host_ip/mac_address (if set) a valid IP / MAC.
+      parent an iface name, and vlan a topology VLAN for this host's site.
   loop: "{{ macvlan_blocks }}"
   loop_control:
     loop_var: macvlan_args

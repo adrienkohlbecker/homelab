@@ -74,7 +74,7 @@ lm_sensors_config: |
       ignore in6
 
 # Each entry names a VLAN; the macvlan role derives this host's slot-indexed
-# /28 from data/network_topology.yml. host_ip defaults to that block's first IP.
+# /28 from data/network_topology.yml and uses its first IP for the host.
 # lab is slot 0, so its IoT block resolves to .128/28.
 macvlan_blocks:
   - name: mac_iot
