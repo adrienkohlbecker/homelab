@@ -19,23 +19,10 @@
   tags:
     - hwe_kernel
 
-# thermald's D-Bus policy grants optional access to the Debian `power` group,
-# which Ubuntu does not create. The package can be present on any supported
-# release, independently of the HWE meta-package, so key the workaround to the
-# policy file rather than the Ubuntu release. The empty group grants no users
-# access and prevents dbus-daemon warning on every configuration reload.
-- name: Probe thermald D-Bus policy
-  stat:
-    path: /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf
-    get_checksum: false
-    get_mime: false
-    get_attributes: false
-  register: hwe_kernel_thermald_policy
-  tags:
-    - hwe_kernel
-
+# thermald's D-Bus policy grants optional access to Debian's `power` group,
+# which Ubuntu does not create. Keep it empty so access remains root-only while
+# dbus-daemon can resolve the policy group without warning.
 - name: Create power group (silence thermald dbus policy warning)
-  when: hwe_kernel_thermald_policy.stat.exists
   group:
     name: power
     system: true

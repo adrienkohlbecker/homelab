@@ -19,27 +19,6 @@
       not run ({{ hwe_kernel_verify_dpkg.stdout }}); the rolling kernel would
       outrun the 2.2.x zfsutils userspace.
 
-# _setup plants this file unconditionally, so its absence is a broken fixture,
-# not a machine without thermald. Assert it rather than gating the group check on
-# it: gating on converge's own signal would let a path change silence the
-# converge task and this assertion together, and report green.
-- name: _verify | Probe thermald D-Bus policy
-  stat:
-    path: /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf
-    get_checksum: false
-    get_mime: false
-    get_attributes: false
-  register: _hwe_kernel_thermald_policy
-
-- name: _verify | Thermald D-Bus policy is present (_setup contract)
-  assert:
-    that:
-      - _hwe_kernel_thermald_policy.stat.exists
-    fail_msg: >-
-      /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf is missing --
-      _setup.yml plants it, so converge's policy probe had nothing to key on
-      and the power-group task below was never exercised.
-
 # fail_key: false so a missing group comes back as a null value rather than
 # failing the task outright -- that keeps the assert below reachable, and with it
 # the explanation of why the group matters.
