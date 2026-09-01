@@ -13,59 +13,29 @@
     cache_valid_time: 3600
   become: true
 
-- name: _verify_rig | Stage TCP fixture listener
-  copy:
-    dest: /tmp/firewall_verify_tcp_listener.py
-    mode: "0755"
-    content: |
-      import selectors
-      import socket
-      import sys
-
-      selector = selectors.DefaultSelector()
-      for port in [int(arg) for arg in sys.argv[1:]]:
-          sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-          sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-          sock.bind(("0.0.0.0", port))
-          sock.listen()
-          sock.setblocking(False)
-          selector.register(sock, selectors.EVENT_READ)
-
-      body = b"firewall-verify-ok\n"
-      response = (
-          b"HTTP/1.1 200 OK\r\n"
-          + b"Content-Length: "
-          + str(len(body)).encode()
-          + b"\r\nConnection: close\r\n\r\n"
-          + body
-      )
-
-      while True:
-          for key, _ in selector.select():
-              conn, _ = key.fileobj.accept()
-              with conn:
-                  conn.sendall(response)
-  become: true
-
-- name: _verify_rig | Stop stale TCP fixture listener
-  systemd:
-    name: firewall_verify_tcp_listener.service
-    state: stopped
-  failed_when: false
-  become: true
-
-- name: _verify_rig | Run TCP fixture listener
-  command: >
-    systemd-run --unit firewall_verify_tcp_listener --collect
-    /usr/bin/python3 /tmp/firewall_verify_tcp_listener.py
-    80 443 445 {{ service_ports.nut }} {{ service_ports.authelia }} {{ service_ports.transmission_bt }}
+- name: _verify_rig | Run host TCP fixture listeners
+  command:
+    argv:
+      - podman
+      - run
+      - -d
+      - --replace
+      - --name
+      - firewall_verify_tcp_listener
+      - --network=host
+      - --pull=missing
+      - docker.io/library/busybox
+      - sh
+      - -c
+      - |
+        set -eu
+        mkdir -p /www
+        echo firewall-verify-ok > /www/index.html
+        for port in 80 443 445 {{ service_ports.nut }} {{ service_ports.authelia }} {{ service_ports.transmission_bt }}; do
+            httpd -f -p "$port" -h /www &
+        done
+        wait
   changed_when: true
-  become: true
-
-- name: _verify_rig | Pull tiny test image
-  command: podman pull docker.io/library/busybox
-  register: firewall_verify_pull
-  changed_when: "'Storing signatures' in firewall_verify_pull.stdout or 'Writing manifest' in firewall_verify_pull.stdout"
   become: true
 
 # The port is arbitrary; the FORWARD rule scopes by --ctstate DNAT, not by
