@@ -21,16 +21,9 @@ hdparm_priority=90000
 
 hdparm_disks=()
 
-# Memoize Netdata's normalized chart id per device; fixid otherwise forks on
-# every call and charts.d update loops must stay cheap.
+# Chart creation caches Netdata's normalized id per device so the update loop
+# reads pure Bash values instead of forking fixid every minute.
 declare -A _hdparm_safe_ids=()
-_hdparm_safe() {
-  local dev="$1"
-  if [ -z "${_hdparm_safe_ids[$dev]:-}" ]; then
-    _hdparm_safe_ids[$dev]=$(fixid "$dev")
-  fi
-  printf '%s' "${_hdparm_safe_ids[$dev]}"
-}
 
 hdparm_check() {
   # An empty fleet-wide config is valid; configured disks require hdparm.
@@ -41,7 +34,8 @@ hdparm_check() {
 hdparm_create() {
   local dev safe
   for dev in "${hdparm_disks[@]}"; do
-    safe=$(_hdparm_safe "$dev")
+    _hdparm_safe_ids[$dev]=$(fixid "$dev")
+    safe=${_hdparm_safe_ids[$dev]}
     cat <<EOF
 CHART hdparm.${safe} '' "Drive power state: ${dev}" "state" hdparm hdparm.power_state line ${hdparm_priority} ${hdparm_update_every}
 CLABEL device "${dev}" 1
@@ -59,7 +53,7 @@ EOF
 hdparm_update() {
   local dev safe path state a s sl u ce
   for dev in "${hdparm_disks[@]}"; do
-    safe=$(_hdparm_safe "$dev")
+    safe=${_hdparm_safe_ids[$dev]}
     path="/dev/disk/by-id/${dev}"
     a=0
     s=0
