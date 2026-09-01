@@ -57,6 +57,31 @@
 - name: _setup | Seed stale Docker-executor runtime state
   when: gitlab_runner_executor != 'docker'
   block:
+    - name: _setup | Create stale user-slice drop-in directory
+      file:
+        path: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: _setup | Seed stale user-slice memory cap
+      copy:
+        content: |
+          [Slice]
+          MemoryMax=256M
+        dest: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d/50-memory.conf
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+
+    - name: _setup | Load stale user-slice memory cap
+      systemd:
+        daemon_reload: true
+      become: true
+
     - name: _setup | Enable linger for gitlab_runner
       import_role:
         name: linger

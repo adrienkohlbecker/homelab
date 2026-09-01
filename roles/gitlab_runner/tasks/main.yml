@@ -357,63 +357,43 @@
     # setting that genuinely needs a restart (listen_address) comes from the
     # stable service_ports map, so restarting on config would risk a 30-min
     # drain for changes the runner picks up live.
-    # Bound the rootless runner's user slice so a wide CI fan-out can't exhaust
-    # host RAM and swap out a co-tenant control plane (fox: headscale + nginx).
-    # The job containers live under user-<uid>.slice (rootless podman), not
-    # under gitlab_runner.service in system.slice, so the cap goes on the slice.
-    # Opt-in via host_vars (host-RAM-dependent); removed as a tombstone when
-    # unconfigured. uid is service_user-allocated, so check-mode-gate the
-    # fresh-user case where it only reports creation.
-    - name: Cap the rootless runner user slice memory
-      when:
-        - gitlab_runner_executor == 'docker'
-        - not ansible_check_mode or gitlab_runner_user.uid is defined
+    - name: Manage the rootless runner user-slice memory cap
+      when: not ansible_check_mode or gitlab_runner_user.uid is defined
       vars:
-        _slice_dropin_dir: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d
+        _gitlab_runner_slice: user-{{ gitlab_runner_user.uid }}.slice
       block:
-        - name: Create the runner user-slice drop-in dir
-          when: gitlab_runner_memory_max | default('') | length > 0
-          file:
-            path: "{{ _slice_dropin_dir }}"
-            state: directory
-            owner: root
-            group: root
-            mode: "0755"
-          become: true
-
-        # No validate: a drop-in can't be checked at the template's temp path
-        # (systemd-analyze needs the parent unit on the live search path), and
-        # unlike a malformed unit file a bad resource-control value doesn't
-        # brick daemon-reload -- systemd logs-and-ignores it. _verify asserts
-        # the cap actually landed finite on the live slice, which is the
-        # stronger functional check.
-        - name: Render the runner user-slice memory cap  # noqa: require-validate
-          when: gitlab_runner_memory_max | default('') | length > 0
-          template:
-            src: slice-memory.conf.j2
-            dest: "{{ _slice_dropin_dir }}/50-memory.conf"
-            owner: root
-            group: root
-            mode: "0644"
-            backup: true
-          become: true
-          register: gitlab_runner_slice_cap
+        - name: Install the runner user-slice memory cap
+          import_role:
+            name: systemd_unit
+            tasks_from: install
+          vars:
+            systemd_unit_args:
+              src: slice-memory.conf.j2
+              for: "{{ _gitlab_runner_slice }}"
+              condition: >-
+                {{ gitlab_runner_executor == 'docker'
+                   and (gitlab_runner_memory_max | default('') | length > 0) }}
 
         - name: Remove the runner user-slice memory cap when unconfigured
-          when: gitlab_runner_memory_max | default('') | length == 0
+          import_role:
+            name: systemd_unit
+            tasks_from: remove
+          vars:
+            systemd_unit_args:
+              for: "{{ _gitlab_runner_slice }}"
+              condition: >-
+                {{ gitlab_runner_executor != 'docker'
+                   or (gitlab_runner_memory_max | default('') | length == 0) }}
+
+        - name: Remove the legacy runner user-slice memory cap
           file:
-            path: "{{ _slice_dropin_dir }}/50-memory.conf"
+            path: /etc/systemd/system/{{ _gitlab_runner_slice }}.d/50-memory.conf
             state: absent
           become: true
-          register: gitlab_runner_slice_cap_removed
+          register: gitlab_runner_legacy_slice_cap
 
-        # daemon-reload re-reads the slice drop-in and applies (or lifts)
-        # MemoryMax/MemoryHigh on the live cgroup -- no restart needed.
-        - name: Apply the user-slice memory cap change
-          when: >-
-            gitlab_runner_slice_cap.changed
-            or gitlab_runner_slice_cap_removed.changed
+        - name: Reload systemd after removing the legacy memory cap
+          when: gitlab_runner_legacy_slice_cap.changed
           systemd:
             daemon_reload: true
-            scope: system
           become: true

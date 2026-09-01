@@ -115,6 +115,16 @@
   failed_when: _gitlab_runner_shell_user_manager.stdout | trim == 'active'
   become: true
 
+- name: _verify | Shell executor lifted the runner user-slice memory cap
+  when: gitlab_runner_executor != 'docker'
+  systemd:
+    name: user-{{ _gitlab_runner_uid.stdout }}.slice
+  register: _gitlab_runner_shell_slice
+  failed_when: >-
+    _gitlab_runner_shell_slice.status.MemoryMax != "infinity"
+    or _gitlab_runner_shell_slice.status.MemoryHigh != "infinity"
+  become: true
+
 # AWS qemu runner (instance / fleeting-plugin-aws). Enabled on box with
 # placeholder secrets, so the host-side artifacts get real coverage even though
 # no instance ever boots in the harness. timeout-guards the binary call: a
