@@ -141,16 +141,6 @@ headscale_oidc_client_id: headscale
 tailscale_advertise_routes:
   - 10.123.55.0/24
 
-# Pin the lab-hosted dependencies fox consumes to lab's physical IP over wg0.
-# Public DNS for *.lab.fahm.fr now resolves to lab's Tailscale CGNAT address,
-# which fox does NOT route (accept-routes/accept-dns off). More fundamentally,
-# headscale's OIDC discovery runs at startup -- before the tailnet exists, since
-# headscale itself hasn't started yet -- so this dependency CANNOT be served over
-# the mesh and must ride wg0's cross-site host /32:
-#   - auth.fahm.fr: Headscale OIDC discovery at startup.
-etc_hosts_entries:
-  auth.fahm.fr: "{{ network.hosts.lab.physical }}"
-
 # Trimmed from the pug-derived list to what a Hetzner cloud VM actually
 # exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
 # module), vmstat/mem.swapio (no swap configured). Dropped collectors:

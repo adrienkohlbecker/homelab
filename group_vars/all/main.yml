@@ -47,9 +47,8 @@ zfs_mount_cache_datasets:
 
 macvlan_blocks: []
 etc_hosts_entries:
-  # auth.fahm.fr is a custom DNS entry (→ lab's LAN IP). When DNS
-  # is under load, Go-runtime DNS lookups (gitea OIDC, headscale) time out
-  # waiting for a UDP response. Pinning it here bypasses the DNS VIP entirely.
+  # Pin auth.fahm.fr to lab's physical IP: this avoids Go DNS timeouts under
+  # VIP load and lets fox resolve Headscale OIDC over wg0 before its tailnet exists.
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
 fail2ban_enabled: false
 has_transcoding_acceleration: false
