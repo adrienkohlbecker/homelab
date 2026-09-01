@@ -1,19 +1,6 @@
-# keepalived's use_vmac creates a vrrp.<VRID> macvlan that shares the parent
-# interface's L2 segment, so it ingresses LAN broadcast/multicast and VRRP-peer
-# traffic whose source addresses do not route back through it. The kernel logs
-# each such packet as a "martian source" -- tens of thousands of lines/day on a
-# busy segment (e.g. pug's vrrp.1). The asymmetry is legitimate and already
-# tolerated by loose reverse-path filtering (see roles/firewall); silence the
-# duplicate log noise by disabling martian logging on the vmac iface the moment
-# udev creates it.
-#
-# This only takes effect because roles/firewall pins
-# net.ipv4.conf.all.log_martians=0: the kernel OR-folds `all` into every
-# interface's effective value, so an all=1 would override the per-iface 0
-# written here and the flood would continue regardless of this rule.
-#
-# This must be a udev rule, not a sysctl.d value: the vrrp interface does not
-# exist at boot (keepalived creates it at start), so systemd-sysctl has nothing
-# to apply. %k is the kernel iface name; writing /proc directly avoids the
-# sysctl-CLI dot/slash mangling of names like "vrrp.1".
+# The VRRP vmac receives legitimate asymmetric LAN traffic that the kernel
+# otherwise logs as martian noise. Apply at interface creation because the vmac
+# does not exist when sysctl.d runs. Writing /proc avoids sysctl interpreting
+# the dot in names such as vrrp.1. This per-interface zero depends on the
+# firewall role keeping net.ipv4.conf.all.log_martians=0.
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="vrrp*", RUN+="/bin/sh -c 'echo 0 > /proc/sys/net/ipv4/conf/%k/log_martians'"
