@@ -6,7 +6,6 @@
   uri:
     url: http://localhost:{{ service_ports.jellyfin }}/System/Info/Public
     status_code: 200
-    return_content: true
   register: _jellyfin_http
   retries: 30
   delay: 2
@@ -32,7 +31,6 @@
     url: https://jellyfin.{{ inventory_hostname }}.{{ domain }}/System/Info/Public
     validate_certs: false
     status_code: 200
-    return_content: true
   register: _jellyfin_http_nginx
   retries: 30
   delay: 2
