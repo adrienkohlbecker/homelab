@@ -1,0 +1,62 @@
+# `podman_image_args` contract:
+#   name       required caller name; publishes `<name>_podman` and
+#              `<name>_image_pull`
+#   image      required image reference
+#   condition  optional bool, default true
+- name: image | Validate arguments
+  assert:
+    quiet: true
+    that:
+      - podman_image_args is defined
+      - podman_image_args is mapping
+      - podman_image_args.name is string
+      - podman_image_args.name is match('^[a-z_][a-z0-9_-]*$')
+      - podman_image_args.image is string
+      - podman_image_args.image | length > 0
+      - podman_image_args.keys() | difference(['name', 'image', 'condition']) | length == 0
+    fail_msg: >-
+      podman_image_args needs name (a valid identifier) and a non-empty image;
+      got {{ podman_image_args | default('<unset>') }}
+  tags:
+    - podman
+
+- name: image | Resolve condition for {{ podman_image_args.name }}
+  set_fact:
+    _podman_image_condition: "{{ podman_image_args.condition | default(true) }}"
+  tags:
+    - podman
+
+- name: image | Check whether podman is installed for {{ podman_image_args.name }}
+  when: _podman_image_condition
+  stat:
+    path: /usr/bin/podman
+  register: _podman_image_binary
+  tags:
+    - podman
+
+- name: image | Pull image for {{ podman_image_args.name }}
+  when:
+    - _podman_image_condition
+    - not ansible_check_mode or _podman_image_binary.stat.exists
+  containers.podman.podman_image:
+    name: "{{ podman_image_args.image }}"
+  register: _podman_image_result
+  retries: 3
+  delay: 10
+  until: _podman_image_result is not failed
+  become: true
+  tags:
+    - podman
+
+- name: image | Publish results for {{ podman_image_args.name }}
+  set_fact:
+    "{{ podman_image_args.name | ansible_var_key }}_podman": >-
+      {{ _podman_image_binary
+         if _podman_image_condition
+         else {'changed': false, 'stat': {'exists': false}} }}
+    "{{ podman_image_args.name | ansible_var_key }}_image_pull": >-
+      {{ _podman_image_result
+         if _podman_image_condition
+         else {'changed': false} }}
+  tags:
+    - podman

@@ -36,10 +36,14 @@
 
 # The image bootstraps org/user/bucket only while BoltDB is empty. Mounted
 # *_FILE secrets keep credentials out of command lines and the environment.
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: influxdb_podman
+- name: Pull influxdb image
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: influxdb
+      image: "{{ influxdb_image }}"
   tags:
     - influxdb
 
@@ -143,18 +147,6 @@
   vars:
     fluentbit_extension_args:
       name: influxdb
-  tags:
-    - influxdb
-
-- name: Pull influxdb image
-  when: not ansible_check_mode or influxdb_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ influxdb_image }}"
-  register: influxdb_image_pull
-  retries: 3
-  delay: 10
-  until: influxdb_image_pull is not failed
-  become: true
   tags:
     - influxdb
 

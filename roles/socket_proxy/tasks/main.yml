@@ -9,22 +9,14 @@
 # fail invoking a missing /usr/bin/podman. Probe for the binary (stat runs for
 # real in check mode) and skip the pull only in that case; a real converge --
 # where podman is installed by the time this runs -- always pulls.
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: socket_proxy_podman
-  tags:
-    - socket_proxy
-
 - name: Pull socket_proxy image
-  when: not ansible_check_mode or socket_proxy_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ socket_proxy_image }}"
-  register: socket_proxy_image_pull
-  retries: 3
-  delay: 10
-  until: socket_proxy_image_pull is not failed
-  become: true
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: socket_proxy
+      image: "{{ socket_proxy_image }}"
   tags:
     - socket_proxy
 

@@ -150,22 +150,14 @@
   tags:
     - sabnzbd
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: sabnzbd_podman
-  tags:
-    - sabnzbd
-
 - name: Pull sabnzbd image
-  when: not ansible_check_mode or sabnzbd_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ sabnzbd_image }}"
-  register: sabnzbd_image_pull
-  retries: 3
-  delay: 10
-  until: sabnzbd_image_pull is not failed
-  become: true
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: sabnzbd
+      image: "{{ sabnzbd_image }}"
   tags:
     - sabnzbd
 

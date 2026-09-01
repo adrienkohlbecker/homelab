@@ -108,22 +108,14 @@
   tags:
     - homepage
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: homepage_podman
-  tags:
-    - homepage
-
 - name: Pull homepage image
-  when: not ansible_check_mode or homepage_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ homepage_image }}"
-  register: homepage_image_pull
-  retries: 3
-  delay: 10
-  until: homepage_image_pull is not failed
-  become: true
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: homepage
+      image: "{{ homepage_image }}"
   tags:
     - homepage
 

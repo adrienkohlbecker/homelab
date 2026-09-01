@@ -56,22 +56,14 @@
   tags:
     - lidarr
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: lidarr_podman
-  tags:
-    - lidarr
-
 - name: Pull lidarr image
-  when: not ansible_check_mode or lidarr_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ lidarr_image }}"
-  register: lidarr_image_pull
-  retries: 3
-  delay: 10
-  until: lidarr_image_pull is not failed
-  become: true
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: lidarr
+      image: "{{ lidarr_image }}"
   tags:
     - lidarr
 

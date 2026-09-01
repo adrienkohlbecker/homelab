@@ -51,10 +51,14 @@
   tags:
     - authelia
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: authelia_podman
+- name: Pull authelia image
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: authelia
+      image: "{{ authelia_image }}"
   tags:
     - authelia
 
@@ -121,18 +125,6 @@
     disable_dns: false
     state: present
   register: authelia_network
-  become: true
-  tags:
-    - authelia
-
-- name: Pull authelia image
-  when: not ansible_check_mode or authelia_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ authelia_image }}"
-  register: authelia_image_pull
-  retries: 3
-  delay: 10
-  until: authelia_image_pull is not failed
   become: true
   tags:
     - authelia

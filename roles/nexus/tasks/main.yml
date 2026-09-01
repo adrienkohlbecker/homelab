@@ -133,22 +133,14 @@
   tags:
     - nexus
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: nexus_podman
-  tags:
-    - nexus
-
 - name: Pull nexus image
-  when: not ansible_check_mode or nexus_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ nexus_image }}"
-  register: nexus_image_pull
-  retries: 3
-  delay: 10
-  until: nexus_image_pull is not failed
-  become: true
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: nexus
+      image: "{{ nexus_image }}"
   tags:
     - nexus
 

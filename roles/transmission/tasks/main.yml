@@ -142,10 +142,14 @@
   tags:
     - transmission
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: transmission_podman
+- name: Pull transmission image
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: transmission
+      image: "{{ transmission_image }}"
   tags:
     - transmission
 
@@ -166,18 +170,6 @@
   vars:
     fluentbit_extension_args:
       name: transmission
-  tags:
-    - transmission
-
-- name: Pull transmission image
-  when: not ansible_check_mode or transmission_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ transmission_image }}"
-  register: transmission_image_pull
-  retries: 3
-  delay: 10
-  until: transmission_image_pull is not failed
-  become: true
   tags:
     - transmission
 

@@ -49,22 +49,14 @@
   tags:
     - radarr
 
-- name: Check whether podman is installed
-  stat:
-    path: /usr/bin/podman
-  register: radarr_podman
-  tags:
-    - radarr
-
 - name: Pull radarr image
-  when: not ansible_check_mode or radarr_podman.stat.exists
-  containers.podman.podman_image:
-    name: "{{ radarr_image }}"
-  register: radarr_image_pull
-  retries: 3
-  delay: 10
-  until: radarr_image_pull is not failed
-  become: true
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: radarr
+      image: "{{ radarr_image }}"
   tags:
     - radarr
 
