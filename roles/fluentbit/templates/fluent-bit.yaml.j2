@@ -10,10 +10,7 @@ service:
   http_port: {{ service_ports.fluentbit }}
   hot_reload: true
   storage.path: /var/lib/fluent-bit/storage/
-  storage.sync: normal
-  storage.checksum: false
   storage.metrics: true
-  storage.backlog.mem_limit: 5M
   storage.backlog.flush_on_shutdown: true
 
 # Filters execute in include order. Service roles add literal includes to the
