@@ -68,21 +68,6 @@
   tags:
     - journald
 
-# /var/log/journal/<machine-id>/ persists across a Storage= flip — journald
-# creates it lazily on the first persistent write but never tears it down
-# when the operator switches back to volatile. Reap it loudly so a
-# persistent→volatile rollback doesn't leave multi-GiB orphans on the pool
-# (and so box's pre-baked dir from an earlier image generation gets cleaned
-# up on first apply).
-- name: Remove orphaned persistent journal directory on volatile hosts
-  when: journald_storage == 'volatile'
-  file:
-    path: /var/log/journal
-    state: absent
-  become: true
-  tags:
-    - journald
-
 # state=started is idempotent (no-op when active) and fails loudly if the
 # unit can't start. Doubles as the post-conf liveness assertion: without
 # journald running, container --log-driver=journald, every systemd unit,
