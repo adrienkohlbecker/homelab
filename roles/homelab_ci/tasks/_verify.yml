@@ -20,6 +20,7 @@
 # group gets nothing, and the second publisher's steps below fail. Passing
 # `install -m 0770` here would set the group bits directly and pass either way.
 - name: _verify | Cross-publisher artifact access works
+  become: true
   block:
     - name: _verify | Operator creates a group-managed artifact tree
       command:
@@ -35,7 +36,6 @@
             mkdir /mnt/scratch/homelab_ci/.cross_publisher_probe &&
             touch /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
       changed_when: true
-      become: true
 
     - name: _verify | Non-member cannot reach the operator artifact
       command:
@@ -50,7 +50,6 @@
       register: homelab_ci_verify_outsider
       changed_when: false
       failed_when: homelab_ci_verify_outsider.rc == 0
-      become: true
 
     - name: _verify | Second publisher can read the operator artifact
       command:
@@ -63,7 +62,6 @@
           - -r
           - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
       changed_when: false
-      become: true
 
     - name: _verify | Second publisher can remove the operator artifact tree
       command:
@@ -76,17 +74,14 @@
           - -r
           - /mnt/scratch/homelab_ci/.cross_publisher_probe
       changed_when: true
-      become: true
   always:
     - name: _verify | Remove the cross-publisher probe
       file:
         path: /mnt/scratch/homelab_ci/.cross_publisher_probe
         state: absent
-      become: true
 
     - name: _verify | Remove the second CI publisher
       user:
         name: homelab_ci_verify
         state: absent
         remove: false
-      become: true
