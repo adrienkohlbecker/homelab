@@ -96,30 +96,18 @@
   changed_when: false
   become: true
 
-# SNI follows the URL host, not the Host header, so probing https://localhost/
-# with a Host: override trips TLSV1_UNRECOGNIZED_NAME on openssl 3.x
-# (noble/resolute). Map the vhost FQDN to loopback and probe it directly so
-# SNI and Host both carry transmission's server_name.
-- name: _verify | Map the transmission vhost to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 transmission.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
-
 # The vhost has `auth: true`, so the real browser path goes through
 # Authelia. Assert a cookieless GET redirects to the portal -- this is the
 # only probe that fails if `auth: true` is dropped from nginx_site_args.
 # Asserting the returnUrl (rd=) echoes transmission's own URL proves the
 # request routed to transmission's server_name, not the default vhost.
-- name: _verify | Transmission UI gate redirects unauthenticated requests to Authelia
-  uri:
-    url: https://transmission.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _transmission_nginx_gate
-  failed_when: _transmission_nginx_gate is not authelia_redirects_to('transmission', inventory_hostname, domain)
+- name: _verify | Verify Transmission Authelia gate
+  import_role:
+    name: nginx
+    tasks_from: verify_authelia_gate
+  vars:
+    nginx_verify_authelia_gate_args:
+      subdomain: transmission
 
 # The --network media join + transmission.dns.podman FQDN is how the *arr stack
 # reaches transmission's RPC, bypassing nginx -- the loopback/nginx probes above

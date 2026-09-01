@@ -21,26 +21,14 @@
 # Validates the auth_request wiring (without it the request would reach
 # InfluxDB and return the SPA's HTML 200).
 #
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
-- name: _verify | Map the influxdb vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 influxdb.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
-
-- name: _verify | Influxdb / gate redirects unauthenticated to Authelia
-  uri:
-    url: https://influxdb.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _influxdb_gate
-  failed_when: _influxdb_gate is not authelia_redirects_to('influxdb', inventory_hostname, domain, require_rd=false)
-  become: true
+- name: _verify | Verify InfluxDB Authelia gate
+  import_role:
+    name: nginx
+    tasks_from: verify_authelia_gate
+  vars:
+    nginx_verify_authelia_gate_args:
+      subdomain: influxdb
+      require_rd: false
 
 - name: _verify | Create unique influxdb fluent-bit marker
   set_fact:

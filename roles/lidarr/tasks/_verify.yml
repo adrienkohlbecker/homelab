@@ -22,23 +22,13 @@
   until: _lidarr_http.status == 200
   failed_when: (_lidarr_http.json | default({})) | length == 0
 
-# Resolve the FQDN to loopback so SNI matches the served certificate; a Host
-# header on https://localhost leaves SNI set to localhost.
-- name: _verify | Map the lidarr vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 lidarr.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
-
-- name: _verify | Lidarr UI gate redirects unauthenticated requests to Authelia
-  uri:
-    url: https://lidarr.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _lidarr_nginx_gate
-  failed_when: _lidarr_nginx_gate is not authelia_redirects_to('lidarr', inventory_hostname, domain)
+- name: _verify | Verify Lidarr Authelia gate
+  import_role:
+    name: nginx
+    tasks_from: verify_authelia_gate
+  vars:
+    nginx_verify_authelia_gate_args:
+      subdomain: lidarr
 
 # Lidarr rewrites config.xml only on shutdown, beyond the idempotence pass;
 # restart and compare the production contract to prevent restart churn.

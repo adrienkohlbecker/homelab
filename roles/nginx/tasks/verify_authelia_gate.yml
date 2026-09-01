@@ -1,0 +1,48 @@
+# `nginx_verify_authelia_gate_args` contract:
+#   subdomain  required vhost subdomain
+#   require_rd optional bool, default true
+- name: verify_authelia_gate | Validate arguments
+  assert:
+    quiet: true
+    that:
+      - nginx_verify_authelia_gate_args is defined
+      - nginx_verify_authelia_gate_args is mapping
+      - nginx_verify_authelia_gate_args.subdomain is string
+      - nginx_verify_authelia_gate_args.subdomain | length > 0
+      - (nginx_verify_authelia_gate_args.require_rd | default(true)) is boolean
+      - nginx_verify_authelia_gate_args.keys() | difference(['subdomain', 'require_rd']) | length == 0
+    fail_msg: >-
+      nginx_verify_authelia_gate_args needs a non-empty subdomain and an optional
+      boolean require_rd; got {{ nginx_verify_authelia_gate_args | default('<unset>') }}
+  tags:
+    - nginx
+
+# The FQDN keeps both SNI and Host on the intended vhost.
+- name: verify_authelia_gate | Map vhost FQDN to loopback for {{ nginx_verify_authelia_gate_args.subdomain }}
+  lineinfile:
+    path: /etc/hosts
+    line: >-
+      127.0.0.1 {{ nginx_verify_authelia_gate_args.subdomain }}.{{ inventory_hostname }}.{{ domain }}
+    state: present
+    backup: true
+  become: true
+  tags:
+    - nginx
+
+- name: verify_authelia_gate | Verify unauthenticated redirect for {{ nginx_verify_authelia_gate_args.subdomain }}
+  uri:
+    url: >-
+      https://{{ nginx_verify_authelia_gate_args.subdomain }}.{{ inventory_hostname }}.{{ domain }}/
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _nginx_authelia_gate
+  failed_when: >-
+    _nginx_authelia_gate is not authelia_redirects_to(
+      nginx_verify_authelia_gate_args.subdomain,
+      inventory_hostname,
+      domain,
+      require_rd=(nginx_verify_authelia_gate_args.require_rd | default(true))
+    )
+  tags:
+    - nginx

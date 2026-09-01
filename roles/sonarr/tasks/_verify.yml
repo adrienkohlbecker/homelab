@@ -25,23 +25,13 @@
     or (_sonarr_http.json | default({})).authentication | default('') != "external"
 
 # Probe the Authelia-gated browser path separately from direct API access.
-# Resolve the FQDN to loopback because a Host header on https://localhost
-# leaves SNI=localhost, which OpenSSL rejects for this vhost.
-- name: _verify | Map the sonarr vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 sonarr.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
-
-- name: _verify | Sonarr UI gate redirects unauthenticated requests to Authelia
-  uri:
-    url: https://sonarr.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _sonarr_nginx_gate
-  failed_when: _sonarr_nginx_gate is not authelia_redirects_to('sonarr', inventory_hostname, domain)
+- name: _verify | Verify Sonarr Authelia gate
+  import_role:
+    name: nginx
+    tasks_from: verify_authelia_gate
+  vars:
+    nginx_verify_authelia_gate_args:
+      subdomain: sonarr
 
 # Intra-stack peers use sonarr.dns.podman; a 401 from inside the container
 # proves media-network DNS and API-key enforcement on that path.

@@ -23,23 +23,13 @@
   failed_when: (_radarr_http.json | default({})) | length == 0
 
 # Probe the Authelia-gated browser path separately from direct API access.
-# Resolve the FQDN to loopback because a Host header on https://localhost
-# leaves SNI=localhost, which OpenSSL rejects for this vhost.
-- name: _verify | Map the radarr vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 radarr.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
-
-- name: _verify | Radarr UI gate redirects unauthenticated requests to Authelia
-  uri:
-    url: https://radarr.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _radarr_nginx_gate
-  failed_when: _radarr_nginx_gate is not authelia_redirects_to('radarr', inventory_hostname, domain)
+- name: _verify | Verify Radarr Authelia gate
+  import_role:
+    name: nginx
+    tasks_from: verify_authelia_gate
+  vars:
+    nginx_verify_authelia_gate_args:
+      subdomain: radarr
 
 # A 401 from radarr.dns.podman inside the container proves media-network DNS,
 # API reachability, and authentication enforcement on the intra-stack path.

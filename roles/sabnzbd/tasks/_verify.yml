@@ -65,25 +65,14 @@
 # without it (and mode=version is unauthenticated, so it can't prove the gate
 # either). The FQDN URL still exercises the subdomain -> server_name routing.
 #
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
-- name: _verify | Map the sabnzbd vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 sabnzbd.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
-
-- name: _verify | SABnzbd UI gate redirects unauthenticated requests to Authelia
-  uri:
-    url: https://sabnzbd.{{ inventory_hostname }}.{{ domain }}/
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _sabnzbd_nginx_gate
-  failed_when: _sabnzbd_nginx_gate is not authelia_redirects_to('sabnzbd', inventory_hostname, domain, require_rd=false)
+- name: _verify | Verify SABnzbd Authelia gate
+  import_role:
+    name: nginx
+    tasks_from: verify_authelia_gate
+  vars:
+    nginx_verify_authelia_gate_args:
+      subdomain: sabnzbd
+      require_rd: false
 
 - name: _verify | Wait for normalized sabnzbd startup record in lnav store
   command:
