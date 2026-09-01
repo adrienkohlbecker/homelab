@@ -53,21 +53,18 @@ locals {
 }
 
 source "amazon-ebs" "qemu_host" {
-  region                      = "eu-central-1"
-  instance_type               = "c6a.xlarge"
-  ssh_username                = "ubuntu"
-  ssh_interface               = "public_ip"
-  temporary_key_pair_type     = "ed25519"
-  associate_public_ip_address = true
+  region                                    = "eu-central-1"
+  instance_type                             = "c6a.xlarge"
+  ssh_username                              = "ubuntu"
+  ssh_interface                             = "public_ip"
+  temporary_key_pair_type                   = "ed25519"
+  temporary_security_group_source_public_ip = true
+  associate_public_ip_address               = true
 
   subnet_filter {
     filters = { "tag:Name" = "homelab-ci-*" }
     random  = true
   }
-  security_group_filter {
-    filters = { "tag:Name" = "homelab-ci-qemu-host" }
-  }
-
   source_ami_filter {
     filters = {
       name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"

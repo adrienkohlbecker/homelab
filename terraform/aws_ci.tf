@@ -438,10 +438,9 @@ resource "aws_default_route_table" "ci" {
 }
 
 # ─── Security group ──────────────────────────────────────────────────────────
-# Instance-executor qemu hosts, and the local AMI bakes that reuse this SG. The
-# manager runs on fox outside the VPC, so fleeting must SSH to the worker's
-# public address; `mise run packer:qemu-host-ami` runs packer on the operator's
-# workstation, which filters this same SG, so the home WAN needs SSH in too. No
+# Instance-executor qemu hosts. The manager runs on fox outside the VPC, so
+# fleeting must SSH to the worker's public address. AMI bakes use a temporary
+# Packer security group restricted to the builder's current public IP. No
 # standing Elastic IP is allocated, and public IPv4 bills only while an instance
 # exists.
 resource "aws_security_group" "ci_qemu_host" {
@@ -460,12 +459,11 @@ resource "aws_security_group" "ci_qemu_host" {
     cidr_blocks = ["${hcloud_primary_ip.fox.ip_address}/32"]
   }
 
-  # Local `packer:qemu-host-ami` / `fox_image` bakes SSH from the operator's
-  # workstation, which egresses via the home WAN (residential, so it can drift
-  # -- update TF_VAR_home_wan_ip and re-apply, same value the fox wg0 ingress
-  # already tracks).
+  # Direct SSH diagnostics from the operator workstation egress through the
+  # home WAN (residential, so it can drift -- update TF_VAR_home_wan_ip and
+  # re-apply, same value the fox wg0 ingress already tracks).
   ingress {
-    description = "SSH from operator workstation (local bakes)"
+    description = "SSH from operator workstation"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -796,8 +794,11 @@ resource "aws_iam_role_policy" "ci_bake" {
           "ec2:RegisterImage", "ec2:DeregisterImage", "ec2:CreateImage",
           "ec2:DescribeImages", "ec2:DescribeImageAttribute",
           "ec2:ModifyImageAttribute",
-          # Packer's ephemeral keypair + tagging.
+          # Packer's ephemeral keypair, source-restricted security group, and
+          # tagging.
           "ec2:CreateKeyPair", "ec2:DeleteKeyPair", "ec2:DescribeKeyPairs",
+          "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup",
+          "ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress",
           "ec2:CreateTags", "ec2:DescribeTags",
           # Discovery.
           "ec2:DescribeSubnets", "ec2:DescribeSecurityGroups",
