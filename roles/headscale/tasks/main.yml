@@ -99,8 +99,7 @@
     - headscale
 
 - name: Create headscale OIDC client secret
-  when:
-    - not ansible_check_mode or headscale_podman_available
+  when: not ansible_check_mode or headscale_podman_available
   containers.podman.podman_secret:
     name: headscale_oidc_secret
     data: "{{ headscale_oidc_client_secret }}"
@@ -159,17 +158,18 @@
       or headscale_image_changed
       or (_headscale_oidc_secret.changed | default(false))
   command:
-    argv: >-
-      {{
-        ['/usr/bin/podman', 'run', '--rm',
-         '--network=headscale',
-         '--security-opt=no-new-privileges',
-         '--tmpfs=/var/lib/headscale:rw,mode=0700',
-         '--volume=/mnt/services/headscale/config.yaml:/etc/headscale/config.yaml:ro',
-         '--volume=/mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro']
-        + ['--secret=headscale_oidc_secret,type=mount,target=oidc_client_secret']
-        + [headscale_image, 'configtest']
-      }}
+    argv:
+      - /usr/bin/podman
+      - run
+      - --rm
+      - --network=headscale
+      - --security-opt=no-new-privileges
+      - --tmpfs=/var/lib/headscale:rw,mode=0700
+      - --volume=/mnt/services/headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - --volume=/mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro
+      - --secret=headscale_oidc_secret,type=mount,target=oidc_client_secret
+      - "{{ headscale_image }}"
+      - configtest
   changed_when: false
   become: true
   tags:
