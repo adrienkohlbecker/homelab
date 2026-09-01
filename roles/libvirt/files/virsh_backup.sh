@@ -134,26 +134,8 @@ if domains=$(virsh list --all --persistent --name); then
     }
     case "$nvram_real" in
     /var/lib/libvirt/qemu/nvram/*)
-      # Stage + rename like the XML dump so a crash mid-copy can't truncate
-      # the last good varstore. cp --reflink=auto is a near-free CoW clone
-      # on the ZFS image dataset, a full copy elsewhere. chmod 0600 the temp
-      # explicitly: it is already 0600 under umask 077, but pin it so a
-      # future umask change can't leak a secret-bearing varstore.
       vdest="$backup_dir/dom_${safe}_VARS.fd"
-      vtmp=$(mktemp "$vdest.XXXXXX") || {
-        echo >&2 "mktemp failed for $vdest"
-        ((f_failed += 1))
-        continue
-      }
-      if cp --reflink=auto -- "$nvram_real" "$vtmp"; then
-        chmod 0600 "$vtmp"
-        mv -f "$vtmp" "$vdest"
-        seen[$vdest]=1
-      else
-        rm -f "$vtmp"
-        echo >&2 "nvram copy failed for $domain: $nvram_real"
-        ((f_failed += 1))
-      fi
+      dump_obj "$vdest" cat -- "$nvram_real"
       ;;
     *)
       echo >&2 "refusing out-of-tree nvram for $domain: $nvram_real"
