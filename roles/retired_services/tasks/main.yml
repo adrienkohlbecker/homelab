@@ -63,6 +63,20 @@
     - retired_services
     - logrotate
 
+- name: Remove retired libvirt guest creation tools
+  apt:
+    name:
+      - libhugetlbfs-bin
+      - swtpm
+      - swtpm-tools
+      - virtinst
+    state: absent
+    purge: true
+  become: true
+  tags:
+    - retired_services
+    - libvirt
+
 - name: Remove unconfigured management macvlan
   import_role:
     name: systemd_unit

@@ -1,5 +1,4 @@
-# Release-divergent: noble installs the qemu-kvm transitional
-# metapackage and lacks the swtpm driver; resolute+ installs qemu-system and
-# pulls swtpm. resolute exercises both gates.
+# Default Noble coverage installs the qemu-kvm transitional metapackage;
+# Resolute exercises the qemu-system branch after qemu-kvm was removed.
 ubuntu:
   - resolute
