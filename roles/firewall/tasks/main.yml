@@ -92,33 +92,6 @@
 # inline it here with `ignoreerrors: true` the sysctl module reports
 # changed=true every run (couldn't apply live → marks as changed)
 # and the rerun never converges.
-# Remove the pre-rename file: hosts provisioned before the 30→90
-# rename keep the stale 30-firewall-hardening.conf. It's overridden by
-# the new 90- file at boot so it's not harmful, but a lingering conf
-# with conflicting values is a debugging trap. (The modules-load.d
-# file keeps its 30- prefix — module load order is not last-wins.)
-- name: Remove pre-rename 30-firewall-hardening sysctl file
-  file:
-    path: /etc/sysctl.d/30-firewall-hardening.conf
-    state: absent
-  become: true
-  tags:
-    - firewall
-
-# Transitional: earlier revisions wrote net.ipv4.conf.all.rp_filter=2 into
-# the hardening file. We now cede `all` to keepalived (see the rp_filter
-# comment below), so strip the stale line — otherwise the file re-asserts
-# all=2 at boot (only for keepalived to lower it to 0) and contradicts the
-# comment. No-op on fresh hosts and once removed.
-- name: Drop the ceded all.rp_filter from the hardening sysctls
-  ansible.posix.sysctl:
-    name: net.ipv4.conf.all.rp_filter
-    sysctl_file: /etc/sysctl.d/90-firewall-hardening.conf
-    state: absent
-  become: true
-  tags:
-    - firewall
-
 - name: Install network-stack hardening sysctls
   ansible.posix.sysctl:
     name: "{{ item.name }}"
