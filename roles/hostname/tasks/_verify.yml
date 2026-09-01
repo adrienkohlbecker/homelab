@@ -1,11 +1,3 @@
-# Functional checks for the hostname role. The converge proves the
-# hostname/template tasks exited cleanly; these checks verify that
-# (a) the transient and persistent hostnames match inventory_hostname,
-# (b) /etc/hosts resolves the short form to 127.0.1.1 locally without a
-# DNS round-trip (FQDN is deliberately not in /etc/hosts — see hosts.j2),
-# (c) the IPv6 ::1 alias for `localhost` is in place, and
-# (d) etc_hosts_entries (when set) actually resolves to its configured IP.
-
 - name: _verify | Read running hostname
   command: hostname
   register: _hostname_hostname
@@ -25,11 +17,6 @@
     that:
       - _hostname_hostname.stdout == inventory_hostname
       - _hostname_hostnamectl_static.stdout == inventory_hostname
-    fail_msg: |
-      Hostname state mismatch:
-        running: {{ _hostname_hostname.stdout }}
-        static:  {{ _hostname_hostnamectl_static.stdout }}
-        expected: {{ inventory_hostname }}
 
 - name: _verify | Resolve inventory_hostname short form
   command: getent -s files ahosts {{ inventory_hostname }}
@@ -47,10 +34,6 @@
     that:
       - "'127.0.1.1' in _hostname_getent_short.stdout"
       - "'::1' in _hostname_getent_localhost.stdout"
-    fail_msg: |
-      /etc/hosts resolution mismatch:
-        short → {{ _hostname_getent_short.stdout | replace('\n', ' / ') }}
-        v6    → {{ _hostname_getent_localhost.stdout | replace('\n', ' / ') }}
 
 - name: _verify | Resolve etc_hosts_entries to configured IPs
   command: getent -s files ahosts {{ item.key }}
