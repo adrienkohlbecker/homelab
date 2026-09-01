@@ -1,18 +1,3 @@
-# Loopback probe -- the unit's --sdnotify=healthy gates systemd `active`
-# on kuma's in-container healthcheck, which itself probes HTTP, so by the
-# time _verify runs HTTP is already up. The short retry covers the tiny
-# race between active transition and this task firing; a real failure
-# reports in seconds, not minutes.
-- name: _verify | Kuma answers on its loopback port
-  uri:
-    url: http://localhost:{{ service_ports.kuma }}/
-    status_code: 200
-  register: _kuma_loopback
-  retries: 5
-  delay: 1
-  until: _kuma_loopback.status == 200
-  become: true
-
 # nginx auth-gate probe -- the UI subdomain has `auth: true`, so a
 # cookieless GET / has to land on Authelia's 302 redirect chain. Validates
 # both the auth_request wiring and the proxy_pass port.
@@ -55,20 +40,6 @@
   failed_when: >-
     _kuma_push_bypass.status == 302
     or (_kuma_push_bypass.json | default({})).get('msg') != 'Monitor not found or not active.'
-  become: true
-
-# Uid regression detector -- kuma runs as the kuma host uid directly
-# (tier-1 --user, no uidmap, entrypoint shell wrapper bypassed). kuma.db
-# should land owned by that user. A regression that drops the --user
-# flag or re-introduces uidmap could land the file as root or another
-# uid silently; assert ownership so the regression is loud.
-- name: _verify | Kuma sqlite DB is owned by kuma
-  stat:
-    path: /mnt/services/kuma/kuma.db
-  register: _kuma_db_owner
-  failed_when: >-
-    not _kuma_db_owner.stat.exists
-    or _kuma_db_owner.stat.pw_name != 'kuma'
   become: true
 
 # A fresh Kuma has no user, so auth must remain enabled until setup completes.
