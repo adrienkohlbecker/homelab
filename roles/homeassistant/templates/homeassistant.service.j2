@@ -36,13 +36,21 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name homeassistant \
+    --init \
     --log-driver journald \
     --log-opt tag="homeassistant" \
-    --user root \
-    {{ homeassistant_user | podman_idmap_args | join(" ") }} \
+    {# The image's s6 entrypoint needs container root, which makes Podman #}
+    {# copy every image layer for the non-contiguous root-to-service UID map. #}
+    {# Run s6's HA command directly and preserve its workdir + jemalloc setup. #}
+    --user {{ homeassistant_user.uid }}:{{ homeassistant_user.gid }} \
+    --workdir /config \
+    --entrypoint python3 \
 {% for net in homeassistant_networks %}
     --network={{ net.name }}{{ (':mac=' ~ net.mac) if net.mac is defined else '' }} \
 {% endfor %}
+    --env HOME=/config \
+    --env LD_PRELOAD=/usr/local/lib/libjemalloc.so.2 \
+    --env MALLOC_CONF=background_thread:true,metadata_thp:auto,dirty_decay_ms:20000,muzzy_decay_ms:20000 \
     --env TZ={{ system_timezone }} \
     --env NO_COLOR=1 \
     --tz={{ system_timezone }} \
@@ -68,7 +76,8 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    {{ homeassistant_image }}
+    {{ homeassistant_image }} \
+    -m homeassistant --config /config
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

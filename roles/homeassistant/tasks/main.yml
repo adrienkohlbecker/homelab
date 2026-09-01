@@ -279,8 +279,6 @@
   tags:
     - homeassistant
 
-# Pull the image before the prestage below so its `podman create` finds it
-# already present rather than doing an unbounded implicit pull mid-task.
 - name: Pull homeassistant image
   import_role:
     name: podman
@@ -289,47 +287,6 @@
     podman_image_args:
       name: homeassistant
       image: "{{ homeassistant_image }}"
-  tags:
-    - homeassistant
-
-# Pre-stage chown'd layers so the unit's `systemctl start` doesn't blow
-# through TimeoutSec=120 doing the per-file ID-mapped copy on first
-# extraction. The +0:N:1 uidmap-override pattern doesn't compose with
-# idmapped mounts, so podman falls back to a copy regardless of kernel
-# support; we just move the cost out of the deadline. The staging
-# container is removed; cached chown'd layers stay in storage and are
-# reused by the unit's later `podman run`. Both this prestage and the
-# unit template render from homeassistant_image, so they stay in sync.
-
-# Sentinel encodes (image-tag, uid, gid) so a bump in any of the three
-# invalidates the cache and re-runs the prestage. Lives under podman's
-# storage root so if storage is wiped the sentinel goes with it (the
-# chown'd layers cached there would also be gone, so re-prestaging is
-# correct).
-- name: Compute homeassistant prestage sentinel path
-  when: not ansible_check_mode
-  set_fact:
-    homeassistant_prestage_sentinel: >-
-      /var/lib/containers/storage/.prestage_homeassistant_{{
-        (homeassistant_image ~ '|' ~ homeassistant_user.uid ~ '|' ~ homeassistant_user.gid)
-        | hash('sha1')
-      }}
-  tags:
-    - homeassistant
-
-- name: Pre-stage homeassistant chown'd layers
-  when: not ansible_check_mode
-  shell: |
-    set -euo pipefail
-    podman create --replace --name homeassistant-prestage \
-      {{ (homeassistant_user | podman_idmap_args) | join(" ") }} \
-      {{ homeassistant_image | quote }} true
-    podman rm homeassistant-prestage
-    touch {{ homeassistant_prestage_sentinel | quote }}
-  args:
-    executable: /bin/bash
-    creates: "{{ homeassistant_prestage_sentinel }}"
-  become: true
   tags:
     - homeassistant
 
