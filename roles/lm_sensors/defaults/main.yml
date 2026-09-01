@@ -2,17 +2,11 @@
 # Kernel modules to load now and at boot; derive with `sudo sensors-detect`.
 lm_sensors_modules: []
 
-# Netdata go.d relabel map; see templates/sensors.conf.j2 for its shape.
-lm_sensors_relabel: []
-
 # Native libsensors configuration. Feature and subfeature names come from
 # `sensors -u`; `set` directives are applied live and at boot.
 lm_sensors_config: ""
 
 lm_sensors_qemu_test_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
-lm_sensors_qemu_test_relabel: >-
-  {{ [{'chip': 'verify-isa-0000', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}]
-     if (_role_under_test | default('')) == 'lm_sensors' else [] }}
 lm_sensors_qemu_test_config: |
   {% if (_role_under_test | default('')) == 'lm_sensors' %}
   chip "verify-isa-0000"

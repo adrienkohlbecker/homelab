@@ -50,11 +50,14 @@
     - netdata
 
 - name: Install lm_sensors metrics
-  import_role:
-    name: lm_sensors
-    tasks_from: netdata
+  import_tasks: config.yml
   vars:
-    lm_sensors_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+    netdata_args:
+      src: sensors.conf
+      dest: go.d/sensors.conf
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+      validate: >-
+        python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' %s
   tags:
     - netdata
 

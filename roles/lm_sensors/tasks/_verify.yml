@@ -1,4 +1,4 @@
-# Verify module loading/removal and the separately invoked Netdata collector.
+# Verify module loading/removal and libsensors configuration migration.
 # The arm64 QEMU fixture has no hwmon chips, so live sensor charts and chip
 # limit application require hardware verification.
 
@@ -39,32 +39,12 @@
       - not _lm_sensors_config_files.results[1].stat.exists
       - not _lm_sensors_config_files.results[2].stat.exists
 
-# _setup installs netdata without starting it; the collector needs it running.
+# Exercise the role's running-Netdata restart path during config removal.
 - name: _verify | Start netdata
   systemd:
     name: netdata
     state: started
   become: true
-
-- name: _verify | Install lm_sensors netdata collector
-  import_tasks: netdata.yml
-
-- name: _verify | Read the deployed go.d sensors config
-  slurp:
-    path: /etc/netdata/go.d/sensors.conf
-  register: _lm_sensors_godconf
-  become: true
-
-- name: _verify | Assert it is valid YAML and rendered the relabel map
-  vars:
-    _parsed: "{{ _lm_sensors_godconf | slurp_yaml }}"
-  assert:
-    that:
-      - _parsed.jobs | length > 0
-      - _parsed.jobs[0].name == 'sensors'
-      - _parsed.jobs[0].relabel[0].chip == 'verify-isa-0000'
-      - _parsed.jobs[0].relabel[0].sensors[0].label == 'Verify Probe'
-    fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _lm_sensors_godconf | slurp_text(trim=false) }}"
 
 # The unused dummy module should unload cleanly without requiring a reboot.
 - name: _verify | Clear any pre-existing reboot-required sentinel
@@ -76,7 +56,6 @@
 - name: _verify | Switch to an empty module list
   set_fact:
     lm_sensors_qemu_test_modules: []
-    lm_sensors_qemu_test_relabel: []
     lm_sensors_qemu_test_config: ""
 
 - name: _verify | Re-run the role's module-management tasks
