@@ -68,13 +68,6 @@ pipeline:
       match: svc.*
       logical_op: and
       exclude:
-        - 'SYSTEMD_UNIT ^hd-idle\.service$'
-        - 'MESSAGE ^probing sd[a-z]+: reads:'
-
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
         - 'SYSLOG_IDENTIFIER ^systemd$'
         - 'MESSAGE ^tmp-crun\.[A-Za-z0-9]+\.mount: Deactivated successfully\.$'
 
