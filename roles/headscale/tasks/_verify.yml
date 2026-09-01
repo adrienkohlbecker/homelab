@@ -1,16 +1,3 @@
-# Loopback probe -- the unit's --sdnotify=healthy gates systemd `active` on the
-# in-container `headscale users list` CLI check, so by the time _verify runs the
-# server is answering. /health is headscale's own liveness endpoint (200 {}).
-- name: _verify | Headscale answers /health on its loopback port
-  uri:
-    url: http://localhost:{{ service_ports.headscale }}/health
-    status_code: 200
-  register: _headscale_loopback
-  retries: 5
-  delay: 1
-  until: _headscale_loopback.status == 200
-  become: true
-
 # Metrics probe -- fox's netdata prometheus collector scrapes this loopback
 # endpoint and its presence alert doubles as a headscale liveness signal, so a
 # broken --publish or a changed metrics path must fail here, not silently on
