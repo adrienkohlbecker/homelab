@@ -129,13 +129,6 @@ JWT_SECRET = {{ gitea_jwt_secret }}
 [actions]
 ENABLED = false
 
-# Left on as a fail-safe janitor: [actions] is disabled so nothing new is
-# produced, but this still ages out any residual action logs left in the DB
-# from when the runner was active (and keeps cleaning if Actions is re-enabled).
-[cron.cleanup_actions]
-ENABLED = true
-OLDER_THAN = 8760h
-
 # Reject weak keys at registration time -- gitea-side enforcement is
 # independent of host sshd's KexAlgorithms/Ciphers. -1 = disallowed.
 [ssh.minimum_key_sizes]
