@@ -37,8 +37,7 @@ use-ipv4=yes
 use-ipv6=no
 #allow-interfaces=eth0
 # Pinned to the host's primary uplink. Without this, multi-NIC hosts
-# (eth0 + macvlan children mac_mgmt/mac_iot sharing one L2, plus
-# virbr0/podman*/iot VLAN) hear their own mDNS announcements echoed
+# with macvlan children sharing one L2 hear their own mDNS announcements echoed
 # back via a sibling interface and rename to <host>-NNNN every time a
 # netlink address-change fires.
 allow-interfaces={{ default_interface }}

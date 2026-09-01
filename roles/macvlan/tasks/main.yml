@@ -1,39 +1,11 @@
-# macvlan role: per-host macvlan iface setup.
+# Each macvlan_blocks entry requires a child interface name, parent interface,
+# and topology VLAN. The child receives the first IP of this host's derived /28
+# as a /32, a stable seeded MAC, and a route to the complete block.
 #
-# Driven by host_vars `macvlan_blocks` — a list of macvlan_args dicts,
-# one per VLAN-tagged parent the host needs an L2 presence on. Each
-# entry brings up a macvlan child interface (mac_mgmt, mac_iot, …) at
-# a specified IP, on a specified parent NIC.
-#
-# Entry schema:
-#   name        required; iface name. Also drives the systemd unit
-#               filename ({{name}}.service) and the MAC seed. Use
-#               `mac_<vlan>` (e.g. `mac_mgmt` for the mgmt VLAN,
-#               `mac_iot` for VLAN-tagged subifs).
-#   parent      required; parent iface (e.g. `eth0` for mgmt VLAN,
-#               `iot` for a VLAN-tagged subif).
-#   vlan        required; VLAN key under this host's topology site. The
-#               role derives the host's slot-indexed /28 block from
-#               data/network_topology.yml. The iface gets a /32 IP
-#               within the block, plus a route to the whole block via
-#               the iface.
-#   podman_network
-#               optional bool, default false. When true the role
-#               also creates a podman macvlan network named after
-#               the block (same `name`), attached to the same parent,
-#               with ip_range = upper /29 of the block. Consumers
-#               just attach via `--network={{ name }}` and don't
-#               need to know the parent / subnet / ip_range — see
-#               roles/homeassistant for an example (it consumes
-#               `mac_iot`). Precondition: the network's subnet/gateway
-#               derive from the parent's gathered primary IPv4 (subnet =
-#               that address's network, gateway = its .1), so the parent
-#               must carry the VLAN's address, the VLAN must route via .1,
-#               and the derived block must sit within the parent network
-#               (asserted).
-#
-# Hosts that don't trunk any macvlan-bearing VLANs leave macvlan_blocks empty;
-# the role no-ops cleanly.
+# podman_network optionally creates a same-named macvlan network from the
+# parent's gathered IPv4 subnet and gateway, with the block's upper /29 as its
+# container pool. The parent must therefore have an IPv4 fact and contain the
+# derived block. An empty macvlan_blocks list makes the role a no-op.
 
 - name: Validate macvlan block inputs
   assert:

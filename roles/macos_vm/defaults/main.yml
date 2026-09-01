@@ -33,7 +33,8 @@ macos_vm_ssh_host_port: 2222
 macos_vm_mac_address: ""                # auto-generated from inventory_hostname+name if empty
 
 # Display & input.
-macos_vm_vnc_listen: "127.0.0.1"        # tunnel via SSH; or set to a macvlan child IP (e.g. mac_mgmt's host_ip) to expose on mac_mgmt
+# Tunnel via SSH; change only when remote VNC is intentional.
+macos_vm_vnc_listen: "127.0.0.1"
 macos_vm_vnc_keymap: fr                 # QEMU VNC keymap; keeps AZERTY input aligned with macOS
 
 # Recovery defaults seeded through OpenCore NVRAM. `en-US:1` means English UI
