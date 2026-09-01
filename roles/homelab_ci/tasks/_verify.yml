@@ -10,15 +10,6 @@
     system: true
   become: true
 
-- name: _verify | Create a non-member account
-  user:
-    name: homelab_ci_outsider
-    create_home: false
-    shell: /usr/sbin/nologin
-    state: present
-    system: true
-  become: true
-
 # runuser starts fresh processes with supplementary groups from the account
 # database, so three identities exercise the real contract: two publishers must
 # be able to manage each other's trees, and a non-member must not see them.
@@ -61,7 +52,7 @@
         argv:
           - runuser
           - -u
-          - homelab_ci_outsider
+          - nobody
           - --
           - test
           - -r
@@ -114,12 +105,9 @@
         state: absent
       become: true
 
-    - name: _verify | Remove the probe accounts
+    - name: _verify | Remove the second CI publisher
       user:
-        name: "{{ item }}"
+        name: homelab_ci_verify
         state: absent
         remove: false
-      loop:
-        - homelab_ci_verify
-        - homelab_ci_outsider
       become: true
