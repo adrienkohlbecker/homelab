@@ -71,41 +71,6 @@
       reachable from the test fixture). HTML content was:
       {{ _homepage_alerts_html.content }}
 
-# Hot-reload proof: the role intentionally skips restart on YAML config
-# edits because gethomepage watches /app/config. If a future image bump
-# drops the watcher this assertion fires loudly instead of letting the
-# regression hide as "ansible reports changed, dashboard shows old data".
-- name: _verify | Inject sentinel bookmark to exercise homepage hot-reload
-  copy:
-    dest: /mnt/services/homepage/bookmarks.yaml
-    content: |
-      - Verify:
-          - HomepageVerifySentinel:
-              - abbr: VS
-                href: https://verify.example/
-    owner: homepage
-    group: homepage
-    mode: "0644"
-  become: true
-
-- name: _verify | Homepage hot-reloads bookmarks.yaml and renders the sentinel
-  # Probe /api/bookmarks rather than the SSR'd `/` page: getStaticProps
-  # caches the rendered HTML by path (query string doesn't differentiate
-  # SSG output), so polling `/?_t=N` returns the same year-old HIT
-  # response no matter how many random query strings you throw at it.
-  # The /api/bookmarks JSON endpoint reads from the live in-memory
-  # config that gethomepage's chokidar file-watch refreshes, so the
-  # sentinel appears here as soon as the watcher fires.
-  uri:
-    url: "http://localhost:{{ service_ports.homepage }}/api/bookmarks"
-    return_content: true
-    status_code: 200
-  register: _homepage_hotreload
-  retries: 60
-  delay: 2
-  until: "'HomepageVerifySentinel' in _homepage_hotreload.content"
-  become: true
-
 - name: _verify | Set unique Homepage log-normalization marker
   set_fact:
     _homepage_lnav_marker: "homepage-normalize-{{ ansible_date_time.epoch }}"

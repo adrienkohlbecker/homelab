@@ -75,6 +75,7 @@
     - bookmarks
     - settings
     - widgets
+  register: homepage_config
   become: true
   tags:
     - homepage
@@ -100,8 +101,6 @@
   tags:
     - homepage
 
-# Homepage hot-reloads YAML config from the bind-mounted dir, so config-file
-# changes don't need a service restart — only the unit template itself does.
 - name: Manage homepage service
   import_role:
     name: systemd_unit
@@ -110,7 +109,7 @@
     systemd_unit_args:
       src: homepage.service.j2
       condition: "{{ not ansible_check_mode or homepage_user.uid is defined }}"
-      restart: "{{ homepage_network.changed }}"
+      restart: "{{ homepage_network.changed or homepage_config.changed }}"
   tags:
     - homepage
 
