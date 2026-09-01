@@ -41,13 +41,6 @@
   register: fluentbit_extension_config
   become: true
 
-- name: Remove obsolete fluent-bit service normalizer
-  file:
-    path: "/etc/fluent-bit/{{ fluentbit_extension_args.name }}_normalize.lua"
-    state: absent
-  register: fluentbit_extension_lua_removed
-  become: true
-
 - name: Find installed fluent-bit service extensions
   find:
     paths: /etc/fluent-bit/services
@@ -80,7 +73,6 @@
     - >-
       fluentbit_extension_config.changed or
       fluentbit_extension_shared_lua.changed or
-      fluentbit_extension_lua_removed.changed or
       fluentbit_extension_manifest.changed
   become: true
 
@@ -92,6 +84,6 @@
     state: >-
       {{ 'reloaded'
          if fluentbit_extension_config.changed or fluentbit_extension_shared_lua.changed
-            or fluentbit_extension_lua_removed.changed or fluentbit_extension_manifest.changed
+            or fluentbit_extension_manifest.changed
          else 'started' }}
   become: true

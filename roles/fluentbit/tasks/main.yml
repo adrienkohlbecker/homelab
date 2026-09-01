@@ -76,14 +76,6 @@
   tags:
     - fluentbit
 
-- name: Remove retired OTLP shape filter
-  file:
-    path: /etc/fluent-bit/otlp_shape.lua
-    state: absent
-  become: true
-  tags:
-    - fluentbit
-
 - name: Create fluent-bit service extension directory
   file:
     path: /etc/fluent-bit/services
@@ -204,20 +196,6 @@
   tags:
     - fluentbit
 
-- name: Remove classic fluent-bit configuration
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/fluent-bit/fluent-bit.conf
-    - /etc/fluent-bit/parsers_nginx.conf
-    - /etc/fluent-bit/parsers_custom.conf
-    - /etc/fluent-bit/parsers.d
-    - /etc/fluent-bit/filters.d
-  become: true
-  tags:
-    - fluentbit
-
 - name: Install fluent-bit reload override
   import_role:
     name: systemd_unit
@@ -307,17 +285,6 @@
     group: root
     mode: "0600"
   when: not ansible_check_mode
-  become: true
-  tags:
-    - fluentbit
-
-# parse_unifi.lua was deployed by this role when udm_syslog was active.
-# The role and its fluentbit_udm_input code path were both removed; the
-# deployed copy no longer serves any purpose.
-- name: Remove retired parse_unifi.lua
-  file:
-    path: /etc/fluent-bit/parse_unifi.lua
-    state: absent
   become: true
   tags:
     - fluentbit
