@@ -24,7 +24,6 @@ itself by poking `window.frameElement.style.height`. Stdlib only.
 
 import base64
 import contextlib
-import datetime
 import html
 import http.client
 import json
@@ -352,12 +351,6 @@ PAGE = """<!doctype html>
     white-space: nowrap;
     line-height: 1.4;
   }}
-  footer {{
-    margin-top: 8px;
-    padding: 4px 8px;
-    font-size: 11px;
-    color: var(--muted);
-  }}
 </style>
 </head>
 <body>
@@ -385,7 +378,7 @@ PAGE = """<!doctype html>
 """
 
 
-def render_html(hosts: list[dict], iso_updated_at: str) -> str:
+def render_html(hosts: list[dict]) -> str:
     sections = []
     for host in hosts:
         rows = []
@@ -415,14 +408,7 @@ def render_html(hosts: list[dict], iso_updated_at: str) -> str:
                 for a in host["alarms"]
             )
         sections.append(f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>')
-    # Footer shows the wall-clock ISO timestamp of this run. The iframe widget
-    # refreshes us every minute so an operator comparing against the dashboard's
-    # datetime widget can spot a wedged generator at a glance. We don't render
-    # "X ago" client-side because the python _humanize_delta isn't worth
-    # replicating in JS for a footer; a wedged generator also fails the
-    # systemd unit, which trips systemdunits monitoring independently.
-    footer = f"<footer>Updated {html.escape(iso_updated_at)}</footer>"
-    return PAGE.format(body="".join(sections) + footer)
+    return PAGE.format(body="".join(sections))
 
 
 def _atomic_write(path: pathlib.Path, content: str) -> None:
@@ -445,15 +431,13 @@ def main() -> None:
     if not password:
         raise OSError("authelia_password is empty")
     data = collect(hosts, _basic_authorization("homepage_alerts", password))
-    iso = datetime.datetime.now(tz=datetime.UTC).isoformat(timespec="seconds")
-
     # No top-level try/except — an exception here (disk full, permission
     # denied, etc.) propagates to Python's default print-traceback-and-exit-1.
     # The traceback lands in the journal via stderr, the unit transitions to
     # failed, and nginx keeps serving the previous (atomic-write means there
     # is no half-written intermediate) snapshot. systemd_service_unit_failed_state
     # picks up the failure independently.
-    _atomic_write(pathlib.Path("/var/www/homepage_alerts/index.html"), render_html(data, iso))
+    _atomic_write(pathlib.Path("/var/www/homepage_alerts/index.html"), render_html(data))
 
 
 if __name__ == "__main__":

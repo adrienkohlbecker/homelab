@@ -390,7 +390,7 @@ class TestRenderHtml:
                 ],
             }
         ]
-        html = ag.render_html(hosts, "2024-01-01T00:00:00+00:00")
+        html = ag.render_html(hosts)
         assert "lab" in html
         assert "cpu" in html
         assert "system.cpu" in html
@@ -400,7 +400,7 @@ class TestRenderHtml:
 
     def test_renders_no_alerts(self) -> None:
         hosts = [{"name": "pug", "alarms": []}]
-        html = ag.render_html(hosts, "2024-01-01T00:00:00+00:00")
+        html = ag.render_html(hosts)
         assert "No active alerts" in html
 
     def test_renders_error(self) -> None:
@@ -411,12 +411,8 @@ class TestRenderHtml:
                 "alarms": [],
             }
         ]
-        html = ag.render_html(hosts, "2024-01-01T00:00:00+00:00")
+        html = ag.render_html(hosts)
         assert "ConnectionError" in html
-
-    def test_renders_footer(self) -> None:
-        html = ag.render_html([], "2024-06-01T12:00:00+00:00")
-        assert "Updated 2024-06-01T12:00:00+00:00" in html
 
     def test_critical_has_icon(self) -> None:
         hosts = [
@@ -434,7 +430,7 @@ class TestRenderHtml:
                 ],
             }
         ]
-        html = ag.render_html(hosts, "now")
+        html = ag.render_html(hosts)
         assert "status-icon" in html
         assert 'class="alarm CRITICAL"' in html
 
@@ -454,7 +450,7 @@ class TestRenderHtml:
                 ],
             }
         ]
-        html = ag.render_html(hosts, "now")
+        html = ag.render_html(hosts)
         assert "<b>bad</b>" not in html
         assert "&lt;b&gt;bad&lt;/b&gt;" in html
         assert "x&lt;y" in html
@@ -465,5 +461,5 @@ class TestRenderHtml:
             {"name": "lab", "alarms": []},
             {"name": "pug", "alarms": []},
         ]
-        html = ag.render_html(hosts, "now")
+        html = ag.render_html(hosts)
         assert html.index("lab") < html.index("pug")
