@@ -11,6 +11,31 @@
     - retired_services
     - macvlan
 
+- name: Find retired Apport log files
+  find:
+    paths: /var/log
+    patterns:
+      - 'apport.log'
+      - 'apport.log.*'
+    file_type: file
+  register: retired_services_apport_logs
+  become: true
+  tags:
+    - retired_services
+    - kdump
+
+- name: Remove retired Apport log files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ retired_services_apport_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - retired_services
+    - kdump
+
 - name: Remove retired podman socket drop-in
   import_role:
     name: systemd_unit
