@@ -161,25 +161,24 @@ def host_vlan_block(
     network: Mapping[str, Any],
     inventory_hostname: str,
     vlan: str,
-    site: str = "home",
-    prefix: int = 28,
-    offset: int = 8,
 ) -> str:
-    """Return the per-host VLAN block derived from topology host slot."""
+    """Return the host's slot-indexed /28 from the VLAN allocation area."""
+    site = _get_path(network, f"hosts.{inventory_hostname}.site")
     cidr = _get_path(network, f"sites.{site}.vlans.{vlan}.cidr")
     slot = _get_path(network, f"hosts.{inventory_hostname}.slot")
-    if cidr is None or slot is None:
-        raise AnsibleError(f"host_vlan_block requires topology cidr and host slot for {inventory_hostname}/{vlan}")
+    if site is None or cidr is None or slot is None:
+        raise AnsibleError(
+            f"host_vlan_block requires topology site, cidr, and host slot for {inventory_hostname}/{vlan}"
+        )
 
     parent = ipaddress.ip_network(str(cidr), strict=False)
-    prefix = int(prefix)
-    if prefix < parent.prefixlen:
-        raise AnsibleError(f"host_vlan_block prefix /{prefix} is wider than parent {parent}")
+    if parent.prefixlen > 28:
+        raise AnsibleError(f"host_vlan_block prefix /28 is wider than parent {parent}")
 
-    index = int(offset) + int(slot)
-    subnet_size = 1 << (parent.max_prefixlen - prefix)
+    index = 8 + int(slot)
+    subnet_size = 1 << (parent.max_prefixlen - 28)
     subnet_address = ipaddress.ip_address(int(parent.network_address) + index * subnet_size)
-    subnet = ipaddress.ip_network(f"{subnet_address}/{prefix}", strict=False)
+    subnet = ipaddress.ip_network(f"{subnet_address}/28", strict=False)
     # subnet is derived from parent's own addresses, so the families always
     # match; pyright can't see that through the v4/v6 union.
     if not subnet.subnet_of(parent):  # pyright: ignore[reportArgumentType]

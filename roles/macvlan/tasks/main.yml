@@ -101,7 +101,7 @@
 - name: Set up macvlan blocks
   include_tasks: install.yml
   vars:
-    macvlan_block: "{{ network | host_vlan_block(inventory_hostname, macvlan_args.vlan, site=network.hosts[inventory_hostname].site) }}"
+    macvlan_block: "{{ network | host_vlan_block(inventory_hostname, macvlan_args.vlan) }}"
   loop: "{{ macvlan_blocks }}"
   loop_control:
     loop_var: macvlan_args

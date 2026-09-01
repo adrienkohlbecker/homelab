@@ -140,12 +140,21 @@ def test_authelia_redirects_to_can_skip_rd_check() -> None:
 
 def test_host_vlan_block_derives_slot_indexed_subnet() -> None:
     network = {
-        "sites": {"home": {"vlans": {"management": {"cidr": "10.123.0.0/23"}, "iot": {"cidr": "10.123.4.0/24"}}}},
-        "hosts": {"lab": {"slot": 0}, "pug": {"slot": 1}, "box": {"slot": 3}},
+        "sites": {
+            "home": {"vlans": {"management": {"cidr": "10.123.0.0/23"}, "iot": {"cidr": "10.123.4.0/24"}}},
+            "remote": {"vlans": {"management": {"cidr": "10.124.0.0/23"}}},
+        },
+        "hosts": {
+            "lab": {"site": "home", "slot": 0},
+            "pug": {"site": "home", "slot": 1},
+            "box": {"site": "home", "slot": 3},
+            "bunk": {"site": "remote", "slot": 0},
+        },
     }
     assert homelab.host_vlan_block(network, "lab", "management") == "10.123.0.128/28"
     assert homelab.host_vlan_block(network, "pug", "management") == "10.123.0.144/28"
     assert homelab.host_vlan_block(network, "box", "iot") == "10.123.4.176/28"
+    assert homelab.host_vlan_block(network, "bunk", "management") == "10.124.0.128/28"
 
 
 @pytest.mark.parametrize(
@@ -159,9 +168,18 @@ def test_host_vlan_block_derives_slot_indexed_subnet() -> None:
 def test_host_vlan_block_rejects_invalid_subnets(cidr: str, slot: int, error: type[Exception]) -> None:
     network = {
         "sites": {"home": {"vlans": {"iot": {"cidr": cidr}}}},
-        "hosts": {"lab": {"slot": slot}},
+        "hosts": {"lab": {"site": "home", "slot": slot}},
     }
     with pytest.raises(error):
+        homelab.host_vlan_block(network, "lab", "iot")
+
+
+def test_host_vlan_block_requires_host_site() -> None:
+    network = {
+        "sites": {"home": {"vlans": {"iot": {"cidr": "10.123.4.0/24"}}}},
+        "hosts": {"lab": {"slot": 0}},
+    }
+    with pytest.raises(AnsibleError, match="requires topology site"):
         homelab.host_vlan_block(network, "lab", "iot")
 
 
