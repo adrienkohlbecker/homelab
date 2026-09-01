@@ -42,14 +42,6 @@
   failed_when: _influxdb_gate is not authelia_redirects_to('influxdb', inventory_hostname, domain, require_rd=false)
   become: true
 
-# Service-native CLI liveness -- catches a regression where /health
-# returns 200 but the in-container CLI can't talk to influxd (e.g. a
-# misconfigured /etc/influxdb2/configs after a bind-mount perms change).
-- name: _verify | Influx ping succeeds
-  command: podman exec influxdb influx ping
-  changed_when: false
-  become: true
-
 - name: _verify | Create unique influxdb fluent-bit marker
   set_fact:
     influxdb_lnav_marker: "verify_influxdb_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"

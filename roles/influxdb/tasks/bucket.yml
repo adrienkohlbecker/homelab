@@ -27,9 +27,8 @@
 #   nothing. To recover a lost token, delete the auth and re-run -- a
 #   fresh one is minted and printed.
 #
-# Assumes the influxdb role's main.yml has already been applied in
-# the same play -- main.yml's "Wait for influxdb container to answer
-# ping" is the synchronization barrier; this file doesn't repeat it.
+# Assumes the influxdb role's main.yml has already authenticated its
+# managed CLI config in the same play; this file doesn't repeat that barrier.
 # argv form across this file: each user-controlled value lands in its
 # own argv slot, so a name containing a space or a leading dash can't
 # argv-inject if a future caller feeds untrusted input. Today every
