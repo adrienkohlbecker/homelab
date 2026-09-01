@@ -1,7 +1,7 @@
 #jinja2: lstrip_blocks: True
-# Host-native GitLab Runner; Docker jobs use rootless podman.
+# Host-native GitLab Runner.
 [Unit]
-Description=GitLab Runner ({{ gitlab_runner_executor }} executor)
+Description=GitLab Runner
 After=network-online.target
 Wants=network-online.target
 # Keep slow network recovery inside the restart burst window.

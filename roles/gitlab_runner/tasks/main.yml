@@ -1,23 +1,20 @@
-# Host-native GitLab Runner. fox uses Docker over rootless podman for AWS cells;
-# lab runs the qemu harness through a protected shell executor. Both trust
-# operator-authored pipelines. The only local listener is loopback metrics.
+# Host-native GitLab Runner. fox manages the AWS fleeting pools; lab runs the
+# qemu harness through a protected shell executor. Both trust operator-authored
+# pipelines. The only local listener is loopback metrics.
 - name: GitLab Runner
   tags:
     - gitlab_runner
   block:
     # Required inputs live in host_vars; reject empty rendered vault values.
-    - name: Assert the required gitlab_runner secret is set
+    - name: Assert a runner backend is configured
       assert:
         that:
-          - gitlab_runner_token | default('') | length > 0
-          - gitlab_runner_executor in ['docker', 'shell']
-          - not (gitlab_runner_aws_qemu_enabled | bool) or gitlab_runner_executor == 'docker'
+          - gitlab_runner_shell_enabled | bool or gitlab_runner_aws_qemu_enabled | bool
+          - not (gitlab_runner_shell_enabled | bool) or gitlab_runner_shell_token | length > 0
         fail_msg: >-
-          gitlab_runner_token is unset, or gitlab_runner_executor is
-          unsupported/incompatible with the AWS qemu runner, for
-          {{ inventory_hostname }}.
-          Create a protected project runner on gitlab.com with run-untagged off
-          and locked to the project, then vault its glrt- token for this host.
+          No gitlab_runner backend is configured for {{ inventory_hostname }},
+          or the enabled shell runner has no token. Enable the shell or AWS qemu
+          runner and vault its project-runner token before deploying the role.
 
     # fox needs manager credentials to scale the ASG; workers use their own
     # read-only instance profile.
@@ -35,17 +32,6 @@
           tagged aws-shell-qemu, create an IAM access key for the
           homelab-ci-fleeting manager user, and vault the token/key values
           before enabling the runner in prod.
-
-    - name: Assert the Docker executor memory cap is set
-      when: gitlab_runner_executor == 'docker'
-      assert:
-        that:
-          - gitlab_runner_memory_high | default('') | length > 0
-          - gitlab_runner_memory_max | default('') | length > 0
-        fail_msg: >-
-          Docker executor hosts must set gitlab_runner_memory_high and
-          gitlab_runner_memory_max so the rootless job tree cannot exhaust
-          host memory.
 
     # _site_test reuses the main AWS plugin and credential profile.
     - name: Assert the AWS qemu site runner inputs are set
@@ -68,38 +54,8 @@
       vars:
         service_user_args:
           name: gitlab_runner
-          extra_groups: "{{ ['kvm', 'homelab_ci'] if gitlab_runner_executor == 'shell' else [] }}"
-          # User-scope systemd writes below ~/.config; service_user creates the
-          # directory while createhome remains off.
+          extra_groups: "{{ ['kvm', 'homelab_ci'] if gitlab_runner_shell_enabled else [] }}"
           home: /mnt/services/gitlab_runner
-
-    # This fixed allocation is part of the runner storage format: fox's rootless
-    # store maps container IDs through 165536:65536. Changing it requires an
-    # explicit podman system migrate before the old store can be used again.
-    - name: Configure subordinate IDs for the Docker executor
-      when: gitlab_runner_executor == 'docker'
-      lineinfile:
-        path: /etc/{{ item }}
-        regexp: '^gitlab_runner:'
-        line: 'gitlab_runner:165536:65536'
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-        validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
-      loop:
-        - subuid
-        - subgid
-      register: gitlab_runner_subid_result
-      become: true
-
-    - name: Warn when existing runner storage needs migration
-      when:
-        - gitlab_runner_executor == 'docker'
-        - gitlab_runner_subid_result.changed
-        - not gitlab_runner_user.changed
-      debug:
-        msg: "Run: sudo -u gitlab_runner podman system migrate"
 
     # The checksum drives version replacement and verifies the download.
     - name: Download gitlab-runner binary
@@ -168,47 +124,6 @@
               aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key }}
           become: true
 
-    # crun needs the lingered user manager's D-Bus and cgroup hierarchy before
-    # the rootless socket starts. Rootless podman is the user-scope exception
-    # documented in AGENTS.md.
-    - name: Turn on linger
-      when: gitlab_runner_executor == 'docker'
-      import_role:
-        name: linger
-        tasks_from: linger
-      vars:
-        linger_args:
-          name: gitlab_runner
-          uid: "{{ gitlab_runner_user.uid }}"
-
-    - name: Install rootless podman prune timer
-      when:
-        - gitlab_runner_executor == 'docker'
-        - not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
-      import_role:
-        name: podman
-        tasks_from: prune
-      vars:
-        podman_prune_args:
-          name: gitlab_runner_podman_prune
-          user: gitlab_runner
-      tags:
-        - gitlab_runner
-
-    # The Docker executor dials this socket; podman itself remains
-    # socket-activated and uses the role-wide rootless storage path.
-    - name: Enable and start rootless podman socket
-      when:
-        - gitlab_runner_executor == 'docker'
-        - not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
-      systemd:
-        name: podman.socket
-        enabled: true
-        state: started
-        scope: user
-      become: true
-      become_user: gitlab_runner
-
     # Parse TOML locally; `gitlab-runner verify` is an online registration check,
     # not a configuration linter.
     - name: Render gitlab-runner config.toml
@@ -246,32 +161,3 @@
           restart: >-
             {{ gitlab_runner_binary.changed
                or gitlab_runner_fleeting_aws_binary.changed }}
-
-    - name: Manage the rootless runner user-slice memory cap
-      when:
-        - gitlab_runner_executor == 'docker'
-        - not ansible_check_mode or gitlab_runner_user.uid is defined
-      vars:
-        _gitlab_runner_slice: user-{{ gitlab_runner_user.uid }}.slice
-      block:
-        - name: Install the runner user-slice memory cap
-          import_role:
-            name: systemd_unit
-            tasks_from: install
-          vars:
-            systemd_unit_args:
-              src: slice-memory.conf.j2
-              for: "{{ _gitlab_runner_slice }}"
-
-        - name: Remove the legacy runner user-slice memory cap
-          file:
-            path: /etc/systemd/system/{{ _gitlab_runner_slice }}.d/50-memory.conf
-            state: absent
-          become: true
-          register: gitlab_runner_legacy_slice_cap
-
-        - name: Reload systemd after removing the legacy memory cap
-          when: gitlab_runner_legacy_slice_cap.changed
-          systemd:
-            daemon_reload: true
-          become: true

@@ -1,16 +1,13 @@
 # Optional deploy tuning belongs in defaults so host_vars can override it.
 # Fixed values stay inline in config.toml.j2.
-# Primary runner executor. fox uses the Docker executor against rootless podman;
-# lab can use a host-native shell executor for qemu CI fallback work.
-gitlab_runner_executor: docker
+# Optional host-native shell executor for qemu CI fallback work on lab.
+gitlab_runner_shell_enabled: false
+gitlab_runner_shell_token: ""
+gitlab_runner_shell_limit: 0
 
 # Process-wide ceiling across every [[runners]] block. Each block also has an
 # independent `limit`; AWS host capacity is managed separately.
 gitlab_runner_concurrent: 8
-
-# Per-runner job ceiling, independent of the process-wide `concurrent`. 0 leaves
-# this runner bounded only by `concurrent`.
-gitlab_runner_limit: 0
 
 # ── AWS qemu runner (instance / fleeting) ───────────────────────────────────
 # Instance executor that scales an ASG from zero and runs the qemu harness on

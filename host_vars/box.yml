@@ -156,26 +156,10 @@ samba_shares:
 # runtime VAAPI probe inside the container falls back to software, but
 # the ansible-side machinery and container's view of /dev get covered.
 has_transcoding_acceleration: true
-# roles/gitlab_runner CI fixture. Enabled so the role exercises its full
-# host-side path under the harness (binary download, config.toml render +
-# TOML validate, rootless podman socket bringup, unit install + _verify's
-# start/metrics/stop smoke). The smoke DOES start the runner, which retries
-# registration against gitlab.com with this token -- the safety property is
-# that it is a non-functional placeholder (registration just fails async),
-# NOT that nothing ever runs. No blast radius as long as it stays obviously
-# fake.
-gitlab_runner_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
-# Exercise the user-slice memory-cap path under the harness: the values are
-# generous (no real jobs run here, so the slice sits near-idle) but force the
-# drop-in render + daemon-reload, and _verify asserts the cap actually landed
-# finite on the live slice. Prod sizing is fox's.
-gitlab_runner_memory_high: 512M
-gitlab_runner_memory_max: 1G
-
-# Exercise the AWS qemu instance-executor block: AWS fleeting plugin download,
-# manager-side AWS profile render, config.toml render, and _verify smoke. The
-# qemu harness never boots an ASG, and these placeholder credentials are never
-# accepted by AWS.
+# Exercise the AWS qemu instance-executor block: runner/plugin download,
+# manager-side AWS profile render, config.toml render, unit install, and the
+# start/metrics/stop smoke. The qemu harness never boots an ASG, and these
+# placeholder credentials are never accepted by AWS.
 gitlab_runner_aws_qemu_enabled: true
 gitlab_runner_aws_qemu_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_aws_qemu_access_key_id: TEST_PLACEHOLDER_DO_NOT_USE

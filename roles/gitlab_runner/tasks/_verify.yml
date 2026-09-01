@@ -80,12 +80,6 @@
       - "'gitlab-runner-update-drop' not in fluentbit_verify_result.stdout"
       - "'gitlab-runner-submit-drop' not in fluentbit_verify_result.stdout"
 
-- name: _verify | Resolve gitlab_runner uid
-  command: id -u gitlab_runner
-  register: _gitlab_runner_uid
-  changed_when: false
-  become: true
-
 # Without its go-plugin handshake, the AWS plugin may block on stdin.
 - name: _verify | Pinned fleeting-plugin-aws binary runs on this arch
   when: gitlab_runner_aws_qemu_enabled
@@ -95,30 +89,6 @@
   failed_when: >-
     gitlab_runner_fleeting_aws_version
     not in _gitlab_runner_fleeting_aws_version.stdout
-
-- name: _verify | Docker executor has its subordinate ID ranges
-  when: gitlab_runner_executor == 'docker'
-  command: getsubids{{ ' -g' if item == 'subgid' else '' }} gitlab_runner
-  register: _gitlab_runner_subids
-  changed_when: false
-  failed_when: >-
-    _gitlab_runner_subids.rc != 0
-    or not (_gitlab_runner_subids.stdout is search('gitlab_runner 165536 65536'))
-  loop:
-    - subuid
-    - subgid
-  become: false
-
-# Drive the configured socket through activation, linger, and storage.
-- name: _verify | Docker-executor socket answers podman info
-  when: gitlab_runner_executor == 'docker'
-  command: >-
-    podman --url unix:///run/user/{{ _gitlab_runner_uid.stdout }}/podman/podman.sock info
-  register: _gitlab_runner_podman_info
-  changed_when: false
-  failed_when: "'graphRoot' not in _gitlab_runner_podman_info.stdout"
-  become: true
-  become_user: gitlab_runner
 
 # Start the qemu enable-only unit to exercise its runtime identity and paths.
 - name: _verify | Start the runner to drive the unit's ExecStart
@@ -188,15 +158,4 @@
   systemd:
     name: gitlab_runner.service
     state: stopped
-  become: true
-
-# Query the live slice because a drop-in stat would not prove systemd parsed it.
-- name: _verify | Runner user-slice carries a finite memory cap
-  when: gitlab_runner_executor == 'docker'
-  systemd:
-    name: user-{{ _gitlab_runner_uid.stdout }}.slice
-  register: _gitlab_runner_slice_cap
-  failed_when: >-
-    _gitlab_runner_slice_cap.status.MemoryMax == "infinity"
-    or _gitlab_runner_slice_cap.status.MemoryHigh == "infinity"
   become: true

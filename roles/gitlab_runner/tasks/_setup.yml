@@ -1,7 +1,7 @@
 # Recreate the prerequisites normally supplied by earlier site.yml layers.
 
 - name: _setup | Ensure shell-runner supplementary groups exist
-  when: gitlab_runner_executor == 'shell'
+  when: gitlab_runner_shell_enabled
   group:
     name: "{{ item }}"
     state: present
@@ -10,13 +10,6 @@
     - kvm
     - homelab_ci
   become: true
-
-# Exercise the production rootless storage layout; this is additive on box_deps.
-- name: _setup | Install podman with prod-shape storage layout
-  when: gitlab_runner_executor == 'docker'
-  import_role:
-    name: podman
-    tasks_from: install
 
 - name: _setup | Install fluent-bit for structured-log integration
   import_role:

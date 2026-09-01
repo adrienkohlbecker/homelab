@@ -188,34 +188,13 @@ netdata_diskspace_blocklist: []
 
 # The Hetzner image carves this rebuild-only partition before rpool. Persistent
 # service state remains under /mnt/services; this ext4 filesystem carries only
-# reconstructible images and rootless runner overlay layers.
+# reconstructible images and container layers.
 podman_storage_device: /dev/disk/by-partlabel/podman
 
-# Global job ceiling across BOTH runner blocks (config.toml is process-wide) --
-# the fleet umbrella, NOT the per-runner knob. Set to the sum of the two
-# runners' per-runner `limit`s (16 docker + 65 role-cell aws_qemu + 1 site,
-# role-cell = max_instances*capacity = 5*13, site = 1*1) so each is bounded by
-# its own limit and neither starves the other. The remote aws_qemu slots are
-# SSH'd to ASG hosts, not run on fox; fox only holds their connections and log
-# streams.
+# Process-wide safety ceiling across both AWS runner blocks. Actual work remains
+# bounded by each runner's limit and the AWS Spot quota; fox only holds their
+# connections and log streams.
 gitlab_runner_concurrent: 82
-
-# Per-runner cap on the Docker-on-podman runner: bounds jobs run directly on
-# fox. The wide cell fan-out runs on the AWS qemu shell hosts (the ASG), off
-# fox; this only governs small jobs run here. The user-slice memory cap below is
-# the hard RAM guardrail under it.
-gitlab_runner_limit: 16
-
-# Cap the rootless runner's user slice (all job containers + podman) so a wide
-# matrix can't push the 3.7 GiB host into swap and OOM-threaten the co-tenant
-# headscale control plane + its nginx front. MemoryHigh throttles + reclaims
-# ~2/3 in before the MemoryMax kill ceiling, leaving ~700 MiB headroom for
-# headscale/nginx/tailscaled/OS. It bounds any small jobs run on the
-# Docker-on-podman runner directly on fox; the wide cell fan-out now runs on the
-# AWS qemu shell hosts (the ASG), off fox. See
-# notes/ci_aws_test_cells.md "Fox host protection".
-gitlab_runner_memory_high: 2.5G
-gitlab_runner_memory_max: 3G
 
 gitlab_runner_aws_qemu_enabled: true
 

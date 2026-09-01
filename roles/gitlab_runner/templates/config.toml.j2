@@ -48,28 +48,18 @@ shutdown_timeout = 1800
 # Metrics and inseparable pprof endpoints are intentionally loopback-only.
 listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
+{% if gitlab_runner_shell_enabled %}
 [[runners]]
-  name = "{{ inventory_hostname }}-{{ 'shell-qemu' if gitlab_runner_executor == 'shell' else 'docker-aws' }}"
+  name = "{{ inventory_hostname }}-shell-qemu"
   url = "https://gitlab.com"
   # Vaulted project-runner token.
-  token = "{{ gitlab_runner_token }}"
-  executor = "{{ gitlab_runner_executor }}"
-{% if gitlab_runner_executor == 'shell' %}
+  token = "{{ gitlab_runner_shell_token }}"
+  executor = "shell"
   shell = "bash"
-{% endif %}
   # Bounds this runner independently of the process-wide `concurrent`.
-  limit = {{ gitlab_runner_limit }}
+  limit = {{ gitlab_runner_shell_limit }}
   # Keep enough requests outstanding to avoid long-poll stalls.
   request_concurrency = 4
-
-{% if gitlab_runner_executor == 'docker' %}
-  [runners.docker]
-    # Socket-activated rootless podman, kept available by linger.
-    host = "unix:///run/user/{{ gitlab_runner_user.uid }}/podman/podman.sock"
-    # Jobs may override the project CI image; this runner is project-locked.
-    image = "registry.gitlab.com/akohlbecker/homelab/ci:latest"
-    # Jobs orchestrate remote cells without nested containers or devices.
-    privileged = false
 {% endif %}
 {% if gitlab_runner_aws_qemu_enabled %}
 

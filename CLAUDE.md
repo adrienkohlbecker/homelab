@@ -199,7 +199,7 @@ Verify before deciding, don't guess: `sudo podman image inspect <img> --format '
 
 ### Prefer system-scope systemd units
 
-Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required — today just rootless podman ([roles/gitlab_runner/](roles/gitlab_runner/)). When hardening, `systemd-analyze security <unit>` lists cheap wins.
+Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required. When hardening, `systemd-analyze security <unit>` lists cheap wins.
 
 ### Inter-container DNS
 

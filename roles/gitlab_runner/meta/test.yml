@@ -1,4 +1,4 @@
-# box_deps exercises Docker/AWS host artifacts; lab exercises the shell executor.
+# box_deps exercises AWS host artifacts; lab exercises the shell executor.
 machines:
   box_deps:
   # Shell-executor fallback selected by host_vars/lab.yml.
