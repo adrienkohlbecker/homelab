@@ -44,5 +44,5 @@ START_HD_IDLE=true
 #                          stdout/stderr
 #  -h                      Print usage information.
 #
-# Filter chain documented at group_vars/all.yml's rotational_disks_by_id.
+# Disk selection is defined by group_vars/all/main.yml's rotational_disks_by_id.
 HD_IDLE_OPTS="-i 0{% if ansible_distribution_release != 'noble' %} -s 1{% endif %}{% for dev in rotational_disks_by_id %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
