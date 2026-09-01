@@ -134,32 +134,15 @@
   tags:
     - apt
 
-- name: Configure apt log compression
+- name: Configure package-manager log compression
   import_role:
     name: logrotate
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/apt
-  tags:
-    - apt
-
-- name: Configure dpkg log compression
-  import_role:
-    name: logrotate
-    tasks_from: compression
-  vars:
-    logrotate_args:
-      item: /etc/logrotate.d/dpkg
-  tags:
-    - apt
-
-- name: Configure alternatives log compression
-  import_role:
-    name: logrotate
-    tasks_from: compression
-  vars:
-    logrotate_args:
-      item: /etc/logrotate.d/alternatives
+      configs:
+        - path: /etc/logrotate.d/apt
+        - path: /etc/logrotate.d/dpkg
+        - path: /etc/logrotate.d/alternatives
   tags:
     - apt

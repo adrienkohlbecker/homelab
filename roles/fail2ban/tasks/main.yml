@@ -20,7 +20,8 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/fail2ban
+      configs:
+        - path: /etc/logrotate.d/fail2ban
       condition: "{{ not (ansible_check_mode and fail2ban_apt.changed) }}"
   tags:
     - fail2ban

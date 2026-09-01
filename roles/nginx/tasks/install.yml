@@ -15,7 +15,8 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/nginx
+      configs:
+        - path: /etc/logrotate.d/nginx
       condition: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
   tags:
     - nginx

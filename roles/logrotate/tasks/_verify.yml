@@ -22,13 +22,15 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/_verify_does_not_exist
+      configs:
+        - path: /etc/logrotate.d/_verify_does_not_exist
       condition: false
 
 - name: _verify | Assert condition:false skipped the compression replace
-  assert:
-    that:
-      - logrotate_optional_config is skipped
+  stat:
+    path: /etc/logrotate.d/_verify_does_not_exist
+  register: logrotate_verify_condition
+  failed_when: logrotate_verify_condition.stat.exists
 
 - name: _verify | Compression helper over an absent optional config
   import_role:
@@ -36,13 +38,14 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/_verify_optional_does_not_exist
-      optional: true
+      configs:
+        - path: /etc/logrotate.d/_verify_optional_does_not_exist
+          optional: true
 
 - name: _verify | Assert optional config was checked and skipped
   assert:
     that:
-      - not logrotate_optional_config.stat.exists
+      - not logrotate_configs.results[0].stat.exists
 
 - name: _verify | Run the compression toggle over the fixture
   import_role:
@@ -50,7 +53,8 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/_verify_logrotate
+      configs:
+        - path: /etc/logrotate.d/_verify_logrotate
 
 - name: _verify | Package config has no diversion  # noqa: command-instead-of-module -- read-only query
   command:

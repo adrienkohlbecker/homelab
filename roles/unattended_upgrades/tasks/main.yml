@@ -19,7 +19,8 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/unattended-upgrades
+      configs:
+        - path: /etc/logrotate.d/unattended-upgrades
       condition: "{{ not (ansible_check_mode and unattended_upgrades_apt.changed) }}"
   tags:
     - unattended_upgrades

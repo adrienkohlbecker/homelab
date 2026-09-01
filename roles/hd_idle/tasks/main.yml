@@ -14,7 +14,8 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/hd-idle
+      configs:
+        - path: /etc/logrotate.d/hd-idle
       condition: "{{ not (ansible_check_mode and hd_idle_apt.changed) }}"
   tags:
     - hd_idle

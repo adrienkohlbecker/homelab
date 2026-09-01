@@ -1,49 +1,39 @@
-# Inputs: caller passes a single dict `logrotate_args` with keys
-#   item        required; path to the logrotate config file to edit
+# Inputs: caller passes one `logrotate_args` dict:
+#   configs     required; explicit list of config paths and optional flags
 #   condition   optional bool, default true; gates the whole call
-#   optional    optional bool, default false; skip an absent package config
-#
-# The dict form prevents inter-call leakage at play-vars scope: each
-# import_role pass replaces the whole `logrotate_args` value, so a
-# previous caller's condition can't bleed into the next caller that
-# doesn't explicitly override.
 - name: compression | Assert inputs
   assert:
     that:
-      - logrotate_args.item is defined
+      - logrotate_args.configs is defined
+      - logrotate_args.configs | length > 0
       - zfs_root is defined
-    fail_msg: logrotate_args.item and zfs_root are required
+    fail_msg: logrotate_args.configs and zfs_root are required
 
-- name: compression | Check optional config {{ logrotate_args.item }}
-  when:
-    - logrotate_args.condition | default(true)
-    - logrotate_args.optional | default(false)
+- name: compression | Inspect package configs
+  when: logrotate_args.condition | default(true)
   stat:
-    path: "{{ logrotate_args.item }}"
-  register: logrotate_optional_config
+    path: "{{ item.path }}"
+  loop: "{{ logrotate_args.configs }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: logrotate_configs
   become: true
 
-- name: compression | Configure logrotate compression {{ logrotate_args.item }}
+- name: compression | Configure logrotate compression
   when:
     - logrotate_args.condition | default(true)
-    - not (logrotate_args.optional | default(false)) or logrotate_optional_config.stat.exists
+    - not (item.item.optional | default(false)) or item.stat.exists
   replace:
-    # Disable matches a bare `compress` only; enable matches just the exact line
-    # disable writes (disabled_line), so a stray prose comment that merely
-    # mentions compress (e.g. "# compress: off here") on a non-ZFS host isn't
-    # turned into a live directive. [ \t] (not \s, which also matches \n) keeps
-    # compresscmd/compressoptions/compressext from being clobbered. Both stay
-    # idempotent: disable's output `# compress …` no longer matches disable_rx,
-    # and enable's output `compress` no longer matches enable_rx.
+    # Match only a bare compress directive or the exact marker written here;
+    # [ \t] avoids matching across lines or clobbering compresscmd/options/ext.
     regexp: "{{ zfs_root | ternary(disable_rx, enable_rx) }}"
     replace: "{{ zfs_root | ternary(disable_to, enable_to) }}"
-    path: "{{ logrotate_args.item }}"
+    path: "{{ item.item.path }}"
     backup: true
-    # No validate: here. The edit is a surgical one-directive toggle (it can't
-    # break config syntax), and `logrotate -d` over an arbitrary existing package
-    # config fails on unrelated pre-existing issues — e.g. /etc/logrotate.d/
-    # alternatives errors rc:1 because /var/log is group-writable and it has no
-    # `su` directive. template.yml validates the files *it* renders, which is safe.
+    # Package snippets can fail whole-file validation for unrelated reasons.
+  loop: "{{ logrotate_configs.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path }}"
   become: true
   vars:
     disabled_line: '# compress # zfs already compresses disk contents'

@@ -17,7 +17,8 @@
     tasks_from: compression
   vars:
     logrotate_args:
-      item: /etc/logrotate.d/chrony
+      configs:
+        - path: /etc/logrotate.d/chrony
       condition: "{{ not (ansible_check_mode and chrony_apt.changed) }}"
   tags:
     - chrony
