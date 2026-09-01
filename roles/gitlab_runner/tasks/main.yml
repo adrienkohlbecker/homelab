@@ -223,23 +223,13 @@
     # (rootless_storage_path on the dedicated /var/lib/containers store); no
     # per-user storage.conf is needed since jobs are plain containers (no
     # uidmapped siblings).
-    - name: Enable rootless podman socket
+    - name: Enable and start rootless podman socket
       when:
         - gitlab_runner_executor == 'docker'
         - not (ansible_check_mode and (gitlab_runner_user.changed or (gitlab_runner_lingered | default(false))))
       systemd:
         name: podman.socket
         enabled: true
-        scope: user
-      become: true
-      become_user: gitlab_runner
-
-    - name: Start rootless podman socket
-      when:
-        - gitlab_runner_executor == 'docker'
-        - not (ansible_check_mode and (gitlab_runner_user.changed or (gitlab_runner_lingered | default(false))))
-      systemd:
-        name: podman.socket
         state: started
         scope: user
       become: true
