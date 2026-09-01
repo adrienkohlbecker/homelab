@@ -67,8 +67,6 @@
   apt:
     name:
       - libhugetlbfs-bin
-      - swtpm
-      - swtpm-tools
       - virtinst
     state: absent
     purge: true

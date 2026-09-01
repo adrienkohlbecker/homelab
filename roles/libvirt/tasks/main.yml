@@ -5,14 +5,12 @@
       # (26.04) dropped it. qemu-system is the modern replacement (pulls
       # qemu-system-x86 / qemu-system-arm transitively via qemu-system-*).
       - "{{ 'qemu-kvm' if ansible_distribution_major_version | int < 26 else 'qemu-system' }}"
-      - dnsmasq-base
       - libvirt-clients
       - libvirt-daemon
       - libvirt-daemon-system
       - ovmf
       - python3-libvirt
       - python3-lxml
-    install_recommends: false
     policy_rc_d: 101
     cache_valid_time: 3600
   become: true
