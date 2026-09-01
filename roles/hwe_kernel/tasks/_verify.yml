@@ -1,40 +1,14 @@
 # Functional verify. Pairs with _setup.yml, which installs the rolling HWE
-# meta-package so converge must remove it. The power-group assertion separately
-# proves the thermald D-Bus policy workaround ran.
+# meta-package and removes the power group so both probes exercise converge.
 
-- name: _verify | Probe HWE meta-package status
+- name: _verify | Rolling HWE meta-package is absent
   command: dpkg-query -W -f='${Status}' linux-generic-hwe-{{ ansible_distribution_version }}
   register: hwe_kernel_verify_dpkg
   changed_when: false
-  failed_when: false
+  failed_when: hwe_kernel_verify_dpkg.stdout == 'install ok installed'
   check_mode: false
-  become: true
 
-- name: _verify | Converge removed the rolling HWE meta-package
-  assert:
-    that:
-      - hwe_kernel_verify_dpkg.stdout != 'install ok installed'
-    fail_msg: >-
-      HWE meta-package still installed -- converge's removal task did
-      not run ({{ hwe_kernel_verify_dpkg.stdout }}); the rolling kernel would
-      outrun the 2.2.x zfsutils userspace.
-
-# fail_key: false so a missing group comes back as a null value rather than
-# failing the task outright -- that keeps the assert below reachable, and with it
-# the explanation of why the group matters.
-- name: _verify | Probe power group
+- name: _verify | Power group exists for thermald D-Bus policy
   getent:
     database: group
     key: power
-    fail_key: false
-
-- name: _verify | Power group exists (for thermald dbus policy)
-  assert:
-    that:
-      - getent_group is defined
-      - getent_group.power is not none
-    fail_msg: >-
-      power group missing --
-      /usr/share/dbus-1/system.d/org.freedesktop.thermald.conf's
-      <policy group="power"> rule will log "Unknown group 'power'"
-      on every boot.
