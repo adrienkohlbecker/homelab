@@ -86,38 +86,6 @@
   changed_when: false
   become: true
 
-# _setup.yml plants Docker state so shell assertions prove a real transition.
-- name: _verify | Shell executor removed Docker runtime artifacts
-  when: gitlab_runner_executor != 'docker'
-  stat:
-    path: "{{ item }}"
-  loop:
-    - /var/lib/systemd/linger/gitlab_runner
-    - /mnt/services/gitlab_runner/.config/systemd/user/sockets.target.wants/podman.socket
-    - /etc/systemd/user/gitlab_runner_podman_prune.service
-    - /etc/systemd/user/gitlab_runner_podman_prune.timer
-  register: _gitlab_runner_shell_artifacts
-  failed_when: _gitlab_runner_shell_artifacts.stat.exists
-  become: true
-
-- name: _verify | Shell executor stopped gitlab_runner user manager  # noqa: command-instead-of-module -- is-active query, not a state change
-  when: gitlab_runner_executor != 'docker'
-  command: systemctl is-active user@{{ _gitlab_runner_uid.stdout }}.service
-  register: _gitlab_runner_shell_user_manager
-  changed_when: false
-  failed_when: _gitlab_runner_shell_user_manager.stdout | trim == 'active'
-  become: true
-
-- name: _verify | Shell executor lifted the runner user-slice memory cap
-  when: gitlab_runner_executor != 'docker'
-  systemd:
-    name: user-{{ _gitlab_runner_uid.stdout }}.slice
-  register: _gitlab_runner_shell_slice
-  failed_when: >-
-    _gitlab_runner_shell_slice.status.MemoryMax != "infinity"
-    or _gitlab_runner_shell_slice.status.MemoryHigh != "infinity"
-  become: true
-
 # Without its go-plugin handshake, the AWS plugin may block on stdin.
 - name: _verify | Pinned fleeting-plugin-aws binary runs on this arch
   when: gitlab_runner_aws_qemu_enabled
@@ -128,15 +96,14 @@
     gitlab_runner_fleeting_aws_version
     not in _gitlab_runner_fleeting_aws_version.stdout
 
-- name: _verify | Subordinate ID ranges match the executor
+- name: _verify | Docker executor has its subordinate ID ranges
+  when: gitlab_runner_executor == 'docker'
   command: getsubids{{ ' -g' if item == 'subgid' else '' }} gitlab_runner
   register: _gitlab_runner_subids
   changed_when: false
   failed_when: >-
-    (gitlab_runner_executor == 'docker'
-     and (_gitlab_runner_subids.rc != 0
-          or not (_gitlab_runner_subids.stdout is search('gitlab_runner 165536 65536'))))
-    or (gitlab_runner_executor != 'docker' and _gitlab_runner_subids.rc == 0)
+    _gitlab_runner_subids.rc != 0
+    or not (_gitlab_runner_subids.stdout is search('gitlab_runner 165536 65536'))
   loop:
     - subuid
     - subgid

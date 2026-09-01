@@ -11,36 +11,9 @@
     - homelab_ci
   become: true
 
-- name: _setup | Create gitlab_runner user for non-Docker transition fixture
-  when: gitlab_runner_executor != 'docker'
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    service_user_args:
-      name: gitlab_runner
-      extra_groups:
-        - kvm
-        - homelab_ci
-      home: /mnt/services/gitlab_runner
-
-- name: _setup | Seed stale Docker-executor subordinate IDs
-  when: gitlab_runner_executor != 'docker'
-  lineinfile:
-    path: /etc/{{ item }}
-    regexp: '^gitlab_runner:'
-    line: 'gitlab_runner:165536:65536'
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  loop:
-    - subuid
-    - subgid
-  become: true
-
 # Exercise the production rootless storage layout; this is additive on box_deps.
 - name: _setup | Install podman with prod-shape storage layout
+  when: gitlab_runner_executor == 'docker'
   import_role:
     name: podman
     tasks_from: install
@@ -48,58 +21,3 @@
 - name: _setup | Install fluent-bit for structured-log integration
   import_role:
     name: fluentbit
-
-- name: _setup | Seed stale Docker-executor runtime state
-  when: gitlab_runner_executor != 'docker'
-  block:
-    - name: _setup | Create stale user-slice drop-in directory
-      file:
-        path: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      become: true
-
-    - name: _setup | Seed stale user-slice memory cap
-      copy:
-        content: |
-          [Slice]
-          MemoryMax=256M
-        dest: /etc/systemd/system/user-{{ gitlab_runner_user.uid }}.slice.d/50-memory.conf
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
-
-    - name: _setup | Load stale user-slice memory cap
-      systemd:
-        daemon_reload: true
-      become: true
-
-    - name: _setup | Enable linger for gitlab_runner
-      import_role:
-        name: linger
-        tasks_from: linger
-      vars:
-        linger_args:
-          name: gitlab_runner
-          uid: "{{ gitlab_runner_user.uid }}"
-
-    - name: _setup | Install stale rootless podman prune timer
-      import_role:
-        name: podman
-        tasks_from: prune
-      vars:
-        podman_prune_args:
-          name: gitlab_runner_podman_prune
-          user: gitlab_runner
-
-    - name: _setup | Enable and start rootless podman.socket
-      systemd:
-        name: podman.socket
-        enabled: true
-        state: started
-        scope: user
-      become: true
-      become_user: gitlab_runner

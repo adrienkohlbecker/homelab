@@ -209,79 +209,6 @@
       become: true
       become_user: gitlab_runner
 
-    # Stop user units while the lingered manager is alive, then remove the
-    # enable symlink as a managerless tombstone before disabling linger.
-    - name: Disable Docker-executor runtime state for non-Docker executors
-      when:
-        - gitlab_runner_executor != 'docker'
-        - not ansible_check_mode or gitlab_runner_user.uid is defined
-      block:
-        - name: Check whether gitlab_runner linger is enabled
-          stat:
-            path: /var/lib/systemd/linger/gitlab_runner
-          register: gitlab_runner_linger_marker
-          become: true
-
-        - name: Remove rootless podman prune timer
-          when: gitlab_runner_linger_marker.stat.exists
-          import_role:
-            name: systemd_timer
-            tasks_from: remove
-          vars:
-            systemd_timer_args:
-              name: gitlab_runner_podman_prune
-              user: gitlab_runner
-
-        - name: Stop and disable rootless podman.socket
-          when: gitlab_runner_linger_marker.stat.exists
-          systemd:
-            name: podman.socket
-            state: stopped
-            enabled: false
-            scope: user
-          become: true
-          become_user: gitlab_runner
-
-        - name: Stop rootless podman.service
-          when: gitlab_runner_linger_marker.stat.exists
-          systemd:
-            name: podman.service
-            state: stopped
-            scope: user
-          become: true
-          become_user: gitlab_runner
-
-        - name: Remove rootless podman.socket enable symlink
-          file:
-            path: /mnt/services/gitlab_runner/.config/systemd/user/sockets.target.wants/podman.socket
-            state: absent
-          become: true
-
-        - name: Turn off linger
-          import_role:
-            name: linger
-            tasks_from: disable
-          vars:
-            linger_args:
-              name: gitlab_runner
-              uid: "{{ gitlab_runner_user.uid }}"
-
-    - name: Remove subordinate IDs from the shell executor
-      when: gitlab_runner_executor != 'docker'
-      lineinfile:
-        path: /etc/{{ item }}
-        regexp: '^gitlab_runner:'
-        state: absent
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-        validate: python3 -c 'import sys; lines = [x.strip() for x in open(sys.argv[1]) if x.strip()]; sys.exit(1 if [x for x in lines if len(x.split(":")) != 3 or not x.split(":")[1].isdigit() or not x.split(":")[2].isdigit()] else 0)' "%s"
-      loop:
-        - subuid
-        - subgid
-      become: true
-
     # Parse TOML locally; `gitlab-runner verify` is an online registration check,
     # not a configuration linter.
     - name: Render gitlab-runner config.toml
@@ -321,7 +248,9 @@
                or (gitlab_runner_fleeting_aws_binary.changed | default(false)) }}
 
     - name: Manage the rootless runner user-slice memory cap
-      when: not ansible_check_mode or gitlab_runner_user.uid is defined
+      when:
+        - gitlab_runner_executor == 'docker'
+        - not ansible_check_mode or gitlab_runner_user.uid is defined
       vars:
         _gitlab_runner_slice: user-{{ gitlab_runner_user.uid }}.slice
       block:
@@ -333,16 +262,6 @@
             systemd_unit_args:
               src: slice-memory.conf.j2
               for: "{{ _gitlab_runner_slice }}"
-              condition: "{{ gitlab_runner_executor == 'docker' }}"
-
-        - name: Remove the runner user-slice memory cap from non-Docker executors
-          import_role:
-            name: systemd_unit
-            tasks_from: remove
-          vars:
-            systemd_unit_args:
-              for: "{{ _gitlab_runner_slice }}"
-              condition: "{{ gitlab_runner_executor != 'docker' }}"
 
         - name: Remove the legacy runner user-slice memory cap
           file:
