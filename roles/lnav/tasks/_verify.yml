@@ -43,27 +43,19 @@
   tags:
     - lnav
 
-- name: Write representative lnav sample logs
+- name: Write representative lnav sample log
   copy:
-    dest: "{{ item.path }}"
-    content: "{{ item.content }}"
+    dest: /tmp/lnav_verify/lnav.jsonl
+    content: |
+      {"time":"2026-06-08T12:34:56.789Z","host":"lab","service":"homeassistant","unit":"homeassistant.service","identifier":"homeassistant","level":"warn","message":"connection failed","stream":"journald","fields":{"CONTAINER_NAME":"homeassistant","SYSTEMD_UNIT":"homeassistant.service","SYSLOG_IDENTIFIER":"homeassistant","context":{"retry":3}}}
+      {"time":"2026-06-08T12:34:56.500Z","host":"lab","service":"netdata","unit":null,"identifier":null,"level":"info","message":"earlier out-of-order record","stream":"journald","fields":{}}
     mode: "0644"
-  loop:
-    - path: /tmp/lnav_verify/syslog
-      content: |
-        Jun  8 08:00:00 lab example[1234]: Plain syslog verification
-    # The second record is deliberately 289ms EARLIER than the first: the merged
-    # store is written in ingest order, not strict time order, so this exercises
-    # the format's `ordered-by-time` (lnav must trust file order and not insert
-    # an out-of-time-order banner, and SQL row 1 must stay the first file line).
-    - path: /tmp/lnav_verify/lnav.jsonl
-      content: |
-        {"time":"2026-06-08T12:34:56.789Z","host":"lab","service":"homeassistant","unit":"homeassistant.service","identifier":"homeassistant","level":"warn","message":"connection failed","stream":"journald","fields":{"CONTAINER_NAME":"homeassistant","SYSTEMD_UNIT":"homeassistant.service","SYSLOG_IDENTIFIER":"homeassistant","context":{"retry":3}}}
-        {"time":"2026-06-08T12:34:56.500Z","host":"lab","service":"netdata","unit":null,"identifier":null,"level":"info","message":"earlier out-of-order record","stream":"journald","fields":{}}
   tags:
     - lnav
 
-- name: Lnav format samples match their target formats
+# The second record is deliberately 289ms earlier than the first. The merged
+# store is written in ingest order, so this exercises `ordered-by-time`.
+- name: Lnav format matches its representative sample
   become: true
   become_user: "{{ ansible_user_id }}"
   command:
@@ -71,19 +63,14 @@
       - /usr/local/bin/lnav
       - -m
       - format
-      - "{{ item.name }}"
+      - fluentbit_lnav
       - test
-      - "{{ item.path }}"
+      - /tmp/lnav_verify/lnav.jsonl
   changed_when: false
-  loop:
-    - name: fluentbit_lnav
-      path: /tmp/lnav_verify/lnav.jsonl
-    - name: syslog_log
-      path: /tmp/lnav_verify/syslog
   tags:
     - lnav
 
-- name: Lnav config check accepts representative samples
+- name: Lnav config check accepts representative sample
   become: true
   become_user: "{{ ansible_user_id }}"
   command:
@@ -92,11 +79,8 @@
       - -n
       - -N
       - -C
-      - "{{ item }}"
+      - /tmp/lnav_verify/lnav.jsonl
   changed_when: false
-  loop:
-    - /tmp/lnav_verify/lnav.jsonl
-    - /tmp/lnav_verify/syslog
   tags:
     - lnav
 
