@@ -44,7 +44,6 @@
     # config fails on unrelated pre-existing issues — e.g. /etc/logrotate.d/
     # alternatives errors rc:1 because /var/log is group-writable and it has no
     # `su` directive. template.yml validates the files *it* renders, which is safe.
-  register: logrotate_conf
   become: true
   vars:
     disabled_line: '# compress # zfs already compresses disk contents'
@@ -52,15 +51,3 @@
     enable_rx: '^(\s*){{ disabled_line }}[ \t]*$'
     disable_to: '\1{{ disabled_line }}'
     enable_to: '\1compress'
-
-# Callers name package configs; repository templates render compression directly.
-# Divert changed files to .dpkg-dist (ignored by logrotate) so apt upgrades cannot
-# overwrite the edit. Restore package ownership when re-enabling compression.
-# A removed diversion is re-added when an upgrade restores a bare compress line.
-- name: compression | (Un)divert {{ logrotate_args.item }}
-  when: logrotate_conf.changed
-  community.general.dpkg_divert:
-    path: "{{ logrotate_args.item }}"
-    divert: "{{ logrotate_args.item }}.dpkg-dist"
-    state: "{{ zfs_root | ternary('present', 'absent') }}"
-  become: true

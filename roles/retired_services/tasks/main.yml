@@ -1,4 +1,35 @@
 ---
+- name: Remove retired logrotate conffile diversions
+  community.general.dpkg_divert:
+    path: "{{ item }}"
+    divert: "{{ item }}.dpkg-dist"
+    state: absent
+  loop:
+    - /etc/logrotate.conf
+    - /etc/logrotate.d/btmp
+    - /etc/logrotate.d/wtmp
+    - /etc/logrotate.d/rsyslog
+    - /etc/logrotate.d/ubuntu-pro-client
+    - /etc/logrotate.d/cloud-init
+    - /etc/logrotate.d/apt
+    - /etc/logrotate.d/dpkg
+    - /etc/logrotate.d/alternatives
+    - /etc/logrotate.d/unattended-upgrades
+    - /etc/logrotate.d/nginx
+    - /etc/logrotate.d/certbot
+    - /etc/logrotate.d/hd-idle
+    - /etc/logrotate.d/libvirtd
+    - /etc/logrotate.d/libvirtd.libxl
+    - /etc/logrotate.d/libvirtd.lxc
+    - /etc/logrotate.d/libvirtd.qemu
+    - /etc/logrotate.d/netdata
+    - /etc/logrotate.d/fail2ban
+    - /etc/logrotate.d/chrony
+  become: true
+  tags:
+    - retired_services
+    - logrotate
+
 - name: Remove unconfigured management macvlan
   import_role:
     name: systemd_unit

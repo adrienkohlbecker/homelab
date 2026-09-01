@@ -1,4 +1,4 @@
-# Exercise rotation with and without compression, diversion creation/removal,
+# Exercise package-upgrade persistence, rotation with and without compression,
 # and preservation of unowned policies on ZFS and ext4.
 machines:
   box:

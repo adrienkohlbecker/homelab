@@ -1,4 +1,21 @@
 ---
+- name: _verify | Retired logrotate diversion is absent  # noqa: command-instead-of-module -- read-only query
+  command: dpkg-divert --listpackage /etc/logrotate.d/apt
+  register: retired_services_logrotate_diversion
+  changed_when: false
+  failed_when: retired_services_logrotate_diversion.stdout | trim | length > 0
+  become: true
+
+- name: _verify | Retired diversion files were preserved
+  command: grep -Fx "{{ item.content }}" "{{ item.path }}"
+  loop:
+    - path: /etc/logrotate.d/apt
+      content: '# active local config'
+    - path: /etc/logrotate.d/apt.dpkg-dist
+      content: '# saved package config'
+  changed_when: false
+  become: true
+
 - name: _verify | Retired podman socket drop-in is absent
   stat:
     path: /etc/systemd/system/podman.socket.d/override.conf

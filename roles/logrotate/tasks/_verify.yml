@@ -1,5 +1,5 @@
 # Exercise both compression directions across box and minimal, including
-# diversion changes, repeated helper calls, and an untouched unowned policy.
+# package upgrades, repeated helper calls, and an untouched unowned policy.
 - name: _verify | Create a fixture logrotate config
   copy:
     dest: /etc/logrotate.d/_verify_logrotate
@@ -16,13 +16,6 @@
       }
   become: true
 
-- name: _verify | Register the diversion to remove on non-ZFS hosts
-  when: not zfs_root
-  community.general.dpkg_divert:
-    path: /etc/logrotate.d/_verify_logrotate
-    divert: /etc/logrotate.d/_verify_logrotate.dpkg-dist
-  become: true
-
 - name: _verify | Compression helper with condition:false over a bogus path
   import_role:
     name: logrotate
@@ -35,7 +28,7 @@
 - name: _verify | Assert condition:false skipped the compression replace
   assert:
     that:
-      - logrotate_conf is skipped
+      - logrotate_optional_config is skipped
 
 - name: _verify | Compression helper over an absent optional config
   import_role:
@@ -50,7 +43,6 @@
   assert:
     that:
       - not logrotate_optional_config.stat.exists
-      - logrotate_conf is skipped
 
 - name: _verify | Run the compression toggle over the fixture
   import_role:
@@ -60,23 +52,47 @@
     logrotate_args:
       item: /etc/logrotate.d/_verify_logrotate
 
-- name: _verify | List diversion for the fixture
+- name: _verify | Package config has no diversion  # noqa: command-instead-of-module -- read-only query
   command:
     argv:
       - dpkg-divert
-      - --list
-      - /etc/logrotate.d/_verify_logrotate
+      - --listpackage
+      - /etc/logrotate.d/btmp
+  register: logrotate_verify_diversion
   changed_when: false
-  register: logrotate_verify_divert
+  failed_when: logrotate_verify_diversion.stdout | trim | length > 0
   become: true
 
-- name: _verify | Diversion matches the compression policy
+- name: _verify | Read locally modified package config
+  slurp:
+    src: /etc/logrotate.d/btmp
+  register: logrotate_verify_btmp_before
+  become: true
+
+- name: _verify | Reinstall logrotate while retaining local conffiles
+  command:
+    argv:
+      - apt-get
+      - --reinstall
+      - -o
+      - Dpkg::Options::=--force-confdef
+      - -o
+      - Dpkg::Options::=--force-confold
+      - install
+      - -y
+      - logrotate
+  changed_when: true
+  become: true
+
+- name: _verify | Read package config after reinstall
+  slurp:
+    src: /etc/logrotate.d/btmp
+  register: logrotate_verify_btmp_after
+  become: true
+
+- name: _verify | Package reinstall preserved the compression policy
   assert:
-    that:
-      - >-
-        ('/etc/logrotate.d/_verify_logrotate.dpkg-dist' in logrotate_verify_divert.stdout)
-        == zfs_root
-    fail_msg: compression toggle did not reconcile the dpkg diversion
+    that: logrotate_verify_btmp_after.content == logrotate_verify_btmp_before.content
 
 - name: _verify | Read back the toggled fixture
   slurp:
@@ -181,14 +197,6 @@
     that:
       - not logrotate_verify_cond.stat.exists
     fail_msg: condition:false still wrote the drop-in
-
-- name: _verify | Remove the test diversion
-  when: zfs_root
-  community.general.dpkg_divert:
-    path: /etc/logrotate.d/_verify_logrotate
-    divert: /etc/logrotate.d/_verify_logrotate.dpkg-dist
-    state: absent
-  become: true
 
 - name: _verify | Clean up fixtures
   file:

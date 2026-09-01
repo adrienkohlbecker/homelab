@@ -1,4 +1,24 @@
 ---
+- name: _setup | Register retired logrotate conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/logrotate.d/apt
+    divert: /etc/logrotate.d/apt.dpkg-dist
+  become: true
+
+- name: _setup | Install active and package logrotate fixtures
+  copy:
+    dest: "{{ item.path }}"
+    content: "{{ item.content }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - path: /etc/logrotate.d/apt
+      content: '# active local config'
+    - path: /etc/logrotate.d/apt.dpkg-dist
+      content: '# saved package config'
+  become: true
+
 - name: _setup | Start configured macvlan fixtures
   import_role:
     name: macvlan
