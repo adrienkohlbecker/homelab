@@ -173,8 +173,9 @@
       python3 -c 'import subprocess,sys;
       p=subprocess.run(["sensors","-c",sys.argv[1]],capture_output=True,text=True);
       sys.stdout.write(p.stdout); sys.stderr.write(p.stderr);
-      sys.exit(0 if p.returncode == 1 and p.stderr.startswith("No sensors found!")
-      else p.returncode)' %s
+      errors=any(line.lstrip().startswith("Error:") for line in p.stderr.splitlines());
+      sys.exit(1 if errors else 0 if p.returncode == 1
+      and p.stderr.startswith("No sensors found!") else p.returncode)' %s
   register: lm_sensors_ignore_file
   become: true
   tags:
@@ -206,8 +207,9 @@
       python3 -c 'import subprocess,sys;
       p=subprocess.run(["sensors","-c",sys.argv[1]],capture_output=True,text=True);
       sys.stdout.write(p.stdout); sys.stderr.write(p.stderr);
-      sys.exit(0 if p.returncode == 1 and p.stderr.startswith("No sensors found!")
-      else p.returncode)' %s
+      errors=any(line.lstrip().startswith("Error:") for line in p.stderr.splitlines());
+      sys.exit(1 if errors else 0 if p.returncode == 1
+      and p.stderr.startswith("No sensors found!") else p.returncode)' %s
   register: lm_sensors_limits_file
   become: true
   tags:
