@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# Down-rank HomeAssistant's mac_iot (macvlan) default route so a podman
-# bridge default wins where both exist (netavark installs a default per
-# gateway-bearing network at equal metric -- an unpinned tie,
-# the shape lab is in), while leaving it as-is where the macvlan is the
-# only default (single-default hosts) so HA's egress is never stranded.
-# Runs on the host (HA has no CAP_NET_ADMIN) and edits inside the
-# container netns via nsenter. Invoked from homeassistant.service.j2
-# ExecStartPost with the mac_iot gateway as $1. Best-effort: never fails
-# the unit -- a route hiccup must not block HA from starting.
+# Down-rank HomeAssistant's mac_iot default so a podman bridge wins when both
+# exist, but preserve it when it is the only route. Runs host-side because HA
+# has no CAP_NET_ADMIN. Best-effort: a route hiccup must not block HA startup.
 set -euo pipefail
 
-gw="${1:-}"
-[[ -n "$gw" ]] || exit 0
-
-pid="$(/usr/bin/podman inspect -f '{{.State.Pid}}' homeassistant 2>/dev/null)" || exit 0
-[[ -n "$pid" ]] || exit 0
+read -r pid gw < <(
+  /usr/bin/podman inspect \
+    -f '{{.State.Pid}} {{.NetworkSettings.Networks.mac_iot.Gateway}}' \
+    homeassistant 2>/dev/null
+) || exit 0
+[[ -n "$pid" && -n "$gw" ]] || exit 0
 
 # Only touch the macvlan default when a second default exists to fall back
 # on -- otherwise removing it would cut HA's only route off-subnet.
