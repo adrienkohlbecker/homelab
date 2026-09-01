@@ -35,35 +35,25 @@
   tags:
     - homeassistant
 
-- name: Create sqlite directory
+- name: Create homeassistant state directories
   when: not ansible_check_mode or homeassistant_user.uid is defined
   file:
-    dest: /mnt/services/sqlite/homeassistant
-    state: directory
-    owner: homeassistant
-    group: homeassistant
-    mode: "0755"
-  become: true
-  tags:
-    - homeassistant
-
-- name: Create homeassistant subdirectories
-  when: not ansible_check_mode or homeassistant_user.uid is defined
-  file:
-    dest: "/mnt/services/homeassistant/{{ item }}"
+    dest: "{{ item }}"
     state: directory
     owner: homeassistant
     group: homeassistant
     mode: "0755"
   become: true
   loop:
-    - custom_templates
-    - blueprints
-    - blueprints/automation
-    - dashboards
-    - www
-    - custom_components
-    - .storage
+    - /mnt/services/sqlite/homeassistant
+    - /mnt/services/homeassistant/custom_templates
+    - /mnt/services/homeassistant/blueprints
+    - /mnt/services/homeassistant/blueprints/automation
+    - /mnt/services/homeassistant/dashboards
+    - /mnt/services/homeassistant/www
+    - /mnt/services/homeassistant/custom_components
+    - /mnt/services/homeassistant/custom_components/hacs
+    - /mnt/services/homeassistant/.storage
   tags:
     - homeassistant
 
@@ -256,18 +246,6 @@
     group: root
     mode: "0700"
   register: homeassistant_hacs_dir
-  become: true
-  tags:
-    - homeassistant
-
-- name: Create HACS install dir
-  when: not ansible_check_mode or homeassistant_user.uid is defined
-  file:
-    path: /mnt/services/homeassistant/custom_components/hacs
-    state: directory
-    owner: homeassistant
-    group: homeassistant
-    mode: "0755"
   become: true
   tags:
     - homeassistant
