@@ -136,7 +136,7 @@ class _HostClient:
 
 def alarm_href(click_root: str, host_name: str, alarm: dict) -> str:
     """Build the v2 deep-link for an alarm row. Falls back to the alerts
-    list page if alarm_log didn't yield a transition_id."""
+    list page if alert_transitions didn't yield a transition_id."""
     base = f"{click_root}/v2/spaces/{urllib.parse.quote(host_name)}/rooms/local/alerts"
     tid = alarm.get("transition_id")
     if not tid:
@@ -196,8 +196,7 @@ def _format_value(alarm: dict) -> str:
 def normalize(payload: dict) -> list[dict]:
     """Flatten netdata's `{alarms: {chart.alarm: {...}}}` into a list sorted
     critical-first then warning-first then alphabetical. The `id` and
-    `last_status_change` fields are kept so click-through can build the
-    same registry-alert-redirect URL netdata uses for telegram notifs."""
+    `last_status_change` fields are kept for the v2 alert deep-link."""
     rank = {"CRITICAL": 0, "WARNING": 1, "CLEAR": 2, "UNDEFINED": 3, "UNINITIALIZED": 4}
     items = []
     for key, alarm in (payload.get("alarms") or {}).items():
