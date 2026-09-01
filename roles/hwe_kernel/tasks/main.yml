@@ -1,11 +1,6 @@
-# Noble ships 6.8 as GA, so the HWE meta only overshoots into the rolling
-# edge. Strip it (and its image/headers metas) and let autoremove reclaim
-# the orphaned rolling kernel. Ubuntu's apt never autoremoves the *running*
-# kernel, so on a host currently booted into the rolling HWE (e.g. fox on
-# 6.17) this drops the meta but leaves the live kernel in place -- demoting
-# that running kernel needs an explicit purge + reboot done by hand, not an
-# unattended converge that could reboot-loop. Once the host is back on 6.8,
-# this task is a no-op.
+# Noble's rolling HWE meta can outrun the pinned ZFS userspace. Remove its
+# package chain, but let apt protect any running HWE kernel; demotion requires
+# a deliberate purge and reboot.
 - name: Remove rolling HWE kernel (GA is already 6.8)
   apt:
     pkg:
