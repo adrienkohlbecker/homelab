@@ -277,14 +277,21 @@
     mode: "0644"
   become: true
 
+- name: _setup | Install hdparm
+  apt:
+    name: hdparm
+    state: present
+    cache_valid_time: 3600
+  become: true
+
 - name: _setup | Register retired hdparm conffile diversion
   community.general.dpkg_divert:
     path: /etc/hdparm.conf
   become: true
 
-- name: _setup | Install retained hdparm conffile fixture
+- name: _setup | Install managed hdparm conffile fixture
   copy:
-    content: "# retained hdparm config\n"
+    content: "# Managed hdparm configuration fixture\nquiet\n"
     dest: /etc/hdparm.conf
     owner: root
     group: root

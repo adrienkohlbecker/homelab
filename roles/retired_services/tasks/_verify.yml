@@ -116,9 +116,11 @@
   changed_when: false
   become: true
 
-- name: _verify | Managed hdparm conffile was retained
-  command: grep -Fx '# retained hdparm config' /etc/hdparm.conf
+- name: _verify | Packaged hdparm conffile was restored
+  command: dpkg --verify hdparm
+  register: retired_services_hdparm_verify
   changed_when: false
+  failed_when: "'/etc/hdparm.conf' in retired_services_hdparm_verify.stdout"
   become: true
 
 - name: _verify | Retired ZFS cron files are absent

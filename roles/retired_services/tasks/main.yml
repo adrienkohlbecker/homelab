@@ -442,6 +442,69 @@
     - retired_services
     - hdparm
 
+- name: Check retired hdparm configuration
+  stat:
+    path: /etc/hdparm.conf
+    checksum_algorithm: md5
+  register: retired_services_hdparm_conf
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
+- name: Read retired hdparm configuration
+  when: retired_services_hdparm_conf.stat.exists
+  slurp:
+    src: /etc/hdparm.conf
+  register: retired_services_hdparm_conf_content
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
+- name: Query packaged hdparm configuration checksum # noqa: command-instead-of-module -- read-only package metadata query
+  command: dpkg-query -W -f=${Conffiles} hdparm
+  register: retired_services_hdparm_conffiles
+  changed_when: false
+  failed_when: retired_services_hdparm_conffiles.rc not in [0, 1]
+  check_mode: false
+  tags:
+    - retired_services
+    - hdparm
+
+- name: Restore packaged hdparm configuration
+  vars:
+    _active_directives: >-
+      {{ (retired_services_hdparm_conf_content.content | default('') | b64decode).splitlines()
+         | map('trim') | reject('equalto', '') | reject('match', '^#') | list }}
+    _packaged_checksum: >-
+      {{ retired_services_hdparm_conffiles.stdout
+         | regex_search('/etc/hdparm\.conf\s+([0-9a-f]{32})', '\1')
+         | first | default('') }}
+  when:
+    - retired_services_hdparm_conffiles.rc == 0
+    - retired_services_hdparm_conf.stat.exists
+    - _active_directives == ['quiet']
+    - retired_services_hdparm_conf.stat.checksum != _packaged_checksum
+  command:
+    argv:
+      - apt-get
+      - --reinstall
+      - -o
+      - Dpkg::Options::=--force-confask
+      - -o
+      - Dpkg::Options::=--force-confnew
+      - install
+      - -y
+      - hdparm
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: true
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
 - name: Remove retired ZFS cron conffile diversion
   community.general.dpkg_divert:
     path: /etc/cron.d/zfsutils-linux
