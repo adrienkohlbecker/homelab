@@ -11,11 +11,11 @@
 - name: Assert default_interface is plausible (not a bridge/tunnel)
   assert:
     that:
-      - ansible_default_ipv4.interface is defined
-      - ansible_default_ipv4.interface is not match("^(wg|podman|virbr|docker|br-|veth)")
+      - default_interface is defined
+      - default_interface is not match("^(wg|podman|virbr|docker|br-|veth)")
     fail_msg: >-
-      ansible_default_ipv4.interface resolved to
-      '{{ ansible_default_ipv4.interface }}', which looks like a
+      default_interface resolved to
+      '{{ default_interface }}', which looks like a
       bridge/tunnel — the firewall's iifname-scoped rules would
       attach to the wrong iface. Override `default_interface` in
       host_vars (group_vars/all.yml defaults it to
