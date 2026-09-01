@@ -61,15 +61,11 @@ FROM = {{ gitea_smtp_from }}
 USER = {{ gitea_smtp_user }}
 PASSWD = {{ gitea_smtp_password }}
 
-# Only deviations from upstream gitea defaults: closed registration
-# behind email-confirm + captcha, require sign-in to view anything, mail
-# notifications on, time tracking off. Every other [service] key is left at
-# the gitea-shipped default.
+# Deliberate service policy: closed registration, authenticated-only views,
+# notifications on, time tracking off, and SSO-only web login.
 [service]
-REGISTER_EMAIL_CONFIRM = true
 ENABLE_NOTIFY_MAIL = true
 DISABLE_REGISTRATION = true
-ENABLE_CAPTCHA = true
 DEFAULT_ENABLE_TIMETRACKING = false
 # Require a session for every view -- no anonymous repo browsing, even of
 # the otherwise-public /explore listing. API requests with a token in the
