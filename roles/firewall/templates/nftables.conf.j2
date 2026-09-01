@@ -61,9 +61,7 @@ table inet homelab {
     counter forward_podman_isolation {}
     counter forward_nonsyn {}
     counter forward_catchall {}
-    counter input_ssh {}
-    counter input_http {}
-    counter input_https {}
+    counter input_public_tcp {}
 {% if samba_enabled | default(false) %}
     counter input_admin_samba {}
 {% endif %}
@@ -279,9 +277,7 @@ table inet homelab {
 
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
-        tcp dport 22 counter name "input_ssh" accept comment "SSH"
-        tcp dport 80 counter name "input_http" accept comment "HTTP"
-        tcp dport 443 counter name "input_https" accept comment "HTTPS"
+        tcp dport { 22, 80, 443 } counter name "input_public_tcp" accept comment "SSH, HTTP, HTTPS"
 {% if samba_enabled | default(false) %}
         iifname . ip saddr @lan_admin_pairs tcp dport 445 counter name "input_admin_samba" accept comment "Samba (admin)"
 {% endif %}

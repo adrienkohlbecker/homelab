@@ -118,13 +118,7 @@
     aardvark_pkts: "{{ nft_counters.aardvark_accept.packets }}"
     wireguard_pkts: "{{ nft_counters.wireguard_accept.packets }}"
     mdns_pkts: "{{ nft_counters.mdns_accept.packets }}"
-    # TCP accept rule counters — most probes intentionally have no
-    # listener, so the rule-specific counter is the signal that each
-    # firewall branch matched. Keep these split so one open port can't
-    # mask another regressing out of the ruleset.
-    input_ssh_pkts: "{{ nft_counters.input_ssh.packets }}"
-    input_http_pkts: "{{ nft_counters.input_http.packets }}"
-    input_https_pkts: "{{ nft_counters.input_https.packets }}"
+    input_public_tcp_pkts: "{{ nft_counters.input_public_tcp.packets }}"
     input_admin_samba_pkts: "{{ nft_counters.input_admin_samba.packets }}"
     input_admin_nut_pkts: "{{ nft_counters.input_admin_nut.packets }}"
     input_transmission_tcp_pkts: "{{ nft_counters.input_transmission_tcp.packets }}"
@@ -157,9 +151,7 @@
       - aardvark_pkts | int >= 2  # two probes: default-bridge + non-default-bridge
       - wireguard_pkts | int >= 1
       - mdns_pkts | int == 0
-      - input_ssh_pkts | int >= 1
-      - input_http_pkts | int >= 1
-      - input_https_pkts | int >= 1
+      - input_public_tcp_pkts | int >= 3  # independent SSH, HTTP, and HTTPS probes
       - input_admin_samba_pkts | int >= 1
       - input_admin_nut_pkts | int >= 1
       - input_transmission_tcp_pkts | int >= 1
