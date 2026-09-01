@@ -4,25 +4,10 @@
 Description=headscale
 After=network-online.target
 Wants=network-online.target
-# Baseline start-limit, present regardless of OIDC: Restart=always + RestartSec=5
-# can trip systemd's default 5-starts-in-10s burst during a slow dependency
-# warmup and land the unit in `failed` rather than retrying. Matches the sibling
-# podman units (e.g. roles/kuma). OIDC widens the burst to 15 -- fox is a
-# wg *listener*, so the tunnel to lab only carries traffic once lab/pug send their
-# next keepalive (~25s after a fox reboot), and headscale must keep retrying
-# boot-time OIDC discovery through that wg0 warmup rather than exhausting the
-# burst. A genuinely-broken server still surfaces (Restart=always loops, and
-# fox's netdata headscale collector goes missing -- see host_vars/fox.yml).
-StartLimitIntervalSec=600
-StartLimitBurst={{ 15 if _headscale_oidc_configured else 3 }}
 {% if _headscale_oidc_configured %}
 {% if not qemu_test %}
-# OIDC discovery hits the Authelia issuer at startup, and on fox that issuer
-# (auth.fahm.fr) resolves to lab's wg /32 -- reachable only over the wg0
-# backbone. Order after wg-quick so the interface + route exist before
-# headscale's first start attempt. fox always runs the wireguard role, and this
-# unit only ever runs on fox, so the dep always holds. Skipped under qemu_test,
-# where the role test has no wg0 unit to order against.
+# On fox, OIDC discovery reaches lab's Authelia issuer over wg0. Order after the
+# interface there; the qemu role test has no wg0 unit to order against.
 After=wg-quick@wg0.service
 {% endif %}
 {% endif %}
