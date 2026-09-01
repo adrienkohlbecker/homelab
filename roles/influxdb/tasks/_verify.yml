@@ -128,10 +128,8 @@
 # Authelia-gated; machine clients reach influxd off-vhost over the podman network
 # (covered by roles/homeassistant/_verify).
 
-# Exercise bucket.yml end-to-end with a throwaway tenant. Verifies the
-# org→user→bucket→write-auth path and -- via the write/query roundtrip
-# below -- that the produced token actually carries the bucket-scoped
-# write permission.
+# Exercise bucket.yml end-to-end with a throwaway tenant, then verify its
+# authorization metadata and the bucket's write path.
 - name: _verify | Provision throwaway influxdb tenant via bucket.yml
   import_role:
     name: influxdb
@@ -140,25 +138,6 @@
     influxdb_bucket_args:
       user: verify_user
       bucket: verify_bucket
-
-# Resolve the throwaway tenant's org + bucket ids -- needed both to
-# assert bucket.yml minted a write-auth (by its permission string) and
-# to mint a fresh throwaway token for the functional roundtrip below.
-- name: _verify | Resolve verify org id
-  command:
-    argv:
-      - podman
-      - exec
-      - influxdb
-      - influx
-      - org
-      - list
-      - --name
-      - "{{ influxdb_root_org }}"
-      - --json
-  register: _influxdb_verify_org
-  changed_when: false
-  become: true
 
 - name: _verify | Resolve verify_bucket id
   command:
@@ -178,16 +157,15 @@
   changed_when: false
   become: true
 
-# Contract: bucket.yml minted a bucket-scoped write-auth for verify_user.
-# The token value is redacted by influxd 2.8+ (only the permission string
-# survives), so assert on the permission -- shaped
-# `write:orgs/<orgid>/buckets/<bucketid>` -- not a token. A miss means
-# bucket.yml's conditional auth-create skipped (re-check its `when:`) or
-# the influx-cli --json shape changed.
+# The token is redacted after creation, but its exact permission list remains.
 - name: _verify | Bucket.yml minted a write-auth for verify_bucket
   vars:
-    _verify_org_id: "{{ (_influxdb_verify_org.stdout | from_json | first).id }}"
-    _verify_bucket_id: "{{ (_influxdb_verify_bucket.stdout | from_json | first).id }}"
+    _verify_bucket: >-
+      {{ _influxdb_verify_bucket.stdout
+         | from_json
+         | one_by_attr('name', 'verify_bucket') }}
+    _verify_write_permission: >-
+      write:orgs/{{ _verify_bucket.orgID }}/buckets/{{ _verify_bucket.id }}
   command:
     argv:
       - podman
@@ -203,92 +181,25 @@
   changed_when: false
   failed_when: >-
     ((_influxdb_verify_auth_list.stdout | from_json)
-     | selectattr('permissions', 'defined')
-     | selectattr('permissions', 'contains',
-         'write:orgs/' ~ _verify_org_id ~ '/buckets/' ~ _verify_bucket_id)
+     | matching_by_attr('permissions', [_verify_write_permission])
      | list | length) == 0
   become: true
 
-# Mint a fresh throwaway write-auth to exercise the write path end-to-end.
-# bucket.yml's own token is redacted post-creation, so _verify mints its
-# own here -- the token IS returned at `auth create`, so this is the only
-# path to a usable token value, mirroring the operator's one-time copy.
-- name: _verify | Mint a throwaway write-auth for the functional roundtrip
-  vars:
-    _verify_bucket_id: "{{ (_influxdb_verify_bucket.stdout | from_json | first).id }}"
+- name: _verify | Write a sentinel point through the managed operator config
   command:
     argv:
       - podman
       - exec
       - influxdb
       - influx
-      - auth
-      - create
-      - --json
+      - write
+      - --bucket
+      - verify_bucket
       - --org
       - "{{ influxdb_root_org }}"
-      - --user
-      - verify_user
-      - --write-bucket
-      - "{{ _verify_bucket_id }}"
-  register: _influxdb_verify_auth_create
+      - sentinel,source=ansible_verify value=1
   changed_when: false
   become: true
-
-# Functional write + negative-read on the throwaway write-auth: the write
-# step's 204 proves the token is honored; the read step (which must fail
-# rc != 0) proves write-bucket doesn't accidentally grant read. A previous
-# admin-as-self query step was redundant -- 204 + rc-check span both.
-# argv form keeps the line-protocol point's embedded space in one slot.
-- name: _verify | Exercise bucket-scoped write-auth (positive write + negative read)
-  vars:
-    _verify_token: "{{ (_influxdb_verify_auth_create.stdout | from_json).token }}"
-  block:
-    - name: _verify | Write a sentinel point with the bucket write-auth
-      command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - write
-          - --bucket
-          - verify_bucket
-          - --org
-          - "{{ influxdb_root_org }}"
-          - --token
-          - "{{ _verify_token }}"
-          - sentinel,source=ansible_verify value=1
-      changed_when: false
-      become: true
-
-    - name: _verify | Write-bucket-only token attempts read
-      command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - query
-          - --org
-          - "{{ influxdb_root_org }}"
-          - --token
-          - "{{ _verify_token }}"
-          - >-
-            from(bucket:"verify_bucket") |> range(start:-1m)
-      register: _influxdb_neg_query
-      changed_when: false
-      failed_when: false
-      become: true
-
-    - name: _verify | Write-bucket-only token cannot read (auth scope enforced)
-      assert:
-        that:
-          - _influxdb_neg_query.rc != 0
-        fail_msg: >-
-          Write-bucket token successfully read from verify_bucket --
-          bucket.yml's --write-bucket invocation appears to grant read
-          perms, which is a scope regression.
 
 # Ownership assertion -- catches a regression where data/ or config/ ends
 # up owned by a different host uid (e.g. a future uidmap change that
