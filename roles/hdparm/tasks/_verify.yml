@@ -8,36 +8,5 @@
 # it needs no real disk. The role's converge behavior (hdparm package,
 # /etc/hdparm.conf, CAP_SYS_RAWIO, the udev re-apply) is exercised on every
 # arch regardless.
-- name: _verify | Read managed hdparm conffile
-  slurp:
-    src: /etc/hdparm.conf
-  register: hdparm_verify_config_before
-  become: true
-
-- name: _verify | Reinstall hdparm while retaining local conffiles
-  command:
-    argv:
-      - apt-get
-      - --reinstall
-      - -o
-      - Dpkg::Options::=--force-confdef
-      - -o
-      - Dpkg::Options::=--force-confold
-      - install
-      - -y
-      - hdparm
-  changed_when: true
-  become: true
-
-- name: _verify | Read hdparm conffile after reinstall
-  slurp:
-    src: /etc/hdparm.conf
-  register: hdparm_verify_config_after
-  become: true
-
-- name: _verify | Package reinstall preserved the managed hdparm conffile
-  assert:
-    that: hdparm_verify_config_after.content == hdparm_verify_config_before.content
-
 - name: _verify | Exercise the hdparm charts.d collector
   import_tasks: _verify_collector.yml

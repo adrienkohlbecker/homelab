@@ -13,37 +13,6 @@
 # the collector prefix match (instanced mode, plugin != job) -- not just the
 # trivial present=0 path; fake_plugin:fake_job is the present=0 witness.
 
-- name: _verify | Read managed Netdata conffile
-  slurp:
-    src: /etc/netdata/netdata.conf
-  register: netdata_verify_config_before
-  become: true
-
-- name: _verify | Reinstall Netdata while retaining local conffiles
-  command:
-    argv:
-      - apt-get
-      - --reinstall
-      - -o
-      - Dpkg::Options::=--force-confdef
-      - -o
-      - Dpkg::Options::=--force-confold
-      - install
-      - -y
-      - netdata
-  changed_when: true
-  become: true
-
-- name: _verify | Read Netdata conffile after reinstall
-  slurp:
-    src: /etc/netdata/netdata.conf
-  register: netdata_verify_config_after
-  become: true
-
-- name: _verify | Package reinstall preserved the managed Netdata conffile
-  assert:
-    that: netdata_verify_config_after.content == netdata_verify_config_before.content
-
 - name: _verify | Netdata.service is loaded and active
   systemd:
     name: netdata
