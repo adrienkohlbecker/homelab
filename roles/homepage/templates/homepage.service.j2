@@ -27,11 +27,8 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
-# HOMEPAGE_ALLOWED_HOSTS — gethomepage's Host-header allowlist. Three entries:
+# HOMEPAGE_ALLOWED_HOSTS — gethomepage's Host-header allowlist. Two entries:
 #   - homepage.<host>.<domain>: nginx vhost (browser path)
-#   - localhost:<service_ports.homepage>: host-side _verify probe (ansible uri
-#     sends Host: localhost:<port> from the URL netloc; podman forwards TCP
-#     transparently so the container sees that literal Host)
 #   - localhost:3000: in-container --health-cmd wget probe
 # Direct-IP / raw inventory_hostname Host headers are intentionally rejected:
 # no legitimate path uses them, and a narrow allowlist hardens against
@@ -57,7 +54,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/homepage/settings.yaml:/app/config/settings.yaml:ro \
     --volume /mnt/services/homepage/widgets.yaml:/app/config/widgets.yaml:ro \
     --tz={{ system_timezone }} \
-    --env HOMEPAGE_ALLOWED_HOSTS=homepage.{{ inventory_hostname }}.{{ domain }},localhost:{{ service_ports.homepage }},localhost:3000 \
+    --env HOMEPAGE_ALLOWED_HOSTS=homepage.{{ inventory_hostname }}.{{ domain }},localhost:3000 \
     --env LOG_TARGETS=stdout \
     --publish 127.0.0.1:{{ service_ports.homepage }}:3000/tcp \
     --health-cmd {{ "http://localhost:3000/api/healthcheck" | podman_health_wget }} \
