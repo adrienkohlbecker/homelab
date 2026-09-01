@@ -49,7 +49,6 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="homepage" \
     --security-opt=no-new-privileges \
     --network homepage \
-    --init \
     --user 0:0 \
     {{ homepage_user | podman_idmap_args | join(" ") }} \
     --volume /mnt/services/homepage:/app/config:ro \
