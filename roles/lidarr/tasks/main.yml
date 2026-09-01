@@ -3,9 +3,8 @@
     that:
       - (lidarr_api_key | default('')) | length > 0
     fail_msg: >-
-      lidarr_api_key is required (vaulted in group_vars/{prod,test}.yml). Without it
-      config.xml renders an empty <ApiKey>, lidarr self-generates a random key on
-      boot, and every intra-stack X-Api-Key consumer silently breaks.
+      lidarr_api_key is required to keep the managed config.xml deterministic;
+      an empty key makes Lidarr generate and persist a random one on startup.
   tags:
     - lidarr
 
