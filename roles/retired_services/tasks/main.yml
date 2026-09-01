@@ -428,13 +428,26 @@
     - retired_services
     - hdparm
 
-- name: Restart Netdata after diskless hdparm cleanup
+- name: Check Netdata state after diskless hdparm cleanup
   when:
     - rotational_disks_by_id | length == 0
     - not ansible_check_mode
     - >-
       retired_services_hdparm_netdata_files.changed
       or retired_services_hdparm_disk_group.changed | default(false)
+  systemd:
+    name: netdata
+  register: retired_services_hdparm_netdata_state
+  failed_when: false
+  changed_when: false
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
+- name: Restart Netdata after diskless hdparm cleanup
+  when:
+    - retired_services_hdparm_netdata_state.status.ActiveState | default('') == 'active'
   systemd:
     name: netdata
     state: restarted
