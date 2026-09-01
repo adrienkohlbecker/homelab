@@ -4,8 +4,8 @@
 #
 # Netdata charts.d collector: ATA drive power state via `hdparm -C`.
 #
-# Emits one chart per configured device with four bool dimensions
-# (active/standby/sleeping/unknown). The chart context is shared
+# Emits one chart per configured device with five bool dimensions
+# (active/standby/sleeping/unknown/collector_error). The context is shared
 # (`hdparm.power_state`), so a single health template fans out across
 # every drive without per-device enumeration in alerts.conf.
 #
@@ -58,22 +58,9 @@ hdparm_update() {
     sl=0
     u=0
     ce=0
-    # Per-device call so a single bad drive (missing by-id symlink after
-    # a disk replacement, transient SATA-link drop) only collapses its
-    # own chart — not every drive in the list. The previous batch form
-    # short-circuited at hdparm's first per-drive failure.
-    #
-    # `unknown` is hdparm reporting the drive responded with a power-
-    # state code outside the known set (rare; a SATA-link drift
-    # symptom). `collector_error` is the monitoring stack failing to
-    # read the drive at all — missing by-id symlink, hdparm exit ≠ 0,
-    # empty output — operationally distinct from a drive misbehaving.
-    #
-    # `timeout -k 2 5` bounds a wedged-drive call: SIGTERM at 5s,
-    # SIGKILL 2s later. exit 124/137 short-circuits the `&&` to the
-    # `else` arm and reports collector_error like any other read
-    # failure -- so one bad drive doesn't block the rest of the
-    # update cycle.
+    # Poll independently so one failed or wedged drive cannot block the rest.
+    # `unknown` is a drive-reported state; `collector_error` means no readable
+    # result. The timeout bounds each ATA ioctl before the loop continues.
     if [ -e "$path" ] && state=$(timeout -k 2 5 hdparm -C "$path" 2>/dev/null | awk '/^ drive state is:/{sub(/^ drive state is:  /,""); print; exit}'); then
       case "$state" in
       "active/idle") a=1 ;;
