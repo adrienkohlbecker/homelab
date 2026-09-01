@@ -62,52 +62,25 @@
   tags:
     - authelia
 
-- name: Create authelia JWT secret
+- name: Create authelia secrets
   when: not ansible_check_mode or authelia_podman_available
   containers.podman.podman_secret:
-    name: authelia_jwt_secret
-    data: "{{ authelia_jwt_secret }}"
-  register: _authelia_jwt_secret
-  become: true
-  tags:
-    - authelia
-
-- name: Create authelia session secret
-  when: not ansible_check_mode or authelia_podman_available
-  containers.podman.podman_secret:
-    name: authelia_session_secret
-    data: "{{ authelia_session_secret }}"
-  register: _authelia_session_secret
-  become: true
-  tags:
-    - authelia
-
-- name: Create authelia storage encryption key
-  when: not ansible_check_mode or authelia_podman_available
-  containers.podman.podman_secret:
-    name: authelia_storage_encryption_key
-    data: "{{ authelia_storage_encryption_key }}"
-  register: _authelia_storage_encryption_key
-  become: true
-  tags:
-    - authelia
-
-- name: Create authelia SMTP password secret
-  when: not ansible_check_mode or authelia_podman_available
-  containers.podman.podman_secret:
-    name: authelia_smtp_password
-    data: "{{ authelia_smtp_password }}"
-  register: _authelia_smtp_password
-  become: true
-  tags:
-    - authelia
-
-- name: Create authelia OIDC HMAC secret
-  when: not ansible_check_mode or authelia_podman_available
-  containers.podman.podman_secret:
-    name: authelia_oidc_hmac_secret
-    data: "{{ authelia_oidc_hmac_secret }}"
-  register: _authelia_oidc_hmac_secret
+    name: "{{ item.name }}"
+    data: "{{ item.data }}"
+  loop:
+    - name: authelia_jwt_secret
+      data: "{{ authelia_jwt_secret }}"
+    - name: authelia_session_secret
+      data: "{{ authelia_session_secret }}"
+    - name: authelia_storage_encryption_key
+      data: "{{ authelia_storage_encryption_key }}"
+    - name: authelia_smtp_password
+      data: "{{ authelia_smtp_password }}"
+    - name: authelia_oidc_hmac_secret
+      data: "{{ authelia_oidc_hmac_secret }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _authelia_secrets
   become: true
   tags:
     - authelia
@@ -141,11 +114,7 @@
         {{ authelia_network.changed
            or authelia_config_result.changed
            or authelia_users_result.changed
-           or (_authelia_jwt_secret.changed | default(false))
-           or (_authelia_session_secret.changed | default(false))
-           or (_authelia_storage_encryption_key.changed | default(false))
-           or (_authelia_smtp_password.changed | default(false))
-           or (_authelia_oidc_hmac_secret.changed | default(false)) }}
+           or (_authelia_secrets.changed | default(false)) }}
   tags:
     - authelia
 
