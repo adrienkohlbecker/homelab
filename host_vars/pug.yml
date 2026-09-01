@@ -12,13 +12,10 @@ lm_sensors_modules:
 # kernel alarm bit (and netdata's debugfs.plugin) flap clear<->alarm dozens of
 # times a day. Raise the limit to a genuine over-temp threshold (Tjmax ~100C),
 # keeping the chip's 5C hysteresis band, so the alarm means something.
-lm_sensors_limits:
-  - chip: nct6798-isa-02a0
-    set:
-      - feature: temp7_max
-        value: 90
-      - feature: temp7_max_hyst
-        value: 85
+lm_sensors_config: |
+  chip "nct6798-isa-02a0"
+      set temp7_max 90
+      set temp7_max_hyst 85
 
 swap_partition: /dev/disk/by-partlabel/swap
 

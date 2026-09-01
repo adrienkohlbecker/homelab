@@ -1,41 +1,3 @@
-- name: Assert lm_sensors_limits is well-formed
-  vars:
-    _limits: "{{ lm_sensors_effective_limits }}"
-    _sets: "{{ _limits | map(attribute='set', default=[]) | flatten }}"
-  assert:
-    that:
-      - _limits is sequence and _limits is not string
-      - _limits | selectattr('chip', 'undefined') | list | length == 0
-      - _limits | selectattr('set', 'undefined') | list | length == 0
-      - _sets | selectattr('feature', 'undefined') | list | length == 0
-      - _sets | selectattr('value', 'undefined') | list | length == 0
-      - _sets | rejectattr('feature', 'match', '^[a-z0-9_]+\Z') | list | length == 0
-      - _sets | map(attribute='value') | reject('match', '^-?[0-9]+(\.[0-9]+)?\Z') | list | length == 0
-    fail_msg: >-
-      lm_sensors_limits entries each need a `chip` and a `set` list of
-      {feature, value} dicts -- feature a hwmon subfeature name (lowercase
-      letters, digits, underscore -- e.g. temp7_max), value numeric.
-      Got: {{ _limits }}
-  tags:
-    - lm_sensors
-
-- name: Assert lm_sensors_ignore is well-formed
-  vars:
-    _ignore: "{{ lm_sensors_effective_ignore }}"
-    _features: "{{ _ignore | map(attribute='features', default=[]) | flatten }}"
-  assert:
-    that:
-      - _ignore is sequence and _ignore is not string
-      - _ignore | selectattr('chip', 'undefined') | list | length == 0
-      - _ignore | selectattr('features', 'undefined') | list | length == 0
-      - _features | reject('match', '^[a-z0-9_]+\Z') | list | length == 0
-    fail_msg: >-
-      lm_sensors_ignore entries each need a `chip` and a `features` list of
-      hwmon feature names (lowercase letters, digits, underscore -- e.g. temp3).
-      Got: {{ _ignore }}
-  tags:
-    - lm_sensors
-
 - name: Assert lm_sensors_modules is a list of valid module names
   assert:
     that:
@@ -158,11 +120,11 @@
   tags:
     - lm_sensors
 
-- name: Write the libsensors ignore list
-  when: lm_sensors_effective_ignore | length > 0
+- name: Write the libsensors configuration
+  when: lm_sensors_effective_config | trim | length > 0
   template:
-    src: sensors_ignore.conf.j2
-    dest: /etc/sensors.d/zz_netdata_ignore.conf
+    src: libsensors.conf.j2
+    dest: /etc/sensors.d/zz_homelab.conf
     mode: "0644"
     owner: root
     group: root
@@ -176,59 +138,37 @@
       errors=any(line.lstrip().startswith("Error:") for line in p.stderr.splitlines());
       sys.exit(1 if errors else 0 if p.returncode == 1
       and p.stderr.startswith("No sensors found!") else p.returncode)' %s
-  register: lm_sensors_ignore_file
+  register: lm_sensors_config_file
   become: true
   tags:
     - lm_sensors
 
-- name: Remove the libsensors ignore list when empty
-  when: lm_sensors_effective_ignore | length == 0
+- name: Remove the libsensors configuration when empty
+  when: lm_sensors_effective_config | trim | length == 0
   file:
-    path: /etc/sensors.d/zz_netdata_ignore.conf
+    path: /etc/sensors.d/zz_homelab.conf
     state: absent
-  register: lm_sensors_ignore_removed
+  register: lm_sensors_config_removed
   become: true
   tags:
     - lm_sensors
 
-# Limits need `sensors -s` now and lm-sensors.service at boot.
-- name: Write the libsensors limits overrides
-  when: lm_sensors_effective_limits | length > 0
-  template:
-    src: sensors_limits.conf.j2
-    dest: /etc/sensors.d/zz_homelab_limits.conf
-    mode: "0644"
-    owner: root
-    group: root
-    backup: true
-    # A sensor-less fixture returns 1 after a successful parse. Syntax errors
-    # start with an Error line, so accept only the explicit no-sensors result.
-    validate: >-
-      python3 -c 'import subprocess,sys;
-      p=subprocess.run(["sensors","-c",sys.argv[1]],capture_output=True,text=True);
-      sys.stdout.write(p.stdout); sys.stderr.write(p.stderr);
-      errors=any(line.lstrip().startswith("Error:") for line in p.stderr.splitlines());
-      sys.exit(1 if errors else 0 if p.returncode == 1
-      and p.stderr.startswith("No sensors found!") else p.returncode)' %s
-  register: lm_sensors_limits_file
-  become: true
-  tags:
-    - lm_sensors
-
-# Removing the file stops boot-time reapplication. Live limits persist until
-# reboot because libsensors cannot restore the chip defaults.
-- name: Remove the libsensors limits overrides when empty
-  when: lm_sensors_effective_limits | length == 0
+# Remove the split files only after the replacement has passed validation.
+- name: Remove legacy libsensors configuration files
   file:
-    path: /etc/sensors.d/zz_homelab_limits.conf
+    path: "{{ item }}"
     state: absent
-  register: lm_sensors_limits_removed
+  loop:
+    - /etc/sensors.d/zz_netdata_ignore.conf
+    - /etc/sensors.d/zz_homelab_limits.conf
+  register: lm_sensors_legacy_config_removed
   become: true
   tags:
     - lm_sensors
 
-# Probe before enabling: some package builds omit the boot-time service.
+# Set directives need `sensors -s` now and lm-sensors.service at boot.
 - name: Check whether lm-sensors.service exists  # noqa: command-instead-of-module
+  when: lm_sensors_has_set
   command: systemctl list-unit-files lm-sensors.service
   register: lm_sensors_unit
   changed_when: false
@@ -240,7 +180,7 @@
 
 - name: Ensure lm-sensors.service is enabled to re-apply limits at boot
   when:
-    - lm_sensors_effective_limits | length > 0
+    - lm_sensors_has_set
     - "'lm-sensors.service' in lm_sensors_unit.stdout"
   systemd:
     name: lm-sensors.service
@@ -251,6 +191,7 @@
 
 # Sensorless fixtures make `sensors -s` fail; apply only where hwmon chips exist.
 - name: Detect whether any hwmon chip is present
+  when: lm_sensors_has_set
   find:
     paths: /sys/class/hwmon
     patterns: hwmon*
@@ -262,7 +203,8 @@
 
 - name: Apply the libsensors limits live
   when:
-    - lm_sensors_limits_file.changed | default(false)
+    - lm_sensors_has_set
+    - lm_sensors_config_file.changed | default(false)
     - lm_sensors_hwmon.matched | int > 0
   command: sensors -s
   changed_when: true
@@ -282,13 +224,12 @@
   tags:
     - lm_sensors
 
-- name: Restart netdata to re-read the sensor ignore list and limits
+- name: Restart netdata to re-read the libsensors configuration
   when:
     - >-
-      (lm_sensors_ignore_file.changed | default(false))
-      or (lm_sensors_ignore_removed.changed | default(false))
-      or (lm_sensors_limits_file.changed | default(false))
-      or (lm_sensors_limits_removed.changed | default(false))
+      (lm_sensors_config_file.changed | default(false))
+      or (lm_sensors_config_removed.changed | default(false))
+      or (lm_sensors_legacy_config_removed.changed | default(false))
     - lm_sensors_netdata_active.rc == 0
   systemd:
     name: netdata

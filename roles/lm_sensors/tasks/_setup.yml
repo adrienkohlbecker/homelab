@@ -2,3 +2,24 @@
   import_role:
     name: netdata
     tasks_from: install
+
+- name: _setup | Ensure the legacy libsensors configuration directory exists
+  file:
+    path: /etc/sensors.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: _setup | Seed legacy libsensors configuration files
+  copy:
+    dest: "{{ item }}"
+    content: "# legacy test fixture\n"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - /etc/sensors.d/zz_netdata_ignore.conf
+    - /etc/sensors.d/zz_homelab_limits.conf
+  become: true

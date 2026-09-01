@@ -1,26 +1,21 @@
-# Optional host overrides. Empty module/ignore/limits lists remove their files.
+# Optional host overrides. Empty values remove their files.
 # Kernel modules to load now and at boot; derive with `sudo sensors-detect`.
 lm_sensors_modules: []
 
 # Netdata go.d relabel map; see templates/sensors.conf.j2 for its shape.
 lm_sensors_relabel: []
 
-# Hide phantom inputs from libsensors readers, including netdata debugfs.plugin.
-# Shape: [{chip: <glob>, features: [<feature>, ...]}]; names from `sensors -u`.
-lm_sensors_ignore: []
-
-# Chip limits applied with `sensors -s`, then at boot by lm-sensors.service.
-# Shape: [{chip: <name>, set: [{feature: <subfeature>, value: <num>}]}].
-# Subfeature names come from `sensors -u` (e.g. temp7_max).
-lm_sensors_limits: []
+# Native libsensors configuration. Feature and subfeature names come from
+# `sensors -u`; `set` directives are applied live and at boot.
+lm_sensors_config: ""
 
 lm_sensors_qemu_test_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
 lm_sensors_qemu_test_relabel: >-
   {{ [{'chip': 'verify-isa-0000', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}]
      if (_role_under_test | default('')) == 'lm_sensors' else [] }}
-lm_sensors_qemu_test_ignore: >-
-  {{ [{'chip': 'verify-isa-0000', 'features': ['temp2']}]
-     if (_role_under_test | default('')) == 'lm_sensors' else [] }}
-lm_sensors_qemu_test_limits: >-
-  {{ [{'chip': 'verify-isa-0000', 'set': [{'feature': 'temp1_max', 'value': 95}]}]
-     if (_role_under_test | default('')) == 'lm_sensors' else [] }}
+lm_sensors_qemu_test_config: |
+  {% if (_role_under_test | default('')) == 'lm_sensors' %}
+  chip "verify-isa-0000"
+      ignore temp2
+      set temp1_max 95
+  {% endif %}

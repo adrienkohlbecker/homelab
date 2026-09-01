@@ -22,6 +22,23 @@
   changed_when: false
   become: true
 
+- name: _verify | Stat the current and legacy libsensors configuration files
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/sensors.d/zz_homelab.conf
+    - /etc/sensors.d/zz_netdata_ignore.conf
+    - /etc/sensors.d/zz_homelab_limits.conf
+  register: _lm_sensors_config_files
+  become: true
+
+- name: _verify | Assert the consolidated configuration replaced legacy files
+  assert:
+    that:
+      - _lm_sensors_config_files.results[0].stat.exists
+      - not _lm_sensors_config_files.results[1].stat.exists
+      - not _lm_sensors_config_files.results[2].stat.exists
+
 # _setup installs netdata without starting it; the collector needs it running.
 - name: _verify | Start netdata
   systemd:
@@ -60,8 +77,7 @@
   set_fact:
     lm_sensors_qemu_test_modules: []
     lm_sensors_qemu_test_relabel: []
-    lm_sensors_qemu_test_ignore: []
-    lm_sensors_qemu_test_limits: []
+    lm_sensors_qemu_test_config: ""
 
 - name: _verify | Re-run the role's module-management tasks
   import_tasks: main.yml
@@ -72,16 +88,10 @@
   register: _lm_sensors_modload_after
   become: true
 
-- name: _verify | Stat the libsensors ignore file after removal
+- name: _verify | Stat the libsensors configuration after removal
   stat:
-    path: /etc/sensors.d/zz_netdata_ignore.conf
-  register: _lm_sensors_ignore_after
-  become: true
-
-- name: _verify | Stat the libsensors limits file after removal
-  stat:
-    path: /etc/sensors.d/zz_homelab_limits.conf
-  register: _lm_sensors_limits_after
+    path: /etc/sensors.d/zz_homelab.conf
+  register: _lm_sensors_config_after
   become: true
 
 - name: _verify | Check whether the dropped module is still loaded
@@ -101,13 +111,11 @@
   assert:
     that:
       - not _lm_sensors_modload_after.stat.exists
-      - not _lm_sensors_ignore_after.stat.exists
-      - not _lm_sensors_limits_after.stat.exists
+      - not _lm_sensors_config_after.stat.exists
       - _lm_sensors_dummy_loaded.rc != 0
       - not _lm_sensors_reboot_after.stat.exists
     fail_msg: >-
       empty-list removal arm: modules-load.d exists={{ _lm_sensors_modload_after.stat.exists }},
-      sensors.d ignore exists={{ _lm_sensors_ignore_after.stat.exists }},
-      sensors.d limits exists={{ _lm_sensors_limits_after.stat.exists }},
+      sensors.d config exists={{ _lm_sensors_config_after.stat.exists }},
       dummy still loaded={{ _lm_sensors_dummy_loaded.rc == 0 }},
       reboot-required exists={{ _lm_sensors_reboot_after.stat.exists }}

@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 ROLE_MAIN = Path(__file__).parent.parent / "roles/lm_sensors/tasks/main.yml"
 
 
@@ -29,8 +28,7 @@ def test_validators_handle_parser_results(
     tmp_path: Path, sensors_rc: int, sensors_stderr: str, expected_rc: int
 ) -> None:
     validators = _validators()
-    assert len(validators) == 2
-    assert validators[0] == validators[1]
+    assert len(validators) == 1
 
     sensor = tmp_path / "sensors"
     sensor.write_text(
