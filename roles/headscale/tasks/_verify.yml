@@ -69,47 +69,15 @@
   failed_when: "'test-harness' not in _headscale_user_list.stdout"
   become: true
 
-# Dual-stack STUN publish -- fox is a dual-stack relay, so the embedded DERP
-# STUN (udp/3478) must be reachable over IPv6, not just v4. This is asserted
-# structurally rather than functionally on purpose: headscale's STUN answers
-# Tailscale's own netcheck flow (confirmed working over IPv4 against prod fox)
-# but NOT a hand-rolled RFC5389 Binding Request, and the box harness has no
-# IPv6-capable Tailscale client to drive a real netcheck (the home/test nets are
-# IPv4-only). So a reflection round-trip can't run here. Instead assert the
-# publish plumbing the role is responsible for: the host must bind [::]:3478 (the
-# v6 --publish landed) and netavark must have wired a v6 DNAT rule forwarding it
-# into the container. A missing [::] listener or a non-dual-stack podman network
-# fails this. End-to-end v6 STUN is verified in the field via `tailscale
-# netcheck` from a v6-capable client after deploy.
-- name: _verify | Host publishes DERP STUN on IPv6 ([::]:3478)
-  command: ss -ulnH
-  register: _headscale_stun_listen
+# Podman's view is independent of netavark's firewall driver and proves both
+# host families are mapped to the container's STUN listener.
+- name: _verify | Headscale publishes DERP STUN on IPv4 and IPv6
+  command: podman port headscale {{ service_ports.headscale_stun }}/udp
+  register: _headscale_stun_ports
   changed_when: false
-  failed_when: "('[::]:' ~ service_ports.headscale_stun) not in _headscale_stun_listen.stdout"
-  become: true
-
-# netavark's firewall driver is iptables on noble (see roles/podman
-# install.yml), so the v6 DNAT rule lives in the ip6tables nat table. On
-# resolute+ netavark uses the native nftables driver and ip6tables is empty --
-# check the nft ruleset there instead. box_deps (the only machine that runs this
-# _verify) is noble today, so the iptables branch is the one that executes; the
-# nft branch is a best-effort placeholder to refine when the box base OS moves.
-- name: _verify | Netavark forwards inbound v6 STUN into the headscale container (iptables)
-  shell: set -o pipefail; ip6tables -t nat -S | grep -- "--dport {{ service_ports.headscale_stun }} -j DNAT"
-  args:
-    executable: /bin/bash
-  register: _headscale_stun_dnat
-  changed_when: false
-  when: ansible_distribution_release == 'noble'
-  become: true
-
-- name: _verify | Netavark forwards inbound v6 STUN into the headscale container (nftables)
-  shell: set -o pipefail; nft list ruleset | grep -- "{{ service_ports.headscale_stun }}" | grep -iq "dnat"
-  args:
-    executable: /bin/bash
-  register: _headscale_stun_dnat_nft
-  changed_when: false
-  when: ansible_distribution_release != 'noble'
+  failed_when: >-
+    ('0.0.0.0:' ~ service_ports.headscale_stun) not in _headscale_stun_ports.stdout
+    or (':::' ~ service_ports.headscale_stun) not in _headscale_stun_ports.stdout
   become: true
 
 # Read the rendered config from the host because the distroless headscale image
