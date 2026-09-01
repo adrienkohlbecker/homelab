@@ -246,31 +246,35 @@
     | list | length == 0
   become: true
 
-# WAL is set in main.yml via `PRAGMA journal_mode=WAL` on the two DBs.
-# Re-read it here so a silent no-op (e.g. a BUSY-lock returning the
-# requested mode without applying, or a sqlite-cli regression) doesn't
-# pass apply but degrade the role's "WAL for write throughput" design.
-# DBs are absent on first apply before HA writes them -- skip then.
-- name: _verify | Stat sqlite DBs
-  stat:
-    path: "{{ item }}"
-  register: _homeassistant_sqlite_dbs
+# Re-read WAL through the same SQLite runtime HA uses. DBs absent on the first
+# cold start are valid; every DB that exists must report WAL.
+- name: _verify | Sqlite DBs are in WAL mode when present
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - python3
+      - -c
+      - |
+        from pathlib import Path
+        import sqlite3
+        import sys
+
+        path = Path(sys.argv[1])
+        if not path.exists():
+            raise SystemExit(0)
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as database:
+            mode = database.execute("PRAGMA journal_mode;").fetchone()[0]
+        if mode.casefold() != "wal":
+            raise RuntimeError(f"Expected WAL for {path}, got {mode}")
+      - "{{ item }}"
+  changed_when: false
   loop:
-    - /mnt/services/sqlite/homeassistant/home-assistant_v2.db
-    - /mnt/services/homeassistant/zigbee.db
+    - /config/db/home-assistant_v2.db
+    - /config/zigbee.db
   loop_control:
     label: "{{ item | basename }}"
-  become: true
-
-- name: _verify | Sqlite DBs are in WAL mode (when present)
-  command: sqlite3 -readonly {{ item.item }} 'PRAGMA journal_mode;'
-  register: _homeassistant_sqlite_wal
-  changed_when: false
-  failed_when: (_homeassistant_sqlite_wal.stdout | trim) != 'wal'
-  loop: "{{ _homeassistant_sqlite_dbs.results }}"
-  loop_control:
-    label: "{{ item.item | basename }}"
-  when: item.stat.exists
   become: true
 
 - name: _verify | Exercise homeassistant fluent-bit record contracts

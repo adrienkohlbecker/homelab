@@ -405,51 +405,48 @@
   tags:
     - homeassistant
 
-# sqlite3 CLI for the journal_mode probe + WAL conversion below.
-# Each container ships its own libsqlite but the host-side PRAGMA
-# tasks shell out to /usr/bin/sqlite3 which isn't preinstalled on
-# Ubuntu cloud images. Prod gets it via fluentbit
-# transitively; testrole.py runs only this role, so the dep is
-# local.
-- name: Install sqlite3 CLI
-  apt:
-    pkg: sqlite3
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - homeassistant
-
 # HA's recorder writes very heavily (every state change, every poll);
 # ZHA's zigpy DB sees fewer writes but the same fsync amplification.
 # WAL halves the per-commit fsync count and lets readers not block the
-# writer. The mode is persisted in the DB header, so this is one-shot
-# (probe returns 'wal' on subsequent applies). DBs are skipped if
-# absent (first apply before HA has created them); the second apply
-# after HA's first cold start lands the conversion.
-- name: Read sqlite journal mode
-  command: sqlite3 -readonly {{ item }} 'PRAGMA journal_mode;'
-  register: homeassistant_sqlite_pragma
-  changed_when: false
-  failed_when: false
+# writer. Use HA's own Python/SQLite runtime against the mounted paths so the
+# host does not need a second SQLite implementation. Missing DBs are left for
+# the next converge after HA creates them.
+- name: Configure sqlite WAL mode
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - python3
+      - -c
+      - |
+        from pathlib import Path
+        import sqlite3
+        import sys
+
+        path = Path(sys.argv[1])
+        if not path.exists():
+            print("absent")
+            raise SystemExit(0)
+
+        with sqlite3.connect(str(path)) as database:
+            current = database.execute("PRAGMA journal_mode;").fetchone()[0]
+            if current.casefold() == "wal":
+                print("wal")
+                raise SystemExit(0)
+            result = database.execute("PRAGMA journal_mode=WAL;").fetchone()[0]
+            if result.casefold() != "wal":
+                raise RuntimeError(f"Could not enable WAL for {path}: {result}")
+            print("converted")
+      - "{{ item }}"
+  register: homeassistant_sqlite_wal
+  changed_when: homeassistant_sqlite_wal.stdout == "converted"
   become: true
   loop:
-    - /mnt/services/sqlite/homeassistant/home-assistant_v2.db
-    - /mnt/services/homeassistant/zigbee.db
+    - /config/db/home-assistant_v2.db
+    - /config/zigbee.db
   loop_control:
     label: "{{ item | basename }}"
-  tags:
-    - homeassistant
-
-- name: Convert sqlite to WAL
-  command: sqlite3 {{ item.item }} 'PRAGMA journal_mode=WAL;'
-  when:
-    - item.rc == 0
-    - (item.stdout | default('') | trim) not in ['wal', '']
-  changed_when: true
-  become: true
-  loop: "{{ homeassistant_sqlite_pragma.results }}"
-  loop_control:
-    label: "{{ item.item | basename }}"
   tags:
     - homeassistant
 
