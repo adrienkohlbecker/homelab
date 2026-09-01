@@ -427,6 +427,27 @@
     - retired_services
     - hdparm
 
+- name: Remove retired ZFS cron conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/cron.d/zfsutils-linux
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - zfs
+
+- name: Remove retired ZFS cron conffile paths
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/cron.d/zfsutils-linux
+    - /etc/cron.d/zfsutils-linux.disabled
+  become: true
+  tags:
+    - retired_services
+    - zfs
+
 - name: Remove retired Mailutils sender-domain config
   file:
     path: /etc/mailutils.conf

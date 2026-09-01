@@ -171,6 +171,16 @@
   changed_when: false
   become: true
 
+- name: _verify | Retired ZFS cron files are absent
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/cron.d/zfsutils-linux
+    - /etc/cron.d/zfsutils-linux.disabled
+  register: retired_services_zfs_cron_files
+  failed_when: retired_services_zfs_cron_files.stat.exists
+  become: true
+
 - name: _verify | Retired Mailutils sender-domain config is absent
   stat:
     path: /etc/mailutils.conf

@@ -160,18 +160,33 @@
   changed_when: false
   become: true
 
-- name: _verify | Distro zfs cron is diverted aside
-  command: dpkg-divert --list /etc/cron.d/zfsutils-linux
-  register: _zfs_verify_cron_divert
-  changed_when: false
+- name: _verify | Reinstall zfsutils-linux while retaining local conffiles
+  command:
+    argv:
+      - apt-get
+      - --reinstall
+      - -o
+      - Dpkg::Options::=--force-confdef
+      - -o
+      - Dpkg::Options::=--force-confold
+      - install
+      - -y
+      - zfsutils-linux
+  changed_when: true
   become: true
 
-- name: _verify | Assert distro zfs cron diversion is active
+- name: _verify | Inspect distro zfs cron paths after reinstall
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/cron.d/zfsutils-linux
+    - /etc/cron.d/zfsutils-linux.disabled
+  register: _zfs_verify_cron_files
+  become: true
+
+- name: _verify | Distro zfs cron remains absent after reinstall
   assert:
-    that: "'/etc/cron.d/zfsutils-linux.disabled' in _zfs_verify_cron_divert.stdout"
-    fail_msg: >-
-      dpkg-divert not active for /etc/cron.d/zfsutils-linux:
-      {{ _zfs_verify_cron_divert.stdout }}
+    that: _zfs_verify_cron_files.results | rejectattr('stat.exists', 'equalto', false) | list | length == 0
 
 - name: _verify | Read distro scrub/trim timer enablement  # noqa: command-instead-of-module
   command: systemctl is-enabled {{ item }}

@@ -287,6 +287,22 @@
     mode: "0644"
   become: true
 
+- name: _setup | Install retired ZFS cron conffile fixture
+  copy:
+    content: "# retired ZFS cron fixture\n"
+    dest: /etc/cron.d/zfsutils-linux
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Register retired ZFS cron conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/cron.d/zfsutils-linux
+    divert: /etc/cron.d/zfsutils-linux.disabled
+    rename: true
+  become: true
+
 - name: _setup | Create retired Mailutils sender-domain fixture
   copy:
     content: "address { email-domain example.invalid; };\n"
