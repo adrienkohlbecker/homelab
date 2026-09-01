@@ -43,6 +43,8 @@
     # Observability.
     - fluentbit
     - socket_proxy
+    - role: hdparm
+      when: rotational_disks_by_id | length > 0
     - netdata
 
 # Services -- host-scoped, built on the platform above. A role belongs here
@@ -69,7 +71,6 @@
   hosts: box,lab,pug
   roles:
     - firewall
-    - hdparm
     - hd_idle
     - smart
     - lm_sensors
