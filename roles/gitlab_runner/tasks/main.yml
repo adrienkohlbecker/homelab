@@ -1,7 +1,7 @@
 # GitLab Runner (host-native binary). fox uses the Docker executor against the
 # runner user's rootless podman socket to orchestrate AWS test cells; lab uses a
 # shell executor to run the same qemu harness locally as a CI fallback. box is
-# the CI fixture. Gated on gitlab_runner_enabled.
+# the CI fixture.
 #
 # The Docker executor keeps branch code inside a job container rather than
 # running it directly as the runner user. The lab shell executor deliberately
@@ -14,7 +14,6 @@
 # operator-facing HTTP surface. The runner UI is gitlab.com itself; the only
 # local listener is the loopback Prometheus metrics endpoint (for netdata).
 - name: GitLab Runner
-  when: gitlab_runner_enabled | default(false) | bool
   tags:
     - gitlab_runner
   block:
@@ -30,9 +29,9 @@
           - gitlab_runner_executor in ['docker', 'shell']
           - not (gitlab_runner_aws_qemu_enabled | default(false) | bool) or gitlab_runner_executor == 'docker'
         fail_msg: >-
-          gitlab_runner_enabled is true but gitlab_runner_token is unset, or
-          gitlab_runner_executor is unsupported/incompatible with the
-          AWS qemu runner, for {{ inventory_hostname }}.
+          gitlab_runner_token is unset, or gitlab_runner_executor is
+          unsupported/incompatible with the AWS qemu runner, for
+          {{ inventory_hostname }}.
           Create a project runner on gitlab.com (Settings -> CI/CD -> Runners ->
           New project runner) with the {{ inventory_hostname }}-{{ gitlab_runner_name_suffix }}
           name/tag convention, run-untagged off, locked to the project, and

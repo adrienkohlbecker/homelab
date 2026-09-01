@@ -43,7 +43,6 @@ podman_operator_prune_enabled: true
 # Host-native CI fallback runner. It deliberately uses its own token variable so
 # lab cannot accidentally clone fox's project runner token and inherit the wrong
 # server-side tags.
-gitlab_runner_enabled: true
 gitlab_runner_executor: shell
 gitlab_runner_name_suffix: shell-qemu
 gitlab_runner_token: "{{ gitlab_runner_lab_token | default('') }}"

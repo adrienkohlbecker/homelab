@@ -155,9 +155,7 @@ service_ports:
   gitea: 3000
   # GitLab Runner manager's Prometheus metrics + pprof, loopback-bound
   # (config.toml listen_address 127.0.0.1); unauthenticated, so never the public
-  # surface. Scraped by netdata's go.d prometheus collector (the gitlab_runner
-  # job in roles/netdata/templates/prometheus.conf.j2, gated on
-  # gitlab_runner_enabled).
+  # surface. Scraped by netdata's go.d prometheus collector.
   gitlab_runner: 9252
   # headscale control-plane HTTP, loopback-published; nginx fronts it on 443.
   # Only the host-side --publish maps to this; the container's own listener

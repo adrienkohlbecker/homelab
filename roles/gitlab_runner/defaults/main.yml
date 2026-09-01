@@ -1,13 +1,8 @@
-# Off by default; a host enabling the runner sets the required secret
-# (gitlab_runner_token -- asserted in tasks/main.yml), then flips this true.
-#
 # defaults/ (not vars/) per CLAUDE.md: role vars sit ABOVE host_vars and would
 # mask host overrides; defaults sit below, so host_vars wins. Everything here is
 # host-overridable deploy-tuning. Single-use constants that never vary
 # (gitlab.com URL, the runner name, the CI image) are inlined in
 # config.toml.j2 rather than surfaced here.
-gitlab_runner_enabled: false
-
 # Primary runner executor. fox uses the Docker executor against rootless podman;
 # lab can use a host-native shell executor for qemu CI fallback work.
 gitlab_runner_executor: docker

@@ -51,9 +51,8 @@ jobs:
 
   # gitlab_runner runs on the host orchestrating the AWS test cells (fox).
   # Loopback scrape of the unauthenticated metrics listener (config.toml
-  # listen_address). Gated on netdata_collectors membership rather than the
-  # prod-wide gitlab_runner_enabled flag (which would render this on every prod
-  # host); the presence alert doubles as a liveness signal where it runs.
+  # listen_address). netdata_collectors membership keeps this host-scoped; the
+  # presence alert doubles as a liveness signal where it runs.
   - name: gitlab_runner
     url: http://127.0.0.1:{{ service_ports.gitlab_runner }}/metrics
     autodetection_retry: 60
