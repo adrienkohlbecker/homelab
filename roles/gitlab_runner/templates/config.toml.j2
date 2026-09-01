@@ -1,4 +1,42 @@
 #jinja2: lstrip_blocks: True
+{% macro aws_instance_runner(name_suffix, token, asg_name, capacity, max_instances, request_concurrency, idle_time) %}
+[[runners]]
+  name = "{{ inventory_hostname }}-{{ name_suffix }}"
+  url = "https://gitlab.com"
+  token = "{{ token }}"
+  executor = "instance"
+  shell = "bash"
+  limit = {{ max_instances * capacity }}
+  request_concurrency = {{ request_concurrency }}
+  # The AMI mounts local NVMe at /mnt/scratch and pre-creates these paths.
+  builds_dir = "/mnt/scratch/gitlab-runner/builds"
+  cache_dir = "/mnt/scratch/gitlab-runner/cache"
+
+  [runners.autoscaler]
+    plugin = "fleeting-plugin-aws"
+    capacity_per_instance = {{ capacity }}
+    max_use_count = 0
+    max_instances = {{ max_instances }}
+    delete_instances_on_shutdown = true
+    instance_ready_command = "/usr/local/bin/homelab_ci_ready"
+
+    [runners.autoscaler.plugin_config]
+      name = "{{ asg_name }}"
+      profile = "{{ gitlab_runner_aws_qemu_profile }}"
+      config_file = "/mnt/services/gitlab_runner/.aws/config"
+      credentials_file = "/mnt/services/gitlab_runner/.aws/credentials"
+      scale_in_termination = true
+
+    [runners.autoscaler.connector_config]
+      username = "{{ gitlab_runner_aws_qemu_username }}"
+      use_external_addr = true
+      timeout = "15m0s"
+
+    [[runners.autoscaler.policy]]
+      idle_count = 0
+      idle_time = "{{ idle_time }}"
+      preemptive_mode = false
+{% endmacro %}
 # Managed by ansible (roles/gitlab_runner) -- do not edit on the host.
 #
 # GitLab Runner config. fox uses the Docker executor against gitlab_runner's
@@ -60,109 +98,27 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 {% if gitlab_runner_aws_qemu_enabled | default(false) %}
 
 # AWS qemu runner: an instance executor backed by fleeting-plugin-aws and a
-# dedicated Auto Scaling Group. Jobs run as shell payloads on the AWS host, not
-# inside a container, so they can use /dev/kvm for nested qemu. Gate 1 keeps
-# this at one job on one host; raise capacity only after the single-cell
-# kill-switch benchmark is green.
-[[runners]]
-  name = "{{ inventory_hostname }}-aws-shell-qemu"
-  url = "https://gitlab.com"
-  # Second glrt- project runner, distinct from the docker token. Server-side
-  # tags/run-untagged/locked/protected carry the actual aws-shell-qemu routing
-  # policy.
-  token = "{{ gitlab_runner_aws_qemu_token }}"
-  executor = "instance"
-  shell = "bash"
-  limit = {{ gitlab_runner_aws_qemu_max_instances * gitlab_runner_aws_qemu_capacity_per_instance }}
-  request_concurrency = 4
-  # The instance-executor host mounts its c8id local-NVMe instance store at
-  # /mnt/scratch (qemu-host AMI boot service homelab_ci_prepare_scratch). Pin the
-  # git checkout, runner cache, and build tree there so all heavy job I/O -- and
-  # the per-job uv .venv built in the checkout -- stays on local NVMe rather than
-  # the small EBS root. The boot service pre-creates these owned by the ssh user.
-  builds_dir = "/mnt/scratch/gitlab-runner/builds"
-  cache_dir = "/mnt/scratch/gitlab-runner/cache"
-
-  [runners.autoscaler]
-    # PATH-resolved binary /usr/local/bin/fleeting-plugin-aws; installed and
-    # pinned by tasks/main.yml.
-    plugin = "fleeting-plugin-aws"
-    capacity_per_instance = {{ gitlab_runner_aws_qemu_capacity_per_instance }}
-    # Reuse hosts while idle so the S3-hydrated qemu image cache is paid once
-    # per host lifetime, not once per job.
-    max_use_count = 0
-    max_instances = {{ gitlab_runner_aws_qemu_max_instances }}
-    delete_instances_on_shutdown = true
-    # Baked into the runner-host AMI. It rejects hosts without KVM or a writable
-    # scratch cache before GitLab assigns a job to them.
-    instance_ready_command = "/usr/local/bin/homelab_ci_ready"
-
-    [runners.autoscaler.plugin_config]
-      # Name of the Terraform-owned Auto Scaling Group.
-      name = "{{ gitlab_runner_aws_qemu_asg_name }}"
-      profile = "{{ gitlab_runner_aws_qemu_profile }}"
-      config_file = "/mnt/services/gitlab_runner/.aws/config"
-      credentials_file = "/mnt/services/gitlab_runner/.aws/credentials"
-      # Terminate protected instances through the ASG desired-capacity path.
-      scale_in_termination = true
-
-    [runners.autoscaler.connector_config]
-      username = "{{ gitlab_runner_aws_qemu_username }}"
-      # fox manages the worker from outside the AWS VPC, so the connector must
-      # SSH to the instance public address. The SG admits fox only.
-      use_external_addr = true
-      timeout = "15m0s"
-
-    [[runners.autoscaler.policy]]
-      idle_count = 0
-      idle_time = "{{ gitlab_runner_aws_qemu_idle_time }}"
-      preemptive_mode = false
+# dedicated Auto Scaling Group. Jobs run directly on hosts with nested KVM.
+{{ aws_instance_runner(
+     'aws-shell-qemu',
+     gitlab_runner_aws_qemu_token,
+     gitlab_runner_aws_qemu_asg_name,
+     gitlab_runner_aws_qemu_capacity_per_instance,
+     gitlab_runner_aws_qemu_max_instances,
+     4,
+     gitlab_runner_aws_qemu_idle_time
+   ) }}
 {% endif %}
 {% if gitlab_runner_aws_qemu_site_enabled | default(false) %}
 
-# Dedicated _site_test runner: a second instance-executor pool (ASG
-# homelab-ci-qemu-site, one 4-vCPU c8id.xlarge) that runs only the full-site
-# converge cell, off the shared role-cell pool. The site converge is the
-# pipeline critical path and was losing ~70% of its runtime to CPU contention
-# against the cell burst; one host, one job (capacity = max_instances = 1) gives
-# its box guest dedicated vCPUs and lets the role-cell pool drain without waiting
-# on it. Shares the AWS plugin + rendered .aws profile with the block above
-# (hence the assert that the role-cell runner is enabled); differs only in token,
-# ASG, and the one-host sizing. The aws-shell-qemu-site server-side tag routes
-# _site_test here.
-[[runners]]
-  name = "{{ inventory_hostname }}-aws-shell-qemu-site"
-  url = "https://gitlab.com"
-  token = "{{ gitlab_runner_aws_qemu_site_token }}"
-  executor = "instance"
-  shell = "bash"
-  limit = 1
-  request_concurrency = 1
-  builds_dir = "/mnt/scratch/gitlab-runner/builds"
-  cache_dir = "/mnt/scratch/gitlab-runner/cache"
-
-  [runners.autoscaler]
-    plugin = "fleeting-plugin-aws"
-    capacity_per_instance = 1
-    max_use_count = 0
-    max_instances = 1
-    delete_instances_on_shutdown = true
-    instance_ready_command = "/usr/local/bin/homelab_ci_ready"
-
-    [runners.autoscaler.plugin_config]
-      name = "{{ gitlab_runner_aws_qemu_site_asg_name }}"
-      profile = "{{ gitlab_runner_aws_qemu_profile }}"
-      config_file = "/mnt/services/gitlab_runner/.aws/config"
-      credentials_file = "/mnt/services/gitlab_runner/.aws/credentials"
-      scale_in_termination = true
-
-    [runners.autoscaler.connector_config]
-      username = "{{ gitlab_runner_aws_qemu_username }}"
-      use_external_addr = true
-      timeout = "15m0s"
-
-    [[runners.autoscaler.policy]]
-      idle_count = 0
-      idle_time = "{{ gitlab_runner_aws_qemu_site_idle_time }}"
-      preemptive_mode = false
+# Dedicated one-host, one-job pool for the full-site converge cell.
+{{ aws_instance_runner(
+     'aws-shell-qemu-site',
+     gitlab_runner_aws_qemu_site_token,
+     gitlab_runner_aws_qemu_site_asg_name,
+     1,
+     1,
+     1,
+     gitlab_runner_aws_qemu_site_idle_time
+   ) }}
 {% endif %}
