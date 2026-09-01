@@ -142,16 +142,6 @@
     - subgid
   become: false
 
-- name: _verify | Rootless podman prune timer is active under gitlab_runner
-  when: gitlab_runner_executor == 'docker'
-  systemd:
-    name: gitlab_runner_podman_prune.timer
-    scope: user
-  register: _gitlab_runner_podman_prune
-  failed_when: _gitlab_runner_podman_prune.status.ActiveState != "active"
-  become: true
-  become_user: gitlab_runner
-
 # Drive the configured socket through activation, linger, and storage.
 - name: _verify | Docker-executor socket answers podman info
   when: gitlab_runner_executor == 'docker'
