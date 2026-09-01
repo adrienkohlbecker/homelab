@@ -20,7 +20,6 @@
     path: /srv/filebrowser/{{ item.name }}
     src: "{{ item.src if item.enabled | bool else omit }}"
     state: "{{ 'link' if item.enabled | bool else 'absent' }}"
-    force: true
   loop:
     - { name: home, src: "{{ ansible_user_dir }}", enabled: true }
     - { name: data, src: /mnt/data, enabled: "{{ zfs_has_data_mount }}" }
