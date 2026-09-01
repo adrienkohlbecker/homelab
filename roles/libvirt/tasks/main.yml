@@ -82,56 +82,26 @@
   tags:
     - libvirt
 
-- name: Create zfs filesystem
-  when: zfs_root
-  zfs:
-    name: rpool/libvirt
-    state: present
-    extra_zfs_properties:
-      mountpoint: /var/lib/libvirt/images
-      # 64K matches qemu's default qcow2 cluster_size: a guest write lands
-      # in one record instead of straddling many. (The prior '4096' was
-      # copy-pasted from the SQLite datasets and maximized metadata +
-      # write amplification for multi-GB images.) Only governs newly
-      # written files. compression is left inherited (zstd from rpool).
-      recordsize: '65536'
-      # Guests cache their own pages; keep them out of the host ARC, which
-      # lab deliberately squeezes for VM RAM (host_vars/lab.yml).
-      primarycache: metadata
-      # Keep atime accounting (inherited on) but cap its write cost with
-      # relatime -- updated at most once a day or when mtime/ctime change
-      # -- instead of the write-per-read of full atime on an image store.
-      relatime: 'on'
-      # VM images are not replicated today and the daily virsh_backup
-      # config dump rides this dataset. Tag explicitly (not inherited) so
-      # the choice is visible and zfs-autobackup's `-s local` picker
-      # doesn't silently skip it. See notes/SOMEDAY.md "Back up libvirt
-      # VMs and their definitions".
-      'autobackup:bak': 'false'
-  become: true
-  tags:
-    - libvirt
-
-- name: Create mount point
-  file:
-    dest: /var/lib/libvirt/images
-    state: directory
-    owner: root
-    group: root
-    mode: "0711"
-  become: true
-  tags:
-    - libvirt
-
-- name: Install zfs mount service
-  when: zfs_root
+- name: Create and mount libvirt dataset
   import_role:
-    name: zfs
-    tasks_from: mount_unit
+    name: zfs_dataset
+    tasks_from: dataset
   vars:
-    zfs_mount_args:
+    zfs_dataset_args:
       dataset: rpool/libvirt
       mountpoint: /var/lib/libvirt/images
+      owner: root
+      group: root
+      mode: "0711"
+      extra_properties:
+        # Match qemu's default qcow2 cluster size.
+        recordsize: '65536'
+        # Guests cache their own pages; keep them out of the host ARC.
+        primarycache: metadata
+        # Limit atime writes without disabling access-time accounting.
+        relatime: 'on'
+        # VM images and the local configuration dumps are not replicated.
+        'autobackup:bak': 'false'
   tags:
     - libvirt
 
