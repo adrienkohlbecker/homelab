@@ -23,17 +23,14 @@
   vars:
     service_user_args:
       name: lidarr
-      # linuxserver/lidarr's s6 init recursively chowns /config to
-      # PUID:PGID=lidarr:media on every container start. Match it here
-      # so ansible doesn't flap the dir's gid back to `lidarr` each run.
+      # Match linuxserver's recursive PUID:PGID chown so Ansible does not
+      # flap the configuration directory group after each container start.
       shared_group: media
   tags:
     - lidarr
 
 - name: Configure lidarr
-  # Render via copy:content + rstrip_newlines because lidarr rewrites
-  # config.xml on shutdown without a trailing newline; a plain template:
-  # leaves us drifting forever.
+  # Lidarr writes config.xml without a trailing newline on shutdown.
   copy:
     content: "{{ lookup('template', 'config.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/lidarr/config.xml
@@ -43,12 +40,8 @@
     backup: true
     validate: python3 -c 'import xml.etree.ElementTree as ET, sys; ET.parse(sys.argv[1])' "%s"
   register: lidarr_conf
-  # ansible.cfg sets [diff] always=True + verbosity=1, so without this the
-  # rendered <ApiKey> would print to the operator/CI log on write & rotation.
   become: true
-  # On a fresh-host --check run lidarr_user + its config dir are only reported
-  # (their creating tasks are guarded), so an unguarded copy with owner=lidarr
-  # would fail resolving the not-yet-created user/dir.
+  # A fresh check-mode run has no resolved user or config directory yet.
   when: not ansible_check_mode or lidarr_user.uid is defined
   tags:
     - lidarr
@@ -102,7 +95,7 @@
     nginx_site_args:
       subdomain: lidarr
       proxy_pass: http://127.0.0.1:{{ service_ports.lidarr }}/
-      # See sonarr's nginx_site_args comment.
+      # Browsers use Authelia; podman peers connect directly with X-Api-Key.
       auth: true
   tags:
     - lidarr

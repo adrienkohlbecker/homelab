@@ -23,9 +23,7 @@
   loop:
     - /mnt/services
     - /mnt/scratch
-    # lidarr scopes its bind-mount to /mnt/scratch/lidarr (the category dir
-    # sabnzbd creates on prod, before lidarr starts); the container won't
-    # start without the source. Create it here for the isolated test.
+    # SABnzbd creates this bind-mount source in production.
     - /mnt/scratch/lidarr
     - /mnt/media
   become: true
