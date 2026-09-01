@@ -49,17 +49,6 @@
   tags:
     - filebrowser
 
-# Transitional: legacy theme.css path under /etc/nginx/snippets/ (the role
-# briefly used it after the container -> autoindex migration). Drop after
-# this has converged everywhere.
-- name: Remove legacy filebrowser theme location
-  file:
-    path: /etc/nginx/snippets/filebrowser_theme.css
-    state: absent
-  become: true
-  tags:
-    - filebrowser
-
 - name: Install filebrowser nginx theme stylesheet
   copy:
     src: theme.css
@@ -68,16 +57,6 @@
     group: root
     mode: "0644"
     backup: true
-  become: true
-  tags:
-    - filebrowser
-
-# Transitional: legacy htpasswd left over from the previous nginx
-# auth_basic gate. Drop after this has converged everywhere.
-- name: Remove legacy filebrowser htpasswd
-  file:
-    path: /etc/nginx/filebrowser.htpasswd
-    state: absent
   become: true
   tags:
     - filebrowser
