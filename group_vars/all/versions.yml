@@ -21,11 +21,6 @@ adguard_image:       docker.io/adguard/adguardhome:v0.107.77  # 2026-06-02
 authelia_image:      docker.io/authelia/authelia:4.39.19  # 2026-04-12
 bazarr_image:        docker.io/linuxserver/bazarr:1.5.2  # 2026-05-11
 
-# headscale image, referenced by BOTH the service unit
-# (templates/headscale.service.j2) and the mockoidc OIDC boot-test fixture
-# (tasks/_setup.yml -- mockoidc is a subcommand of this same binary). A single
-# constant so a version bump moves both together; a one-sided bump would
-# silently test the OIDC boot path against a stale mockoidc binary.
 headscale_image:     docker.io/headscale/headscale:0.26.1  # 2026-06-06
 
 homeassistant_image: ghcr.io/home-assistant/home-assistant:2026.6.3  # 2026-06-12

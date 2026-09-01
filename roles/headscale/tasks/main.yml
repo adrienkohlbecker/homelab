@@ -6,8 +6,7 @@
   tags:
     - headscale
 
-# A missing or mistyped input would leave interactive enrollment broken while
-# the fail-open control plane keeps serving existing nodes.
+# Fail-open OIDC keeps serving existing nodes even when enrollment is broken.
 - name: Assert required headscale OIDC inputs are set
   assert:
     that:
@@ -20,12 +19,8 @@
   tags:
     - headscale
 
-# The embedded DERP advertises these public IPs in its DERPMap; the config
-# template omits each key if its var is unset. Catch the asymmetric-typo case
-# (one set, one not) loudly here -- a half-set pair silently advertises the
-# container's private podman address for the missing family and degrades NAT
-# traversal for roaming clients on that protocol. Both-set (the dual-stack fox
-# relay) and both-unset (the IPv4-only test box) are the two valid states.
+# A half-set pair makes DERP advertise its private container address for the
+# missing family. Fox sets both; the IPv4-only test fixture sets neither.
 - name: Assert headscale DERP advertised IPs are set together (both or neither)
   assert:
     that:
@@ -37,13 +32,8 @@
   tags:
     - headscale
 
-# The advertised addresses are hardcoded (headscale cannot auto-detect them
-# behind nginx + the podman bridge) and duplicated from the reserved Hetzner
-# primary IPs in terraform/hetzner.tf, so nothing else catches a stale pin. The
-# original failure was precisely this: the AAAA published the /64 network base,
-# an address fox never held, and IPv6-only clients simply could not reach the
-# relay. Nothing inside the estate has IPv6 egress to notice, so assert at
-# converge that the host actually holds what it advertises.
+# Headscale cannot discover its public addresses behind nginx and Podman. Catch
+# stale Terraform pins at converge because the estate has no IPv6 egress probe.
 - name: Assert headscale DERP advertised IPs are held by this host
   assert:
     that:
@@ -69,9 +59,7 @@
   tags:
     - headscale
 
-# State dir bind-mounted to /var/lib/headscale: the SQLite DB, auto-generated
-# noise, DERP private keys, and CLI unix socket all land here. Owned by the
-# headscale uid (tier-1 --user, no uidmap) so the container writes them directly.
+# Persistent DB, keys, and CLI socket, owned by the container's direct host uid.
 - name: Create headscale data dir
   when: not ansible_check_mode or headscale_user.uid is defined
   file:
@@ -84,8 +72,7 @@
   tags:
     - headscale
 
-# No host-side HuJSON parser is available; the container configtest below
-# validates the policy before a changed unit is restarted.
+# The native configtest below validates HuJSON before restart.
 - name: Render headscale ACL policy
   when: not ansible_check_mode or headscale_user.uid is defined
   template:
@@ -131,8 +118,7 @@
     group: headscale
     mode: "0640"
     backup: true
-    # The template action can only validate YAML syntax; the pinned container's
-    # native configtest below checks Headscale semantics before service changes.
+    # The native configtest below handles Headscale semantics.
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
   become: true
   register: headscale_config_result
@@ -149,14 +135,8 @@
   tags:
     - headscale
 
-# Dedicated dual-stack podman network so the embedded DERP STUN answers over
-# IPv6 too (fox is a dual-stack relay -- see host_vars/fox.yml). The default
-# podman bridge is IPv4-only; ipv6:true makes netavark hand the container an
-# extra ULA /64 and set up the same DNAT path for v6 published ports. Inbound
-# STUN to the host's public v6 is DNAT'd to the container's ULA with the client
-# source preserved (netavark masquerades only container-subnet/localhost
-# sources), so STUN reflects the real client address -- exactly as the IPv4 path
-# already does.
+# The default Podman bridge is IPv4-only. A dual-stack network gives embedded
+# DERP STUN an IPv6 DNAT path while preserving the remote client address.
 - name: Create headscale dual-stack podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
@@ -168,10 +148,8 @@
   tags:
     - headscale
 
-# configtest initializes Headscale far enough to open its database and create
-# private keys. Put all mutable state on a disposable tmpfs so validation can
-# exercise the rendered config, ACL, OIDC secret, and pinned binary without
-# touching the live database or keys.
+# Configtest opens the database and creates keys, so isolate all mutable state
+# on tmpfs while exercising the rendered inputs and pinned binary.
 - name: Validate rendered headscale configuration
   when:
     - not ansible_check_mode
@@ -214,14 +192,8 @@
   tags:
     - headscale
 
-# Public vhost (NOT Authelia-gated -- Tailscale clients hit the raw control
-# API + DERP relay here, all over https/443). No enable_http: certbot issues
-# the cert via the DNS-01 Cloudflare challenge (no :80 needed) and clients
-# never use plain HTTP, so the site stays https-only (the template's default
-# :80 block just redirects to :443, and fox's firewall doesn't open 80
-# anyway). Long read timeout + buffering off keep the long-poll control stream
-# and the DERP websocket (handled by the site template's Upgrade/Connection
-# headers) alive.
+# The public control API and DERP relay cannot be Authelia-gated. DNS-01 keeps
+# the site HTTPS-only; no buffering and a long timeout preserve control streams.
 - name: Configure nginx
   import_role:
     name: nginx

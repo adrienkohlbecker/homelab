@@ -1,29 +1,16 @@
 #jinja2: lstrip_blocks: True
 # Managed by Ansible (roles/headscale). Schema: headscale v0.26.x.
-# server_url is the public control-plane + DERP FQDN clients enroll against. The
-# default follows the repo's <service>.<host>.<domain> convention, which the test
-# harness renders (headscale.box.fahm.fr). Prod (fox) overrides it via
-# headscale_server_url to the apex-level headscale.fahm.fr -- a flat public name
-# decoupled from fox.fahm.fr (now the host's Tailscale IP) so an un-enrolled
-# client can still reach the control plane to join (see host_vars/fox.yml +
-# terraform/dns_fahm_fr.tf). nginx terminates TLS and reverse-proxies to the
-# loopback listener, so headscale itself runs plain HTTP (tls_* empty). The
-# tailscale role's _setup overrides headscale_server_url again to the plain-http
-# loopback listener so a real Tailscale client can register under the harness
-# without trusting the snakeoil TLS cert (whose CN/SAN don't match the vhost).
+# Fox overrides the public name so unenrolled clients do not depend on its
+# Tailscale address. Tests use either the host vhost or a plain loopback URL.
+# nginx terminates TLS in both production and the vhost test.
 server_url: {{ headscale_server_url | default('https://headscale.' ~ inventory_hostname ~ '.' ~ domain) }}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
 grpc_listen_addr: 127.0.0.1:50443
 grpc_allow_insecure: false
 
-# CLI talks to the running `serve` over this socket (used by _verify and by
-# the tailscale role's preauthkey mint). Kept inside the writable state dir so
-# the tier-1 non-root container user can create it (default /var/run isn't
-# writable without root). 0700 (owner-only): the only callers are the
-# headscale-uid serve process and `podman exec` as that same uid (_verify, the
-# tailscale role's mint), so the group bit the upstream example sets buys
-# nothing here -- it just widens who could drive the admin gRPC socket.
+# The non-root process creates its admin socket in writable state. Only the same
+# uid invokes it through `podman exec`, so no group access is needed.
 unix_socket: /var/lib/headscale/headscale.sock
 unix_socket_permission: "0700"
 
@@ -35,28 +22,20 @@ prefixes:
   v6: fd7a:115c:a1e0::/48
   allocation: sequential
 
-# Embedded DERP: STUN (udp/3478, published to the internet) does NAT-traversal
-# assistance; the relay itself rides server_url over nginx/443. urls/paths are
-# empty so the tailnet relays only through our own DERP (no third-party relay);
-# relayed traffic is WireGuard-encrypted end-to-end regardless. Direct
-# connections are preferred and are what carry traffic in the common case.
+# Embedded DERP uses public STUN and relays over server_url. Empty maps keep
+# third-party relays out; traffic remains end-to-end encrypted.
 derp:
   server:
     enabled: true
     region_id: 999
     region_code: "fox"
     region_name: "Headscale Embedded DERP (fox)"
-    # [::] (not 0.0.0.0) so STUN serves IPv6 clients too -- fox is a dual-stack
-    # relay and the container sits on a dual-stack podman network. The :: socket
-    # is dual-stack (accepts v4-mapped too), so the single listener covers both.
+    # The dual-stack socket accepts IPv4-mapped and IPv6 clients.
     stun_listen_addr: "[::]:3478"
     private_key_path: /var/lib/headscale/derp_server_private.key
     automatically_add_embedded_derp_region: true
-    # Pin the public addresses the embedded DERP advertises (host_vars/fox.yml,
-    # the terraform-reserved primary IPs). headscale's auto-detection would
-    # otherwise see the container's podman bridge/ULA address behind nginx + the
-    # DNAT bridge, degrading NAT traversal for roaming clients. Unset on the
-    # IPv4-only box harness (no host_var), so the keys are simply omitted there.
+    # Auto-detection sees Podman's private addresses; fox pins its reserved
+    # public addresses while the IPv4-only fixture omits both keys.
 {% if headscale_derp_ipv4 is defined %}
     ipv4: "{{ headscale_derp_ipv4 }}"
 {% endif %}
@@ -67,15 +46,11 @@ derp:
   paths: []
   auto_update_enabled: false
 
-# Don't phone home for update checks.
 disable_check_updates: true
 ephemeral_node_inactivity_timeout: 30m
 
-# A per-deployment NAT-traversal tuning knob, surfaced deliberately. Randomizing
-# the WireGuard source port helps hole-punching on some NAT types but hurts it on
-# others, so it's a field-test dial (verify with `tailscale netcheck` from a
-# roaming cellular client), not a blind on. Kept explicit so flipping it is a
-# conscious decision.
+# Randomizing the WireGuard source port helps some NATs and hurts others. Change
+# only after a roaming-client `tailscale netcheck` comparison.
 randomize_client_port: false
 
 database:
@@ -89,33 +64,21 @@ tls_cert_path: ""
 tls_key_path: ""
 
 log:
-  # Zerolog JSON keeps message metadata as typed fields and writes to stdout,
-  # avoiding the duplicate timestamp/level prefix and the misleading journald
-  # err priority that Headscale's text-mode stderr output receives. The role's
-  # fluent-bit extension promotes the useful fields into the lnav store.
+  # JSON preserves typed fields and avoids text-mode's misleading stderr level.
   format: json
-  # Keep info-level control-plane events for audit and outage diagnosis.
   level: info
 
 policy:
   mode: file
   path: /etc/headscale/acl.hujson
 
-# MagicDNS resolves tailnet names under base_domain (must differ from the
-# server_url FQDN). All other queries forward to adguard over the mesh. The
-# lab/pug Tailscale nodes advertise the 10.123.0.0/18 physical partition,
-# deliberately less specific than the 10.123.0.0/21 classless static route
-# pushed on the Trusted VLAN, so Trusted clients prefer the local gateway while
-# roaming clients keep adguard and the physical sites reachable.
+# MagicDNS owns base_domain; AdGuard handles everything else over the mesh. Its
+# /18 mesh route remains less specific than the Trusted VLAN's local /21 route.
 dns:
   magic_dns: true
-  # Send ALL queries from roaming devices to adguard, not just tailnet/MagicDNS
-  # names. Without this, a device on foreign WiFi resolves via that network's DNS
-  # and loses adblock + split-horizon *.fahm.fr. The cost is that the advertised
-  # route must be accepted by the client; otherwise DNS is unreachable until the
-  # client opts out with `tailscale set --accept-dns=false` (a per-device escape
-  # hatch this server setting can't override). Headless hosts already run
-  # --accept-dns=false, so only roaming user-devices are affected.
+  # Roaming devices use AdGuard for adblocking and split-horizon names. Clients
+  # that reject its route must opt out with `tailscale set --accept-dns=false`;
+  # headless hosts already do.
   override_local_dns: true
   base_domain: ts.{{ domain }}
   nameservers:
@@ -124,13 +87,8 @@ dns:
     split: {}
   search_domains: []
 {% if headscale_derp_ipv4 is defined %}
-  # Pin the control-plane FQDN into MagicDNS so a roaming device can still resolve
-  # it when the DNS-VIP chain (the global nameserver above) is unreachable. With
-  # override_local_dns on, all queries go to the VIP, so without this a DNS
-  # outage leaves a client unable to re-resolve headscale to recover. Points at
-  # fox's public IPs (the same addresses headscale.fahm.fr resolves to). fox-only:
-  # gated on the DERP IPs, unset under the box harness where server_url is a
-  # loopback URL.
+  # Keep the control plane resolvable when the DNS VIP is down. Fox reuses its
+  # public DERP addresses; the loopback fixture omits these records.
   extra_records:
     - name: "headscale.{{ domain }}"
       type: "A"
@@ -144,27 +102,16 @@ dns:
   extra_records: []
 {% endif %}
 
-# User-device enrollment via Authelia OIDC. Headless hosts (lab/pug/bunk) use
-# pre-auth keys instead and never hit this. The test harness supplies fixture
-# values only for the headscale role's render and native configtest coverage.
+# User devices enroll through Authelia; headless hosts use pre-auth keys.
 oidc:
   issuer: "{{ headscale_oidc_issuer }}"
   client_id: "{{ headscale_oidc_client_id }}"
   client_secret_path: "/run/secrets/oidc_client_secret"
   scope: ["openid", "profile", "email"]
-  # Keep the control plane available when Authelia is down. Existing nodes and
-  # pre-auth-key registration must not depend on the lab-hosted OIDC issuer; only
-  # interactive user-device enrollment is degraded until discovery succeeds.
+  # An Authelia outage should degrade only interactive enrollment.
   only_start_if_oidc_is_available: false
-  # PKCE hardens the public auth-code flow against authorization-code
-  # interception (headscale's default method is S256). Enabling it is the
-  # deliberate non-default here; Authelia accepts a PKCE challenge from clients
-  # that send one, so this needs no Authelia-side client change. The harness
-  # verifies that this block renders and passes the pinned binary's configtest.
+  # PKCE uses Headscale's S256 default; Authelia accepts the client challenge.
   pkce:
     enabled: true
-  # No allowed_domains/allowed_groups gate: device enrollment is open to any
-  # identity Authelia authenticates. Deliberate -- this is a single-household
-  # tailnet and the ACL is permissive by design (acl.hujson.j2), so a
-  # domain/group filter here would add no real isolation until the ACL is
-  # tightened. Revisit (allowed_groups + the "groups" scope) alongside that.
+  # Any Authelia identity may enroll while this household tailnet's ACL remains
+  # permissive. Add allowed_groups and its scope when the ACL is tightened.
