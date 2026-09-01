@@ -16,8 +16,6 @@
   register: journald_verify_emit
   changed_when: false
   become: true
-  tags:
-    - journald
 
 # --sync blocks until journald has flushed buffered records to backing
 # storage; deterministic alternative to polling the read with retries.
@@ -25,8 +23,6 @@
   command: journalctl --sync
   changed_when: false
   become: true
-  tags:
-    - journald
 
 - name: _verify | Read sentinel back through journalctl
   command: journalctl --identifier=journald_verify --output=cat --no-pager
@@ -34,8 +30,6 @@
   changed_when: false
   failed_when: journald_verify_emit.cmd[-1] not in journald_verify_read.stdout
   become: true
-  tags:
-    - journald
 
 # ReadKMsg=yes opts journald in to the kernel ring buffer; assert the
 # kernel transport has at least one record since boot (every Linux boot
@@ -47,8 +41,6 @@
   changed_when: false
   failed_when: journald_verify_kmsg.stdout == ''
   become: true
-  tags:
-    - journald
 
 # Audit=no in journald.conf means systemd-journald-audit.socket stays
 # disabled and the kernel audit netlink fd never reaches journald. The
@@ -68,8 +60,6 @@
     journald_verify_audit_socket.status.LoadState != "masked"
     or journald_verify_audit_socket.status.ActiveState == "active"
   become: true
-  tags:
-    - journald
 
 - name: _verify | Install auditd (sole writer of /var/log/audit/audit.log)
   apt:
@@ -79,15 +69,11 @@
     update_cache: true
     cache_valid_time: 3600
   become: true
-  tags:
-    - journald
 
 - name: _verify | Enable kernel audit subsystem
   command: auditctl -e 1
   changed_when: false
   become: true
-  tags:
-    - journald
 
 - name: _verify | Emit synthetic audit sentinel
   command: auditctl -m audit-verify-{{ _journald_audit_token }}
@@ -96,15 +82,11 @@
   register: journald_verify_audit_emit
   changed_when: false
   become: true
-  tags:
-    - journald
 
 - name: _verify | Force journal flush before reads
   command: journalctl --sync
   changed_when: false
   become: true
-  tags:
-    - journald
 
 # `auditctl -m` is synchronous to the kernel netlink, but auditd's
 # disk write is async-incremental (default flush mode). Retry the
@@ -119,8 +101,6 @@
   delay: 1
   until: journald_verify_audit_grep.rc == 0
   become: true
-  tags:
-    - journald
 
 - name: _verify | Sentinel does NOT land in journald _TRANSPORT=audit
   command: journalctl _TRANSPORT=audit --output=cat --no-pager
@@ -128,5 +108,3 @@
   changed_when: false
   failed_when: journald_verify_audit_emit.cmd[-1] in journald_verify_audit_absent.stdout
   become: true
-  tags:
-    - journald
