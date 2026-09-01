@@ -146,7 +146,6 @@
     - not ansible_check_mode
   uri:
     url: "http://127.0.0.1:{{ service_ports.fan2go_api }}/fan"
-    return_content: true
   register: fan2go_api
   failed_when: >-
     fan2go_api.status | default(0) != 200
