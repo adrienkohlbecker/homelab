@@ -38,9 +38,3 @@ path = /mnt/services/getmail/
 read_all = false
 delivered_to = false
 received = false
-# Google has retained app passwords for 2FA accounts (only Less Secure
-# App Access was killed, in 2022); no sunset announced. When that
-# changes, swap the password line above for:
-#   use_xoauth2 = true
-#   password_command = ("/usr/bin/getmail-gmail-xoauth-tokens", "/mnt/services/getmail/oauth2.json")
-# Bootstrap requires a Google Cloud OAuth2 client + one-time consent flow.
