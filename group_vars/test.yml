@@ -217,7 +217,6 @@ samba_password: changeme
 gmail_app_password: changeme
 spouse_samba_password: changeme
 z2m_network_key: changeme
-jellyfin_api_token: changeme
 mosquitto_accounts:
   z2m:
     password: changeme
