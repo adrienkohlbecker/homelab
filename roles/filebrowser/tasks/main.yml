@@ -71,7 +71,6 @@
       # show up in the autoindex listing.
       location_conf: |
         root /srv/filebrowser;
-        charset utf-8;
         # MIME map wiped so every served file is application/octet-stream —
         # browsers download instead of rendering HTML/SVG planted in the
         # mounted trees by upstream services (sabnzbd, *arr, etc.). nginx
