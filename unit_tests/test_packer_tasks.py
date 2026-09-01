@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import stat
 import subprocess
 from pathlib import Path
 
@@ -120,10 +121,15 @@ def test_seed_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:
     calls = launch_log.read_text().splitlines()
     assert len(calls) == 2
     for ubuntu, call in zip(("noble", "resolute"), calls, strict=True):
+        args = shlex.split(call)
+        image_dir = Path(args[args.index("--image-dir") + 1])
         destination = Path(env["HOMELAB_CI_DIR"]) / ubuntu / "box_deps"
         assert f"--ubuntu {ubuntu}" in call
+        assert image_dir.parent == Path(env["HOMELAB_CI_DIR"])
+        assert image_dir.name.startswith(f".build-seed-{ubuntu}-")
         assert (destination / "artifact").read_text() == "source\n"
         assert (destination / "seeded").read_text() == "yes\n"
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o2770
 
 
 def test_qemu_host_uses_canonical_mise_upstream() -> None:

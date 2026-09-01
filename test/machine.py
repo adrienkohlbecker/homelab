@@ -1909,7 +1909,7 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
     """Reap orphaned tmp* (harness) and .build-* (packer) dirs from prior runs.
 
     Cleanup normally rides Machine.__aexit__'s finally chain for tmp* and the
-    trailing rmdir in mise-tasks/packer/build.sh for .build-*.
+    trailing cleanup in the packer build and seed-deps tasks for .build-*.
     Both bypass on SIGKILL / OOM / power-loss, leaving orphan dirs. Each is a
     full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
     until .ansible-lint excludes the path, so leaks are doubly expensive.

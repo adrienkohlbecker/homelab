@@ -36,7 +36,7 @@ if [ ! -d "${src}" ]; then
   exit 1
 fi
 
-# Stage a copy of box's artifacts into a sibling tmpdir so the seed runs
+# Stage a copy of box's artifacts under the shared build-workdir root so the seed runs
 # against a fresh tree and publish.py's atomic-rename swaps it over the
 # previous good box_deps directory without disturbing box. The copy is
 # also what protects the box source from --commit's in-place writes,
@@ -51,13 +51,13 @@ fi
 # slash forms; `ditto` is the Apple-blessed equivalent that always
 # uses clonefile(2) when both ends are on the same APFS volume
 # (10.13+).
-tmp=$(mktemp -d "${base}/.seed-XXXXXX")
+tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-seed-${ubuntu}-XXXXXX")
 # mktemp -d always creates 0700 for security, defeating the umask 002
 # above; publish.py's atomic rename then carries that mode onto box_deps,
-# leaving it un-traversable by the kvm-group CI runner that opens the
+# leaving it un-traversable by the homelab_ci-group runner that opens the
 # backing image. Restore the group-collaborative mode the umask intends
-# (setgid is inherited from the setgid parent ${base}).
-chmod 2775 "${tmp}"
+# without granting access to other local accounts.
+chmod 2770 "${tmp}"
 # rm the tmpdir on any exit path. On success publish.py has already
 # renamed it over ${dst}, so `rm -rf` is a no-op. On failure mid-run
 # we don't want a partially-seeded directory left behind to be picked
