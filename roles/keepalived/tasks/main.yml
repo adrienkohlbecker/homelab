@@ -34,31 +34,16 @@
   tags:
     - keepalived
 
-- name: Reload udev rules
+- name: Reload and apply vrrp martian-logging udev rule
   when: keepalived_martians_rule.changed
-  command: udevadm control --reload
-  changed_when: false
-  become: true
-  tags:
-    - keepalived
-
-# Apply the udev-owned value immediately to an already-running vmac.
-- name: Silence martian logging on any running vrrp interface
   shell: |
     set -euo pipefail
-    shopt -s nullglob
-    applied=0
-    for f in /proc/sys/net/ipv4/conf/vrrp*/log_martians; do
-      if [ "$(cat "$f")" != 0 ]; then
-        echo 0 > "$f"
-        applied=1
-      fi
-    done
-    echo "applied=${applied}"
+    udevadm control --reload
+    udevadm trigger --action=add --subsystem-match=net --sysname-match="vrrp*"
+    udevadm settle
   args:
     executable: /bin/bash
-  register: keepalived_vrrp_martians
-  changed_when: '"applied=1" in keepalived_vrrp_martians.stdout'
+  changed_when: true
   become: true
   tags:
     - keepalived
