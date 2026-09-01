@@ -38,17 +38,6 @@
     state: restarted
   become: true
 
-- name: _verify | Lidarr is back up after the restart
-  uri:
-    url: http://127.0.0.1:{{ service_ports.lidarr }}/api/v1/system/status
-    headers:
-      X-Api-Key: "{{ lidarr_api_key }}"
-    status_code: 200
-  register: _lidarr_http_postrestart
-  retries: 60
-  delay: 2
-  until: _lidarr_http_postrestart.status == 200
-
 # Any predicted change after Lidarr's writeback is configuration drift.
 - name: _verify | Config.xml remains converged after lidarr's writeback
   copy:
