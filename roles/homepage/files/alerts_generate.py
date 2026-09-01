@@ -183,9 +183,7 @@ def _format_value(alarm: dict) -> str:
     if units == "timestamp":
         try:
             ts = int(float(alarm.get("value") or 0))
-        except TypeError:
-            return alarm.get("value_string") or ""
-        except ValueError:
+        except (TypeError, ValueError):
             return alarm.get("value_string") or ""
         if ts == 0:
             return "never"
