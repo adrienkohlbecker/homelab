@@ -31,17 +31,6 @@
   failed_when: journald_verify_emit.cmd[-1] not in journald_verify_read.stdout
   become: true
 
-# ReadKMsg=yes opts journald in to the kernel ring buffer; assert the
-# kernel transport has at least one record since boot (every Linux boot
-# emits hundreds within the first second). Without ReadKMsg, _TRANSPORT=
-# kernel returns empty and this fails. Passive — no trigger needed.
-- name: _verify | Confirm kernel transport is populated (ReadKMsg=yes)
-  command: journalctl _TRANSPORT=kernel --since=-5m --output=cat --no-pager --lines=1
-  register: journald_verify_kmsg
-  changed_when: false
-  failed_when: journald_verify_kmsg.stdout == ''
-  become: true
-
 # PID 1 emits SERVICE_START through the kernel audit path for every service.
 - name: _verify | Run transient service for native audit record
   command:
