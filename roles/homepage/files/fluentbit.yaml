@@ -58,9 +58,3 @@ pipeline:
       match: svc.homepage.service
       condition: key_value_equals _level silly
       set: _level trace
-    # The homepage_alerts timer fires every minute, so auditd records a
-    # SERVICE_START/STOP pair for it each run. Omit only its successful
-    # bookkeeping; failures and other units stay.
-    - name: grep
-      match: audit
-      exclude: "log ^type=SERVICE_(START|STOP) msg=audit\\([0-9.]+:[0-9]+\\): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts .* res=success'"

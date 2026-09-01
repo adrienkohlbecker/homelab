@@ -177,15 +177,6 @@
           CONTAINER_TAG: homepage
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: homepage.service
-        - _tag: audit
-          log: "type=SERVICE_START msg=audit(4072368012.092:808): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=success'"
-          marker: homepage-audit-success-drop
-        - _tag: audit
-          log: "type=SERVICE_START msg=audit(4072368012.092:809): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=homepage_alerts comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=failed'"
-          marker: homepage-audit-failed-keep
-        - _tag: audit
-          log: "type=SERVICE_STOP msg=audit(4072368012.092:810): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=unrelated comm=systemd exe=/usr/lib/systemd/systemd hostname=? addr=? terminal=? res=success'"
-          marker: homepage-unrelated-audit-success-keep
       expected:
         - message: homepage-valid
           level: debug
@@ -201,9 +192,3 @@
           service: homepage
           _absent:
             - fields.parser_status
-        - fields.marker: homepage-audit-failed-keep
-        - fields.marker: homepage-unrelated-audit-success-keep
-
-- name: _verify | Successful homepage_alerts audit bookkeeping was omitted
-  assert:
-    that: "'-drop' not in fluentbit_verify_result.stdout"

@@ -39,41 +39,32 @@
   tags:
     - journald
 
-# Mask + stop systemd-journald-audit.socket. The conf above sets
-# Audit=no; this releases the kernel audit netlink fd so auditd has
-# sole ownership of the audit stream. auditd writes
-# /var/log/audit/audit.log (100% coverage), which fluent-bit tails
-# directly -- the previous dual-write through journald put ~80% of
-# records into both streams and surfaced as duplicate facets in
-# HyperDX.
-#
-# Why mask, not just `enabled: false`: the upstream unit ships as
-# `static` (no [Install] section) + `WantedBy=systemd-journald.service`
-# in its [Unit]. `enabled: false` is a no-op on a static unit, and
-# the WantedBy makes every journald restart re-activate the socket.
-# Masking with a /dev/null symlink is the only way to keep it down
-# across journald restarts; the `Audit=no` conf is the belt, this is
-# the suspenders.
-- name: Mask systemd-journald-audit.socket
+# The socket passes the kernel audit netlink fd to journald. Enable it
+# explicitly because image presets differ across Ubuntu variants.
+- name: Enable systemd-journald-audit.socket
   systemd:
     name: systemd-journald-audit.socket
-    masked: true
-    state: stopped
+    enabled: true
+    masked: false
   become: true
   register: journald_audit_socket
   tags:
     - journald
 
-# Conf change requires journald restart to pick up Audit=no (and to
-# drop the audit fd it currently holds, if any). A pure restart
-# suffices: with audit.socket stopped above, there's no downstream
-# socket activation needing coordinated ordering. Steady-state apply
-# (no conf change, socket already disabled) skips the restart.
-- name: Restart systemd-journald.service
+# The audit socket cannot claim its netlink fd while journald is active.
+- name: Stop systemd-journald.service before audit socket activation
   when: journald_conf_d_99_custom_conf_result.changed or journald_audit_socket.changed
   systemd:
     name: systemd-journald.service
-    state: restarted
+    state: stopped
+  become: true
+  tags:
+    - journald
+
+- name: Start systemd-journald-audit.socket
+  systemd:
+    name: systemd-journald-audit.socket
+    state: started
   become: true
   tags:
     - journald
