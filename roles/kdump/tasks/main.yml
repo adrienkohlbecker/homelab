@@ -12,6 +12,8 @@
     # writing its ineffective arm64 knob would report changed forever.
     - { name: hardlockup_panic, value: '1' }
     - { name: softlockup_panic, value: '1' }
+    # Kernel warnings remain diagnostic instead of forcing a host outage.
+    - { name: panic_on_warn, value: '0' }
     - { name: hung_task_panic, value: '1' }
     - { name: panic_on_rcu_stall, value: '1' }
     - { name: unknown_nmi_panic, value: '1' }
