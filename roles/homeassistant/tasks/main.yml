@@ -46,12 +46,7 @@
   become: true
   loop:
     - /mnt/services/sqlite/homeassistant
-    - /mnt/services/homeassistant/custom_templates
-    - /mnt/services/homeassistant/blueprints
-    - /mnt/services/homeassistant/blueprints/automation
     - /mnt/services/homeassistant/dashboards
-    - /mnt/services/homeassistant/www
-    - /mnt/services/homeassistant/custom_components
     - /mnt/services/homeassistant/custom_components/hacs
     - /mnt/services/homeassistant/.storage
   tags:
