@@ -5,22 +5,17 @@ index.html — a dark-themed, iframe-friendly alert list.
 
 Run as a Type=oneshot systemd service fired by homepage_alerts.timer on
 a one-minute cadence (OnCalendar=*:*:00 + AccuracySec=1s on the
-homepage host). nginx serves the file directly from OUTPUT_DIR; no
-proxy_pass, no long-running process.
+homepage host). nginx serves /var/www/homepage_alerts/index.html directly;
+no proxy_pass, no long-running process.
 
 Every request carries a dedicated Authelia service account via HTTP Basic
 authentication. The netdata vhost forwards that credential only to Authelia,
 then strips it before proxying the request to netdata itself.
 
-Inputs (env):
+Input (env):
 - NETDATA_HOSTS: comma-separated list of `<name>=<url>` pairs. Each URL is
   fetched server-side and used for browser click-through.
   Example: "lab=https://netdata.lab.fahm.fr,pug=https://netdata.pug.fahm.fr"
-- OUTPUT_DIR: directory to write the files into (default
-  /var/www/homepage_alerts). Must be writable by the unit's User=.
-- NETDATA_BASIC_AUTH_USERNAME: dedicated Authelia service-account username.
-- NETDATA_BASIC_AUTH_PASSWORD_FILE: path to its password file. Both Basic
-  authentication inputs are required.
 
 Embedded in the homepage dashboard via an iframe widget mounted at
 /alerts/ on the homepage vhost (same origin) so the page can resize
@@ -446,15 +441,10 @@ def main() -> None:
     if not hosts:
         print("NETDATA_HOSTS is empty; refusing to run", file=sys.stderr)
         sys.exit(1)
-    output_dir = pathlib.Path(os.environ.get("OUTPUT_DIR", "/var/www/homepage_alerts"))
-    username = os.environ.get("NETDATA_BASIC_AUTH_USERNAME", "")
-    password_file = os.environ.get("NETDATA_BASIC_AUTH_PASSWORD_FILE", "")
-    if not (username and password_file):
-        raise OSError("NETDATA_BASIC_AUTH_USERNAME and NETDATA_BASIC_AUTH_PASSWORD_FILE are required")
-    password = pathlib.Path(password_file).read_text().strip()
+    password = pathlib.Path(__file__).with_name("authelia_password").read_text().strip()
     if not password:
-        raise OSError("NETDATA_BASIC_AUTH_PASSWORD_FILE is empty")
-    data = collect(hosts, _basic_authorization(username, password))
+        raise OSError("authelia_password is empty")
+    data = collect(hosts, _basic_authorization("homepage_alerts", password))
     iso = datetime.datetime.now(tz=datetime.UTC).isoformat(timespec="seconds")
 
     # No top-level try/except — an exception here (disk full, permission
@@ -463,7 +453,7 @@ def main() -> None:
     # failed, and nginx keeps serving the previous (atomic-write means there
     # is no half-written intermediate) snapshot. systemd_service_unit_failed_state
     # picks up the failure independently.
-    _atomic_write(output_dir / "index.html", render_html(data, iso))
+    _atomic_write(pathlib.Path("/var/www/homepage_alerts/index.html"), render_html(data, iso))
 
 
 if __name__ == "__main__":

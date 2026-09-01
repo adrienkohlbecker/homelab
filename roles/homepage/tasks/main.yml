@@ -230,9 +230,6 @@
           {%- for host in homepage_netdata_hosts -%}
           {{ ("," if not loop.first else "") ~ host ~ "=https://netdata." ~ host ~ "." ~ domain }}
           {%- endfor -%}
-        OUTPUT_DIR: /var/www/homepage_alerts
-        NETDATA_BASIC_AUTH_USERNAME: homepage_alerts
-        NETDATA_BASIC_AUTH_PASSWORD_FILE: /opt/homepage_alerts/authelia_password
       additional_service_directives:
         - "PrivateTmp=yes"
         - "ProtectSystem=strict"
