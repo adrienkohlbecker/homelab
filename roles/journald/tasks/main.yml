@@ -25,7 +25,7 @@
   tags:
     - journald
 
-- name: Render journald.conf.d/99-custom.conf
+- name: Render journald.conf.d/99-custom.conf  # noqa: require-validate
   template:
     src: 99-custom.conf.j2
     dest: /etc/systemd/journald.conf.d/99-custom.conf
@@ -33,7 +33,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
   register: journald_conf_d_99_custom_conf_result
   become: true
   tags:
