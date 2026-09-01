@@ -164,46 +164,6 @@
   until: _headscale_lnav_record.rc == 0
   become: true
 
-# Exercise the ACL SIGHUP reload's fail-soft contract (tasks/main.yml): a
-# malformed policy on disk + SIGHUP must NOT take the server down -- headscale
-# logs the load error and keeps serving the previously-loaded policy. This is
-# the safety property the SIGHUP-not-restart design rests on; a regression to
-# "restart on ACL change" (or a headscale change that hard-fails on a bad
-# policy) surfaces here. Destructive to the on-disk ACL, which is fine: _verify
-# is test-only and the VM is discarded after -- so this runs last.
-- name: _verify | Plant a malformed ACL policy on disk
-  copy:
-    dest: /mnt/services/headscale/acl.hujson
-    content: "{ this is not valid hujson policy "
-    owner: headscale
-    group: headscale
-    mode: "0640"
-  become: true
-
-# Reload via the unit's ExecReload -- the same path prod takes for an ACL change
-# (tasks/main.yml drives it through the helper's reload: arg, which is also a
-# `state: reloaded`) -- so this exercises the real reload wiring, not a bare
-# `podman kill`.
-- name: _verify | Reload headscale to load the (malformed) policy
-  systemd:
-    name: headscale.service
-    state: reloaded
-  become: true
-
-# `users list` round-trips gRPC over the socket to the running serve process,
-# so it answering proves headscale stayed up serving its previously-loaded
-# policy rather than crashing on the malformed file -- the fail-soft contract.
-# Retried because the policy reload is async to signal receipt. (A stronger
-# check than `systemctl is-active`, which could read 'active' mid crash-restart.)
-- name: _verify | Server survived the bad reload and still serves (fail-soft)
-  command: podman exec headscale headscale users list
-  register: _headscale_failsoft_list
-  changed_when: false
-  retries: 5
-  delay: 1
-  until: _headscale_failsoft_list.rc == 0
-  become: true
-
 - name: _verify | Exercise headscale fluent-bit record contracts
   import_role:
     name: fluentbit

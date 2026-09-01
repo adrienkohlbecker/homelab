@@ -45,8 +45,8 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="headscale" \
     --security-opt=no-new-privileges \
-    {# tini PID 1: reaps zombies and forwards signals -- notably the SIGHUP the
-       unit's ExecReload sends for an ACL policy reload. Matches sibling units. #}
+    {# Headscale runs directly as PID 1, so use tini to reap children and
+       forward termination signals. #}
     --init \
     --volume /mnt/services/headscale/config.yaml:/etc/headscale/config.yaml:ro \
     --volume /mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro \
@@ -85,14 +85,6 @@ ExecStart=/usr/bin/podman run \
 # flow benign.
 ExecStartPost=-/usr/sbin/conntrack --delete --family ipv4 --proto udp --dport {{ service_ports.headscale_stun }}
 ExecStartPost=-/usr/sbin/conntrack --delete --family ipv6 --proto udp --dport {{ service_ports.headscale_stun }}
-# ACL-only changes reload via SIGHUP, not a restart: headscale reloads the
-# HuJSON policy on HUP (same as `systemctl reload`), so a policy tweak needn't
-# bounce the control plane + embedded DERP + every client long-poll. Fails soft
-# -- a malformed policy leaves the running server on its previous ACL. Driven by
-# the systemd_unit helper's reload: arg (roles/headscale/tasks/main.yml), which
-# only reloads when the unit was already active. --init forwards the HUP to the
-# headscale process.
-ExecReload=/usr/bin/podman kill --signal HUP headscale
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

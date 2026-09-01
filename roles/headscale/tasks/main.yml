@@ -103,12 +103,8 @@
   tags:
     - headscale
 
-# No validate: here -- HuJSON (JSON + comments/trailing commas) has no host-side
-# parser (python's json rejects the trailing commas; headscale's own checker is
-# in-container, and the file isn't at its in-container path when validate runs).
-# A malformed policy fails soft anyway: the unit's SIGHUP ExecReload keeps the
-# previously-loaded policy, and _verify exercises exactly that with a planted
-# malformed file. Per AGENTS.md: omit validate rather than invent a fake one.
+# No host-side HuJSON parser is available; the container configtest below
+# validates the policy before a changed unit is restarted.
 - name: Render headscale ACL policy
   when: not ansible_check_mode or headscale_user.uid is defined
   template:
@@ -192,30 +188,16 @@
   tags:
     - headscale
 
-# Whether this run (re)starts the unit -- consumed by both the restart trigger
-# and the ACL-reload guard below (single jinja expression so ansible keeps the
-# bool). A restart is also the only thing that re-reads a rotated OIDC secret:
-# it's mounted (--secret type=mount), so the running container won't pick up a
-# new value without one -- hence the secret result is in the chain.
-- name: Compute whether the headscale unit restarts this run
-  set_fact:
-    headscale_will_restart: >-
-      {{ headscale_config_result.changed
-         or (headscale_network.changed | default(false))
-         or (_headscale_oidc_secret.changed | default(false)) }}
-  tags:
-    - headscale
-
 # configtest initializes Headscale far enough to open its database and create
 # private keys. Put all mutable state on a disposable tmpfs so validation can
 # exercise the rendered config, ACL, OIDC secret, and pinned binary without
-# touching the live database or keys. ACL-only changes retain their fail-soft
-# SIGHUP path; validate before service changes that can restart the process.
+# touching the live database or keys.
 - name: Validate rendered headscale configuration
   when:
     - not ansible_check_mode
     - >-
       headscale_config_result.changed
+      or headscale_acl_result.changed
       or headscale_image_changed
       or (_headscale_oidc_secret.changed | default(false))
   command:
@@ -235,14 +217,6 @@
   tags:
     - headscale
 
-# reload: drives an ACL-only change through the unit's ExecReload (SIGHUP, no
-# restart) -- see the unit template. The systemd_unit helper starts-then-reloads,
-# so it reloads only when the unit was already active and skips the reload on a
-# run that (re)started the unit: a fresh start loads the current policy anyway,
-# and `systemctl reload` on a down unit would error (the bug a standalone `podman
-# kill` had). restart and reload are mutually exclusive here by construction --
-# reload requires not headscale_will_restart. A clean re-run leaves
-# headscale_acl_result.changed false, so neither fires and idempotence holds.
 - name: Manage headscale service
   import_role:
     name: systemd_unit
@@ -251,8 +225,12 @@
     systemd_unit_args:
       src: headscale.service.j2
       condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
-      restart: "{{ headscale_will_restart }}"
-      reload: "{{ headscale_acl_result.changed and not headscale_will_restart }}"
+      # The mounted OIDC secret is read only at container start.
+      restart: >-
+        {{ headscale_config_result.changed
+           or headscale_acl_result.changed
+           or (headscale_network.changed | default(false))
+           or (_headscale_oidc_secret.changed | default(false)) }}
   tags:
     - headscale
 
