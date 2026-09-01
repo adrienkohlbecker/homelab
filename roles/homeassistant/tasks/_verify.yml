@@ -7,25 +7,22 @@
     or _homeassistant_unit.status.ActiveState != "active"
   become: true
 
-# HA enters recovery mode for a broken include but silently drops a malformed
-# notify platform. Catch both managed-configuration failures before the HTTP
-# probes obscure them behind secondary symptoms.
-- name: _verify | Homeassistant loaded managed configuration without error
+# Resolve includes, secrets, and integration schemas through Home Assistant's
+# own checker before HTTP probes obscure configuration failures.
+- name: _verify | Homeassistant configuration is valid
   command:
     argv:
-      - journalctl
-      - -u
+      - podman
+      - exec
       - homeassistant
-      - -b
-      - --no-pager
-      - --grep=Activating recovery mode|Invalid config for .notify
-  register: _homeassistant_config_errors
+      - python3
+      - -m
+      - homeassistant
+      - --script
+      - check_config
+      - --config
+      - /config
   changed_when: false
-  # journalctl --grep prints "-- No entries --" (and exits 1) when nothing
-  # matches, so match the message text rather than testing stdout length.
-  failed_when: >-
-    "Activating recovery mode" in _homeassistant_config_errors.stdout
-    or "Invalid config" in _homeassistant_config_errors.stdout
   become: true
 
 # Functional probe of HA itself. /manifest.json is the same endpoint
