@@ -144,7 +144,6 @@ dns:
   extra_records: []
 {% endif %}
 
-{% if _headscale_oidc_configured %}
 # User-device enrollment via Authelia OIDC. Headless hosts (lab/pug/bunk) use
 # pre-auth keys instead and never hit this. The test harness supplies fixture
 # values only for the headscale role's render and native configtest coverage.
@@ -169,4 +168,3 @@ oidc:
   # tailnet and the ACL is permissive by design (acl.hujson.j2), so a
   # domain/group filter here would add no real isolation until the ACL is
   # tightened. Revisit (allowed_groups + the "groups" scope) alongside that.
-{% endif %}

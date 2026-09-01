@@ -4,12 +4,10 @@
 Description=headscale
 After=network-online.target
 Wants=network-online.target
-{% if _headscale_oidc_configured %}
 {% if not qemu_test %}
 # On fox, OIDC discovery reaches lab's Authelia issuer over wg0. Order after the
 # interface there; the qemu role test has no wg0 unit to order against.
 After=wg-quick@wg0.service
-{% endif %}
 {% endif %}
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
@@ -61,9 +59,7 @@ ExecStart=/usr/bin/podman run \
        network's ULA; netavark DNATs host v4 and v6 to it, source preserved. #}
     --publish 0.0.0.0:{{ service_ports.headscale_stun }}:3478/udp \
     --publish '[::]:{{ service_ports.headscale_stun }}:3478/udp' \
-{% if _headscale_oidc_configured %}
     --secret=headscale_oidc_secret,type=mount,target=oidc_client_secret \
-{% endif %}
     {# Liveness via the service-native CLI: `headscale users list` round-trips
        through the gRPC API over the unix socket to the running serve process,
        so it proves the server is actually answering (not just that the

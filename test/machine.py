@@ -834,13 +834,6 @@ class Machine:
             "test/inventory.ini",
             *self.ansible_args,
         ]
-        fixture_vars: dict[str, object] = {}
-        if self.role == "headscale":
-            fixture_vars["headscale_oidc_issuer"] = "http://127.0.0.1:1/oidc"
-            fixture_vars["headscale_oidc_client_id"] = "headscale"
-            fixture_vars["headscale_oidc_client_secret"] = "test-oidc-client-secret"
-        if fixture_vars:
-            parts += ["-e", json.dumps(fixture_vars, sort_keys=True, separators=(",", ":"))]
         # --upstream-mirrors clears nexus_url so all mirror_* Jinja in
         # group_vars/all.yml resolves to upstream URLs even though
         # group_vars/test.yml sets nexus_url. An AWS guest can't reach the LAN

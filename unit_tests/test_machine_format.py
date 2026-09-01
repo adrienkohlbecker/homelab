@@ -105,22 +105,6 @@ def test_format_ansible_cmd_default_envelope(
     # guest is not in AWS.
     assert '{"test_in_aws": false}' in cmd
     assert not any("tailscale_wan_direct" in part for part in cmd)
-    assert not any("headscale_oidc_" in part for part in cmd)
-
-
-def test_format_ansible_cmd_role_fixture_vars(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    firewall_cmd = machine_factory(role="firewall").format_ansible_cmd("site.yml")
-    headscale_cmd = machine_factory(role="headscale").format_ansible_cmd("site.yml")
-
-    assert not any("tailscale_wan_direct" in part for part in firewall_cmd)
-    assert (
-        '{"headscale_oidc_client_id":"headscale",'
-        '"headscale_oidc_client_secret":"test-oidc-client-secret",'
-        '"headscale_oidc_issuer":"http://10.166.0.10:8090/oidc"}'
-    ) in headscale_cmd
-
 
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
     machine_factory: Callable[..., machine.Machine],

@@ -6,36 +6,17 @@
   tags:
     - headscale
 
-- name: Resolve whether headscale OIDC is configured
-  set_fact:
-    _headscale_oidc_configured: >-
-      {{
-        (headscale_oidc_issuer | default('') | length > 0)
-        or (headscale_oidc_client_id | default('') | length > 0)
-        or (headscale_oidc_client_secret | default('') | length > 0)
-      }}
-  tags:
-    - headscale
-
-# Required inputs live in host_vars/group_vars and the role asserts them (per
-# AGENTS.md). A missing or mistyped value would otherwise leave interactive
-# enrollment broken while the fail-open control plane keeps serving existing
-# nodes. Mirrors roles/tailscale's input assert.
-- name: Assert required headscale OIDC inputs are set when OIDC is configured
+# A missing or mistyped input would leave interactive enrollment broken while
+# the fail-open control plane keeps serving existing nodes.
+- name: Assert required headscale OIDC inputs are set
   assert:
     that:
       - headscale_oidc_issuer | default('') | length > 0
       - headscale_oidc_client_id | default('') | length > 0
       - headscale_oidc_client_secret | default('') | length > 0
     fail_msg: >-
-      One or more headscale_oidc_* inputs are set, but one of
-      headscale_oidc_issuer,
-      headscale_oidc_client_id, headscale_oidc_client_secret is unset or empty
-      (set them in host_vars + vaulted group_vars/prod.yml; see
-      notes/headscale_mesh_redesign.md §E). A mistyped vault key that renders to
-      an empty string passes `is defined` but boots an OIDC-broken control plane
-      that still reaches `active`, so check for non-empty, not just defined.
-  when: _headscale_oidc_configured
+      Headscale requires non-empty headscale_oidc_issuer,
+      headscale_oidc_client_id, and headscale_oidc_client_secret inputs.
   tags:
     - headscale
 
@@ -132,7 +113,6 @@
 
 - name: Create headscale OIDC client secret
   when:
-    - _headscale_oidc_configured
     - not ansible_check_mode or headscale_podman_available
   containers.podman.podman_secret:
     name: headscale_oidc_secret
@@ -209,7 +189,7 @@
          '--tmpfs=/var/lib/headscale:rw,mode=0700',
          '--volume=/mnt/services/headscale/config.yaml:/etc/headscale/config.yaml:ro',
          '--volume=/mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro']
-        + (['--secret=headscale_oidc_secret,type=mount,target=oidc_client_secret'] if _headscale_oidc_configured else [])
+        + ['--secret=headscale_oidc_secret,type=mount,target=oidc_client_secret']
         + [headscale_image, 'configtest']
       }}
   changed_when: false
