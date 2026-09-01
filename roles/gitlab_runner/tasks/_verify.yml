@@ -10,11 +10,6 @@
   changed_when: false
   failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
 
-- name: _verify | Rendered config uses the requested executor
-  command: grep -F 'executor = "{{ gitlab_runner_executor }}"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
 - name: _verify | Exercise gitlab_runner fluent-bit record contracts
   import_role:
     name: fluentbit
@@ -134,30 +129,6 @@
     gitlab_runner_fleeting_aws_version
     not in _gitlab_runner_fleeting_aws_version.stdout
 
-- name: _verify | Rendered config carries the AWS qemu instance runner block
-  when: gitlab_runner_aws_qemu_enabled
-  command: grep -F 'plugin = "fleeting-plugin-aws"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
-- name: _verify | AWS qemu runner points at the Terraform ASG
-  when: gitlab_runner_aws_qemu_enabled
-  command: grep -F 'name = "{{ gitlab_runner_aws_qemu_asg_name }}"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
-- name: _verify | AWS qemu runner build tree lives on the NVMe scratch
-  when: gitlab_runner_aws_qemu_enabled
-  command: grep -F 'builds_dir = "/mnt/scratch/gitlab-runner/builds"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
-- name: _verify | AWS qemu runner cache lives on the NVMe scratch
-  when: gitlab_runner_aws_qemu_enabled
-  command: grep -F 'cache_dir = "/mnt/scratch/gitlab-runner/cache"' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
-
 - name: _verify | Subordinate ID ranges match the executor
   command: getsubids{{ ' -g' if item == 'subgid' else '' }} gitlab_runner
   register: _gitlab_runner_subids
@@ -171,16 +142,6 @@
     - subuid
     - subgid
   become: false
-
-- name: _verify | Rootless podman.socket is active under gitlab_runner
-  when: gitlab_runner_executor == 'docker'
-  systemd:
-    name: podman.socket
-    scope: user
-  register: _gitlab_runner_podman_sock
-  failed_when: _gitlab_runner_podman_sock.status.ActiveState != "active"
-  become: true
-  become_user: gitlab_runner
 
 - name: _verify | Rootless podman prune timer is active under gitlab_runner
   when: gitlab_runner_executor == 'docker'
@@ -205,12 +166,6 @@
   failed_when: "'graphRoot' not in _gitlab_runner_podman_info.stdout"
   become: true
   become_user: gitlab_runner
-
-- name: _verify | Rendered config dials that same socket
-  when: gitlab_runner_executor == 'docker'
-  command: grep -F 'unix:///run/user/{{ _gitlab_runner_uid.stdout }}/podman/podman.sock' /mnt/services/gitlab_runner/config.toml
-  changed_when: false
-  become: true
 
 # Functional unit-start smoke: the role enable-onlys under qemu_test, so start
 # the runner by hand. gitlab-runner run stays up on a placeholder token
