@@ -144,3 +144,15 @@
     path: /etc/_verify_prune
     state: absent
   become: true
+
+- name: _verify | Rolling HWE meta-package is absent
+  command: dpkg-query -W -f='${Status}' linux-generic-hwe-{{ ansible_distribution_version }}
+  register: cleanup_verify_hwe_dpkg
+  changed_when: false
+  failed_when: cleanup_verify_hwe_dpkg.stdout == 'install ok installed'
+  check_mode: false
+
+- name: _verify | Power group exists for thermald D-Bus policy
+  getent:
+    database: group
+    key: power

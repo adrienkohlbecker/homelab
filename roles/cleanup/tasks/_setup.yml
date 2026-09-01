@@ -1,6 +1,5 @@
 # Force the opposite starting state so converge must remove the rolling HWE
-# meta-package rather than passing against the baked image as a no-op. We touch
-# only the meta-package; dpkg refuses to purge the running kernel image.
+# meta-package and recreate the thermald policy group.
 - name: _setup | Install HWE meta-package (converge removes it)
   apt:
     pkg:
