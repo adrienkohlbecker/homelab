@@ -39,17 +39,6 @@
   tags:
     - journald
 
-# Tombstone the pre-rename drop-in so a host provisioned before the
-# 10-→99- rename doesn't carry two identical files (99- already
-# supersedes it; removing the redundant 10- changes no effective config).
-- name: Remove the superseded 10-custom.conf drop-in
-  file:
-    path: /etc/systemd/journald.conf.d/10-custom.conf
-    state: absent
-  become: true
-  tags:
-    - journald
-
 # Mask + stop systemd-journald-audit.socket. The conf above sets
 # Audit=no; this releases the kernel audit netlink fd so auditd has
 # sole ownership of the audit stream. auditd writes
