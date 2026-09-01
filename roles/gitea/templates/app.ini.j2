@@ -1,7 +1,6 @@
 APP_NAME = Gitea
 RUN_USER = git
 WORK_PATH = /mnt/services/gitea
-RUN_MODE = prod
 
 [database]
 DB_TYPE = sqlite3
@@ -12,7 +11,6 @@ SQLITE_JOURNAL_MODE = WAL
 # cleanup_actions cron in particular) writers race on the WAL lock and
 # 500ms is short enough to surface as user-visible 500s.
 SQLITE_TIMEOUT = 10000
-LOG_SQL = false
 
 [repository]
 ROOT = /mnt/services/gitea/data/gitea-repositories
@@ -91,9 +89,6 @@ SAME_SITE = lax
 [log]
 MODE = console
 LEVEL = info
-
-[repository.pull-request]
-DEFAULT_MERGE_STYLE = merge
 
 [repository.signing]
 DEFAULT_TRUST_MODEL = collaborator
