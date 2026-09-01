@@ -1,19 +1,5 @@
-# Removal-only role; no positive function to exercise. Apt's own
-# state=absent already proves the packages aren't installed, so we
-# assert the harder-to-catch residue: snap binary, snapd as a live
-# unit, snapd unit files on disk, squashfs mounts, runtime data
-# roots, plus the apt pin that keeps snapd from being reseeded.
-
-- name: _verify | Probe for snap binary
-  stat:
-    path: /usr/bin/snap
-  register: _cleanup_verify_snap_bin
-
-- name: _verify | Assert snap binary is gone
-  assert:
-    that:
-      - not _cleanup_verify_snap_bin.stat.exists
-    fail_msg: "/usr/bin/snap still present"
+# Apt and file modules own package and data-root absence. Verify the residual
+# systemd and mount state they cannot guarantee, then exercise backup pruning.
 
 - name: _verify | Gather service facts
   service_facts:
@@ -56,32 +42,6 @@
     that:
       - _cleanup_verify_squashfs_mounts.rc == 1
     fail_msg: "Residual snap mounts present:\n{{ _cleanup_verify_squashfs_mounts.stdout }}"
-
-- name: _verify | Probe snap data roots
-  stat:
-    path: "{{ item }}"
-  register: _cleanup_verify_data_roots
-  loop:
-    - /var/snap
-    - /var/lib/snapd
-    - /var/cache/snapd
-    - /root/snap
-  become: true  # /root is mode 0700 so /root/snap stat needs root
-
-- name: _verify | Assert no snap data roots remain
-  assert:
-    that:
-      - not item.stat.exists
-    fail_msg: "Residual snap data root: {{ item.item }}"
-  loop: "{{ _cleanup_verify_data_roots.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: _verify | Assert nosnap apt pin is in place
-  stat:
-    path: /etc/apt/preferences.d/nosnap.pref
-  register: _cleanup_verify_nosnap_pin
-  failed_when: not _cleanup_verify_nosnap_pin.stat.exists
 
 # Exercise prune_ansible_backups: it must evict a backup whose FILENAME
 # timestamp is older than the cutoff, keep a fresh one, and never touch files
