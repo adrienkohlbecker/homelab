@@ -1,21 +1,7 @@
-# Functional check: hd-idle is alive and its argv matches what the
-# template rendered. We can't drive a real spindown in CI (would need
-# to wait the full idle window against a real spinning disk), so this
-# is the closest we get -- two assertions:
-#
-#   (1) global flags  '-i 0' (always) and '-s 1' (on releases newer
-#       than noble) appear in argv. Catches the env-file
-#       parse-failure mode where HD_IDLE_OPTS silently empties.
-#
-#   (2) per-disk -a    for every rotational + non-removable + non-
-#       virtual disk ansible_devices sees, an '-a /dev/disk/by-id/<id>
-#       -i 1200' entry appears in argv. Catches regressions in the
-#       template's selectattr filter chain.
-#
-# On every variant (box / minimal / lab / pug) the per-disk list is
-# non-empty: _setup.yml loads a scsi_debug ghost disk that satisfies
-# the template filter, so (2) always exercises the filter chain end-
-# to-end. On lab/pug the ghost is joined by real spinning disks.
+# Verify the service is active and its argv matches the rendered configuration.
+# The scsi_debug fixture keeps the canonical disk selection non-empty. Actual
+# spindown is not exercised because it needs the full idle window and a physical
+# spinning disk.
 
 - name: _verify | Confirm hd-idle is active  # noqa: command-instead-of-module
   command: systemctl is-active hd-idle
