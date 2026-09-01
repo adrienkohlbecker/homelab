@@ -10,7 +10,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 
 | Host        | Role                                                        | Disk shape          |
 | ----------- | ----------------------------------------------------------- | ------------------- |
-| `lab`       | Main server: DNS, media, gitea, minio, libvirt, home-automation | mdadm-EFI + 3-disk mirror rpool + dozer/tank(raidz2)/mouse |
+| `lab`       | Main server: DNS, media, Gitea archive, MinIO, libvirt, home-automation | mdadm-EFI + 3-disk mirror rpool + dozer/tank(raidz2)/mouse |
 | `pug`       | Secondary server (DNS mirror via keepalived, zfs autobackup target) | rpool + 2 apoc      |
 | `fox`       | External VPS (headscale mesh hub)                           | n/a                 |
 | `bunk`      | Off-site Synology NAS (configured via `bunk.yml`)           | n/a                 |
