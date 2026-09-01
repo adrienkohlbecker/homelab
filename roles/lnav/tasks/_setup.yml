@@ -1,4 +1,4 @@
-# Seed both a generic orphan and the retired syslog format to exercise pruning.
+# Seed the retired syslog format to exercise pruning.
 - name: Create lnav formats directory for orphan fixture
   file:
     path: /etc/lnav/formats/homelab
@@ -8,13 +8,13 @@
     mode: "0755"
   become: true
 
-- name: Plant orphaned lnav format files
+- name: Plant retired lnav format file
   copy:
-    dest: "/etc/lnav/formats/homelab/{{ item }}.json"
+    dest: /etc/lnav/formats/homelab/syslog_body_scan.json
     content: |
       {
         "$schema": "https://lnav.org/schemas/format-v1.schema.json",
-        "{{ item }}": {
+        "syslog_body_scan": {
           "title": "Retired format that must be pruned on converge",
           "regex": { "std": { "pattern": "^(?<body>.*)$" } },
           "value": { "body": { "kind": "string" } },
@@ -24,7 +24,4 @@
     owner: root
     group: root
     mode: "0644"
-  loop:
-    - orphan_retired
-    - syslog_body_scan
   become: true

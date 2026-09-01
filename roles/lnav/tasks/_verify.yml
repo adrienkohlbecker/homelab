@@ -12,7 +12,7 @@
   tags:
     - lnav
 
-# The orphan planted in _setup must have been pruned by converge, and the
+# The retired format planted in _setup must have been pruned by converge, and the
 # managed formats must be exactly what remains -- proving the prune removes
 # retired files without taking out live ones.
 - name: Enumerate format files left on disk after converge
@@ -31,7 +31,7 @@
     that: on_disk == (lnav_format_files | sort)
     fail_msg: >-
       lnav formats dir mismatch: on disk {{ on_disk }}, expected {{ lnav_format_files | sort }}
-      (orphan_retired.json should have been pruned)
+      (syslog_body_scan.json should have been pruned)
   tags:
     - lnav
 
