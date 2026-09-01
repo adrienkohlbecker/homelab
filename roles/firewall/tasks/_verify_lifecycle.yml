@@ -2,15 +2,8 @@
 # ExecStop / restart cycle resets per-rule counters, so this must
 # come after _verify_counters.yml's assertion block.
 
-# Re-apply coverage. With iptables-restore the apply was destructive
-# (wiped netavark's chains), so the verify forced a re-flush + podman
-# network reload to validate the reload-cascade. nft -f is per-table
-# atomic — our apply only touches `inet homelab`, leaving netavark's
-# `ip filter`/`ip nat` chains alone. Drive the reload through systemd
-# rather than calling `nft -f` directly so the ExecReload= line in
-# override_nftables.conf is on the exercised path; a regression
-# (typo, removal, wrong target) surfaces here instead of silently
-# leaving operator `systemctl reload` no-op'd.
+# Reload through systemd to exercise the drop-in, preserve netavark's
+# tables, and reattach wg0 to the recreated flowtable.
 - name: _verify_lifecycle | Read wg0 flowtable unit invocation before reload
   systemd:
     name: wg0_flowtable.service

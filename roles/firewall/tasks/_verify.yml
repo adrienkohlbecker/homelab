@@ -1,17 +1,11 @@
-# Functional firewall verification — every probe exercises live
-# netfilter behaviour. Test scaffolding (podman, listeners, multi-IP
-# netns) lives here rather than in _setup.yml because _setup is
-# reserved for genuine role dependencies — none of this is needed for
-# the firewall role itself to converge.
+# Functional firewall verification exercises live netfilter behaviour.
+# _setup.yml installs fixture dependencies; these tasks build the probe
+# topology and listeners used by the assertions.
 #
 # Probe topology:
 #   extns netns ─ veth_ext ── wg0* (192.0.2.1) ─ root netns (the VM)
 #
-# The rig carrier subnet is TEST-NET-1 (192.0.2.0/24, RFC 5737):
-# reserved address space that can never collide with a real route on
-# the fixture. Any RFC1918 pick risks shadowing — an earlier
-# 10.99.0.0/24 rig broke on EC2 cells whose VPC subnet was exactly
-# that /24 (the ENI's subnet route hijacked the probe replies).
+# The rig uses reserved TEST-NET-1 so fixture routes cannot shadow it.
 #
 # extns carries one alias for each representative source range; probe
 # matrices select the source explicitly with curl/nc. Matching /32 host

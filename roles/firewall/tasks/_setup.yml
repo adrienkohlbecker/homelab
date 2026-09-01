@@ -1,25 +1,13 @@
-# Functional verification of FORWARD/DNAT and POSTROUTING masquerade
-# rules needs a real podman install — netavark's `ip filter`/`ip nat`
-# chains, container egress via MASQUERADE, published-port DNAT. Run
-# the prod install path so the rig is faithful to what runs on real
-# hosts. CLAUDE.md reserves _setup.yml for genuine fixture deps like
-# this; keeping it in _verify.yml coupled the firewall verify to
-# podman's working state for unrelated reasons.
+# FORWARD/DNAT verification requires the production podman stack and
+# its netavark chains, masquerade, and published-port DNAT.
 - name: _setup | Install podman stack via prod install.yml
   import_role:
     name: podman
     tasks_from: install
 
-# wg0_flowtable.service has `ConditionPathExists=/sys/class/net/wg0`
-# so the unit silently no-ops when wg0 is absent (typical on a fresh
-# install where wireguard hasn't run). The ansible service module
-# can't tell condition-skipped apart from inactive and tries to
-# (re)start the unit on every run -- idempotence drift. Stand up
-# wg0 in the same shape _verify_rig later expects: a veth pair
-# where the peer (veth_ext) lives in the extns netns. _verify_rig's
-# bring-up task is "if not exist, create veth pair, move peer to
-# extns" -- finding wg0 already in the expected shape lets it
-# skip creation and just idempotently re-apply addresses/routes.
+# Create wg0 before converge so wg0_flowtable.service does not
+# condition-skip and appear inactive to Ansible. Match the veth shape
+# consumed by _verify_rig.
 - name: _setup | Create wg0 veth + extns netns (shape _verify_rig expects)
   shell: |
     set -euo pipefail

@@ -31,10 +31,7 @@
 - name: _verify_counters | Sysctl — assert persistence
   assert:
     that:
-      # ansible.posix.sysctl writes `key=value` without surrounding
-      # spaces; the earlier assertion expected `key = value` (the
-      # canonical sysctl(8) parse-tolerant form) and missed the
-      # actual on-disk shape. Compare against the no-spaces form.
+      # ansible.posix.sysctl writes the canonical no-spaces form.
       - "'net.netfilter.nf_conntrack_tcp_loose=0' in (_firewall_sysctl_persist.content | b64decode)"
       - "'nf_conntrack' in (_firewall_modload_persist.content | b64decode)"
     fail_msg: >-
@@ -74,10 +71,8 @@
   register: _firewall_reboot_required_stat
   become: true
 
-# Require recent mtime so a stale file from a prior --keep'd run
-# doesn't false-pass. The role's apply is well within an hour of
-# verify on a normal harness cycle (~10 min total); cross-session
-# --keep'd re-runs (file from yesterday) correctly fail.
+# Require a recent mtime so a cross-session --keep rerun cannot pass
+# on a stale signal.
 - name: _verify_counters | Reboot signal — assert reboot was signaled this run
   assert:
     that:

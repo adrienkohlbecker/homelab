@@ -1,40 +1,13 @@
-# Dynamically attaches wg0 to the inet homelab `bulk` flowtable. Kept
-# out of /etc/nftables.conf's static `devices = { ... }` clause so
-# nftables.service can load at boot without racing wg-quick@wg0 — nft
-# errors out with ENOENT when a flowtable device doesn't exist yet,
-# which would leave the host without a firewall until manual restart.
+# Attach wg0 dynamically so nftables can load before the interface exists.
 #
-# PartOf=wg-quick@wg0.service nftables.service: a restart of either
-# parent propagates a restart to us, so the dynamic attachment is
-# re-applied after wg-quick comes back up or after a full
-# nftables.service restart. PartOf doesn't propagate reload — the
-# reload case is handled by nftables.service's ExecReload drop-in
-# which calls `systemctl try-restart wg0_flowtable.service`.
+# PartOf reapplies the attachment after either parent restarts.
+# nftables.service's ExecReload handles reloads, which PartOf does not.
 #
-# WantedBy=wg-quick@wg0.service: enabling installs the symlink under
-# wg-quick@wg0.service.wants/, so starting wg-quick at boot also
-# starts this unit. After= orders us after wg-quick has finished
-# bringing wg0 up. Deliberately NOT BindsTo=wg-quick@wg0.service: a
-# Requires-style dep would try to auto-start wg-quick whenever we're
-# started, which under the test harness (where the wireguard role
-# wasn't applied, so /etc/wireguard/wg0.conf doesn't exist) would
-# cascade-fail the converge. PartOf + WantedBy gives the same
-# lifecycle binding for prod (where wg-quick starts first) without
-# the Requires-style coupling.
+# WantedBy starts this unit with wg-quick without making a direct start
+# pull in wg-quick as a Requires-style dependency would.
 #
-# ConditionPathExists silently skips the unit (no failed state, no
-# emitted error in the journal) when wg0 doesn't exist. Covers the
-# test-harness case where the wireguard role hasn't been applied and
-# /sys/class/net/wg0 isn't present, plus a degraded-wg-quick boot
-# where the iface never came up. PartOf will re-fire ExecStart
-# whenever wg-quick is (re)started and brings wg0 up; ConditionPath
-# is re-evaluated on each start.
-#
-# Not `ExecCondition=/bin/sh -c '... || exit 255'`: systemd docs say
-# exit-255 can leave the unit in 'failed' state and make `systemctl start
-# --wait` return non-zero. The static Condition* directives are the
-# documented "silent skip" mechanism and behave consistently across
-# systemd versions.
+# Silently skip when wg0 is absent; the condition is re-evaluated when
+# wg-quick next starts.
 [Unit]
 Description=Attach wg0 to nftables homelab flowtable
 After=wg-quick@wg0.service nftables.service
@@ -44,11 +17,8 @@ ConditionPathExists=/sys/class/net/wg0
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# nft 1.0.9 (noble) rejects a bare `{ devices = {...}; }` add to an existing
-# flowtable with "missing hook and priority"; the block must restate them. They
-# must stay in sync with the base
-# `flowtable bulk` declaration in nftables.conf.j2 -- nft merges wg0 into that
-# flowtable's existing device set ($WAN_IFACE), it does not replace it.
+# nft 1.0.9 requires the existing hook and priority to be restated when
+# merging wg0 into the flowtable's device set.
 ExecStart=/usr/sbin/nft add flowtable inet homelab bulk { hook ingress priority filter; devices = { wg0 }; }
 
 [Install]

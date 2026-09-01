@@ -24,18 +24,8 @@
   changed_when: false
   failed_when: firewall_verify_wan_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_wan_container.stdout
 
-# FORWARD chain podman0→podman0 ct-status-dnat regression probe.
-# This path broke during the nft migration: containers inheriting the
-# host's resolv.conf (one-shot containers without --dns) ended up
-# querying a VIP that PREROUTING DNATs back into the bridge — iif and
-# oif both podman0. netavark's NETAVARK_FORWARD chain accepted, but
-# our `inet homelab` forward chain had no matching rule and fell
-# through to default DROP; multi-base-chain semantics drops the
-# packet regardless. Re-fired the canonical case here by running a
-# transient busybox on the same `podman` network and curling the
-# bridge gateway IP — netavark's existing published-port rule
-# DNATs that to the long-running httpd container, exercising exactly
-# the iif=podman0/oif=podman0/ct-status-dnat path.
+# Query the bridge gateway from podman0 so netavark DNATs back to a
+# podman0 container, exercising the same-bridge ct-status-dnat allow.
 - name: _verify_forward | FORWARD/DNAT — container → host bridge IP → DNAT'd to container on same bridge
   command: >
     podman run --rm --network podman docker.io/library/busybox
