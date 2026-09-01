@@ -17,6 +17,8 @@
       - swtpm
       - swtpm-tools
       - libhugetlbfs-bin
+      - python3-libvirt
+      - python3-lxml
     policy_rc_d: 101
     cache_valid_time: 3600
   become: true
@@ -71,24 +73,11 @@
   tags:
     - libvirt
 
-- name: Install ansible dependencies to run libvirt module
-  apt:
-    name:
-      - python3-libvirt
-      - python3-lxml
-    cache_valid_time: 3600
-  become: true
-  register: libvirt_apt_python
-  tags:
-    - libvirt
-
-# The reconnect is only needed on the converge that actually installed the
-# binding; the union covers python3-libvirt arriving transitively via the
-# virtualization-tools transaction. meta: reset_connection ignores task-level
-# conditionals, so gate a dynamic include instead -- import_tasks would hoist
-# the meta task past the `when:` at parse time.
+# meta: reset_connection ignores task-level conditionals, so gate a dynamic
+# include instead -- import_tasks would hoist the meta task past the `when:` at
+# parse time.
 - name: Reset connection if the Python libvirt bindings were installed
-  when: libvirt_apt.changed or libvirt_apt_python.changed
+  when: libvirt_apt.changed
   include_tasks: reset_connection.yml  # noqa: prefer-import
   tags:
     - libvirt
@@ -228,7 +217,7 @@
     - libvirt
 
 - name: Check the default network is defined
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_libvirtd_socket_started_result.changed))
   command: virsh net-info default
   register: libvirt_default_net
   changed_when: false
@@ -258,7 +247,7 @@
 # autostart half -- split into two calls (same reason the pool dance below
 # needs three). state: active first, then autostart on a stateless call.
 - name: Start default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_libvirtd_socket_started_result.changed))
   community.libvirt.virt_net:
     name: default
     state: active
@@ -267,7 +256,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_libvirtd_socket_started_result.changed))
   community.libvirt.virt_net:
     name: default
     autostart: true
@@ -298,7 +287,7 @@
 # `state: present` defines only when absent, so an existing pool is left
 # untouched. virsh_backup's pool-dumpxml captures the definition.
 - name: Declare the default storage pool
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or libvirt_libvirtd_socket_started_result.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_libvirtd_socket_started_result.changed))
   become: true
   tags:
     - libvirt
