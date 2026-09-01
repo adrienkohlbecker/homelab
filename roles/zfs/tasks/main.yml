@@ -23,9 +23,10 @@
     - zfs
 
 # Catches divergence between the userspace zfsutils and the loaded zfs.ko.
-# Ubuntu ships the kernel module inside linux-modules-*-generic, so its version
-# tracks the installed kernel independently of zfsutils-linux. This catches a
-# kernel/userspace package mismatch before zfs commands fail opaquely.
+# Ubuntu ships the kernel module inside linux-modules-*-generic, so its OpenZFS
+# release tracks the installed kernel independently of zfsutils-linux. Ubuntu's
+# package revisions can legitimately differ; only the upstream release matters
+# for kernel/userspace compatibility.
 #
 # Gates — the assert is only meaningful in a settled state:
 #   - zfs_apt.changed: just upgraded userspace; the loaded kmod won't
@@ -49,6 +50,8 @@
     - zfs
 
 - name: Assert userspace and kmod ZFS versions match
+  vars:
+    zfs_release_pattern: '[0-9]+\.[0-9]+\.[0-9]+'
   when:
     - not zfs_apt.changed
     - not zfs_reboot_required.stat.exists
@@ -60,10 +63,13 @@
       # short-circuits (Jinja `or`) when length < 2, so it never indexes [1]
       # past the end.
       - zfs_version_out.stdout_lines | length >= 2
-      - (zfs_version_out.stdout_lines | length < 2) or ((zfs_version_out.stdout_lines[0] | regex_replace('^zfs-', '')) == (zfs_version_out.stdout_lines[1] | regex_replace('^zfs-kmod-', '')))
+      - >-
+        (zfs_version_out.stdout_lines | length < 2) or
+        ((zfs_version_out.stdout_lines[0] | regex_search(zfs_release_pattern)) ==
+         (zfs_version_out.stdout_lines[1] | regex_search(zfs_release_pattern)))
     fail_msg: |-
-      ZFS version check failed (expected two lines -- zfs-<ver> userspace and
-      zfs-kmod-<ver> module -- that agree):
+      ZFS version check failed (expected two lines whose upstream OpenZFS
+      releases agree -- Ubuntu package revisions may differ):
       {{ zfs_version_out.stdout }}
   tags:
     - zfs
