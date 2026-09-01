@@ -2,13 +2,9 @@
   command: /usr/local/bin/lnav -V
   register: lnav_installed_version
   changed_when: false
-  tags:
-    - lnav
-
-- name: Assert lnav version
-  assert:
-    that: lnav_version in lnav_installed_version.stdout
-    fail_msg: "lnav version mismatch: expected {{ lnav_version }}, got {{ lnav_installed_version.stdout }}"
+  failed_when: >-
+    lnav_installed_version.rc != 0 or
+    lnav_version not in lnav_installed_version.stdout
   tags:
     - lnav
 
