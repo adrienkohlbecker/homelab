@@ -1,15 +1,10 @@
 # GitLab CI pipeline (notes/ci_aws_nested_qemu_cells.md).
 #
 # Runner pools:
-#   - gitlab.com hosted runners take the cheap stateless jobs (lint, unit
-#     tests): no qemu, no boxes, and a public project's compute cost factor
-#     makes the minutes effectively free. They can't reach the home network
-#     (so no nexus); they run in the project-registry ci image published by
-#     the ci_image job below.
-#   - fox's always-on Docker-executor runner (`fox-docker-aws`) takes the
-#     rare/manual AWS/Hetzner orchestration jobs (image bakes, the qemu image
-#     reaper). Each runs in a CI-image container on fox and drives AWS / Hetzner
-#     over the aws CLI + SSH.
+#   - gitlab.com hosted runners take stateless jobs: lint, unit tests, AWS
+#     control-plane jobs, and no-op child pipelines. They can't reach the home
+#     network (so no nexus); they run in the project-registry ci image published
+#     by the ci_image job below.
 #   - the AWS `aws-shell-qemu` fleeting pool (fleeting-plugin-aws + ASG) is the
 #     default test-cell target and also runs `detect`: the `test_cells` child
 #     matrix runs the nested qemu harness on autoscaled runner hosts, off fox so
@@ -315,9 +310,11 @@ ci_image:
 # template resolves /homelab-ci/ami/qemu-host/noble.
 qemu_host_ami:
   stage: prepare
-  extends: .protected_manual_job
+  extends:
+    - .hosted
+    - .protected_manual_job
   tags:
-    - fox-docker-aws
+    - saas-linux-small-amd64
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
@@ -332,9 +329,9 @@ qemu_host_ami:
 
 # Build + promote the box / box_deps nested-qemu guest images the test cells
 # boot, one manual job per (image, release). Unlike qemu_host_ami (an EC2 AMI
-# bake on fox) these are qemu fixtures that only build under nested KVM, so they
-# run on lab's shell runner: packer:publish-qemu builds or seeds the requested
-# fixture and then uploads/promotes the resulting bundle to
+# bake orchestrated through AWS APIs), these are qemu fixtures that only build
+# under nested KVM, so they run on lab's shell runner: packer:publish-qemu builds
+# or seeds the requested fixture, then uploads/promotes the resulting bundle to
 # s3://homelab-ci-images and writes the promoted.json pointer object the aws_qemu
 # cells hydrate. Without these the S3 bundles only refresh from a manual local
 # build, so promoted images drift behind role code.
@@ -455,13 +452,14 @@ schedule_status_guard:
 # apply automatically on protected refs.
 qemu_image_reaper:
   stage: prepare
+  extends: .hosted
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: true
   tags:
-    - fox-docker-aws
+    - saas-linux-small-amd64
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com

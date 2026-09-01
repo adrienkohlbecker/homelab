@@ -1217,7 +1217,7 @@ class TestTargets:
 class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
         doc = _render_child_doc(["nginx:box", "podman:box:resolute"], site_test=False)
-        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc["stages"] == ["test1", "test2"]
         # All cells run the qemu backend; the harness defaults to it, so there is
@@ -1240,11 +1240,10 @@ class TestRenderChildPipeline:
 
     def test_cells_run_on_the_shell_qemu_runner(self) -> None:
         # The cell fan-out (everything extending .cell, including _site_test) runs
-        # on the qemu shell runner, not the on-fox docker runner. The default tag
-        # stays fox-docker-aws for the no_cells placeholder; .cell overrides it to
-        # the shell runner.
+        # on the qemu shell runner. The default stays executor-neutral; .cell
+        # selects the target's shell runner.
         doc = _render_child_doc(["nginx:box"], site_test=True)
-        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "tags" not in doc["default"]
         assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
         assert "image" not in doc[".cell"]
         # _site_test extends .cell but overrides the tag onto the dedicated
@@ -1277,13 +1276,13 @@ class TestRenderChildPipeline:
         assert "when" not in doc["_site_test:box"]
         assert "when" not in doc["_site_check:box"]
 
-    def test_no_cells_placeholder_stays_on_fox(self) -> None:
-        # The placeholder carries no own tag, so it inherits the fox-docker-aws
-        # default -- a no-cell pipeline stays on the always-on on-fox runner and
-        # never reaches a qemu cell runner just to report there is nothing to test.
+    def test_no_cells_placeholder_runs_on_hosted_runner(self) -> None:
+        # A no-cell pipeline does not consume a persistent or autoscaled qemu
+        # runner just to report there is nothing to test.
         doc = _render_child_doc([], site_test=False)
-        assert "tags" not in doc["no_cells"]
-        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert doc["no_cells"]["tags"] == ["saas-linux-small-amd64"]
+        assert doc["no_cells"]["image"] == "alpine:3.22"
+        assert "tags" not in doc["default"]
 
     def test_site_test_job_added(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=True)
@@ -1335,7 +1334,7 @@ class TestRenderChildPipeline:
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=False, target="lab")
-        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["lab-shell-qemu"]
         # The harness defaults to the qemu backend, so no HOMELAB_TEST_BACKEND.
@@ -1365,7 +1364,7 @@ class TestRenderChildPipeline:
 
     def test_aws_qemu_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=False, target="aws_qemu")
-        assert doc["default"]["tags"] == ["fox-docker-aws"]
+        assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
         assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
@@ -1409,10 +1408,11 @@ class TestRenderChildPipeline:
         joined = "\n".join(doc[".cell"]["before_script"])
         assert "ci:hydrate-qemu-images" not in joined
 
-    def test_lab_no_cells_placeholder_stays_on_fox(self) -> None:
+    def test_lab_no_cells_placeholder_runs_on_hosted_runner(self) -> None:
         doc = _render_child_doc([], site_test=False, target="lab")
-        assert doc["default"]["tags"] == ["fox-docker-aws"]
-        assert "tags" not in doc["no_cells"]
+        assert "tags" not in doc["default"]
+        assert doc["no_cells"]["tags"] == ["saas-linux-small-amd64"]
+        assert doc["no_cells"]["image"] == "alpine:3.22"
         assert "image" not in doc["default"]
 
 

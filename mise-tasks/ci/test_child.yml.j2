@@ -8,8 +8,6 @@
 # "any cells?" flag cannot gate the trigger). See notes/ci_aws_nested_qemu_cells.md.
 default:
   interruptible: true
-  tags:
-    - fox-docker-aws
 
 # Cells are split evenly across two display stages because the GitLab UI only
 # renders the first 100 jobs of a stage; `needs: []` keeps them one parallel
@@ -186,6 +184,9 @@ no_cells:
   stage: test1
   # The trigger is gated off (HAVE_CELLS=false) so this never runs; it only
   # keeps the artifact a syntactically valid pipeline.
+  image: alpine:3.22
+  tags:
+    - saas-linux-small-amd64
   script:
     - echo "no role-relevant changes; nothing to test"
 {% endif %}
