@@ -27,13 +27,6 @@
   tags:
     - hdparm
 
-- name: Divert hdparm.conf
-  community.general.dpkg_divert:
-    path: /etc/hdparm.conf
-  become: true
-  tags:
-    - hdparm
-
 # Grammar (see /lib/udev/hdparm and hdparm.conf preamble): each line
 # is a comment, blank, a directive (`key` / `key = value`), a device
 # path opening a block (`/dev/... {`), or a closing brace -- "ANYTHING

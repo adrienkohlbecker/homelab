@@ -418,6 +418,15 @@
     - retired_services
     - hd_idle
 
+- name: Remove retired hdparm conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/hdparm.conf
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
 - name: Remove retired Mailutils sender-domain config
   file:
     path: /etc/mailutils.conf

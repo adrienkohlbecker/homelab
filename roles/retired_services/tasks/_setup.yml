@@ -273,6 +273,20 @@
     mode: "0644"
   become: true
 
+- name: _setup | Register retired hdparm conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/hdparm.conf
+  become: true
+
+- name: _setup | Install retained hdparm conffile fixture
+  copy:
+    content: "# retained hdparm config\n"
+    dest: /etc/hdparm.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create retired Mailutils sender-domain fixture
   copy:
     content: "address { email-domain example.invalid; };\n"

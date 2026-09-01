@@ -159,6 +159,18 @@
   changed_when: false
   become: true
 
+- name: _verify | Retired hdparm diversion is absent  # noqa: command-instead-of-module
+  command: dpkg-divert --listpackage /etc/hdparm.conf
+  register: retired_services_hdparm_diversion
+  changed_when: false
+  failed_when: retired_services_hdparm_diversion.stdout | trim | length > 0
+  become: true
+
+- name: _verify | Managed hdparm conffile was retained
+  command: grep -Fx '# retained hdparm config' /etc/hdparm.conf
+  changed_when: false
+  become: true
+
 - name: _verify | Retired Mailutils sender-domain config is absent
   stat:
     path: /etc/mailutils.conf
