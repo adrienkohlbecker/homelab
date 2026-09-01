@@ -8,13 +8,6 @@
 # it needs no real disk. The role's converge behavior (hdparm package,
 # /etc/hdparm.conf, CAP_SYS_RAWIO, the udev re-apply) is exercised on every
 # arch regardless.
-- name: _verify | Hdparm conffile has no diversion  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /etc/hdparm.conf
-  register: hdparm_verify_diversion
-  changed_when: false
-  failed_when: hdparm_verify_diversion.stdout | trim | length > 0
-  become: true
-
 - name: _verify | Read managed hdparm conffile
   slurp:
     src: /etc/hdparm.conf

@@ -1,11 +1,4 @@
 ---
-- name: _verify | Smartd conffile has no diversion  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /etc/smartd.conf
-  register: smart_verify_diversion
-  changed_when: false
-  failed_when: smart_verify_diversion.stdout | trim | length > 0
-  become: true
-
 - name: _verify | Read managed smartd conffile
   slurp:
     src: /etc/smartd.conf

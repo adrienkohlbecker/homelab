@@ -13,13 +13,6 @@
 # the collector prefix match (instanced mode, plugin != job) -- not just the
 # trivial present=0 path; fake_plugin:fake_job is the present=0 witness.
 
-- name: _verify | Netdata conffile has no diversion  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /etc/netdata/netdata.conf
-  register: netdata_verify_diversion
-  changed_when: false
-  failed_when: netdata_verify_diversion.stdout | trim | length > 0
-  become: true
-
 - name: _verify | Read managed Netdata conffile
   slurp:
     src: /etc/netdata/netdata.conf

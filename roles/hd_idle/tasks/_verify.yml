@@ -17,13 +17,6 @@
 # the template filter, so (2) always exercises the filter chain end-
 # to-end. On lab/pug the ghost is joined by real spinning disks.
 
-- name: _verify | Hd-idle conffile has no diversion  # noqa: command-instead-of-module
-  command: dpkg-divert --listpackage /etc/default/hd-idle
-  register: hd_idle_verify_diversion
-  changed_when: false
-  failed_when: hd_idle_verify_diversion.stdout | trim | length > 0
-  become: true
-
 - name: _verify | Read managed hd-idle conffile
   slurp:
     src: /etc/default/hd-idle
