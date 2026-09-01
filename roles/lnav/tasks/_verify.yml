@@ -227,36 +227,25 @@
 # file it would be clamped up to its neighbor), giving the relative-bound task
 # an exclusion witness inside a file that still spans the cutoff (lnav refuses
 # to open a file wholly outside the time cutoffs).
-- name: Write lnav-journal verification store
+- name: Write lnav-journal verification stores
   copy:
-    dest: /var/log/fluent-bit/lnav.jsonl
-    content: |
-      {"time":"2020-01-01T00:00:00Z","host":"box","service":"lnav_ancient","unit":"lnav_ancient.service","identifier":"lnav_ancient","level":"info","message":"lnav wrapper ancient history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_ancient.service"}}
-      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_other","unit":"lnav_other.service","identifier":"lnav_other","level":"info","message":"lnav wrapper other unit","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_other.service"}}
-      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
-      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"debug","message":"lnav wrapper debug hidden","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+    dest: "{{ item.path }}"
+    content: "{{ item.content }}"
     mode: "0644"
-  become: true
-  tags:
-    - lnav
-
-- name: Write lnav-journal rotated verification store
-  copy:
-    dest: /var/log/fluent-bit/lnav.jsonl.1
-    content: |
-      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_rotated","unit":"lnav_rotated.service","identifier":"lnav_rotated","level":"info","message":"lnav wrapper rotated history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_rotated.service"}}
-      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper filtered history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
-    mode: "0644"
-  become: true
-  tags:
-    - lnav
-
-- name: Write second lnav-journal rotated verification store
-  copy:
-    dest: /var/log/fluent-bit/lnav.jsonl.2
-    content: |
-      {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_older","unit":"lnav_older.service","identifier":"lnav_older","level":"info","message":"lnav wrapper older history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_older.service"}}
-    mode: "0644"
+  loop:
+    - path: /var/log/fluent-bit/lnav.jsonl
+      content: |
+        {"time":"2020-01-01T00:00:00Z","host":"box","service":"lnav_ancient","unit":"lnav_ancient.service","identifier":"lnav_ancient","level":"info","message":"lnav wrapper ancient history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_ancient.service"}}
+        {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_other","unit":"lnav_other.service","identifier":"lnav_other","level":"info","message":"lnav wrapper other unit","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_other.service"}}
+        {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper verification","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+        {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"debug","message":"lnav wrapper debug hidden","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+    - path: /var/log/fluent-bit/lnav.jsonl.1
+      content: |
+        {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_rotated","unit":"lnav_rotated.service","identifier":"lnav_rotated","level":"info","message":"lnav wrapper rotated history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_rotated.service"}}
+        {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_verify","unit":"lnav_verify.service","identifier":"lnav_verify","level":"info","message":"lnav wrapper filtered history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_verify.service"}}
+    - path: /var/log/fluent-bit/lnav.jsonl.2
+      content: |
+        {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_older","unit":"lnav_older.service","identifier":"lnav_older","level":"info","message":"lnav wrapper older history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_older.service"}}
   become: true
   tags:
     - lnav
