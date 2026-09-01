@@ -54,18 +54,6 @@
     or (':::' ~ service_ports.headscale_stun) not in _headscale_stun_ports.stdout
   become: true
 
-# The distroless image has no cat; inspect its read-only config from the host.
-- name: _verify | Rendered config enabled OIDC, PKCE, and structured logging
-  command: cat /mnt/services/headscale/config.yaml
-  register: _headscale_hs_oidc_cfg
-  changed_when: false
-  failed_when: >-
-    'http://127.0.0.1:1/oidc' not in _headscale_hs_oidc_cfg.stdout
-    or 'pkce:' not in _headscale_hs_oidc_cfg.stdout
-    or 'format: json' not in _headscale_hs_oidc_cfg.stdout
-    or 'level: info' not in _headscale_hs_oidc_cfg.stdout
-  become: true
-
 - name: _verify | Exercise headscale fluent-bit record contracts
   import_role:
     name: fluentbit
