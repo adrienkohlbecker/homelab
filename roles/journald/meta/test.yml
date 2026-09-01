@@ -1,3 +1,0 @@
-# Box covers the volatile storage configuration used by test hosts.
-machines:
-  box:
