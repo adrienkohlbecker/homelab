@@ -205,6 +205,20 @@
     mode: "0755"
   become: true
 
+- name: _setup | Register retired Netdata conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/netdata/netdata.conf
+  become: true
+
+- name: _setup | Install retained Netdata conffile fixture
+  copy:
+    content: "# retained Netdata config\n"
+    dest: /etc/netdata/netdata.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create legacy Netdata smartctl collector fixture
   copy:
     content: |-

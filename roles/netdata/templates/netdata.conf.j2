@@ -12,9 +12,8 @@
 #
 # Only the load-bearing overrides live here. netdata overlays this file on its
 # compiled-in defaults, so every option not listed keeps its auto-tuned value
-# -- this is deliberately NOT a wholesale copy of netdata.conf. The package's
-# stock netdata.conf is dpkg-diverted aside (see configure.yml), so this is the
-# only netdata.conf the daemon reads.
+# -- this is deliberately NOT a wholesale copy of netdata.conf. This managed
+# conffile is the only netdata.conf the daemon reads.
 #
 # Keys are non-indented `key = value` so the configparser validate parses cleanly.
 

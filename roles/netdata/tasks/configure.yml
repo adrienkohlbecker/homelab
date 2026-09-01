@@ -3,13 +3,6 @@
 # collectors, telegram alerting, the startup-readiness drop-in, and
 # the service enable. Split out of main.yml for navigability; runs in
 # main.yml's order so the registers it sets feed the service restart.
-- name: Divert configuration file
-  community.general.dpkg_divert:
-    path: /etc/netdata/netdata.conf
-  become: true
-  tags:
-    - netdata
-
 # Only the load-bearing overrides are templated; netdata overlays the file on
 # its compiled-in defaults, so this is deliberately not a wholesale netdata.conf
 # (which would freeze the hundreds of auto-tuned [plugin:*] sections). The

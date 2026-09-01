@@ -375,6 +375,15 @@
   tags:
     - retired_services
 
+- name: Remove retired Netdata conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/netdata/netdata.conf
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - netdata
+
 - name: Remove retired smartmontools defaults file
   file:
     path: /etc/default/smartmontools
