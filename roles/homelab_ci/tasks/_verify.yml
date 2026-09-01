@@ -33,11 +33,10 @@
           - nobody
           - --
           - test
+          - "!"
           - -r
           - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
-      register: homelab_ci_verify_outsider
       changed_when: false
-      failed_when: homelab_ci_verify_outsider.rc == 0
 
     - name: _verify | Second publisher can read the operator artifact
       command:
