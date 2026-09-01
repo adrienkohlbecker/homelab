@@ -1085,7 +1085,7 @@
   tags:
     - retired_services
 
-- name: Remove retired fan2go build artifacts
+- name: Remove retired fan2go artifacts
   file:
     path: "{{ item }}"
     state: absent
@@ -1095,6 +1095,8 @@
     - /var/cache/go-1.26.3.aarch64.tar.gz
     - /var/cache/fan2go-0.13.0-src
     - /var/cache/fan2go-tui-0.2.1-src
+    - /usr/local/bin/fan2go-0.13.0
+    - /usr/local/bin/fan2go-tui-0.2.1
   become: true
   tags:
     - retired_services
