@@ -21,9 +21,8 @@ StartLimitBurst={{ 15 if _headscale_oidc_configured else 3 }}
 # (auth.fahm.fr) resolves to lab's wg /32 -- reachable only over the wg0
 # backbone. Order after wg-quick so the interface + route exist before
 # headscale's first start attempt. fox always runs the wireguard role, and this
-# unit only ever runs on fox, so the dep always holds. Skipped under qemu_test:
-# the OIDC boot test points at a local mockoidc issuer (no wg0 in the harness),
-# and an After= on a unit that doesn't exist would warn under systemd-analyze.
+# unit only ever runs on fox, so the dep always holds. Skipped under qemu_test,
+# where the role test has no wg0 unit to order against.
 After=wg-quick@wg0.service
 {% endif %}
 {% endif %}

@@ -836,7 +836,7 @@ class Machine:
         ]
         fixture_vars: dict[str, object] = {}
         if self.role == "headscale":
-            fixture_vars["headscale_oidc_issuer"] = "http://10.166.0.10:8090/oidc"
+            fixture_vars["headscale_oidc_issuer"] = "http://127.0.0.1:1/oidc"
             fixture_vars["headscale_oidc_client_id"] = "headscale"
             fixture_vars["headscale_oidc_client_secret"] = "test-oidc-client-secret"
         if fixture_vars:

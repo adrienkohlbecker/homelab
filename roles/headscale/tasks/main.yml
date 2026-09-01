@@ -18,9 +18,9 @@
     - headscale
 
 # Required inputs live in host_vars/group_vars and the role asserts them (per
-# AGENTS.md). A missing/typo'd issuer would otherwise fail opaquely at
-# headscale's boot-time OIDC discovery on the one public host rather than loudly
-# here at parse time. Mirrors roles/tailscale's input assert.
+# AGENTS.md). A missing or mistyped value would otherwise leave interactive
+# enrollment broken while the fail-open control plane keeps serving existing
+# nodes. Mirrors roles/tailscale's input assert.
 - name: Assert required headscale OIDC inputs are set when OIDC is configured
   assert:
     that:

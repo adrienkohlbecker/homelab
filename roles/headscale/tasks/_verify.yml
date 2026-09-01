@@ -125,34 +125,15 @@
   when: ansible_distribution_release != 'noble'
   become: true
 
-# OIDC boot test -- _setup stood up a local mockoidc issuer and enabled OIDC for
-# this converge. With only_start_if_oidc_is_available:true, headscale reaching
-# `active` is itself proof that it completed boot-time OIDC discovery against the
-# issuer (a malformed oidc block or unreachable issuer would leave the unit
-# failed). Assert that, plus that the rendered config actually carried OIDC +
-# the pkce block + the mock issuer -- so a regression that drops PKCE or the OIDC
-# wiring fails here rather than silently shipping OIDC untested. Coverage
-# boundary: this proves boot-time OIDC *discovery* + that the oidc/pkce block
-# rendered -- NOT a live authorization-code / PKCE-S256 token exchange (the
-# harness has no browser/OAuth client to drive enrollment). The end-to-end login
-# flow is checked in the field after deploy.
-- name: _verify | Headscale.service is active (boot-time OIDC discovery succeeded)  # noqa: command-instead-of-module
-  command: systemctl is-active headscale.service
-  register: _headscale_hs_active
-  changed_when: false
-  failed_when: _headscale_hs_active.stdout | trim != 'active'
-  become: true
-
-# Read the rendered config from the host (the distroless headscale image has no
-# cat to podman-exec); /mnt/services/headscale/config.yaml is the file mounted
-# read-only into the container. Keep info-level events for the audit trail and
-# emit them as structured JSON on stdout.
-- name: _verify | Rendered config enabled OIDC + PKCE and structured logging
+# Read the rendered config from the host because the distroless headscale image
+# has no cat. This confirms the test-only OIDC inputs and logging policy reached
+# the file mounted read-only into the container; configtest covers its schema.
+- name: _verify | Rendered config enabled OIDC, PKCE, and structured logging
   command: cat /mnt/services/headscale/config.yaml
   register: _headscale_hs_oidc_cfg
   changed_when: false
   failed_when: >-
-    'http://10.166.0.10:8090/oidc' not in _headscale_hs_oidc_cfg.stdout
+    'http://127.0.0.1:1/oidc' not in _headscale_hs_oidc_cfg.stdout
     or 'pkce:' not in _headscale_hs_oidc_cfg.stdout
     or 'format: json' not in _headscale_hs_oidc_cfg.stdout
     or 'level: info' not in _headscale_hs_oidc_cfg.stdout
