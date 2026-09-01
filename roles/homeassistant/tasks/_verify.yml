@@ -158,7 +158,6 @@
     {% endraw %}
   args:
     executable: /bin/bash
-  register: _homeassistant_route_downrank
   changed_when: false
   become: true
 

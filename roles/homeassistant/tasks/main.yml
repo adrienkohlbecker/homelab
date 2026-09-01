@@ -180,7 +180,6 @@
     state: touch
     modification_time: preserve
     access_time: preserve
-  register: homeassistant_files
   become: true
   with_items:
     - automations.yaml
