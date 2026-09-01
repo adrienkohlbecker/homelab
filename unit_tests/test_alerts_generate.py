@@ -154,7 +154,6 @@ class TestFetchOne:
 
         result = ag._fetch_one("lab", "https://netdata.lab", "https://netdata.lab", "Basic credential")
 
-        assert "log_warn" not in result
         assert result["alarms"][0]["href"] == "https://netdata.lab/v2/spaces/lab/rooms/local/alerts"
         assert capsys.readouterr().err == ""
 
@@ -176,9 +175,8 @@ class TestFetchOne:
 
         monkeypatch.setattr(ag, "_HostClient", FakeClient)
 
-        result = ag._fetch_one("lab", "https://netdata.lab", "https://netdata.lab", "Basic credential")
+        ag._fetch_one("lab", "https://netdata.lab", "https://netdata.lab", "Basic credential")
 
-        assert result["log_warn"] == "alert_transitions parse failed: ValueError: bad payload"
         assert "alert_transitions parse failed" in capsys.readouterr().err
 
 
@@ -228,7 +226,6 @@ class TestNormalize:
                     "status": "WARNING",
                     "value_string": "85 %",
                     "last_status_change": 1700000000,
-                    "info": "CPU usage is high",
                 }
             }
         }
@@ -242,7 +239,6 @@ class TestNormalize:
         assert a["status"] == "WARNING"
         assert a["value"] == "85 %"
         assert a["when"] == 1700000000
-        assert a["info"] == "CPU usage is high"
 
     def test_alphabetical_within_same_status(self) -> None:
         payload = {
@@ -452,7 +448,6 @@ class TestRenderHtml:
         hosts = [
             {
                 "name": "lab",
-                "click_url": "https://nd",
                 "alarms": [
                     {
                         "name": "cpu",
@@ -474,7 +469,7 @@ class TestRenderHtml:
         assert 'href="https://nd/alert"' in html
 
     def test_renders_no_alerts(self) -> None:
-        hosts = [{"name": "pug", "click_url": "https://nd", "alarms": []}]
+        hosts = [{"name": "pug", "alarms": []}]
         html = ag.render_html(hosts, "2024-01-01T00:00:00+00:00")
         assert "No active alerts" in html
 
@@ -482,7 +477,6 @@ class TestRenderHtml:
         hosts = [
             {
                 "name": "lab",
-                "click_url": "https://nd",
                 "error": "ConnectionError",
                 "alarms": [],
             }
@@ -498,7 +492,6 @@ class TestRenderHtml:
         hosts = [
             {
                 "name": "lab",
-                "click_url": "https://nd",
                 "alarms": [
                     {
                         "name": "x",
@@ -519,7 +512,6 @@ class TestRenderHtml:
         hosts = [
             {
                 "name": "<b>bad</b>",
-                "click_url": "https://nd",
                 "alarms": [
                     {
                         "name": "x<y",
@@ -540,8 +532,8 @@ class TestRenderHtml:
 
     def test_multiple_hosts(self) -> None:
         hosts = [
-            {"name": "lab", "click_url": "#", "alarms": []},
-            {"name": "pug", "click_url": "#", "alarms": []},
+            {"name": "lab", "alarms": []},
+            {"name": "pug", "alarms": []},
         ]
         html = ag.render_html(hosts, "now")
         assert html.index("lab") < html.index("pug")

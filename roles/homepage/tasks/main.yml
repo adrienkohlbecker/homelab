@@ -148,11 +148,9 @@
     - homepage
 
 # Sidecar: a stdlib-only Python oneshot that polls each configured host's
-# netdata `/api/v1/alarms?active`, renders HTML + JSON, and atomically writes
-# both to /var/www/homepage_alerts/. nginx serves them under /alerts/ on the
-# homepage vhost (same origin, so the iframe widget can resize itself via
-# window.frameElement). Fires every minute via systemd timer; no long-running
-# process.
+# netdata alerts, atomically writes static HTML, and exits. nginx serves it
+# under /alerts/ on the homepage vhost so the iframe can resize itself on the
+# same origin.
 - name: Create alerts sidecar source directory
   file:
     dest: /opt/homepage_alerts

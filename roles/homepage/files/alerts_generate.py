@@ -243,7 +243,6 @@ def normalize(payload: dict) -> list[dict]:
                 "status": alarm.get("status") or "UNDEFINED",
                 "value": _format_value(alarm),
                 "when": alarm.get("last_status_change") or 0,
-                "info": alarm.get("info") or "",
             }
         )
     items.sort(key=lambda a: (rank.get(a["status"], 99), a["key"]))
@@ -251,28 +250,27 @@ def normalize(payload: dict) -> list[dict]:
 
 
 def _fetch_one(name: str, query_url: str, click_url: str, authorization: str) -> dict:
-    entry: dict = {"name": name, "url": query_url, "click_url": click_url}
+    entry: dict = {"name": name}
     client = None
     try:
         client = _HostClient(query_url, authorization)
         alarms = normalize(client.alarms())
         # A transitions miss is non-fatal: the alarm row falls back to the
         # alerts list URL.
-        log_warn = ""
         try:
             tid_by_key = latest_transition_by_alarm(client.alert_transitions())
         except Exception as e:
             tid_by_key = {}
-            log_warn = f"alert_transitions parse failed: {type(e).__name__}: {e}"
+            print(
+                f"[{name}] alert_transitions parse failed: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
         # An active alarm transitioned within the lookback window, so the
         # (name, chart) join is a single pass. A miss falls back to the alerts
         # list URL.
         for a in alarms:
             a["transition_id"] = tid_by_key.get((a["name"], a["chart"]), "")
             a["href"] = alarm_href(click_url, name, a)
-        if log_warn:
-            print(f"[{name}] {log_warn}", file=sys.stderr)
-            entry["log_warn"] = log_warn
         entry["alarms"] = alarms
     except Exception as e:
         # Bare except so one host's transport quirk never disappears the rest
@@ -429,23 +427,17 @@ def render_html(hosts: list[dict], iso_updated_at: str) -> str:
     for host in hosts:
         rows = []
         title = html.escape(host["name"])
-        click_root = host["click_url"]
         if host.get("error"):
             rows.append(f'<div class="err">{html.escape(host["error"])}</div>')
         elif not host["alarms"]:
             rows.append('<div class="empty">No active alerts.</div>')
         else:
-            for a in host["alarms"]:
-                # href was pre-computed in _fetch_one so it's also visible on
-                # api_alerts.json (debugging) — render_html just trusts it.
-                # target=_blank: this page lives in the /alerts/ iframe on the
-                # homepage vhost; a _self click would replace the iframe
-                # contents, not navigate the parent page. settings.yaml.j2's
-                # global `target: _self` is the corresponding half.
-                href = a.get("href") or click_root
-                rows.append(
+            # target=_blank: this page lives in the /alerts/ iframe on the
+            # homepage vhost; a _self click would replace the iframe contents.
+            rows.extend(
+                (
                     f'<a class="alarm {html.escape(a["status"])}" '
-                    f'href="{html.escape(href)}" target="_blank" rel="noopener">'
+                    f'href="{html.escape(a["href"])}" target="_blank" rel="noopener">'
                     f'<span class="status">'
                     f"{STATUS_ICONS.get(a['status'], '')}"
                     f'<span class="status-text">{html.escape(a["status"])}</span>'
@@ -457,6 +449,8 @@ def render_html(hosts: list[dict], iso_updated_at: str) -> str:
                     f'<span class="value">{html.escape(a["value"])}</span>'
                     f"</a>"
                 )
+                for a in host["alarms"]
+            )
         sections.append(f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>')
     # Footer shows the wall-clock ISO timestamp of this run. The iframe widget
     # refreshes us every minute so an operator comparing against the dashboard's

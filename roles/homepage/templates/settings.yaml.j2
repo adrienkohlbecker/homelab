@@ -8,9 +8,8 @@ layout:
     style: row
     columns: 1
     header: false
-# _self: homepage-wide bookmark clicks open in the current tab. The /alerts/ iframe
-# overrides this to target="_blank" per-row in alerts_server.py:render_html — _self
-# inside that iframe would replace the iframe, not the page.
+# Bookmark clicks open in the current tab; alert rows open a new tab because
+# they render inside the /alerts/ iframe.
 target: _self
 hideVersion: true
 disableCollapse: true
