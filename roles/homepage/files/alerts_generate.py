@@ -134,25 +134,6 @@ class _HostClient:
         return self._get_json(f"/api/v2/alert_transitions?{query}")
 
 
-def latest_transition_by_alarm(log) -> dict[tuple[str, str], str]:
-    """Map (alert name, instance) → most-recent transition_id from the netdata
-    v2 /api/v2/alert_transitions response. v2 transitions carry `alert` (the
-    alarm name) and `instance` (the chart id) instead of the integer alarm_id
-    the retired v1 alarm_log used, so we key on the (name, chart) pair the
-    active-alarms endpoint joins on at the call site. `gi` is a monotonic
-    global id; sorting newest-first keeps the current-state transition we want
-    to deep-link to. The payload is the `{"transitions": [...]}` envelope; a
-    bare list is also accepted for test fixtures."""
-    transitions = log.get("transitions") if isinstance(log, dict) else (log or [])
-    out: dict[tuple[str, str], str] = {}
-    for entry in sorted(transitions or [], key=lambda e: e.get("gi") or e.get("when") or 0, reverse=True):
-        key = (entry.get("alert"), entry.get("instance"))
-        tid = entry.get("transition_id")
-        if key[0] and key[1] and tid and key not in out:
-            out[key] = tid
-    return out
-
-
 def alarm_href(click_root: str, host_name: str, alarm: dict) -> str:
     """Build the v2 deep-link for an alarm row. Falls back to the alerts
     list page if alarm_log didn't yield a transition_id."""
@@ -244,7 +225,11 @@ def _fetch_one(name: str, url: str, authorization: str) -> dict:
         # A transitions miss is non-fatal: the alarm row falls back to the
         # alerts list URL.
         try:
-            tid_by_key = latest_transition_by_alarm(client.alert_transitions())
+            transitions = client.alert_transitions()["transitions"]
+            tid_by_key = {
+                (transition["alert"], transition["instance"]): transition["transition_id"]
+                for transition in sorted(transitions, key=lambda transition: transition["gi"])
+            }
         except Exception as e:
             tid_by_key = {}
             print(

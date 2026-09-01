@@ -125,7 +125,7 @@ class TestHostClient:
 
 
 class TestFetchOne:
-    def test_transition_history_miss_uses_alerts_list_without_warning(
+    def test_latest_transition_builds_deep_link(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         class FakeClient:
@@ -145,7 +145,22 @@ class TestFetchOne:
                 }
 
             def alert_transitions(self) -> dict:
-                return {"transitions": []}
+                return {
+                    "transitions": [
+                        {
+                            "alert": "cpu_high",
+                            "instance": "system.cpu",
+                            "gi": 10,
+                            "transition_id": "tid-old",
+                        },
+                        {
+                            "alert": "cpu_high",
+                            "instance": "system.cpu",
+                            "gi": 20,
+                            "transition_id": "tid-new",
+                        },
+                    ]
+                }
 
             def close(self) -> None:
                 pass
@@ -154,7 +169,7 @@ class TestFetchOne:
 
         result = ag._fetch_one("lab", "https://netdata.lab", "Basic credential")
 
-        assert result["alarms"][0]["href"] == "https://netdata.lab/v2/spaces/lab/rooms/local/alerts"
+        assert "/alerts/tid-new?" in result["alarms"][0]["href"]
         assert capsys.readouterr().err == ""
 
     def test_transition_parse_failure_remains_visible(
@@ -264,91 +279,6 @@ class TestNormalize:
         result = ag.normalize(payload)
         assert result[0]["key"] == "a.alarm"
         assert result[1]["key"] == "z.alarm"
-
-
-# ---------------------------------------------------------------------------
-# latest_transition_by_alarm
-# ---------------------------------------------------------------------------
-
-
-class TestLatestTransitionByAlarm:
-    def test_envelope_newest_wins(self) -> None:
-        # Same (alert, instance): the higher `gi` is the current-state transition.
-        log = {
-            "transitions": [
-                {
-                    "alert": "cpu",
-                    "instance": "system.cpu",
-                    "gi": 10,
-                    "transition_id": "tid-old",
-                },
-                {
-                    "alert": "cpu",
-                    "instance": "system.cpu",
-                    "gi": 20,
-                    "transition_id": "tid-new",
-                },
-            ]
-        }
-        result = ag.latest_transition_by_alarm(log)
-        assert result == {("cpu", "system.cpu"): "tid-new"}
-
-    def test_bare_list_accepted(self) -> None:
-        log = [
-            {
-                "alert": "cpu",
-                "instance": "system.cpu",
-                "gi": 1,
-                "transition_id": "tid-a",
-            }
-        ]
-        result = ag.latest_transition_by_alarm(log)
-        assert result == {("cpu", "system.cpu"): "tid-a"}
-
-    def test_multiple_alarms(self) -> None:
-        log = {
-            "transitions": [
-                {"alert": "a1", "instance": "c1", "gi": 5, "transition_id": "t1"},
-                {"alert": "a2", "instance": "c2", "gi": 10, "transition_id": "t2"},
-            ]
-        }
-        result = ag.latest_transition_by_alarm(log)
-        assert result == {("a1", "c1"): "t1", ("a2", "c2"): "t2"}
-
-    def test_when_fallback_sort(self) -> None:
-        # No `gi`: fall back to `when` for newest-first ordering.
-        log = {
-            "transitions": [
-                {
-                    "alert": "a",
-                    "instance": "c",
-                    "when": 100,
-                    "transition_id": "tid-old",
-                },
-                {
-                    "alert": "a",
-                    "instance": "c",
-                    "when": 200,
-                    "transition_id": "tid-new",
-                },
-            ]
-        }
-        assert ag.latest_transition_by_alarm(log) == {("a", "c"): "tid-new"}
-
-    def test_empty_log(self) -> None:
-        assert ag.latest_transition_by_alarm([]) == {}
-        assert ag.latest_transition_by_alarm({"transitions": []}) == {}
-        assert ag.latest_transition_by_alarm({}) == {}
-
-    def test_missing_fields_skipped(self) -> None:
-        log = {
-            "transitions": [
-                {"alert": "a", "instance": "c"},  # no transition_id
-                {"instance": "c", "gi": 1, "transition_id": "t"},  # no alert
-                {"alert": "a", "gi": 2, "transition_id": "t"},  # no instance
-            ]
-        }
-        assert ag.latest_transition_by_alarm(log) == {}
 
 
 # ---------------------------------------------------------------------------
