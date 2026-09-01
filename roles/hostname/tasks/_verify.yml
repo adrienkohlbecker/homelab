@@ -1,22 +1,11 @@
-- name: _verify | Read running hostname
-  command: hostname
-  register: _hostname_hostname
+- name: _verify | Hostname states match inventory
+  command: "{{ item }}"
+  loop:
+    - hostname
+    - hostnamectl --static
+  register: _hostname_state
   changed_when: false
-
-- name: _verify | Read static hostname (systemd)
-  # The transient kernel hostname can match by DHCP coincidence even when
-  # the static (persistent) name is wrong — only the static value survives
-  # a reboot, so assert on it directly.
-  command: hostnamectl --static
-  register: _hostname_hostnamectl_static
-  changed_when: false
-
-- name: _verify | Hostname state matches inventory
-  assert:
-    quiet: true
-    that:
-      - _hostname_hostname.stdout == inventory_hostname
-      - _hostname_hostnamectl_static.stdout == inventory_hostname
+  failed_when: _hostname_state.stdout != inventory_hostname
 
 - name: _verify | Resolve inventory_hostname short form
   command: getent -s files ahosts {{ inventory_hostname }}
