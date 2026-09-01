@@ -38,10 +38,6 @@ path = /mnt/services/getmail/
 read_all = false
 delivered_to = false
 received = false
-# Per-message audit trail (size, mailbox, msgid, sender, recipient, delivery
-# path). Lives next to the maildir so it doesn't flow to journald and the
-# centralized fluentbit → openobserve pipeline.
-message_log = /mnt/services/getmail/messages.log
 # Google has retained app passwords for 2FA accounts (only Less Secure
 # App Access was killed, in 2022); no sunset announced. When that
 # changes, swap the password line above for:

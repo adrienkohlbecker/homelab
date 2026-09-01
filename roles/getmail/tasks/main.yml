@@ -44,24 +44,6 @@
   tags:
     - getmail
 
-# getmail creates messages.log on first run under whatever umask the
-# service inherits (systemd's default produces 0644). Pre-create it
-# 0600 so even if the parent dir's 0700 ever drifts, the per-message
-# metadata (msgid / sender / recipient / size) is still owner-only.
-# The preserve flags keep the task idempotent on re-runs.
-- name: Pre-create messages.log
-  file:
-    path: /mnt/services/getmail/messages.log
-    state: touch
-    owner: "{{ ansible_user_id }}"
-    group: "{{ ansible_user_id }}"
-    mode: "0600"
-    modification_time: preserve
-    access_time: preserve
-  become: true
-  tags:
-    - getmail
-
 - name: Configure getmail
   template:
     src: getmailrc.j2
