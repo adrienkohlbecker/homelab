@@ -39,8 +39,6 @@
   become: true
   loop:
     - /mnt/services/jellyfin/config
-    - /mnt/services/jellyfin/data
-    - /mnt/services/jellyfin/data/introskipper
     - /mnt/scratch/jellyfin
     - /mnt/scratch/jellyfin/cache
     - /mnt/scratch/jellyfin/cache/transcodes
