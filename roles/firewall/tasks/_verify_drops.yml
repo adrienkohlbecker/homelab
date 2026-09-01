@@ -68,11 +68,16 @@
 # 1000-1049 back-to-back from extns; each is a NEW conntrack flow
 # reaching the icmp rule. Burst 20 + ~10/sec refill over <1s → ~30
 # overflow drops.
-- name: _verify_drops | Stage ICMP flood probe script
-  copy:
-    dest: /tmp/firewall_verify_icmp_flood.py
-    mode: "0755"
-    content: |
+- name: _verify_drops | Input — ICMP echo flood (varying IDs) overflows the rate-limit
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - python3
+      - -
+    stdin: |
       import socket, struct
       sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
       for i in range(50):
@@ -87,10 +92,6 @@
           chksum = ~chksum & 0xFFFF
           pkt = struct.pack("!BBHHH", 8, 0, chksum, icmp_id, 0)
           sock.sendto(pkt, ("192.0.2.1", 0))
-  become: true
-
-- name: _verify_drops | Input — ICMP echo flood (varying IDs) overflows the rate-limit
-  command: ip netns exec extns python3 /tmp/firewall_verify_icmp_flood.py
   changed_when: false
   failed_when: false
   become: true
@@ -147,11 +148,13 @@
 # Reproduce the stale-DNAT handoff shape: original destination is the DNS VIP,
 # but PREROUTING rewrites it to a peer reachable through wg0. The packet enters
 # on the vmac and reaches FORWARD without matching the earlier podman DNAT allow.
-- name: _verify_drops | Stage stale DNS VIP DNAT fixture
-  copy:
-    dest: /tmp/firewall_verify_vip_dnat.nft
-    mode: "0600"
-    content: |
+- name: _verify_drops | Install stale DNS VIP DNAT fixture
+  command:
+    argv:
+      - nft
+      - -f
+      - -
+    stdin: |
       add chain inet homelab firewall_verify_vip_dnat {
           type nat hook prerouting priority -101; policy accept;
       }
@@ -159,10 +162,6 @@
           iifname "vrrp.{{ dns_keepalived_vrid }}" \
           ip daddr {{ network.virtual_ips.dns }} udp dport 12345 \
           dnat ip to {{ _firewall_probe_nonscope }}
-  become: true
-
-- name: _verify_drops | Install stale DNS VIP DNAT fixture
-  command: nft -f /tmp/firewall_verify_vip_dnat.nft
   changed_when: true
   become: true
 
