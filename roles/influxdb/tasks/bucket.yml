@@ -4,7 +4,8 @@
 # The token is printed only by the first `auth create`; InfluxDB redacts it from
 # later listings, so this task neither publishes nor persists it. Delete the
 # authorization and re-run to recover a lost token. The main role must have
-# authenticated its managed CLI config before this entry point runs.
+# authenticated its managed CLI config and verified the managed org before this
+# entry point runs.
 #
 # JSON output avoids table-shape drift; argv slots keep tenant names inert.
 
@@ -16,50 +17,16 @@
     fail_msg: >-
       influxdb_bucket requires influxdb_bucket_args.{user,bucket}.
 
-- name: bucket | Query org {{ influxdb_root_org }}
-  command:
-    argv:
-      - podman
-      - exec
-      - influxdb
-      - influx
-      - org
-      - list
-      - --name
-      - "{{ influxdb_root_org }}"
-      - --json
-  register: _influxdb_bucket_org_query
-  changed_when: false
-  check_mode: false
-  # Let the assertion below report a missing org with recovery guidance.
-  failed_when: false
-  become: true
-
-# Match the returned name exactly rather than relying on CLI filter semantics.
-# The rc check short-circuits JSON parsing on command failure.
-- name: "bucket | Assert org exists: {{ influxdb_root_org }}"
-  assert:
-    that:
-      - _influxdb_bucket_org_query.rc == 0
-      - (_influxdb_bucket_org_query.stdout
-          | from_json
-          | matching_by_attr('name', influxdb_root_org)
-          | length) > 0
-    fail_msg: >-
-      Managed influxdb org '{{ influxdb_root_org }}' not found.
-      Reapply the influxdb role's main.yml to bootstrap it.
-
 # Keep derived IDs block-scoped so repeated imports cannot leak tenant state.
 - name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_root_org }}
   vars:
+    _influxdb_bucket_record: >-
+      {{ _influxdb_bucket_bucket_id_query.stdout
+          | from_json
+          | one_by_attr('name', influxdb_bucket_args.bucket) }}
     _influxdb_org_id: >-
-      {{ (_influxdb_bucket_org_query.stdout
-          | from_json
-          | one_by_attr('name', influxdb_root_org)).id }}
-    _influxdb_bucket_id: >-
-      {{ (_influxdb_bucket_bucket_id_query.stdout
-          | from_json
-          | one_by_attr('name', influxdb_bucket_args.bucket)).id }}
+      {{ _influxdb_bucket_record.orgID }}
+    _influxdb_bucket_id: "{{ _influxdb_bucket_record.id }}"
   block:
     - name: bucket | Query user {{ influxdb_bucket_args.user }}
       command:
@@ -91,8 +58,8 @@
           - influx
           - user
           - create
-          - --org-id
-          - "{{ _influxdb_org_id }}"
+          - --org
+          - "{{ influxdb_root_org }}"
           - --name
           - "{{ influxdb_bucket_args.user }}"
       become: true
@@ -106,8 +73,8 @@
           - influx
           - bucket
           - list
-          - --org-id
-          - "{{ _influxdb_org_id }}"
+          - --org
+          - "{{ influxdb_root_org }}"
           - --name
           - "{{ influxdb_bucket_args.bucket }}"
           - --json
@@ -129,8 +96,8 @@
           - influx
           - bucket
           - create
-          - --org-id
-          - "{{ _influxdb_org_id }}"
+          - --org
+          - "{{ influxdb_root_org }}"
           - --name
           - "{{ influxdb_bucket_args.bucket }}"
       become: true
@@ -145,8 +112,8 @@
           - influx
           - bucket
           - list
-          - --org-id
-          - "{{ _influxdb_org_id }}"
+          - --org
+          - "{{ influxdb_root_org }}"
           - --name
           - "{{ influxdb_bucket_args.bucket }}"
           - --json
@@ -197,8 +164,8 @@
           - auth
           - create
           - --json
-          - --org-id
-          - "{{ _influxdb_org_id }}"
+          - --org
+          - "{{ influxdb_root_org }}"
           - --user
           - "{{ influxdb_bucket_args.user }}"
           - --write-bucket

@@ -165,6 +165,7 @@
       - list
       - --name
       - "{{ influxdb_root_org }}"
+      - --json
   register: _influxdb_auth_check
   changed_when: false
   failed_when: false
@@ -176,17 +177,21 @@
   tags:
     - influxdb
 
-- name: Assert the influx default config authenticates
+- name: Assert the influx default config authenticates to the managed org
   assert:
     that:
       - _influxdb_auth_check.rc == 0
+      - (_influxdb_auth_check.stdout
+          | from_json
+          | matching_by_attr('name', influxdb_root_org)
+          | length) > 0
     fail_msg: >-
-      `influx org list` was rejected by the running InfluxDB -- the operator
-      token in influxdb_root_token is not recognized. It must be an OPERATOR
-      token (bucket.yml's `influx user/auth create` needs write:users, which an
-      all-access token lacks). Mint a fresh one offline with `influxd recovery
-      auth create-operator` (stop the container first), set influxdb_root_token
-      to it in vault (ansible-vault edit group_vars/prod.yml), and re-apply.
+      `influx org list` did not return the managed '{{ influxdb_root_org }}'
+      organization. The token in influxdb_root_token must be a recognized
+      OPERATOR token because bucket.yml needs write:users, which an all-access
+      token lacks. Reapply bootstrap if the org is missing; otherwise mint a
+      fresh token offline with `influxd recovery auth create-operator` (stop the
+      container first), set influxdb_root_token in the vault, and re-apply.
   when: not ansible_check_mode
   tags:
     - influxdb
