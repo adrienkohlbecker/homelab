@@ -11,14 +11,6 @@
   tags:
     - smart
 
-- name: Divert smartd.conf
-  community.general.dpkg_divert:
-    path: /etc/smartd.conf
-  when: not (ansible_check_mode and smart_apt.changed)
-  become: true
-  tags:
-    - smart
-
 # smartd has no parser-only mode; the packaged service parses on start/reload.
 - name: Configure smartd  # noqa: require-validate
   template:

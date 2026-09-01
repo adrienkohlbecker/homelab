@@ -220,6 +220,20 @@
     mode: "0644"
   become: true
 
+- name: _setup | Register retired smartd conffile diversion
+  community.general.dpkg_divert:
+    path: /etc/smartd.conf
+  become: true
+
+- name: _setup | Install retained smartd conffile fixture
+  copy:
+    content: "# retained smartd config\n"
+    dest: /etc/smartd.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create retired Mailutils sender-domain fixture
   copy:
     content: "address { email-domain example.invalid; };\n"

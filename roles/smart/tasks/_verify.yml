@@ -1,0 +1,38 @@
+---
+- name: _verify | Smartd conffile has no diversion  # noqa: command-instead-of-module
+  command: dpkg-divert --listpackage /etc/smartd.conf
+  register: smart_verify_diversion
+  changed_when: false
+  failed_when: smart_verify_diversion.stdout | trim | length > 0
+  become: true
+
+- name: _verify | Read managed smartd conffile
+  slurp:
+    src: /etc/smartd.conf
+  register: smart_verify_config_before
+  become: true
+
+- name: _verify | Reinstall smartmontools while retaining local conffiles
+  command:
+    argv:
+      - apt-get
+      - --reinstall
+      - -o
+      - Dpkg::Options::=--force-confdef
+      - -o
+      - Dpkg::Options::=--force-confold
+      - install
+      - -y
+      - smartmontools
+  changed_when: true
+  become: true
+
+- name: _verify | Read smartd conffile after reinstall
+  slurp:
+    src: /etc/smartd.conf
+  register: smart_verify_config_after
+  become: true
+
+- name: _verify | Package reinstall preserved the managed smartd conffile
+  assert:
+    that: smart_verify_config_after.content == smart_verify_config_before.content
