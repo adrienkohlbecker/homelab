@@ -71,12 +71,7 @@
     or _kuma_db_owner.stat.pw_name != 'kuma'
   become: true
 
-# disableAuth guard probe -- main.yml must never flip disableAuth on an
-# instance with no user: kuma's auto-login derefs the first user row and
-# crashes the socket handshake. A fresh test VM has an empty user table, so
-# assert the row was left unset. The populated-user (prod) path can't be
-# driven here without scripting kuma's socket.io setup wizard to mint a
-# user, so only the safety-critical guard is exercised in-harness.
+# A fresh Kuma has no user, so auth must remain enabled until setup completes.
 - name: _verify | DisableAuth stays unset while the user table is empty
   command: >-
     sqlite3 -readonly /mnt/services/kuma/kuma.db
@@ -89,8 +84,7 @@
     and _kuma_disableauth.stdout.split('|')[1] | trim == 'true'
   become: true
 
-# Functional WAL probe catches a startup regression that leaves the database
-# in the default delete-journal mode. Read-only probe, does not lock.
+# A read-only probe catches a regression to delete-journal mode.
 - name: _verify | Kuma sqlite is in WAL journal mode
   command: sqlite3 -readonly /mnt/services/kuma/kuma.db 'PRAGMA journal_mode;'
   register: _kuma_wal
@@ -98,12 +92,7 @@
   failed_when: _kuma_wal.stdout | trim != 'wal'
   become: true
 
-# Positive seed path -- the empty-table guard above proves the seed is
-# SKIPPED with no user; this proves it FLIPS once a user exists, the
-# prod-only branch unreachable against the harness's fresh kuma (which has
-# an empty user table). Run against a synthetic kuma-shaped DB so we neither
-# mutate the live instance nor depend on kuma's full user schema; the
-# statement mirrors main.yml's seed -- keep the two in sync.
+# Exercise the shared seed against a synthetic DB without mutating live state.
 - name: _verify | DisableAuth seed flips once, then is idempotent
   block:
     - name: _verify | Build a synthetic kuma-shaped DB with one user

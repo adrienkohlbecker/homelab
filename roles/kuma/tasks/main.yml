@@ -71,30 +71,11 @@
   tags:
     - kuma
 
-# Uptime-Kuma has no env/config knob for disabling its built-in login
-# (feature request louislam/uptime-kuma#6459, still open) -- the only
-# control is the `disableAuth` row in its sqlite `setting` table, normally
-# flipped via Settings > Security in the UI. Authelia already gates the
-# nginx vhost below, so kuma's own login is a redundant second prompt;
-# seed disableAuth=true so the Authelia session is the single gate.
-#
-# Hard precondition: with disableAuth set, kuma auto-logs-in as the first
-# user row (server.js: afterLogin(R.findOne("user")) on socket connect).
-# An empty user table dereferences null and crashes the handshake, so the
-# statement self-gates on `WHERE EXISTS (SELECT 1 FROM user)` -- a brand-new
-# instance (fresh host or test VM) keeps its own login until the operator
-# runs the setup wizard and a later converge seeds it.
-#
-# One live statement against the WAL DB: `.timeout 30000` rides out any
-# heartbeat write or WAL checkpoint kuma is mid-flight (the old 5s could
-# expire during a checkpoint and abort the converge). value is the JSON
-# literal `true` (Settings.get JSON.parses it); type='general' mirrors the
-# UI's setSettings("general", ...) so the row also surfaces on the Security
-# page. `changes()` reports whether the row actually moved, so changed_when
-# is honest and the restart below fires only on a real flip -- kuma re-reads
-# disableAuth on a fresh socket connection. A DB whose schema kuma hasn't
-# created yet (no `user` table) is tolerated: the seed no-ops until first
-# start has populated it.
+# Kuma has no config knob for disabling its login, so seed its setting after
+# the setup wizard creates a user. Enabling it earlier breaks auto-login because
+# Kuma expects to find the first user. Authelia then remains the sole gate.
+# The timeout accommodates WAL writes; changes() limits the restart to a flip.
+# A missing schema is tolerated until Kuma completes its first start.
 - name: Disable kuma's built-in auth (Authelia fronts it)
   when: not ansible_check_mode
   command:
@@ -131,28 +112,19 @@
     nginx_site_args:
       subdomain: kuma
       proxy_pass: http://127.0.0.1:{{ service_ports.kuma }}/
-      # Authelia is the sole gate: kuma's own login is disabled via the
-      # disableAuth seed above (no env knob exists for it), so this vhost
-      # auth is what actually protects the dashboard.
+      # Kuma's login is disabled above, leaving Authelia as the dashboard gate.
       auth: true
-      # /api/push/<token> is kuma's push-monitor heartbeat endpoint;
-      # the token in the URL is the secret. Off-host monitored systems
-      # hit it without an Authelia session, so the sibling location
-      # bypasses auth_request -- an off-host heartbeat carries no session.
+      # Off-host push monitors authenticate with the URL token, without an
+      # Authelia session, so their exact endpoint bypasses auth_request.
       server_conf: |
-        # Token-shaped match only: the token in the URL is the secret, and
-        # anchoring to /api/push/<token> stops a future kuma route under
-        # /api/push/ from inheriting this unauthenticated bypass. nginx
-        # matches the path only (query string excluded) and kuma push tokens
-        # are [A-Za-z0-9_-]. proxy_pass carries no URI part because a regex
-        # location forbids one -- do not add a trailing path.
+        # Anchor the token-shaped path so future push routes stay authenticated.
+        # A regex location requires proxy_pass without a URI component.
         location ~ ^/api/push/[A-Za-z0-9_-]+/?$ {
           proxy_pass http://127.0.0.1:{{ service_ports.kuma }};
           proxy_http_version 1.1;
           proxy_set_header Host              $host;
           proxy_set_header X-Real-IP         $remote_addr;
-          # Unauthenticated path: overwrite X-Forwarded-For with the peer
-          # rather than appending a client-supplied header kuma may log.
+          # Do not pass a client-supplied forwarding chain to this open route.
           proxy_set_header X-Forwarded-For   $remote_addr;
           proxy_set_header X-Forwarded-Proto $scheme;
           proxy_set_header X-Forwarded-Host  $host;
