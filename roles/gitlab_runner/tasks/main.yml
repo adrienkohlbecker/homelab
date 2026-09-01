@@ -184,7 +184,7 @@
     - name: Install rootless podman prune timer
       when:
         - gitlab_runner_executor == 'docker'
-        - not (ansible_check_mode and (gitlab_runner_user.changed or (gitlab_runner_lingered | default(false))))
+        - not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
       import_role:
         name: podman
         tasks_from: prune
@@ -200,7 +200,7 @@
     - name: Enable and start rootless podman socket
       when:
         - gitlab_runner_executor == 'docker'
-        - not (ansible_check_mode and (gitlab_runner_user.changed or (gitlab_runner_lingered | default(false))))
+        - not (ansible_check_mode and (gitlab_runner_user.changed or gitlab_runner_lingered))
       systemd:
         name: podman.socket
         enabled: true
@@ -245,7 +245,7 @@
           start: "{{ not qemu_test }}"
           restart: >-
             {{ gitlab_runner_binary.changed
-               or (gitlab_runner_fleeting_aws_binary.changed | default(false)) }}
+               or gitlab_runner_fleeting_aws_binary.changed }}
 
     - name: Manage the rootless runner user-slice memory cap
       when:
