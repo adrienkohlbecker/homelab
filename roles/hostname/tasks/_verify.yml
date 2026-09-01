@@ -7,28 +7,19 @@
   changed_when: false
   failed_when: _hostname_state.stdout != inventory_hostname
 
-- name: _verify | Resolve inventory_hostname short form
-  command: getent -s files ahosts {{ inventory_hostname }}
-  register: _hostname_getent_short
-  changed_when: false
-
-- name: _verify | Resolve localhost over IPv6
-  command: getent -s files ahostsv6 localhost
-  register: _hostname_getent_localhost
-  changed_when: false
-
-- name: _verify | /etc/hosts resolution matches expectation
-  assert:
-    quiet: true
-    that:
-      - "'127.0.1.1' in _hostname_getent_short.stdout"
-      - "'::1' in _hostname_getent_localhost.stdout"
-
-- name: _verify | Resolve etc_hosts_entries to configured IPs
+- name: _verify | IPv4 hosts entries resolve
   command: getent -s files ahosts {{ item.key }}
-  loop: "{{ etc_hosts_entries | dict2items }}"
-  register: _hostname_etc_hosts_entries
+  loop: "{{ [{'key': inventory_hostname, 'value': '127.0.1.1'}] + (etc_hosts_entries | dict2items) }}"
+  register: _hostname_ipv4_entries
   changed_when: false
   failed_when: >-
-    _hostname_etc_hosts_entries.rc != 0
-    or item.value not in _hostname_etc_hosts_entries.stdout.split()
+    _hostname_ipv4_entries.rc != 0
+    or item.value not in _hostname_ipv4_entries.stdout.split()
+
+- name: _verify | IPv6 localhost resolves
+  command: getent -s files ahostsv6 localhost
+  register: _hostname_ipv6_localhost
+  changed_when: false
+  failed_when: >-
+    _hostname_ipv6_localhost.rc != 0
+    or '::1' not in _hostname_ipv6_localhost.stdout.split()
