@@ -4,7 +4,6 @@ Storage={{ journald_storage }}
    compresses it; otherwise (tmpfs for Storage=volatile, ext4 for non-ZFS
    hosts) journald's per-object XZ is the only compression in the stack. #}
 Compress={{ (journald_storage == 'persistent' and zfs_root) | ternary('no', 'yes') }}
-ForwardToSyslog=no
 ReadKMsg=yes
 # Audit records flow through fluent-bit's tail of /var/log/audit/audit.log
 # (the auditd authoritative stream, 100% coverage). Letting journald
