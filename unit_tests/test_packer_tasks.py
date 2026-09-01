@@ -40,11 +40,14 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
     fake_bin = tmp_path / "bin"
     log = tmp_path / "packer.log"
     archive_log = tmp_path / "archive.log"
+    cache_log = tmp_path / "cache.log"
+    _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'Linux\\n'\n")
     _executable(
         fake_bin / "packer",
         "#!/bin/sh\n"
         "set -eu\n"
         'printf "%s\\n" "$*" >>"$PACKER_TEST_LOG"\n'
+        'printf "%s\\n" "$PACKER_CACHE_DIR" >>"$PACKER_CACHE_LOG"\n'
         'for arg in "$@"; do\n'
         '  case "$arg" in build_directory=*) build_directory=${arg#*=} ;; esac\n'
         "done\n"
@@ -54,6 +57,7 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
     env.update(
         PATH=f"{fake_bin}:{env['PATH']}",
         PACKER_ARCHIVE_LOG=str(archive_log),
+        PACKER_CACHE_LOG=str(cache_log),
         PACKER_TEST_LOG=str(log),
     )
 
@@ -66,6 +70,7 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
         assert f"ubuntu_name={ubuntu}" in call
         assert f"output_directory={env['HOMELAB_CI_DIR']}/{ubuntu}" in call
         assert "-only=qemu.box" in call
+    assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus.split())
 
     archive_entries = archive_log.read_text().splitlines()
     assert "roles/refind/files/zz-stage-efi-stub" in archive_entries

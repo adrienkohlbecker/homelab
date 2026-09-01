@@ -52,6 +52,7 @@ def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
     monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
     monkeypatch.setattr(machine.platform, "machine", lambda: "x86_64")
+    monkeypatch.delenv("HOMELAB_CI_DIR", raising=False)
     monkeypatch.setattr(machine.Path, "is_dir", lambda self: False)
     with pytest.raises(RuntimeError, match="does not exist"):
         machine.Machine(
@@ -61,3 +62,12 @@ def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pyte
             ubuntu_name="noble",
             machine_timeout=300,
         )
+
+
+def test_qemu_imagedir_uses_configured_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    configured = tmp_path / "configured"
+    configured.mkdir()
+    monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
+    monkeypatch.setenv("HOMELAB_CI_DIR", str(configured))
+
+    assert machine.imagedir_for_host() == configured

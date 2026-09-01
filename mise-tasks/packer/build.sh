@@ -27,7 +27,7 @@ fi
 # Linux: keep packer's ISO cache off the root FS; falls through to
 # packer's default (./packer_cache in cwd) on Mac.
 case "$(uname -s)" in
-Linux) export PACKER_CACHE_DIR=/mnt/scratch/homelab_ci/packer_cache ;;
+Linux) export PACKER_CACHE_DIR="${HOMELAB_CI_DIR}/packer_cache" ;;
 Darwin) ;;
 *)
   echo "Unsupported OS: $(uname -s)" >&2

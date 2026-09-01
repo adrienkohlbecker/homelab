@@ -57,6 +57,7 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
     # Pin host-platform discovery to Darwin so Machine resolves imagedir to
     # tmp_path/packer/artifacts (writable, host-agnostic).
     monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
+    monkeypatch.delenv("HOMELAB_CI_DIR", raising=False)
     # These tests only build command lines -- they never spawn qemu -- so the
     # emulator binary needn't actually be installed. The x86 CI image ships
     # qemu-system-x86 but not the aarch64 emulator, so an unmocked which()

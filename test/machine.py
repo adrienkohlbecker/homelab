@@ -1884,23 +1884,19 @@ class Machine:
 def imagedir_for_host() -> Path:
     """Return the platform's packer-image cache root.
 
-    /mnt/scratch/homelab_ci on Linux dev hosts; <repo>/packer/artifacts on Mac
-    (matches mise.toml's homelab_ci_dir; /mnt/scratch/homelab_ci doesn't exist on Mac).
-    Linux raises if the mountpoint is missing -- the dev host workflow
-    expects the qemu volume to be mounted before any test runs.
+    HOMELAB_CI_DIR is authoritative under mise. Direct invocations fall back
+    to /mnt/scratch/homelab_ci on Linux or <repo>/packer/artifacts on Mac.
+    Linux raises if the selected mountpoint is missing; Mac creates it.
     """
     system = platform.system()
     if system == "Darwin":
-        d = Path("packer/artifacts").resolve()
+        d = Path(os.environ.get("HOMELAB_CI_DIR", "packer/artifacts")).resolve()
         d.mkdir(parents=True, exist_ok=True)
         return d
     if system == "Linux":
-        d = Path("/mnt/scratch/homelab_ci")
+        d = Path(os.environ.get("HOMELAB_CI_DIR", "/mnt/scratch/homelab_ci")).resolve()
         if not d.is_dir():
-            raise RuntimeError(
-                f"Imagedir {str(d)!r} does not exist. "
-                f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/homelab_ci`)."
-            )
+            raise RuntimeError(f"Imagedir {d!s} does not exist; mount or create the configured qemu image volume.")
         return d
     raise RuntimeError(f"Unknown operating system: {system}")
 
