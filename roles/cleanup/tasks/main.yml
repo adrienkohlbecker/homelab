@@ -73,10 +73,7 @@
   tags:
     - cleanup
 
-# Block snapd from being reinstalled by a later `apt install` whose
-# dep chain pulls a snap-shimmed transitional package (firefox,
-# chromium-browser, …). Without this, the purge below is undone
-# silently the next time apt is asked to install anything snap-shimmed.
+# Prevent later package installs from silently pulling snapd back in.
 - name: Pin snapd against reinstallation
   copy:
     src: nosnap.pref
@@ -134,15 +131,8 @@
   tags:
     - cleanup
 
-# `backup: true` on every config-writing task (CLAUDE.md) leaves
-# <name>.<pid>.<timestamp>~ files accumulating across the host (thousands, back
-# to 2024). The daily ZFS snapshots hold deep history and ansible --diff shows
-# changes live, so the on-disk backups only need to cover a recent window — a
-# daily timer prunes anything older than a week. Deliberately not gated on
-# zfs_root: it runs on the non-ZFS hosts too (fox), where the ansible repo + git
-# are the recovery path rather than snapshots; a 7-day window is reasonable
-# regardless, and gating would trip the undefined-on-localhost trap logrotate
-# just fixed.
+# Keep one week of local Ansible backups; ZFS snapshots or the repository
+# provide deeper recovery on every managed host.
 - name: Install the ansible-backup prune script
   copy:
     src: prune_ansible_backups
