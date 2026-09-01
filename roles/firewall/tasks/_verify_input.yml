@@ -10,24 +10,24 @@
   become: true
 
 # Unscoped INPUT allow / catch-all reject — baseline coverage.
-- name: _verify_input | INPUT allow — port 80 reachable from extns (unscoped)
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:80/
-  register: _firewall_input_http
+- name: _verify_input | INPUT allow — public HTTP ports reachable from extns
+  command: >
+    ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
+    --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ item }}/
+  loop:
+    - 80
+    - 443
+  loop_control:
+    label: tcp/{{ item }}
+  register: _firewall_public_http
   changed_when: false
-  failed_when: _firewall_input_http.rc != 0 or 'firewall-verify-ok' not in _firewall_input_http.stdout
+  failed_when: _firewall_public_http.rc != 0 or 'firewall-verify-ok' not in _firewall_public_http.stdout
   become: true
 
 - name: _verify_input | INPUT deny — port 18080 (no rule, no listener) hits catch-all
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:18080/
   changed_when: false
   failed_when: false
-  become: true
-
-- name: _verify_input | INPUT allow — port 443 reachable from extns (unscoped)
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:443/
-  register: _firewall_input_https
-  changed_when: false
-  failed_when: _firewall_input_https.rc != 0 or 'firewall-verify-ok' not in _firewall_input_https.stdout
   become: true
 
 # Loopback accept (`iif lo accept`). The fixture listener returns a known
@@ -63,23 +63,35 @@
   changed_when: false
   become: true
 
-# Wireguard 51820 is scoped to -i WAN. Two probes — positive via the
-# controller-side WAN endpoint (qemu: loopback UDP forward, ingressing on
-# enp0s2, the WAN iface in the test VM; EC2: the cell's public IP through
-# the security group's 51820/udp allow) and negative from the netns where
-# traffic always ingresses on wg0.
-- name: _verify_input | INPUT allow — wireguard (51820/udp) reachable on WAN iface from controller  # noqa: risky-shell-pipe
+# Controller-side UDP forwards exercise the real WAN interface. UDP has no
+# response contract here; named counters below distinguish accepted probes
+# from the deliberately rejected mDNS source.
+- name: _verify_input | Send WAN-side UDP policy probes
   delegate_to: localhost
-  shell: |
-    echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp['51820'] }} >/dev/null 2>&1 || true
-  args: { executable: /bin/bash }
+  command:
+    argv:
+      - nc
+      - -u
+      - -w
+      - "1"
+      - "{{ wan_probe_host }}"
+      - "{{ item.port }}"
+    stdin: .
+  loop:
+    - label: wireguard accept
+      port: "{{ wan_forward_ports.udp['51820'] }}"
+    - label: transmission accept
+      port: "{{ wan_forward_ports.udp[(service_ports.transmission_bt | string)] }}"
+    - label: tailscale underlay accept
+      port: "{{ wan_forward_ports.udp[(tailscale_port | string)] }}"
+      enabled: "{{ tailscale_wan_direct | default(false) }}"
+    - label: mDNS non-home-source reject
+      port: "{{ wan_forward_ports.udp['5353'] }}"
+  loop_control:
+    label: "{{ item.label }}"
+  when: item.enabled | default(true) | bool
   changed_when: false
-
-- name: _verify_input | INPUT — wireguard (51820/udp) rejected when ingressing on wg0  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 51820
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
+  failed_when: false
 
 # Transmission BT peer port is WAN-only (iif=$WAN_IFACE). Harness backends
 # that expose controller-side forwards for both protocols prove WAN ingress;
@@ -94,107 +106,50 @@
   changed_when: false
   failed_when: _firewall_input_transmission_wan.rc != 0 or 'firewall-verify-ok' not in _firewall_input_transmission_wan.stdout
 
-- name: _verify_input | INPUT allow — transmission (51413/udp) reaches WAN iface from controller  # noqa: risky-shell-pipe
-  delegate_to: localhost
-  shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp[(service_ports.transmission_bt | string)] }} >/dev/null 2>&1 || true
-  args: { executable: /bin/bash }
-  changed_when: false
-
-- name: _verify_input | INPUT — transmission (51413/tcp) rejected on wg0 ingress (iif scope)
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:51413/
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify_input | INPUT — transmission (51413/udp) rejected on wg0 ingress (iif scope)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 51413
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-- name: _verify_input | INPUT allow — tailscale underlay reaches WAN iface from controller  # noqa: risky-shell-pipe
-  delegate_to: localhost
-  shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp[(tailscale_port | string)] }} >/dev/null 2>&1 || true
-  args: { executable: /bin/bash }
-  changed_when: false
-  when:
-    - tailscale_wan_direct | default(false)
-
-# mDNS requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously. The WAN
-# forward reaches the WAN iface, but the forwarded source is not a HOME_LAN
-# address from nft's perspective, so this is a WAN-source negative. wg0 probes
-# below cover each half of the scope failing from synthetic in-VM sources.
-- name: _verify_input | INPUT — mDNS (5353/udp) rejected from non-home WAN source  # noqa: risky-shell-pipe
-  delegate_to: localhost
-  shell: echo . | nc -u -w 1 {{ wan_probe_host }} {{ wan_forward_ports.udp['5353'] }} >/dev/null 2>&1 || true
-  args: { executable: /bin/bash }
-  changed_when: false
-
 # --- probe_wg group (wireguard-source positives) ---------------------
-# Admin services (mosh/samba/nut) use the concatenated set
-# lan_admin_pairs to require an (iif, saddr) *intersection* — wg0 only
-# accepts $WG_SUBNET saddrs, $WAN_IFACE only accepts $HOME_LAN. The
-# rig ingresses everything on wg0, so probe_wg (in $WG_SUBNET) is the
-# positive case for all three services. mDNS rides the same group as a
-# saddr-scope negative (wg saddr fails the iif=WAN + saddr=$HOME_LAN
-# requirement on the saddr half).
-- name: _verify_input | Bind probe_wg on extns veth (wireguard-source probes)
-  command: ip -n extns addr replace {{ _firewall_probe_wg }}/32 dev veth_ext
-  changed_when: true
-  become: true
-
-- name: _verify_input | INPUT — mosh (60000/udp) reachable from wireguard source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 192.0.2.1 60000
-  args: { executable: /bin/bash }
+# The concatenated admin set accepts WG_SUBNET sources on wg0. mDNS is the
+# paired negative because it additionally requires WAN ingress + HOME_LAN.
+- name: _verify_input | Send wireguard-source UDP policy probes
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ _firewall_probe_wg }}"
+      - 192.0.2.1
+      - "{{ item.port }}"
+    stdin: .
+  loop:
+    - { label: mosh accept, port: "60000" }
+    - label: tailscale LAN-direct accept
+      port: "{{ tailscale_port }}"
+      enabled: "{{ tailscale_wan_direct | default(false) }}"
+    - { label: mDNS source reject, port: "5353" }
+  loop_control:
+    label: "{{ item.label }}"
+  when: item.enabled | default(true) | bool
   changed_when: false
   become: true
 
-# The Tailscale LAN-direct rule shares lan_admin_pairs with mosh/samba/nut,
-# so the wireguard source (wg0 . WG_SUBNET) is its positive case too. A LAN
-# peer probing tailscaled's underlay on the mgmt iface lands here rather than
-# on the WAN-only underlay rule above. Gated on the same flag that renders the
-# rule and its counter.
-- name: _verify_input | INPUT — tailscale direct endpoint reachable from wireguard source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 192.0.2.1 {{ tailscale_port }}
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-  when:
-    - tailscale_wan_direct | default(false)
-
-- name: _verify_input | INPUT — Samba (445/tcp) reachable from wireguard source
+- name: _verify_input | INPUT — admin TCP services reachable from wireguard source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_wg }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
-  register: _firewall_input_samba_wg
+    --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ item.port }}/
+  loop:
+    - { label: Samba, port: "445" }
+    - { label: nut, port: "{{ service_ports.nut }}" }
+    - { label: Authelia, port: "{{ service_ports.authelia }}" }
+  loop_control:
+    label: "{{ item.label }}"
+  register: _firewall_wg_admin_tcp
   changed_when: false
-  failed_when: _firewall_input_samba_wg.rc != 0 or 'firewall-verify-ok' not in _firewall_input_samba_wg.stdout
-  become: true
-
-- name: _verify_input | INPUT — nut (3493/tcp) reachable from wireguard source
-  command: >
-    ip netns exec extns curl --interface {{ _firewall_probe_wg }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
-  register: _firewall_input_nut_wg
-  changed_when: false
-  failed_when: _firewall_input_nut_wg.rc != 0 or 'firewall-verify-ok' not in _firewall_input_nut_wg.stdout
-  become: true
-
-- name: _verify_input | INPUT — Authelia forward-auth reachable from wireguard source
-  command: >
-    ip netns exec extns curl --interface {{ _firewall_probe_wg }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.authelia }}/
-  register: _firewall_input_authelia_wg
-  changed_when: false
-  failed_when: _firewall_input_authelia_wg.rc != 0 or 'firewall-verify-ok' not in _firewall_input_authelia_wg.stdout
-  become: true
-
-# mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
-# wg saddr fails the saddr half — counter must not increment.
-- name: _verify_input | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_wg }} 192.0.2.1 5353
-  args: { executable: /bin/bash }
-  changed_when: false
+  failed_when: _firewall_wg_admin_tcp.rc != 0 or 'firewall-verify-ok' not in _firewall_wg_admin_tcp.stdout
   become: true
 
 # IGMP accept is unscoped (link-local TTL=1 — no WAN-routable IGMP), so
@@ -208,151 +163,158 @@
   become: true
 
 # --- probe_home group (home_LAN-source iif/saddr-mismatch negatives) -
-# probe_home (in $HOME_LAN) on wg0 ingress is a NEGATIVE case across
-# the admin set: wrong iif for its saddr. The wg0+HOME_LAN path was
-# accepted under prior union semantics; regression back to union
-# would let these through. mDNS rides the same group as the iif-half
-# negative (home saddr on wg0 fails the iif=$WAN_IFACE requirement).
-- name: _verify_input | Bind probe_home on extns veth (home_LAN-source probes)
-  command: ip -n extns addr replace {{ _firewall_probe_home }}/32 dev veth_ext
-  changed_when: true
-  become: true
-
-- name: _verify_input | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 192.0.2.1 60000
-  args: { executable: /bin/bash }
+# HOME_LAN sources arriving on wg0 must miss the paired admin and mDNS rules.
+- name: _verify_input | Send home-source UDP mismatch probes
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ _firewall_probe_home }}"
+      - 192.0.2.1
+      - "{{ item.port }}"
+    stdin: .
+  loop:
+    - { label: mosh reject, port: "60000" }
+    - { label: mDNS interface reject, port: "5353" }
+  loop_control:
+    label: "{{ item.label }}"
   changed_when: false
   become: true
 
-- name: _verify_input | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+- name: _verify_input | INPUT — admin TCP services reject mismatched home source on wg0
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_home }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
-  register: _firewall_input_samba_home_wrong_iif
+    --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ item.port }}/
+  loop:
+    - { label: Samba, port: "445" }
+    - { label: nut, port: "{{ service_ports.nut }}" }
+  loop_control:
+    label: "{{ item.label }}"
+  register: _firewall_home_tcp_mismatch
   changed_when: false
-  failed_when: _firewall_input_samba_home_wrong_iif.rc == 0
+  failed_when: _firewall_home_tcp_mismatch.rc == 0
   become: true
 
-- name: _verify_input | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
-  command: >
-    ip netns exec extns curl --interface {{ _firewall_probe_home }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
-  register: _firewall_input_nut_home_wrong_iif
-  changed_when: false
-  failed_when: _firewall_input_nut_home_wrong_iif.rc == 0
-  become: true
-
-- name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home }} 192.0.2.1 5353
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-- name: _verify_input | INPUT — Samba (445/tcp) reachable from home_LAN source via mac_mgmt
+- name: _verify_input | INPUT — admin TCP services reachable through mac_mgmt
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_home_mac }}
-      --connect-timeout 3 --max-time 5 -sf http://{{ _firewall_probe_home_mac_host }}:445/
-  register: _firewall_input_samba_mac_mgmt
+    --connect-timeout 3 --max-time 5 -sf
+    http://{{ _firewall_probe_home_mac_host }}:{{ item.port }}/
+  loop:
+    - { label: Samba, port: "445" }
+    - { label: nut, port: "{{ service_ports.nut }}" }
+  loop_control:
+    label: "{{ item.label }}"
+  register: _firewall_mac_admin_tcp
   changed_when: false
-  failed_when: _firewall_input_samba_mac_mgmt.rc != 0 or 'firewall-verify-ok' not in _firewall_input_samba_mac_mgmt.stdout
+  failed_when: _firewall_mac_admin_tcp.rc != 0 or 'firewall-verify-ok' not in _firewall_mac_admin_tcp.stdout
   become: true
 
-- name: _verify_input | INPUT — nut (3493/tcp) reachable from home_LAN source via mac_mgmt
-  command: >
-    ip netns exec extns curl --interface {{ _firewall_probe_home_mac }}
-      --connect-timeout 3 --max-time 5 -sf http://{{ _firewall_probe_home_mac_host }}:{{ service_ports.nut }}/
-  register: _firewall_input_nut_mac_mgmt
-  changed_when: false
-  failed_when: _firewall_input_nut_mac_mgmt.rc != 0 or 'firewall-verify-ok' not in _firewall_input_nut_mac_mgmt.stdout
-  become: true
-
-# The Tailscale LAN-direct rule's other positive: a home-LAN peer hitting the
-# mgmt macvlan IP, which ingresses on mac_mgmt -- the exact path the WAN underlay
-# rule misses and this rule was added for. Pairs with the wireguard-source probe
-# above; the counter assertion requires BOTH to fire (>= 2), so a regression
-# narrowing the rule to wg-only can't be masked by the wg hit alone. UDP nc, like
-# the wg probe -- tailscaled doesn't answer a synthetic datagram, so the counter
-# is the witness, not a reply.
-- name: _verify_input | INPUT — tailscale direct endpoint reachable from home_LAN source via mac_mgmt  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_home_mac }} {{ _firewall_probe_home_mac_host }} {{ tailscale_port }}
-  args: { executable: /bin/bash }
+- name: _verify_input | INPUT — tailscale direct endpoint reachable through mac_mgmt
+  when: tailscale_wan_direct | default(false)
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ _firewall_probe_home_mac }}"
+      - "{{ _firewall_probe_home_mac_host }}"
+      - "{{ tailscale_port }}"
+    stdin: .
   changed_when: false
   become: true
-  when:
-    - tailscale_wan_direct | default(false)
 
 # --- probe_nonscope group (out-of-scope negatives) -------------------
-# probe_nonscope (192.0.2.2 primary on veth_ext) is in neither
-# $HOME_LAN nor $WG_SUBNET nor $PODMAN_DEFAULT — every saddr-scoped
-# rule must reject it. No bind task: the primary alias is in place
-# from the netns setup above.
-- name: _verify_input | INPUT — mosh (60000/udp) rejected from non-scope source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_nonscope }} 192.0.2.1 60000
-  args: { executable: /bin/bash }
+# probe_nonscope is in none of the trusted source ranges. These probes must
+# miss every source- or WAN-scoped UDP allow.
+- name: _verify_input | Send non-scope UDP rejection probes
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ _firewall_probe_nonscope }}"
+      - 192.0.2.1
+      - "{{ item.port }}"
+    stdin: .
+  loop:
+    - { label: wireguard interface reject, port: "51820" }
+    - { label: transmission interface reject, port: "{{ service_ports.transmission_bt }}" }
+    - { label: mosh source reject, port: "60000" }
+  loop_control:
+    label: "{{ item.label }}"
   changed_when: false
   become: true
 
-- name: _verify_input | INPUT — Samba (445/tcp) rejected from non-scope source
+- name: _verify_input | INPUT — scoped TCP services reject non-scope source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:445/
-  register: _firewall_input_samba_nonscope
+    --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ item.port }}/
+  loop:
+    - { label: Samba, port: "445" }
+    - { label: nut, port: "{{ service_ports.nut }}" }
+    - { label: transmission, port: "{{ service_ports.transmission_bt }}" }
+  loop_control:
+    label: "{{ item.label }}"
+  register: _firewall_nonscope_tcp
   changed_when: false
-  failed_when: _firewall_input_samba_nonscope.rc == 0
+  failed_when: _firewall_nonscope_tcp.rc == 0
   become: true
 
-- name: _verify_input | INPUT — nut (3493/tcp) rejected from non-scope source
-  command: >
-    ip netns exec extns curl --interface {{ _firewall_probe_nonscope }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ service_ports.nut }}/
-  register: _firewall_input_nut_nonscope
+# --- podman-source positives -----------------------------------------
+# Aardvark accepts both the default bridge and named-bridge pool; NUT accepts
+# the named pool used by Home Assistant.
+- name: _verify_input | INPUT — aardvark-dns reachable from podman source ranges
+  command:
+    argv:
+      - ip
+      - netns
+      - exec
+      - extns
+      - nc
+      - -u
+      - -w
+      - "1"
+      - -s
+      - "{{ item.source }}"
+      - 192.0.2.1
+      - "5333"
+    stdin: .
+  loop:
+    - { label: default bridge, source: "{{ _firewall_probe_podman }}" }
+    - { label: named bridge pool, source: "{{ _firewall_probe_podman_pool }}" }
+  loop_control:
+    label: "{{ item.label }}"
   changed_when: false
-  failed_when: _firewall_input_nut_nonscope.rc == 0
-  become: true
-
-# --- probe_podman group (default-bridge-source positives) ------------
-# Container DNS (5333 aardvark) — consumers live on the default podman
-# bridge, so positive probes source-bind from probe_podman (in
-# $PODMAN_DEFAULT). nc -u sends a single UDP packet source-bound to the
-# alias; the named counter is the assertion.
-- name: _verify_input | Bind probe_podman on extns veth (default-bridge-source probes)
-  command: ip -n extns addr replace {{ _firewall_probe_podman }}/32 dev veth_ext
-  changed_when: true
-  become: true
-
-- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman }} 192.0.2.1 5333
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-# --- probe_podman_pool group (non-default-bridge-source positives) ---
-# Cross-bridge regression: aardvark-dns binds the gateway IP of every
-# dns-enabled named bridge (mosquitto, …), all carved out of
-# netavark's 10.89.0.0/16 default_subnet_pools[0] base. A previous
-# saddr-scoped rule covered only podman_default_network and the
-# catch-all UDP reject killed every cross-bridge container-name lookup
-# (z2m → mosquitto) before aardvark saw it. HA's
-# NUT integration is the other consumer from this subnet, matching
-# the separate `ip saddr $PODMAN_POOL tcp dport 3493 accept` rule.
-- name: _verify_input | Bind probe_podman_pool on extns veth (non-default-bridge-source probes)
-  command: ip -n extns addr replace {{ _firewall_probe_podman_pool }}/32 dev veth_ext
-  changed_when: true
   become: true
 
 - name: _verify_input | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_podman_pool }}
-      --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:3493/
-  register: _firewall_input_nut_podman_pool
+    --connect-timeout 3 --max-time 5 -sf
+    http://192.0.2.1:{{ service_ports.nut }}/
+  register: _firewall_podman_pool_nut
   changed_when: false
-  failed_when: _firewall_input_nut_podman_pool.rc != 0 or 'firewall-verify-ok' not in _firewall_input_nut_podman_pool.stdout
-  become: true
-
-- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source  # noqa: risky-shell-pipe
-  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ _firewall_probe_podman_pool }} 192.0.2.1 5333
-  args: { executable: /bin/bash }
-  changed_when: false
+  failed_when: _firewall_podman_pool_nut.rc != 0 or 'firewall-verify-ok' not in _firewall_podman_pool_nut.stdout
   become: true
 
 # VRRP and mDNS still need structural checks: the harness can't

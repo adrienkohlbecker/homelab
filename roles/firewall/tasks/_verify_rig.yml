@@ -54,11 +54,9 @@
   changed_when: true
   become: true
 
-# Configure the probe interfaces created by _setup.yml. Probe-group
-# secondary aliases are added in
-# _verify_input.yml via `Bind probe_X` tasks at the head of each
-# group. Host /32 routes back via wg0 are declared once here
-# (idempotent), regardless of which source is active in the netns.
+# Configure the probe interfaces created by _setup.yml. Representative
+# source aliases and their host return routes live together here; probe
+# tasks select the source explicitly with curl/nc.
 - name: _verify_rig | Configure probe netns
   shell: |
     set -euo pipefail
@@ -81,6 +79,10 @@
     ip addr replace 192.0.2.1/24 dev wg0
     ip link set wg0 up
     ip -n extns addr replace {{ _firewall_probe_nonscope }}/24 dev veth_ext
+    ip -n extns addr replace {{ _firewall_probe_home }}/32 dev veth_ext
+    ip -n extns addr replace {{ _firewall_probe_wg }}/32 dev veth_ext
+    ip -n extns addr replace {{ _firewall_probe_podman }}/32 dev veth_ext
+    ip -n extns addr replace {{ _firewall_probe_podman_pool }}/32 dev veth_ext
     ip -n extns link set veth_ext up
     ip addr replace 100.64.99.1/24 dev tailscale0
     ip link set tailscale0 up

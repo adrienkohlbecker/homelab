@@ -13,14 +13,10 @@
 # 10.99.0.0/24 rig broke on EC2 cells whose VPC subnet was exactly
 # that /24 (the ENI's subnet route hijacked the probe replies).
 #
-# extns starts with only the non-scope primary (192.0.2.2/24) on
-# veth_ext. The four representative-subnet sources are bound per
-# probe-group in _verify_input.yml via `ip -n extns addr replace
-# probe_X/32 …` tasks so each group's source is visible at its call
-# site rather than preconfigured. /32 host routes back via wg0 are
-# declared once at netns setup (idempotent, and replies still need
-# to land on wg0 regardless of which source is active). Aliases
-# derived from group_vars via ipmath(250) — offset 250 keeps each
+# extns carries one alias for each representative source range; probe
+# matrices select the source explicitly with curl/nc. Matching /32 host
+# routes return through wg0. Aliases derive from group_vars via
+# ipmath(250) — offset 250 keeps each
 # address outside netavark's bottom-up auto-allocation range while
 # staying inside the subnet (assumes /24-or-bigger; smaller prefixes
 # overflow silently).
