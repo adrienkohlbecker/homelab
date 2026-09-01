@@ -192,32 +192,6 @@
   tags:
     - adguard
 
-- name: Create logind conf.d directory
-  file:
-    dest: /etc/systemd/logind.conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - adguard
-
-- name: Extend logind inhibitor delay for the reboot guard
-  copy:
-    content: |
-      [Login]
-      InhibitDelayMaxSec=300
-    dest: /etc/systemd/logind.conf.d/adguard_reboot_guard.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
-  become: true
-  tags:
-    - adguard
-
 - name: Install DNS reboot guard script
   template:
     src: adguard_reboot_guard.j2

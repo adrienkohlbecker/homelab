@@ -23,6 +23,15 @@
     - keepalived
     - adguard
 
+- name: Remove retired AdGuard inhibitor delay override
+  file:
+    path: /etc/systemd/logind.conf.d/adguard_reboot_guard.conf
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - adguard
+
 - name: Remove retired logrotate conffile diversions
   community.general.dpkg_divert:
     path: "{{ item }}"
