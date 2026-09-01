@@ -43,57 +43,49 @@
   failed_when: kdump_verify_nmi_watchdog_timer.status.UnitFileState != 'enabled'
   become: true
 
-# Reboot so the post-reboot checks below test the kernel the cmdline write
-# actually selected. aarch64 boots with the staged rEFInd EFI-stub cmdline, so
-# the crashkernel= write would not reach the running kernel; skip the reboot
-# there.
-- name: _verify | Reboot to exercise crashkernel reservation
-  import_role:
-    name: reboot
-    tasks_from: reboot
+- name: _verify | Exercise post-reboot kdump state
   when: ansible_architecture != 'aarch64'
+  block:
+    # The aarch64 fixture uses a staged rEFInd EFI-stub command line, so the
+    # ZBM crashkernel write cannot reach the running kernel after reboot.
+    - name: _verify | Reboot to exercise crashkernel reservation
+      import_role:
+        name: reboot
+        tasks_from: reboot
 
-- name: _verify | Crashkernel reservation is non-zero post-reboot
-  when: ansible_architecture != 'aarch64'
-  command: cat /sys/kernel/kexec_crash_size
-  register: kdump_verify_kexec_size
-  changed_when: false
-  failed_when: (kdump_verify_kexec_size.stdout | trim | int) == 0
-  become: true
+    - name: _verify | Crashkernel reservation is non-zero post-reboot
+      command: cat /sys/kernel/kexec_crash_size
+      register: kdump_verify_kexec_size
+      changed_when: false
+      failed_when: (kdump_verify_kexec_size.stdout | trim | int) == 0
+      become: true
 
-# kdump-tools regenerates the capture-kernel initrd and kexec-loads it on
-# each start, so right after the reboot it sits in `activating` (is-active
-# rc 3) for tens of seconds. Retry until it settles rather than racing it.
-- name: _verify | Kdump-tools.service is active post-reboot  # noqa: command-instead-of-module
-  when: ansible_architecture != 'aarch64'
-  command: systemctl is-active kdump-tools
-  register: kdump_verify_active
-  changed_when: false
-  retries: 30
-  delay: 4
-  until: kdump_verify_active.stdout | trim == 'active'
-  failed_when: kdump_verify_active.stdout | trim != 'active'
-  become: true
+    # kdump-tools regenerates the capture-kernel initrd and kexec-loads it on
+    # each start, so wait for the service to settle after reboot.
+    - name: _verify | Kdump-tools.service is active post-reboot  # noqa: command-instead-of-module
+      command: systemctl is-active kdump-tools
+      register: kdump_verify_active
+      changed_when: false
+      retries: 30
+      delay: 4
+      until: kdump_verify_active.stdout | trim == 'active'
+      failed_when: kdump_verify_active.stdout | trim != 'active'
+      become: true
 
-- name: _verify | Kdump-config show reports ready to kdump
-  when: ansible_architecture != 'aarch64'
-  command: kdump-config show
-  register: kdump_verify_config
-  changed_when: false
-  failed_when: "'ready to kdump' not in kdump_verify_config.stdout"
-  become: true
+    - name: _verify | Kdump-config show reports ready to kdump
+      command: kdump-config show
+      register: kdump_verify_config
+      changed_when: false
+      failed_when: "'ready to kdump' not in kdump_verify_config.stdout"
+      become: true
 
-# Cross-package contract: with apport purged, no boot-time service
-# should re-chmod /var/crash to 1777. Stat post-reboot rather than
-# at converge time so we'd catch any future kdump-tools postinst /
-# tmpfiles.d entry that resets perms across a reboot.
-- name: _verify | /var/crash perms survive reboot
-  when: ansible_architecture != 'aarch64'
-  stat:
-    path: /var/crash
-  register: kdump_verify_crash_dir
-  failed_when: >-
-    kdump_verify_crash_dir.stat.mode != '0750'
-    or kdump_verify_crash_dir.stat.pw_name != 'root'
-    or kdump_verify_crash_dir.stat.gr_name != 'root'
-  become: true
+    # Verify no package resets the protected crash directory across reboot.
+    - name: _verify | /var/crash perms survive reboot
+      stat:
+        path: /var/crash
+      register: kdump_verify_crash_dir
+      failed_when: >-
+        kdump_verify_crash_dir.stat.mode != '0750'
+        or kdump_verify_crash_dir.stat.pw_name != 'root'
+        or kdump_verify_crash_dir.stat.gr_name != 'root'
+      become: true
