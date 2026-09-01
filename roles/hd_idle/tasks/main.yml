@@ -23,12 +23,8 @@
   tags:
     - hd_idle
 
-# Noble ships hd-idle 1.05 (C), a forking daemon with no PIDFile that
-# systemd's Type=forking unit tracks unreliably under rapid restarts —
-# breaking idempotence. Override it to foreground/Type=simple (rationale in
-# files/hd-idle-override.conf). Must land before the service start below so
-# the unit comes up as Type=simple. Gated to the C-version releases; the Go
-# rewrite (resolute+) has a proper Type=simple unit already.
+# Install before service start so Noble uses the foreground drop-in immediately.
+# The helper condition leaves Resolute's native Type=simple unit untouched.
 - name: Run hd-idle in the foreground (noble fork-tracking race)
   import_role:
     name: systemd_unit
