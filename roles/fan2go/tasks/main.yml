@@ -322,3 +322,17 @@
            or fan2go_binary_build.changed | default(false) }}
   tags:
     - fan2go
+
+- name: Verify fan2go API reports configured fans
+  when:
+    - fan2go_enabled
+    - not ansible_check_mode
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.fan2go_api }}/fan"
+    return_content: true
+  register: fan2go_api
+  failed_when: >-
+    fan2go_api.status | default(0) != 200
+    or fan2go_api.json | default({}) | length == 0
+  tags:
+    - fan2go
