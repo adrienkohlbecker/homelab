@@ -113,7 +113,6 @@
   become: true
   tags:
     - cleanup
-    - hwe_kernel
 
 # `apt purge snapd` only removes dpkg-tracked files; the runtime
 # data roots survive as orphaned trees (multi-MB to multi-GB),
