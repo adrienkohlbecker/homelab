@@ -397,11 +397,6 @@
       # it doesn't fall through to connect-src/frame-src/img-src via
       # default-src.
       csp_additional: "script-src www.gstatic.com {{ nginx_csp_default }}"
-      # Slowloris defense on the upload paths: with proxy_request_buffering
-      # off, nginx hands bytes upstream as they arrive — without body/header
-      # timeouts a 1-byte/sec PUT can pin a worker for proxy_read_timeout
-      # (300s here) per connection. nginx's defaults are 60s; tighten the
-      # body side since 30s is plenty for a 20m upload over LAN.
       location_conf: |
         # Jellyfin's reverse-proxy guide recommends 20M for plugin
         # uploads and custom poster art.
@@ -410,17 +405,10 @@
         # jellyfin's own nginx guide says off. The upstream still streams
         # to the client; nginx just stops trying to spool full chunks.
         proxy_buffering off;
-        # Match proxy_buffering off on the request side — plugin/poster
-        # uploads stream directly upstream instead of spooling to
-        # /var/lib/nginx/body/ first.
-        proxy_request_buffering off;
         # 4K HEVC transcode cold-starts routinely exceed the default 60s
         # before the first segment leaves ffmpeg; bump the read timeout so
         # nginx doesn't kill the first request while the backend is alive.
         proxy_read_timeout 300s;
-      server_conf: |
-        client_body_timeout 30s;
-        client_header_timeout 10s;
   tags:
     - jellyfin
 
