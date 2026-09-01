@@ -1,72 +1,16 @@
-# The same nobody account exercises both sides of the group boundary: without
-# an override it is an outsider, while -G homelab_ci gives its process the
-# publisher group. The operator and nobody remain distinct file-owning UIDs.
-#
-# The probe creates under umask 077 and never passes an explicit mode. That is
-# what puts the default ACL under test: with it, the kernel ignores the umask
-# and the new objects inherit group rwx; without it the umask applies, the
-# group gets nothing, and the second publisher's steps below fail. Passing
-# `install -m 0770` here would set the group bits directly and pass either way.
+# Creating without an explicit mode makes the default ACL, rather than chmod,
+# responsible for granting the second publisher access despite umask 077.
 - name: _verify | Cross-publisher artifact access works
+  shell: |
+    set -euo pipefail
+    probe=/mnt/scratch/homelab_ci/.cross_publisher_probe
+    trap "rm -rf ${probe}" EXIT
+
+    runuser -u {{ ansible_user_id }} -- sh -c "umask 077; mkdir ${probe} && touch ${probe}/artifact"
+    ! runuser -u nobody -- test -r "${probe}/artifact"
+    runuser -u nobody -G homelab_ci -- test -r "${probe}/artifact"
+    runuser -u nobody -G homelab_ci -- rm -r "${probe}"
+  args:
+    executable: /bin/bash
   become: true
-  block:
-    - name: _verify | Operator creates a group-managed artifact tree
-      command:
-        argv:
-          - runuser
-          - -u
-          - "{{ ansible_user_id }}"
-          - --
-          - sh
-          - -c
-          - >-
-            umask 077;
-            mkdir /mnt/scratch/homelab_ci/.cross_publisher_probe &&
-            touch /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
-      changed_when: true
-
-    - name: _verify | Non-member cannot reach the operator artifact
-      command:
-        argv:
-          - runuser
-          - -u
-          - nobody
-          - --
-          - test
-          - "!"
-          - -r
-          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
-      changed_when: false
-
-    - name: _verify | Second publisher can read the operator artifact
-      command:
-        argv:
-          - runuser
-          - -u
-          - nobody
-          - -G
-          - homelab_ci
-          - --
-          - test
-          - -r
-          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
-      changed_when: false
-
-    - name: _verify | Second publisher can remove the operator artifact tree
-      command:
-        argv:
-          - runuser
-          - -u
-          - nobody
-          - -G
-          - homelab_ci
-          - --
-          - rm
-          - -r
-          - /mnt/scratch/homelab_ci/.cross_publisher_probe
-      changed_when: true
-  always:
-    - name: _verify | Remove the cross-publisher probe
-      file:
-        path: /mnt/scratch/homelab_ci/.cross_publisher_probe
-        state: absent
+  changed_when: true
