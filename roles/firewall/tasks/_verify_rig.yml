@@ -84,19 +84,6 @@
   changed_when: true
   become: true
 
-# TCP listeners aren't bound for INPUT probes any more — every TCP
-# accept rule carries a named counter and the assertion block in
-# _verify_counters.yml checks each counter incremented (positive
-# cases) or stayed at 0 (negative cases). Without a listener, a
-# positive probe gets RST from the kernel and curl exits non-zero;
-# we drive that via `failed_when: false` because the load-bearing
-# signal is the counter, not the rc. Trade-off: per-probe granularity
-# is lost (multiple positives merge into a single >= 1 assertion),
-# and a regression that breaks just one of N positive paths won't
-# surface as long as another still fires the same counter. The
-# busybox httpd above stays because the DNAT body-grep probe asserts
-# the response payload, which a counter alone cannot prove.
-
 # Bring up the extns netns + wg0 veth with only the non-scope primary
 # on veth_ext. Probe-group secondary aliases are added in
 # _verify_input.yml via `Bind probe_X` tasks at the head of each
