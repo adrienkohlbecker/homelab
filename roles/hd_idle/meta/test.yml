@@ -1,6 +1,3 @@
-# Release-divergent: noble ships hd-idle 1.05 (C, forking daemon) and takes
-# the foreground-run + HD_IDLE_OPTS workaround; resolute+ ships the Go rewrite
-# (Type=simple, START_HD_IDLE handling) and takes the native path. resolute is
-# the only release that diverges from the noble default cell.
+# Exercise Resolute's native Go service alongside Noble's foreground drop-in.
 ubuntu:
   - resolute
