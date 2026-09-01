@@ -79,8 +79,8 @@ cloud_init_managed: false
 #                  targets where mid-write spindown is harmful and
 #                  spin-up during use is expected.
 #   links.ids      skip drives udev didn't surface a /dev/disk/by-id/
-#                  link for (no stable identifier surfaced; the gap is
-#                  surfaced at apply time by roles/hdparm/tasks/netdata.yml).
+#                  link for; neither consumer can address them safely without
+#                  a stable identifier.
 # Per-drive ID:    `links.ids | sort | first` so the chosen ID is
 #                  stable even if udev returns the symlink list in a
 #                  different order between reboots.

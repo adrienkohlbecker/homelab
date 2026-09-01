@@ -2,12 +2,6 @@
 # charts.d emits a per-drive power-state chart directly into netdata's
 # own chart registry (no prometheus-text round-trip).
 
-# `charts_d_hdparm.conf.j2` populates hdparm_disks from ansible_devices'
-# rotational drives, taking the first `links.ids` entry. A drive with an
-# empty `links.ids` (USB enclosures whose vendor strings udev rejects,
-# brand-new disks before symlinks settle) silently drops from the
-# collector — surface it at apply time so the operator can see N drives
-# in `lsblk` but N-1 in netdata isn't a mystery.
 # hdparm-the-binary has cap_sys_rawio=ep (main.yml), but that grants
 # the ioctl, not the file open. /dev/sdX is mode 660 root:disk on
 # Debian, so opening the device as the netdata user fails with EACCES
@@ -33,21 +27,6 @@
     name: netdata
     state: restarted
   become: true
-  tags:
-    - hdparm
-
-- name: Detect rotational drives missing /dev/disk/by-id symlinks
-  vars:
-    # Mirror group_vars/all.yml's rotational_disks_by_id filter chain
-    # so a drive correctly excluded by the master selector (USB-
-    # removable target, kernel pseudo-block-device) isn't loudly
-    # flagged here as "dropped from hdparm". Diverges only on the
-    # `links.ids` axis (reject vs select) -- that's the whole point
-    # of the diagnostic.
-    _rot_no_id: "{{ ansible_devices | dict2items | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)') | selectattr('value.rotational', 'equalto', '1') | selectattr('value.removable', 'equalto', '0') | rejectattr('value.links.ids') | map(attribute='key') | list }}"
-  debug:
-    msg: "Rotational drives dropped from hdparm collector (no /dev/disk/by-id symlink): {{ _rot_no_id }}"
-  when: _rot_no_id | length > 0
   tags:
     - hdparm
 
