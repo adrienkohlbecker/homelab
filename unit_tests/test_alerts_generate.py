@@ -30,34 +30,23 @@ ag = _load()
 
 
 class TestParseHosts:
-    def test_name_url_format(self) -> None:
-        result = ag.parse_hosts("lab=http://localhost:19999")
-        assert result == [("lab", "http://localhost:19999")]
-
-    def test_multiple_hosts(self) -> None:
-        result = ag.parse_hosts("lab=http://a,pug=https://b")
-        assert len(result) == 2
-        assert result[0][0] == "lab"
-        assert result[1][0] == "pug"
-
-    def test_strips_trailing_slash(self) -> None:
-        result = ag.parse_hosts("lab=https://b/")
-        assert result[0][1] == "https://b"
-
-    def test_empty_string(self) -> None:
-        assert ag.parse_hosts("") == []
-
-    def test_blank_entries_skipped(self) -> None:
-        result = ag.parse_hosts(",lab=http://a,,")
-        assert len(result) == 1
-
-    def test_url_with_equals(self) -> None:
-        result = ag.parse_hosts("lab=https://cloud.netdata.cloud/spaces?id=1")
-        assert result[0][1] == "https://cloud.netdata.cloud/spaces?id=1"
-
-    def test_whitespace_stripped(self) -> None:
-        result = ag.parse_hosts("  lab = http://a  ")
-        assert result[0] == ("lab", "http://a")
+    @pytest.mark.parametrize(
+        ("spec", "expected"),
+        [
+            ("lab=http://localhost:19999", [("lab", "http://localhost:19999")]),
+            ("lab=http://a,pug=https://b", [("lab", "http://a"), ("pug", "https://b")]),
+            ("lab=https://b/", [("lab", "https://b")]),
+            ("", []),
+            (",lab=http://a,,", [("lab", "http://a")]),
+            (
+                "lab=https://cloud.netdata.cloud/spaces?id=1",
+                [("lab", "https://cloud.netdata.cloud/spaces?id=1")],
+            ),
+            ("  lab = http://a  ", [("lab", "http://a")]),
+        ],
+    )
+    def test_valid_entries(self, spec: str, expected: list[tuple[str, str]]) -> None:
+        assert ag.parse_hosts(spec) == expected
 
     @pytest.mark.parametrize("spec", ["lab", "=https://netdata.lab", "lab="])
     def test_malformed_entry_rejected(self, spec: str) -> None:
@@ -319,27 +308,21 @@ class TestAlarmHref:
 
 
 class TestHumanizeDelta:
-    def test_just_now(self) -> None:
-        assert ag._humanize_delta(10) == "just now"
-        assert ag._humanize_delta(-10) == "just now"
-
-    def test_minutes(self) -> None:
-        assert ag._humanize_delta(300) == "5m ago"
-
-    def test_hours(self) -> None:
-        assert ag._humanize_delta(7200) == "2h ago"
-
-    def test_days(self) -> None:
-        assert ag._humanize_delta(86400 * 3) == "3d ago"
-
-    def test_months(self) -> None:
-        assert ag._humanize_delta(86400 * 60) == "2mo ago"
-
-    def test_years(self) -> None:
-        assert ag._humanize_delta(86400 * 400) == "1y ago"
-
-    def test_from_now(self) -> None:
-        assert ag._humanize_delta(-300) == "5m from now"
+    @pytest.mark.parametrize(
+        ("seconds", "expected"),
+        [
+            (10, "just now"),
+            (-10, "just now"),
+            (300, "5m ago"),
+            (7200, "2h ago"),
+            (86400 * 3, "3d ago"),
+            (86400 * 60, "2mo ago"),
+            (86400 * 400, "1y ago"),
+            (-300, "5m from now"),
+        ],
+    )
+    def test_formats_delta(self, seconds: float, expected: str) -> None:
+        assert ag._humanize_delta(seconds) == expected
 
 
 # ---------------------------------------------------------------------------
