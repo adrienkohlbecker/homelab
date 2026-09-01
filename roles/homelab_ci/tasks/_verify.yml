@@ -1,18 +1,6 @@
-- name: _verify | Create a second CI publisher
-  user:
-    name: homelab_ci_verify
-    groups:
-      - homelab_ci
-    append: true
-    create_home: false
-    shell: /usr/sbin/nologin
-    state: present
-    system: true
-  become: true
-
-# runuser starts fresh processes with supplementary groups from the account
-# database, so three identities exercise the real contract: two publishers must
-# be able to manage each other's trees, and a non-member must not see them.
+# The same nobody account exercises both sides of the group boundary: without
+# an override it is an outsider, while -G homelab_ci gives its process the
+# publisher group. The operator and nobody remain distinct file-owning UIDs.
 #
 # The probe creates under umask 077 and never passes an explicit mode. That is
 # what puts the default ACL under test: with it, the kernel ignores the umask
@@ -56,7 +44,9 @@
         argv:
           - runuser
           - -u
-          - homelab_ci_verify
+          - nobody
+          - -G
+          - homelab_ci
           - --
           - test
           - -r
@@ -68,7 +58,9 @@
         argv:
           - runuser
           - -u
-          - homelab_ci_verify
+          - nobody
+          - -G
+          - homelab_ci
           - --
           - rm
           - -r
@@ -79,9 +71,3 @@
       file:
         path: /mnt/scratch/homelab_ci/.cross_publisher_probe
         state: absent
-
-    - name: _verify | Remove the second CI publisher
-      user:
-        name: homelab_ci_verify
-        state: absent
-        remove: false
