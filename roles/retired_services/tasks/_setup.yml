@@ -5,6 +5,17 @@
     divert: /etc/logrotate.d/apt.dpkg-dist
   become: true
 
+- name: _setup | Install retired kdump oops panic sysctl pin
+  copy:
+    dest: /etc/sysctl.d/30-kdump.conf
+    content: |
+      kernel.panic_on_oops=1
+      kernel.panic=10
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Install active and package logrotate fixtures
   copy:
     dest: "{{ item.path }}"

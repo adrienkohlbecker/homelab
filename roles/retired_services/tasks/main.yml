@@ -100,6 +100,17 @@
     - retired_services
     - kdump
 
+- name: Remove retired kdump oops panic sysctl pin
+  ansible.posix.sysctl:
+    name: kernel.panic_on_oops
+    state: absent
+    sysctl_file: /etc/sysctl.d/30-kdump.conf
+    reload: false
+  become: true
+  tags:
+    - retired_services
+    - kdump
+
 - name: Remove retired podman socket drop-in
   import_role:
     name: systemd_unit
