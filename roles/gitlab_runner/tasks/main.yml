@@ -36,6 +36,17 @@
           homelab-ci-fleeting manager user, and vault the token/key values
           before enabling the runner in prod.
 
+    - name: Assert the Docker executor memory cap is set
+      when: gitlab_runner_executor == 'docker'
+      assert:
+        that:
+          - gitlab_runner_memory_high | default('') | length > 0
+          - gitlab_runner_memory_max | default('') | length > 0
+        fail_msg: >-
+          Docker executor hosts must set gitlab_runner_memory_high and
+          gitlab_runner_memory_max so the rootless job tree cannot exhaust
+          host memory.
+
     # _site_test reuses the main AWS plugin and credential profile.
     - name: Assert the AWS qemu site runner inputs are set
       when: gitlab_runner_aws_qemu_site_enabled | default(false)
@@ -325,20 +336,16 @@
             systemd_unit_args:
               src: slice-memory.conf.j2
               for: "{{ _gitlab_runner_slice }}"
-              condition: >-
-                {{ gitlab_runner_executor == 'docker'
-                   and (gitlab_runner_memory_max | default('') | length > 0) }}
+              condition: "{{ gitlab_runner_executor == 'docker' }}"
 
-        - name: Remove the runner user-slice memory cap when unconfigured
+        - name: Remove the runner user-slice memory cap from non-Docker executors
           import_role:
             name: systemd_unit
             tasks_from: remove
           vars:
             systemd_unit_args:
               for: "{{ _gitlab_runner_slice }}"
-              condition: >-
-                {{ gitlab_runner_executor != 'docker'
-                   or (gitlab_runner_memory_max | default('') | length == 0) }}
+              condition: "{{ gitlab_runner_executor != 'docker' }}"
 
         - name: Remove the legacy runner user-slice memory cap
           file:

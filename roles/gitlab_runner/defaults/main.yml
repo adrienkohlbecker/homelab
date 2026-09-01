@@ -16,13 +16,6 @@ gitlab_runner_limit: 0
 # needs kvm for /dev/kvm and homelab_ci for /mnt/scratch/homelab_ci.
 gitlab_runner_extra_groups: []
 
-# The Docker job tree lives under user-<uid>.slice, so its optional host-sized
-# cap bounds the runner and every rootless container together. Empty max removes
-# the cap; set the soft MemoryHigh below the hard MemoryMax. See
-# notes/ci_aws_nested_qemu_cells.md.
-gitlab_runner_memory_high: ""
-gitlab_runner_memory_max: ""
-
 # ── AWS qemu runner (instance / fleeting) ───────────────────────────────────
 # Instance executor that scales an ASG from zero and runs the qemu harness on
 # nested-KVM hosts. Capacity starts at one job on one host.

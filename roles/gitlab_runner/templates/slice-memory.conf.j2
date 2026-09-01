@@ -3,7 +3,5 @@
 # Bounds the rootless Docker job tree. See defaults/main.yml and
 # notes/ci_aws_nested_qemu_cells.md.
 [Slice]
-{% if gitlab_runner_memory_high | default('') | length > 0 %}
 MemoryHigh={{ gitlab_runner_memory_high }}
-{% endif %}
 MemoryMax={{ gitlab_runner_memory_max }}
