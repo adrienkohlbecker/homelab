@@ -36,7 +36,6 @@ import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 FETCH_TIMEOUT = 5
-MAX_FETCH_WORKERS = 8
 # Look back far enough to find the current transition for every active alert.
 ALERT_TRANSITIONS_WINDOW = 7 * 24 * 3600
 
@@ -72,22 +71,6 @@ STATUS_ICONS = {
         '0-1.75.875.875 0 0 0 0 1.75Z" clip-rule="evenodd"/></svg>'
     ),
 }
-
-
-def parse_hosts(spec: str) -> list[tuple[str, str]]:
-    """Parse comma-separated `name=url` entries from `NETDATA_HOSTS`."""
-    out = []
-    for chunk in spec.split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        name, separator, url = chunk.partition("=")
-        name = name.strip()
-        url = url.strip()
-        if not separator or not name or not url:
-            raise ValueError(f"malformed NETDATA_HOSTS entry: {chunk!r}")
-        out.append((name, url.rstrip("/")))
-    return out
 
 
 class _HostClient:
@@ -247,16 +230,13 @@ def _fetch_one(name: str, url: str, authorization: str) -> dict:
     return entry
 
 
-def collect(hosts: list[tuple[str, str]], authorization: str) -> list[dict]:
+def collect(hosts: dict[str, str], authorization: str) -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
     # worst-case render is bounded by FETCH_TIMEOUT, not summed across hosts.
     # Iterating futures in submit order preserves the configured host order in
-    # the response. Cap at MAX_FETCH_WORKERS so a future operator adding 30
-    # hosts doesn't spawn 30 threads on a single run.
-    if not hosts:
-        return []
-    with ThreadPoolExecutor(max_workers=min(len(hosts), MAX_FETCH_WORKERS)) as pool:
-        futures = [pool.submit(_fetch_one, name, url, authorization) for name, url in hosts]
+    # the response.
+    with ThreadPoolExecutor() as pool:
+        futures = [pool.submit(_fetch_one, name, url, authorization) for name, url in hosts.items()]
         return [f.result() for f in futures]
 
 
@@ -423,10 +403,7 @@ def _atomic_write(path: pathlib.Path, content: str) -> None:
 
 
 def main() -> None:
-    hosts = parse_hosts(os.environ.get("NETDATA_HOSTS", ""))
-    if not hosts:
-        print("NETDATA_HOSTS is empty; refusing to run", file=sys.stderr)
-        sys.exit(1)
+    hosts = dict(entry.split("=", 1) for entry in os.environ["NETDATA_HOSTS"].split(","))
     password = pathlib.Path(__file__).with_name("authelia_password").read_text().strip()
     if not password:
         raise OSError("authelia_password is empty")

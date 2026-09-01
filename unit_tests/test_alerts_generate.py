@@ -1,7 +1,7 @@
 """Unit tests for roles/homepage/files/alerts_generate.py.
 
-Tests parsing, rendering, and the authenticated HTTP client without needing a
-running netdata instance.
+Tests rendering and the authenticated HTTP client without needing a running
+netdata instance.
 """
 
 import importlib.util
@@ -22,36 +22,6 @@ def _load():
 
 
 ag = _load()
-
-
-# ---------------------------------------------------------------------------
-# parse_hosts
-# ---------------------------------------------------------------------------
-
-
-class TestParseHosts:
-    @pytest.mark.parametrize(
-        ("spec", "expected"),
-        [
-            ("lab=http://localhost:19999", [("lab", "http://localhost:19999")]),
-            ("lab=http://a,pug=https://b", [("lab", "http://a"), ("pug", "https://b")]),
-            ("lab=https://b/", [("lab", "https://b")]),
-            ("", []),
-            (",lab=http://a,,", [("lab", "http://a")]),
-            (
-                "lab=https://cloud.netdata.cloud/spaces?id=1",
-                [("lab", "https://cloud.netdata.cloud/spaces?id=1")],
-            ),
-            ("  lab = http://a  ", [("lab", "http://a")]),
-        ],
-    )
-    def test_valid_entries(self, spec: str, expected: list[tuple[str, str]]) -> None:
-        assert ag.parse_hosts(spec) == expected
-
-    @pytest.mark.parametrize("spec", ["lab", "=https://netdata.lab", "lab="])
-    def test_malformed_entry_rejected(self, spec: str) -> None:
-        with pytest.raises(ValueError, match="malformed NETDATA_HOSTS entry"):
-            ag.parse_hosts(spec)
 
 
 # ---------------------------------------------------------------------------
