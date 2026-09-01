@@ -390,6 +390,59 @@
   tags:
     - retired_services
 
+- name: Remove hdparm Netdata files from diskless hosts
+  when: rotational_disks_by_id | length == 0
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/libexec/netdata/charts.d/hdparm.chart.sh
+    - /etc/netdata/charts.d/hdparm.conf
+    - /etc/netdata/health.d/hdparm.conf
+  register: retired_services_hdparm_netdata_files
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
+- name: Read disk group membership on diskless hosts
+  when: rotational_disks_by_id | length == 0
+  getent:
+    database: group
+    key: disk
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
+- name: Remove netdata from disk group on diskless hosts
+  when:
+    - rotational_disks_by_id | length == 0
+    - not ansible_check_mode
+    - "'netdata' in ansible_facts.getent_group.disk[2].split(',')"
+  command: gpasswd --delete netdata disk
+  register: retired_services_hdparm_disk_group
+  changed_when: true
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
+- name: Restart Netdata after diskless hdparm cleanup
+  when:
+    - rotational_disks_by_id | length == 0
+    - not ansible_check_mode
+    - >-
+      retired_services_hdparm_netdata_files.changed
+      or retired_services_hdparm_disk_group.changed | default(false)
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+  tags:
+    - retired_services
+    - hdparm
+
 - name: Remove retired Netdata conffile diversion
   community.general.dpkg_divert:
     path: /etc/netdata/netdata.conf

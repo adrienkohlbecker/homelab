@@ -76,6 +76,24 @@
   failed_when: retired_services_netdata_smartctl.stat.exists
   become: true
 
+- name: _verify | Hdparm Netdata files are absent on a diskless host
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/libexec/netdata/charts.d/hdparm.chart.sh
+    - /etc/netdata/charts.d/hdparm.conf
+    - /etc/netdata/health.d/hdparm.conf
+  register: retired_services_hdparm_netdata_files
+  failed_when: retired_services_hdparm_netdata_files.stat.exists
+  become: true
+
+- name: _verify | Netdata lacks disk-group privilege on a diskless host
+  command: id -nG netdata
+  register: retired_services_netdata_groups
+  changed_when: false
+  failed_when: "'disk' in retired_services_netdata_groups.stdout.split()"
+  become: true
+
 - name: _verify | Managed Netdata conffile was retained
   command: grep -Fx '# retained Netdata config' /etc/netdata/netdata.conf
   changed_when: false

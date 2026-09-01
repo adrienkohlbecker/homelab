@@ -200,13 +200,18 @@
     mode: "0644"
   become: true
 
-- name: _setup | Create legacy Netdata collector directory
+- name: _setup | Create legacy Netdata collector directories
   file:
-    path: /etc/netdata/go.d
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - /usr/libexec/netdata/charts.d
+    - /etc/netdata/charts.d
+    - /etc/netdata/go.d
+    - /etc/netdata/health.d
   become: true
 
 - name: _setup | Register retired Netdata conffile diversion
@@ -233,6 +238,26 @@
     owner: root
     group: root
     mode: "0644"
+  become: true
+
+- name: _setup | Create hdparm Netdata fixtures on a diskless host
+  copy:
+    content: "retired hdparm fixture\n"
+    dest: "{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - /usr/libexec/netdata/charts.d/hdparm.chart.sh
+    - /etc/netdata/charts.d/hdparm.conf
+    - /etc/netdata/health.d/hdparm.conf
+  become: true
+
+- name: _setup | Add netdata to disk group on a diskless host
+  user:
+    name: netdata
+    groups: disk
+    append: true
   become: true
 
 - name: _setup | Register legacy smartmontools defaults diversion

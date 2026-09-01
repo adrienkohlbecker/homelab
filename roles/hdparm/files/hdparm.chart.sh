@@ -26,8 +26,6 @@ hdparm_disks=()
 declare -A _hdparm_safe_ids=()
 
 hdparm_check() {
-  # An empty fleet-wide config is valid; configured disks require hdparm.
-  [ "${#hdparm_disks[@]}" -eq 0 ] && return 0
   require_cmd hdparm || return 1
 }
 

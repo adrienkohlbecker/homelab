@@ -30,43 +30,6 @@
 - name: _verify | Install hdparm netdata collector
   import_tasks: netdata.yml
 
-# The collector is installed fleet-wide (roles/netdata/tasks/metrics.yml)
-# while the hdparm binary is only installed where the hdparm role is in
-# play -- so on a diskless host without the binary (fox), check() must
-# stay quiet: empty disk list means nothing to poll, and the missing binary is
-# only an error once drives are configured. Exercise both arms with the
-# charts.d dependency-helper contract and a PATH that hides every hdparm.
-- name: _verify | Check() is quiet with no disks and loud with disks but no binary
-  shell: |
-    set -euo pipefail
-    error() { echo "chartsd-error: $*" >&2; }
-    require_cmd() {
-      command -v "$1" >/dev/null 2>&1 || {
-        error "missing required command: $1"
-        return 1
-      }
-    }
-    source /usr/libexec/netdata/charts.d/hdparm.chart.sh
-    PATH=/usr/bin
-    hdparm_disks=()
-    diagnostic=$(hdparm_check 2>&1)
-    if [ -n "$diagnostic" ]; then
-      echo "empty disk list emitted a diagnostic: $diagnostic" >&2
-      exit 1
-    fi
-    hdparm_disks=(_verify_ghost)
-    if diagnostic=$(hdparm_check 2>&1); then
-      echo "check() passed despite configured disks and a missing hdparm binary" >&2
-      exit 1
-    fi
-    if [[ "$diagnostic" != *hdparm* ]]; then
-      echo "missing-binary diagnostic did not identify hdparm: $diagnostic" >&2
-      exit 1
-    fi
-  args:
-    executable: /bin/bash
-  changed_when: false
-
 # The hdparm_drive_active alert calc references $zfs_scan.any_in_progress.active
 # (so multi-hour ZFS scrubs don't pin it at crit). On a host where the
 # referenced chart never registers, the calc is NaN and the alert is

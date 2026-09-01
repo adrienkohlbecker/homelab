@@ -16,6 +16,7 @@
     - netdata
 
 - name: Install hdparm metrics
+  when: rotational_disks_by_id | length > 0
   import_role:
     name: hdparm
     tasks_from: netdata
