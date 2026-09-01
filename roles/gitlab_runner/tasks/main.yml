@@ -103,7 +103,6 @@
 
     # The checksum drives version replacement and verifies the download.
     - name: Download gitlab-runner binary
-      when: not ansible_check_mode or gitlab_runner_user.uid is defined
       get_url:
         url: "{{ gitlab_runner_archive[ansible_architecture].url }}"
         dest: /usr/local/bin/gitlab-runner
@@ -117,9 +116,7 @@
 
     # The instance executor resolves this plugin by PATH name.
     - name: Download fleeting-plugin-aws binary
-      when:
-        - gitlab_runner_aws_qemu_enabled
-        - not ansible_check_mode or gitlab_runner_user.uid is defined
+      when: gitlab_runner_aws_qemu_enabled
       get_url:
         url: "{{ gitlab_runner_fleeting_aws_archive[ansible_architecture].url }}"
         dest: /usr/local/bin/fleeting-plugin-aws
