@@ -13,8 +13,9 @@ Requires=zfs_mount_mnt_services.service
 {% endif %}
 {% endif %}
 # Deliberately NOT PartOf=zfs_autosnapshot.target. The nightly snapshot
-# quiesces stateful services, but homepage has no writable state -- its only
-# mount is /mnt/services/homepage:/app/config:ro. Quiescing buys nothing.
+# quiesces stateful services, but homepage has no persistent writable state.
+# Its four managed configuration files are mounted read-only, so quiescing
+# buys nothing.
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
@@ -51,7 +52,10 @@ ExecStart=/usr/bin/podman run \
     --network homepage \
     --user 0:0 \
     {{ homepage_user | podman_idmap_args | join(" ") }} \
-    --volume /mnt/services/homepage:/app/config:ro \
+    --volume /mnt/services/homepage/services.yaml:/app/config/services.yaml:ro \
+    --volume /mnt/services/homepage/bookmarks.yaml:/app/config/bookmarks.yaml:ro \
+    --volume /mnt/services/homepage/settings.yaml:/app/config/settings.yaml:ro \
+    --volume /mnt/services/homepage/widgets.yaml:/app/config/widgets.yaml:ro \
     --tz={{ system_timezone }} \
     --env HOMEPAGE_ALLOWED_HOSTS=homepage.{{ inventory_hostname }}.{{ domain }},localhost:{{ service_ports.homepage }},localhost:3000 \
     --env LOG_TARGETS=stdout \

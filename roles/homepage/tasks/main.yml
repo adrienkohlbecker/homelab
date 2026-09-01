@@ -22,33 +22,6 @@
   tags:
     - homepage
 
-# The homepage container's Node entrypoint also `copyfile`'s the
-# integration configs (docker.yaml, kubernetes.yaml, proxmox.yaml,
-# custom.css, custom.js) from /app/src/skeleton/ into /app/config/
-# at startup whenever the target is missing. With /app/config :ro
-# the copyfile errors EROFS and the unit fails to start. Touch
-# each file so the entrypoint's "copy if absent" path no-ops.
-# force: false leaves any operator-edited content alone on prod
-# (those files preexist from before the :ro switch).
-- name: Touch homepage skeleton-seeded config files (entrypoint copyfile no-op)  # noqa: require-backup
-  when: not ansible_check_mode or homepage_user.uid is defined
-  copy:
-    content: ""
-    dest: "/mnt/services/homepage/{{ item }}"
-    force: false
-    owner: homepage
-    group: homepage
-    mode: "0644"
-  loop:
-    - docker.yaml
-    - kubernetes.yaml
-    - proxmox.yaml
-    - custom.css
-    - custom.js
-  become: true
-  tags:
-    - homepage
-
 - name: Create homepage podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
