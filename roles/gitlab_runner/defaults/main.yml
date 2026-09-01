@@ -12,10 +12,6 @@ gitlab_runner_concurrent: 8
 # this runner bounded only by `concurrent`.
 gitlab_runner_limit: 0
 
-# Supplementary groups for the gitlab_runner service user. lab's shell runner
-# needs kvm for /dev/kvm and homelab_ci for /mnt/scratch/homelab_ci.
-gitlab_runner_extra_groups: []
-
 # ── AWS qemu runner (instance / fleeting) ───────────────────────────────────
 # Instance executor that scales an ASG from zero and runs the qemu harness on
 # nested-KVM hosts. Capacity starts at one job on one host.

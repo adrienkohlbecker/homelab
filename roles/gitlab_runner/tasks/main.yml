@@ -68,7 +68,7 @@
       vars:
         service_user_args:
           name: gitlab_runner
-          extra_groups: "{{ gitlab_runner_extra_groups }}"
+          extra_groups: "{{ ['kvm', 'homelab_ci'] if gitlab_runner_executor == 'shell' else [] }}"
           # User-scope systemd writes below ~/.config; service_user creates the
           # directory while createhome remains off.
           home: /mnt/services/gitlab_runner

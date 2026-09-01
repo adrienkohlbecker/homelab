@@ -1,6 +1,7 @@
 # Recreate the prerequisites normally supplied by earlier site.yml layers.
 
 - name: _setup | Ensure shell-runner supplementary groups exist
+  when: gitlab_runner_executor == 'shell'
   group:
     name: "{{ item }}"
     state: present
@@ -18,7 +19,9 @@
   vars:
     service_user_args:
       name: gitlab_runner
-      extra_groups: "{{ gitlab_runner_extra_groups }}"
+      extra_groups:
+        - kvm
+        - homelab_ci
       home: /mnt/services/gitlab_runner
 
 - name: _setup | Seed stale Docker-executor subordinate IDs
