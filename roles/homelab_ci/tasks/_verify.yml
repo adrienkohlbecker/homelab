@@ -21,7 +21,7 @@
 # `install -m 0770` here would set the group bits directly and pass either way.
 - name: _verify | Cross-publisher artifact access works
   block:
-    - name: _verify | Operator creates a group-managed artifact directory
+    - name: _verify | Operator creates a group-managed artifact tree
       command:
         argv:
           - runuser
@@ -30,20 +30,10 @@
           - --
           - sh
           - -c
-          - umask 077; mkdir /mnt/scratch/homelab_ci/.cross_publisher_probe
-      changed_when: true
-      become: true
-
-    - name: _verify | Operator creates a group-managed artifact
-      command:
-        argv:
-          - runuser
-          - -u
-          - "{{ ansible_user_id }}"
-          - --
-          - sh
-          - -c
-          - umask 077; touch /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
+          - >-
+            umask 077;
+            mkdir /mnt/scratch/homelab_ci/.cross_publisher_probe &&
+            touch /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
       changed_when: true
       become: true
 
@@ -75,7 +65,7 @@
       changed_when: false
       become: true
 
-    - name: _verify | Second publisher can remove the operator artifact
+    - name: _verify | Second publisher can remove the operator artifact tree
       command:
         argv:
           - runuser
@@ -83,18 +73,7 @@
           - homelab_ci_verify
           - --
           - rm
-          - /mnt/scratch/homelab_ci/.cross_publisher_probe/artifact
-      changed_when: true
-      become: true
-
-    - name: _verify | Second publisher can remove the operator directory
-      command:
-        argv:
-          - runuser
-          - -u
-          - homelab_ci_verify
-          - --
-          - rmdir
+          - -r
           - /mnt/scratch/homelab_ci/.cross_publisher_probe
       changed_when: true
       become: true
