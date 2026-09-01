@@ -1,11 +1,5 @@
-# Runtime identity is ansible_user_id — the human reading the mail.
-# Implemented as a system-scope timer with User=ansible_user_id in the
-# service unit (via systemd_timer's run_as arg) rather than a
-# user-scope timer: every operation works via regular
-# systemctl/journalctl, netdata's systemdunits collector sees the
-# unit on the system bus, and there's a single permission/user-mapping
-# model to reason about. The maildir stays operator-owned (0700) so
-# the human can browse it without sudo.
+# Run the system-scope timer as the operator so regular systemctl/journalctl
+# and Netdata see it while the private Maildir stays browsable without sudo.
 - name: Validate required getmail inputs
   assert:
     quiet: true
@@ -52,12 +46,7 @@
     group: "{{ ansible_user_id }}"
     mode: "0600"
     backup: true
-    # Real parser (semantic shape, not just INI well-formedness) and
-    # removes the apostrophe-quoting hazard of the prior inline
-    # python3 -c '…' validator. getmail is installed by the first
-    # task in this file and the maildir is created by the task
-    # immediately above, so both prereqs are present by the time the
-    # template task fires.
+    # Use getmail's parser after installing the package and creating the Maildir.
     validate: /usr/bin/getmail --dump --rcfile %s --getmaildir /mnt/services/getmail
   tags:
     - getmail
@@ -70,18 +59,9 @@
     systemd_timer_args:
       name: getmail
       description: Fetch mail via getmail
-      # 00:10, in the compact early small-job cluster. The ~2min fetch is the
-      # longest of the small jobs and still finishes long before
-      # zfs_autosnapshot at 02:00.
       on_calendar: "*-*-* 00:10:00"
-      # --getmaildir co-locates oldmail-* state next to the maildir so a
-      # $HOME reset doesn't trigger a re-fetch of years of archive.
-      # OPERATOR NOTE: when invoking getmail manually from a shell for
-      # debugging, always pass --getmaildir /mnt/services/getmail too.
-      # `getmail --rcfile /mnt/services/getmail/getmailrc` alone writes
-      # oldmail-* to ~/.getmail/ (the default), splitting dedup state
-      # across two paths and triggering a partial re-fetch of the
-      # archive on first such run.
+      # Keep oldmail-* dedup state beside the archive. Manual runs must pass the
+      # same --getmaildir; the ~/.getmail default would split state and refetch.
       exec_start: >-
         /usr/bin/getmail
         --rcfile /mnt/services/getmail/getmailrc
