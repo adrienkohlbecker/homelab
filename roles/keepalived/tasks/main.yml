@@ -63,28 +63,6 @@
   tags:
     - keepalived
 
-- name: Remove the retired tenant configuration paths
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/keepalived/conf.d
-    - /etc/systemd/system/keepalived.service.d/override.conf
-  register: keepalived_tenant_paths
-  become: true
-  tags:
-    - keepalived
-    - adguard
-
-- name: Reload systemd after removing the keepalived drop-in
-  when: keepalived_tenant_paths.changed
-  systemd:
-    daemon_reload: true
-  become: true
-  tags:
-    - keepalived
-    - adguard
-
 - name: Configure the AdGuard health script
   template:
     src: adguard_healthcheck.sh.j2

@@ -10,16 +10,6 @@
       - _keepalived_unit.status.ActiveState == 'active'
       - _keepalived_unit.status.UnitFileState == 'enabled'
 
-- name: _verify | Retired tenant paths are absent
-  stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/keepalived/conf.d
-    - /etc/systemd/system/keepalived.service.d/override.conf
-  register: _keepalived_tenant_paths
-  failed_when: _keepalived_tenant_paths.stat.exists
-  become: true
-
 # Force the role-owned template to change and prove the service reload is
 # hitless: a reload preserves ActiveEnterTimestampMonotonic, unlike a restart.
 - name: _verify | Perturb the installed configuration

@@ -1,4 +1,28 @@
 ---
+- name: Remove retired keepalived tenant configuration
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/keepalived/conf.d
+    - /etc/systemd/system/keepalived.service.d/override.conf
+  register: retired_services_keepalived_tenant_config
+  become: true
+  tags:
+    - retired_services
+    - keepalived
+    - adguard
+
+- name: Reload systemd after removing retired keepalived configuration
+  when: retired_services_keepalived_tenant_config.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - retired_services
+    - keepalived
+    - adguard
+
 - name: Remove retired logrotate conffile diversions
   community.general.dpkg_divert:
     path: "{{ item }}"
