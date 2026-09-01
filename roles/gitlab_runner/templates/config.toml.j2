@@ -39,33 +39,19 @@
 {% endmacro %}
 # Managed by ansible (roles/gitlab_runner) -- do not edit on the host.
 #
-# GitLab Runner config. fox uses the Docker executor against gitlab_runner's
-# rootless podman socket for AWS orchestration jobs; lab can use the shell
-# executor to run qemu cells directly. Tags / locked / run-untagged / protected
-# all live server-side with the glrt- runner registration, not in this file.
+# Tags, locking, and protected-runner policy live in GitLab's registration.
 concurrent = {{ gitlab_runner_concurrent }}
-# JSON logs parse cleanly in fluentbit (the repo's only log consumer); the
-# default `runner` format is ANSI-decorated and needs a custom parser.
+# Avoid the default ANSI-decorated log format.
 log_format = "json"
-# Graceful-shutdown drain: on SIGQUIT (systemctl stop/restart) the runner stops
-# claiming jobs and waits up to this many seconds for in-flight jobs to finish
-# before force-exiting. The default is 30s -- far too short to wind a cell
-# matrix down -- so hold it ~30 min, enough to cover the longest jobs (AMI
-# bakes). The unit's TimeoutStopSec sits just past this bound (1860s) so
-# systemd only SIGKILLs a runner too wedged to run the drain at all.
+# Allow long cells to drain; the unit timeout is the later kill backstop.
 shutdown_timeout = 1800
-# Prometheus metrics + pprof, loopback-only (fox's netdata go.d prometheus
-# collector scrapes it). Unauthenticated, and the pprof debug endpoints cannot
-# be disabled separately from metrics -- accepted on loopback (any local
-# process can trigger profiling), but re-evaluate if this listener ever moves
-# off 127.0.0.1.
+# Metrics and inseparable pprof endpoints are intentionally loopback-only.
 listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
 [[runners]]
   name = "{{ inventory_hostname }}-{{ 'shell-qemu' if gitlab_runner_executor == 'shell' else 'docker-aws' }}"
   url = "https://gitlab.com"
-  # glrt- authentication token from creating the runner in the GitLab project
-  # (Settings -> CI/CD -> Runners -> New project runner). Vaulted in host_vars.
+  # Vaulted project-runner token.
   token = "{{ gitlab_runner_token }}"
   executor = "{{ gitlab_runner_executor }}"
 {% if gitlab_runner_executor == 'shell' %}
@@ -73,26 +59,16 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 {% endif %}
   # Bounds this runner independently of the process-wide `concurrent`.
   limit = {{ gitlab_runner_limit }}
-  # Concurrent new-job requests to GitLab. The default 1 keeps a single request
-  # in flight, so when it blocks on a long poll the runner trips its long-polling
-  # bottleneck warning (loud once a second runner also polls). 4 is upstream's
-  # 2-4 recommendation -- enough outstanding requests to clear the stall without
-  # hammering GitLab's API.
+  # Keep enough requests outstanding to avoid long-poll stalls.
   request_concurrency = 4
 
 {% if gitlab_runner_executor == 'docker' %}
   [runners.docker]
-    # gitlab_runner's rootless podman socket (socket-activated; linger keeps
-    # the user manager alive). Rootless keeps the runner non-root-equivalent
-    # on this host.
+    # Socket-activated rootless podman, kept available by linger.
     host = "unix:///run/user/{{ gitlab_runner_user.uid }}/podman/podman.sock"
-    # Default job image: the project CI image (mise tool tree + warm uv
-    # cache baked in -- see .gitlab-ci.yml's ci_image job). Jobs may still
-    # name another image; the runner is locked to this project so there is
-    # no allowed_images policy to maintain.
+    # Jobs may override the project CI image; this runner is project-locked.
     image = "registry.gitlab.com/akohlbecker/homelab/ci:latest"
-    # Job containers orchestrate remote EC2 cells over ssh/https only -- no
-    # devices, no nested containers, no privileges.
+    # Jobs orchestrate remote cells without nested containers or devices.
     privileged = false
 {% endif %}
 {% if gitlab_runner_aws_qemu_enabled | default(false) %}

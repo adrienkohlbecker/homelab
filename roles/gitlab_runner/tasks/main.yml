@@ -1,27 +1,11 @@
-# GitLab Runner (host-native binary). fox uses the Docker executor against the
-# runner user's rootless podman socket to orchestrate AWS test cells; lab uses a
-# shell executor to run the same qemu harness locally as a CI fallback. box is
-# the CI fixture.
-#
-# The Docker executor keeps branch code inside a job container rather than
-# running it directly as the runner user. The lab shell executor deliberately
-# does run job payloads as gitlab_runner so it can drive local qemu/KVM; keep
-# that runner protected, project-locked, and only used through the manual lab
-# fallback path. Neither executor is a hostile-multi-tenant boundary: every
-# pipeline is operator-authored.
-#
-# No nginx vhost and no homepage bookmark on purpose: this service exposes no
-# operator-facing HTTP surface. The runner UI is gitlab.com itself; the only
-# local listener is the loopback Prometheus metrics endpoint (for netdata).
+# Host-native GitLab Runner. fox uses Docker over rootless podman for AWS cells;
+# lab runs the qemu harness through a protected shell executor. Both trust
+# operator-authored pipelines. The only local listener is loopback metrics.
 - name: GitLab Runner
   tags:
     - gitlab_runner
   block:
-    # Required input lives in host_vars and the role asserts it (CLAUDE.md).
-    # It renders straight into config.toml, so an unset value would boot a
-    # runner that silently fails to register -- catch it loudly here instead.
-    # Non-empty, not just defined: a mistyped vault key renders to "" which
-    # passes `is defined`.
+    # Required inputs live in host_vars; reject empty rendered vault values.
     - name: Assert the required gitlab_runner secret is set
       assert:
         that:
@@ -35,10 +19,8 @@
           Create a protected project runner on gitlab.com with run-untagged off
           and locked to the project, then vault its glrt- token for this host.
 
-    # The AWS qemu runner is a manager-side instance executor. Its GitLab token
-    # stays on fox, and the AWS plugin needs an SDK credential profile because
-    # fox is not an EC2 instance with an instance profile. The worker hosts get
-    # their own read-only instance profile; this identity only scales the ASG.
+    # fox needs manager credentials to scale the ASG; workers use their own
+    # read-only instance profile.
     - name: Assert the AWS qemu runner secrets are set
       when: gitlab_runner_aws_qemu_enabled
       assert:
@@ -54,10 +36,7 @@
           homelab-ci-fleeting manager user, and vault the token/key values
           before enabling the runner in prod.
 
-    # The dedicated _site_test pool reuses the role-cell pool's AWS plugin and
-    # rendered .aws credential profile (both gated on the main aws_qemu flag), so
-    # it can only run when the role-cell runner is also enabled; it just needs its
-    # own GitLab project-runner token (tagged aws-shell-qemu-site).
+    # _site_test reuses the main AWS plugin and credential profile.
     - name: Assert the AWS qemu site runner inputs are set
       when: gitlab_runner_aws_qemu_site_enabled | default(false)
       assert:
@@ -79,11 +58,8 @@
         service_user_args:
           name: gitlab_runner
           extra_groups: "{{ gitlab_runner_extra_groups }}"
-          # Real passwd home (the unit's Environment=HOME matches): the
-          # user-scope `systemctl enable podman.socket` below writes
-          # ~/.config/systemd/user/, which fails against the /nonexistent
-          # sentinel. The config-dir task creates the directory; createhome
-          # stays off so useradd doesn't race it.
+          # User-scope systemd writes below ~/.config; service_user creates the
+          # directory while createhome remains off.
           home: /mnt/services/gitlab_runner
 
     # This fixed allocation is part of the runner storage format: fox's rootless
@@ -114,8 +90,7 @@
       debug:
         msg: "Run: sudo -u gitlab_runner podman system migrate"
 
-    # checksum: drives re-download on a version bump (sha mismatch forces fetch)
-    # and surfaces tampering on the plain-https URL.
+    # The checksum drives version replacement and verifies the download.
     - name: Download gitlab-runner binary
       when: not ansible_check_mode or gitlab_runner_user.uid is defined
       get_url:
@@ -129,8 +104,7 @@
       become: true
       register: gitlab_runner_binary
 
-    # The AWS instance executor's ASG plugin, manually installed and referenced
-    # by PATH name in config.toml (plugin = "fleeting-plugin-aws").
+    # The instance executor resolves this plugin by PATH name.
     - name: Download fleeting-plugin-aws binary
       when:
         - gitlab_runner_aws_qemu_enabled
@@ -186,13 +160,9 @@
               aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key | default('TEST_PLACEHOLDER_DO_NOT_USE') }}
           become: true
 
-    # Linger so rootless podman has a user systemd manager up at all times:
-    # crun makes sd-bus calls when creating containers, which fail with
-    # "Permission denied" without one. The helper enables linger and waits
-    # for user@<uid>.service (which provides the dbus + cgroup hierarchy
-    # crun expects) so the socket tasks below find a live bus. Rootless podman
-    # is the one accepted user-scope exception (CLAUDE.md "Prefer system-scope
-    # systemd units").
+    # crun needs the lingered user manager's D-Bus and cgroup hierarchy before
+    # the rootless socket starts. Rootless podman is the user-scope exception
+    # documented in AGENTS.md.
     - name: Turn on linger
       when: gitlab_runner_executor == 'docker'
       import_role:
@@ -217,12 +187,8 @@
       tags:
         - gitlab_runner
 
-    # The Docker executor dials this socket (config.toml [runners.docker]
-    # host); socket-activated, so the podman service itself only runs while
-    # jobs do. Storage rides the podman role's system config
-    # (rootless_storage_path on the dedicated /var/lib/containers store); no
-    # per-user storage.conf is needed since jobs are plain containers (no
-    # uidmapped siblings).
+    # The Docker executor dials this socket; podman itself remains
+    # socket-activated and uses the role-wide rootless storage path.
     - name: Enable and start rootless podman socket
       when:
         - gitlab_runner_executor == 'docker'
@@ -235,10 +201,8 @@
       become: true
       become_user: gitlab_runner
 
-    # Switching the primary runner away from Docker must tear down the
-    # rootless runtime state Docker mode needed. Stop the socket/service while
-    # the lingering user manager is still alive, then remove the enable symlink
-    # as a managerless tombstone and disable linger.
+    # Stop user units while the lingered manager is alive, then remove the
+    # enable symlink as a managerless tombstone before disabling linger.
     - name: Disable Docker-executor runtime state for non-Docker executors
       when:
         - gitlab_runner_executor != 'docker'
@@ -310,12 +274,8 @@
         - subgid
       become: true
 
-    # 0600 + owned by the runner: holds the glrt- runner token. validate
-    # parses the rendered TOML (gitlab-runner falls back to defaults on a
-    # parse error, so catch typos here). A bare TOML parse is the best
-    # validate available: `gitlab-runner verify` is a live server check
-    # (dials gitlab.com with the configured token), not an offline lint --
-    # upstream ships none.
+    # Parse TOML locally; `gitlab-runner verify` is an online registration check,
+    # not a configuration linter.
     - name: Render gitlab-runner config.toml
       when: not ansible_check_mode or gitlab_runner_user.uid is defined
       template:
@@ -336,6 +296,9 @@
         fluentbit_extension_args:
           name: gitlab_runner
 
+    # QEMU fixtures enable without registering. Config changes hot-reload every
+    # 3s; only binary or unit changes warrant a potentially long draining
+    # restart.
     - name: Manage gitlab_runner.service
       import_role:
         name: systemd_unit
@@ -349,14 +312,6 @@
             {{ gitlab_runner_binary.changed
                or (gitlab_runner_fleeting_aws_binary.changed | default(false)) }}
 
-    # Live registration needs a real gitlab.com runner token -- none exists in
-    # the qemu harness, so enable-only under qemu_test and let _verify exercise
-    # the host-side artifacts. Prod (fox) starts the runner for real. restart
-    # propagates a unit or binary change only -- NOT a config change:
-    # gitlab-runner hot-reloads config.toml every 3s, and the one rendered
-    # setting that genuinely needs a restart (listen_address) comes from the
-    # stable service_ports map, so restarting on config would risk a 30-min
-    # drain for changes the runner picks up live.
     - name: Manage the rootless runner user-slice memory cap
       when: not ansible_check_mode or gitlab_runner_user.uid is defined
       vars:

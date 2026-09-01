@@ -1,16 +1,11 @@
-# defaults/ (not vars/) per CLAUDE.md: role vars sit ABOVE host_vars and would
-# mask host overrides; defaults sit below, so host_vars wins. Everything here is
-# host-overridable deploy-tuning. Single-use constants that never vary
-# (gitlab.com URL, the runner name, the CI image) are inlined in
-# config.toml.j2 rather than surfaced here.
+# Optional deploy tuning belongs in defaults so host_vars can override it.
+# Fixed values stay inline in config.toml.j2.
 # Primary runner executor. fox uses the Docker executor against rootless podman;
 # lab can use a host-native shell executor for qemu CI fallback work.
 gitlab_runner_executor: docker
 
-# Global job ceiling across ALL [[runners]] blocks (process-wide) -- the docker
-# runner plus the aws_qemu runner. Per-runner bounds live in `limit` (below +
-# per block), not here. The real test capacity is the qemu cell fan-out on the
-# AWS shell-runner ASG, governed separately (notes/ci_aws_nested_qemu_cells.md).
+# Process-wide ceiling across every [[runners]] block. Each block also has an
+# independent `limit`; AWS host capacity is managed separately.
 gitlab_runner_concurrent: 8
 
 # Per-runner job ceiling, independent of the process-wide `concurrent`. 0 leaves
@@ -21,29 +16,16 @@ gitlab_runner_limit: 0
 # needs kvm for /dev/kvm and homelab_ci for /mnt/scratch/homelab_ci.
 gitlab_runner_extra_groups: []
 
-# Memory ceiling on the rootless runner's user slice (user-<uid>.slice). The
-# Docker-executor job containers run under that slice via the rootless podman
-# socket -- NOT under gitlab_runner.service (which sits in system.slice) -- so
-# capping the slice bounds the entire CI footprint at once: the runner manager
-# plus every concurrent job container. On a co-tenant host (fox runs the
-# headscale control plane + its nginx front alongside the runner) this keeps a
-# wide fan-out from pushing the host into swap and OOM-threatening the tunnel
-# control plane. The cap is host-RAM-dependent with no sane universal value, so
-# it's opt-in: the enabling host sets these in host_vars. Empty max = no cap
-# (the slice drop-in is removed). MemoryHigh throttles + reclaims (soft) before
-# MemoryMax hard-OOMs within the slice, so the CI tree self-limits under
-# pressure rather than the kernel picking a global victim -- set High below Max.
-# See notes/ci_aws_test_cells.md "Fox host protection".
+# The Docker job tree lives under user-<uid>.slice, so its optional host-sized
+# cap bounds the runner and every rootless container together. Empty max removes
+# the cap; set the soft MemoryHigh below the hard MemoryMax. See
+# notes/ci_aws_nested_qemu_cells.md.
 gitlab_runner_memory_high: ""
 gitlab_runner_memory_max: ""
 
 # ── AWS qemu runner (instance / fleeting) ───────────────────────────────────
-# Second [[runners]] block: an instance executor that asks fleeting-plugin-aws to
-# scale a dedicated Auto Scaling Group from zero, then runs shell jobs directly
-# on the AWS host. Those jobs hydrate S3 qemu images and run the same qemu
-# harness as the lab fallback. Gate 1 deliberately starts at one job on one
-# host; increase capacity only after the nested-qemu kill-switch benchmark
-# passes.
+# Instance executor that scales an ASG from zero and runs the qemu harness on
+# nested-KVM hosts. Capacity starts at one job on one host.
 gitlab_runner_aws_qemu_enabled: false
 gitlab_runner_aws_qemu_token: ""
 
@@ -55,20 +37,15 @@ gitlab_runner_aws_qemu_region: eu-central-1
 gitlab_runner_aws_qemu_access_key_id: ""
 gitlab_runner_aws_qemu_secret_access_key: ""
 
-# Terraform owns the matching ASG. Keep the config values explicit here so the
-# runner block can be enabled before it replaces the legacy direct-EC2 path.
+# Terraform owns the matching ASG.
 gitlab_runner_aws_qemu_asg_name: homelab-ci-qemu-host
 gitlab_runner_aws_qemu_capacity_per_instance: 1
 gitlab_runner_aws_qemu_max_instances: 1
 gitlab_runner_aws_qemu_idle_time: "15m"
 gitlab_runner_aws_qemu_username: ubuntu
 
-# Dedicated single-host pool for the _site_test critical-path cell, off the
-# shared role-cell pool. Reuses the role-cell runner's AWS plugin + .aws profile
-# (so it requires gitlab_runner_aws_qemu_enabled), needs only its own GitLab
-# project-runner token tagged aws-shell-qemu-site, and pins one host / one job.
-# Terraform owns the matching ASG (homelab-ci-qemu-site, 4-vCPU c8id.xlarge).
-# Short idle_time: it runs a single job per pipeline, so warm reuse buys nothing.
+# Dedicated one-host pool for _site_test. It reuses the AWS plugin/profile and
+# has its own GitLab token and Terraform-owned ASG.
 gitlab_runner_aws_qemu_site_enabled: false
 gitlab_runner_aws_qemu_site_token: ""
 gitlab_runner_aws_qemu_site_asg_name: homelab-ci-qemu-site

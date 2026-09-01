@@ -1,8 +1,4 @@
-# Test-harness setup for roles/gitlab_runner. The runner is a host-native
-# binary whose Docker executor needs gitlab_runner's rootless podman stack, and
-# whose shell executor needs the supplementary groups prod creates earlier in
-# site.yml. Bring up those prerequisites so standalone role tests match the
-# host-scoped plays.
+# Recreate the prerequisites normally supplied by earlier site.yml layers.
 
 - name: _setup | Ensure shell-runner supplementary groups exist
   group:
@@ -40,11 +36,7 @@
     - subgid
   become: true
 
-# Run the podman role's install.yml so the test VM gets the same storage
-# layout prod does: the dedicated store mounted at /var/lib/containers,
-# /var/lib/containers/rootless with sticky-bit perms, and the system
-# storage.conf with the right graphroot. Additive on box_deps (which pre-bakes
-# podman) and the full install path on a plain fixture.
+# Exercise the production rootless storage layout; this is additive on box_deps.
 - name: _setup | Install podman with prod-shape storage layout
   import_role:
     name: podman

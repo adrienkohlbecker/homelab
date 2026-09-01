@@ -1,52 +1,35 @@
 #jinja2: lstrip_blocks: True
-# gitlab_runner.service ###############################################
-# GitLab Runner, host-native: a single static Go binary at
-# /usr/local/bin/gitlab-runner running as the gitlab_runner system user.
-# Docker mode starts job containers over rootless podman; shell mode runs job
-# payloads directly as this service user. The runner process itself is not
-# containerised.
+# Host-native GitLab Runner; Docker jobs use rootless podman.
 [Unit]
 Description=GitLab Runner ({{ gitlab_runner_executor }} executor)
 After=network-online.target
 Wants=network-online.target
-# Restart=always + RestartSec=10 can trip systemd's default 5-in-10s burst
-# during a slow network warmup and land the unit in `failed`; widen the window.
+# Keep slow network recovery inside the restart burst window.
 StartLimitIntervalSec=600
 StartLimitBurst=5
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
-# config.toml + the runner's working dir live under /mnt/services; order after
-# the dataset mount so they exist before start.
+# The working directory lives on the services dataset.
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
 {% endif %}
 {% endif %}
-# Deliberately NOT PartOf=zfs_autosnapshot.target: the runner has no persistent
-# consistency need (config.toml is ansible-rendered; job state lives in
-# throwaway containers), and joining the target would let the nightly 02:00
-# snapshot stop the runner mid-CI.
+# Do not join zfs_autosnapshot.target: job state is disposable and snapshots
+# must not interrupt CI.
 
 [Service]
 Type=simple
 User=gitlab_runner
 Group=gitlab_runner
 WorkingDirectory=/mnt/services/gitlab_runner
-# nologin service user has no real home; point HOME at the working dir so any
-# runner cache lands on a writable, owned path rather than failing against an
-# unset/unwritable HOME.
+# The nologin user needs a writable HOME.
 Environment=HOME=/mnt/services/gitlab_runner
 ExecStart=/usr/local/bin/gitlab-runner run \
     --config /mnt/services/gitlab_runner/config.toml \
     --working-directory /mnt/services/gitlab_runner
 Restart=always
 RestartSec=10
-# gitlab-runner drains gracefully on SIGQUIT: it stops claiming new jobs and
-# waits for in-flight jobs to finish, bounded by config.toml's
-# shutdown_timeout (1800s), then exits. TimeoutStopSec sits just past that
-# bound as the SIGKILL backstop: long enough that systemd never truncates a
-# healthy drain, short enough that a runner too wedged to honor SIGQUIT
-# cannot block stop/restart -- and with them converge and host reboot --
-# forever.
+# SIGQUIT drains to shutdown_timeout; systemd kills only after that bound.
 KillSignal=SIGQUIT
 TimeoutStopSec=1860
 
