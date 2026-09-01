@@ -29,7 +29,6 @@ sudo apt-get update -qq
     netcat-openbsd \
     passt \
     xorriso \
-    cloud-image-utils \
     python3-yaml \
     build-essential \
     zstd \

@@ -24,7 +24,7 @@
   apt:
     name:
       - acl
-      - cloud-image-utils
+      - xorriso
     state: present
   register: homelab_ci_packages
   become: true

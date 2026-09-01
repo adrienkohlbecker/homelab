@@ -25,7 +25,6 @@ from matrix import UBUNTU_RELEASES
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
-    build_seed_iso,
     print_cmd_line,
     print_line,
     read_and_write_stream,
@@ -1316,10 +1315,18 @@ class Machine:
             cloud_image = await self._ensure_minimal_cloudimg()
             seed_img = self.workdir_path / "seed.img"
             disk_img = self.workdir_path / "disk.img"
-            await build_seed_iso(
-                seed_img,
-                Path("test/minimal/user-data"),
-                Path("test/minimal/meta-data"),
+            await run_command(
+                [
+                    "xorrisofs",
+                    "-output",
+                    str(seed_img),
+                    "-volid",
+                    "cidata",
+                    "-joliet",
+                    "-rock",
+                    "test/minimal/user-data",
+                    "test/minimal/meta-data",
+                ]
             )
             await self._create_overlay(
                 str(cloud_image),
