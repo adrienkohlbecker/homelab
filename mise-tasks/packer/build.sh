@@ -67,12 +67,10 @@ repo_root=$(git rev-parse --show-toplevel)
 # Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs slirp,
 # the passt command + advertised DNS, the netdev rewrite) plus passt's own startup
 # banner. packer routes the shim's stderr through Go's logger, which it discards
-# without PACKER_LOG, so the shim writes to QEMU_NET_WRAPPER_LOG instead. Point
-# it at a sibling file *outside* any per-source output dir: packer deletes a
-# failed source's output_directory before this EXIT trap runs, which would take
-# a build-dir-derived log with it. On failure the ERR trap dumps the logs to
-# stdout for CI diagnosis; on success they're silently cleaned up.
-netlog=$(mktemp "${HOMELAB_CI_DIR}/.netlog-XXXXXX")
+# without PACKER_LOG, so the shim writes to QEMU_NET_WRAPPER_LOG instead. Keep
+# it in system temporary storage: packer can delete a failed source's output
+# directory before the ERR trap dumps the log. Successful runs remove it.
+netlog=$(mktemp "${TMPDIR:-/tmp}/homelab-packer-netlog.XXXXXX")
 export QEMU_NET_WRAPPER_LOG="${netlog}"
 dump_net_logs() {
   local f
