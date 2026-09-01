@@ -26,10 +26,8 @@
   tags:
     - jellyfin
 
-# Jellyfin hardcodes its DBs under /config/data/. Pre-create the parent dir
-# (and the sqlite/scratch/log siblings) so the symlinks below can be placed
-# on a fresh deploy; jellyfin would create them on first start, but that
-# race breaks idempotency.
+# Pre-create persistent and scratch paths before the container starts so their
+# ownership and cleanup policy are deterministic on a fresh deployment.
 - name: Create jellyfin state directories
   when: not ansible_check_mode or jellyfin_user.uid is defined
   file:
@@ -107,8 +105,9 @@
 # plugin DLLs + meta.json drop under /config/plugins/sso/; the OID config
 # and login button are seeded as files Jellyfin reads at startup (it only
 # rewrites them on a dashboard save, which the templates' headers forbid).
-# Version is pinned in vars/main.yml against the 10.10.6 ABI ceiling.
-# Full rationale: notes/jellyfin_sso_rollout.md.
+# The image and ABI-compatible plugin versions are pinned together in
+# group_vars/all/versions.yml. Full rationale:
+# notes/archive/jellyfin_sso_rollout.md.
 - name: Install unzip for SSO plugin extraction
   apt:
     name: unzip
@@ -135,14 +134,10 @@
 
 # Plugin policy: only SSO-Auth is source-controlled here, because it is
 # auth-critical -- a from-scratch rebuild must come up with working OIDC login.
-# The other two plugins in use are operator-installed via the Jellyfin UI and
-# left to Jellyfin's own auto-update: Intro Skipper (intro/credit + media-segment
-# detection) and Open Subtitles. They are convenience features, not load-bearing,
-# so pinning their binaries (download + sha256 + per-Jellyfin-bump ABI ceiling)
-# isn't worth the maintenance. The role still owns their managed state -- Intro
-# Skipper's introskipper.db rides the 4K sqlite dataset (below) and its
-# TaskExtractMediaSegments schedule is pinned via the API (above). After a bare
-# rebuild, install both from the UI; their state and schedules then reconcile.
+# Intro Skipper and Open Subtitles are operator-installed through Jellyfin and
+# left to its own updater. They are convenience features, and their state rides
+# the backed-up Jellyfin service directory. The fresh-install procedure lives in
+# notes/runbooks/jellyfin_postinstall.md.
 #
 # Gate the download on the same version-stamped sentinel the Extract task
 # below keys off. The zip stages under /tmp, which is wiped on reboot and
@@ -316,7 +311,8 @@
 # on the box fixture), and the JSON body is PascalCase to match Jellyfin's
 # null-naming-policy, case-sensitive model binder. Roles is [] (empty =>
 # every authenticated Authelia user may sign in); AdminRoles=[admins] maps
-# the groups claim to a Jellyfin admin. See notes/jellyfin_sso_rollout.md.
+# the groups claim to a Jellyfin admin. See
+# notes/archive/jellyfin_sso_rollout.md.
 - name: Compose desired SSO OID provider state
   when: not qemu_test
   set_fact:
