@@ -1,32 +1,9 @@
-# Materialise a synthetic rotational SCSI disk so the test variants
-# (box, minimal -- all virtio + rotational=0) actually exercise the
-# template's per-disk selectattr filter. Without this, ansible_devices
-# offers no rotational+non-removable+non-virtual disk and the per-disk
-# branch of templates/hd-idle.j2 emits zero -a entries -- and the
-# loop in _verify.yml asserts nothing.
-#
-# scsi_debug lives in linux-modules-extra-<abi> on noble, which the lab
-# chroot.sh deliberately skips via --no-install-recommends on linux-generic --
-# so install it here on demand. resolute (26.04) consolidated kernel packaging
-# and ships no linux-modules-extra-<abi> at all: scsi_debug moved into the base
-# linux-modules-<abi> already installed with the running kernel, so the on-
-# demand install is both impossible (no such package) and unnecessary there.
-# Gate it to < 26; resolute+ just modprobe straight from the base package.
-# modprobe gives us a real /dev/sdN with a /sys/block/sdN/device/ chain (so
-# ansible reports virtual=0) and udev-created /dev/disk/by-id/scsi-* symlinks.
-#
-# scsi_debug devices default to queue/rotational=0 (treated as an
-# in-memory SSD). The module's `rotational=` parameter is not available on
-# every supported kernel, so flip the flag via sysfs after load. This works
-# on every kernel and is idempotent with future kernels that honour the
-# parameter. Without the override
-# the template filter drops the device and we're back to zero -a
-# entries on box.
-#
-# Refreshing ansible_devices after the sysfs poke updates the fact
-# cache (jsonfile, 2h TTL per the harness env) so the subsequent
-# main apply + _verify both see the ghost. No cleanup -- the harness
-# destroys the VM at end of test.
+# The default fixtures have no eligible rotational disk, which would make the
+# per-disk verification vacuous. scsi_debug supplies a real disk and stable
+# by-id link; noble needs linux-modules-extra, while resolute ships the module
+# in its base kernel package. Set its rotational flag through portable sysfs,
+# then refresh cached facts for the later converge and verification plays.
+# Harness teardown removes the device with the VM.
 
 - name: _setup | Install linux-modules-extra to make scsi_debug available
   when: ansible_distribution_major_version | int < 26
