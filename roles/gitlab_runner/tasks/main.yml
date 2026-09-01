@@ -32,10 +32,8 @@
           gitlab_runner_token is unset, or gitlab_runner_executor is
           unsupported/incompatible with the AWS qemu runner, for
           {{ inventory_hostname }}.
-          Create a project runner on gitlab.com (Settings -> CI/CD -> Runners ->
-          New project runner) with the {{ inventory_hostname }}-{{ gitlab_runner_name_suffix }}
-          name/tag convention, run-untagged off, locked to the project, and
-          protected; then vault the glrt- token for this host.
+          Create a protected project runner on gitlab.com with run-untagged off
+          and locked to the project, then vault its glrt- token for this host.
 
     # The AWS qemu runner is a manager-side instance executor. Its GitLab token
     # stays on fox, and the AWS plugin needs an SDK credential profile because

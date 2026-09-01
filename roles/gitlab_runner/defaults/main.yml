@@ -7,11 +7,6 @@
 # lab can use a host-native shell executor for qemu CI fallback work.
 gitlab_runner_executor: docker
 
-# Suffix for the GitLab runner name in config.toml. The matching GitLab project
-# runner tags are server-side, but using the same suffix keeps host config and
-# UI names lined up.
-gitlab_runner_name_suffix: "{{ 'shell-qemu' if gitlab_runner_executor == 'shell' else 'docker-aws' }}"
-
 # Global job ceiling across ALL [[runners]] blocks (process-wide) -- the docker
 # runner plus the aws_qemu runner. Per-runner bounds live in `limit` (below +
 # per block), not here. The real test capacity is the qemu cell fan-out on the

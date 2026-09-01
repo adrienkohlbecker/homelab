@@ -24,7 +24,7 @@ shutdown_timeout = 1800
 listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 
 [[runners]]
-  name = "{{ inventory_hostname }}-{{ gitlab_runner_name_suffix }}"
+  name = "{{ inventory_hostname }}-{{ 'shell-qemu' if gitlab_runner_executor == 'shell' else 'docker-aws' }}"
   url = "https://gitlab.com"
   # glrt- authentication token from creating the runner in the GitLab project
   # (Settings -> CI/CD -> Runners -> New project runner). Vaulted in host_vars.
