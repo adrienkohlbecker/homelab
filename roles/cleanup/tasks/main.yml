@@ -66,7 +66,6 @@
   # does not, so we shell out. `failed_when: false` covers the
   # "no matching units" return.
   command: systemctl stop 'snap-*.mount'
-  register: _cleanup_snap_mounts
   changed_when: false
   failed_when: false
   when: _cleanup_snap_bin.stat.exists
