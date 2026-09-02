@@ -51,17 +51,8 @@
   tags:
     - console
 
-# Disabling console blanking has two halves that don't overlap:
-#
-#   1. consoleblank=0 on the kernel cmdline (below) — disables the VT
-#      idle-blank timer from before userspace exists, so an early-boot
-#      panic stays on screen instead of blanking 10 minutes later.
-#   2. console_noblank.service (above) — runs `setterm --powersave off
-#      --powerdown 0` to disable DPMS, which is monitor-side state the
-#      kernel cmdline can't reach.
-#
-# Both matter for walk-up/KVM-IP debugging: (1) handles the kernel
-# timer, (2) keeps the monitor from sleeping on top of that.
+# The kernel argument below disables VT blanking; this unit separately disables
+# monitor DPMS after console setup.
 - name: Manage console_noblank.service
   import_role:
     name: systemd_unit
@@ -72,12 +63,8 @@
   tags:
     - console
 
-# consoleblank=0 — disable the VT idle-blank timer so an early-boot panic stays
-# on screen instead of blanking. grub_scope: all (GRUB_CMDLINE_LINUX, not
-# _DEFAULT) so the recovery menuentry carries it too — recovery boot is exactly
-# the walk-up debug case where a blanking timer is most unwelcome. grub_name
-# keeps the historical grub filename (99-console.cfg) distinct from the ZBM
-# fragment name.
+# Apply the argument to recovery entries too; keep the historical GRUB fragment
+# name distinct from the ZBM fragment name.
 - name: Set consoleblank=0 kernel arg
   import_role:
     name: boot
