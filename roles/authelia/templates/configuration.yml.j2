@@ -20,15 +20,15 @@ log:
 totp:
   issuer: '{{ authelia_cookie_domain }}'
 
-# Identity verification: drives the JWT used in reset-password emails.
-identity_validation:
-  # AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE supplies the secret.
-  reset_password: {}
-
 authentication_backend:
+  # Ansible owns the password hashes in users.yml; portal writes would be
+  # overwritten by the next converge.
+  password_reset:
+    disable: true
+  password_change:
+    disable: true
   file:
     path: '/config/users.yml'
-    watch: true
 
 # Access control: default_policy deny, so any subdomain not matched
 # below is refused outright. Every authenticated user -- operator and

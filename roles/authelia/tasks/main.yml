@@ -68,8 +68,6 @@
     name: "{{ item.name }}"
     data: "{{ item.data }}"
   loop:
-    - name: authelia_jwt_secret
-      data: "{{ authelia_jwt_secret }}"
     - name: authelia_storage_encryption_key
       data: "{{ authelia_storage_encryption_key }}"
     - name: authelia_smtp_password
@@ -113,6 +111,18 @@
            or authelia_config_result.changed
            or authelia_users_result.changed
            or (_authelia_secrets.changed | default(false)) }}
+  tags:
+    - authelia
+
+- name: Remove retired authelia secrets
+  when: not ansible_check_mode or authelia_podman_available
+  containers.podman.podman_secret:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - authelia_jwt_secret
+    - authelia_session_secret
+  become: true
   tags:
     - authelia
 
