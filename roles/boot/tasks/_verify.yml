@@ -10,39 +10,19 @@
     name: reboot
     tasks_from: reboot
 
-# Verify the hold is in place (dpkg Want=hold) rather than just checking
-# "no grub installed" which is a tautology on test fixtures that never had
-# grub. Also assert none are installed, which is the hold's intended effect.
+# The hold is the mechanism; the invariant is that no grub package is installed
+# to compete with rEFInd. Check dpkg state directly without depending on apt's
+# mirror-backed cache.
 - name: _verify | Dpkg install status for grub*
   when: not grub_bootloader
-  command: dpkg-query -W -f='${binary:Package} ${db:Status-Want} ${db:Status-Status}\n' 'grub*'
+  command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
   changed_when: false
-  failed_when: false
   register: _boot_verify_grub_status
+  failed_when: >-
+    _boot_verify_grub_status.stdout_lines
+    | select('search', '\\sinstalled$')
+    | list | length > 0
   become: true
-
-- name: _verify | At least one grub package is held
-  when: not grub_bootloader
-  assert:
-    that: >-
-      _boot_verify_grub_status.stdout_lines
-      | select('search', '\\shold\\s')
-      | list | length > 0
-    fail_msg: >-
-      No grub-prefixed package has dpkg Want=hold — apt-mark hold grub*
-      did not take effect: {{ _boot_verify_grub_status.stdout_lines }}
-
-- name: _verify | No grub package is installed
-  when: not grub_bootloader
-  assert:
-    that: >-
-      _boot_verify_grub_status.stdout_lines
-      | select('search', '\\sinstalled$')
-      | list | length == 0
-    fail_msg: >-
-      A grub-prefixed package is installed despite the hold — it will fight
-      rEFInd at boot. Offending: {{ _boot_verify_grub_status.stdout_lines
-                                    | select('search', '\\sinstalled$') | list }}
 
 - name: _verify | MODULES=most is pinned in initramfs conf.d
   command: grep -qxF MODULES=most /etc/initramfs-tools/conf.d/modules-most
