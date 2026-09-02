@@ -23,9 +23,6 @@ PartOf=zfs_autosnapshot.target
 {% endif %}
 
 [Service]
-# Suppress exact successful zero-work RSS records while retaining nonzero
-# results, grabs, and every warning/error.
-LogFilterPatterns=~^[[]Info[]] (RssSyncService: Starting RSS Sync|DownloadDecisionMaker: No results found|RssSyncService: RSS Sync Completed[.] Reports found: 0, Reports grabbed: 0)[[:space:]]*$
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes

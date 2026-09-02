@@ -20,8 +20,6 @@ StartLimitIntervalSec=600
 StartLimitBurst=3
 
 [Service]
-# HAProxy also emits a decorated copy with severity and process metadata.
-LogFilterPatterns=~^Proxy (dockerfrontend|dockerbackend|docker-events) stopped [(]cumulated conns: FE: [0-9]+, BE: [0-9]+[)][.][[:space:]]*$
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Delegate=yes
 Restart=always

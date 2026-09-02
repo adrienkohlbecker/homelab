@@ -47,11 +47,3 @@ pipeline:
         - socket_proxy_level _level
         - socket_proxy_process_id process_id
       set: parser_status parsed
-    # EVENTS=0 deliberately leaves the generated docker-events backend unused.
-    # The image still emits a multiline missing-timeouts warning for it.
-    - name: grep
-      match: svc.socket_proxy.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'log \Amissing timeouts for backend ''docker-events''\.'
