@@ -25,13 +25,9 @@ PartOf=zfs_autosnapshot.target
 
 [Service]
 # Successful zero-work scans are noise; nonzero work and failures remain.
-LogFilterPatterns=~^[[]Info[]] ExistingMetadataImporter: Found 0 existing metadata files[[:space:]]*$
-LogFilterPatterns=~^[[]Info[]] ExistingSubtitleImporter: Found 0 existing subtitle files[[:space:]]*$
-LogFilterPatterns=~^[[]Info[]] ExistingOtherExtraImporter: Found 0 existing other extra files[[:space:]]*$
-LogFilterPatterns=~^[[]Info[]] ExistingExtraFileService: Found 0 possible extra files, imported 0 files[.][[:space:]]*$
-LogFilterPatterns=~^[[]Info[]] RssSyncService: Starting RSS Sync[[:space:]]*$
+LogFilterPatterns=~^[[]Info[]] Existing(MetadataImporter: Found 0 existing metadata files|SubtitleImporter: Found 0 existing subtitle files|OtherExtraImporter: Found 0 existing other extra files|ExtraFileService: Found 0 possible extra files, imported 0 files[.])[[:space:]]*$
+LogFilterPatterns=~^[[]Info[]] RssSyncService: (Starting RSS Sync|RSS Sync Completed[.] Reports found: [0-9]+, Reports grabbed: 0)[[:space:]]*$
 LogFilterPatterns=~^[[]Info[]] DownloadDecisionMaker: Processing [0-9]+ releases[[:space:]]*$
-LogFilterPatterns=~^[[]Info[]] RssSyncService: RSS Sync Completed[.] Reports found: [0-9]+, Reports grabbed: 0[[:space:]]*$
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
