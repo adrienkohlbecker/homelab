@@ -1,11 +1,6 @@
 # {{ ansible_managed }}
-# Authelia file backend user database. Password hashes are argon2id;
-# generate fresh ones with `podman run --rm authelia/authelia:4.39
-# authelia crypto hash generate argon2` against the cleartext
-# password, then vault the resulting `$argon2id$...$...$...` string
-# into the per-user entry under authelia_users in group_vars/prod.yml.
-#
-# Schema reference: https://www.authelia.com/configuration/first-factor/file/
+# Authelia file-backend schema:
+# https://www.authelia.com/configuration/first-factor/file/
 ---
 users:
 {% for user in authelia_users %}

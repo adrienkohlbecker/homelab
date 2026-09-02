@@ -1,8 +1,7 @@
 # {{ ansible_managed }}
-# Authelia v4.39+ configuration. All secrets are referenced via *_FILE
-# env vars (see authelia.service.j2 + AUTHELIA_*_FILE in the secrets
-# docs); this file is templated to /mnt/services/authelia/configuration.yml
-# and mounted read-only into the container.
+# Runtime secrets use *_FILE environment variables except the inline OIDC
+# issuer key documented below. The service mounts the containing directory at
+# /config, which also stores SQLite state and password updates.
 ---
 theme: 'auto'
 # server.address is the listen socket inside the container; nginx on
@@ -194,53 +193,28 @@ notifier:
     subject: '[Authelia] {title}'
     startup_check_address: '{{ root_email }}'
 
-# OIDC identity provider. Independent of the forward-auth path
-# (PR2-5 uses /api/authz/auth-request directly and doesn't touch
-# this block); these endpoints serve OIDC client integrations
-# (MinIO, Paperless, OpenProject, ...) declared in
-# `authelia_oidc_clients`.
+# OIDC is independent of forward-auth and serves authelia_oidc_clients.
 identity_providers:
   oidc:
-    # HMAC secret signs internal OIDC artefacts (CSRF tokens during
-    # the consent flow, OAuth state). Mounted as a podman secret and
-    # consumed via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
-    # in authelia.service.j2.
-    #
-    # The RSA private key under jwks signs id_token / userinfo
-    # response JWTs (RS256). Authelia v4.39 only accepts the PEM
-    # inline here -- no `key_file:`, no `*_KEY_FILE` env override --
-    # so the vaulted PEM gets templated into this file (mode 0640,
-    # authelia-owned). The matching public JWK is derived at
-    # startup and published at /jwks.json for clients to verify
-    # signatures.
+    # The HMAC secret is mounted through *_FILE. Authelia v4.39 requires the
+    # RSA signing key inline and derives its public /jwks.json entry at startup.
     jwks:
       - key_id: 'main'
         algorithm: 'RS256'
         use: 'sig'
         key: |
           {{ authelia_oidc_issuer_private_key | indent(width=10) }}
-    # No explicit cors block: discovery + JWKS are fetched server-to-
-    # server by every current client (MinIO, Paperless, OpenProject);
-    # there's no browser-origin SPA hitting them cross-domain.
-    #
-    # Authelia v4.39 defaults to putting non-`sub` claims only into
-    # the userinfo response (spec-compliant: id_token stays small).
-    # Some clients (MinIO 2022 in particular) inspect the id_token
-    # directly and never call userinfo, so groups-driven policy
-    # mapping silently breaks ("Groups claim missing from the JWT
-    # token"). The `jwt_groups` policy below promotes groups +
-    # email into the id_token for clients that opt in via
-    # `claims_policy: jwt_groups` on their client entry.
+    # Discovery and JWKS are consumed server-to-server, so no CORS policy is
+    # needed. Some clients read groups only from the ID token; this opt-in
+    # policy promotes the claims they need from userinfo.
     claims_policies:
       jwt_groups:
         id_token:
           - groups
           - email
           - email_verified
-    # Custom OIDC authorization policy. The global access_control rules gate
-    # forward-auth proxies; an OIDC RP is instead gated by its
-    # authorization_policy. `operator_only` admits just the operator, for
-    # first-party clients that shouldn't be reachable by the household member.
+    # OIDC clients use authorization_policy rather than access_control rules.
+    # operator_only keeps selected first-party clients operator-scoped.
     authorization_policies:
       operator_only:
         default_policy: 'deny'
@@ -251,9 +225,7 @@ identity_providers:
 {% for client in authelia_oidc_clients %}
       - client_id: '{{ client.client_id }}'
         client_name: '{{ client.client_name }}'
-        # Authelia v4.39 expects the pbkdf2-sha512 hash here. The
-        # plaintext lives in a separate vault entry and is handed
-        # to the consumer role's container env (see roles/minio).
+        # Authelia expects the hash; the consumer owns the plaintext half.
         client_secret: '{{ client.client_secret }}'
         public: false
         authorization_policy: '{{ client.authorization_policy | default("two_factor") }}'
