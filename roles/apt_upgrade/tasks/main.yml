@@ -4,6 +4,7 @@
     autoremove: true
     cache_valid_time: 3600
     lock_timeout: 300
+    force_apt_get: true
   become: true
   tags:
     - apt_upgrade
