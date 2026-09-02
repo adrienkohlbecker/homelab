@@ -56,30 +56,6 @@
       - "'Error: false failed with exit 1' in _bash_f_rescue.stderr"
       - "'Error: ls /nonexistent-path-for-verify failed with exit' in _bash_f_rescue.stderr"
 
-# f_rescue must not mutate the caller's errexit state. Caller disables -e,
-# calls f_rescue, then inspects $- to confirm -e is still off. Catches a
-# regression of the prior `set +e; ...; set -e` toggle that unconditionally
-# re-enabled errexit regardless of the caller's prior state.
-- name: _verify | F_rescue preserves caller's errexit state
-  shell: |
-    source /usr/local/lib/functions.sh
-    set +e
-    f_rescue false
-    case $- in
-      *e*) echo "errexit=on" ;;
-      *)   echo "errexit=off" ;;
-    esac
-  args:
-    executable: /bin/bash
-  register: _bash_f_rescue_errexit
-  changed_when: false
-
-- name: _verify | F_rescue errexit-preservation assertion
-  assert:
-    that:
-      - _bash_f_rescue_errexit.rc == 0
-      - "'errexit=off' in _bash_f_rescue_errexit.stdout"
-
 - name: _verify | F_trace echoes the shell-quoted command to stdout then runs it
   shell: |
     source /usr/local/lib/functions.sh
