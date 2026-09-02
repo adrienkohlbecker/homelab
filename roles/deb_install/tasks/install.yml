@@ -35,10 +35,10 @@
   assert:
     quiet: true
     that:
-      - deb_install_args.name | default('') | regex_findall('^[A-Za-z0-9][A-Za-z0-9.+_-]*$') | length > 0
+      - (deb_install_args.name | default('')) is match('^[A-Za-z0-9][A-Za-z0-9.+_-]*$')
       - deb_install_args.version | default('') | length > 0
       - deb_install_args.url | default('') | length > 0
-      - deb_install_args.sha256 | default('') | regex_findall('^[0-9a-fA-F]{64}$') | length > 0
+      - (deb_install_args.sha256 | default('')) is match('^[0-9a-fA-F]{64}$')
     fail_msg: >-
       deb_install_args must define name (slash-free dpkg package name),
       version, url and a 64-hex sha256; got {{ deb_install_args }}
