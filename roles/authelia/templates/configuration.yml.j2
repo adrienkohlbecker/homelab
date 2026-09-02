@@ -111,9 +111,6 @@ authentication_backend:
 access_control:
   default_policy: 'deny'
   rules:
-    # Portal itself must be reachable without prior auth.
-    - domain: 'auth.{{ authelia_cookie_domain }}'
-      policy: 'bypass'
     - domain:
 {% for host in homepage_netdata_hosts %}
         - 'netdata.{{ host }}.{{ domain }}'
