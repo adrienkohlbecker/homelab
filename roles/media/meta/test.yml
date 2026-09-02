@@ -1,5 +1,5 @@
 # _setup.yml imports podman/install, pre-baked into box_deps (see
-# packer/seed_deps.yml), so route there to skip the podman install on every
-# test run.
+# test/playbooks/build_box_deps.yml), so route there to skip the podman install
+# on every test run.
 machines:
   box_deps:

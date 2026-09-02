@@ -1,5 +1,5 @@
 # socket_proxy runs a podman container fronting the rootful podman socket, so
 # it needs podman present -- route to box_deps (podman pre-baked in
-# packer/seed_deps.yml); the default box fixture has no podman.
+# test/playbooks/build_box_deps.yml); the default box fixture has no podman.
 machines:
   box_deps:

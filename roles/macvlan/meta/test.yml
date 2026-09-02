@@ -1,5 +1,5 @@
 # The podman_network path needs podman, which box_deps pre-bakes (see
-# packer/seed_deps.yml) — route there to skip ~140s of podman install on
-# every test run. --machine on the CLI still wins over this.
+# test/playbooks/build_box_deps.yml) — route there to skip ~140s of podman
+# install on every test run. --machine on the CLI still wins over this.
 machines:
   box_deps:

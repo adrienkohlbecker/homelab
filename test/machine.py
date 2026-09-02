@@ -273,11 +273,10 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         ssh_user="vagrant",
         inventory_host="box",
         # box_deps: same disks/inventory as box (incl. the second `zee`
-        # disk), but the packer build pre-bakes podman, nginx + snakeoil cert,
-        # and fluent-bit via
-        # packer/seed_deps.yml. Roles opt in via roles/<role>/meta/test.yml's
-        # `machine: box_deps`. Reuses host_vars/box.yml because
-        # inventory_host stays box.
+        # disk), but the test harness pre-bakes podman, nginx + snakeoil cert,
+        # and fluent-bit via test/playbooks/build_box_deps.yml. Roles opt in
+        # via roles/<role>/meta/test.yml's `machine: box_deps`. Reuses
+        # host_vars/box.yml because inventory_host stays box.
         # 5 GiB: box_deps roles pull large container images and run them
         # during converge (HA alone is 2.4 GB on disk, ~1 GB RSS at
         # startup); the expanded nginx_site assert+validate chain runs
@@ -520,7 +519,7 @@ class Machine:
         # commit_in_place: skip the qcow2-overlay step for the OS disks and
         # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
         # drives directly. Writes during the run mutate those files in
-        # place — that's the whole point, since mise-tasks/packer/seed-deps.sh
+        # place — that's the whole point, since mise-tasks/test/build_box_deps.sh
         # stages a fresh copy of box's artifacts into a tmpdir, runs
         # launch.py --commit --seed against it, and then publishes the
         # mutated tmpdir as box_deps. Refuses unless image_dir is also
@@ -1370,7 +1369,7 @@ class Machine:
             if self._commit_in_place:
                 # No overlay: pass the source files straight to qemu in
                 # their on-disk format. Writes persist in image_dir so
-                # mise-tasks/packer/seed-deps.sh can publish it afterwards.
+                # mise-tasks/test/build_box_deps.sh can publish it afterwards.
                 os_disk_paths = list(os_src_paths)
                 drive_format = self._packer_disk_format
             else:
@@ -1904,10 +1903,10 @@ def imagedir_for_host() -> Path:
 
 
 def sweep_stale_workdirs(imagedir: Path) -> None:
-    """Reap orphaned tmp* (harness) and .build-* (packer) dirs from prior runs.
+    """Reap orphaned tmp* (harness) and .build-* (image builders) dirs from prior runs.
 
     Cleanup normally rides Machine.__aexit__'s finally chain for tmp* and the
-    trailing cleanup in the packer build and seed-deps tasks for .build-*.
+    trailing cleanup in the Packer and box_deps build tasks for .build-*.
     Both bypass on SIGKILL / OOM / power-loss, leaving orphan dirs. Each is a
     full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
     until .ansible-lint excludes the path, so leaks are doubly expensive.

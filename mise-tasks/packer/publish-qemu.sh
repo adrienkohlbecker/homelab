@@ -18,7 +18,7 @@ box)
   mise run packer:build box --ubuntu "$ubuntu"
   ;;
 box_deps)
-  mise run packer:seed-deps --ubuntu "$ubuntu"
+  mise run test:build_box_deps --ubuntu "$ubuntu"
   ;;
 *)
   echo "unsupported qemu fixture machine: $machine" >&2

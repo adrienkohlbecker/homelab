@@ -211,7 +211,7 @@ The harness lives in `test/` (Python, asyncio).
 
 ### Harness CLI
 
-`test/testrole.py <role>` boots `box` (default) and applies the role end-to-end. `test/testall.py` fans out role × machine in parallel. Flags: `--machine {minimal,box,lab,pug}`, `--keep`, `testall.py --retry-failed`. Exit codes: `0` success, `1` converge, `124` timeout, `125` idempotence, `130` cancelled. Failed-run artifacts → `test/out/<machine>.<ubuntu>.<role>.*.ansi`. Artifact trees under `/mnt/scratch/qemu/<codename>/` (Linux) or `packer/artifacts/<codename>/` (Mac); macOS needs `xorriso` for the cloud-init seed iso. On the macOS aarch64 fixture, run `mise run test:firmware` once during bootstrap — it fetches a newer edk2 (Homebrew's edk2-stable202408 ASSERTs in rEFInd across a warm reboot, wedging any role that reboots: reboot/kdump/console `_verify`). `packer:seed-deps` depends on it and worktrees symlink it from the main checkout, so one fetch covers all; the harness **errors with fetch guidance** if it is missing rather than falling back to the broken firmware.
+`test/testrole.py <role>` boots `box` (default) and applies the role end-to-end. `test/testall.py` fans out role × machine in parallel. Flags: `--machine {minimal,box,lab,pug}`, `--keep`, `testall.py --retry-failed`. Exit codes: `0` success, `1` converge, `124` timeout, `125` idempotence, `130` cancelled. Failed-run artifacts → `test/out/<machine>.<ubuntu>.<role>.*.ansi`. Artifact trees under `/mnt/scratch/qemu/<codename>/` (Linux) or `packer/artifacts/<codename>/` (Mac); macOS needs `xorriso` for the cloud-init seed iso. On the macOS aarch64 fixture, run `mise run test:firmware` once during bootstrap — it fetches a newer edk2 (Homebrew's edk2-stable202408 ASSERTs in rEFInd across a warm reboot, wedging any role that reboots: reboot/kdump/console `_verify`). `test:build_box_deps` depends on it and worktrees symlink it from the main checkout, so one fetch covers all; the harness **errors with fetch guidance** if it is missing rather than falling back to the broken firmware.
 
 **Flake policy:** every wait in the harness is **bounded** — a stuck boot surfaces as a quick failure, never a silent hang. Don't paper over flakes with auto-retry; fix the unbounded wait.
 
@@ -223,7 +223,7 @@ SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-author
 
 ### Test environment design
 
-Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. Variants: `minimal` (cloud ext4), `box` (single-disk rpool, default CI fixture), `box_deps` (box + pre-baked podman/nginx/fluent-bit, opt-in via `machines: {box_deps:}` in `meta/test.yml`, saves repeated dependency installs), `pug`/`lab` (on-demand/nightly). `box_deps` rebuild: `mise run packer:seed-deps --ubuntu <codename>` after every `packer:build box`.
+Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. Variants: `minimal` (cloud ext4), `box` (single-disk rpool, default CI fixture), `box_deps` (box + pre-baked podman/nginx/fluent-bit, opt-in via `machines: {box_deps:}` in `meta/test.yml`, saves repeated dependency installs), `pug`/`lab` (on-demand/nightly). `box_deps` rebuild: `mise run test:build_box_deps --ubuntu <codename>` after every `packer:build box`.
 
 ## Continuous Integration
 

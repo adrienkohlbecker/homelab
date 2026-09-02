@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Layer packer/seed_deps.yml on top of the box artifact and publish as box_deps"
+#MISE description="Build the box_deps test fixture from the published box artifact"
 #MISE interactive=true
 # The seed reboots into the HWE 6.8 kernel; on the aarch64 fixture that warm
 # reboot needs the newer edk2 firmware (see test/arch.py) or it wedges, so the
@@ -8,7 +8,7 @@
 # jobs, which run this to produce the published box_deps bundle) the fetch still
 # runs but the blob goes unused. Idempotent: a no-op once present.
 #MISE depends=["test:firmware"]
-#USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to seed multiple releases" default="noble"
+#USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to build multiple releases" default="noble"
 #USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
@@ -36,8 +36,8 @@ if [ ! -d "${src}" ]; then
   exit 1
 fi
 
-# Stage a copy of box's artifacts under the shared build-workdir root so the seed runs
-# against a fresh tree and publish.py's atomic-rename swaps it over the
+# Stage a copy of box's artifacts under the shared build-workdir root so the
+# build runs against a fresh tree and publish.py's atomic rename swaps it over the
 # previous good box_deps directory without disturbing box. The copy is
 # also what protects the box source from --commit's in-place writes,
 # since the qcow2 overlay is bypassed.
@@ -51,7 +51,7 @@ fi
 # slash forms; `ditto` is the Apple-blessed equivalent that always
 # uses clonefile(2) when both ends are on the same APFS volume
 # (10.13+).
-tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-seed-${ubuntu}-XXXXXX")
+tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-box-deps-${ubuntu}-XXXXXX")
 # mktemp -d always creates 0700 for security, defeating the umask 002
 # above; publish.py's atomic rename then carries that mode onto box_deps,
 # leaving it un-traversable by the homelab_ci-group runner that opens the
@@ -61,7 +61,7 @@ chmod 2770 "${tmp}"
 # rm the tmpdir on any exit path. On success publish.py has already
 # renamed it over ${dst}, so `rm -rf` is a no-op. On failure mid-run
 # we don't want a partially-seeded directory left behind to be picked
-# up by a future packer publish or confuse the next seed-deps run.
+# up by a future publish or confuse the next box_deps build.
 trap 'rm -rf "${tmp}"' EXIT
 echo "==> Staging ${src} -> ${tmp}"
 case "$(uname -s)" in
@@ -74,18 +74,18 @@ Darwin) ditto "${src}" "${tmp}" ;;
 esac
 
 # launch.py --commit mounts ${tmp}/packer-ubuntu-N.<format> directly
-# (no qcow2 overlay), so seed_deps.yml's writes land in the staged tree.
+# (no qcow2 overlay), so build_box_deps.yml's writes land in the staged tree.
 # --seed runs the playbook after system-running, then powers off cleanly.
 echo "==> Seeding via test/launch.py --commit"
 test/launch.py \
   --machine box_deps \
   --ubuntu "${ubuntu}" \
   --image-dir "${tmp}" \
-  --seed packer/seed_deps.yml \
+  --seed test/playbooks/build_box_deps.yml \
   --commit \
   --timeout 1200
 
-# Atomic publish under the same lockfile packer's install post-processor
+# Atomic publish under the same lockfile Packer's install post-processor
 # and test/machine.py's shared-flock acquire use. rm + mv windows
 # concurrent with a test cell mid-launch would otherwise race the
 # backing-file open(2) qemu does at device init.

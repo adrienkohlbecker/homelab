@@ -1,5 +1,5 @@
 # _setup.yml imports nginx/test_fixture, which is pre-baked into box_deps (see
-# packer/seed_deps.yml), so route there to skip the nginx install on every
-# test run. minio needs nothing else box_deps lacks.
+# test/playbooks/build_box_deps.yml), so route there to skip the nginx install
+# on every test run. minio needs nothing else box_deps lacks.
 machines:
   box_deps:

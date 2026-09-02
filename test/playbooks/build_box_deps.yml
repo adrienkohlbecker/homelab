@@ -1,9 +1,9 @@
 # Bake the heavy cross-cutting test deps (podman, nginx + snakeoil certs, and
 # fluent-bit) into the box_deps variant image so role tests that opt in via
 # roles/<role>/meta/test.yml skip their installation in every _setup.yml hook.
-# Invoked by qemu.pkr.hcl's seed-deps post-processor,
-# which boots the freshly-built image, runs this playbook against it,
-# and shuts it down cleanly so the shipped artifacts carry the deps.
+# The test:build_box_deps task boots the published box fixture, runs this
+# playbook against it, and shuts it down cleanly before publishing the derived
+# fixture.
 - name: Bake homelab test deps into the box_deps variant image
   hosts: all
   become: true

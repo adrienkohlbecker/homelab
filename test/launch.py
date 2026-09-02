@@ -181,7 +181,7 @@ def parse_args() -> argparse.Namespace:
         metavar="PLAYBOOK",
         help="After SSH + system-running ready, run ansible-playbook "
         "PLAYBOOK against the booted VM, then cleanly shut down. Used by "
-        "mise-tasks/packer/seed-deps.sh to bake deps into a derived variant "
+        "mise-tasks/test/build_box_deps.sh to bake deps into a derived variant "
         "image. Implies --exit-after-ready semantics.",
     )
     parser.add_argument(
@@ -324,7 +324,7 @@ async def _run_async(
                 # roles/group_vars/host_vars that prepare() already
                 # copied there. Ansible's group_vars/host_vars lookup
                 # is relative to the playbook's dir; the original
-                # packer/seed_deps.yml location has no group_vars
+                # test/playbooks/build_box_deps.yml has no group_vars
                 # sibling, so `ubuntu_mirror` (and friends from
                 # group_vars/all.yml) would otherwise be undefined.
                 staged_seed = m.workdir_path / seed.name
