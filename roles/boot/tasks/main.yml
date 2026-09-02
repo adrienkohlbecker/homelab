@@ -203,18 +203,6 @@
   tags:
     - boot
 
-- name: Set initramfs debug command line
-  import_role:
-    name: boot
-    tasks_from: cmdline
-  vars:
-    boot_cmdline_args:
-      name: initramfs_debug
-      contents: "{{ (boot_initramfs_debug | bool) | ternary('debug', '') }}"
-      grub_scope: default
-  tags:
-    - boot
-
 - name: Set target kernel debug command line
   import_role:
     name: boot

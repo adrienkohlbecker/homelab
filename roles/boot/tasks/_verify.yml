@@ -137,15 +137,6 @@
       Expected: {{ _console_serial | trim }}
       Got: {{ _boot_verify_cmdline.stdout }}
 
-- name: _verify | Commandline carries initramfs debug when enabled
-  when: not grub_bootloader and (boot_initramfs_debug | bool)
-  assert:
-    that:
-      - "'debug' in _boot_verify_cmdline.stdout.split()"
-    fail_msg: >-
-      org.zfsbootmenu:commandline is missing debug from the
-      initramfs_debug fragment: {{ _boot_verify_cmdline.stdout }}
-
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
 # not just that the ZFS property was set. Skipped on aarch64 (no reboot above).
@@ -177,25 +168,6 @@
     fail_msg: >-
       /proc/cmdline does not carry earlycon= after reboot — the
       ZBM serial args may not have propagated: {{ _cmdline }}
-
-- name: _verify | Running kernel booted with initramfs debug when enabled
-  when: not grub_bootloader and ansible_architecture != 'aarch64' and (boot_initramfs_debug | bool)
-  vars:
-    _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
-  assert:
-    that:
-      - "'debug' in _cmdline.split()"
-    fail_msg: >-
-      /proc/cmdline does not carry debug after reboot — the ZBM property may
-      not have propagated: {{ _cmdline }}
-
-- name: _verify | Initramfs debug log exists when enabled
-  when: not grub_bootloader and ansible_architecture != 'aarch64' and (boot_initramfs_debug | bool)
-  stat:
-    path: /run/initramfs/initramfs.debug
-  register: _boot_verify_initramfs_debug
-  become: true
-  failed_when: not _boot_verify_initramfs_debug.stat.exists
 
 # --- EFI NVRAM boot entries ---
 

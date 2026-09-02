@@ -13,10 +13,6 @@ boot_serial_console: ""
 # dependencies.
 boot_disable_lvm_services: "{{ zfs_root | default(false) }}"
 
-# Temporary initramfs-tools tracing. When enabled, the next boot writes
-# /run/initramfs/initramfs.debug, useful for timing pre-root scripts.
-boot_initramfs_debug: false
-
 # Temporary target-kernel tracing appended to the command line that ZBM passes
 # to the selected boot environment via org.zfsbootmenu:commandline.
 boot_target_debug_cmdline: ""
