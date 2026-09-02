@@ -19,9 +19,9 @@
 #                  flat repo (trailing-slash suite, no components)
 #   pin:           optional { package, version, priority } -> preferences.d/<name>
 #
-# Exposes apt_source_<name>_changed (true when the repo, signing key, prereqs,
-# or legacy source cleanup changed) so the caller can gate its install out of
-# check mode -- where a prereq install can mask the repository task.
+# Exposes apt_source_<name>_changed (true when the repo, signing key, or prereqs
+# changed) so the caller can gate its install out of check mode -- where a
+# prereq install can mask the repository task.
 
 - name: Assert apt_source args for {{ apt_source_args.name }}
   assert:
@@ -42,31 +42,6 @@
       apt_source_args must define name, key_url, key_id, uris and suites,
       with name a [a-z0-9_-] slug and key_url an https URL;
       got {{ apt_source_args }}
-
-# Sweep legacy apt_repository output by the scoped keyring reference rather
-# than a caller-provided filename. This catches URL-derived names, Fluent Bit's
-# historical fluent-bit.list, and the canonical <name>.list without retaining
-# the retired filename interface.
-- name: Find legacy .list files for {{ apt_source_args.name }}
-  find:
-    paths: /etc/apt/sources.list.d
-    patterns: "*.list"
-    contains: "signed-by=/usr/share/keyrings/{{ apt_source_args.name }}\\.gpg"
-    # Legacy deb lines start with `deb [arch=...`; search the whole file
-    # instead of applying the regex only at the start of each line.
-    read_whole_file: true
-  register: apt_source_legacy_lists
-  become: true
-
-- name: Remove legacy .list files for {{ apt_source_args.name }}
-  file:
-    path: "{{ item.path }}"
-    state: absent
-  loop: "{{ apt_source_legacy_lists.files }}"
-  loop_control:
-    label: "{{ item.path }}"
-  register: apt_source_legacy_lists_removed
-  become: true
 
 # A scoped keyring must not also remain in apt's global trust directory.
 - name: Remove global-trust keyring for {{ apt_source_args.name }}
@@ -152,11 +127,11 @@
   register: apt_source_repo
 
 # deb822_repository writes the .sources file but does not refresh apt. Use a
-# strict refresh after changing the repo or deleting a legacy duplicate so a
-# broken source fails here rather than as a missing package in the caller.
+# strict refresh after changing the repo so a broken source fails here rather
+# than as a missing package in the caller.
 - name: Refresh apt cache after repository change for {{ apt_source_args.name }}  # noqa: command-instead-of-module
   when:
-    - apt_source_repo is changed or apt_source_legacy_lists_removed is changed
+    - apt_source_repo is changed
     - not ansible_check_mode
   command: apt-get update --error-on=any
   register: apt_source_refresh
@@ -183,4 +158,4 @@
 
 - name: Export change signal for {{ apt_source_args.name }}
   set_fact:
-    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo is changed or apt_source_key is changed or apt_source_prereqs is changed or apt_source_legacy_lists_removed is changed }}"
+    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo is changed or apt_source_key is changed or apt_source_prereqs is changed }}"
