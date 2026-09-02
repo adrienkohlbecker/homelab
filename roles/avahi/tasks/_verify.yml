@@ -1,13 +1,7 @@
-# Wire-path check: getent ahosts <host>.local routes through
-# libnss-mdns (mdns4_minimal), which sends its own multicast query
-# to 224.0.0.251 and is *not* a D-Bus self-query of avahi -- this
-# verifies the daemon answers on the wire, not just over the local
-# socket. If allow-interfaces regressed to lo-only, the multicast
-# group on the real uplink wouldn't be joined and this would fail.
-# Retried because the first multicast announcement lags unit-active
-# by several seconds on cold start (esp. in QEMU).
-- name: _verify | Host's own .local name resolves via mDNS on the wire
-  command: getent ahosts {{ ansible_hostname }}.local
+# libnss-mdns delegates .local resolution to Avahi through its local socket.
+# Retry because daemon readiness can lag unit activation on a cold boot.
+- name: _verify | Host's own .local name resolves through NSS and Avahi
+  command: getent ahostsv4 {{ ansible_hostname }}.local
   register: _avahi_resolve
   retries: 20
   delay: 2
@@ -16,14 +10,8 @@
     - ansible_default_ipv4.address in _avahi_resolve.stdout
   changed_when: false
 
-# Confirms avahi joined the mDNS multicast group (224.0.0.251) on
-# the pinned iface. Avahi binds 0.0.0.0:5353 for multicast reception
-# (kernel requirement), so the iface pin lives at the IGMP-membership
-# layer rather than the bind layer -- ss would always show the
-# wildcard bind regardless of allow-interfaces. Positive check:
-# catches a regression that failed to join the group at all (typo
-# in allow-interfaces, socket-option bug) which the getent above
-# could still mask via the kernel's loopback path for local queries.
+# Local NSS resolution does not prove that Avahi joined the multicast group on
+# the configured uplink, so verify that membership separately.
 - name: _verify | Avahi joined 224.0.0.251 on the pinned iface
   command: ip -j maddr show dev {{ default_interface }}
   register: _avahi_maddr
