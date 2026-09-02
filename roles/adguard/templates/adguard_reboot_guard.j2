@@ -13,21 +13,9 @@ PEER_IPS=(
 
 LOCK_PID=
 
-take_lock() {
-  if [ -z "${LOCK_PID:-}" ]; then
-    systemd-inhibit \
-      --what=shutdown \
-      --mode=block \
-      --who="adguard_reboot_guard" \
-      --why="No healthy DNS peer - this host is the last DNS server" \
-      sleep infinity &
-    LOCK_PID=$!
-    echo "lock taken - no peer answered DNS" >&2
-  fi
-}
-
 release_lock() {
-  if [ -n "${LOCK_PID:-}" ]; then
+  if [ -n "$LOCK_PID" ]; then
+    # A vanished inhibitor is already released; reap it if it still exists.
     kill "$LOCK_PID" 2>/dev/null || true
     wait "$LOCK_PID" 2>/dev/null || true
     LOCK_PID=
@@ -42,14 +30,19 @@ update_lock() {
       return 0
     fi
   done
-  take_lock
+  if [ -z "$LOCK_PID" ]; then
+    systemd-inhibit \
+      --what=shutdown \
+      --mode=block \
+      --who="adguard_reboot_guard" \
+      --why="No healthy DNS peer - this host is the last DNS server" \
+      sleep infinity &
+    LOCK_PID=$!
+    echo "lock taken - no peer answered DNS" >&2
+  fi
 }
 
-cleanup() {
-  release_lock
-  exit 0
-}
-trap cleanup SIGTERM SIGINT
+trap 'release_lock; exit 0' SIGTERM SIGINT
 
 while true; do
   update_lock
