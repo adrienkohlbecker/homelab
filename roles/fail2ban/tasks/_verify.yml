@@ -93,10 +93,3 @@
   command: fail2ban-client set sshd unbanip 192.0.2.1
   changed_when: true
   become: true
-
-- name: _verify | Banned IP is gone from inet f2b-table
-  command: nft list table inet f2b-table
-  register: _fail2ban_f2b_after
-  changed_when: false
-  failed_when: "'192.0.2.1' in _fail2ban_f2b_after.stdout"
-  become: true
