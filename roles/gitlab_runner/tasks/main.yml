@@ -23,29 +23,16 @@
       assert:
         that:
           - gitlab_runner_aws_qemu_token | length > 0
+          - gitlab_runner_aws_qemu_site_token | length > 0
           - gitlab_runner_aws_qemu_access_key_id | length > 0
           - gitlab_runner_aws_qemu_secret_access_key | length > 0
         fail_msg: >-
           gitlab_runner_aws_qemu_enabled is true but
-          gitlab_runner_aws_qemu_token and/or the manager AWS credentials are
-          unset for {{ inventory_hostname }}. Create a protected project runner
-          tagged aws-shell-qemu, create an IAM access key for the
-          homelab-ci-fleeting manager user, and vault the token/key values
-          before enabling the runner in prod.
-
-    # _site_test reuses the main AWS plugin and credential profile.
-    - name: Assert the AWS qemu site runner inputs are set
-      when: gitlab_runner_aws_qemu_site_enabled
-      assert:
-        that:
-          - gitlab_runner_aws_qemu_enabled | bool
-          - gitlab_runner_aws_qemu_site_token | length > 0
-        fail_msg: >-
-          gitlab_runner_aws_qemu_site_enabled is true but either the role-cell
-          aws_qemu runner is disabled (the site pool reuses its AWS credentials)
-          or gitlab_runner_aws_qemu_site_token is unset for
-          {{ inventory_hostname }}. Create a protected project runner tagged
-          aws-shell-qemu-site and vault its token before enabling the site pool.
+          role-cell/site runner tokens and/or the manager AWS credentials are
+          unset for {{ inventory_hostname }}. Create protected project runners
+          tagged aws-shell-qemu and aws-shell-qemu-site, create an IAM access
+          key for the homelab-ci-fleeting manager user, and vault the token/key
+          values before enabling the runner in prod.
 
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:

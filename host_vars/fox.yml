@@ -275,6 +275,5 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
 # group_vars/prod.yml (gitlab_runner_aws_qemu_site_token); the role-cell runner's
 # AWS plugin + .aws profile are reused. detect.py routes _site_test here via the
 # aws_qemu site_runner_tag.
-gitlab_runner_aws_qemu_site_enabled: true
 # One job per pipeline, so warm reuse buys nothing here either -- same 2m drain.
 gitlab_runner_aws_qemu_site_idle_time: "2m"

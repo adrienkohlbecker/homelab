@@ -32,7 +32,6 @@ gitlab_runner_aws_qemu_username: ubuntu
 
 # Dedicated one-host pool for _site_test. It reuses the AWS plugin/profile and
 # has its own GitLab token and Terraform-owned ASG.
-gitlab_runner_aws_qemu_site_enabled: false
 gitlab_runner_aws_qemu_site_token: ""
 gitlab_runner_aws_qemu_site_asg_name: homelab-ci-qemu-site
 gitlab_runner_aws_qemu_site_idle_time: "5m"
