@@ -114,10 +114,10 @@
     argv: >-
       {{ ['certbot', 'certonly', '--noninteractive', '--dns-cloudflare',
           '--cert-name', inventory_hostname + '.' + domain,
-          '--deploy-hook', certbot_deploy_hook,
+         '--deploy-hook', certbot_deploy_hook,
           '--domains', certbot_domains | join(',')]
          + (certbot_renewal_required | ternary(['--force-renewal'], []))
-         + (certbot_production_certificates | ternary([], ['--test-cert'])) }}
+         + (qemu_test | ternary(['--test-cert'], [])) }}
   vars:
     certbot_deploy_hook: >-
       systemctl is-active --quiet nginx || exit 0; systemctl reload nginx

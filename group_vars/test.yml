@@ -145,8 +145,6 @@ wireguard_keys:
   bunk:
     public_key: changeme
 
-certbot_production_certificates: false
-
 postfix_smtp_user: changeme
 postfix_smtp_password: changeme
 cloudflare_api_token: !vault |
