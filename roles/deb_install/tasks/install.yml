@@ -14,7 +14,6 @@
 #             record ${Version} 1.75.183. Pin the recorded version, not the URL.
 #   url       required; .deb download URL
 #   sha256    required; expected sha256 of the .deb
-#   timeout   optional; get_url timeout (seconds); omitted -> module default
 #
 # apt installs the single .deb with no archive dependency resolution (its deps
 # must already be satisfied) and will downgrade when the pin is older than the
@@ -45,9 +44,7 @@
 
 # Resolve the caller's dict into per-call locals once, mirroring the other
 # *_args helper roles (roles/service_user, roles/systemd_unit). Hoisting keeps
-# the staged-file path (referenced three times below) in one place. The optional
-# timeout stays inline on get_url below: default(omit) routed through set_fact
-# drops the key entirely, so the fact would be undefined rather than omitted.
+# the staged-file path (referenced three times below) in one place.
 - name: Resolve deb_install caller defaults
   set_fact:
     _deb_install_name: "{{ deb_install_args.name }}"
@@ -98,7 +95,6 @@
         owner: root
         group: root
         checksum: "sha256:{{ _deb_install_sha256 }}"
-        timeout: "{{ deb_install_args.timeout | default(omit) }}"
       register: deb_install_download
       retries: 3
       delay: 5
