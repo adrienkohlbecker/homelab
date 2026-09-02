@@ -33,24 +33,17 @@
 
 # dumpkeys reads the kernel VT's current keymap via KDGKBENT on /dev/tty0, so it
 # doesn't depend on a controlling terminal and works from ansible's ssh session.
-- name: _verify | Read live VT keymap
+# AZERTY maps keycode 16 to 'a' (QWERTY maps it to 'q'). The end anchor avoids
+# the ansible-core 2.20 handling bug for a word-boundary escape in `failed_when`.
+- name: _verify | Live VT keymap is French AZERTY
   command: dumpkeys
   register: _console_dumpkeys
   changed_when: false
+  failed_when: >-
+    _console_dumpkeys.stdout
+    | regex_findall('^\s*keycode\s+16\s*=\s*\+?a\s*$', multiline=True)
+    | length == 0
   become: true
-
-- name: _verify | Live VT keymap is French AZERTY
-  assert:
-    # AZERTY maps keycode 16 to 'a' (QWERTY would map it to 'q'). The `\s*$`
-    # end-anchor stands in for a `\b`: under ansible-core 2.20 a `\b` in a
-    # quoted regex evaluated inside a `that:` conditional is mangled into a
-    # backspace escape and never matches. regex_findall | length mirrors the
-    # config-directive checks above.
-    that:
-      - _console_dumpkeys.stdout | regex_findall('^\s*keycode\s+16\s*=\s*\+?a\s*$', multiline=True) | length > 0
-    fail_msg: >-
-      Live VT keymap doesn't look like French AZERTY:
-      keycode 16 did not map to 'a'.
 
 # The console_setup initramfs hook
 # (/usr/share/initramfs-tools/hooks/console_setup, shipped by the
@@ -127,17 +120,11 @@
       {{ _with_blank | length }} carry consoleblank=0
 
 # /sys/module/kernel/parameters/consoleblank exposes the value the
-# running kernel parsed from the cmdline at boot. Post-reboot this is
-# the strongest functional check: it proves the cmdline source above
-# actually propagated through to the kernel, not just that the file/
-# property is set correctly. Skipped on aarch64 — the reboot above is
-# also skipped, so the running kernel reflects the pre-role cmdline
-# (which the EFI-stub entry baked in at image build) and this would
-# fail unconditionally.
+# running kernel parsed from the cmdline at boot, proving the boot chain applied
+# the argument. Aarch64 skips the reboot, so its running kernel still reflects
+# the EFI-stub entry baked into the image.
 - name: _verify | Running kernel applied consoleblank=0
   when: ansible_architecture != 'aarch64'
-  slurp:
-    src: /sys/module/kernel/parameters/consoleblank
-  register: _console_consoleblank
-  failed_when: (_console_consoleblank.content | b64decode | trim) != '0'
+  command: grep -qxF 0 /sys/module/kernel/parameters/consoleblank
+  changed_when: false
   become: true
