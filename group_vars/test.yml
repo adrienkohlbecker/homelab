@@ -366,12 +366,9 @@ authelia_oidc_issuer_private_key: !vault |
           33386234326433376539333031303362356262376531346264326462353635353834363639343265
           37373466333464303736303833363235623133303438393764353262363236633230
 
-# Test-fixture OIDC clients. The client_secret is the pbkdf2-sha512
-# hash of "changeme" (Authelia's required format); the matching
-# plaintext lives next to the consumer role's other test vars
-# (minio_oidc_client_secret below). The redirect_uri is templated
-# against inventory_hostname so the same value works for any
-# future test host.
+# Test-fixture OIDC clients cover the standard confidential-client shape and
+# Jellyfin's client_secret_post exception. The client_secret is the
+# pbkdf2-sha512 hash of "changeme" in Authelia's required format.
 authelia_oidc_clients:
   - client_id: minio
     client_name: MinIO
@@ -379,18 +376,6 @@ authelia_oidc_clients:
     authorization_policy: one_factor
     redirect_uris:
       - 'https://minio.{{ inventory_hostname }}.{{ domain }}/oauth_callback'
-  - client_id: gitea
-    client_name: Gitea
-    # Same "changeme" pbkdf2 hash. Gitea's CLI provisioning is gated
-    # off in qemu_test (gitea admin auth add-oauth validates the
-    # discovery URL at registration time, which would need real
-    # Authelia + multi-SAN snakeoil + DNS host entry on box -- same
-    # trade minio explicitly declined). The client row stays here so
-    # the authelia _verify still parses a stable shape.
-    client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
-    authorization_policy: one_factor
-    redirect_uris:
-      - 'https://gitea.{{ inventory_hostname }}.{{ domain }}/user/oauth2/authelia/callback'
   - client_id: jellyfin
     client_name: Jellyfin
     # Same "changeme" pbkdf2 hash. Jellyfin's SSO provider is provisioned
@@ -408,18 +393,6 @@ authelia_oidc_clients:
     token_endpoint_auth_method: client_secret_post
     redirect_uris:
       - 'https://jellyfin.{{ inventory_hostname }}.{{ domain }}/sso/OID/redirect/authelia'
-  - client_id: headscale
-    client_name: Headscale
-    # Same "changeme" pbkdf2 hash as the other test clients. headscale's OIDC is
-    # disabled under qemu_test (it validates the issuer via OIDC discovery at
-    # boot, which the box VM can't reach), so this row is shape-only -- it keeps
-    # the authelia test client list mirroring prod. Prod's real hash + the fox
-    # redirect + the vaulted plaintext are an operator step (notes §E).
-    client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
-    authorization_policy: one_factor
-    redirect_uris:
-      - 'https://headscale.{{ inventory_hostname }}.{{ domain }}/oidc/callback'
-
 # Plaintext OIDC client secrets handed to consumer roles.
 # Pairs with the pbkdf2 hash above; rotate both halves together.
 minio_oidc_client_secret: changeme
