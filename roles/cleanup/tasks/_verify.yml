@@ -10,7 +10,6 @@
 - name: _verify | Find residual snapd unit files on disk
   find:
     paths:
-      - /lib/systemd/system
       - /usr/lib/systemd/system
       - /etc/systemd/system
     patterns: snapd*
