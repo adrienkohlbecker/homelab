@@ -36,6 +36,11 @@ local message_cases = {
         want = "warn",
     },
     {
+        label = "influxdb.warn.logfmt",
+        line = 'ts=2099-01-02T03:04:05Z lvl=warning msg="influxdb warning"',
+        want = "warn",
+    },
+    {
         label = "netdata.error.text",
         line = "level=error msg=\"start watching '/etc/netdata/scripts.d': no such file or directory\" plugin=scripts.d",
         want = "error",
