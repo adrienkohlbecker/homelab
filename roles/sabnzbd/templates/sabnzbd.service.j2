@@ -39,7 +39,7 @@ SyslogIdentifier=%N
 
 # Routine connection lifecycle records add no state. Preserve warnings,
 # failures, and TLS records without negotiated-cipher confirmation.
-LogFilterPatterns=~^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}::INFO::[[](downloader|newswrapper):[0-9]+[]] ([0-9]+@[^: ]+: (Initiating connection|Connected using TLSv[0-9.]+ [(][^)]+[)])|Connecting [0-9]+@[^ ]+ finished)[[:space:]]*$
+LogFilterPatterns=~[[](downloader|newswrapper):[0-9]+[]] ([0-9]+@[^: ]+: (Initiating connection|Connected using TLSv[0-9.]+ [(][^)]+[)])|Connecting [0-9]+@[^ ]+ finished)[[:space:]]*$
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
