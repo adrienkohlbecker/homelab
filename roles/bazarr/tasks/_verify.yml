@@ -20,7 +20,6 @@
     headers:
       X-API-KEY: "{{ bazarr_api_key }}"
     status_code: 200
-    return_content: true
   register: _bazarr_http
   retries: 30
   delay: 2
