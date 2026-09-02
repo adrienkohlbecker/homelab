@@ -48,9 +48,6 @@
 - name: Resolve deb_install caller defaults
   set_fact:
     _deb_install_name: "{{ deb_install_args.name }}"
-    _deb_install_version: "{{ deb_install_args.version }}"
-    _deb_install_url: "{{ deb_install_args.url }}"
-    _deb_install_sha256: "{{ deb_install_args.sha256 }}"
 
 # Read dpkg's recorded status + version directly. `apt: deb=` is idempotent on
 # *version* alone -- it would leave a removed-but-config-files package (which
@@ -76,7 +73,7 @@
   # dpkg-query emits "<status> <version>" (e.g. "installed 1.2.3"); anything but
   # an exact "installed <pinned version>" reinstalls -- not-installed yields "",
   # a removed-but-config-files package yields "config-files <version>".
-  when: deb_install_query.stdout != ("installed " ~ _deb_install_version)
+  when: deb_install_query.stdout != ("installed " ~ deb_install_args.version)
   become: true
   block:
 
@@ -86,7 +83,7 @@
     - name: Download deb
       check_mode: false
       get_url:
-        url: "{{ _deb_install_url }}"
+        url: "{{ deb_install_args.url }}"
         # /var/cache (root:root 0755), not world-writable /tmp: a local user
         # can't pre-plant or symlink the staging path. 0600 keeps the transient
         # unreadable to other local users while it waits for apt.
@@ -94,7 +91,7 @@
         mode: '0600'
         owner: root
         group: root
-        checksum: "sha256:{{ _deb_install_sha256 }}"
+        checksum: "sha256:{{ deb_install_args.sha256 }}"
       register: deb_install_download
       retries: 3
       delay: 5
