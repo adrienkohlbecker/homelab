@@ -89,10 +89,8 @@
 - name: Force apt update (--error-on=any)  # noqa: command-instead-of-module
   when: apt_mirror_legacy_emptied.changed or apt_mirror_deb822.changed
   command: apt-get update --error-on=any
-  register: _apt_force_update
   retries: 5
   delay: 30
-  until: _apt_force_update.rc == 0
   changed_when: true
   become: true
   tags:
