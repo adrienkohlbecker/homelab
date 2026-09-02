@@ -5,7 +5,6 @@ pipeline:
     - name: grep
       match: svc.*
       exclude:
-        - 'MESSAGE ^veth[0-9]+( |@|: )'
         - 'MESSAGE container health_status .*health_status=healthy'
 
     # systemd logs a unit's own lifecycle from init.scope, so the target unit
