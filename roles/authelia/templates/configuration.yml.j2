@@ -213,14 +213,6 @@ identity_providers:
           - groups
           - email
           - email_verified
-    # OIDC clients use authorization_policy rather than access_control rules.
-    # operator_only keeps selected first-party clients operator-scoped.
-    authorization_policies:
-      operator_only:
-        default_policy: 'deny'
-        rules:
-          - policy: 'two_factor'
-            subject: 'user:akohlbecker'
     clients:
 {% for client in authelia_oidc_clients %}
       - client_id: '{{ client.client_id }}'
