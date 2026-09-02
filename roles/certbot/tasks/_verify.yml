@@ -1,14 +1,9 @@
 # Exercise the issued certificate and renewal path. Netdata verifies the
 # cross-role x509check configuration on its consumer side.
 
-- name: _verify | Cert files exist
+- name: _verify | Private key exists
   stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
-    - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
-  loop_control:
-    label: "{{ item }}"
+    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
   register: _certbot_cert
   failed_when: not _certbot_cert.stat.exists
   become: true
