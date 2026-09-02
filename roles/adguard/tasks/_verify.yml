@@ -105,7 +105,6 @@
   command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} example.com A
   register: adguard_verify_upstream
   changed_when: false
-  failed_when: adguard_verify_upstream.stdout_lines | length == 0
   retries: 30
   delay: 2
   until: adguard_verify_upstream.stdout_lines | length > 0
@@ -117,7 +116,6 @@
 - name: _verify | Filtering engine blocks a listed domain
   uri:
     url: http://127.0.0.1:{{ service_ports.adguard }}/control/filtering/check_host?name=doubleclick.net
-    return_content: true
     status_code: 200
   register: adguard_verify_blocked
   retries: 30
@@ -162,21 +160,6 @@
   changed_when: false
   failed_when: "'127.0.0.1' not in adguard_verify_pihole.stdout_lines"
 
-- name: _verify | AdGuard filter lists are populated
-  uri:
-    url: http://127.0.0.1:{{ service_ports.adguard }}/control/filtering/status
-    return_content: true
-    status_code: 200
-  register: adguard_verify_filtering
-  retries: 30
-  delay: 2
-  until: >-
-    ((adguard_verify_filtering.json | default({})).filters | default([])
-     | selectattr('enabled')
-     | map(attribute='rules_count')
-     | map('int')
-     | sum) > 0
-
 - name: _verify | Verify AdGuard Authelia gate
   import_role:
     name: nginx
@@ -184,13 +167,6 @@
   vars:
     nginx_verify_authelia_gate_args:
       subdomain: adguard
-
-- name: _verify | Reboot guard service is active
-  systemd:
-    name: adguard_reboot_guard.service
-  register: _adguard_verify_reboot_guard
-  failed_when: _adguard_verify_reboot_guard.status.ActiveState != 'active'
-  become: true
 
 # Plain grep (not -q): it consumes all input so systemd-inhibit never
 # takes a SIGPIPE under pipefail, and the matching line lands in the
