@@ -16,6 +16,19 @@
     state: present
   become: true
 
+- name: _verify | Authelia runs as a non-root container user
+  command:
+    argv:
+      - podman
+      - exec
+      - authelia
+      - id
+      - -u
+  register: authelia_verify_uid
+  changed_when: false
+  failed_when: authelia_verify_uid.stdout | int == 0
+  become: true
+
 - name: _verify | Authelia /api/health reachable through nginx
   uri:
     url: https://auth.{{ authelia_cookie_domain }}/api/health
