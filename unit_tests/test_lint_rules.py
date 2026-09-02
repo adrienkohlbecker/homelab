@@ -15,6 +15,7 @@ NoInventoryHostnameWhen = _RULES["NoInventoryHostnameWhen"]
 NoNoLog = _RULES["NoNoLog"]
 PreferImport = _RULES["PreferImport"]
 RequireBackup = _RULES["RequireBackup"]
+RequireNamedRoleEntrypoint = _RULES["RequireNamedRoleEntrypoint"]
 RequireValidate = _RULES["RequireValidate"]
 ShellStrictMode = _RULES["ShellStrictMode"]
 
@@ -94,6 +95,30 @@ class TestRequireBackup:
     )
     def test_test_files_are_exempt(self, path: str) -> None:
         assert RequireBackup().matchtask(_task("copy"), _lintable(path)) is False
+
+
+class TestRequireNamedRoleEntrypoint:
+    def test_static_fixture_requires_tasks_from(self) -> None:
+        result = RequireNamedRoleEntrypoint().matchtask(
+            _task("import_role", name="apt"),
+            _lintable("test/playbooks/build_box_deps.yml"),
+        )
+        assert result == "static test fixture role imports must set `tasks_from:`"
+
+    def test_named_entrypoint_is_allowed(self) -> None:
+        result = RequireNamedRoleEntrypoint().matchtask(
+            _task("ansible.builtin.import_role", name="apt", tasks_from="configure"),
+            _lintable("/repo/test/playbooks/_bootstrap.yml"),
+        )
+        assert result is False
+
+    @pytest.mark.parametrize(
+        "path",
+        ["test/playbooks/site.yml", "roles/example/tasks/main.yml"],
+    )
+    def test_normal_role_entrypoints_are_allowed(self, path: str) -> None:
+        result = RequireNamedRoleEntrypoint().matchtask(_task("import_role", name="example"), _lintable(path))
+        assert result is False
 
 
 class TestNoHandlers:

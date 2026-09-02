@@ -54,14 +54,21 @@ def _is_test_hook(file: Lintable | None) -> bool:
     return file is not None and file.path.name.startswith(_TEST_HOOK_PREFIXES)
 
 
+def _is_test_playbook(file: Lintable | None) -> bool:
+    if file is None:
+        return False
+    parts = file.path.parts
+    return any(parts[index : index + 2] == ("test", "playbooks") for index in range(len(parts) - 1))
+
+
 def _is_test_file(file: Lintable | None) -> bool:
     if file is None:
         return False
     if _is_test_hook(file):
         return True
-    parts = file.path.parts
-    if "test" in parts and parts[parts.index("test") : parts.index("test") + 2] == ("test", "playbooks"):
+    if _is_test_playbook(file):
         return True
+    parts = file.path.parts
     if "roles" not in file.path.parts:
         return False
     role = parts.index("roles") + 1
@@ -101,6 +108,28 @@ class RequireBackup(AnsibleLintRule):
         if backup is False:
             return f"{module} task sets `backup: false`; config writes must keep backups"
         return f"{module} task is missing `backup: true`"
+
+
+class RequireNamedRoleEntrypoint(AnsibleLintRule):
+    """Static test fixtures must select the role task file they depend on."""
+
+    id = "require-named-role-entrypoint"
+    severity = "HIGH"
+    tags: ClassVar[list[str]] = ["idiom"]
+    version_changed = "1.0.0"
+
+    def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
+        if (
+            task["__ansible_action_type__"] != "task"
+            or _module_name(task) != "import_role"
+            or not _is_test_playbook(file)
+            or (file is not None and file.path.name == "site.yml")
+        ):
+            return False
+
+        if task["action"].get("tasks_from"):
+            return False
+        return "static test fixture role imports must set `tasks_from:`"
 
 
 class ShellStrictMode(AnsibleLintRule):

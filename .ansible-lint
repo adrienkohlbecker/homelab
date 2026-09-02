@@ -15,9 +15,11 @@ exclude_paths:
   # HA GUI submodule: home-assistant YAML, not ansible content. ansible-lint
   # can't load the blueprints (load-failure) and mis-lints the automation files.
   - roles/homeassistant/files/ha_gui_config/
-  # Harness driver playbooks reference `_role_under_test`, injected at runtime —
-  # they don't syntax-check standalone.
-  - test/playbooks/
+  # Harness driver playbooks reference `_role_under_test`, injected at runtime,
+  # so they don't syntax-check standalone. Static fixture playbooks are linted.
+  - test/playbooks/_setup.yml
+  - test/playbooks/_verify.yml
+  - test/playbooks/site.yml
 
 # Loop vars must be `__`-prefixed or `{role}_`-prefixed.
 loop_var_prefix: "^(__|{role}_)"
@@ -26,9 +28,10 @@ var_naming_pattern: "^[a-z_][a-z0-9_]*$"
 
 use_default_rules: true
 # Custom rules encode repo-specific conventions from AGENTS.md/CLAUDE.md:
-# shell-strict-mode, require-backup, no-handlers, no-no-log, and no
-# inventory_hostname branching are enforced; prefer-import and require-validate
-# are warning-only so they surface drift without blocking unrelated changes.
+# shell-strict-mode, require-backup, require-named-role-entrypoint, no-handlers,
+# no-no-log, and no inventory_hostname branching are enforced; prefer-import
+# and require-validate are warning-only so they surface drift without blocking
+# unrelated changes.
 rulesdir:
   - ./lint/ansible_rules/
 
