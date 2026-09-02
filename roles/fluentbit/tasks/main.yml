@@ -5,7 +5,7 @@
   vars:
     apt_source_args:
       name: fluentbit
-      key_id: C3C0A28534B9293EAF51FABD9F9DDC083888C1CD
+      key_sha256: df248e2d7103ca62cb683c20a077198d0fb0a7f79dbf53a604af0317de3b4711
       key_url: https://packages.fluentbit.io/fluentbit.key
       uris: "{{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }}"
       suites: "{{ ansible_distribution_release }}"

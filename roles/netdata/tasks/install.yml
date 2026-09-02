@@ -5,9 +5,8 @@
 # 2.* so a fresh install lands on the latest 2.x and only a deliberate
 # pin bump moves to a future major. See notes/netdata_v2_migration_analysis.md.
 
-# Flat repo (no components). The apt_source helper fetches the key into the scoped
-# /usr/share/keyrings/netdata.gpg (not the global trust store), verifies it
-# against key_id, and renders the 2.* pin.
+# Flat repo (no components). The apt_source helper pins the armored key payload
+# in the scoped /usr/share/keyrings/netdata.asc (not the global trust store).
 - name: install | Configure netdata apt repository
   import_role:
     name: apt_source
@@ -15,7 +14,7 @@
   vars:
     apt_source_args:
       name: netdata
-      key_id: 6E155DC153906B73765A74A99DD4A74CECFA8F4F
+      key_sha256: a18bd0303840126254b05a972f20df17c851d1573d28866ff67f55e152762e4f
       key_url: https://repo.netdata.cloud/netdatabot.gpg.key
       uris: "{{ mirror_apt_netdata }}/"
       suites: "{{ ansible_distribution_release }}/"

@@ -5,7 +5,7 @@
   vars:
     apt_source_args:
       name: docker
-      key_id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
       key_url: https://download.docker.com/linux/ubuntu/gpg
       uris: "{{ mirror_apt_docker }}"
       suites: "{{ ansible_distribution_release }}"

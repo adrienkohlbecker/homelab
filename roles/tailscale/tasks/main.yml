@@ -8,7 +8,7 @@
   vars:
     apt_source_args:
       name: tailscale
-      key_id: 2596A99EAAB33821893C0A79458CA832957F5868
+      key_sha256: 53c6f7dfbd774839d9f37e6c5022ba952108aba9a0e556a56f292a9eb605d7cf
       key_url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.asc"
       uris: "{{ mirror_apt_tailscale }}"
       suites: "{{ ansible_distribution_release }}"

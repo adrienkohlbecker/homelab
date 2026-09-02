@@ -1,4 +1,33 @@
 ---
+- name: Inspect armored replacements for retired binary apt keyrings
+  stat:
+    path: /usr/share/keyrings/{{ item }}.asc
+  loop:
+    - 1password
+    - docker
+    - fluentbit
+    - mise
+    - netdata
+    - tailscale
+  register: retired_services_apt_source_keys
+  become: true
+  tags:
+    - retired_services
+    - apt_source
+
+- name: Remove retired binary apt keyrings with armored replacements
+  when: item.stat.exists
+  file:
+    path: /usr/share/keyrings/{{ item.item }}.gpg
+    state: absent
+  loop: "{{ retired_services_apt_source_keys.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+  tags:
+    - retired_services
+    - apt_source
+
 - name: Remove retired shared Bash functions
   file:
     path: /usr/local/lib/functions.sh

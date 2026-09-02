@@ -1,8 +1,8 @@
 # Configures a third-party apt repository: signing key + deb822 source +
 # optional version pin.
 #
-# The signing key lives at /usr/share/keyrings/<name>.gpg, referenced by
-# signed-by= on the repo so it is trusted for this source only. Debian reserves
+# The armored signing key lives at /usr/share/keyrings/<name>.asc, referenced
+# by signed-by= on the repo so it is trusted for this source only. Debian reserves
 # /usr/share/keyrings for dpkg-managed keys and points self-fetched ones at
 # /etc/apt/keyrings; we deliberately use the former to share one fleet-wide
 # keyring location with roles/apt's archive keyring.
@@ -12,7 +12,7 @@
 #
 #   name:          identifier -- scoped keyring file, .sources name, pin file
 #   key_url:       URL of the signing key (fetched into the scoped keyring)
-#   key_id:        full GPG fingerprint, re-checked against the fetched key
+#   key_sha256:    checksum of the exact armored key payload
 #   uris:          repo base URL (usually a mirror_apt_* var)
 #   suites:        apt suite -- e.g. nodistro, or the release codename
 #   components:    optional apt component -- e.g. main, stable; omit for a
@@ -28,7 +28,7 @@
     that:
       - apt_source_args.name is defined
       - apt_source_args.key_url is defined
-      - apt_source_args.key_id is defined
+      - apt_source_args.key_sha256 is defined
       - apt_source_args.uris is defined
       - apt_source_args.suites is defined
       # name lands in the keyring / .sources / preferences file paths --
@@ -36,11 +36,13 @@
       - apt_source_args.name | default('') is match('^[a-z0-9_-]+\Z')
       # the key is the source's trust anchor; a plaintext fetch is MITM-able.
       - apt_source_args.key_url | default('') is match('https://')
+      - apt_source_args.key_sha256 | default('') is match('^[0-9a-f]{64}\Z')
       - apt_source_args.suites | default('') is not search('[ ,]')
       - apt_source_args.components | default('') is not search('[ ,]')
     fail_msg: >-
-      apt_source_args must define name, key_url, key_id, uris and suites,
-      with name a [a-z0-9_-] slug and key_url an https URL;
+      apt_source_args must define name, key_url, key_sha256, uris and suites,
+      with name a [a-z0-9_-] slug, key_url an https URL, and key_sha256 a
+      lowercase SHA-256 digest;
       got {{ apt_source_args }}
 
 # Pre-warm /var/lib/apt/lists/ in check mode so python3-debian can be resolved.
@@ -72,40 +74,12 @@
   get_url:
     url: "{{ apt_source_args.key_url }}"
     dest: /usr/share/keyrings/{{ apt_source_args.name }}.asc
+    checksum: sha256:{{ apt_source_args.key_sha256 }}
     owner: root
     group: root
     mode: "0644"
   become: true
   register: apt_source_key
-
-- name: Dearmor the repository key into the scoped keyring for {{ apt_source_args.name }}
-  when: apt_source_key is changed
-  command: gpg --batch --yes --dearmor --output /usr/share/keyrings/{{ apt_source_args.name }}.gpg /usr/share/keyrings/{{ apt_source_args.name }}.asc
-  changed_when: true
-  become: true
-
-# deb822_repository trusts whatever signed_by serves without checking it
-# against key_id, so assert the primary fingerprint before trusting the key.
-# Real converge only: command tasks skip under --check.
-- name: Read repository key fingerprint for {{ apt_source_args.name }}
-  when: not ansible_check_mode
-  command: gpg --show-keys --with-colons /usr/share/keyrings/{{ apt_source_args.name }}.gpg
-  changed_when: false
-  register: apt_source_key_fpr
-  become: true
-
-- name: Assert the fetched key matches key_id for {{ apt_source_args.name }}
-  when: not ansible_check_mode
-  vars:
-    # The first fpr record is the primary key; field 10 is its fingerprint.
-    apt_source_fpr_fields: "{{ (apt_source_key_fpr.stdout_lines | select('match', 'fpr:') | list | first | default('')).split(':') }}"
-  assert:
-    that:
-      - (apt_source_fpr_fields | length > 9) and (apt_source_fpr_fields[9] == apt_source_args.key_id)
-    fail_msg: >-
-      Fetched key for {{ apt_source_args.name }} primary fingerprint
-      {{ apt_source_fpr_fields[9] if (apt_source_fpr_fields | length > 9) else 'none' }}
-      does not match expected {{ apt_source_args.key_id }}
 
 - name: Configure repository for {{ apt_source_args.name }}
   when: not (ansible_check_mode and apt_source_prereqs is changed)
@@ -116,7 +90,7 @@
     suites: "{{ apt_source_args.suites }}"
     components: "{{ apt_source_args.components | default(omit) }}"
     architectures: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
-    signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+    signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.asc
   become: true
   register: apt_source_repo
 

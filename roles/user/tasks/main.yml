@@ -263,7 +263,7 @@
     apt_source_args:
       name: mise
       key_url: https://mise.en.dev/gpg-key.pub
-      key_id: 24853EC9F655CE80B48E6C3A8B81C9D17413A06D
+      key_sha256: 91c72340c5cc84ae2ba98c1070083feacf789b0a4a3d34b2416147769e475d96
       uris: "{{ mirror_apt_mise }}"
       suites: stable
       components: main
@@ -334,7 +334,7 @@
   vars:
     apt_source_args:
       name: 1password
-      key_id: 3FEF9748469ADBE15DA7CA80AC2D62742012EA22
+      key_sha256: f39e7dd9dedc581ced85732832f217e0de5860a3b80279b5af4bc7c6d8157bae
       key_url: https://downloads.1password.com/linux/keys/1password.asc
       uris: "{{ mirror_apt_1password }}"
       suites: stable
