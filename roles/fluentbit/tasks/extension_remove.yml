@@ -19,16 +19,7 @@
   tags:
     - fluentbit
 
-- name: extension_remove | Check whether the extension directory exists
-  stat:
-    path: /etc/fluent-bit/services
-  register: fluentbit_extension_remove_dir
-  become: true
-  tags:
-    - fluentbit
-
 - name: extension_remove | Remove retired service extensions
-  when: fluentbit_extension_remove_dir.stat.isdir | default(false)
   file:
     path: /etc/fluent-bit/services/{{ item }}.yaml
     state: absent
@@ -39,7 +30,6 @@
     - fluentbit
 
 - name: extension_remove | Find remaining service extensions
-  when: fluentbit_extension_remove_dir.stat.isdir | default(false)
   find:
     paths: /etc/fluent-bit/services
     patterns: "*.yaml"
@@ -50,7 +40,6 @@
     - fluentbit
 
 - name: extension_remove | Rebuild service extension manifest
-  when: fluentbit_extension_remove_dir.stat.isdir | default(false)
   copy:
     content: |
       includes:{{ '' if fluentbit_extension_remove_remaining.files else ' []' }}
@@ -68,18 +57,9 @@
   tags:
     - fluentbit
 
-- name: extension_remove | Check whether Fluent Bit is installed
-  stat:
-    path: /opt/fluent-bit/bin/fluent-bit
-  register: fluentbit_extension_remove_binary
-  become: true
-  tags:
-    - fluentbit
-
 - name: extension_remove | Validate rebuilt configuration
   when:
     - not ansible_check_mode
-    - fluentbit_extension_remove_binary.stat.exists
     - >-
       fluentbit_extension_remove_configs.changed | default(false)
       or fluentbit_extension_remove_manifest.changed | default(false)
@@ -89,23 +69,9 @@
   tags:
     - fluentbit
 
-- name: extension_remove | Check whether Fluent Bit is active
-  when:
-    - not ansible_check_mode
-    - fluentbit_extension_remove_binary.stat.exists
-  systemd:
-    name: fluent-bit.service
-  register: fluentbit_extension_remove_active
-  changed_when: false
-  failed_when: false
-  become: true
-  tags:
-    - fluentbit
-
 - name: extension_remove | Reload Fluent Bit
   when:
     - not ansible_check_mode
-    - fluentbit_extension_remove_active.status.ActiveState | default('') == 'active'
     - >-
       fluentbit_extension_remove_configs.changed | default(false)
       or fluentbit_extension_remove_manifest.changed | default(false)
