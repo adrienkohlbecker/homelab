@@ -101,7 +101,6 @@
     opts: "{{ boot_esp_mount_opts }}"
     state: mounted
     backup: true
-  register: boot_esp_mount
   become: true
   tags:
     - boot

@@ -27,8 +27,6 @@
 - name: _verify | MODULES=most is pinned in initramfs conf.d
   command: grep -qxF MODULES=most /etc/initramfs-tools/conf.d/modules-most
   changed_when: false
-  register: _boot_verify_modules
-  failed_when: _boot_verify_modules.rc != 0
   become: true
 
 # The conf.d check proves the pin landed; this proves it took effect. ahci (SATA)
