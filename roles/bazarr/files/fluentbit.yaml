@@ -1,28 +1,21 @@
 parsers:
   - name: bazarr_console
     format: regex
-    regex: '^(?<bazarr_time>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}) - (?<logger>[[:alnum:]_.-]+)[[:space:]]+\((?<thread_id>[0-9a-f]+)\) :[[:space:]]+(?<bazarr_level>[A-Z]+) \((?<source>[[:alnum:]_.-]+):(?<source_line>[0-9]+)\) - (?<message>.*)$'
+    regex: '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} - (?<logger>[[:alnum:]_.-]+)[[:space:]]+\((?<thread_id>[0-9a-f]+)\) :[[:space:]]+(?<_level>[A-Z]+) \((?<source>[[:alnum:]_.-]+):(?<source_line>[0-9]+)\) - (?<message>.*)$'
     types: source_line:integer
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.bazarr.service
-      rename: MESSAGE log
     - name: parser
       match: svc.bazarr.service
-      key_name: log
+      key_name: MESSAGE
       parser: bazarr_console
       reserve_data: true
-      preserve_key: true
     - name: modify
       match: svc.bazarr.service
       condition:
         - key_exists CONTAINER_TAG
         - key_exists message
-        - key_exists bazarr_level
-      hard_rename:
-        - message log
-        - bazarr_level _level
-      remove: bazarr_time
+        - key_exists _level
+      hard_rename: message log
       set: parser_status parsed
