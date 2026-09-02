@@ -52,19 +52,6 @@
     label: '{{ item.mountpoint }} <- {{ data_pool }}/{{ item.name }}'
   become: true
 
-- name: _verify | Mountpoint owned by ansible_user_id
-  when: zfs_root
-  stat:
-    path: "{{ item.mountpoint }}"
-  register: data_verify_owner
-  failed_when: >-
-    not data_verify_owner.stat.exists
-    or data_verify_owner.stat.pw_name != ansible_user_id
-    or data_verify_owner.stat.gr_name != ansible_user_id
-  loop: '{{ data_datasets }}'
-  loop_control:
-    label: "{{ item.mountpoint }} owner={{ ansible_user_id }}:{{ ansible_user_id }}"
-
 - name: _verify | Mountpoint is writable as ansible_user_id
   when: zfs_root
   file:
