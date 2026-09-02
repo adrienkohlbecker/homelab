@@ -509,13 +509,17 @@
     - retired_services
     - netdata
 
-- name: Remove retired Netdata smartctl collector override
+- name: Remove retired Netdata collector overrides
   file:
-    path: /etc/netdata/go.d/smartctl.conf
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/netdata/go.d/smartctl.conf
+    - /etc/netdata/go.d/fail2ban.conf
   become: true
   tags:
     - retired_services
+    - netdata
 
 - name: Remove hdparm Netdata files from diskless hosts
   when: rotational_disks_by_id | length == 0

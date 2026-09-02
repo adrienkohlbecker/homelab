@@ -1,19 +1,6 @@
-# Metric-wiring phase, imported by main.yml after the service is up: each
-# sibling role ships a tasks/netdata.yml that drops its own collector config
-# (and any alerts) through netdata's config/health/charts_d helpers. Split out
-# of main.yml for navigability; runs in main.yml's order. netdata_presence is
-# netdata's own collector rather than a sibling role.
-# fail2ban runs only where fail2ban_enabled is set (fox + the test box); skip
-# its collector on hosts that don't run it.
-- name: Install fail2ban metrics
-  when: fail2ban_enabled
-  import_role:
-    name: fail2ban
-    tasks_from: netdata
-  vars:
-    fail2ban_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
-  tags:
-    - netdata
+# Metric-wiring phase, imported by main.yml after the service is up: sibling
+# roles drop collector configuration and alerts through Netdata's helpers.
+# netdata_presence is Netdata's own collector rather than a sibling role.
 
 - name: Install hdparm metrics
   when: rotational_disks_by_id | length > 0

@@ -335,6 +335,17 @@
     mode: "0644"
   become: true
 
+- name: _setup | Create legacy Netdata fail2ban collector fixture
+  copy:
+    content: |-
+      jobs:
+        - name: fail2ban
+    dest: /etc/netdata/go.d/fail2ban.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Create hdparm Netdata fixtures on a diskless host
   copy:
     content: "retired hdparm fixture\n"

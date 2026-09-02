@@ -111,11 +111,14 @@
   failed_when: retired_services_fail2ban_jail_override.stat.exists
   become: true
 
-- name: _verify | Retired Netdata smartctl collector override is absent
+- name: _verify | Retired Netdata collector overrides are absent
   stat:
-    path: /etc/netdata/go.d/smartctl.conf
-  register: retired_services_netdata_smartctl
-  failed_when: retired_services_netdata_smartctl.stat.exists
+    path: "{{ item }}"
+  loop:
+    - /etc/netdata/go.d/smartctl.conf
+    - /etc/netdata/go.d/fail2ban.conf
+  register: retired_services_netdata_collector
+  failed_when: retired_services_netdata_collector.stat.exists
   become: true
 
 - name: _verify | Hdparm Netdata files are absent on a diskless host
