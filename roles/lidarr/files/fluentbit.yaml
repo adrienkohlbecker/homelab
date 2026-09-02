@@ -8,12 +8,6 @@ pipeline:
     - name: modify
       match: svc.lidarr.service
       rename: MESSAGE log
-    - name: grep
-      match: svc.lidarr.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'log ^\[Info\] (RssSyncService: Starting RSS Sync|DownloadDecisionMaker: No results found|RssSyncService: RSS Sync Completed\. Reports found: 0, Reports grabbed: 0)[[:space:]]*$'
     - name: parser
       match: svc.lidarr.service
       key_name: log

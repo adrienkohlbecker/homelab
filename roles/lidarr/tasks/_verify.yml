@@ -114,10 +114,6 @@
         - MESSAGE: "[Info] Lifecycle: lidarr-unit-record \n"
           SYSLOG_IDENTIFIER: systemd
           SYSTEMD_UNIT: lidarr.service
-        - MESSAGE: "[Info] RssSyncService: Starting RSS Sync \n"
-          CONTAINER_TAG: lidarr
-          SYSLOG_IDENTIFIER: lidarr
-          SYSTEMD_UNIT: lidarr.service
         - MESSAGE: "[Info] RssSyncService: RSS Sync Completed. Reports found: 1, Reports grabbed: 0 \n"
           CONTAINER_TAG: lidarr
           SYSLOG_IDENTIFIER: lidarr
