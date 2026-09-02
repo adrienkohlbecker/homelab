@@ -1,30 +1,18 @@
 # Apt and file modules own package and data-root absence. Verify the residual
 # systemd and mount state they cannot guarantee, then exercise backup pruning.
 
-- name: _verify | Assert snapd.socket is gone from systemd's view  # noqa: command-instead-of-module
-  command: systemctl show snapd.socket --property=LoadState --value
-  register: _cleanup_verify_snapd_socket
+- name: _verify | Assert no snap runtime residue
+  shell: |
+    set -euo pipefail
+    [ "$(systemctl show snapd.socket --property=LoadState --value)" = not-found ]
+    units=$(find /usr/lib/systemd/system /etc/systemd/system -name "snapd*" -print -quit)
+    [ -z "$units" ]
+    rc=0
+    findmnt --first-only --noheadings --types squashfs >/dev/null || rc=$?
+    [ "$rc" -eq 1 ]
+  args:
+    executable: /bin/bash
   changed_when: false
-  failed_when: _cleanup_verify_snapd_socket.stdout | trim != 'not-found'
-
-- name: _verify | Find residual snapd unit files on disk
-  find:
-    paths:
-      - /usr/lib/systemd/system
-      - /etc/systemd/system
-    patterns: snapd*
-    file_type: any
-    recurse: true
-  register: _cleanup_verify_snapd_units
-  failed_when: _cleanup_verify_snapd_units.matched != 0
-
-- name: _verify | Assert no residual squashfs mounts remain
-  # findmnt(8) only guarantees rc=0=match / rc=1=no-match in
-  # --first-only mode; other modes can return rc=0 with no matches.
-  command: findmnt --first-only --noheadings --types squashfs
-  register: _cleanup_verify_squashfs_mounts
-  changed_when: false
-  failed_when: _cleanup_verify_squashfs_mounts.rc != 1
 
 # Exercise filename-time pruning: remove old, keep fresh, ignore near-matches.
 
