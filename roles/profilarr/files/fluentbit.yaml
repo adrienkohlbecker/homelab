@@ -12,12 +12,6 @@ pipeline:
       match: svc.profilarr.service
       condition: key_exists CONTAINER_TAG
       rename: MESSAGE log
-    - name: grep
-      match: svc.profilarr.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'log (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes|apscheduler\.scheduler - DEBUG - (Looking for jobs to run|Next wakeup is due)|apscheduler\.executors\.default - INFO - (Running job|Job )|task_system - INFO - (Starting task: Repository Sync|Task Repository Sync completed successfully))'
     - name: parser
       match: svc.profilarr.service
       key_name: log

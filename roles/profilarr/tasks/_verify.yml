@@ -48,10 +48,6 @@
         - MESSAGE: "2099-01-02 03:04:08 - app.verify - ERROR - must-not-parse\n"
           SYSLOG_IDENTIFIER: systemd
           SYSTEMD_UNIT: profilarr.service
-        - MESSAGE: "2099-01-02 03:04:09 - apscheduler.scheduler - DEBUG - Looking for jobs to run profilarr-routine\n"
-          CONTAINER_TAG: profilarr
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: profilarr.service
       expected:
         - message: profilarr-debug
           level: debug
@@ -83,7 +79,3 @@
           _absent:
             - fields.parser_status
             - fields.source
-
-- name: _verify | Routine repository-sync record is omitted from the aggregate
-  assert:
-    that: "'profilarr-routine' not in fluentbit_verify_result.stdout"
