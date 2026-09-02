@@ -16,20 +16,15 @@
 # in exchange every downstream check tests post-reboot reality rather
 # than next-boot intent.
 
-# Aarch64 boxes (packer-built on arm Macs) bypass ZBM entirely: rEFInd boots a
-# Linux EFI-stub menuentry whose kernel cmdline is staged at image-build time.
-# So the ZBM commandline property write the role just made would not affect a
-# post-reboot kernel here, and on top of that EDK2 aarch64 has a known reboot
-# bug on this image.
-# Skip the reboot + the post-reboot sysfs check on aarch64; the
-# ZBM property / GRUB cfg + initrd + service assertions
-# below still prove the role wrote the next-boot config correctly,
-# which is the load-bearing contract on x86_64 prod hosts.
+# Non-GRUB aarch64 boxes bypass ZBM: rEFInd boots a Linux EFI-stub menuentry
+# whose kernel cmdline is staged at image-build time, so the property written
+# here is not consumed until the later rEFInd role restages it. GRUB fixtures
+# consume update-grub directly and can exercise the post-reboot contract.
 - name: _verify | Reboot to apply role changes
   import_role:
     name: reboot
     tasks_from: reboot
-  when: ansible_architecture != 'aarch64'
+  when: grub_bootloader or ansible_architecture != 'aarch64'
 
 # dumpkeys reads the kernel VT's current keymap via KDGKBENT on /dev/tty0, so it
 # doesn't depend on a controlling terminal and works from ansible's ssh session.
@@ -85,8 +80,8 @@
   failed_when: _console_noblank_active.stdout | trim != 'active'
   become: true
 
-# Aarch64 cannot exercise the post-reboot probe below, so retain its ZBM
-# property check as the handoff consumed by the later rEFInd role.
+# Non-GRUB aarch64 cannot exercise the post-reboot probe below, so retain its
+# ZBM property check as the handoff consumed by the later rEFInd role.
 - name: _verify | ZBM commandline includes consoleblank=0
   when: not grub_bootloader and ansible_architecture == 'aarch64'
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
@@ -121,10 +116,10 @@
 
 # /sys/module/kernel/parameters/consoleblank exposes the value the
 # running kernel parsed from the cmdline at boot, proving the boot chain applied
-# the argument. Aarch64 skips the reboot, so its running kernel still reflects
-# the EFI-stub entry baked into the image.
+# the argument. Non-GRUB aarch64 skips the reboot because its running kernel
+# still reflects the EFI-stub entry baked into the image.
 - name: _verify | Running kernel applied consoleblank=0
-  when: ansible_architecture != 'aarch64'
+  when: grub_bootloader or ansible_architecture != 'aarch64'
   command: grep -qxF 0 /sys/module/kernel/parameters/consoleblank
   changed_when: false
   become: true
