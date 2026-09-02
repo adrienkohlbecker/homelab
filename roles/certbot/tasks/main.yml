@@ -148,8 +148,7 @@
          + (certbot_production_certificates | ternary([], ['--test-cert'])) }}
   vars:
     certbot_deploy_hook: >-
-      logger -t certbot-deploy "reloading nginx for ${RENEWED_LINEAGE:-?}";
-      systemctl is-active --quiet nginx && systemctl reload nginx
+      systemctl is-active --quiet nginx || exit 0; systemctl reload nginx
     # Standard host SANs + apex names (auth.fahm.fr etc.) declared per-host
     # in certbot_extra_sans. The DNS: prefix matches the x509_certificate_info
     # module's subject_alt_name output shape.

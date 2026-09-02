@@ -118,7 +118,7 @@
   assert:
     that:
       - "'renew_hook' in _verify_renewal_text"
-      - "'systemctl reload nginx' in _verify_renewal_text"
+      - "'systemctl is-active --quiet nginx || exit 0; systemctl reload nginx' in _verify_renewal_text"
     fail_msg: >-
       deploy-hook missing from renewal config
       (file={{ _certbot_renewal.source }},
