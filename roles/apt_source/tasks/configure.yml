@@ -143,7 +143,7 @@
     - apt_source_args.pin is defined
   copy:
     content: |
-      # {{ ansible_managed }}
+      # Ansible managed
       # Pin-Priority above the distro archive default (500) makes this repo win.
       # Use a version pin: `Pin: origin <host>` is avoided because the source
       # URL's host is the mirror proxy, not the upstream, so a hostname pin
