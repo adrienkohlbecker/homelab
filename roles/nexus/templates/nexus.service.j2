@@ -36,10 +36,10 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
-# Routine audit events are complete, stable JSON records. Keep task failures
-# and repository-level audit events.
-LogFilterPatterns=~^[{]\x22timestamp\x22:\x22[^\x22]*\x22,\x22nodeId\x22:\x22[^\x22]*\x22,\x22initiator\x22:\x22[*]TASK\x22,\x22domain\x22:\x22tasks\x22,\x22type\x22:\x22(started|taskstartedrunningevent|finished|blocked|scheduled)\x22,
-LogFilterPatterns=~^[{]\x22timestamp\x22:\x22[^\x22]*\x22,\x22nodeId\x22:\x22[^\x22]*\x22,\x22initiator\x22:\x22[^\x22]*\x22,\x22domain\x22:\x22repository[.]asset\x22,\x22type\x22:\x22(created|updated-(attribute|downloaded|uploaded))\x22,
+# Routine audit events have stable adjacent identifying fields. Keep task
+# failures and repository-level audit events.
+LogFilterPatterns=~\x22initiator\x22:\x22[*]TASK\x22,\x22domain\x22:\x22tasks\x22,\x22type\x22:\x22(started|taskstartedrunningevent|finished|blocked|scheduled)\x22
+LogFilterPatterns=~\x22domain\x22:\x22repository[.]asset\x22,\x22type\x22:\x22(created|updated-(attribute|downloaded|uploaded))\x22
 
 # Nexus's DB + config ride the snapshotted services dataset (/nexus-data).
 # Only the `default` blob store is bind-mounted to /mnt/scratch (NOT
