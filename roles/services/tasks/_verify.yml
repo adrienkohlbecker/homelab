@@ -1,17 +1,5 @@
-# Functional verify for the datasets created by main.yml.
-#
-# An idempotent converge is not evidence extra_properties actually landed --
-# community.general.zfs treats a property whose source is not local|received|-
-# as absent, so a value silently inherited from the parent reads back correct
-# while never being set locally. For the sqlite child this is load-bearing: an
-# inherited recordsize would test-pass yet silently defeat Home Assistant's
-# 4K-page recorder tuning. `zfs get` source must be `local`,
-# not just right -- zfs-autobackup's picker filters with `-s local`
-# (roles/zfs_autobackup/templates/zfs_autosnapshot.sh.j2:14), so an inherited
-# autobackup:bak=true would test-pass but never get backed up.
-#
-# Expected values come from services_datasets (vars/main.yml), shared with
-# main.yml, so the assertions track whatever both halves agree on.
+# Verify each service dataset owns its expected properties. The SQLite child's
+# 4K recordsize must not be inherited from a conflicting parent value.
 
 - name: _verify | Expected properties set locally
   when: zfs_root

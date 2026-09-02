@@ -1,12 +1,5 @@
-# Functional verify for the media infra produced by main.yml. As in
-# roles/data/tasks/_verify.yml, an idempotent converge is not evidence the
-# extra_properties landed source=local -- a value inherited from the pool
-# reads back correct while zfs-autobackup's `-s local` picker would skip it,
-# so `zfs get` is the only reliable witness. The podman network, media group
-# and storage dirs are consumed by ~10 service roles that don't run during
-# this role's test, so assert them here. Expected dataset properties and
-# library dirs come from vars/main.yml, shared with main.yml so the two
-# halves cannot drift.
+# Verify the media dataset owns its backup and tuning properties. The remaining
+# checks cover shared contracts consumed by downstream service roles.
 
 - name: _verify | Media podman network exists
   command:

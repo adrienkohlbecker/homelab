@@ -1,16 +1,5 @@
-# Functional verify for the three site datasets created by main.yml.
-#
-# An idempotent converge is not evidence extra_properties actually
-# landed -- community.general.zfs treats a property whose source is
-# anything other than local|received|- as absent, so a property
-# silently inherited from a parent dataset can read back as the right
-# value while never being set locally. `zfs get` is the only reliable
-# witness. Source must be `local`, not just the right value:
-# zfs-autobackup's picker filters with `-s local`
-# (roles/zfs_autobackup/templates/zfs_autosnapshot.sh.j2:14), so an
-# inherited `autobackup:bak=true` would test-pass but never get backed
-# up. Asserting `local` for the mountpoint as well as the extra
-# properties keeps the role's "I set this explicitly" contract honest.
+# Verify each site dataset owns the properties used by its mount and backup
+# contracts rather than inheriting matching values.
 
 - name: _verify | Expected properties set locally
   when: zfs_root
