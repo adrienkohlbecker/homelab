@@ -117,8 +117,6 @@
   vars:
     fluentbit_extension_args:
       name: nexus
-      lua_files:
-        - conmon_partial_message.lua
   tags:
     - nexus
 

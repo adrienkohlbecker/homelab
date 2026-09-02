@@ -48,7 +48,7 @@
   tags:
     - fluentbit
 
-- name: Install fluent-bit Lua filters  # noqa: require-validate
+- name: Install fluent-bit static assets  # noqa: require-validate
   copy:
     src: "{{ item }}"
     dest: /etc/fluent-bit/{{ item }}
@@ -57,12 +57,15 @@
     mode: "0644"
     backup: true
   loop:
+    - conmon_partial_message.lua
     - strip_ansi.lua
     - level_from_message.lua
     - podman_events.lua
     - lnav_shape.lua
+    - parsers.yaml
+    - filters-pre.yaml
   become: true
-  register: fluentbit_lua
+  register: fluentbit_assets
   when: not (ansible_check_mode and fluentbit_apt.changed)
   tags:
     - fluentbit
@@ -90,32 +93,6 @@
     force: false
   become: true
   register: fluentbit_service_manifest
-  tags:
-    - fluentbit
-
-- name: Install fluent-bit shared parsers  # noqa: require-validate
-  copy:
-    src: parsers.yaml
-    dest: /etc/fluent-bit/parsers.yaml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: fluentbit_parsers
-  tags:
-    - fluentbit
-
-- name: Install fluent-bit pre-service filters  # noqa: require-validate
-  copy:
-    src: filters-pre.yaml
-    dest: /etc/fluent-bit/filters-pre.yaml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: fluentbit_filters_pre
   tags:
     - fluentbit
 
@@ -180,10 +157,9 @@
   register: fluentbit_conf
   when: >-
     not (ansible_check_mode and
-         (fluentbit_apt.changed or fluentbit_lua.changed or
+         (fluentbit_apt.changed or fluentbit_assets.changed or
           fluentbit_extension_dir.changed or fluentbit_service_manifest.changed or
-          fluentbit_parsers.changed or
-          fluentbit_filters_pre.changed or fluentbit_filters_post.changed))
+          fluentbit_filters_post.changed))
   tags:
     - fluentbit
 
@@ -212,10 +188,9 @@
       {{ 'restarted'
          if fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed
          else 'reloaded'
-         if fluentbit_conf.changed or fluentbit_lua.changed
+         if fluentbit_conf.changed or fluentbit_assets.changed
             or fluentbit_extension_dir.changed or fluentbit_service_manifest.changed
-            or fluentbit_parsers.changed
-            or fluentbit_filters_pre.changed or fluentbit_filters_post.changed
+            or fluentbit_filters_post.changed
          else 'started' }}
   become: true
   tags:
