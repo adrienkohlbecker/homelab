@@ -92,13 +92,10 @@
                 fields = record.get("fields", {})
                 if (
                     record.get("service") == "sabnzbd"
-                    and fields.get("parser_status") == "parsed"
                     and fields.get("source") == "SABnzbd"
                     and isinstance(fields.get("source_line"), int)
                     and record.get("message", "").startswith("SABnzbd.py-")
                     and "CONTAINER_TAG" not in fields
-                    and "sabnzbd_time" not in fields
-                    and "sabnzbd_level" not in fields
                 ):
                     print(json.dumps(record, sort_keys=True))
                     sys.exit(0)
@@ -145,31 +142,24 @@
           service: sabnzbd
           fields.source: newswrapper
           fields.source_line: 424
-          fields.parser_status: parsed
           _absent:
-            - fields.sabnzbd_time
-            - fields.sabnzbd_level
             - fields.CONTAINER_TAG
         - message: 'Signal 15 caught, saving and exiting...'
           level: warn
           fields.source: __init__
           fields.source_line: 641
-          fields.parser_status: parsed
         - message: Saving /config/admin/postproc2.sab failed
           level: error
           fields.source: filesystem
           fields.source_line: 1088
-          fields.parser_status: parsed
         - message: '[ls.io-init] done.'
           service: sabnzbd
           _absent:
-            - fields.parser_status
             - fields.source
             - fields.source_line
         - message: Started sabnzbd.
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.source
             - fields.source_line
 

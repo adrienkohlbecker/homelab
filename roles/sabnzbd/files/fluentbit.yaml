@@ -1,30 +1,13 @@
 parsers:
   - name: sabnzbd_console
     format: regex
-    regex: '/\A(?<sabnzbd_time>[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3})::(?<sabnzbd_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)::\[(?<sabnzbd_source>[^]:]+):(?<sabnzbd_source_line>[0-9]+)\] (?<sabnzbd_message>[\s\S]*)\z/'
-    types: sabnzbd_source_line:integer
+    regex: '/\A[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}::(?<_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)::\[(?<source>[^]:]+):(?<source_line>[0-9]+)\] (?<log>[\s\S]*)\z/'
+    types: source_line:integer
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.sabnzbd.service
-      rename: MESSAGE log
     - name: parser
       match: svc.sabnzbd.service
-      key_name: log
+      key_name: MESSAGE
       parser: sabnzbd_console
       reserve_data: true
-      preserve_key: true
-    - name: modify
-      match: svc.sabnzbd.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists sabnzbd_message
-        - key_exists sabnzbd_level
-      hard_rename:
-        - sabnzbd_message log
-        - sabnzbd_level _level
-        - sabnzbd_source source
-        - sabnzbd_source_line source_line
-      remove: sabnzbd_time
-      set: parser_status parsed
