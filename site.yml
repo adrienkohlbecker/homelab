@@ -75,12 +75,12 @@
     - fan2go
     - powertop
     - macvlan
+    - resolved
     - avahi
     - kdump
     - wolweb
     - keepalived
     - nut
-    - resolved
     - adguard
     - docker_client
 
