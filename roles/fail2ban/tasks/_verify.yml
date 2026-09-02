@@ -1,11 +1,7 @@
-# Functional verification of the role's premise: bans land in
-# `inet f2b-table` (the nftables-native banaction) and not in the
-# iptables-nft compat `ip filter` table. Stat-only checks (unit
-# active, file present) would pass even if the banaction silently
-# regressed to iptables-multiport.
+# Verify bans use the nftables-native table rather than the iptables-nft
+# compatibility path.
 
-# Harness-invoked only; nftables is implicit on prod via the firewall
-# role, but testrole.py fail2ban runs in isolation.
+# The isolated role harness does not run the firewall role.
 - name: _verify | Install nftables
   apt:
     pkg:
@@ -13,8 +9,7 @@
     cache_valid_time: 3600
   become: true
 
-# fail2ban cold-starts in a few seconds after enable; status returns an
-# error before the daemon is ready.
+# Status fails briefly while fail2ban cold-starts.
 - name: _verify | Sshd jail uses the systemd journal backend
   command: fail2ban-client status sshd
   register: _fail2ban_status
@@ -27,13 +22,7 @@
   changed_when: false
   become: true
 
-# State-only assertion (function-test would need synthetic sshd-failure
-# journal injection + findtime wait, and fail2ban-client `set banip`
-# explicitly bypasses ignoreip — manual bans skip BanManager's filter,
-# so a "ban an ignored IP" test would always land in f2b-table). This
-# proves the daemon parsed the rendered jail and loaded each expected
-# entry — catches empty-interpolation regressions that would silently
-# shrink the whitelist.
+# Manual bans bypass ignoreip, so query the daemon's loaded whitelist.
 - name: _verify | Fail2ban-client knows the configured ignoreip
   command: fail2ban-client get sshd ignoreip
   register: _fail2ban_ignoreip
@@ -46,12 +35,7 @@
     or network.partitions.wireguard.cidr not in _fail2ban_ignoreip.stdout
   become: true
 
-# Proves the sendmail-whois-lines.local override was parsed and the
-# inherited start/stop notification handlers are neutralized -- queried
-# from the loaded daemon, not stat'd off disk, so a precedence regression
-# (e.g. the .local not winning over sendmail-common.conf) would surface.
-# actionban is left intact and not asserted here (it carries the whois
-# expansion that the synthetic-ban path below already exercises).
+# Query the loaded action so an override-precedence regression surfaces.
 - name: _verify | Sendmail action start/stop handlers are empty
   command: fail2ban-client get sshd action sendmail-whois-lines {{ item }}
   register: _fail2ban_mail_handler
@@ -79,9 +63,7 @@
     or '192.0.2.1' not in _fail2ban_f2b_table.stdout
   become: true
 
-# Negative assertion: the iptables-nft compat `ip filter` table either
-# does not exist (rc != 0) or does not carry an f2b-sshd chain. If it
-# does, the banaction override silently reverted to iptables-multiport.
+# An f2b chain here means the banaction reverted to iptables-multiport.
 - name: _verify | Iptables-nft compat path is NOT used
   command: nft list table ip filter
   register: _fail2ban_ip_filter
