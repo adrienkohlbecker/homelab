@@ -1,9 +1,8 @@
-- name: Install console-setup + keyboard-configuration
+- name: Install console dependencies
   apt:
     pkg:
       - initramfs-tools
       - console-setup
-      - keyboard-configuration
     cache_valid_time: 3600
   become: true
   register: console_apt
