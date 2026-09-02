@@ -6,7 +6,10 @@
 # from pre-write validation.
 - name: Pin snapd against reinstallation  # noqa: require-validate
   copy:
-    src: nosnap.pref
+    content: |
+      Package: snapd
+      Pin: release a=*
+      Pin-Priority: -10
     dest: /etc/apt/preferences.d/nosnap.pref
     owner: root
     group: root
