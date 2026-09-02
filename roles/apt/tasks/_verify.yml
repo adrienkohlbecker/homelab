@@ -1,28 +1,11 @@
-# Assertions for the apt role. Functional checks only:
-# - 80-retries is parsed by apt (retries=3 with delayed backoff).
-# - /var/lib/apt/lists/ carries an index file for every configured
-#   (mirror, suite) -- apt's own source of truth, not the prettyprinted
-#   apt-cache policy dump.
-# - apt reads no index target from the retired legacy sources.list.
-# - apt-get update --error-on=any succeeds (turns transient mirror
-#   failures into a hard fail instead of a 0-exit warning).
-
-- name: _verify | Read apt's parsed retry config
+- name: _verify | Apt parses the retry policy
   command: apt-config dump Acquire::Retries
   changed_when: false
   register: _apt_retries
-
-- name: _verify | Apt parses Acquire::Retries=3
-  assert:
-    that:
-      - '''Acquire::Retries "3";'' in _apt_retries.stdout_lines'
-    fail_msg: apt didn't load Acquire::Retries=3 from 80-retries.
-
-- name: _verify | Apt parses Acquire::Retries::Delay
-  assert:
-    that:
-      - '''Acquire::Retries::Delay "true";'' in _apt_retries.stdout_lines'
-    fail_msg: apt did not load Acquire::Retries::Delay from 80-retries.
+  failed_when: >-
+    _apt_retries.rc != 0
+    or 'Acquire::Retries "3";' not in _apt_retries.stdout_lines
+    or 'Acquire::Retries::Delay "true";' not in _apt_retries.stdout_lines
 
 # /var/lib/apt/lists/ filenames encode (mirror, suite, component, arch):
 # `<host>_<path>_dists_<suite>_<component>_binary-<arch>_Packages`.
@@ -34,6 +17,7 @@
     paths: /var/lib/apt/lists/
     patterns: "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_main_*"
   register: _apt_lists
+  failed_when: _apt_lists.matched == 0
   vars:
     _verify_mirror_prefix: "{{ item.mirror | regex_replace('^https?://', '') | regex_replace('/+$', '') | regex_replace('/', '_') }}"
   loop:
@@ -44,17 +28,8 @@
   loop_control:
     label: "{{ item.mirror }} {{ item.suite }}"
 
-- name: _verify | Every suite has at least one index file
-  assert:
-    that:
-      - item.matched > 0
-    fail_msg: "No /var/lib/apt/lists/ entries for {{ item.item.mirror }} {{ item.item.suite }}."
-  loop: "{{ _apt_lists.results }}"
-  loop_control:
-    label: "{{ item.item.mirror }} {{ item.item.suite }}"
-
 # Query apt's parsed source view rather than stat-ing the file the role emptied.
-- name: _verify | Read apt index targets
+- name: _verify | Apt reads no sources from the legacy sources.list
   command:
     argv:
       - apt-get
@@ -63,17 +38,10 @@
       - $(SOURCESENTRY)
   register: _apt_indextargets
   changed_when: false
-
-- name: _verify | Apt reads no sources from the legacy sources.list
-  assert:
-    that:
-      - >-
-        _apt_indextargets.stdout_lines
-        | select('search', '^/etc/apt/sources.list:') | list | length == 0
-    fail_msg: >-
-      apt still indexes entries from /etc/apt/sources.list:
-      {{ _apt_indextargets.stdout_lines
-      | select('search', '^/etc/apt/sources.list:') | list }}
+  failed_when: >-
+    _apt_indextargets.rc != 0
+    or (_apt_indextargets.stdout_lines
+    | select('search', '^/etc/apt/sources.list:') | list | length) > 0
 
 # Functional check: every configured suite serves valid signed metadata.
 # --error-on=any turns transient warnings (one unreachable suite, stale
