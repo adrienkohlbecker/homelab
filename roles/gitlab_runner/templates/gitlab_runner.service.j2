@@ -18,8 +18,8 @@ Requires=zfs_mount_mnt_services.service
 [Service]
 # Successful coordinator progress and idle taskscaler calculations add no
 # state. Keep retries, incomplete accepts, final outcomes, and scale actions.
-LogFilterPatterns=~^[{].*\x22level\x22:\x22info\x22,.*\x22msg\x22:\x22(Appending trace to coordinator[.][.][.]ok|Updating job[.][.][.]|Submitting job to coordinator[.][.][.]ok)\x22.*[}]$
-LogFilterPatterns=~^[{].*\x22level\x22:\x22info\x22,.*\x22msg\x22:\x22required scaling change\x22,.*\x22subsystem\x22:\x22taskscaler\x22.*[}]$
+LogFilterPatterns=~\x22msg\x22:\x22(Appending trace to coordinator[.][.][.]ok|Updating job[.][.][.]|Submitting job to coordinator[.][.][.]ok)\x22
+LogFilterPatterns=~\x22msg\x22:\x22required scaling change\x22
 User=gitlab_runner
 Group=gitlab_runner
 WorkingDirectory=/mnt/services/gitlab_runner
