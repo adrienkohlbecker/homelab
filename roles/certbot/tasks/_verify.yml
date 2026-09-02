@@ -1,9 +1,5 @@
-# Functional checks for the certbot role. The role's main.yml fails
-# loudly if the certbot subprocess errors, but that doesn't catch
-# regressions like "wrong SANs", "snakeoil left from a sibling _setup
-# masquerading as the real cert". x509check.conf rendering (cross-role
-# coupling with netdata) is covered on the consumer side in
-# roles/netdata/tasks/_verify.yml.
+# Exercise the issued certificate and renewal path. Netdata verifies the
+# cross-role x509check configuration on its consumer side.
 
 - name: _verify | Cert files exist
   stat:
@@ -17,10 +13,7 @@
   failed_when: not _certbot_cert.stat.exists
   become: true
 
-# valid_at: catches a stale-but-existing cert (certbot silently failed,
-# old file still on disk) which the SAN+issuer asserts below would
-# happily pass. Module evaluates the timestamps server-side so the
-# assertion is just a boolean check.
+# Reject a stale certificate that still has the expected SANs and issuer.
 - name: _verify | Inspect issued certificate
   community.crypto.x509_certificate_info:
     path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
@@ -50,9 +43,6 @@
       issuer={{ _certbot_cert_info.issuer }},
       subject={{ _certbot_cert_info.subject }})
 
-# Renewals only happen if certbot.timer is enabled+active. The
-# systemd module returns the full unit status dict so a single
-# inspect+assert replaces two `systemctl is-X` shell-outs.
 - name: _verify | Certbot.timer is loaded, enabled, and active
   systemd:
     name: certbot.timer
@@ -63,11 +53,7 @@
     or _certbot_timer.status.ActiveState != "active"
   become: true
 
-# The whole rationale for --deploy-hook (over renewal-hooks/deploy/)
-# is that it's persisted into renewal/<name>.conf at issuance time
-# and survives renewals. A regression that loses the hook would only
-# surface 60 days later when certbot.timer renews and nginx never
-# reloads with the fresh cert.
+# The command-line deploy hook must persist into unattended renewals.
 - name: _verify | Renewal config persists the nginx-reload deploy hook
   vars:
     _verify_renewal_text: "{{ _certbot_renewal.content | b64decode }}"
@@ -80,12 +66,7 @@
        not in _verify_renewal_text
   become: true
 
-# Directory perms are load-bearing: wildcard SAN + lax dir mode = any
-# local-uid read of privkey.pem grants forever-cert for the host's
-# entire subdomain tree. 0750 root:ssl-cert restricts traversal to
-# explicit consumers (www-data, netdata) added to ssl-cert by their
-# own roles. A regression to 0755 / group:root would be silent
-# without this assertion.
+# Restrict wildcard-lineage traversal to explicit ssl-cert consumers.
 - name: _verify | LE storage directories are 0750 root:ssl-cert
   stat:
     path: /etc/letsencrypt/{{ item }}
@@ -102,13 +83,8 @@
     or _certbot_le_dir.stat.gr_name != "ssl-cert"
   become: true
 
-# End-to-end functional check: --dry-run exercises the credentials
-# file, the DNS-cloudflare plugin, and the persisted --deploy-hook in
-# one shot. Catches regressions like "credentials file rotation didn't
-# propagate", "renewal config lost --deploy-hook", or "DNS plugin
-# failed" that the stat/SAN checks above would happily pass. The
-# dry-run reads the server URL from renewal/<name>.conf, so a
-# prod-issued lineage will hit LE prod (rate-limit slots).
+# Exercise the credentials, Cloudflare plugin, and ACME renewal configuration.
+# Certbot dry-runs do not execute deploy hooks; persistence is checked above.
 - name: _verify | Certbot renew --dry-run exercises the renewal path
   command: certbot renew --dry-run --no-random-sleep-on-renew
   changed_when: false

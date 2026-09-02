@@ -23,14 +23,8 @@
   tags:
     - certbot
 
-# Relax apt's default 0700 on live/ and archive/ to 0750 with group
-# ssl-cert so non-root consumers (nginx as www-data, netdata) can
-# traverse into <domain>/ to read fullchain.pem. Plain 0755 would
-# expose directory traversal to every local UID and bind-mounted
-# container; combined with the wildcard SAN on the per-host cert
-# that's a forever-cert blast radius if any uid lands in a position
-# to read privkey.pem. Consumer roles add their service user to
-# ssl-cert in their own install.yml.
+# Let explicit ssl-cert members such as netdata traverse Certbot storage
+# without exposing the wildcard lineage to every local UID.
 - name: Set permissions on storage directories
   file:
     dest: /etc/letsencrypt/{{ item }}
@@ -46,10 +40,8 @@
   tags:
     - certbot
 
-# Pin crypto posture, email, and creds path globally so a hand-run
-# `certbot certonly` / `certbot renew` on the box gets the same shape
-# as ansible's invocation. cli.ini values are defaults; per-cert
-# renewal/<name>.conf (and explicit argv flags) still override.
+# Keep hand-run Certbot commands aligned with Ansible. Per-lineage renewal
+# configuration and explicit arguments still override these defaults.
 - name: Write certbot cli.ini  # noqa: require-validate
   copy:
     dest: /etc/letsencrypt/cli.ini
@@ -83,39 +75,11 @@
   tags:
     - certbot
 
-# Flag notes:
-#   --cert-name pins the lineage path. Without it certbot derives it
-#       from the first -d SAN, so reordering or adding a SAN later
-#       silently rolls live/<name>-0001/ and breaks every consumer
-#       (nginx, x509check.conf, services reading fullchain.pem).
-#   Crypto posture (key-type=ecdsa, elliptic-curve=secp384r1), email,
-#       agree-tos, and the cloudflare creds path are pinned in
-#       /etc/letsencrypt/cli.ini above so they apply to hand-run
-#       certbot too. Existing RSA-keyed hosts need a one-shot
-#       migration: `sudo certbot certonly --force-renewal --cert-name X
-#       --key-type ecdsa --elliptic-curve secp384r1 ...`.
-#   We do NOT pass --reuse-key. Renewals rotate the SPKI every ~60d,
-#       narrowing the blast radius if privkey.pem leaks through the
-#       ssl-cert group. Hosts previously issued with --reuse-key keep
-#       it baked into renewal/<name>.conf; rotate once with
-#       `sudo certbot renew --cert-name X --force-renewal --no-reuse-key`.
-#   --deploy-hook is persisted into renewal/<name>.conf so the
-#       out-of-band certbot.timer renewal reloads nginx without a
-#       separate /etc/letsencrypt/renewal-hooks/deploy/ script.
-#       Migrate existing prod hosts with `sudo certbot reconfigure
-#       --cert-name X --deploy-hook '<cmd>'`.
-#
-# Detect SAN drift so an inventory_hostname rename, domain change, or
-# manual SAN addition triggers re-issuance instead of silently
-# no-op'ing forever. A bare `creates:` gate on privkey.pem fires
-# regardless of cert content.
-#
-# Snakeoils from roles/nginx/_setup.yml and roles/nginx/tasks/test_fixture.yml write
-# to /etc/letsencrypt/live/<dom>/privkey.pem; _setup.yml is test-only
-# (never invoked by site.yml) so prod is unaffected, but a future
-# composed harness fixture applying those snakeoils before this role
-# on the same VM would have their SAN set inspected here and trigger
-# a --force-renewal, which is the right behavior.
+# --cert-name keeps the lineage path stable for every consumer. Omitting
+# --reuse-key rotates the private key on renewal, and the persisted deploy
+# hook makes timer-driven renewals reload nginx. Exact SAN comparison forces
+# reissuance after host, domain, or extra-SAN changes and rejects fixtures at
+# the same path whose certificate contents do not match.
 - name: Stat existing certificate
   stat:
     path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
@@ -161,12 +125,8 @@
   tags:
     - certbot
 
-# Exercise the renewal path immediately when the cloudflare token
-# rotates, so a bad/empty/wrongly-scoped token surfaces now instead
-# of at the next 60-day timer fire (silent until nginx serves an
-# expired cert). Gated on the cert already existing -- on a fresh
-# host the Issue certificate task above already exercises the new
-# token end-to-end.
+# Exercise a rotated token immediately; initial issuance already covers this
+# path on a fresh host.
 - name: Exercise renewal after cloudflare token rotation  # noqa: no-changed-when -- diagnostic dry-run
   command: certbot renew --dry-run --no-random-sleep-on-renew
   become: true
