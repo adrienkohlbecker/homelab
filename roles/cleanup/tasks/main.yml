@@ -1,54 +1,5 @@
-# Purge unwanted packages and snaps from vanilla Ubuntu images. Packer-built
-# ZFS hosts start clean, so the same tasks converge as no-ops there.
-
-- name: Probe for snap binary
-  stat:
-    path: /usr/bin/snap
-  register: _cleanup_snap_bin
-  tags:
-    - cleanup
-
-# --purge skips snapshots and --terminate stops processes and mounts. Remove
-# apps before bases and snapd last; snapd refuses bases with live dependants.
-# Since `snap list` is alphabetical, each iteration assigns a dependency class
-# and removes one snap. Thirty retries cap the supported inventory at 30 snaps.
-- name: Force-purge all snaps (apps → bases → snapd)
-  shell: |
-    set -euo pipefail
-    # Empty `snap list` exits 1; one awk avoids an early-exit SIGPIPE.
-    s=$( { snap list --all --unicode=never --color=never 2>/dev/null || true; } \
-         | awk 'NR>1 && $1!="" {
-                  p = 0
-                  if ($1 ~ /^(bare|core[0-9]*)$/) p = 1
-                  if ($1 == "snapd") p = 2
-                  if (best == "" || p < bestp) { bestp = p; best = $1 }
-                }
-                END { if (best != "") print best }')
-    if [ -n "$s" ]; then
-      snap remove --purge --terminate "$s"
-      echo "removed: $s"
-    fi
-  args:
-    executable: /bin/bash
-  register: _cleanup_snap_purge
-  changed_when: "'removed:' in _cleanup_snap_purge.stdout"
-  until: "'removed:' not in _cleanup_snap_purge.stdout"
-  retries: 30
-  delay: 1
-  when: _cleanup_snap_bin.stat.exists
-  become: true
-  tags:
-    - cleanup
-
-# The systemd module lacks unit globs; no matching lingering mount is benign.
-- name: Stop any lingering snap-*.mount units  # noqa: command-instead-of-module
-  command: systemctl stop 'snap-*.mount'
-  changed_when: false
-  failed_when: false
-  when: _cleanup_snap_bin.stat.exists
-  become: true
-  tags:
-    - cleanup
+# Purge unwanted packages and leftover snap data from vanilla Ubuntu images.
+# Packer-built ZFS hosts start clean, so the same tasks converge as no-ops there.
 
 # Prevent later package installs from silently pulling snapd back in.
 # Apt has no single-file preferences parser, so this static policy is exempt
