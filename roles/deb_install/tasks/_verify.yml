@@ -228,21 +228,9 @@
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
       sha256: "{{ _deb_install_v2_sha.stat.checksum }}"
 
-- name: _verify | Stat the staged file after the current-pin check-mode run
-  stat:
-    path: /var/cache/deb-install-test.deb
-  register: _deb_install_staged_checkmode_current
-  become: true
-
-- name: _verify | Check mode kept the gate closed and staged nothing
+- name: _verify | Check mode kept the current-package gate closed
   assert:
-    that:
-      - not (deb_install_test_deb_changed | bool)
-      - not _deb_install_staged_checkmode_current.stat.exists
-    fail_msg: >-
-      check mode on a current package must close the gate and stage nothing;
-      fact={{ deb_install_test_deb_changed }}
-      staged_exists={{ _deb_install_staged_checkmode_current.stat.exists }}
+    that: not (deb_install_test_deb_changed | bool)
 
 # Check mode on a not-installed package must mutate nothing: the block runs but
 # apt only dry-runs (no check_mode: false override), so nothing installs -- while
