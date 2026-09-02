@@ -141,8 +141,18 @@
 - name: Configure apt pin for {{ apt_source_args.name }}  # noqa: require-validate
   when:
     - apt_source_args.pin is defined
-  template:
-    src: preferences.j2
+  copy:
+    content: |
+      # {{ ansible_managed }}
+      # Pin-Priority above the distro archive default (500) makes this repo win.
+      # Use a version pin: `Pin: origin <host>` is avoided because the source
+      # URL's host is the mirror proxy, not the upstream, so a hostname pin
+      # matches nothing on a mirrored fleet. (`Pin: release o=/l=`, matching the
+      # upstream Release file the proxy serves unchanged, would be mirror-safe if
+      # an origin/release pin is ever needed.) See apt_preferences(5).
+      Package: {{ apt_source_args.pin.package }}
+      Pin: version {{ apt_source_args.pin.version }}
+      Pin-Priority: {{ apt_source_args.pin.priority }}
     dest: /etc/apt/preferences.d/{{ apt_source_args.name }}
     owner: root
     group: root
