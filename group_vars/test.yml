@@ -373,7 +373,6 @@ authelia_oidc_clients:
   - client_id: minio
     client_name: MinIO
     client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
-    authorization_policy: one_factor
     redirect_uris:
       - 'https://minio.{{ inventory_hostname }}.{{ domain }}/oauth_callback'
   - client_id: jellyfin
@@ -382,10 +381,8 @@ authelia_oidc_clients:
     # via the plugin API (POST /sso/OID/Add), gated not qemu_test like
     # gitea -- the box fixture has no Jellyfin admin/token and no Authelia,
     # so no provider is registered there. This row keeps the authelia
-    # _verify's clients list a stable shape. Prod uses two_factor;
-    # one_factor here matches the other test clients (no 2FA on box).
+    # _verify's clients list a stable shape.
     client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
-    authorization_policy: one_factor
     # The SSO plugin's IdentityModel OidcClient authenticates at the token
     # endpoint with client_secret_post (creds in the body), not Authelia's
     # default client_secret_basic -- so the client must register post or

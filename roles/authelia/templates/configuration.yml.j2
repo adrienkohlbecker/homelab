@@ -145,8 +145,8 @@ identity_providers:
         # Authelia expects the hash; the consumer owns the plaintext half.
         client_secret: '{{ client.client_secret }}'
         public: false
-        authorization_policy: '{{ client.authorization_policy | default("two_factor") }}'
-        claims_policy: '{{ client.claims_policy | default("jwt_groups") }}'
+        authorization_policy: 'two_factor'
+        claims_policy: 'jwt_groups'
         # Pre-configure consent for a year so first-party clients
         # don't show the Authorize prompt on every login (single-
         # operator homelab; explicit consent is theatre here).
@@ -158,13 +158,16 @@ identity_providers:
           - '{{ uri }}'
 {% endfor %}
         scopes:
-{% for scope in (client.scopes | default(['openid', 'email', 'profile', 'groups'])) %}
-          - '{{ scope }}'
-{% endfor %}
+          - 'openid'
+          - 'email'
+          - 'profile'
+          - 'groups'
         grant_types:
           - 'authorization_code'
         response_types:
           - 'code'
-        token_endpoint_auth_method: '{{ client.token_endpoint_auth_method | default("client_secret_basic") }}'
+{% if client.token_endpoint_auth_method is defined %}
+        token_endpoint_auth_method: '{{ client.token_endpoint_auth_method }}'
+{% endif %}
         userinfo_signed_response_alg: 'none'
 {% endfor %}
