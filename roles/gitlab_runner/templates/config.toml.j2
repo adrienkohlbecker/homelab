@@ -1,5 +1,5 @@
 #jinja2: lstrip_blocks: True
-{% macro aws_instance_runner(name_suffix, token, asg_name, capacity, max_instances, request_concurrency, idle_time) %}
+{% macro aws_instance_runner(name_suffix, token, asg_name, capacity, max_instances, idle_time) %}
 [[runners]]
   name = "{{ inventory_hostname }}-{{ name_suffix }}"
   url = "https://gitlab.com"
@@ -7,7 +7,7 @@
   executor = "instance"
   shell = "bash"
   limit = {{ max_instances * capacity }}
-  request_concurrency = {{ request_concurrency }}
+  request_concurrency = 4
   # The AMI mounts local NVMe at /mnt/scratch and pre-creates these paths.
   builds_dir = "/mnt/scratch/gitlab-runner/builds"
   cache_dir = "/mnt/scratch/gitlab-runner/cache"
@@ -69,7 +69,6 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
      gitlab_runner_aws_qemu_asg_name,
      gitlab_runner_aws_qemu_capacity_per_instance,
      gitlab_runner_aws_qemu_max_instances,
-     4,
      gitlab_runner_aws_qemu_idle_time
    ) }}
 
@@ -78,7 +77,6 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
      'aws-shell-qemu-site',
      gitlab_runner_aws_qemu_site_token,
      gitlab_runner_aws_qemu_site_asg_name,
-     1,
      1,
      1,
      gitlab_runner_aws_qemu_site_idle_time
