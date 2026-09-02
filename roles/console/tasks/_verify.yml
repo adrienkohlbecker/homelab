@@ -60,28 +60,17 @@
 # disabled, update-initramfs no-op), either path is absent and this
 # fails.
 #
-# Skipped on cloud images that don't ship per-kernel initrds in /boot
-# (Ubuntu's "minimal" cloud images boot a pre-baked initrd packed
-# elsewhere and `update-initramfs -u -k all` reports "Nothing to do").
-# The check is only meaningful on hosts whose kernel package layout
-# manages /boot/initrd.img-<ver> -- i.e. every prod host shape we care
-# about; the minimal variant is test scaffolding, not a deployment
-# target.
-- name: _verify | Stat current kernel's initrd
-  stat:
-    path: /boot/initrd.img-{{ ansible_kernel }}
-  register: _console_initrd_stat
-  become: true
-
+# The minimal cloud fixture boots a pre-baked initrd outside /boot. Every
+# deployment-shaped host must provide the per-kernel initrd inspected here.
 - name: _verify | List current kernel's initrd contents
-  when: _console_initrd_stat.stat.exists
+  when: not qemu_test_minimal
   command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
   register: _console_initrd
   changed_when: false
   become: true
 
 - name: _verify | Initrd bundles console-setup + keyboard configs
-  when: _console_initrd_stat.stat.exists
+  when: not qemu_test_minimal
   assert:
     that: item in _console_initrd.stdout_lines
     fail_msg: "initrd missing: {{ item }}"
