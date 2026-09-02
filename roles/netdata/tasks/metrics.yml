@@ -8,7 +8,7 @@
     name: hdparm
     tasks_from: netdata
   vars:
-    hdparm_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+    hdparm_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -17,7 +17,7 @@
     name: zfs
     tasks_from: netdata
   vars:
-    zfs_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+    zfs_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -26,14 +26,14 @@
     name: systemd_timer
     tasks_from: netdata
   vars:
-    systemd_timer_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+    systemd_timer_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
 - name: Install netdata_presence metrics
   import_tasks: presence.yml
   vars:
-    netdata_presence_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+    netdata_presence_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -43,7 +43,7 @@
     netdata_args:
       src: sensors.conf
       dest: go.d/sensors.conf
-      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
       validate: >-
         python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' %s
   tags:
@@ -54,7 +54,7 @@
     name: certbot
     tasks_from: netdata
   vars:
-    certbot_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+    certbot_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -63,7 +63,7 @@
     name: nginx
     tasks_from: netdata
   vars:
-    nginx_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+    nginx_netdata_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -77,7 +77,7 @@
       name: keepalived_vrrp
       script: keepalived_vrrp.chart.sh
       conf: charts_d_keepalived_vrrp.conf.j2
-      condition: "{{ netdata_keepalived_vrrp_enabled and not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+      condition: "{{ netdata_keepalived_vrrp_enabled and not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 

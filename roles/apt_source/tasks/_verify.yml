@@ -1,16 +1,6 @@
-# Exercises the helper with a representative source and, when a pin is set,
-# asserts that the pinned source wins at its priority. Two scenarios are
-# distinguished by _role_under_test:
-#
-#  - Netdata imports this with `tasks_from: _verify` and the same apt_source_args
-#    it converged with (the harness runs _verify as a separate ansible invocation,
-#    so the args don't survive from configure.yml and must be re-passed). The
-#    standalone block below is skipped for it.
-#  - The standalone apt_source:box cell runs this file directly. main.yml is a
-#    stub, so nothing configured a source during converge; the block below
-#    stands in for a consumer by configuring a representative real repo (docker,
-#    a self-contained real repo) and leaving apt_source_args set for the
-#    assertions that follow.
+# Exercises the helper with a representative real repository. The standalone
+# apt_source:box cell runs this file directly; main.yml is a stub, so the block
+# below stands in for a consumer by configuring Docker's repository.
 - name: _verify | Standalone — configure a representative source under test
   when: _role_under_test | default('') == 'apt_source'
   block:
@@ -28,58 +18,3 @@
       import_role:
         name: apt_source
         tasks_from: configure
-
-- name: _verify | Assert apt_source verify args for {{ apt_source_args.name }}
-  assert:
-    that:
-      - apt_source_args.name is defined
-      - apt_source_args.uris is defined
-    fail_msg: >-
-      apt_source _verify needs name and uris; got {{ apt_source_args }}
-
-- name: _verify | Pin assertions for {{ apt_source_args.name }}
-  when: apt_source_args.pin is defined
-  block:
-    # pin.package may be a glob (e.g. "netdata*") pinning a family of packages;
-    # apt-cache policy needs a concrete name. dpkg-query -W takes a glob and
-    # lists installed matches as "<pkg>\t<version>" lines (no custom -f, whose
-    # \n would be eaten by the command module's shlex); take the first match's
-    # package field, falling back to the literal pin.package when none match
-    # (then the policy assertion below fails meaningfully, not on empty input).
-    - name: _verify | Resolve an installed package matching the configured pin
-      command: dpkg-query -W {{ apt_source_args.pin.package }}
-      changed_when: false
-      failed_when: false
-      register: _apt_source_pin_pkgs
-
-    - name: _verify | Apt policy is available for the configured pin
-      command: apt-cache policy {{ (_apt_source_pin_pkgs.stdout_lines | default([]) | first | default('')).split() | first | default(apt_source_args.pin.package) }}
-      changed_when: false
-      register: _apt_source_policy
-
-    # Turn the pin glob (e.g. "22.*", "5:27.*") into a policy regex -- literal
-    # dots, glob * -> .* -- so the check follows whatever the consumer pinned
-    # rather than assuming a numeric major.minor shape. Precomputed here, not
-    # in the that:, so ansible's conditional re-evaluation can't reprocess it.
-    - name: _verify | Derive the configured pin policy pattern
-      set_fact:
-        _apt_source_policy_re: "[*][*][*] {{ apt_source_args.pin.version | regex_replace('[.]', '[.]') | regex_replace('[*]', '.*') }} {{ apt_source_args.pin.priority }}"
-
-    - name: _verify | Pinned version is the installed candidate
-      assert:
-        that:
-          # `*** <ver> <prio>` marks the installed+selected candidate; assert
-          # it is the pinned major at the pin priority -- a bare priority
-          # substring could match a version string and pass on a no-op pin.
-          - _apt_source_policy.stdout is search(_apt_source_policy_re)
-          # ...and the winning source is this mirror, so a pin mis-targeting
-          # another origin can't satisfy the check above. apt renders a flat
-          # repo's URI without its trailing slash (folding "<uri>/ <suite>/"
-          # into "<uri> <suite>/"), so normalize before the substring check --
-          # a no-op for component repos, whose URI carries no trailing slash.
-          - (apt_source_args.uris | regex_replace('/$', '')) in _apt_source_policy.stdout
-        fail_msg: >-
-          Expected {{ apt_source_args.pin.package }} candidate to match
-          {{ apt_source_args.pin.version }} at priority
-          {{ apt_source_args.pin.priority }} from {{ apt_source_args.uris }};
-          got policy: {{ _apt_source_policy.stdout | default('') }}

@@ -1,5 +1,4 @@
-# Configures a third-party apt repository: signing key + deb822 source +
-# optional version pin.
+# Configures a third-party apt repository: signing key + deb822 source.
 #
 # The armored signing key lives at /usr/share/keyrings/<name>.asc, referenced
 # by signed-by= on the repo so it is trusted for this source only. Debian reserves
@@ -17,7 +16,6 @@
 #   suites:        apt suite -- e.g. nodistro, or the release codename
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
-#   pin:           optional { package, version, priority } -> preferences.d/<name>
 #
 # Exposes apt_source_<name>_changed (true when the repo or signing key changed)
 # so callers can gate dependent installs out of check mode.
@@ -80,31 +78,6 @@
   delay: 30
   until: apt_source_refresh.rc == 0
   changed_when: apt_source_refresh.rc == 0
-  become: true
-
-# No validate: apt has no single-file preferences parser (apt-cache policy
-# reads the whole preferences.d set, not one file), and a malformed pin is
-# inert -- apt skips unparsable stanzas rather than corrupting state.
-- name: Configure apt pin for {{ apt_source_args.name }}  # noqa: require-validate
-  when:
-    - apt_source_args.pin is defined
-  copy:
-    content: |
-      # Ansible managed
-      # Pin-Priority above the distro archive default (500) makes this repo win.
-      # Use a version pin: `Pin: origin <host>` is avoided because the source
-      # URL's host is the mirror proxy, not the upstream, so a hostname pin
-      # matches nothing on a mirrored fleet. (`Pin: release o=/l=`, matching the
-      # upstream Release file the proxy serves unchanged, would be mirror-safe if
-      # an origin/release pin is ever needed.) See apt_preferences(5).
-      Package: {{ apt_source_args.pin.package }}
-      Pin: version {{ apt_source_args.pin.version }}
-      Pin-Priority: {{ apt_source_args.pin.priority }}
-    dest: /etc/apt/preferences.d/{{ apt_source_args.name }}
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
   become: true
 
 - name: Export change signal for {{ apt_source_args.name }}

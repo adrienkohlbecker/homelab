@@ -11,14 +11,14 @@
 # the homelab block — re-synced from stock every converge, so a netdata upgrade
 # that ships new default groups still propagates.
 - name: Read the stock apps_groups.conf
-  when: not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed))
+  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
   slurp:
     src: /usr/lib/netdata/conf.d/apps_groups.conf
   register: netdata_apps_groups_stock
   become: true
 
 - name: Install apps_groups.conf with homelab process groups  # noqa: require-validate
-  when: not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed))
+  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
   copy:
     dest: /etc/netdata/apps_groups.conf
     content: |-

@@ -115,26 +115,22 @@
       Expected the explicit Postfix collector job to emit its queue chart;
       got {{ _netdata_postfix_chart.json | default({}) }}.
 
-# netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
-# ("netdata*") consumer, so the shared apt_source _verify runs here to cover
-# that path: the signing key is scoped (not globally trusted) and the 2.* pin
-# wins at priority 999 from the mirror. No tombstone/negative-key args: netdata
-# never removes its source, and since the nodejs consumer was retired the
-# apt_source state:absent / negative-fingerprint paths have no live exerciser
-# (the helper capability stays; re-add tombstone args from a consumer that
-# actually removes a source if that coverage is wanted again).
-- name: _verify | Netdata apt_source contract (flat repo, scoped key, glob pin)
-  import_role:
-    name: apt_source
-    tasks_from: _verify
+- name: _verify | Read netdata apt policy
+  command: apt-cache policy netdata
+  changed_when: false
+  register: _netdata_apt_policy
+
+- name: _verify | Netdata pin selects the configured major from its mirror
   vars:
-    apt_source_args:
-      name: netdata
-      uris: "{{ mirror_apt_netdata }}/"
-      pin:
-        package: "netdata*"
-        version: "2.*"
-        priority: 999
+    _netdata_policy_re: "[*][*][*] {{ netdata_version.split('.')[0] }}[.][^ ]+ 999"
+  assert:
+    that:
+      - _netdata_apt_policy.stdout is search(_netdata_policy_re)
+      - (mirror_apt_netdata | regex_replace('/$', '')) in _netdata_apt_policy.stdout
+    fail_msg: >-
+      Expected netdata {{ netdata_version }} at priority 999 from
+      {{ mirror_apt_netdata }}; got policy:
+      {{ _netdata_apt_policy.stdout | default('') }}
 
 - name: _verify | Wait for keepalived_vrrp chart to register
   uri:

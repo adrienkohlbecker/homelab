@@ -105,7 +105,7 @@
       dest: go.d/prometheus.conf
       mode: "0600"
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -125,7 +125,7 @@
       src: postfix.conf
       dest: go.d/postfix.conf
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -136,7 +136,7 @@
       src: docker.conf.j2
       dest: go.d/docker.conf
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}"
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
@@ -155,7 +155,7 @@
     netdata_args:
       src: intelgpu.conf
       dest: go.d/intelgpu.conf
-      condition: '{{ ansible_architecture == "x86_64" and not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed)) }}'
+      condition: '{{ ansible_architecture == "x86_64" and not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}'
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   tags:
     - netdata
@@ -215,7 +215,7 @@
 # alerts; the role then writes custom alerts and reload-health hot-loads
 # them. Brief gap is acceptable on a fresh install.
 - name: Enable netdata service
-  when: not (ansible_check_mode and (netdata_apt.changed or apt_source_netdata_changed))
+  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
   systemd:
     name: netdata.service
     enabled: true
