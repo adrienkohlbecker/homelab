@@ -5,15 +5,11 @@ parsers:
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.lidarr.service
-      rename: MESSAGE log
     - name: parser
       match: svc.lidarr.service
-      key_name: log
+      key_name: MESSAGE
       parser: lidarr_console
       reserve_data: true
-      preserve_key: true
     - name: modify
       match: svc.lidarr.service
       condition:

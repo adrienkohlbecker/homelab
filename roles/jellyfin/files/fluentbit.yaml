@@ -4,15 +4,11 @@ parsers:
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.jellyfin.service
-      rename: MESSAGE log
     - name: parser
       match: svc.jellyfin.service
-      key_name: log
+      key_name: MESSAGE
       parser: jellyfin_clef
       reserve_data: true
-      preserve_key: true
     - name: modify
       match: svc.jellyfin.service
       condition:

@@ -4,15 +4,11 @@ parsers:
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.authelia.service
-      rename: MESSAGE log
     - name: parser
       match: svc.authelia.service
-      key_name: log
+      key_name: MESSAGE
       parser: authelia_json
       reserve_data: true
-      preserve_key: true
     - name: modify
       match: svc.authelia.service
       condition:

@@ -7,15 +7,11 @@ parsers:
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.z2m.service
-      rename: MESSAGE log
     - name: parser
       match: svc.z2m.service
-      key_name: log
+      key_name: MESSAGE
       parser: z2m_json
       reserve_data: true
-      preserve_key: true
     - name: parser
       match: svc.z2m.service
       key_name: message

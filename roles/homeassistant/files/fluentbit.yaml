@@ -17,23 +17,19 @@ multiline_parsers:
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.homeassistant.service
-      rename: MESSAGE log
     - name: multiline
       match: svc.homeassistant.service
       multiline.parser: multiline_homeassistant,python,go,java,ruby
-      multiline.key_content: log
+      multiline.key_content: MESSAGE
       buffer: true
       flush_ms: 1000
       emitter_name: multiline_homeassistant_emitter
       emitter_storage.type: filesystem
     - name: parser
       match: svc.homeassistant.service
-      key_name: log
+      key_name: MESSAGE
       parser: homeassistant_text
       reserve_data: true
-      preserve_key: true
     - name: modify
       match: svc.homeassistant.service
       condition:

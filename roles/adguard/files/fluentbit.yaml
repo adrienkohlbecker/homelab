@@ -12,15 +12,11 @@ parsers:
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.adguard.service
-      rename: MESSAGE log
     - name: parser
       match: svc.adguard.service
-      key_name: log
+      key_name: MESSAGE
       parser: adguard_text
       reserve_data: true
-      preserve_key: true
     - name: parser
       match: svc.adguard.service
       key_name: adguard_body

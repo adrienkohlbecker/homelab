@@ -17,23 +17,19 @@ multiline_parsers:
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.homepage.service
-      rename: MESSAGE log
     - name: multiline
       match: svc.homepage.service
       multiline.parser: multiline_homepage
-      multiline.key_content: log
+      multiline.key_content: MESSAGE
       buffer: true
       flush_ms: 1000
       emitter_name: multiline_homepage_emitter
       emitter_storage.type: filesystem
     - name: parser
       match: svc.homepage.service
-      key_name: log
+      key_name: MESSAGE
       parser: homepage_winston
       reserve_data: true
-      preserve_key: true
     - name: modify
       match: svc.homepage.service
       condition:
