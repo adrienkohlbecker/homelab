@@ -49,14 +49,3 @@
   become: true
   tags:
     - docker_client
-
-# Transitional: prior versions of this role wrote a hyphenated filename;
-# delete it so prod hosts converge cleanly. Drop this task once every host
-# has applied the rename.
-- name: Remove legacy hyphenated profile.d shim
-  file:
-    path: /etc/profile.d/docker-client.sh
-    state: absent
-  become: true
-  tags:
-    - docker_client
