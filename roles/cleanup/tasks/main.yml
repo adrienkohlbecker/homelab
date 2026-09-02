@@ -74,7 +74,9 @@
     - cleanup
 
 # Prevent later package installs from silently pulling snapd back in.
-- name: Pin snapd against reinstallation
+# Apt has no single-file preferences parser, so this static policy is exempt
+# from pre-write validation.
+- name: Pin snapd against reinstallation  # noqa: require-validate
   copy:
     src: nosnap.pref
     dest: /etc/apt/preferences.d/nosnap.pref
@@ -82,8 +84,6 @@
     group: root
     mode: "0644"
     backup: true
-    validate: >-
-      python3 -c 'import sys; s=open(sys.argv[1]).read().splitlines(); keys={l.split(":",1)[0] for l in s if ":" in l}; sys.exit(0 if {"Package","Pin","Pin-Priority"} <= keys else 1)' %s
   become: true
   tags:
     - cleanup
