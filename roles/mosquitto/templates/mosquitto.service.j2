@@ -16,6 +16,8 @@ PartOf=zfs_autosnapshot.target
 {% endif %}
 
 [Service]
+# The save announcement precedes the write; any subsequent failure remains.
+LogFilterPatterns=~^Saving in-memory database to /mosquitto/data/+mosquitto[.]db[.]$
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes

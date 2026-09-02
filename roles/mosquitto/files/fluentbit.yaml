@@ -1,9 +1,0 @@
-pipeline:
-  filters:
-    # The save announcement precedes the write; keep any subsequent failure.
-    - name: grep
-      match: svc.mosquitto.service
-      logical_op: and
-      exclude:
-        - 'COMM ^mosquitto$'
-        - 'MESSAGE \ASaving in-memory database to /mosquitto/data/+mosquitto\.db\.\z'
