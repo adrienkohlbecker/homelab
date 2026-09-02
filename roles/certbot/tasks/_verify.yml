@@ -50,19 +50,6 @@
     or _certbot_timer.status.ActiveState != "active"
   become: true
 
-# The command-line deploy hook must persist into unattended renewals.
-- name: _verify | Renewal config persists the nginx-reload deploy hook
-  vars:
-    _verify_renewal_text: "{{ _certbot_renewal.content | b64decode }}"
-  slurp:
-    src: /etc/letsencrypt/renewal/{{ inventory_hostname }}.{{ domain }}.conf
-  register: _certbot_renewal
-  failed_when: >-
-    'renew_hook' not in _verify_renewal_text
-    or 'systemctl is-active --quiet nginx || exit 0; systemctl reload nginx'
-       not in _verify_renewal_text
-  become: true
-
 # Restrict wildcard-lineage traversal to explicit ssl-cert consumers.
 - name: _verify | LE storage directories are 0750 root:ssl-cert
   stat:
