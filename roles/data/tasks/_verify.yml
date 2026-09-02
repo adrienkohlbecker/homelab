@@ -53,7 +53,6 @@
   become: true
 
 - name: _verify | Mountpoint is writable as ansible_user_id
-  when: zfs_root
   command:
     argv:
       - python3
