@@ -1,9 +1,7 @@
 parsers:
   - name: seerr_console
     format: regex
-    regex: '/\A(?<seerr_timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z) \[(?:\x1b\[[0-9;]*m)?(?<seerr_level>debug|info|warn|error)(?:\x1b\[[0-9;]*m)?\](?:\[(?<seerr_source>[^]]+)\])?: (?<seerr_message>[\s\S]*?)(?: (?<seerr_metadata>\{[\s\S]*))?[[:space:]]*\z/'
-  - name: seerr_metadata
-    format: json
+    regex: '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[(?:\x1b\[[0-9;]*m)?(?<_level>debug|info|warn|error)(?:\x1b\[[0-9;]*m)?\](?:\[(?<source>[^]]+)\])?: (?<message>[\s\S]*?)[[:space:]]*\z/'
 
 pipeline:
   filters:
@@ -17,38 +15,10 @@ pipeline:
       parser: seerr_console
       reserve_data: true
       preserve_key: true
-    - name: parser
-      match: svc.seerr.service
-      key_name: seerr_metadata
-      parser: seerr_metadata
-      reserve_data: true
     - name: modify
       match: svc.seerr.service
       condition:
-        - key_exists CONTAINER_TAG
-        - key_exists seerr_message
-        - key_exists seerr_level
-        - key_does_not_exist seerr_metadata
-      hard_rename:
-        - seerr_message log
-        - seerr_level _level
-        - seerr_source source
-      remove: seerr_timestamp
+        - key_exists message
+        - key_exists _level
+      hard_rename: message log
       set: parser_status parsed
-    - name: modify
-      match: svc.seerr.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists seerr_message
-        - key_exists seerr_level
-        - key_exists seerr_metadata
-      hard_rename:
-        - seerr_message log
-        - seerr_source source
-      remove:
-        - seerr_timestamp
-        - seerr_level
-      add:
-        - parser_status failed
-        - parse_error seerr_metadata
-        - _level warn

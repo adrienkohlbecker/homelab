@@ -143,10 +143,9 @@
           SYSLOG_IDENTIFIER: seerr
           SYSTEMD_UNIT: seerr.service
       expected:
-        - message: Request failed
+        - message: 'Request failed {"error":500}'
           level: error
           fields.source: Jellyfin API
-          fields.error: 500
           fields.parser_status: parsed
         - message: Starting Seerr version 3.2.0
           level: info
@@ -158,12 +157,11 @@
           _absent:
             - fields.parser_status
             - fields.source
-        - message: malformed-json
-          level: warn
+        - message: 'malformed-json {"port":5055'
+          level: info
           service: seerr
-          parse_error: seerr_metadata
-          fields.parser_status: failed
-          fields.seerr_metadata: '{"port":5055'
+          fields.source: Server
+          fields.parser_status: parsed
         - message: '2099-01-02T03:04:09.012Z [info][Server]: must-not-parse'
           service: systemd
           _absent:
