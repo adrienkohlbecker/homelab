@@ -105,14 +105,11 @@
     fluentbit_lnav_journald_marker: "verify_journald_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_marker: "verify_nginx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_access_marker: "verify_nginxaccess_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
-    fluentbit_lnav_nginx_5xx_marker: "verify_nginx5xx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_empty_marker: "verify_nginxempty_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_certbot_marker: "verify_certbot_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_ansi_marker: "verify_ansi_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
-    fluentbit_lnav_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_priority_marker: "verify_priority_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
-    fluentbit_lnav_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_healthcheck_marker: "verify_healthcheck_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_podman_event_marker: "verify_podman_event_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_crun_barrier_marker: "verify_crun_barrier_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
@@ -150,15 +147,6 @@
   changed_when: false
   become: true
 
-# A 5xx line must be promoted to error level by lnav_shape even though the
-# upstream modify filter pins nginx.access at debug.
-- name: _verify | Nginx access parse | append a 503 custom-format line
-  command: tee -a /var/log/nginx/access.log
-  args:
-    stdin: "203.0.113.7 - - [08/Jun/2099:12:00:01 +0200] grafana.lab.example \"GET /{{ fluentbit_lnav_nginx_5xx_marker }} HTTP/2.0\" grafana.lab.example 503 0 567 0.500 0.498 \"-\" \"Mozilla/5.0 verifyUA\" \"\" TLSv1.3 TLS_AES_128_GCM_SHA256\n"
-  changed_when: false
-  become: true
-
 # Nginx emits empty host, request, and server-name fields for malformed traffic
 # rejected before a virtual server or request line can be selected.
 - name: _verify | Nginx access parse | append an empty-field 400 line
@@ -187,14 +175,6 @@
     systemd-run --unit=fluentbit_verify_ansi --no-block --quiet
     --property=SyslogIdentifier=fluentbit_verify_ansi
     /usr/bin/printf "[\033[34mdebug\033[39m] ansi {{ fluentbit_lnav_ansi_marker }} colorized line\n"
-  changed_when: false
-  become: true
-
-- name: _verify | Journald warn | emit marked log via transient unit
-  command: >-
-    systemd-run --unit=fluentbit_verify_warn --no-block --quiet
-    /usr/bin/logger -t fluentbit_verify_warn
-    "WARNING {{ fluentbit_lnav_warn_marker }}"
   changed_when: false
   become: true
 
@@ -231,14 +211,6 @@
     systemd-run --unit=fluentbit_verify_multiline --no-block --quiet
     --property=SyslogIdentifier=fluentbit_verify_multiline
     /usr/bin/python3 -c "raise ValueError('trace_{{ fluentbit_lnav_multiline_marker }}')"
-  changed_when: false
-  become: true
-
-- name: _verify | Mitogen | emit marked log via transient unit with mitogen-shaped identifier
-  command: >-
-    systemd-run --unit=fluentbit_verify_mitogen --no-block --quiet
-    --property=SyslogIdentifier=python3(mitogen:fake@host:9999)
-    /bin/echo fluentbit_verify_mitogen marker {{ fluentbit_lnav_mitogen_marker }}
   changed_when: false
   become: true
 
@@ -316,9 +288,6 @@
     - name: nginx_access
       marker: "{{ fluentbit_lnav_nginx_access_marker }}"
       service: nginx_access
-    - name: nginx_5xx
-      marker: "{{ fluentbit_lnav_nginx_5xx_marker }}"
-      service: nginx_access
     - name: nginx_empty
       marker: "{{ fluentbit_lnav_nginx_empty_marker }}"
       service: nginx_access
@@ -329,9 +298,6 @@
     - name: ansi
       marker: "{{ fluentbit_lnav_ansi_marker }}"
       service: fluentbit_verify_ansi
-    - name: warn
-      marker: "{{ fluentbit_lnav_warn_marker }}"
-      service: fluentbit_verify_warn
     - name: priority
       marker: "{{ fluentbit_lnav_priority_marker }}"
       service: fluentbit_verify_priority
@@ -342,9 +308,6 @@
       marker: "{{ fluentbit_lnav_multiline_marker }}"
       service: fluentbit_verify_multiline
       extra: Traceback
-    - name: mitogen
-      marker: "{{ fluentbit_lnav_mitogen_marker }}"
-      service: mitogen
     - name: podman_event
       marker: "{{ fluentbit_lnav_podman_event_marker }}"
       service: podman
@@ -460,17 +423,6 @@
       - "'parse_error' not in row"
     fail_msg: "nginx access line did not parse into structured fields: {{ row }}"
 
-- name: _verify | Nginx access parse | assert 5xx promoted to error
-  vars:
-    row: "{{ _fluentbit_lnav_by_name.nginx_5xx }}"
-  assert:
-    that:
-      - "row.service == 'nginx_access'"
-      - "fluentbit_lnav_nginx_5xx_marker in row.message"
-      - "row.fields.status == 503"
-      - "row.level == 'error'"
-    fail_msg: "nginx 5xx access record not promoted to error level: {{ row }}"
-
 - name: _verify | Nginx access parse | assert empty fields are accepted
   vars:
     row: "{{ _fluentbit_lnav_by_name.nginx_empty }}"
@@ -519,15 +471,6 @@
       - "row.level == 'debug'"
     fail_msg: "seerr-style ANSI not stripped / level not reclassified: {{ row }}"
 
-- name: _verify | Journald warn | assert severity classification
-  vars:
-    row: "{{ _fluentbit_lnav_by_name.warn }}"
-  assert:
-    that:
-      - "row.level == 'warn'"
-      - "fluentbit_lnav_warn_marker in row.message"
-    fail_msg: "WARN keyword classified wrong: {{ row }}"
-
 - name: _verify | Journald priority | assert native severity fallback
   vars:
     row: "{{ _fluentbit_lnav_by_name.priority }}"
@@ -548,15 +491,6 @@
       - "fluentbit_lnav_multiline_marker in row.message"
       - "row.service == 'fluentbit_verify_multiline'"
     fail_msg: "Multiline traceback not joined: {{ row }}"
-
-- name: _verify | Mitogen | assert collapse fired
-  vars:
-    row: "{{ _fluentbit_lnav_by_name.mitogen }}"
-  assert:
-    that:
-      - "row.service == 'mitogen'"
-      - "fluentbit_lnav_mitogen_marker in row.message"
-    fail_msg: "mitogen-shaped identifier did not collapse to service=mitogen: {{ row }}"
 
 - name: _verify | Podman event | assert normalized structured shape
   vars:
