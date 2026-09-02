@@ -108,8 +108,30 @@
   tags:
     - adguard
 
+- name: Create adguard podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: adguard
+    disable_dns: false
+    state: present
+  register: adguard_network
+  become: true
+  tags:
+    - adguard
+
+- name: Read adguard podman network
+  containers.podman.podman_network_info:
+    name: adguard
+  register: adguard_network_info
+  failed_when: adguard_network_info.failed and not ansible_check_mode
+  become: true
+  tags:
+    - adguard
+
 - name: Configure adguard
-  when: not ansible_check_mode or adguard_user.uid is defined
+  when:
+    - not ansible_check_mode or adguard_user.uid is defined
+    - adguard_network_info.networks | default([]) | length > 0
   template:
     src: AdGuardHome.yaml.j2
     dest: /mnt/services/adguard/conf/AdGuardHome.yaml
@@ -142,17 +164,6 @@
   tags:
     - adguard
 
-- name: Create adguard podman network
-  when: not ansible_check_mode
-  containers.podman.podman_network:
-    name: adguard
-    disable_dns: false
-    state: present
-  register: adguard_network
-  become: true
-  tags:
-    - adguard
-
 - name: Pull adguard image
   import_role:
     name: podman
@@ -171,7 +182,9 @@
   vars:
     systemd_unit_args:
       src: adguard.service.j2
-      condition: "{{ not ansible_check_mode or adguard_user.uid is defined }}"
+      condition: >-
+        {{ (not ansible_check_mode or adguard_user.uid is defined)
+           and adguard_network_info.networks | default([]) | length > 0 }}
       restart: "{{ adguard_network.changed or adguard_config.changed or adguard_tls_certs.changed }}"
       throttle: 1
   tags:

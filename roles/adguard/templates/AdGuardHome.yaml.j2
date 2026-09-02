@@ -1,4 +1,4 @@
-{% set adguard_podman_gateway = podman_default_network | ansible.utils.ipaddr('1') | ansible.utils.ipaddr('address') %}
+{% set adguard_podman_gateway = adguard_network_info.networks[0].subnets[0].gateway %}
 http:
   pprof:
     port: 6060
@@ -75,7 +75,7 @@ dns:
   blocked_hosts: []
 {#
   X-Forwarded-For is honored only from nginx's path into the container:
-  the loopback publish DNATs onto the default podman network, so requests
+  the loopback publish DNATs onto the named adguard network, so requests
   arrive sourced from that network's gateway. Trust exactly that address,
   not the whole bridge range -- any co-located container could otherwise
   forge its client identity.

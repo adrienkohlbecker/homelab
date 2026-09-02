@@ -7,6 +7,27 @@
   until: adguard_verify_health.rc == 0
   become: true
 
+- name: _verify | Read adguard podman network
+  containers.podman.podman_network_info:
+    name: adguard
+  register: adguard_verify_network
+  become: true
+
+- name: _verify | Bridge gateway uses the persistent client
+  uri:
+    url: >-
+      {{
+        'http://127.0.0.1:' ~ service_ports.adguard
+        ~ '/control/clients/find?ip0='
+        ~ adguard_verify_network.networks[0].subnets[0].gateway
+      }}
+    status_code: 200
+  register: adguard_verify_gateway_client
+  failed_when: >-
+    adguard_verify_gateway_client.json[0]
+    [adguard_verify_network.networks[0].subnets[0].gateway].name
+    != inventory_hostname ~ ' (host + containers)'
+
 - name: _verify | Create unique adguard fluent-bit marker
   set_fact:
     adguard_lnav_marker: "verify_adguard_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
