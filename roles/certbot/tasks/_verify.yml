@@ -20,19 +20,21 @@
 
 - name: _verify | Certificate has expected SANs, validity, and issuer
   vars:
-    _verify_extras_expected: "{{ certbot_extra_sans | map('regex_replace', '^', 'DNS:') | list }}"
+    _verify_expected_sans: >-
+      {{ ([inventory_hostname + '.' + domain,
+           '*.' + inventory_hostname + '.' + domain]
+          + certbot_extra_sans)
+         | map('regex_replace', '^', 'DNS:') | list }}
   assert:
     that:
-      - ("DNS:" + inventory_hostname + "." + domain) in _certbot_cert_info.subject_alt_name
-      - ("DNS:*." + inventory_hostname + "." + domain) in _certbot_cert_info.subject_alt_name
-      - _verify_extras_expected | difference(_certbot_cert_info.subject_alt_name) | length == 0
+      - (_certbot_cert_info.subject_alt_name | sort) == (_verify_expected_sans | sort)
       - _certbot_cert_info.valid_at.now
       - _certbot_cert_info.valid_at.week_out
       - _certbot_cert_info.issuer != _certbot_cert_info.subject
     fail_msg: >-
       cert missing expected SANs, expiring soon, or self-signed
       (SANs={{ _certbot_cert_info.subject_alt_name }},
-      extras_expected={{ _verify_extras_expected }},
+      expected={{ _verify_expected_sans }},
       not_after={{ _certbot_cert_info.not_after }},
       valid_at={{ _certbot_cert_info.valid_at }},
       issuer={{ _certbot_cert_info.issuer }},
