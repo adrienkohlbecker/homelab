@@ -32,11 +32,10 @@ netplan:
 # package and netplan retains its rendered 50-cloud-init.yaml.
 cloud_init_managed: true
 
-# Leave apt sources to cloud-init: on first boot it writes the Hetzner mirror
-# (mirror.hetzner.com) from the 90-hetznercloud.cfg drop-in baked into the image
-# (packer/hetzner/). The apt role would otherwise rewrite them to
-# archive.ubuntu.com -- this keeps fox on the in-network Hetzner mirror.
-apt_manage_ubuntu_sources: false
+# Cloud-init selects Hetzner's in-network mirrors on first boot; keep the same
+# sources when the apt role takes ownership during subsequent converges.
+ubuntu_mirror: https://mirror.hetzner.com/ubuntu/packages/
+ubuntu_mirror_security: https://mirror.hetzner.com/ubuntu/security/
 
 zfs_arc_min: 0
 zfs_arc_max: 536870912

@@ -11,12 +11,10 @@
   tags:
     - apt
 
-# A fresh Packer image has no package indexes, and the apt module cannot
-# populate them in check mode before resolving python3-debian.
+# A retained Packer image may be months old when first used, and the apt module
+# cannot refresh its package indexes in check mode before resolving python3-debian.
 - name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
-  when:
-    - apt_manage_ubuntu_sources
-    - ansible_check_mode
+  when: ansible_check_mode
   command: apt-get update
   changed_when: false
   check_mode: false
@@ -32,7 +30,6 @@
 # This role's own deb822 files are not written yet, and the legacy-removal task
 # below explicitly orders after these writes for the same reason.
 - name: Install python3-debian
-  when: apt_manage_ubuntu_sources
   apt:
     pkg: python3-debian
     cache_valid_time: 3600
@@ -44,9 +41,7 @@
     - apt
 
 - name: Configure apt sources
-  when:
-    - apt_manage_ubuntu_sources
-    - not (ansible_check_mode and apt_install_python3_debian.changed)
+  when: not (ansible_check_mode and apt_install_python3_debian.changed)
   deb822_repository:
     name: "{{ item.name }}"
     uris: "{{ item.uris }}"
@@ -78,7 +73,6 @@
 # already installed but the deb822 files unwritten (e.g. an interrupted
 # previous run) would leave the system with no sources at all.
 - name: Empty legacy /etc/apt/sources.list  # noqa: require-validate
-  when: apt_manage_ubuntu_sources
   copy:
     content: ""
     dest: /etc/apt/sources.list
@@ -96,9 +90,7 @@
 # time, matching what _verify.yml asserts. The apt module's update_cache
 # silently tolerates partial-suite failures.
 - name: Force apt update (--error-on=any)  # noqa: command-instead-of-module
-  when:
-    - apt_manage_ubuntu_sources
-    - apt_mirror_legacy_emptied.changed or apt_mirror_deb822.changed
+  when: apt_mirror_legacy_emptied.changed or apt_mirror_deb822.changed
   command: apt-get update --error-on=any
   register: _apt_force_update
   retries: 5
