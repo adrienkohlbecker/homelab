@@ -39,8 +39,15 @@
   tags:
     - apt
 
+- name: Record deb822 module availability
+  set_fact:
+    apt_deb822_available: >-
+      {{ not (ansible_check_mode and apt_install_python3_debian.changed) }}
+  tags:
+    - apt
+
 - name: Configure apt sources
-  when: not (ansible_check_mode and apt_install_python3_debian.changed)
+  when: apt_deb822_available
   deb822_repository:
     name: "{{ item.name }}"
     uris: "{{ item.uris }}"

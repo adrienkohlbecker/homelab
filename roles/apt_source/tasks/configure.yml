@@ -19,6 +19,8 @@
 #
 # Exposes apt_source_<name>_changed (true when the repo or signing key changed)
 # so callers can gate dependent installs out of check mode.
+# The apt role publishes apt_deb822_available=false when a fresh check-mode run
+# can only predict installation of deb822_repository's Python dependency.
 
 - name: Assert apt_source args for {{ apt_source_args.name }}
   assert:
@@ -54,6 +56,7 @@
   register: apt_source_key
 
 - name: Configure repository for {{ apt_source_args.name }}
+  when: apt_deb822_available | default(true)
   deb822_repository:
     name: "{{ apt_source_args.name }}"
     types: deb
