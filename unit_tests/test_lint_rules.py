@@ -86,7 +86,11 @@ class TestRequireBackup:
 
     @pytest.mark.parametrize(
         "path",
-        ["roles/x/tasks/_setup.yml", "roles/test/tasks/main.yml", "roles/packer/tasks/main.yml"],
+        [
+            "roles/x/tasks/_setup.yml",
+            "roles/packer/tasks/main.yml",
+            "test/playbooks/tasks/environment.yml",
+        ],
     )
     def test_test_files_are_exempt(self, path: str) -> None:
         assert RequireBackup().matchtask(_task("copy"), _lintable(path)) is False
@@ -222,3 +226,8 @@ class TestTestMetaValidation:
             'machines:\n  box:\nubuntu:\n  - resolute\nskip:\n  "box:resolute": flaky\n',
         )
         assert result.returncode == 0, result.stderr
+
+    def test_bootstrap_must_be_boolean(self, tmp_path: Path) -> None:
+        result = self._run_against(tmp_path, "svc", "bootstrap: pristine\n")
+        assert result.returncode == 1
+        assert "bootstrap must be a boolean" in result.stderr

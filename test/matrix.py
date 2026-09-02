@@ -84,6 +84,11 @@ def release_ubuntu_for(role: str) -> list[str]:
     return _read_role_meta(role).get("ubuntu") or []
 
 
+def bootstrap_for(role: str) -> bool:
+    """Whether the shared bootstrap should run before this role."""
+    return _read_role_meta(role).get("bootstrap", True)
+
+
 def skip_for(role: str) -> set[tuple[str, str]]:
     """(machine, ubuntu) cells this role declares as skipped in CI.
 

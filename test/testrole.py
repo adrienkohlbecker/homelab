@@ -23,7 +23,7 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
-from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES, default_machine_for
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES, bootstrap_for, default_machine_for
 from utils import (
     CommandFailedException,
     IdempotenceFailedException,
@@ -37,18 +37,6 @@ from utils import (
 _BENCHMARK = False
 _PHASE_TIMINGS: list[tuple[str, float]] = []
 
-# Roles whose _verify.yml needs the VM in its packer-shipped state
-# (sources.list still pointing at upstream URLs from chroot.sh's final
-# write_sources_list call), either because the role itself is what
-# transitions that state (apt -> rewrites sources to nexus) or because
-# the role asserts that packer shipped the right thing (packer ->
-# verifies chroot.sh's upstream reset landed). Running the bootstrap
-# prelude first would rewrite sources to nexus before _verify sees the
-# image, masking both kinds of regression. DNS for nexus.lab.fahm.fr
-# resolves via the host resolver chain on-LAN (CI runner, lab dev
-# hosts); off-LAN dev work can pass --upstream-mirrors as the escape
-# hatch.
-_SKIP_BOOTSTRAP_ROLES = frozenset({"apt", "packer", "test"})
 _REMOVED_FLOW_FLAGS = frozenset(
     {
         "--checkmode",
@@ -246,10 +234,10 @@ async def run_test(
                             async with _phase("cloud-init wait"):
                                 await m.ensure_cloud_init()
 
-                        # Configure shared test prerequisites unless that would
-                        # mask the role's own bootstrap contract.
-                        if m.role in _SKIP_BOOTSTRAP_ROLES:
-                            print_line(f"Skipping bootstrap: {m.role!r} is the role that configures it")
+                        # Configure shared test prerequisites unless the role's
+                        # metadata requires the Packer image's pristine state.
+                        if not bootstrap_for(m.role):
+                            print_line(f"Skipping bootstrap: {m.role!r} declares bootstrap: false")
                         else:
                             async with _phase("bootstrap playbook"):
                                 await m.ansible_command(str(m.workdir_path / "_bootstrap.yml"))

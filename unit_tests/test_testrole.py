@@ -120,22 +120,3 @@ class TestParseArgs:
         args, pass_args = testrole.parse_args()
         assert args.role == "nginx"
         assert pass_args == ["--tags", "homepage"]
-
-
-# ---------------------------------------------------------------------------
-# _SKIP_BOOTSTRAP_ROLES
-# ---------------------------------------------------------------------------
-
-
-class TestSkipBootstrapRoles:
-    def test_apt_is_skipped(self) -> None:
-        assert "apt" in testrole._SKIP_BOOTSTRAP_ROLES
-
-    def test_packer_is_skipped(self) -> None:
-        assert "packer" in testrole._SKIP_BOOTSTRAP_ROLES
-
-    def test_test_bootstrap_is_skipped(self) -> None:
-        assert "test" in testrole._SKIP_BOOTSTRAP_ROLES
-
-    def test_nginx_not_skipped(self) -> None:
-        assert "nginx" not in testrole._SKIP_BOOTSTRAP_ROLES

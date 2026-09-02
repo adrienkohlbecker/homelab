@@ -1,5 +1,5 @@
 # Functional mirror probe: prove the configured Nexus path actually serves.
-- name: _verify | Podman docker.io mirror serves its v2 API
+- name: Verify the Podman docker.io mirror serves its v2 API
   when:
     - nexus_url | length > 0
     - not test_in_aws
@@ -12,14 +12,14 @@
     # the mirror location the registries.conf points at doesn't exist.
     status_code: [ 200, 401 ]
     timeout: 15
-# Assert the running resolver state, not merely the drop-in written by main.yml.
+# Assert the running resolver state, not merely the drop-in written above.
 # Scope it to the Global block controlled by resolved.conf.d.
-- name: _verify | Read resolvectl status
+- name: Read resolvectl status
   command: resolvectl status
   register: test_resolvectl
   changed_when: false
 
-- name: _verify | DNS-over-TLS is enforced at the configured resolver
+- name: Verify DNS-over-TLS is enforced at the configured resolver
   vars:
     # Per-link DHCP resolvers must not satisfy the global drop-in contract.
     _test_resolvectl_global: >-
@@ -41,7 +41,7 @@
       fall back to UDP. Global Protocols line: {{ _test_resolvectl_global_protocols }}
 
 # Prove public resolution end-to-end; retry boundedly for a cold DoT handshake.
-- name: _verify | Resolve a public name over the enforced resolver
+- name: Verify public resolution over the enforced resolver
   command: resolvectl query --cache=no wikipedia.org
   register: test_public_resolve
   changed_when: false

@@ -613,7 +613,7 @@ resource "aws_iam_role_policy" "ci_cell" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat(local.ci_qemu_image_read_statements, [
-      # roles/test mirrors.yml mints an ECR login token on the cell (the
+      # test/playbooks/_environment.yml mints an ECR login token on the cell (the
       # controller) and the qemu guest then pulls container layers through the
       # pull-through cache as this same identity. GetAuthorizationToken is only
       # valid against "*"; the repository-scoped actions cover the lazy

@@ -1,0 +1,8 @@
+- name: Prepare the test environment
+  hosts: all
+  tasks:
+    - name: Configure test-only connectivity and credentials
+      import_tasks: tasks/environment.yml
+
+    - name: Verify test-only connectivity
+      import_tasks: tasks/verify_environment.yml

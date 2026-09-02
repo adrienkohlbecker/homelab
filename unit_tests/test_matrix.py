@@ -50,7 +50,7 @@ class TestListTestableRoles:
 
 
 # ---------------------------------------------------------------------------
-# machines_for / default_machine_for / release_ubuntu_for
+# machines_for / default_machine_for / release_ubuntu_for / bootstrap_for
 # ---------------------------------------------------------------------------
 
 
@@ -80,6 +80,14 @@ class TestRoleMeta:
         # here are data rather than a claim about the current default.
         _make_role(roles_tree, "multi", {"ubuntu": ["noble", "resolute"]})
         assert matrix.release_ubuntu_for("multi") == ["noble", "resolute"]
+
+    def test_bootstrap_defaults_to_true(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "plain")
+        assert matrix.bootstrap_for("plain") is True
+
+    def test_bootstrap_reads_false(self, roles_tree: Path) -> None:
+        _make_role(roles_tree, "foundation", {"bootstrap": False})
+        assert matrix.bootstrap_for("foundation") is False
 
 
 # ---------------------------------------------------------------------------

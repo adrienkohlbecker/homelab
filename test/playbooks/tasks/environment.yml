@@ -1,8 +1,3 @@
-- name: Set hostname and seed /etc/hosts
-  import_role:
-    name: hostname
-    tasks_from: configure
-
 - name: Create systemd-resolved configuration directory
   file:
     path: /etc/systemd/resolved.conf.d
@@ -14,7 +9,7 @@
 
 - name: Install DNS-over-TLS configuration
   template:
-    src: 10-test-dns-over-tls.conf.j2
+    src: templates/10-test-dns-over-tls.conf.j2
     dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
     owner: root
     group: root
@@ -30,11 +25,6 @@
     state: restarted
   when: test_resolved_conf.changed
   become: true
-
-- name: Configure apt retries and sources
-  import_role:
-    name: apt
-    tasks_from: configure
 
 - name: Ensure /etc/containers/registries.conf.d exists
   when: test_registry_mirrors | length > 0

@@ -1232,6 +1232,8 @@ class Machine:
         # invoke by checking roles/<role>/tasks/<hook>.yml at the source.
         for playbook in Path("test/playbooks").glob("*.yml"):
             playbook.copy_into(self.workdir_path)
+        Path("test/playbooks/tasks").copy_into(self.workdir_path)
+        Path("test/playbooks/templates").copy_into(self.workdir_path)
 
         # Acquire the publish-lock before any read of the imagedir starts.
         # _create_overlay's qemu-img embeds the backing file's absolute path

@@ -1,6 +1,18 @@
-- name: Configure test bootstrap
+- name: Configure shared role-test prerequisites
   hosts: all
   tasks:
-    - name: Run test bootstrap
+    - name: Configure test-only connectivity and credentials
+      import_tasks: tasks/environment.yml
+
+    - name: Verify test-only connectivity
+      import_tasks: tasks/verify_environment.yml
+
+    - name: Set hostname and seed /etc/hosts
       import_role:
-        name: test
+        name: hostname
+        tasks_from: configure
+
+    - name: Configure apt retries and sources
+      import_role:
+        name: apt
+        tasks_from: configure
