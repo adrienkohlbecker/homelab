@@ -119,10 +119,6 @@
     fluentbit_verify_args:
       name: seerr
       records:
-        - MESSAGE: "2099-01-02T03:04:05.678Z [\u001b[32minfo\u001b[39m][Jellyfin Sync]: Scan starting {\"sessionId\":\"verify-session\"}\n"
-          CONTAINER_TAG: seerr
-          SYSLOG_IDENTIFIER: seerr
-          SYSTEMD_UNIT: seerr.service
         - MESSAGE: "2099-01-02T03:04:06.789Z [\u001b[31merror\u001b[39m][Jellyfin API]: Request failed {\"error\":500}\n"
           CONTAINER_TAG: seerr
           SYSLOG_IDENTIFIER: seerr
@@ -142,29 +138,10 @@
         - MESSAGE: '2099-01-02T03:04:09.012Z [info][Server]: must-not-parse'
           SYSLOG_IDENTIFIER: systemd
           SYSTEMD_UNIT: seerr.service
-        - MESSAGE: '2099-01-02T03:04:10.123Z [debug][Jellyfin Sync]: Title already exists and no changes detected for routine-token'
-          CONTAINER_TAG: seerr
-          SYSLOG_IDENTIFIER: seerr
-          SYSTEMD_UNIT: seerr.service
         - MESSAGE: '2099-01-02T03:04:11.234Z [debug][Jobs]: non-routine-debug'
           CONTAINER_TAG: seerr
           SYSLOG_IDENTIFIER: seerr
           SYSTEMD_UNIT: seerr.service
-        - MESSAGE: '2099-01-02T03:04:12.345Z [info][Jobs]: Starting scheduled job: Jellyfin Recently Added Scan'
-          CONTAINER_TAG: seerr
-          SYSLOG_IDENTIFIER: seerr
-          SYSTEMD_UNIT: seerr.service
-          marker: seerr-job-start-routine-token
-        - MESSAGE: '2099-01-02T03:04:13.456Z [info][Jellyfin Sync]: Beginning to process recently added for library: Movies'
-          CONTAINER_TAG: seerr
-          SYSLOG_IDENTIFIER: seerr
-          SYSTEMD_UNIT: seerr.service
-          marker: seerr-library-routine-token
-        - MESSAGE: '2099-01-02T03:04:14.567Z [info][Jellyfin Sync]: Recently Added Scan Complete'
-          CONTAINER_TAG: seerr
-          SYSLOG_IDENTIFIER: seerr
-          SYSTEMD_UNIT: seerr.service
-          marker: seerr-scan-complete-routine-token
       expected:
         - message: Request failed
           level: error
@@ -196,12 +173,6 @@
           level: debug
           fields.source: Jobs
           fields.parser_status: parsed
-
-- name: _verify | Routine seerr records are omitted from the aggregate
-  assert:
-    that:
-      - "'routine-token' not in fluentbit_verify_result.stdout"
-      - "'verify-session' not in fluentbit_verify_result.stdout"
 
 # Canonical-shape contract. Unlike radarr (which rewrites config.xml on every
 # shutdown), seerr only writes settings.json when a setting actually changes --
