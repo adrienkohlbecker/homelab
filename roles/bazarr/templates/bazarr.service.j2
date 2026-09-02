@@ -4,11 +4,8 @@
 Description=bazarr
 After=network-online.target
 Wants=network-online.target
-# Order-only (no Requires=): on hosts where sonarr/radarr aren't deployed
-# (test variants, future hostsplits) bazarr still starts; on pug it waits
-# so the analytics tracker's import-time HTTPS calls land on a running
-# sonarr/radarr instead of timing out 60s/call. See
-# notes/bazarr_test_blocking_imports.md.
+# Order integrations before Bazarr without preventing standalone startup. See
+# notes/archive/bazarr_test_blocking_imports.md.
 After=sonarr.service radarr.service
 StartLimitInterval=600
 StartLimitBurst=3
@@ -47,10 +44,7 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="bazarr" \
-    {# PUID/PGID (CLAUDE.md "User namespacing" tier 2): the linuxserver s6
-       init usermods its baked-in abc user to these ids and drops to it.
-       Tier 2 is the right fit for a droppable image -- the fake-root
-       --uidmap pattern is reserved for images that insist on id 0. #}
+    {# linuxserver's s6 init maps its abc user to these ids. #}
     --env PUID={{ bazarr_user.uid }} \
     --env PGID={{ media_group.gid }} \
     --env UMASK=002 \

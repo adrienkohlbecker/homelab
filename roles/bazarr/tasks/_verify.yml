@@ -1,7 +1,5 @@
-# Negative probe first: confirms /api/* enforces the apikey. Pairs with the
-# auth'd probe below -- together they prove the apikey we templated is both
-# required by bazarr and the one it accepted. Without this, a future bug that
-# disabled apikey enforcement would let the auth'd probe pass on any key.
+# Together the negative and authenticated probes prove the configured API key
+# is required and active.
 - name: _verify | Bazarr /api/system/status rejects unauth'd requests
   uri:
     url: http://localhost:{{ service_ports.bazarr }}/api/system/status
@@ -11,8 +9,6 @@
   delay: 2
   until: _bazarr_http_unauth.status == 401
 
-# Authenticated probe -- proves the apikey we templated into config.yaml is
-# the one the running container accepted, not just one we wrote to disk.
 # Header form keeps the key out of journald.
 - name: _verify | Bazarr answers /api/system/status with our apikey
   uri:
@@ -53,16 +49,7 @@
   until: _bazarr_lnav_record.rc == 0
   become: true
 
-# The vhost has `auth: true`, so the real browser access pattern is an
-# Authelia-gated UI -- the API path above is reached intra-stack via
-# bazarr.dns.podman with X-API-KEY, bypassing nginx entirely. With the
-# stub in gate mode (see _setup.yml), assert a cookieless GET / lands on
-# nginx's error_page 401 =302 redirect to the portal. This is the only
-# probe that fails if `auth: true` is dropped from nginx_site_args
-# (the loopback apikey probes stay green without it). Asserting the 302
-# returnUrl (rd=) echoes bazarr's own URL proves the request routed to
-# bazarr's server_name (not the default vhost) and the request URI survived.
-#
+# The loopback API probes bypass nginx; verify browser traffic stays gated.
 - name: _verify | Verify Bazarr Authelia gate
   import_role:
     name: nginx

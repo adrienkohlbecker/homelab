@@ -12,9 +12,7 @@
   vars:
     service_user_args:
       name: bazarr
-      # linuxserver/bazarr's s6 init recursively chowns /config to
-      # PUID:PGID=bazarr:media on every container start. Match it here
-      # so ansible doesn't flap the dir's gid back to `bazarr` each run.
+      # Match linuxserver's startup chown to prevent group flapping.
       shared_group: media
   tags:
     - bazarr
@@ -42,9 +40,6 @@
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   register: bazarr_conf
   become: true
-  # On a fresh-host --check run bazarr_user + its config dir are only reported
-  # (their creating tasks are guarded), so an unguarded template with
-  # owner=bazarr would fail resolving the not-yet-created user/dir.
   when: not ansible_check_mode or bazarr_user.uid is defined
   tags:
     - bazarr
@@ -90,10 +85,7 @@
     nginx_site_args:
       subdomain: bazarr
       proxy_pass: http://127.0.0.1:{{ service_ports.bazarr }}/
-      # Bazarr's own auth.type stays null (config.yaml.j2) -- it trusts the
-      # reverse proxy when no native auth is configured, and intra-stack
-      # peers reach it as bazarr.dns.podman:{{ service_ports.bazarr }} with
-      # apikey. See sonarr's nginx_site_args comment.
+      # Native auth stays disabled; Authelia guards browser access.
       auth: true
   tags:
     - bazarr
