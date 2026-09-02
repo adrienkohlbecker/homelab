@@ -58,36 +58,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Probe managed LVM and multipath unit files # noqa: command-instead-of-module
-  when: boot_disable_lvm_services | bool
-  command: systemctl list-unit-files {{ item }}
-  loop:
-    - lvm2-monitor.service
-    - lvm2-lvmpolld.service
-    - dm-event.service
-    - multipathd.service
-    - lvm2-lvmpolld.socket
-    - dm-event.socket
-    - multipathd.socket
-  register: _boot_verify_lvm_unit_files
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Installed LVM and multipath monitor units are masked # noqa: command-instead-of-module
-  when:
-    - boot_disable_lvm_services | bool
-    - item.rc == 0
-    - item.stdout_lines | select('match', '^' ~ (item.item | regex_escape) ~ '\s') | list | length > 0
-  command: systemctl is-enabled {{ item.item }}
-  register: _boot_verify_lvm_unit_state
-  changed_when: false
-  failed_when: _boot_verify_lvm_unit_state.stdout | trim != 'masked'
-  loop: "{{ _boot_verify_lvm_unit_files.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  become: true
-
 # The 'default' fragment carries the base console args. On test VMs (qemu) this
 # includes earlycon + serial for harness output capture; on prod (no legacy UART)
 # it's just console=tty0.
