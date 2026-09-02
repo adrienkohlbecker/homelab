@@ -165,14 +165,6 @@
         - MESSAGE: "[Info] Lifecycle: sonarr-unit-record \n"
           SYSLOG_IDENTIFIER: systemd
           SYSTEMD_UNIT: sonarr.service
-        - MESSAGE: "[Info] ExistingMetadataImporter: Found 0 existing metadata files \n"
-          CONTAINER_TAG: sonarr
-          SYSLOG_IDENTIFIER: sonarr
-          SYSTEMD_UNIT: sonarr.service
-        - MESSAGE: "[Info] RssSyncService: Starting RSS Sync \n"
-          CONTAINER_TAG: sonarr
-          SYSLOG_IDENTIFIER: sonarr
-          SYSTEMD_UNIT: sonarr.service
         - MESSAGE: "[Info] RssSyncService: RSS Sync Completed. Reports found: 1, Reports grabbed: 1 \n"
           CONTAINER_TAG: sonarr
           SYSLOG_IDENTIFIER: sonarr
@@ -200,9 +192,3 @@
             - fields.source
         - message: "RSS Sync Completed. Reports found: 1, Reports grabbed: 1"
           fields.source: RssSyncService
-
-- name: _verify | Successful no-op sonarr records are omitted from aggregate
-  assert:
-    that:
-      - "'Found 0 existing metadata files' not in fluentbit_verify_result.stdout"
-      - "'Starting RSS Sync' not in fluentbit_verify_result.stdout"

@@ -17,14 +17,6 @@ multiline_parsers:
 
 pipeline:
   filters:
-    # Keep successful no-op scans in journald, but omit them from the operator
-    # aggregate. Nonzero imports, grabs, pending reports, and failures remain.
-    - name: grep
-      match: svc.sonarr.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'MESSAGE ^\[Info\] (ExistingMetadataImporter: Found 0 existing metadata files|ExistingSubtitleImporter: Found 0 existing subtitle files|ExistingOtherExtraImporter: Found 0 existing other extra files|ExistingExtraFileService: Found 0 possible extra files, imported 0 files\.|RssSyncService: Starting RSS Sync|DownloadDecisionMaker: Processing [0-9]+ releases|RssSyncService: RSS Sync Completed\. Reports found: [0-9]+, Reports grabbed: 0)[[:space:]]*$'
     - name: multiline
       match: svc.sonarr.service
       multiline.parser: multiline_sonarr
