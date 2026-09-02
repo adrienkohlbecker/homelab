@@ -1,11 +1,22 @@
 - name: Configure services datasets
-  include_tasks:
-    file: _dataset.yml
+  include_role:
+    name: zfs_dataset
+    tasks_from: dataset
+    public: false
     apply:
       tags:
         - services
+  vars:
+    zfs_dataset_args:
+      dataset: "{{ services_dataset.dataset }}"
+      mountpoint: "{{ services_dataset.mountpoint }}"
+      owner: root
+      group: root
+      mode: '0755'
+      extra_properties: "{{ services_dataset.extra_properties | default({}) }}"
   loop: "{{ services_datasets }}"
   loop_control:
-    label: "{{ item.dataset }}"
+    loop_var: services_dataset
+    label: "{{ services_dataset.dataset }}"
   tags:
     - services
