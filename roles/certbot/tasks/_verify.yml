@@ -63,10 +63,3 @@
     or _certbot_le_dir.stat.pw_name != "root"
     or _certbot_le_dir.stat.gr_name != "ssl-cert"
   become: true
-
-# Exercise the credentials, Cloudflare plugin, and ACME renewal configuration.
-# Certbot dry-runs do not execute deploy hooks; persistence is checked above.
-- name: _verify | Certbot renew --dry-run exercises the renewal path
-  command: certbot renew --dry-run --no-random-sleep-on-renew
-  changed_when: false
-  become: true

@@ -138,14 +138,13 @@
   tags:
     - certbot
 
-# Exercise a rotated token immediately; initial issuance already covers this
-# path on a fresh host.
-- name: Exercise renewal after cloudflare token rotation  # noqa: no-changed-when -- diagnostic dry-run
+# Exercise both fresh credentials and later token rotations through the renewal
+# path that the timer will use.
+- name: Exercise renewal after cloudflare credential changes
   command: certbot renew --dry-run --no-random-sleep-on-renew
+  changed_when: false
   become: true
-  when:
-    - certbot_cf_creds.changed
-    - certbot_cert_stat.stat.exists
+  when: certbot_cf_creds.changed
   tags:
     - certbot
 
