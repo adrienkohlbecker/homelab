@@ -4,10 +4,6 @@
   uri:
     url: http://localhost:{{ service_ports.bazarr }}/api/system/status
     status_code: 401
-  register: _bazarr_http_unauth
-  retries: 30
-  delay: 2
-  until: _bazarr_http_unauth.status == 401
 
 # Header form keeps the key out of journald.
 - name: _verify | Bazarr answers /api/system/status with our apikey
@@ -17,9 +13,6 @@
       X-API-KEY: "{{ bazarr_api_key }}"
     status_code: 200
   register: _bazarr_http
-  retries: 30
-  delay: 2
-  until: _bazarr_http.status == 200
   failed_when: (_bazarr_http.json.data | default({})) | length == 0
 
 - name: _verify | Wait for normalized bazarr record in lnav store
