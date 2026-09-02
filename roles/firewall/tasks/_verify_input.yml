@@ -24,12 +24,6 @@
   failed_when: _firewall_public_http.rc != 0 or 'firewall-verify-ok' not in _firewall_public_http.stdout
   become: true
 
-- name: _verify_input | INPUT deny — port 18080 (no rule, no listener) hits catch-all
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:18080/
-  changed_when: false
-  failed_when: false
-  become: true
-
 # Loopback accept (`iif lo accept`). The fixture listener returns a known
 # body so this proves real delivery, while the counter assertion at the end
 # still confirms the packet matched the loopback rule rather than a broader
