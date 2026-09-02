@@ -7,9 +7,6 @@ pipeline:
       exclude:
         - 'MESSAGE ^podman0: port'
         - 'MESSAGE ^veth[0-9]+( |@|: )'
-        - 'MESSAGE name="/etc/gnutls/config"'
-        - 'MESSAGE which is not our child'
-        - 'MESSAGE ^Configuration file /run/systemd/system/netplan-ovs-cleanup\.service is marked world-inaccessible'
         - 'MESSAGE container health_status .*health_status=healthy'
 
     # systemd logs a unit's own lifecycle from init.scope, so the target unit
@@ -57,7 +54,6 @@ pipeline:
       match: nginx.access
       exclude:
         - 'log "homepage-alerts/1"'
-        - 'log "POST /api/v2/write\?'
 
     - name: parser
       match: nginx.access

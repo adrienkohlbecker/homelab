@@ -17,10 +17,9 @@ PartOf=zfs_autosnapshot.target
 
 [Service]
 # Repository synchronization exposes failures separately; suppress only its
-# routine task, scheduler, and no-change progress records.
+# high-volume routine task and scheduler records.
 LogFilterPatterns=~Task Repository Sync [(]ID: 1[)] status changed to:
 LogFilterPatterns=~Updating remote status for branch:
-LogFilterPatterns=~Processing 0 incoming changes
 LogFilterPatterns=~apscheduler[.]scheduler - DEBUG - (Looking for jobs to run|Next wakeup is due)
 LogFilterPatterns=~apscheduler[.]executors[.]default - INFO - (Running job|Job )
 LogFilterPatterns=~task_system - INFO - (Starting task: Repository Sync|Task Repository Sync completed successfully)

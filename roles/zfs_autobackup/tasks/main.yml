@@ -203,10 +203,6 @@
       # oneshot units don't inherit any HOME by default.
       environment:
         HOME: /root
-      # systemd-cat can emit an empty record when the snapshot script has no
-      # output; retain every non-empty status and error line.
-      additional_service_directives:
-        - LogFilterPatterns=~^$
   tags:
     - zfs_autobackup
 
