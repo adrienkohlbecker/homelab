@@ -28,11 +28,3 @@ pipeline:
         - sabnzbd_source_line source_line
       remove: sabnzbd_time
       set: parser_status parsed
-    - name: grep
-      match: svc.sabnzbd.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - '_level ^INFO$'
-        - 'source ^(downloader|newswrapper)$'
-        - 'log ^([0-9]+@[^: ]+: (Initiating connection|Connected using TLSv[0-9.]+ \([^)]+\))|Connecting [0-9]+@[^ ]+ finished)[ \t\r]*$'
