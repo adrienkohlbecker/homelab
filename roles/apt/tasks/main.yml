@@ -23,9 +23,9 @@
     - apt
 
 # deb822_repository requires python3-debian even in check mode (it
-# parses/writes deb822 itself rather than shelling to apt). See
-# roles/netdata/tasks/install.yml for the gate idiom. Must run while
-# the image-shipped apt sources are still the live ones (packer bakes deb822
+# parses/writes deb822 itself rather than shelling to apt). Installing it here
+# makes that module available to every later role. Must run while the
+# image-shipped apt sources are still the live ones (packer bakes deb822
 # .sources at upstream -- see write_sources_list in packer/scripts/chroot.sh).
 # This role's own deb822 files are not written yet, and the legacy-removal task
 # below explicitly orders after these writes for the same reason.

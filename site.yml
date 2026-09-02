@@ -6,13 +6,13 @@
 - name: Base machine install
   hosts: box,lab,pug,fox
   roles:
-    # Host base -- OS, networking, remote access, system services. These roles
-    # are mutually independent, so the order within this band is immaterial.
+    # Host base -- OS, networking, remote access, system services. Apt first
+    # establishes package and deb822 tooling for every role below it.
+    - apt
     - lnav
     - user
     - cleanup
     - hostname
-    - apt
     - apt_upgrade
     - swap
     - netplan

@@ -19,9 +19,8 @@
 #                  flat repo (trailing-slash suite, no components)
 #   pin:           optional { package, version, priority } -> preferences.d/<name>
 #
-# Exposes apt_source_<name>_changed (true when the repo, signing key, or prereqs
-# changed) so the caller can gate its install out of check mode -- where a
-# prereq install can mask the repository task.
+# Exposes apt_source_<name>_changed (true when the repo or signing key changed)
+# so callers can gate dependent installs out of check mode.
 
 - name: Assert apt_source args for {{ apt_source_args.name }}
   assert:
@@ -45,31 +44,6 @@
       lowercase SHA-256 digest;
       got {{ apt_source_args }}
 
-# Pre-warm /var/lib/apt/lists/ in check mode so python3-debian can be resolved.
-# Packer ships an empty cache and the apt module's update_cache is a no-op under
-# --check. Normal runs use the apt tasks' cache_valid_time handling.
-- name: Pre-warm apt cache (real fetch even in --check) for {{ apt_source_args.name }}  # noqa: command-instead-of-module
-  when: ansible_check_mode
-  command: apt-get update
-  changed_when: false
-  check_mode: false
-  become: true
-
-# deb822_repository requires python3-debian even in check mode, and the key
-# fingerprint check below needs gpg. Gate the repository task on this install's
-# .changed so check mode still propagates a would-change signal when the
-# prereq install masks the repository task.
-- name: Install repository prereqs for {{ apt_source_args.name }}
-  apt:
-    pkg:
-      - gpg
-      - python3-debian
-    cache_valid_time: 3600
-  become: true
-  register: apt_source_prereqs
-
-# Apt keys the signed-by file format on its suffix: a .gpg path must hold a
-# binary OpenPGP keyring. Stage the armored source separately and dearmor it.
 - name: Fetch repository key (armored) for {{ apt_source_args.name }}
   get_url:
     url: "{{ apt_source_args.key_url }}"
@@ -82,7 +56,6 @@
   register: apt_source_key
 
 - name: Configure repository for {{ apt_source_args.name }}
-  when: not (ansible_check_mode and apt_source_prereqs is changed)
   deb822_repository:
     name: "{{ apt_source_args.name }}"
     types: deb
@@ -136,4 +109,4 @@
 
 - name: Export change signal for {{ apt_source_args.name }}
   set_fact:
-    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo is changed or apt_source_key is changed or apt_source_prereqs is changed }}"
+    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo is changed or apt_source_key is changed }}"
