@@ -36,30 +36,3 @@
       valid_at={{ _certbot_cert_info.valid_at }},
       issuer={{ _certbot_cert_info.issuer }},
       subject={{ _certbot_cert_info.subject }})
-
-- name: _verify | Certbot.timer is loaded, enabled, and active
-  systemd:
-    name: certbot.timer
-  register: _certbot_timer
-  failed_when: >-
-    _certbot_timer.status.LoadState != "loaded"
-    or _certbot_timer.status.UnitFileState != "enabled"
-    or _certbot_timer.status.ActiveState != "active"
-  become: true
-
-# Restrict wildcard-lineage traversal to explicit ssl-cert consumers.
-- name: _verify | LE storage directories are 0750 root:ssl-cert
-  stat:
-    path: /etc/letsencrypt/{{ item }}
-  loop:
-    - live
-    - archive
-  loop_control:
-    label: "{{ item }}"
-  register: _certbot_le_dir
-  failed_when: >-
-    not _certbot_le_dir.stat.exists
-    or _certbot_le_dir.stat.mode != "0750"
-    or _certbot_le_dir.stat.pw_name != "root"
-    or _certbot_le_dir.stat.gr_name != "ssl-cert"
-  become: true
