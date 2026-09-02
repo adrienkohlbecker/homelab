@@ -5,7 +5,6 @@
       - console-setup
     cache_valid_time: 3600
   become: true
-  register: console_apt
   tags:
     - console
 
@@ -33,7 +32,7 @@
 # a hard reboot when X holds the console. The live VTs pick up the new
 # config at the next boot (reboot-required is touched below).
 - name: Apply console-setup + keyboard to live ttys
-  when: console_cfg.changed and not ansible_check_mode
+  when: console_cfg.changed
   command: setupcon --save
   changed_when: true
   become: true
@@ -41,9 +40,7 @@
     - console
 
 - name: Update initramfs
-  when:
-    - console_cfg.changed
-    - not (ansible_check_mode and console_apt.changed)
+  when: console_cfg.changed
   command: update-initramfs -u -k all
   changed_when: true
   become: true
