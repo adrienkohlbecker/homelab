@@ -5,23 +5,17 @@
 # coupling with netdata) is covered on the consumer side in
 # roles/netdata/tasks/_verify.yml.
 
-- name: _verify | Stat cert files
+- name: _verify | Cert files exist
   stat:
     path: "{{ item }}"
   loop:
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
-  register: _certbot_certs
-  become: true
-
-- name: _verify | Cert files exist
-  assert:
-    that:
-      - item.stat.exists
-    fail_msg: "missing cert at {{ item.item }}"
-  loop: "{{ _certbot_certs.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item }}"
+  register: _certbot_cert
+  failed_when: not _certbot_cert.stat.exists
+  become: true
 
 # valid_at: catches a stale-but-existing cert (certbot silently failed,
 # old file still on disk) which the SAN+issuer asserts below would
@@ -68,46 +62,32 @@
 # Renewals only happen if certbot.timer is enabled+active. The
 # systemd module returns the full unit status dict so a single
 # inspect+assert replaces two `systemctl is-X` shell-outs.
-- name: _verify | Inspect certbot.timer
+- name: _verify | Certbot.timer is loaded, enabled, and active
   systemd:
     name: certbot.timer
   register: _certbot_timer
+  failed_when: >-
+    _certbot_timer.status.LoadState != "loaded"
+    or _certbot_timer.status.UnitFileState != "enabled"
+    or _certbot_timer.status.ActiveState != "active"
   become: true
-
-- name: _verify | Certbot.timer is loaded, enabled, and active
-  assert:
-    that:
-      - _certbot_timer.status.LoadState == "loaded"
-      - _certbot_timer.status.UnitFileState == "enabled"
-      - _certbot_timer.status.ActiveState == "active"
-    fail_msg: >-
-      certbot.timer not in expected state
-      (LoadState={{ _certbot_timer.status.LoadState }},
-      UnitFileState={{ _certbot_timer.status.UnitFileState }},
-      ActiveState={{ _certbot_timer.status.ActiveState }})
 
 # The whole rationale for --deploy-hook (over renewal-hooks/deploy/)
 # is that it's persisted into renewal/<name>.conf at issuance time
 # and survives renewals. A regression that loses the hook would only
 # surface 60 days later when certbot.timer renews and nginx never
 # reloads with the fresh cert.
-- name: _verify | Slurp renewal config
-  slurp:
-    src: /etc/letsencrypt/renewal/{{ inventory_hostname }}.{{ domain }}.conf
-  register: _certbot_renewal
-  become: true
-
 - name: _verify | Renewal config persists the nginx-reload deploy hook
   vars:
     _verify_renewal_text: "{{ _certbot_renewal.content | b64decode }}"
-  assert:
-    that:
-      - "'renew_hook' in _verify_renewal_text"
-      - "'systemctl is-active --quiet nginx || exit 0; systemctl reload nginx' in _verify_renewal_text"
-    fail_msg: >-
-      deploy-hook missing from renewal config
-      (file={{ _certbot_renewal.source }},
-      excerpt={{ _verify_renewal_text | regex_search('renew_hook[^\n]*') | default('<no renew_hook line>') }})
+  slurp:
+    src: /etc/letsencrypt/renewal/{{ inventory_hostname }}.{{ domain }}.conf
+  register: _certbot_renewal
+  failed_when: >-
+    'renew_hook' not in _verify_renewal_text
+    or 'systemctl is-active --quiet nginx || exit 0; systemctl reload nginx'
+       not in _verify_renewal_text
+  become: true
 
 # Directory perms are load-bearing: wildcard SAN + lax dir mode = any
 # local-uid read of privkey.pem grants forever-cert for the host's
@@ -115,26 +95,21 @@
 # explicit consumers (www-data, netdata) added to ssl-cert by their
 # own roles. A regression to 0755 / group:root would be silent
 # without this assertion.
-- name: _verify | Stat LE storage directories
+- name: _verify | LE storage directories are 0750 root:ssl-cert
   stat:
     path: /etc/letsencrypt/{{ item }}
   loop:
     - live
     - archive
-  register: _certbot_le_dirs
-  become: true
-
-- name: _verify | LE storage directories are 0750 root:ssl-cert
-  assert:
-    that:
-      - item.stat.exists
-      - item.stat.mode == "0750"
-      - item.stat.pw_name == "root"
-      - item.stat.gr_name == "ssl-cert"
-    fail_msg: "{{ item.item }} has wrong perms or owner ({{ item.stat }})"
-  loop: "{{ _certbot_le_dirs.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item }}"
+  register: _certbot_le_dir
+  failed_when: >-
+    not _certbot_le_dir.stat.exists
+    or _certbot_le_dir.stat.mode != "0750"
+    or _certbot_le_dir.stat.pw_name != "root"
+    or _certbot_le_dir.stat.gr_name != "ssl-cert"
+  become: true
 
 # End-to-end functional check: --dry-run exercises the credentials
 # file, the DNS-cloudflare plugin, and the persisted --deploy-hook in
