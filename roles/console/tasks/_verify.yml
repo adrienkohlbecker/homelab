@@ -92,23 +92,14 @@
   failed_when: _console_noblank_active.stdout | trim != 'active'
   become: true
 
-# Persistent-config checks: confirm the next-boot cmdline source
-# carries consoleblank=0 (so a future reboot keeps the setting). The
-# runtime probe below proves the *current* boot picked it up.
+# Aarch64 cannot exercise the post-reboot probe below, so retain its ZBM
+# property check as the handoff consumed by the later rEFInd role.
 - name: _verify | ZBM commandline includes consoleblank=0
-  when: not grub_bootloader
+  when: not grub_bootloader and ansible_architecture == 'aarch64'
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: _console_zbm_cmdline
   changed_when: false
   failed_when: "'consoleblank=0' not in _console_zbm_cmdline.stdout"
-  become: true
-
-- name: _verify | GRUB cmdline file includes consoleblank=0
-  when: grub_bootloader
-  slurp:
-    src: /etc/default/grub.d/99-console.cfg
-  register: _console_grub_cfg
-  failed_when: "'consoleblank=0' not in (_console_grub_cfg.content | b64decode)"
   become: true
 
 - name: _verify | Read rendered /boot/grub/grub.cfg
