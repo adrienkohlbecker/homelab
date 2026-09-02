@@ -123,3 +123,14 @@
         - path: /etc/logrotate.d/alternatives
   tags:
     - apt
+
+- name: Run apt safe-upgrade
+  apt:
+    upgrade: safe
+    autoremove: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+    force_apt_get: true
+  become: true
+  tags:
+    - apt_upgrade

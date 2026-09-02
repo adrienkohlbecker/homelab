@@ -14,7 +14,6 @@
     - cleanup
     - hostname
     - apt
-    - apt_upgrade
     - swap
     - netplan
     - wireguard
