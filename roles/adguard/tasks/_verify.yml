@@ -154,12 +154,6 @@
   delay: 2
   until: adguard_verify_https_rr.stdout_lines | length > 0
 
-- name: _verify | Compatibility rewrite pi.hole answers loopback
-  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} pi.hole A
-  register: adguard_verify_pihole
-  changed_when: false
-  failed_when: "'127.0.0.1' not in adguard_verify_pihole.stdout_lines"
-
 - name: _verify | Verify AdGuard Authelia gate
   import_role:
     name: nginx

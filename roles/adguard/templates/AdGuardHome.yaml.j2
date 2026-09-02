@@ -185,11 +185,9 @@ statistics:
 {#
   The keepalived healthcheck digs adguard.home every second per host;
   without this the synthetic probes drown the top-domains statistics.
-  pi.hole is the same class of noise: only operator probes ever ask it.
 #}
   ignored:
     - adguard.home
-    - pi.hole
   interval: 10d
   enabled: true
   ignored_enabled: true
@@ -274,14 +272,6 @@ filtering:
   safebrowsing_block_host: standard-block.dns.adguard.com
   rewrites:
     - domain: adguard.home
-      answer: 127.0.0.1
-      enabled: true
-{#
-  pihole-era compatibility name: anything still asking pi.hole (operator
-  muscle memory, leftover dashboards) gets the same loopback answer.
-  Ignored in statistics above alongside adguard.home.
-#}
-    - domain: pi.hole
       answer: 127.0.0.1
       enabled: true
 {% for host in ['pug', 'lab'] %}
