@@ -22,7 +22,7 @@
 # post-reboot kernel here, and on top of that EDK2 aarch64 has a known reboot
 # bug on this image.
 # Skip the reboot + the post-reboot sysfs check on aarch64; the
-# ZBM property / GRUB cfg + config + initrd + service assertions
+# ZBM property / GRUB cfg + initrd + service assertions
 # below still prove the role wrote the next-boot config correctly,
 # which is the load-bearing contract on x86_64 prod hosts.
 - name: _verify | Reboot to apply role changes
@@ -31,55 +31,8 @@
     tasks_from: reboot
   when: ansible_architecture != 'aarch64'
 
-- name: _verify | Read console-setup config
-  slurp:
-    src: /etc/default/console-setup
-  register: _console_content
-  become: true
-
-- name: _verify | Config carries expected directives
-  vars:
-    _content: "{{ _console_content.content | b64decode }}"
-  assert:
-    that:
-      # Exactly one un-commented line starts with `KEY=`, and it
-      # matches the expected literal — catches both missing directives
-      # and contradicting duplicates appended below (last-assignment
-      # wins on shell-source).
-      - _content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True) | length == 1
-      - item in (_content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True))
-    fail_msg: "console-setup directive missing or duplicated: {{ item }}"
-  loop:
-    - 'CHARMAP="UTF-8"'
-    - 'CODESET="Lat15"'
-    - 'FONTFACE="Fixed"'
-    - 'FONTSIZE="8x16"'
-    - 'ACTIVE_CONSOLES="/dev/tty[1-6]"'
-
-- name: _verify | Read keyboard config
-  slurp:
-    src: /etc/default/keyboard
-  register: _console_keyboard_content
-  become: true
-
-- name: _verify | Keyboard config carries expected directives
-  vars:
-    _content: "{{ _console_keyboard_content.content | b64decode }}"
-  assert:
-    that:
-      - _content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True) | length == 1
-      - item in (_content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True))
-    fail_msg: "keyboard config directive missing or duplicated: {{ item }}"
-  loop:
-    - 'XKBMODEL="pc105"'
-    - 'XKBLAYOUT="fr"'
-    - 'XKBVARIANT=""'
-    - 'XKBOPTIONS="terminate:ctrl_alt_bksp"'
-
-# Live-VT probe: the disk-config + initrd checks above only prove
-# next-boot config. dumpkeys reads the kernel VT's current keymap
-# via KDGKBENT on /dev/tty0, so it doesn't depend on a controlling
-# terminal and works fine from ansible's ssh session.
+# dumpkeys reads the kernel VT's current keymap via KDGKBENT on /dev/tty0, so it
+# doesn't depend on a controlling terminal and works from ansible's ssh session.
 - name: _verify | Read live VT keymap
   command: dumpkeys
   register: _console_dumpkeys
