@@ -1,32 +1,4 @@
-- name: Set hostname
-  hostname:
-    name: "{{ inventory_hostname }}"
-  become: true
-  register: hostname_set
-  tags:
-    - hostname
-
-- name: Touch /var/run/reboot-required on hostname change
-  # rsyslog, journald, postfix and other daemons cache gethostname() at start;
-  # without a reboot they keep the stale label until they're restarted.
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    mode: "0644"
-  become: true
-  when: hostname_set.changed
-  tags:
-    - hostname
-
-- name: Setup hosts file
-  template:
-    src: hosts.j2
-    dest: /etc/hosts
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: python3 -c 'import sys, ipaddress; [ipaddress.ip_address(l.split()[0]) for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")]' %s
-  become: true
+- name: Configure hostname
+  import_tasks: configure.yml
   tags:
     - hostname

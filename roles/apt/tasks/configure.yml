@@ -1,0 +1,110 @@
+- name: Configure apt retries
+  copy:
+    src: 80-retries.conf
+    dest: /etc/apt/apt.conf.d/80-retries
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: 'apt-config dump -c %s'
+  become: true
+  tags:
+    - apt
+
+# A retained Packer image may be months old when first used, and the apt module
+# cannot refresh its package indexes in check mode before resolving python3-debian.
+- name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
+  when: ansible_check_mode
+  command: apt-get update
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - apt
+
+# deb822_repository requires python3-debian even in check mode (it
+# parses/writes deb822 itself rather than shelling to apt). Installing it here
+# makes that module available to every later role. Must run while the
+# image-shipped apt sources are still the live ones (packer bakes deb822
+# .sources at upstream -- see write_sources_list in packer/scripts/chroot.sh).
+# This role's own deb822 files are not written yet, and the legacy-removal task
+# below explicitly orders after these writes for the same reason.
+- name: Install python3-debian
+  apt:
+    pkg: python3-debian
+    cache_valid_time: 3600
+    lock_timeout: 300
+  become: true
+  register: apt_install_python3_debian
+  tags:
+    - apt
+
+- name: Configure apt sources
+  when: not (ansible_check_mode and apt_install_python3_debian.changed)
+  deb822_repository:
+    name: "{{ item.name }}"
+    uris: "{{ item.uris }}"
+    suites: "{{ item.suites }}"
+    components: main universe restricted multiverse
+    architectures: "{{ ['amd64'] if ansible_architecture == 'x86_64' else ['arm64'] }}"
+    # Languages: none -- skip Translation-* index downloads; servers run C.UTF-8.
+    languages:
+      - none
+    signed_by: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+  loop:
+    - name: ubuntu
+      uris: "{{ ubuntu_mirror }}"
+      suites: "{{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates {{ ansible_distribution_release }}-backports"
+    - name: ubuntu-security
+      uris: "{{ ubuntu_mirror_security }}"
+      suites: "{{ ansible_distribution_release }}-security"
+  loop_control:
+    label: "{{ item.name }}"
+  register: apt_mirror_deb822
+  become: true
+  tags:
+    - apt
+
+# Emptied only after the deb822 files are in place, so apt always
+# has a working source -- otherwise a re-run that finds python3-debian
+# already installed but the deb822 files unwritten (e.g. an interrupted
+# previous run) would leave the system with no sources at all.
+- name: Empty legacy /etc/apt/sources.list  # noqa: require-validate
+  copy:
+    content: ""
+    dest: /etc/apt/sources.list
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: apt_mirror_legacy_emptied
+  become: true
+  tags:
+    - apt
+
+# Use apt-get directly (not the apt module's update_cache) so that
+# --error-on=any turns a half-broken suite into a hard fail at apply
+# time. The apt module's update_cache silently tolerates partial-suite
+# failures.
+- name: Force apt update (--error-on=any)  # noqa: command-instead-of-module
+  when: apt_mirror_legacy_emptied.changed or apt_mirror_deb822.changed
+  command: apt-get update --error-on=any
+  retries: 5
+  delay: 30
+  changed_when: true
+  become: true
+  tags:
+    - apt
+
+- name: Configure package-manager log compression
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_args:
+      configs:
+        - path: /etc/logrotate.d/apt
+        - path: /etc/logrotate.d/dpkg
+        - path: /etc/logrotate.d/alternatives
+  tags:
+    - apt

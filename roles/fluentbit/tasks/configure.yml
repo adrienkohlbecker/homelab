@@ -1,0 +1,235 @@
+- name: Configure Fluent Bit apt repository
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: fluentbit
+      key_sha256: df248e2d7103ca62cb683c20a077198d0fb0a7f79dbf53a604af0317de3b4711
+      key_url: https://packages.fluentbit.io/fluentbit.key
+      uris: "{{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: main
+  tags:
+    - fluentbit
+
+# policy_rc_d=101 blocks the package's postinst auto-start. The default
+# config logs to stdout and would harmlessly start, but skipping that
+# saves a noisy systemd restart cycle.
+- name: Install fluent-bit
+  when: not (ansible_check_mode and apt_source_fluentbit_changed)
+  apt:
+    pkg: fluent-bit
+    policy_rc_d: 101
+    cache_valid_time: 3600
+  register: fluentbit_apt
+  become: true
+  tags:
+    - fluentbit
+
+# fluent-bit's filesystem backlog under /var/lib/fluent-bit/storage/
+# queues records while local outputs are backpressured. The package
+# leaves /var/lib/fluent-bit/ at 0755 and fluent-bit creates storage/
+# with the unit's default umask (0755). Tighten both to 0700 so a local
+# user can't traverse the queue; fluent-bit itself runs as root (the
+# conf below is 0600), so 0700 doesn't break the runtime.
+- name: Tighten fluent-bit state directory perms
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - /var/lib/fluent-bit
+    - /var/lib/fluent-bit/storage
+  become: true
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
+- name: Install fluent-bit static assets  # noqa: require-validate
+  copy:
+    src: "{{ item }}"
+    dest: /etc/fluent-bit/{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  loop:
+    - conmon_partial_message.lua
+    - level_from_message.lua
+    - podman_events.lua
+    - lnav_shape.lua
+    - parsers.yaml
+    - filters-pre.yaml
+  become: true
+  register: fluentbit_assets
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
+- name: Create fluent-bit service extension directory
+  file:
+    path: /etc/fluent-bit/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: fluentbit_extension_dir
+  tags:
+    - fluentbit
+
+- name: Initialize fluent-bit service manifest  # noqa: require-validate
+  copy:
+    content: "includes: []\n"
+    dest: /etc/fluent-bit/services.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    force: false
+  become: true
+  register: fluentbit_service_manifest
+  tags:
+    - fluentbit
+
+- name: Install fluent-bit post-service filters  # noqa: require-validate
+  template:
+    src: filters-post.yaml.j2
+    dest: /etc/fluent-bit/filters-post.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: fluentbit_filters_post
+  tags:
+    - fluentbit
+
+- name: Create Fluent Bit lnav log directory
+  file:
+    path: /var/log/fluent-bit
+    state: directory
+    owner: root
+    group: adm
+    mode: "0750"
+  become: true
+  tags:
+    - fluentbit
+
+- name: Create Fluent Bit lnav JSONL store
+  file:
+    path: /var/log/fluent-bit/lnav.jsonl
+    state: touch
+    owner: root
+    group: adm
+    mode: "0640"
+    access_time: preserve
+    modification_time: preserve
+  become: true
+  tags:
+    - fluentbit
+
+- name: Configure Fluent Bit lnav JSONL rotation
+  import_role:
+    name: logrotate
+    tasks_from: template
+  vars:
+    logrotate_args:
+      src: logrotate.j2
+      dest: /etc/logrotate.d/fluent-bit-lnav
+  tags:
+    - fluentbit
+
+- name: Configure fluent-bit
+  template:
+    src: fluent-bit.yaml.j2
+    dest: /etc/fluent-bit/fluent-bit.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+    validate: /opt/fluent-bit/bin/fluent-bit --config %s --dry-run
+  become: true
+  register: fluentbit_conf
+  when: >-
+    not (ansible_check_mode and
+         (fluentbit_apt.changed or fluentbit_assets.changed or
+          fluentbit_extension_dir.changed or fluentbit_service_manifest.changed or
+          fluentbit_filters_post.changed))
+  tags:
+    - fluentbit
+
+- name: Install fluent-bit reload override
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: override.conf.j2
+      for: fluent-bit.service
+      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed)) }}"
+  tags:
+    - fluentbit
+
+# Split restart vs reload: apt package and systemd drop-in changes need
+# a restart; conf/lua changes hit Hot_Reload via SIGHUP and preserve the
+# in-memory backlog. Mutually exclusive (`and not restart`) matches the
+# avahi pattern.
+- name: Enable fluent-bit service
+  when: not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed))
+  systemd:
+    name: fluent-bit.service
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed
+         else 'reloaded'
+         if fluentbit_conf.changed or fluentbit_assets.changed
+            or fluentbit_extension_dir.changed or fluentbit_service_manifest.changed
+            or fluentbit_filters_post.changed
+         else 'started' }}
+  become: true
+  tags:
+    - fluentbit
+
+# The systemd input plugin does not expose db.journal_mode. SQLite accepts
+# journal_mode=WAL on a missing database, then Fluent Bit creates its cursor
+# schema on first write. The timeout covers its short concurrent cursor writes.
+- name: Set fluent-bit journal.db to WAL
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sqlite3
+
+        connection = sqlite3.connect("/var/lib/fluent-bit/journal.db", timeout=5)
+        current_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+        if current_mode.lower() == "wal":
+            print("unchanged")
+        else:
+            new_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            if new_mode.lower() != "wal":
+                raise RuntimeError("Failed to set journal mode to WAL: " + new_mode)
+            print("changed")
+        connection.close()
+  register: fluentbit_journal_db_wal
+  changed_when: fluentbit_journal_db_wal.stdout == "changed"
+  when: not ansible_check_mode
+  become: true
+  tags:
+    - fluentbit
+
+- name: Set fluent-bit journal.db permissions
+  file:
+    path: /var/lib/fluent-bit/journal.db
+    owner: root
+    group: root
+    mode: "0600"
+  when: not ansible_check_mode
+  become: true
+  tags:
+    - fluentbit

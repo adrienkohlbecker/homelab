@@ -15,6 +15,7 @@
     - name: Configure apt to use the Nexus mirror
       import_role:
         name: apt
+        tasks_from: configure
 
     - name: Install podman runtime
       import_role:
@@ -29,6 +30,7 @@
     - name: Install fluent-bit
       import_role:
         name: fluentbit
+        tasks_from: configure
 
     # Everything above wrote its apt sources through the lab Nexus. Rewrite each
     # shared apt mirror to its value without Nexus before shipping the fixture so

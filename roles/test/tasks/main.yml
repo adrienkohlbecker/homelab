@@ -1,6 +1,7 @@
 - name: Set hostname and seed /etc/hosts
   import_role:
     name: hostname
+    tasks_from: configure
 
 - name: Create systemd-resolved configuration directory
   file:
@@ -33,6 +34,7 @@
 - name: Configure apt retries and sources
   import_role:
     name: apt
+    tasks_from: configure
 
 - name: Ensure /etc/containers/registries.conf.d exists
   when: test_registry_mirrors | length > 0
