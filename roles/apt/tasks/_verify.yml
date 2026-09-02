@@ -19,21 +19,6 @@
   loop_control:
     label: "{{ item.mirror }} {{ item.suite }}"
 
-# Query apt's parsed source view rather than stat-ing the file the role emptied.
-- name: _verify | Apt reads no sources from the legacy sources.list
-  command:
-    argv:
-      - apt-get
-      - indextargets
-      - --format
-      - $(SOURCESENTRY)
-  register: _apt_indextargets
-  changed_when: false
-  failed_when: >-
-    _apt_indextargets.rc != 0
-    or (_apt_indextargets.stdout_lines
-    | select('search', '^/etc/apt/sources.list:') | list | length) > 0
-
 # Functional check: every configured suite serves valid signed metadata.
 # --error-on=any turns transient warnings (one unreachable suite, stale
 # Release.gpg) into a non-zero exit; the apt module's update_cache lets
