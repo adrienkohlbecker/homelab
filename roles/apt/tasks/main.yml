@@ -45,15 +45,14 @@
   tags:
     - apt
 
-- name: Configure apt sources (deb822 archive)
+- name: Configure apt source {{ item.name }}
   when:
     - apt_manage_ubuntu_sources
     - not (ansible_check_mode and apt_install_python3_debian.changed)
   deb822_repository:
-    name: ubuntu
-    types: deb
-    uris: "{{ ubuntu_mirror }}"
-    suites: "{{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates {{ ansible_distribution_release }}-backports"
+    name: "{{ item.name }}"
+    uris: "{{ item.uris }}"
+    suites: "{{ item.suites }}"
     components: main universe restricted multiverse
     architectures: "{{ ['amd64'] if ansible_architecture == 'x86_64' else ['arm64'] }}"
     # Languages: none -- skip Translation-* index downloads; servers run C.UTF-8.
@@ -62,28 +61,16 @@
     by_hash: 'yes'
     pdiffs: 'yes'
     signed_by: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+  loop:
+    - name: ubuntu
+      uris: "{{ ubuntu_mirror }}"
+      suites: "{{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates {{ ansible_distribution_release }}-backports"
+    - name: ubuntu-security
+      uris: "{{ ubuntu_mirror_security }}"
+      suites: "{{ ansible_distribution_release }}-security"
+  loop_control:
+    label: "{{ item.name }}"
   register: apt_mirror_deb822
-  become: true
-  tags:
-    - apt
-
-- name: Configure apt sources (deb822 security)
-  when:
-    - apt_manage_ubuntu_sources
-    - not (ansible_check_mode and apt_install_python3_debian.changed)
-  deb822_repository:
-    name: ubuntu-security
-    types: deb
-    uris: "{{ ubuntu_mirror_security }}"
-    suites: "{{ ansible_distribution_release }}-security"
-    components: main universe restricted multiverse
-    architectures: "{{ ['amd64'] if ansible_architecture == 'x86_64' else ['arm64'] }}"
-    languages:
-      - none
-    by_hash: 'yes'
-    pdiffs: 'yes'
-    signed_by: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-  register: apt_mirror_deb822_security
   become: true
   tags:
     - apt
@@ -113,7 +100,7 @@
 - name: Force apt update (--error-on=any)  # noqa: command-instead-of-module
   when:
     - apt_manage_ubuntu_sources
-    - apt_mirror_legacy_emptied.changed or apt_mirror_deb822.changed or apt_mirror_deb822_security.changed
+    - apt_mirror_legacy_emptied.changed or apt_mirror_deb822.changed
   command: apt-get update --error-on=any
   register: _apt_force_update
   retries: 5
