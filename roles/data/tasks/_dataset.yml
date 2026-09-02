@@ -1,13 +1,6 @@
-# Per-dataset wrapper for the include_tasks loop in main.yml. Uses
-# import_role + inline vars (not include_role + set_fact) to avoid the
-# zfs_dataset_args host-fact leak documented in
-# roles/zfs/tasks/_trim_timer.yml:1-17: set_fact or include_role vars:
-# persist at host-fact scope and silently override a later role's own
-# import_role vars: zfs_dataset_args, causing the wrong dataset to be
-# created/queried. import_role vars: binds at task scope and doesn't
-# bleed across role boundaries. Works here because _dataset.yml is
-# included dynamically (include_tasks), so {{ item }} is bound by the
-# time this import executes at runtime.
+# Dynamic inclusion binds item before the imported role's inline vars are
+# evaluated; those task-scoped vars also prevent zfs_dataset_args from leaking
+# into later helper calls.
 - name: _dataset | Configure dataset for {{ item.name }}
   import_role:
     name: zfs_dataset
