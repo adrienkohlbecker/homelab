@@ -22,19 +22,6 @@ pipeline:
       parser: nexus_json
       reserve_data: true
       preserve_key: true
-    - name: grep
-      match: svc.nexus.service
-      logical_op: and
-      exclude:
-        - 'initiator ^\*TASK$'
-        - 'domain ^tasks$'
-        - 'type ^(started|taskstartedrunningevent|finished|blocked|scheduled)$'
-    - name: grep
-      match: svc.nexus.service
-      logical_op: and
-      exclude:
-        - 'domain ^repository\.asset$'
-        - 'type ^(created|updated-(attribute|downloaded|uploaded))$'
     - name: parser
       match: svc.nexus.service
       key_name: formattedMessage

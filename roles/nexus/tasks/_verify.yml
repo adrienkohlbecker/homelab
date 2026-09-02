@@ -54,14 +54,6 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"timestamp":"2026-07-12 00:00:00,009+0000","nodeId":"node-id","initiator":"*TASK","domain":"tasks","type":"finished","context":"nexus-audit-routine","thread":"quartz-1-thread-1","attributes":{"endState":"OK"}}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"timestamp":"2026-07-12 00:00:00,009+0000","nodeId":"node-id","initiator":"anonymous/127.0.0.1","domain":"repository.asset","type":"updated-downloaded","context":"nexus-audit-asset","thread":"qtp-1","attributes":{"repositoryName":"ubuntu"}}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
         - MESSAGE: '{"timestamp":"2026-07-12 00:00:00,009+0000","nodeId":"node-id","initiator":"admin/127.0.0.1","domain":"repository","type":"created","context":"nexus-audit-useful","thread":"qtp-1","attributes":{"name":"test-repository"}}'
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
@@ -149,8 +141,6 @@
   assert:
     that:
       - "'nexus-task-failed' in fluentbit_verify_result.stdout"
-      - "'nexus-audit-routine' not in fluentbit_verify_result.stdout"
-      - "'nexus-audit-asset' not in fluentbit_verify_result.stdout"
       - "'nexus-audit-useful' in fluentbit_verify_result.stdout"
 
 - name: _verify | Retired nexus log files remain absent
