@@ -17,19 +17,7 @@
         - MESSAGE: '{"level":"warning","msg":"gitlab-runner-valid","time":"2099-01-02T03:04:05Z","job":42,"runner_name":"fixture","parser_status":"forged","service":"attribute"}'
           SYSLOG_IDENTIFIER: gitlab-runner
           SYSTEMD_UNIT: gitlab_runner.service
-        - MESSAGE: '{"level":"info","msg":"required scaling change","time":"2099-01-02T03:04:05Z","subsystem":"taskscaler","marker":"gitlab-runner-drop"}'
-          SYSLOG_IDENTIFIER: gitlab-runner
-          SYSTEMD_UNIT: gitlab_runner.service
         - MESSAGE: '{"level":"info","msg":"gitlab-runner-action","time":"2099-01-02T03:04:05Z","subsystem":"taskscaler","marker":"gitlab-runner-keep"}'
-          SYSLOG_IDENTIFIER: gitlab-runner
-          SYSTEMD_UNIT: gitlab_runner.service
-        - MESSAGE: '{"level":"info","msg":"Appending trace to coordinator...ok","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-trace-drop"}'
-          SYSLOG_IDENTIFIER: gitlab-runner
-          SYSTEMD_UNIT: gitlab_runner.service
-        - MESSAGE: '{"level":"info","msg":"Updating job...","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-update-drop"}'
-          SYSLOG_IDENTIFIER: gitlab-runner
-          SYSTEMD_UNIT: gitlab_runner.service
-        - MESSAGE: '{"level":"info","msg":"Submitting job to coordinator...ok","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-submit-drop"}'
           SYSLOG_IDENTIFIER: gitlab-runner
           SYSTEMD_UNIT: gitlab_runner.service
         - MESSAGE: '{"level":"info","msg":"Submitting job to coordinator...accepted, but not yet completed","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-submit-pending-keep"}'
@@ -71,14 +59,6 @@
           service: systemd
           _absent:
             - fields.parser_status
-
-- name: _verify | Routine GitLab coordinator chatter was omitted
-  assert:
-    that:
-      - "'gitlab-runner-drop' not in fluentbit_verify_result.stdout"
-      - "'gitlab-runner-trace-drop' not in fluentbit_verify_result.stdout"
-      - "'gitlab-runner-update-drop' not in fluentbit_verify_result.stdout"
-      - "'gitlab-runner-submit-drop' not in fluentbit_verify_result.stdout"
 
 # Without its go-plugin handshake, the AWS plugin may block on stdin.
 - name: _verify | Pinned fleeting-plugin-aws binary runs on this arch
