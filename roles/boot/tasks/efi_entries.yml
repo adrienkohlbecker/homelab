@@ -8,35 +8,18 @@
 #
 # Gated on `not grub_bootloader` by the import in main.yml.
 
-- name: efi_entries | Create /opt/boot
+- name: efi_entries | Remove installed helper
   file:
     path: /opt/boot
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - boot
-
-- name: efi_entries | Install management script
-  copy:
-    src: efi_entries.py
-    dest: /opt/boot/efi_entries.py
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: python3 -m py_compile "%s"
-  register: _boot_efi_install
+    state: absent
   become: true
   tags:
     - boot
 
 - name: efi_entries | Converge NVRAM entries
-  when: not (ansible_check_mode and _boot_efi_install is changed)
-  command:
-    argv: "{{ ['python3', '/opt/boot/efi_entries.py'] + (['--check'] if ansible_check_mode else []) }}"
+  script:
+    cmd: "efi_entries.py{{ ' --check' if ansible_check_mode else '' }}"
+    executable: /usr/bin/python3
   environment:
     BOOT_EFI_ENTRIES: "{{ boot_efi_entries | to_json }}"
     BOOT_EFI_TIMEOUT: "{{ boot_efi_timeout | to_json }}"

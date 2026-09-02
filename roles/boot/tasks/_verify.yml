@@ -173,8 +173,9 @@
 
 - name: _verify | EFI entries are converged
   when: not grub_bootloader
-  command:
-    argv: "{{ ['python3', '/opt/boot/efi_entries.py', '--check'] }}"
+  script:
+    cmd: efi_entries.py --check
+    executable: /usr/bin/python3
   environment:
     BOOT_EFI_ENTRIES: "{{ boot_efi_entries | to_json }}"
     # Skip timeout: QEMU OVMF does not persist BootTimeout across reboots,
