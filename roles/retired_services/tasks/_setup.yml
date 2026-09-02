@@ -265,13 +265,16 @@
     mode: "0755"
   become: true
 
-- name: _setup | Create custom Samba mDNS fixture
+- name: _setup | Create retired custom Avahi service fixtures
   copy:
     content: retired
-    dest: /etc/avahi/services/smb.service
+    dest: "{{ item }}"
     owner: root
     group: root
     mode: "0644"
+  loop:
+    - /etc/avahi/services/device-info.service
+    - /etc/avahi/services/smb.service
   become: true
 
 - name: _setup | Install retired fail2ban package fixture

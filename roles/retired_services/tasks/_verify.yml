@@ -94,11 +94,14 @@
   failed_when: retired_services_podman_socket_group.rc != 2
   become: true
 
-- name: _verify | Retired custom Samba mDNS service is absent
+- name: _verify | Retired custom Avahi services are absent
   stat:
-    path: /etc/avahi/services/smb.service
-  register: retired_services_samba_mdns
-  failed_when: retired_services_samba_mdns.stat.exists
+    path: "{{ item }}"
+  loop:
+    - /etc/avahi/services/device-info.service
+    - /etc/avahi/services/smb.service
+  register: retired_services_avahi_services
+  failed_when: retired_services_avahi_services.stat.exists
   become: true
 
 - name: _verify | Retired fail2ban package is absent

@@ -476,18 +476,22 @@
     - retired_services
     - podman
 
-- name: Remove retired custom Samba mDNS service
+- name: Remove retired custom Avahi services
   file:
-    path: /etc/avahi/services/smb.service
+    path: "{{ item }}"
     state: absent
-  register: retired_services_samba_mdns
+  loop:
+    - /etc/avahi/services/device-info.service
+    - /etc/avahi/services/smb.service
+  register: retired_services_avahi_services
   become: true
   tags:
     - retired_services
+    - avahi
     - samba
 
-- name: Check Avahi state after Samba mDNS service removal
-  when: retired_services_samba_mdns.changed
+- name: Check Avahi state after service removal
+  when: retired_services_avahi_services.changed
   systemd:
     name: avahi-daemon
   register: retired_services_avahi_state
@@ -496,12 +500,13 @@
   become: true
   tags:
     - retired_services
+    - avahi
     - samba
 
-- name: Reload Avahi after Samba mDNS service removal
+- name: Reload Avahi after service removal
   when:
     - not ansible_check_mode
-    - retired_services_samba_mdns.changed
+    - retired_services_avahi_services.changed
     - retired_services_avahi_state.status.ActiveState | default('') == 'active'
   systemd:
     name: avahi-daemon
@@ -509,6 +514,7 @@
   become: true
   tags:
     - retired_services
+    - avahi
     - samba
 
 - name: Remove retired Netdata Packagecloud source
