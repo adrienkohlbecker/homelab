@@ -2,39 +2,15 @@
 # Sourced preamble for repo operator scripts.
 #
 # Side effects on caller (load-bearing; no consumer re-declares these):
-#   - set -Eeuo pipefail + shopt -s inherit_errexit (strict mode that
-#     also propagates errexit into $(...) and ERR traps into functions)
+#   - set -euo pipefail + shopt -s inherit_errexit (strict mode that
+#     also propagates errexit into $(...))
 #   - PATH pinned to system dirs (callers run via roles/systemd_timer,
 #     which inherits /etc/environment, not /etc/profile)
-#   - ERR trap installed (f_err_trap): on any failure that trips errexit,
-#     prints "ERR: <file>:<line> in <func>: <cmd> (exit N)" to stderr
-#     before the shell terminates. Override with `trap - ERR` if needed.
 
-set -Eeuo pipefail
+set -euo pipefail
 shopt -s inherit_errexit
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-# Default ERR trap. -E (errtrace) above propagates this into functions
-# and $(...) subshells; without errtrace the trap wouldn't fire for
-# failures inside command substitution or in helpers. Commands in
-# `if`/`while`/`until` conditions and `&&`/`||` chains (except the
-# last) are exempt from ERR per bash semantics -- so f_rescue's
-# `if "$@"; then ... else ...` won't trigger this trap.
-f_err_trap() {
-  local rc=$?
-  local lineno=$1 cmd=$2
-  # When the trap fires from top-level (no function frame above the
-  # trap), BASH_SOURCE[1] is unset, which trips `set -u` before the
-  # ##*/ strip can run. Fall back to the script that defined the trap
-  # so the breadcrumb still names *something*; same shape as the
-  # :-main default below for FUNCNAME[1].
-  local src=${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}
-  src=${src##*/}
-  local func=${FUNCNAME[1]:-main}
-  printf 'ERR: %s:%s in %s: %s (exit %s)\n' "$src" "$lineno" "$func" "$cmd" "$rc" >&2
-}
-trap 'f_err_trap "$LINENO" "$BASH_COMMAND"' ERR
 
 # Run "$@" once; on non-zero exit, log to stderr and bump f_failed.
 # Uses an `if`/`else` rather than `set +e`/`set -e` so the caller's
