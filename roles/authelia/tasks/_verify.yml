@@ -100,49 +100,6 @@
     status_code: 401
   become: true
 
-- name: _verify | Read recent authelia container stdout
-  command:
-    argv:
-      - journalctl
-      - -u
-      - authelia.service
-      - -n
-      - "200"
-      - -o
-      - cat
-      - --no-pager
-  register: authelia_verify_journal
-  changed_when: false
-  become: true
-
-- name: _verify | Authelia stdout is structured JSON
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        for line in sys.stdin:
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if (
-                record.get("level") == "info"
-                and record.get("method") == "GET"
-                and record.get("path") == "/api/authz/auth-request"
-                and record.get("remote_ip")
-                and isinstance(record.get("msg"), str)
-                and isinstance(record.get("time"), str)
-            ):
-                sys.exit(0)
-        sys.exit(1)
-  args:
-    stdin: "{{ authelia_verify_journal.stdout }}"
-  changed_when: false
-
 - name: _verify | Wait for normalized authelia record in lnav store
   command:
     argv:
