@@ -1,5 +1,5 @@
 lm_sensors_effective_modules: >-
   {{ lm_sensors_qemu_test_modules if (qemu_test | bool) else lm_sensors_modules }}
 lm_sensors_effective_config: >-
-  {{ lm_sensors_qemu_test_config if (qemu_test | bool) else lm_sensors_config }}
+  {{ (lm_sensors_qemu_test_config | default('', true)) if (qemu_test | bool) else lm_sensors_config }}
 lm_sensors_has_set: "{{ lm_sensors_effective_config is regex('(?m)^\\s*set\\s+') }}"

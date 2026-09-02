@@ -56,7 +56,8 @@
 - name: _verify | Switch to an empty module list
   set_fact:
     lm_sensors_qemu_test_modules: []
-    lm_sensors_qemu_test_config: ""
+    # The inactive default fixture is native-typed as null during a site run.
+    lm_sensors_qemu_test_config: null
 
 - name: _verify | Re-run the role's module-management tasks
   import_tasks: main.yml
