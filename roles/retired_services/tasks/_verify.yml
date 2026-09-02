@@ -328,6 +328,9 @@
     - /etc/fluent-bit/services/plex.yaml
     - /etc/fluent-bit/services/speedtest.yaml
     - /etc/fluent-bit/services/tautulli.yaml
+    - /var/lib/fluent-bit/nginx-error.db
+    - /var/lib/fluent-bit/nginx-error.db-shm
+    - /var/lib/fluent-bit/nginx-error.db-wal
     - /var/lib/fluent-bit/plex.db
     - /var/lib/fluent-bit/plex.db-shm
     - /var/lib/fluent-bit/plex.db-wal

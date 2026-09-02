@@ -657,6 +657,13 @@
     - tautulli
   become: true
 
+- name: _setup | Align baked Fluent Bit config with the current role
+  replace:
+    path: /etc/fluent-bit/fluent-bit.yaml
+    regexp: '(?ms)^    - name: tail\n      tag: nginx[.]error\n.*?^      storage[.]pause_on_chunks_overlimit: true\n\n'
+    replace: ""
+  become: true
+
 - name: _setup | Create retired root backup SSH config fixture
   copy:
     content: "Host *\n    Compression no\n"
@@ -730,6 +737,9 @@
     group: root
     mode: "0600"
   loop:
+    - nginx-error.db
+    - nginx-error.db-shm
+    - nginx-error.db-wal
     - plex.db
     - plex.db-shm
     - plex.db-wal

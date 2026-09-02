@@ -124,11 +124,6 @@ do
 end
 
 do
-    local rec = shape("nginx.error", {}, "info")
-    check("nginx.error", rec.service, "nginx_error")
-end
-
-do
     local rec = shape("nginx.", {}, "info")
     check("nginx.bare", rec.service, "unknown")
 end

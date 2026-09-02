@@ -1035,25 +1035,40 @@
   tags:
     - retired_services
 
-- name: Find retired Plex and Tautulli Fluent Bit cursors
+- name: Find retired service Fluent Bit cursors
   find:
     paths: /var/lib/fluent-bit
     patterns:
+      - nginx-error.db*
       - plex.db*
       - plex-scanner.db*
       - plex-crash-uploader.db*
       - tautulli-websocket.db*
     file_type: file
-  register: retired_services_media_cursors
+  register: retired_services_fluentbit_cursors
   become: true
   tags:
     - retired_services
 
-- name: Remove retired Plex and Tautulli Fluent Bit cursors
+- name: Restart Fluent Bit to release the retired nginx cursor
+  systemd:
+    name: fluent-bit.service
+    state: restarted
+  when: >-
+    retired_services_fluentbit_cursors.files
+    | map(attribute='path')
+    | select('search', '/nginx-error[.]db')
+    | list
+    | length > 0
+  become: true
+  tags:
+    - retired_services
+
+- name: Remove retired service Fluent Bit cursors
   file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ retired_services_media_cursors.files }}"
+  loop: "{{ retired_services_fluentbit_cursors.files }}"
   loop_control:
     label: "{{ item.path }}"
   become: true

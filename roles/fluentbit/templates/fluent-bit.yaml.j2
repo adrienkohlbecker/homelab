@@ -47,20 +47,6 @@ pipeline:
       storage.type: filesystem
       storage.pause_on_chunks_overlimit: true
 
-    - name: tail
-      tag: nginx.error
-      path: /var/log/nginx/error.log
-      db: /var/lib/fluent-bit/nginx-error.db
-      db.locking: true
-      path_key: filepath
-      read_from_head: false
-      skip_long_lines: true
-      skip_empty_lines: true
-      rotate_wait: 30
-      buffer_max_size: 256k
-      storage.type: filesystem
-      storage.pause_on_chunks_overlimit: true
-
     # Certbot has no switch to disable its detailed file logger or send the
     # equivalent DEBUG stream to stdout. Tail only the active path: Fluent Bit
     # follows a rotated inode, while also globbing rotations would duplicate it.
