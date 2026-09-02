@@ -1,27 +1,28 @@
 # Exercise the issued certificate and renewal path. Netdata verifies the
 # cross-role x509check configuration on its consumer side.
 
-- name: _verify | Private key exists
-  stat:
-    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
-  register: _certbot_cert
-  failed_when: not _certbot_cert.stat.exists
+- name: _verify | Verify certbot
   become: true
+  block:
+    - name: _verify | Private key exists
+      stat:
+        path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
+      register: _certbot_cert
+      failed_when: not _certbot_cert.stat.exists
 
-# Reject a stale certificate that still has the expected SANs and issuer.
-- name: _verify | Certificate has expected SANs, validity, and issuer
-  vars:
-    _verify_expected_sans: >-
-      {{ certbot_domains | map('regex_replace', '^', 'DNS:') | list }}
-  community.crypto.x509_certificate_info:
-    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
-    valid_at:
-      now: "+0s"
-      week_out: "+7d"
-  register: _certbot_cert_info
-  failed_when: >-
-    (_certbot_cert_info.subject_alt_name | sort) != (_verify_expected_sans | sort)
-    or not _certbot_cert_info.valid_at.now
-    or not _certbot_cert_info.valid_at.week_out
-    or _certbot_cert_info.issuer == _certbot_cert_info.subject
-  become: true
+    # Reject a stale certificate that still has the expected SANs and issuer.
+    - name: _verify | Certificate has expected SANs, validity, and issuer
+      vars:
+        _verify_expected_sans: >-
+          {{ certbot_domains | map('regex_replace', '^', 'DNS:') | list }}
+      community.crypto.x509_certificate_info:
+        path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+        valid_at:
+          now: "+0s"
+          week_out: "+7d"
+      register: _certbot_cert_info
+      failed_when: >-
+        (_certbot_cert_info.subject_alt_name | sort) != (_verify_expected_sans | sort)
+        or not _certbot_cert_info.valid_at.now
+        or not _certbot_cert_info.valid_at.week_out
+        or _certbot_cert_info.issuer == _certbot_cert_info.subject
