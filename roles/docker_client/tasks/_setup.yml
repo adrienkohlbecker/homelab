@@ -1,0 +1,4 @@
+- name: _setup | Install supported login shells
+  apt:
+    name: zsh
+  become: true

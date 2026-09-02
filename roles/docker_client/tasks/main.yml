@@ -25,22 +25,27 @@
   tags:
     - docker_client
 
-# Docker CLI defaults to /var/run/docker.sock; point it at the operator's
-# rootless podman socket. POSIX `:=` form lets an operator-set DOCKER_HOST (e.g.
-# for debugging against a remote daemon) survive a login. /etc/profile.d/ covers
-# login shells for humans; services that shell out to `docker` need
-# DOCKER_HOST set in their unit env directly.
-- name: Point docker CLI at podman socket
-  copy:
-    dest: /etc/profile.d/docker_client.sh
-    content: |
-      : "${DOCKER_HOST:=unix://${XDG_RUNTIME_DIR}/podman/podman.sock}"
-      export DOCKER_HOST
+# PAM loads /etc/environment before the operator's login shell, so Bash and zsh
+# inherit the same rootless Podman endpoint. Services still need DOCKER_HOST in
+# their unit environment because system units do not inherit the login session.
+- name: Point Docker CLI at Podman socket
+  lineinfile:
+    path: /etc/environment
+    regexp: "^DOCKER_HOST="
+    line: DOCKER_HOST=unix:///run/user/{{ ansible_user_uid }}/podman/podman.sock
+    create: true
     owner: root
     group: root
     mode: "0644"
     backup: true
-    validate: bash -n %s
+  become: true
+  tags:
+    - docker_client
+
+- name: Remove shell-specific Docker host shim
+  file:
+    path: /etc/profile.d/docker_client.sh
+    state: absent
   become: true
   tags:
     - docker_client
