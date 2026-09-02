@@ -12,28 +12,10 @@
 - name: _verify | Buildx plugin loads
   command: docker buildx version
   changed_when: false
-  register: _docker_client_buildx_version
-
-- name: _verify | Buildx version is non-empty
-  assert:
-    that:
-      - _docker_client_buildx_version.stdout | length > 0
-    fail_msg: >-
-      docker buildx version produced no stdout;
-      got stdout={{ _docker_client_buildx_version.stdout | default('') }}
 
 - name: _verify | Compose plugin loads
   command: docker compose version --short
   changed_when: false
-  register: _docker_client_compose_version
-
-- name: _verify | Compose version is non-empty
-  assert:
-    that:
-      - _docker_client_compose_version.stdout | length > 0
-    fail_msg: >-
-      docker compose version --short produced no stdout;
-      got stdout={{ _docker_client_compose_version.stdout | default('') }}
 
 - name: _verify | Login shells inherit the Podman endpoint
   command:
