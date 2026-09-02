@@ -186,17 +186,6 @@ def host_vlan_block(
     return str(subnet)
 
 
-def zfs_source_value(stdout: str) -> dict[str, str]:
-    """Parse `zfs get -H -p -o source,value` output."""
-    lines = str(stdout).splitlines()
-    if not lines:
-        raise AnsibleError("zfs_source_value expected output, got empty stdout")
-    fields = lines[0].split("\t")
-    if len(fields) != 2:
-        raise AnsibleError(f"zfs_source_value expected two tab-separated fields, got {stdout!r}")
-    return {"source": fields[0].strip(), "value": fields[1].strip()}
-
-
 def _get_path(item: Any, path: str) -> Any:
     current = item
     for part in path.split("."):
@@ -284,6 +273,5 @@ class FilterModule:
             "slurp_lines": slurp_lines,
             "slurp_text": slurp_text,
             "slurp_yaml": slurp_yaml,
-            "zfs_source_value": zfs_source_value,
             "zfs_mount_unit": zfs_mount_unit,
         }

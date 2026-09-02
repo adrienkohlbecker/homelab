@@ -12,26 +12,31 @@
 # up. Asserting `local` for the mountpoint as well as the extra
 # properties keeps the role's "I set this explicitly" contract honest.
 
-- name: _verify | Mountpoint property set locally with expected value
+- name: _verify | Expected properties set locally
   when: zfs_root
+  vars:
+    data_expected_properties: >-
+      {{ {'mountpoint': item.mountpoint} | combine(data_extra_properties) }}
   command:
     argv:
       - zfs
       - get
       - -H
       - -p
+      - -s
+      - local
       - -o
-      - source,value
-      - mountpoint
+      - property,value
+      - "{{ data_expected_properties.keys() | join(',') }}"
       - "{{ data_pool }}/{{ item.name }}"
-  register: data_verify_mountpoint
+  register: data_verify_properties
   changed_when: false
   failed_when: >-
-    (data_verify_mountpoint.stdout | zfs_source_value).source != 'local'
-    or (data_verify_mountpoint.stdout | zfs_source_value).value != item.mountpoint
+    (data_verify_properties.stdout_lines | sort)
+    != (data_expected_properties.items() | map('join', '\t') | sort)
   loop: '{{ data_datasets }}'
   loop_control:
-    label: '{{ data_pool }}/{{ item.name }} mountpoint={{ item.mountpoint }}'
+    label: '{{ data_pool }}/{{ item.name }}'
   become: true
 
 - name: _verify | Dataset mount contract passes
@@ -45,28 +50,6 @@
   loop: '{{ data_datasets }}'
   loop_control:
     label: '{{ item.mountpoint }} <- {{ data_pool }}/{{ item.name }}'
-  become: true
-
-- name: _verify | Extra property set locally with expected value
-  when: zfs_root
-  command:
-    argv:
-      - zfs
-      - get
-      - -H
-      - -p
-      - -o
-      - source,value
-      - "{{ item.1.key }}"
-      - "{{ data_pool }}/{{ item.0.name }}"
-  register: data_verify_prop
-  changed_when: false
-  failed_when: >-
-    (data_verify_prop.stdout | zfs_source_value).source != 'local'
-    or (data_verify_prop.stdout | zfs_source_value).value != item.1.value
-  loop: '{{ data_datasets | product(data_extra_properties | dict2items) | list }}'
-  loop_control:
-    label: '{{ data_pool }}/{{ item.0.name }} {{ item.1.key }}={{ item.1.value }}'
   become: true
 
 - name: _verify | Mountpoint owned by ansible_user_id

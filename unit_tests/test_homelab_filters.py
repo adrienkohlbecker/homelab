@@ -183,15 +183,6 @@ def test_host_vlan_block_requires_host_site() -> None:
         homelab.host_vlan_block(network, "lab", "iot")
 
 
-def test_zfs_source_value_parses_tab_separated_source_and_value() -> None:
-    assert homelab.zfs_source_value("local\t/mnt/media\n") == {"source": "local", "value": "/mnt/media"}
-
-
-def test_zfs_source_value_rejects_empty_stdout() -> None:
-    with pytest.raises(AnsibleError):
-        homelab.zfs_source_value("")
-
-
 def test_any_successful_stdout_finds_successful_nonempty_result() -> None:
     assert homelab_tests.any_successful_stdout([{"rc": 1, "stdout": ""}, {"rc": 0, "stdout": "10.0.0.1"}])
     assert not homelab_tests.any_successful_stdout([{"rc": 0, "stdout": ""}, {"rc": 1, "stdout": "ignored"}])
@@ -236,7 +227,6 @@ def test_exposes_filters() -> None:
     assert filters["slurp_json"] is homelab.slurp_json
     assert filters["slurp_lines"] is homelab.slurp_lines
     assert filters["slurp_yaml"] is homelab.slurp_yaml
-    assert filters["zfs_source_value"] is homelab.zfs_source_value
     assert filters["zfs_mount_unit"] is homelab.zfs_mount_unit
 
 
