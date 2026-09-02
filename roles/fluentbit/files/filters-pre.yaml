@@ -5,7 +5,6 @@ pipeline:
     - name: grep
       match: svc.*
       exclude:
-        - 'MESSAGE ^pam_unix\(cron:session\)'
         - 'MESSAGE ^podman0: port'
         - 'MESSAGE ^veth[0-9]+( |@|: )'
         - 'MESSAGE name="/etc/gnutls/config"'
@@ -48,13 +47,6 @@ pipeline:
       exclude:
         - 'event ^health_status$'
         - 'health_status ^starting$'
-
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
-        - 'SYSLOG_IDENTIFIER ^CRON$'
-        - 'MESSAGE ^\(root\) CMD \(command -v debian-sa1 > /dev/null && debian-sa1 (1 1|60 2)\)$'
 
     - name: grep
       match: svc.*
