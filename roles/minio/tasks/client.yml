@@ -1,13 +1,25 @@
+- name: client | Download mcli package
+  get_url:
+    url: "{{ minio_mcli_release[ansible_architecture].url }}"
+    dest: /var/cache/mcli.deb
+    checksum: "sha256:{{ minio_mcli_release[ansible_architecture].sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: minio_mcli_deb_download
+  retries: 3
+  delay: 5
+  until: minio_mcli_deb_download is succeeded
+  become: true
+  tags:
+    - minio
+
 - name: client | Install mcli
-  import_role:
-    name: deb_install
-    tasks_from: install
-  vars:
-    deb_install_args:
-      name: mcli
-      version: "{{ minio_mcli_version }}"
-      url: "{{ minio_mcli_release[ansible_architecture].url }}"
-      sha256: "{{ minio_mcli_release[ansible_architecture].sha256 }}"
+  when: not (ansible_check_mode and minio_mcli_deb_download.changed)
+  apt:
+    deb: /var/cache/mcli.deb
+    allow_downgrade: true
+  become: true
   tags:
     - minio
 

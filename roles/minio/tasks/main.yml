@@ -34,16 +34,32 @@
   tags:
     - minio
 
+- name: Download minio server package
+  get_url:
+    url: "{{ minio_release[ansible_architecture].url }}"
+    dest: /var/cache/minio.deb
+    checksum: "sha256:{{ minio_release[ansible_architecture].sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: minio_deb_download
+  retries: 3
+  delay: 5
+  until: minio_deb_download is succeeded
+  become: true
+  tags:
+    - minio
+
+# apt reads the archive's embedded package/version and skips an exact match.
+# A missing cache is only predicted by get_url in check mode, so there is no
+# local archive for apt to inspect until a real apply downloads it.
 - name: Install minio server
-  import_role:
-    name: deb_install
-    tasks_from: install
-  vars:
-    deb_install_args:
-      name: minio
-      version: "{{ minio_version }}"
-      url: "{{ minio_release[ansible_architecture].url }}"
-      sha256: "{{ minio_release[ansible_architecture].sha256 }}"
+  when: not (ansible_check_mode and minio_deb_download.changed)
+  apt:
+    deb: /var/cache/minio.deb
+    allow_downgrade: true
+  register: minio_deb
+  become: true
   tags:
     - minio
 
@@ -111,13 +127,13 @@
     - minio
 
 - name: Enable minio service
-  when: not (ansible_check_mode and (minio_deb_changed | default(false) | bool))
+  when: not (ansible_check_mode and (minio_deb_download.changed or minio_deb.changed))
   systemd:
     name: minio.service
     enabled: true
     state: >-
       {{ 'restarted'
-         if minio_service_d_override_conf_result.changed or minio_cfg.changed or (minio_deb_changed | default(false) | bool)
+         if minio_service_d_override_conf_result.changed or minio_cfg.changed or minio_deb.changed
          else 'started' }}
   become: true
   tags:
