@@ -13,14 +13,12 @@
   tags:
     - apt
 
-# Pre-warm /var/lib/apt/lists/ so the python3-debian install below
-# works in check mode too. Packer ships the image with an empty cache
-# (no .Packages files), and the apt module's cache update is a no-op
-# in check mode -- so `apt: pkg=python3-debian` would otherwise fail
-# with "no package matching" the first time the role runs in --check.
-# `command:` with `check_mode: false` forces a real fetch.
+# A fresh Packer image has no package indexes, and the apt module cannot
+# populate them in check mode before resolving python3-debian.
 - name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
-  when: apt_manage_ubuntu_sources
+  when:
+    - apt_manage_ubuntu_sources
+    - ansible_check_mode
   command: apt-get update
   changed_when: false
   check_mode: false
