@@ -58,8 +58,19 @@
   tags:
     - console
 
-# Apply the argument to recovery entries too; keep the historical GRUB fragment
-# name distinct from the ZBM fragment name.
+# Removing a grub.d fragment does not update grub.cfg by itself. Regenerate
+# explicitly so a host with both filenames cannot retain the duplicate there.
+- name: Remove legacy console GRUB fragment
+  when: grub_bootloader
+  file:
+    path: /etc/default/grub.d/99-console.cfg
+    state: absent
+  register: console_legacy_grub_fragment
+  become: true
+  tags:
+    - console
+
+# Apply the argument to recovery entries too.
 - name: Set consoleblank=0 kernel arg
   import_role:
     name: boot
@@ -67,8 +78,18 @@
   vars:
     boot_cmdline_args:
       name: consoleblank
-      grub_name: console
       contents: consoleblank=0
       grub_scope: all
+  tags:
+    - console
+
+- name: Update grub after removing the legacy console fragment
+  when:
+    - grub_bootloader
+    - console_legacy_grub_fragment.changed
+    - not ansible_check_mode
+  command: update-grub
+  changed_when: true
+  become: true
   tags:
     - console

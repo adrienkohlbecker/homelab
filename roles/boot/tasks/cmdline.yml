@@ -7,11 +7,9 @@
 #       contents: <args>          # '' removes the fragment
 #       grub_scope: default|all   # GRUB_CMDLINE_LINUX_DEFAULT vs _LINUX (recovery
 #                                 #   too); default 'default'. Ignored on ZBM.
-#       grub_name: <stem>         # grub.d/99-<stem>.cfg; defaults to name. Lets a
-#                                 #   fragment keep distinct grub/ZBM filenames.
 #
 # and the engine dispatches to whichever bootloader the host runs (grub_bootloader):
-#   grub  -> /etc/default/grub.d/99-<grub_name>.cfg  (+ update-grub)
+#   grub  -> /etc/default/grub.d/99-<name>.cfg  (+ update-grub)
 #   ZBM   -> /etc/zfsbootmenu/<name>, reassembled into org.zfsbootmenu:commandline
 # Both paths touch /var/run/reboot-required on change so the site.yml reboot
 # check applies the new cmdline. A caller gates the whole import with
@@ -48,7 +46,7 @@
   vars:
     _boot_grub_var: "{{ 'GRUB_CMDLINE_LINUX' if (boot_cmdline_args.grub_scope | default('default')) == 'all' else 'GRUB_CMDLINE_LINUX_DEFAULT' }}"
   copy:
-    dest: "/etc/default/grub.d/99-{{ boot_cmdline_args.grub_name | default(boot_cmdline_args.name) }}.cfg"
+    dest: "/etc/default/grub.d/99-{{ boot_cmdline_args.name }}.cfg"
     content: "{{ _boot_grub_var }}=\"${{ _boot_grub_var }} {{ boot_cmdline_args.contents }}\"\n"
     backup: true
     owner: root
@@ -61,7 +59,7 @@
 - name: cmdline | Remove grub fragment ({{ boot_cmdline_args.name }})
   when: grub_bootloader and boot_cmdline_args.contents | length == 0
   file:
-    path: "/etc/default/grub.d/99-{{ boot_cmdline_args.grub_name | default(boot_cmdline_args.name) }}.cfg"
+    path: "/etc/default/grub.d/99-{{ boot_cmdline_args.name }}.cfg"
     state: absent
   register: boot_cmdline_grub_absent
   become: true
