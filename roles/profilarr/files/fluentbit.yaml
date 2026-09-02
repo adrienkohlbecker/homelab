@@ -1,10 +1,10 @@
 parsers:
   - name: profilarr_python
     format: regex
-    regex: '/\A(?<profilarr_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (?<profilarr_source>.+?) - (?<profilarr_level>DEBUG|INFO|WARNING|ERROR|CRITICAL) - (?<profilarr_message>[\s\S]*?)[[:space:]]*\z/'
+    regex: '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - (?<source>.+?) - (?<_level>DEBUG|INFO|WARNING|ERROR|CRITICAL) - (?<message>[\s\S]*?)[[:space:]]*\z/'
   - name: profilarr_gunicorn
     format: regex
-    regex: '/\A\[(?<profilarr_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4})\] \[(?<profilarr_gunicorn_pid>\d+)\] \[(?<profilarr_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\] (?<profilarr_message>[\s\S]*?)[[:space:]]*\z/'
+    regex: '/\A\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}\] \[(?<profilarr_gunicorn_pid>\d+)\] \[(?<_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\] (?<message>[\s\S]*?)[[:space:]]*\z/'
 
 pipeline:
   filters:
@@ -26,22 +26,13 @@ pipeline:
       preserve_key: true
     - name: modify
       match: svc.profilarr.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists profilarr_gunicorn_pid
-      add: profilarr_source gunicorn
+      condition: key_exists profilarr_gunicorn_pid
+      add: source gunicorn
     - name: modify
       match: svc.profilarr.service
       condition:
-        - key_exists CONTAINER_TAG
-        - key_exists profilarr_message
-        - key_exists profilarr_level
-        - key_exists profilarr_source
-      hard_rename:
-        - profilarr_message log
-        - profilarr_level _level
-        - profilarr_source source
-      remove:
-        - profilarr_timestamp
-        - profilarr_gunicorn_pid
-      set: parser_status parsed
+        - key_exists message
+        - key_exists _level
+        - key_exists source
+      hard_rename: message log
+      remove: profilarr_gunicorn_pid

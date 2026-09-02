@@ -53,29 +53,21 @@
           level: debug
           service: profilarr
           fields.source: task_system
-          fields.parser_status: parsed
           _absent:
-            - fields.profilarr_timestamp
-            - fields.profilarr_level
-            - fields.profilarr_message
+            - fields.message
         - message: profilarr-gunicorn
           level: warn
           service: profilarr
           fields.source: gunicorn
-          fields.parser_status: parsed
           _absent:
-            - fields.profilarr_timestamp
             - fields.profilarr_gunicorn_pid
-            - fields.profilarr_level
-            - fields.profilarr_message
+            - fields.message
         - message: Starting application as user 1000:1000
           level: info
           service: profilarr
           _absent:
-            - fields.parser_status
             - fields.source
         - message: 2099-01-02 03:04:08 - app.verify - ERROR - must-not-parse
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.source
