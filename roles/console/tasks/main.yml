@@ -25,12 +25,11 @@
   tags:
     - console
 
-# setupcon --save reads both /etc/default/console-setup and
-# /etc/default/keyboard, so a single invocation covers both changes.
+# setupcon --save reads both policy files, applies them to the live VTs, and
+# refreshes the cached keymap/font artifacts consumed by the initramfs hook.
 # No --force (intentionally dropped): setupcon then fails loudly on a bad
 # config rather than forcing it onto the live VTs, and --force can trigger
-# a hard reboot when X holds the console. The live VTs pick up the new
-# config at the next boot (reboot-required is touched below).
+# a hard reboot when X holds the console.
 - name: Apply console-setup + keyboard to live ttys
   when: console_cfg.changed
   command: setupcon --save
@@ -71,19 +70,5 @@
       grub_name: console
       contents: consoleblank=0
       grub_scope: all
-  tags:
-    - console
-
-# The cmdline engine touches /var/run/reboot-required for the consoleblank arg on
-# either bootloader; this covers the console-setup / keyboard file changes.
-- name: Ask to reboot
-  when: console_cfg.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
   tags:
     - console
