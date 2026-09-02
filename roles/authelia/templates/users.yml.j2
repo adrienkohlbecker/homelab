@@ -9,12 +9,9 @@
 ---
 users:
 {% for user in authelia_users %}
-  {{ user.username }}:
+  {{ user.username | to_json }}:
     displayname: {{ user.displayname | to_json }}
     password: {{ user.password_hash | to_json }}
     email: {{ user.email | to_json }}
-    groups:
-{% for group in user.groups | default([]) %}
-      - {{ group }}
-{% endfor %}
+    groups: {{ user.groups | default([]) | to_json }}
 {% endfor %}
