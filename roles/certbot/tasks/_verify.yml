@@ -21,10 +21,7 @@
 - name: _verify | Certificate has expected SANs, validity, and issuer
   vars:
     _verify_expected_sans: >-
-      {{ ([inventory_hostname + '.' + domain,
-           '*.' + inventory_hostname + '.' + domain]
-          + certbot_extra_sans)
-         | map('regex_replace', '^', 'DNS:') | list }}
+      {{ certbot_domains | map('regex_replace', '^', 'DNS:') | list }}
   assert:
     that:
       - (_certbot_cert_info.subject_alt_name | sort) == (_verify_expected_sans | sort)

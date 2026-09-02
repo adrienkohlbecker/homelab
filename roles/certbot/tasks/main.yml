@@ -114,17 +114,13 @@
     argv: >-
       {{ ['certbot', 'certonly', '--noninteractive', '--dns-cloudflare',
           '--cert-name', inventory_hostname + '.' + domain,
-          '--deploy-hook', certbot_deploy_hook]
-         + (['-d'] | product(certbot_domains) | flatten | list)
+          '--deploy-hook', certbot_deploy_hook,
+          '--domains', certbot_domains | join(',')]
          + (certbot_renewal_required | ternary(['--force-renewal'], []))
          + (certbot_production_certificates | ternary([], ['--test-cert'])) }}
   vars:
     certbot_deploy_hook: >-
       systemctl is-active --quiet nginx || exit 0; systemctl reload nginx
-    certbot_domains: >-
-      {{ [inventory_hostname + '.' + domain,
-          '*.' + inventory_hostname + '.' + domain]
-         + certbot_extra_sans }}
     certbot_expected_sans: >-
       {{ certbot_domains | map('regex_replace', '^', 'DNS:') | list }}
     certbot_sans_drifted: >-
