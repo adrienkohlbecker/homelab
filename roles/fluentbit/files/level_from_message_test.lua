@@ -103,9 +103,9 @@ for _, case in ipairs(message_cases) do
     check(case.label, sev(case.line), case.want)
 end
 
--- 14. Native host services fall back to journald PRIORITY when the body has no
---     level keyword in its first 120 chars ("JSONDecodeError" has no word
---     boundary before "error").
+-- Native host services fall back to journald PRIORITY when the body has no
+-- level keyword in its first 120 chars ("JSONDecodeError" has no word
+-- boundary before "error").
 do
     local t = sev(
         "[pug] alarm_log fetch failed: JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
@@ -115,21 +115,21 @@ do
     check("host-priority.error", t, "error")
 end
 
--- 14a. Container PRIORITY remains ignored because it only describes the
---      stdout/stderr stream.
+-- Container PRIORITY remains ignored because it only describes the
+-- stdout/stderr stream.
 do
     local t = sev("container line without a level", nil, { PRIORITY = "3", CONTAINER_TAG = "fixture" })
     check("container-priority.ignored", t, "info")
 end
 
--- 14b. An explicit body level wins over the native journal priority.
+-- An explicit body level wins over the native journal priority.
 do
     local t = sev("WARNING host message", nil, { PRIORITY = "6" })
     check("host-priority.body-wins", t, "warn")
 end
 
--- 14c. Native command/audit sources whose prose contains option names trust
---      their real journal priority instead of body keywords.
+-- Native command/audit sources whose prose contains option names trust
+-- their real journal priority instead of body keywords.
 do
     local t = sev(
         "      ak : PWD=/home/ak ; USER=root ; COMMAND=/usr/sbin/smartctl -l error /dev/nvme0n1",
@@ -148,9 +148,9 @@ do
     check("sensors.priority-only", t, "info")
 end
 
--- 14c-bis. COMM comes from the sending process, SYSLOG_IDENTIFIER from the
---          writer. A record naming a trusted program it did not come from
---          must still be scanned, or any local writer could mute itself.
+-- COMM comes from the sending process, SYSLOG_IDENTIFIER from the writer. A
+-- record naming a trusted program it did not come from must still be scanned,
+-- or any local writer could mute itself.
 do
     local t = sev(
         "error: authentication failure for root",
@@ -169,9 +169,9 @@ do
     check("sudo.comm-matches", t, "info")
 end
 
--- 15. nginx.access pre-stamp branch: an upstream modify filter sets
---     record.severity_text=debug so this filter trusts it and does NOT scan
---     the URL (which here contains "error") for keywords.
+-- nginx.access pre-stamp branch: an upstream modify filter sets
+-- record.severity_text=debug so this filter trusts it and does NOT scan the URL
+-- (which here contains "error") for keywords.
 do
     local t = sev(
         '10.89.0.4 - - [03/Jun/2026:17:41:02 +0000] "GET /admin/error-report?fatal=1 HTTP/1.1" 200 12',
@@ -181,14 +181,14 @@ do
     check("nginx.access.trusted.text", t, "debug")
 end
 
--- 16. The nginx.access trust gate is tag-scoped: the same severity_text on a
---     non-nginx.access record is ignored, and the body is scanned normally.
+-- The nginx.access trust gate is tag-scoped: the same severity_text on a
+-- non-nginx.access record is ignored, and the body is scanned normally.
 do
     local t = sev("real ERROR happened", "svc.foo.service", { severity_text = "info" })
     check("nginx.access.gate-scoped", t, "error")
 end
 
--- 17. A canonical upstream level stays untouched.
+-- A canonical upstream level stays untouched.
 do
     local record = {
         log = "this body says ERROR but severity is already warn",
@@ -222,7 +222,7 @@ do
     check("structured.unknown.error", record.parse_error, "level")
 end
 
--- 18. Non-string body (already-structured record): return 0, no level set.
+-- Non-string body (already-structured record): return 0, no level set.
 do
     local record = { log = 42 }
     local code = set_priority("svc.x.service", 0, record)
