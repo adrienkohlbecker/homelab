@@ -274,6 +274,27 @@
     mode: "0644"
   become: true
 
+- name: _setup | Create legacy fail2ban jail directory
+  file:
+    path: /etc/fail2ban/jail.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Create legacy fail2ban jail overrides
+  copy:
+    content: "[DEFAULT]\n"
+    dest: "/etc/fail2ban/jail.d/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - 00-nftables.local
+    - 99-nftables.local
+  become: true
+
 - name: _setup | Create legacy Netdata collector directories
   file:
     path: "{{ item }}"

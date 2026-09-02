@@ -63,6 +63,18 @@
     - retired_services
     - logrotate
 
+- name: Remove retired fail2ban jail overrides
+  file:
+    path: "/etc/fail2ban/jail.d/{{ item }}"
+    state: absent
+  loop:
+    - 00-nftables.local
+    - 99-nftables.local
+  become: true
+  tags:
+    - retired_services
+    - fail2ban
+
 - name: Remove retired libvirt guest creation tools
   apt:
     name:

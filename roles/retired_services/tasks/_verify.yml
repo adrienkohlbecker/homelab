@@ -101,6 +101,16 @@
   failed_when: retired_services_samba_mdns.stat.exists
   become: true
 
+- name: _verify | Retired fail2ban jail overrides are absent
+  stat:
+    path: "/etc/fail2ban/jail.d/{{ item }}"
+  loop:
+    - 00-nftables.local
+    - 99-nftables.local
+  register: retired_services_fail2ban_jail_override
+  failed_when: retired_services_fail2ban_jail_override.stat.exists
+  become: true
+
 - name: _verify | Retired Netdata smartctl collector override is absent
   stat:
     path: /etc/netdata/go.d/smartctl.conf

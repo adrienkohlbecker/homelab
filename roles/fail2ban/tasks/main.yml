@@ -43,22 +43,6 @@
   tags:
     - fail2ban
 
-# fail2ban loads jail.conf -> jail.d/*.conf -> jail.local -> jail.d/*.local
-# alphabetically with last-wins precedence. We write our DEFAULT
-# block at /etc/fail2ban/jail.local (the upstream-canonical override
-# path); earlier prefix iterations under jail.d/ are cleaned up below.
-- name: Drop legacy jail.d overrides
-  file:
-    path: "/etc/fail2ban/jail.d/{{ item }}"
-    state: absent
-  loop:
-    - 00-nftables.local
-    - 99-nftables.local
-  become: true
-  register: fail2ban_legacy_override
-  tags:
-    - fail2ban
-
 # Daemon-level config (logtarget lives in [Definition] of fail2ban.conf,
 # distinct from jail.local's [DEFAULT]). Route fail2ban-server's own
 # runtime log to journald instead of /var/log/fail2ban.log so the
@@ -186,8 +170,8 @@
 
 # Jail and banaction changes live in jail.local -> restart, since
 # fail2ban-client reload does NOT migrate already-active f2b-*
-# chains to a new banaction's table. The action override and legacy
-# cleanup use SIGHUP reload; the on-disk db replays bans on restart.
+# chains to a new banaction's table. The action override uses SIGHUP
+# reload; the on-disk db replays bans on restart.
 - name: Enable fail2ban service
   when: not (ansible_check_mode and fail2ban_apt.changed)
   systemd:
@@ -197,7 +181,7 @@
       {{ 'restarted'
          if fail2ban_apt.changed or fail2ban_default.changed or fail2ban_daemon.changed
          else 'reloaded'
-         if fail2ban_legacy_override.changed or fail2ban_mail_action.changed
+         if fail2ban_mail_action.changed
          else 'started' }}
   become: true
   tags:
