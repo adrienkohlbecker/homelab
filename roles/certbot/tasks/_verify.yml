@@ -30,7 +30,7 @@
   register: _certbot_cert_info
   become: true
 
-- name: _verify | Certificate SANs cover host + wildcard + extras, valid for at least 7d
+- name: _verify | Certificate has expected SANs, validity, and issuer
   vars:
     _verify_extras_expected: "{{ certbot_extra_sans | map('regex_replace', '^', 'DNS:') | list }}"
   assert:
@@ -40,24 +40,15 @@
       - _verify_extras_expected | difference(_certbot_cert_info.subject_alt_name) | length == 0
       - _certbot_cert_info.valid_at.now
       - _certbot_cert_info.valid_at.week_out
+      - _certbot_cert_info.issuer != _certbot_cert_info.subject
     fail_msg: >-
-      cert missing host+wildcard+extras SANs or expiring soon
+      cert missing expected SANs, expiring soon, or self-signed
       (SANs={{ _certbot_cert_info.subject_alt_name }},
       extras_expected={{ _verify_extras_expected }},
       not_after={{ _certbot_cert_info.not_after }},
-      valid_at={{ _certbot_cert_info.valid_at }})
-
-# Distinguishes a real CA-issued cert from a self-signed snakeoil
-# left in place by a sibling role's _setup at the same paths.
-# Snakeoils satisfy issuer == subject; LE (staging or prod) never
-# does. Robust against LE intermediate rotations (R3 -> R10 -> ...).
-- name: _verify | Certificate is not self-signed
-  assert:
-    that:
-      - _certbot_cert_info.issuer != _certbot_cert_info.subject
-    fail_msg: >-
-      cert is self-signed (likely a snakeoil)
-      (issuer={{ _certbot_cert_info.issuer }}, subject={{ _certbot_cert_info.subject }})
+      valid_at={{ _certbot_cert_info.valid_at }},
+      issuer={{ _certbot_cert_info.issuer }},
+      subject={{ _certbot_cert_info.subject }})
 
 # Renewals only happen if certbot.timer is enabled+active. The
 # systemd module returns the full unit status dict so a single
