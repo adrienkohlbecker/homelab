@@ -24,94 +24,83 @@ local function sev(line, tag, record)
     return record["_level"], code
 end
 
--- 1. podman/docker structured `level=info` (container stdout via journald).
-do
-    local t = sev('time="2026-06-03T17:40:42Z" level=info msg="Created exec session 8ac8367408b2 in container 768913f"')
-    check("docker.info.text", t, "info")
-end
+local message_cases = {
+    {
+        label = "docker.info.text",
+        line = 'time="2026-06-03T17:40:42Z" level=info msg="Created exec session 8ac8367408b2 in container 768913f"',
+        want = "info",
+    },
+    {
+        label = "docker.warn.text",
+        line = 'time="2026-06-03T17:40:47Z" level=warning msg="StopSignal SIGTERM failed to stop container 9f96"',
+        want = "warn",
+    },
+    {
+        label = "netdata.error.text",
+        line = "level=error msg=\"start watching '/etc/netdata/scripts.d': no such file or directory\" plugin=scripts.d",
+        want = "error",
+    },
+    {
+        label = "nexus.warn",
+        line = "2026-06-03 17:40:59,568+0000 WARN  [periodic-9-thread-7] *SYSTEM org.sonatype.nexus.selfhosted.internal.jvm.MemoryMonitor - *SYSTEM [jvm monitor] [memory] High heap",
+        want = "warn",
+    },
+    {
+        label = "nexus.info",
+        line = "2026-06-03 17:41:03,973+0000 INFO  [qtp1550551852-205] *UNKNOWN org.sonatype.nexus.repository.httpclient.internal.HttpClientFacetImpl - Repository status for py",
+        want = "info",
+    },
+    {
+        label = "paperless.error",
+        line = '[2026-06-03 19:41:18,019] [ERROR] [kombu.asynchronous.hub] Error in timer: ResponseError("unknown command")',
+        want = "error",
+    },
+    { label = "sonarr.info", line = "[Info] RssSyncService: Starting RSS Sync ", want = "info" },
+    {
+        label = "profilarr.debug.text",
+        line = "2026-06-03 19:41:48 - apscheduler.scheduler - DEBUG - Looking for jobs to run",
+        want = "debug",
+    },
+    {
+        label = "nginx.warn",
+        line = "2026/06/03 17:41:02 [warn] 3953#3953: *42051 a client request body is buffered to a temporary file /var/lib/nginx/body/0000000112",
+        want = "warn",
+    },
+    {
+        label = "dnscrypt.notice.text",
+        line = "[2026-06-03 05:09:34] [NOTICE] Anonymizing queries for [dct-fr] via [anon-cs-fr]",
+        want = "info",
+    },
+    {
+        label = "postgres.log",
+        line = "2026-06-03 19:41:25.365 CEST [212] LOG:  checkpoint starting: time",
+        want = "info",
+    },
+    {
+        label = "temp.critical.text",
+        line = "temperature sensor 'temperature_nct6798-isa-0290_temp3_AUXTIN0' transitioned from state 'alarm' to 'critical' [device 'nct6798']",
+        want = "fatal",
+    },
+    { label = "nokw.default.text", line = "netmap: suggested exit node:  ()", want = "info" },
+    {
+        label = "headscale.inf",
+        line = "2026-06-10T08:54:39Z INF Received signal to stop, shutting down gracefully signal=terminated",
+        want = "info",
+    },
+    {
+        label = "headscale.wrn",
+        line = "2026-06-10T08:54:40Z WRN Listening without TLS but ServerURL does not start with http://",
+        want = "warn",
+    },
+    {
+        label = "headscale.err",
+        line = "2026-06-14T07:26:08Z ERR user msg: node not found code=404",
+        want = "error",
+    },
+}
 
--- 2. `level=warning` -- matches the "warning" keyword, maps to warn.
-do
-    local t = sev('time="2026-06-03T17:40:47Z" level=warning msg="StopSignal SIGTERM failed to stop container 9f96"')
-    check("docker.warn.text", t, "warn")
-end
-
--- 3. netdata go.d `level=error`.
-do
-    local t =
-        sev("level=error msg=\"start watching '/etc/netdata/scripts.d': no such file or directory\" plugin=scripts.d")
-    check("netdata.error.text", t, "error")
-end
-
--- 4. nexus log4j: bare WARN token after the timestamp.
-do
-    local t = sev(
-        "2026-06-03 17:40:59,568+0000 WARN  [periodic-9-thread-7] *SYSTEM org.sonatype.nexus.selfhosted.internal.jvm.MemoryMonitor - *SYSTEM [jvm monitor] [memory] High heap"
-    )
-    check("nexus.warn", t, "warn")
-end
-
--- 5. nexus bare INFO token.
-do
-    local t = sev(
-        "2026-06-03 17:41:03,973+0000 INFO  [qtp1550551852-205] *UNKNOWN org.sonatype.nexus.repository.httpclient.internal.HttpClientFacetImpl - Repository status for py"
-    )
-    check("nexus.info", t, "info")
-end
-
--- 6. paperless/python `[ERROR]` bracket form.
-do
-    local t = sev(
-        '[2026-06-03 19:41:18,019] [ERROR] [kombu.asynchronous.hub] Error in timer: ResponseError("unknown command")'
-    )
-    check("paperless.error", t, "error")
-end
-
--- 7. *arr `[Info]` bracket form.
-do
-    local t = sev("[Info] RssSyncService: Starting RSS Sync ")
-    check("sonarr.info", t, "info")
-end
-
--- 8. profilarr/apscheduler `- DEBUG -` form.
-do
-    local t = sev("2026-06-03 19:41:48 - apscheduler.scheduler - DEBUG - Looking for jobs to run")
-    check("profilarr.debug.text", t, "debug")
-end
-
--- 9. nginx `[warn]` form (the leading 2026/.. timestamp doesn't interfere).
-do
-    local t = sev(
-        "2026/06/03 17:41:02 [warn] 3953#3953: *42051 a client request body is buffered to a temporary file /var/lib/nginx/body/0000000112"
-    )
-    check("nginx.warn", t, "warn")
-end
-
--- 10. dnscrypt-proxy `[NOTICE]` -- deliberately maps to info, NOT warn.
-do
-    local t = sev("[2026-06-03 05:09:34] [NOTICE] Anonymizing queries for [dct-fr] via [anon-cs-fr]")
-    check("dnscrypt.notice.text", t, "info")
-end
-
--- 11. Postgres `LOG:` chatter -- the trailing-colon rule maps to info.
-do
-    local t = sev("2026-06-03 19:41:25.365 CEST [212] LOG:  checkpoint starting: time")
-    check("postgres.log", t, "info")
-end
-
--- 12. A temperature "critical" -- the fatal rule's `critical` keyword;
---     crit-and-worse collapse to fatal/21.
-do
-    local t = sev(
-        "temperature sensor 'temperature_nct6798-isa-0290_temp3_AUXTIN0' transitioned from state 'alarm' to 'critical' [device 'nct6798']"
-    )
-    check("temp.critical.text", t, "fatal")
-end
-
--- 13. No level keyword anywhere -> default info for a predictable lnav level.
-do
-    local t = sev("netmap: suggested exit node:  ()")
-    check("nokw.default.text", t, "info")
+for _, case in ipairs(message_cases) do
+    check(case.label, sev(case.line), case.want)
 end
 
 -- 14. Native host services fall back to journald PRIORITY when the body has no
@@ -178,26 +167,6 @@ do
         { PRIORITY = "5", SYSLOG_IDENTIFIER = "sudo", COMM = "sudo" }
     )
     check("sudo.comm-matches", t, "info")
-end
-
--- 14d. headscale (zerolog) abbreviated INF level right after the timestamp.
-do
-    local t = sev("2026-06-10T08:54:39Z INF Received signal to stop, shutting down gracefully signal=terminated")
-    check("headscale.inf", t, "info")
-end
-
--- 14e. headscale WRN -- the abbreviated token must map to warn, not fall
---      through to the info default (the bug the zerolog tokens fix).
-do
-    local t = sev("2026-06-10T08:54:40Z WRN Listening without TLS but ServerURL does not start with http://")
-    check("headscale.wrn", t, "warn")
-end
-
--- 14f. headscale ERR -- already matched via the "err" keyword; pin it so the
---      zerolog additions can't regress it.
-do
-    local t = sev("2026-06-14T07:26:08Z ERR user msg: node not found code=404")
-    check("headscale.err", t, "error")
 end
 
 -- 15. nginx.access pre-stamp branch: an upstream modify filter sets
