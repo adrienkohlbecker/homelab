@@ -339,15 +339,9 @@ def main():
             ]
             if de.get("options"):
                 cmd.extend(["--unicode", de["options"]])
-            subprocess.run(cmd, capture_output=True, check=True, text=True, timeout=CMD_TIMEOUT)
+            run(cmd)
         for ce in to_remove:
-            subprocess.run(
-                ["efibootmgr", "-q", "-b", ce["num"], "-B"],
-                capture_output=True,
-                check=True,
-                text=True,
-                timeout=CMD_TIMEOUT,
-            )
+            run(["efibootmgr", "-q", "-b", ce["num"], "-B"])
 
     # --- BootOrder ---
     if not check and (to_remove or to_create):
@@ -382,13 +376,7 @@ def main():
             reorder_msg += " (approximate, entries would be created/removed first)"
         actions.append(reorder_msg)
         if not check:
-            subprocess.run(
-                ["efibootmgr", "-q", "-o", ",".join(desired_order)],
-                capture_output=True,
-                check=True,
-                text=True,
-                timeout=CMD_TIMEOUT,
-            )
+            run(["efibootmgr", "-q", "-o", ",".join(desired_order)])
 
     # --- Timeout ---
     timeout_warning = None
@@ -397,13 +385,7 @@ def main():
             actions.append(f"timeout {current_timeout} -> {desired_timeout}")
         else:
             try:
-                subprocess.run(
-                    ["efibootmgr", "-q", "-t", str(desired_timeout)],
-                    capture_output=True,
-                    check=True,
-                    text=True,
-                    timeout=CMD_TIMEOUT,
-                )
+                run(["efibootmgr", "-q", "-t", str(desired_timeout)])
                 actions.append(f"timeout {current_timeout} -> {desired_timeout}")
             except subprocess.CalledProcessError as e:
                 combined = (e.stderr or "") + (e.stdout or "")
