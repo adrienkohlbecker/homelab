@@ -1,5 +1,4 @@
 # Minimal preserves the vanilla cloud image's snapd and cloud-init state so the
-# role exercises their removal rather than only its no-op path on box.
+# role exercises their removal before the idempotent no-op rerun.
 machines:
-  box:
   minimal:
