@@ -46,13 +46,13 @@
     # \n would be eaten by the command module's shlex); take the first match's
     # package field, falling back to the literal pin.package when none match
     # (then the policy assertion below fails meaningfully, not on empty input).
-    - name: _verify | Resolve an installed package matching {{ apt_source_args.pin.package }}
+    - name: _verify | Resolve an installed package matching the configured pin
       command: dpkg-query -W {{ apt_source_args.pin.package }}
       changed_when: false
       failed_when: false
       register: _apt_source_pin_pkgs
 
-    - name: _verify | Apt policy is available for {{ apt_source_args.pin.package }}
+    - name: _verify | Apt policy is available for the configured pin
       command: apt-cache policy {{ (_apt_source_pin_pkgs.stdout_lines | default([]) | first | default('')).split() | first | default(apt_source_args.pin.package) }}
       changed_when: false
       register: _apt_source_policy
@@ -61,11 +61,11 @@
     # dots, glob * -> .* -- so the check follows whatever the consumer pinned
     # rather than assuming a numeric major.minor shape. Precomputed here, not
     # in the that:, so ansible's conditional re-evaluation can't reprocess it.
-    - name: _verify | Derive the pin policy pattern for {{ apt_source_args.pin.package }}
+    - name: _verify | Derive the configured pin policy pattern
       set_fact:
         _apt_source_policy_re: "[*][*][*] {{ apt_source_args.pin.version | regex_replace('[.]', '[.]') | regex_replace('[*]', '.*') }} {{ apt_source_args.pin.priority }}"
 
-    - name: _verify | Pinned version is the installed candidate for {{ apt_source_args.pin.package }}
+    - name: _verify | Pinned version is the installed candidate
       assert:
         that:
           # `*** <ver> <prio>` marks the installed+selected candidate; assert
