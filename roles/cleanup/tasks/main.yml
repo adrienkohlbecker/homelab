@@ -9,8 +9,6 @@
   stat:
     path: /usr/bin/snap
   register: _cleanup_snap_bin
-  check_mode: false
-  become: true
   tags:
     - cleanup
 
