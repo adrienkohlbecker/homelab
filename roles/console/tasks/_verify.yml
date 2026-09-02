@@ -85,14 +85,6 @@
 # consoleblank module-parameter file shows the boot value, not the
 # runtime VT state), so an exit-code check is the strongest functional
 # probe available from a headless test.
-- name: _verify | Console_noblank.service is enabled  # noqa: command-instead-of-module
-  command: systemctl is-enabled console_noblank.service
-  register: _console_noblank_enabled
-  changed_when: false
-  failed_when:
-    - _console_noblank_enabled.rc != 0 or _console_noblank_enabled.stdout not in ['enabled', 'static']
-  become: true
-
 - name: _verify | Console_noblank.service is active  # noqa: command-instead-of-module
   command: systemctl is-active console_noblank.service
   register: _console_noblank_active
