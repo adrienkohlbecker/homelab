@@ -1,8 +1,9 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
-
-f_require_root
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
 
 # Start a scrub on every imported pool. Scheduled monthly by the zfs_scrub timer
 # (second Sunday), replacing the distro's /etc/cron.d/zfsutils-linux which the

@@ -1,7 +1,9 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
-f_require_root
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
 
 # Daily best-effort dump of libvirt's *persistent* definitions: every
 # domain (plus the NVRAM varstore its XML only references by path), every
@@ -11,14 +13,11 @@ f_require_root
 # a config safety net, not disaster recovery, and it currently rides the
 # same un-replicated rpool/libvirt dataset it dumps into.
 #
-# functions.sh installs set -Eeuo pipefail + an ERR trap and exposes the
-# f_failed counter. We isolate per-object failures with explicit if/else
-# (an if-condition is exempt from errexit and the ERR trap) and bump
-# f_failed instead of aborting, so one bad object doesn't lose the rest of
-# the run; a non-zero f_failed propagates to the timer at the end so the
-# systemdunits collector sees the failed unit. Same loop-isolate-propagate
-# shape as roles/zfs_autobackup/files/zfs_backup_offsite.sh.
+# Per-object failures increment a local counter instead of aborting, so one bad
+# object does not lose the rest of the run. A non-zero result still propagates
+# to the timer at the end.
 backup_dir=/var/lib/libvirt/images
+failed=0
 
 # Domain XML can reference NVRAM/secret paths, and `dumpxml --security-info`
 # (below) un-redacts <graphics passwd=...> so a credentialed guest is
@@ -43,7 +42,7 @@ declare -A seen=()
 # dump_obj DEST CMD... : run CMD with stdout staged to a temp file beside
 # DEST, then atomically rename onto DEST -- so a partial, failed, or empty
 # dump never clobbers the last good copy. Refuses a DEST already written
-# this run. Records failures in f_failed; always returns 0 so the caller's
+# this run. Records failures in `failed`; always returns 0 so the caller's
 # errexit is safe.
 dump_obj() {
   local dest=$1
@@ -51,12 +50,12 @@ dump_obj() {
   local tmp
   if [ -n "${seen[$dest]:-}" ]; then
     echo >&2 "refusing to overwrite $dest -- two objects sanitize to the same name"
-    ((f_failed += 1))
+    ((failed += 1))
     return
   fi
   tmp=$(mktemp "$dest.XXXXXX") || {
     echo >&2 "mktemp failed for $dest"
-    ((f_failed += 1))
+    ((failed += 1))
     return
   }
   # `[ -s ]`: a virsh hiccup can exit 0 yet write nothing, and an empty
@@ -67,7 +66,7 @@ dump_obj() {
   else
     rm -f "$tmp"
     echo >&2 "dump failed (or empty) for $dest:$(printf ' %q' "$@")"
-    ((f_failed += 1))
+    ((failed += 1))
   fi
 }
 
@@ -83,7 +82,7 @@ dump_kind() {
   local objs name f
   if ! objs=$("$@"); then
     echo >&2 "listing failed:$(printf ' %q' "$@")"
-    ((f_failed += 1))
+    ((failed += 1))
     return
   fi
   while read -r name; do
@@ -103,7 +102,7 @@ dump_kind() {
 # and each domain may carry an NVRAM varstore that dumpxml records only by
 # path. The atomic write, collision guard, and empty-guard are shared via
 # dump_obj. The listing is captured first (not piped) so a failed enumerate
-# bumps f_failed instead of silently iterating zero times.
+# increments `failed` instead of silently iterating zero times.
 if domains=$(virsh list --all --persistent --name); then
   while read -r domain; do
     [ -n "$domain" ] || continue
@@ -129,7 +128,7 @@ if domains=$(virsh list --all --persistent --name); then
     # otherwise exfiltrate a root-readable file or poison the backup set.
     nvram_real=$(realpath -e -- "$nvram") || {
       echo >&2 "cannot resolve nvram for $domain: $nvram"
-      ((f_failed += 1))
+      ((failed += 1))
       continue
     }
     case "$nvram_real" in
@@ -139,7 +138,7 @@ if domains=$(virsh list --all --persistent --name); then
       ;;
     *)
       echo >&2 "refusing out-of-tree nvram for $domain: $nvram_real"
-      ((f_failed += 1))
+      ((failed += 1))
       ;;
     esac
   done <<<"$domains"
@@ -152,10 +151,10 @@ if domains=$(virsh list --all --persistent --name); then
   done
 else
   echo >&2 "virsh list failed"
-  ((f_failed += 1))
+  ((failed += 1))
 fi
 
 dump_kind net net-dumpxml virsh net-list --all --persistent --name
 dump_kind pool pool-dumpxml virsh pool-list --all --persistent --name
 
-[ "$f_failed" -eq 0 ] || exit 1
+((failed == 0)) || exit 1

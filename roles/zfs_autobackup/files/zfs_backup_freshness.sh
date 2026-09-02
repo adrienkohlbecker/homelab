@@ -1,8 +1,9 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
-
-f_require_root
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
 
 # Data-level dead-man check for the backup mesh. The nightly legs already
 # page on ERROR (a failed leg fails zfs_autosnapshot.service, which the

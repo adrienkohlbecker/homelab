@@ -1,4 +1,13 @@
 ---
+- name: Remove retired shared Bash functions
+  file:
+    path: /usr/local/lib/functions.sh
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - bash
+
 - name: Remove retired keepalived tenant configuration
   file:
     path: "{{ item }}"

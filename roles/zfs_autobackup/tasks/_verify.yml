@@ -116,7 +116,7 @@
 # the latest snapshot and nothing written since, the script must skip before any
 # rsync; once a write bumps written@, it must proceed to the transfer. bunk is
 # unreachable from the fixture, so the no-skip path targets an unresolvable host
-# and we assert it reached the rsync stage (the f_trace banner), not its outcome.
+# and we assert it reached the rsync stage (the printed invocation), not its outcome.
 - name: _verify | Latest bak snapshot on the offsite-gate dataset
   shell: set -euo pipefail; zfs list -t snapshot -o name -s creation -r rpool/zfs_autobackup_offsite_test | awk -F@ '/@bak-/ {s=$2} END {print s}'
   args:

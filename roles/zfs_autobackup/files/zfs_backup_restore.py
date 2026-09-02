@@ -344,7 +344,7 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
             ["ssh", *SSH_BULK_OPTIONS, config.target_ssh, remote_receive],
         )
     )
-    # Echo the real invocation, matching f_trace in the sibling shell scripts:
+    # Echo the real invocation, matching the sibling shell scripts:
     # rerunning one dataset by hand is the documented fallback mid-restore.
     print(f"$ {pipeline}")
     run(["bash", "-o", "pipefail", "-c", pipeline])

@@ -11,10 +11,3 @@
       - qemu-system-x86
     cache_valid_time: 3600
   become: true
-
-# virsh_backup sources /usr/local/lib/functions.sh, deployed by the bash
-# role (which runs before libvirt in site.yml). The harness runs libvirt
-# in isolation, so deploy the library here too.
-- name: _setup | Deploy the shared shell functions library
-  import_role:
-    name: bash

@@ -1,8 +1,9 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
-
-f_require_root
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
 
 # zpool status issues blocking I/O; on a SUSPENDED pool (too many devices lost,
 # all I/O wedged) it can hang indefinitely and stall the nightly timer. Bound
@@ -31,9 +32,7 @@ SCRUB_EXPIRE="${SCRUB_EXPIRE:-3456000}"
 # Pool capacity is alarmed by netdata's zfspool collector (per-pool
 # netdata_zfspool_thresholds with escalating warn/crit), not duplicated here.
 
-# f_failed is the shared error counter declared by functions.sh; we bump it in
-# each check's failure branch and propagate non-zero via mail + exit 1 at the
-# end -- the loop-isolate-propagate shape the other operator scripts use.
+failed=0
 TMP_OUTPUT=$(mktemp)
 trap 'rm -f "$TMP_OUTPUT"' EXIT
 
@@ -50,11 +49,11 @@ ZFS_VOLUMES=$(zpool list -H -o name)
 echo "Checking pool health condition..."
 if ! health_summary=$(zpool_status -x); then
   echo >&2 "ERROR :: zpool status -x did not complete (pool wedged or zpool error)"
-  ((f_failed += 1))
+  ((failed += 1))
 elif [ "$health_summary" != "all pools are healthy" ]; then
   echo >&2 "ERROR :: zpool status -x reports a problem:"
   echo >&2 "$health_summary"
-  ((f_failed += 1))
+  ((failed += 1))
 fi
 
 # Drive errors — count READ/WRITE/CKSUM on every row whose last three columns
@@ -71,10 +70,10 @@ fi
 echo "Checking drive errors..."
 if ! drive_status=$(zpool_status -p); then
   echo >&2 "ERROR :: zpool status -p did not complete (pool wedged or zpool error)"
-  ((f_failed += 1))
+  ((failed += 1))
 elif echo "$drive_status" | awk '$3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { if ($3 + $4 + $5 > 0) found = 1 } END { exit !found }'; then
   echo >&2 "ERROR :: Detected drive errors (READ/WRITE/CKSUM)"
-  ((f_failed += 1))
+  ((failed += 1))
 fi
 
 # Scrub age — check each volume independently.
@@ -82,18 +81,17 @@ echo "Checking scrub age..."
 CURRENT_DATE=$(date +"%s")
 
 for volume in $ZFS_VOLUMES; do
-  # A suspended/UNAVAIL pool can make `zpool status` exit non-zero, which would
-  # abort the whole run via the errexit inherited from functions.sh, silently
-  # swallowing the alert exactly when a pool is broken. Count it and keep going.
+  # A suspended/UNAVAIL pool can make `zpool status` exit non-zero. Count it and
+  # keep going so a broken pool does not swallow the rest of the alert.
   vol_status=$(zpool_status "$volume") || {
     echo >&2 "ERROR :: Cannot query status for $volume"
-    ((f_failed += 1))
+    ((failed += 1))
     continue
   }
 
   if [[ "$vol_status" == *"scrub canceled"* ]]; then
     echo >&2 "ERROR :: Last scrub canceled on $volume"
-    ((f_failed += 1))
+    ((failed += 1))
     continue
   elif [[ "$vol_status" == *"scrub in progress"* || "$vol_status" == *resilver* ]]; then
     echo "Scrub in progress for $volume, skipping."
@@ -110,22 +108,22 @@ for volume in $ZFS_VOLUMES; do
     SCRUB_RAW_DATE=$(echo "$vol_status" | grep -e "scrub repaired" -e "scrub paused" | awk '{print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}')
     SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s" 2>/dev/null) || {
       echo >&2 "ERROR :: Cannot parse scrub date for $volume: $SCRUB_RAW_DATE"
-      ((f_failed += 1))
+      ((failed += 1))
       continue
     }
   fi
 
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge "$SCRUB_EXPIRE" ]; then
     echo >&2 "ERROR :: Scrub expired on $volume"
-    ((f_failed += 1))
+    ((failed += 1))
   fi
 done
 
-if [ "$f_failed" -gt 0 ]; then
+if ((failed > 0)); then
   # `mail` comes from the postfix role, converged earlier in the layer ladder.
   # The _verify dry-run never reaches this branch because clean fixture pools
-  # report f_failed=0.
-  mail -s "$EMAIL_SUBJECT_PREFIX - $f_failed issue(s) detected" "$EMAIL_TO" <"$TMP_OUTPUT"
+  # report no failures.
+  mail -s "$EMAIL_SUBJECT_PREFIX - $failed issue(s) detected" "$EMAIL_TO" <"$TMP_OUTPUT"
   exit 1
 fi
 

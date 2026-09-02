@@ -8,7 +8,6 @@
   roles:
     # Host base -- OS, networking, remote access, system services. These roles
     # are mutually independent, so the order within this band is immaterial.
-    - bash
     - lnav
     - user
     - cleanup

@@ -1,8 +1,9 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
-
-f_require_root
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
 
 OFFSITE_IP=${1:-}
 DATASET=${2:-}
@@ -18,7 +19,7 @@ MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
 
 # Validate the mount first, ahead of every skip path below (no-snapshot and the
 # change-gate): a broken mount is a fault the offsite run must surface
-# (zfs_check_mount fails -> the caller's f_rescue bumps f_failed -> the unit
+# (zfs_check_mount fails -> the caller records the failure -> the unit
 # exits 1 for monitoring), and skipping ahead of it would let a degraded
 # /mnt/services or /mnt/data be silently reported as an up-to-date skip. The
 # check is sub-second, so paying it on skip nights costs nothing.
@@ -83,42 +84,43 @@ fi
 # after failure so rrsync can release its per-host lock.
 # The output format preserves dataset context on every update sent through
 # journald and Fluent Bit.
-f_trace rsync \
-  --rsh "ssh -F /etc/zfs_autobackup_ssh_config" \
-  --archive \
-  --hard-links \
-  --xattrs \
-  --human-readable \
-  --sparse \
-  --delete \
-  --delete-excluded \
-  --timeout 1800 \
-  --compress \
-  --partial-dir .rsync-partial \
-  --fuzzy \
-  "${rsync_progress[@]}" \
-  -M--fake-super \
-  --numeric-ids \
-  --stats \
-  --out-format="dataset=$DATASET change=%i path=%n%L" \
-  --one-file-system \
-  --exclude .DS_Store \
-  --exclude "._*" \
-  --exclude .DocumentRevisions-V100 \
-  --exclude .Trashes \
-  --exclude .TemporaryItems \
-  --exclude /var/lib/containers \
-  --exclude /home/ak/.local/share/containers \
-  --exclude /var/crash \
-  --exclude "*@*:*:*~" \
-  --exclude ".config/homelab/vault-pass-*" \
-  "${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH"
+rsync_cmd=(rsync
+  --rsh "ssh -F /etc/zfs_autobackup_ssh_config"
+  --archive
+  --hard-links
+  --xattrs
+  --human-readable
+  --sparse
+  --delete
+  --delete-excluded
+  --timeout 1800
+  --compress
+  --partial-dir .rsync-partial
+  --fuzzy
+  "${rsync_progress[@]}"
+  -M--fake-super
+  --numeric-ids
+  --stats
+  --out-format="dataset=$DATASET change=%i path=%n%L"
+  --one-file-system
+  --exclude .DS_Store
+  --exclude "._*"
+  --exclude .DocumentRevisions-V100
+  --exclude .Trashes
+  --exclude .TemporaryItems
+  --exclude /var/lib/containers
+  --exclude /home/ak/.local/share/containers
+  --exclude /var/crash
+  --exclude "*@*:*:*~"
+  --exclude ".config/homelab/vault-pass-*"
+  "${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH")
+printf '$%s\n' "$(printf ' %q' "${rsync_cmd[@]}")"
+"${rsync_cmd[@]}"
 
 # Record the snapshot now mirrored on bunk so the change-gate above can skip
 # unchanged nights, and stamp the marker's mtime for the 30-day reconciliation
-# clock. Reached only on rsync success: functions.sh sets errexit, so a failed
-# rsync aborts the script before this line, leaving the marker at the last good
-# sync for the next run to retry from.
+# clock. Reached only on rsync success: errexit leaves the marker at the last
+# good sync after a failed transfer, so the next run retries it.
 echo "$LAST_SNAPSHOT" >"$MARKER_FILE"
 
 # The destination is relative on purpose. bunk forces this key through rrsync

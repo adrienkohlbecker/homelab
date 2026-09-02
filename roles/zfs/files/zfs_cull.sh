@@ -1,8 +1,9 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
-
-f_require_root
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
 
 # Operator-only manual tooling: nothing in the repo invokes this (no timer, no
 # role). Scheduled snapshot retention is owned by zfs-autobackup's --keep-*
@@ -27,8 +28,8 @@ fi
 # `rpool/banktank@...` that merely contains the substring. SNAPSHOT_PREFIX is
 # matched as a fixed string anchored to the snapshot component (`@prefix`) -- `@`
 # is a unique separator in ZFS names, so it can only select snapshots whose name
-# starts with it. `|| true` keeps a no-match grep (exit 1) from tripping the
-# errexit/ERR-trap inherited from functions.sh.
+# starts with it. `|| true` keeps a no-match grep (exit 1) from tripping
+# errexit.
 mapfile -t targets < <(
   zfs list -H -o name -t snapshot |
     { grep -E "^(${POOL_REGEX})[/@]" || true; } |

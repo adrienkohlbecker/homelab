@@ -1,8 +1,18 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
 
-f_require_root
+failed=0
+run_step() {
+  "$@" || {
+    local retval=$?
+    echo >&2 "Error:$(printf ' %q' "$@") failed with exit $retval"
+    ((failed += 1))
+  }
+}
 
 # --final: quiesce mode for the rebuild runbooks. Runs the full nightly (local
 # snapshots, onsite pulls, offsite rsync) but leaves zfs_autosnapshot.target
@@ -25,15 +35,15 @@ esac
 # pool resumes it from where it left off. Only pools we actually paused are
 # resumed (a pool paused for another reason is left alone), and the resume runs
 # from an EXIT trap so it fires even when a backup step fails and the script
-# exits 1 below. functions.sh installs only an ERR trap, so EXIT is free.
+# exits 1 below.
 declare -a paused_scrubs=()
-f_resume_scrubs() {
+resume_scrubs() {
   local pool
   for pool in "${paused_scrubs[@]}"; do
     zpool scrub "$pool" || echo >&2 "Warning: failed to resume scrub on $pool"
   done
 }
-trap f_resume_scrubs EXIT
+trap resume_scrubs EXIT
 for pool in $(zpool list -H -o name); do
   if zpool status "$pool" | grep -q "scrub in progress"; then
     if zpool scrub -p "$pool"; then
@@ -44,38 +54,38 @@ for pool in $(zpool list -H -o name); do
 done
 
 # create local snapshots
-f_rescue f_trace zfs_backup_local "${zfs_backup_local_args[@]}"
+run_step zfs_backup_local "${zfs_backup_local_args[@]}"
 
 # Gate offsite replication on the local snapshot succeeding. The offsite leg
 # rsyncs from this host's just-taken @bak- snapshots and picks the newest @bak-
-# per dataset independently (zfs_backup_offsite.sh). zfs_backup_local wraps each
-# dataset in f_rescue internally, so a partial failure leaves some datasets at
-# tonight's @bak- and others still at last night's -- replicating that now would
+# per dataset independently (zfs_backup_offsite.sh). A partial local backup
+# failure can leave some datasets at tonight's @bak- and others still at last
+# night's -- replicating that now would
 # push a cross-dataset generation skew offsite, overwriting the previous,
 # consistent copy with a mixed one. So if the local step failed at all, skip
-# offsite and let the next run retry from a clean snapshot. (f_failed is already
+# offsite and let the next run retry from a clean snapshot. (`failed` is already
 # bumped, so the run still exits 1 below for monitoring.)
-zfs_backup_local_ok=$((f_failed == 0))
+zfs_backup_local_ok=$((failed == 0))
 
 # pull each configured source host's snapshots onto this host
 # Unaffected by the gate above: each onsite leg pulls a *peer* host's own
 # snapshots (--no-snapshot --ssh-source), not the ones taken locally this run,
 # so a local-snapshot failure here doesn't make these copies inconsistent.
 {% for src in zfs_autobackup_sources %}
-f_rescue f_trace zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
+run_step zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
 # sync each dataset to offsite synology
 if ((zfs_backup_local_ok)); then
   for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
-    offsite_failed_before=$f_failed
-    f_rescue f_trace zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
+    offsite_failed_before=$failed
+    run_step zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
     # If this dataset failed, bunk rrsync receiver may still hold the per-host
     # fcntl flock for the second or two it takes to notice the dropped
     # connection. Pause before the next dataset so it does not trip "Another
     # instance of rrsync is already accessing this directory" -- a code-12 abort
     # that would lose an otherwise-healthy dataset. Only on failure: a clean
     # transfer has already released the lock before the next iteration starts.
-    if ((f_failed != offsite_failed_before)); then
+    if ((failed != offsite_failed_before)); then
       sleep 10
     fi
   done
@@ -84,7 +94,7 @@ else
 fi
 
 # fail if any of the above failed
-if [ $f_failed -ne 0 ]; then
+if ((failed != 0)); then
   echo >&2 "Error: Some backup steps have failed"
   exit 1
 fi
