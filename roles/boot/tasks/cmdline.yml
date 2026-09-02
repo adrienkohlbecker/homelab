@@ -140,15 +140,6 @@
   become: true
   register: boot_cmdline_properties
 
-# Read back to detect manual drift — an operator or debug session may have
-# edited the property directly. This fires a reboot ask the module's own
-# changed flag would miss.
-- name: cmdline | Detect property drift
-  when: not grub_bootloader and zfs_root and not ansible_check_mode
-  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
-  register: boot_cmdline_readback
-  changed_when: boot_cmdline_readback.stdout | trim != _boot_assembled_cmdline
-  become: true
 - name: cmdline | Ask to reboot ({{ boot_cmdline_args.name }})
   when: >-
     (boot_cmdline_grub_present is defined and boot_cmdline_grub_present.changed)
@@ -156,7 +147,6 @@
     or (boot_cmdline_zbm_present is defined and boot_cmdline_zbm_present.changed)
     or (boot_cmdline_zbm_absent is defined and boot_cmdline_zbm_absent.changed)
     or (boot_cmdline_properties is defined and boot_cmdline_properties.changed)
-    or (boot_cmdline_readback is defined and boot_cmdline_readback.changed)
   file:
     path: /var/run/reboot-required
     state: touch
