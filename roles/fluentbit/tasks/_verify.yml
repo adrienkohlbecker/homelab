@@ -69,32 +69,21 @@
           SYSLOG_IDENTIFIER: systemd
           UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
           ERRNO: "2"
-          marker: healthcheck-enoent-drop
+          marker: healthcheck-enoent-keep
         - _tag: svc.init.scope
           MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Main process exited, code=exited, status=1/FAILURE"
           SYSLOG_IDENTIFIER: systemd
           UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
           PRIORITY: "3"
           marker: healthcheck-failed-keep
-        # ^ and $ are line anchors in Onigmo, so a suppressed line appearing
-        # anywhere inside a merged multiline record used to drop the whole
-        # record along with the real failure it was reported beside.
-        - _tag: svc.init.scope
-          MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Main process exited, code=exited, status=1/FAILURE\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Failed to open /run/systemd/transient/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: No such file or directory"
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
-          ERRNO: "2"
-          PRIORITY: "3"
-          marker: multiline-enoent-keep
       expected:
         - level: error
           fields.marker: homepage-failed-keep
         - fields.marker: podman-unhealthy-keep
           fields.health_status: unhealthy
+        - fields.marker: healthcheck-enoent-keep
         - level: error
           fields.marker: healthcheck-failed-keep
-        - level: error
-          fields.marker: multiline-enoent-keep
 
 - name: _verify | Shared core noise was omitted
   assert:

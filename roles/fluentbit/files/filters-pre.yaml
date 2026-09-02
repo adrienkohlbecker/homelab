@@ -5,7 +5,6 @@ pipeline:
     - name: grep
       match: svc.*
       exclude:
-        - 'MESSAGE ^podman0: port'
         - 'MESSAGE ^veth[0-9]+( |@|: )'
         - 'MESSAGE container health_status .*health_status=healthy'
 
@@ -17,17 +16,6 @@ pipeline:
       exclude:
         - 'UNIT ^homepage_alerts\.service$'
         - 'MESSAGE \A(Starting homepage_alerts\.service - Generate homepage alerts panel static files\.\.\.|Finished homepage_alerts\.service - Generate homepage alerts panel static files\.|homepage_alerts\.service: Deactivated successfully\.)\z'
-
-    # Podman removes one-shot healthcheck units concurrently with systemd's
-    # result collection during a container wave. Keep real probe failures but
-    # omit only the resulting ENOENT cleanup race.
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
-        - 'UNIT ^[a-f0-9]{64}\.service$'
-        - 'ERRNO ^2$'
-        - 'MESSAGE \A[a-f0-9]{64}\.service: Failed to open /run/systemd/transient/[a-f0-9]{64}\.service: No such file or directory\z'
 
     - name: lua
       match: svc.*
