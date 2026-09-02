@@ -64,13 +64,14 @@
   tags:
     - tailscale
 
-- name: Install tailscale fluent-bit extension
+- name: Remove retired tailscale fluent-bit extension
   import_role:
     name: fluentbit
-    tasks_from: extension
+    tasks_from: extension_remove
   vars:
-    fluentbit_extension_args:
-      name: tailscale
+    fluentbit_extension_remove_args:
+      names:
+        - tailscale
   tags:
     - tailscale
 

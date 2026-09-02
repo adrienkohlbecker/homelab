@@ -9,8 +9,17 @@ After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
 {% endif %}
 
-{% if ansible_default_ipv4.interface is defined %}
 [Service]
+# Keep final NetInfo results and failures; discard intermediate probes and
+# routine path churn before they reach the journal.
+LogFilterPatterns=~^netcheck: (netcheck: )?UDP is blocked, trying (HTTPS|ICMP)$
+LogFilterPatterns=~^netmap: suggested exit node:  [(][)]$
+LogFilterPatterns=~^netcheck: DetectCaptivePortal[(]found=false[)]$
+LogFilterPatterns=~^magicsock: disco: node [[][^]]+[]] d:[^ ]+ now using [^ ]+ mtu=[0-9]+ tx=[^ ]+$
+LogFilterPatterns=~^magicsock: disco: failed to send ping .* sendto: destination address required$
+LogFilterPatterns=~^magicsock: derp-[0-9]+ does not know about peer [[][^]]+[]], removing route$
+
+{% if ansible_default_ipv4.interface is defined %}
 # Apply UDP GRO forwarding offload on the underlay NIC whenever tailscaled
 # starts. This keeps the runtime setting aligned across restarts and reboots.
 # https://tailscale.com/kb/1320/performance-best-practices
