@@ -3,7 +3,6 @@
     pkg:
       - avahi-daemon
       - avahi-utils
-      - libxml2-utils
     policy_rc_d: 101
     cache_valid_time: 3600
   register: avahi_apt
