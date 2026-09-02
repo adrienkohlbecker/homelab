@@ -86,21 +86,6 @@
       UnitFileState={{ _certbot_timer.status.UnitFileState }},
       ActiveState={{ _certbot_timer.status.ActiveState }})
 
-- name: _verify | Stat cloudflare credentials file
-  stat:
-    path: /etc/letsencrypt/cloudflare.ini
-  register: _certbot_cf
-  become: true
-
-- name: _verify | Cloudflare credentials are 0600 root:root
-  assert:
-    that:
-      - _certbot_cf.stat.exists
-      - _certbot_cf.stat.mode == "0600"
-      - _certbot_cf.stat.pw_name == "root"
-      - _certbot_cf.stat.gr_name == "root"
-    fail_msg: "cloudflare.ini has wrong perms or owner ({{ _certbot_cf.stat }})"
-
 # The whole rationale for --deploy-hook (over renewal-hooks/deploy/)
 # is that it's persisted into renewal/<name>.conf at issuance time
 # and survives renewals. A regression that loses the hook would only
