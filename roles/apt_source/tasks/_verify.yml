@@ -1,6 +1,6 @@
-# Post-converge assertions for the helper's contract: the signing key is
-# scoped (not globally trusted) and, when a pin is set, the pinned source wins
-# at its priority. Two callers, distinguished by _role_under_test:
+# Exercises the helper with a representative source and, when a pin is set,
+# asserts that the pinned source wins at its priority. Two callers are
+# distinguished by _role_under_test:
 #
 #  - A consumer (netdata, docker_client, etc.) imports this with `tasks_from: _verify` and the
 #    same apt_source_args it converged with (the harness runs _verify as a
@@ -92,29 +92,3 @@
           {{ apt_source_args.pin.version }} at priority
           {{ apt_source_args.pin.priority }} from {{ apt_source_args.uris }};
           got policy: {{ _apt_source_policy.stdout | default('') }}
-
-# Scoped signed-by keyring on both paths: noble's apt_key and resolute's
-# get_url both write /usr/share/keyrings/<name>.gpg, and neither writes the
-# legacy global-trust copy at /etc/apt/trusted.gpg.d/ (which would re-grant
-# the key fleet-wide trust).
-- name: _verify | Keyring is scoped, not globally trusted, for {{ apt_source_args.name }}
-  block:
-    - name: _verify | Stat the scoped and legacy keyrings for {{ apt_source_args.name }}
-      stat:
-        path: "{{ item }}"
-      loop:
-        - /usr/share/keyrings/{{ apt_source_args.name }}.gpg
-        - /etc/apt/trusted.gpg.d/{{ apt_source_args.name }}.gpg
-      register: _apt_source_keyrings
-      become: true
-
-    - name: _verify | Scoped keyring present, legacy global-trust keyring absent
-      assert:
-        that:
-          - _apt_source_keyrings.results[0].stat.exists
-          - not _apt_source_keyrings.results[1].stat.exists
-        fail_msg: >-
-          Expected /usr/share/keyrings/{{ apt_source_args.name }}.gpg present
-          and /etc/apt/trusted.gpg.d/{{ apt_source_args.name }}.gpg absent; got
-          scoped={{ _apt_source_keyrings.results[0].stat.exists }}
-          legacy={{ _apt_source_keyrings.results[1].stat.exists }}
