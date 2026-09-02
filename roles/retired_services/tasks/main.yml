@@ -1,7 +1,7 @@
 ---
-- name: Inspect armored replacements for retired binary apt keyrings
+- name: Inspect apt sources migrating from binary keyrings
   stat:
-    path: /usr/share/keyrings/{{ item }}.asc
+    path: /etc/apt/sources.list.d/{{ item }}.sources
   loop:
     - 1password
     - docker
@@ -9,20 +9,35 @@
     - mise
     - netdata
     - tailscale
-  register: retired_services_apt_source_keys
+  register: retired_services_apt_source_files
   become: true
   tags:
     - retired_services
     - apt_source
 
-- name: Remove retired binary apt keyrings with armored replacements
+- name: Read apt sources migrating from binary keyrings
   when: item.stat.exists
-  file:
-    path: /usr/share/keyrings/{{ item.item }}.gpg
-    state: absent
-  loop: "{{ retired_services_apt_source_keys.results }}"
+  slurp:
+    src: "{{ item.stat.path }}"
+  loop: "{{ retired_services_apt_source_files.results }}"
   loop_control:
     label: "{{ item.item }}"
+  register: retired_services_apt_source_contents
+  become: true
+  tags:
+    - retired_services
+    - apt_source
+
+- name: Remove binary apt keyrings after their sources use armored keys
+  when: >-
+    ('Signed-By: /usr/share/keyrings/' ~ item.item.item ~ '.asc')
+    in (item.content | default('') | b64decode).splitlines()
+  file:
+    path: /usr/share/keyrings/{{ item.item.item }}.gpg
+    state: absent
+  loop: "{{ retired_services_apt_source_contents.results }}"
+  loop_control:
+    label: "{{ item.item.item }}"
   become: true
   tags:
     - retired_services
