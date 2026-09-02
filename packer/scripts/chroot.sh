@@ -747,8 +747,7 @@ fi
 #     a derived image bakes it in, in which case the role re-installs it fresh
 #     (an apt install lands the unit unmasked).
 #   - multipathd.service / .socket: roles/boot masks these itself on zfs_root
-#     hosts (boot_disable_lvm_services) and its _verify asserts them masked, so a
-#     pre-mask here is aligned, not in conflict.
+#     hosts, so a pre-mask here is aligned, not in conflict.
 # snapd is deliberately NOT masked: the debootstrap base never ships it, and the
 # cleanup role purges it on the cloud-image (minimal) variant with a _verify that
 # asserts no snapd unit files remain — a mask symlink would trip that assertion.

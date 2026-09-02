@@ -109,7 +109,7 @@
 # monitor. The packages may remain installed as dependencies, so manage the
 # systemd entry points instead of purging shared storage tooling.
 - name: Probe unused LVM and multipath unit files # noqa: command-instead-of-module
-  when: boot_disable_lvm_services | bool
+  when: zfs_root | bool
   command: systemctl list-unit-files {{ item }}
   loop:
     - lvm2-monitor.service
@@ -129,7 +129,7 @@
 
 - name: Disable unused LVM and multipath monitor units
   when:
-    - boot_disable_lvm_services | bool
+    - zfs_root | bool
     - item.rc == 0
     - item.stdout_lines | select('match', '^' ~ (item.item | regex_escape) ~ '\s') | list | length > 0
   systemd:
