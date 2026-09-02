@@ -138,22 +138,19 @@
     argv: >-
       {{ ['certbot', 'certonly', '--noninteractive', '--dns-cloudflare',
           '--cert-name', inventory_hostname + '.' + domain,
-          '--deploy-hook', certbot_deploy_hook,
-          '-d', inventory_hostname + '.' + domain,
-          '-d', '*.' + inventory_hostname + '.' + domain]
-         + (certbot_extra_sans | map('regex_replace', '^', '-d,') | map('split', ',') | flatten | list)
+          '--deploy-hook', certbot_deploy_hook]
+         + (['-d'] | product(certbot_domains) | flatten | list)
          + (certbot_sans_drifted | ternary(['--force-renewal'], []))
          + (certbot_production_certificates | ternary([], ['--test-cert'])) }}
   vars:
     certbot_deploy_hook: >-
       systemctl is-active --quiet nginx || exit 0; systemctl reload nginx
-    # Standard host SANs + apex names (auth.fahm.fr etc.) declared per-host
-    # in certbot_extra_sans. The DNS: prefix matches the x509_certificate_info
-    # module's subject_alt_name output shape.
+    certbot_domains: >-
+      {{ [inventory_hostname + '.' + domain,
+          '*.' + inventory_hostname + '.' + domain]
+         + certbot_extra_sans }}
     certbot_expected_sans: >-
-      {{ ['DNS:' + inventory_hostname + '.' + domain,
-          'DNS:*.' + inventory_hostname + '.' + domain]
-         + (certbot_extra_sans | map('regex_replace', '^', 'DNS:') | list) }}
+      {{ certbot_domains | map('regex_replace', '^', 'DNS:') | list }}
     certbot_sans_drifted: >-
       {{ certbot_cert_stat.stat.exists
          and (certbot_cert_info.subject_alt_name | sort) != (certbot_expected_sans | sort) }}
