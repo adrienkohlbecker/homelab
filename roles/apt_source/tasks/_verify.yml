@@ -37,15 +37,6 @@
     fail_msg: >-
       apt_source _verify needs name and uris; got {{ apt_source_args }}
 
-# apt cache refresh re-validates the repo against the signing key (a wrong
-# signed-by keyring surfaces as NO_PUBKEY + the module erroring). The
-# converge already refreshed once, but that gate is change-only; running it
-# here makes the key wiring an explicit assertion.
-- name: _verify | Apt cache refresh re-validates the source for {{ apt_source_args.name }}
-  apt:
-    update_cache: true
-  become: true
-
 - name: _verify | Pin assertions for {{ apt_source_args.name }}
   when: apt_source_args.pin is defined
   block:
