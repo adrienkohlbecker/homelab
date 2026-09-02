@@ -43,21 +43,7 @@
                 except json.JSONDecodeError:
                     continue
                 fields = record.get("fields", {})
-                if (
-                    record.get("service") == "bazarr"
-                    and fields.get("parser_status") == "parsed"
-                    and fields.get("logger")
-                    and fields.get("thread_id")
-                    and fields.get("source")
-                    and isinstance(fields.get("source_line"), int)
-                    and record.get("level") in {"debug", "info", "warn", "error", "fatal"}
-                    and not record.get("message", "").startswith("20")
-                    and "bazarr_time" not in fields
-                    and "bazarr_level" not in fields
-                    and "CONTAINER_TAG" not in fields
-                    and "PRIORITY" not in fields
-                ):
-                    print(json.dumps(record, sort_keys=True))
+                if record.get("service") == "bazarr" and fields.get("parser_status") == "parsed":
                     sys.exit(0)
         sys.exit(1)
       - /var/log/fluent-bit/lnav.jsonl
