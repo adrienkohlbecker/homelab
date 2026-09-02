@@ -71,7 +71,6 @@
   become: true
   tags:
     - keepalived
-    - adguard
 
 - name: Render the DNS keepalived configuration
   template:
@@ -89,7 +88,6 @@
   become: true
   tags:
     - keepalived
-    - adguard
 
 # Serialize config reloads so the DNS peers never release the VIP together.
 - name: Enable keepalived service
@@ -106,4 +104,3 @@
   throttle: 1
   tags:
     - keepalived
-    - adguard
