@@ -16,6 +16,9 @@ PartOf=zfs_autosnapshot.target
 {% endif %}
 
 [Service]
+# The image supplies this deprecated internal argument itself. Keep every
+# other warning, including nearby nats-port failures.
+LogFilterPatterns=~^ts=[^ ]+ lvl=[^ ]+ msg=\x22nats-port argument is deprecated and unused\x22([[:space:]].*)?$
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes

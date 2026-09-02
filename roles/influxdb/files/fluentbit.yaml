@@ -25,11 +25,3 @@ pipeline:
         - lvl _level
       remove: ts
       set: parser_status parsed
-    # InfluxDB 2.8 emits this once per start for an internal argument that the
-    # image itself supplies. Keep all other warnings.
-    - name: grep
-      match: svc.influxdb.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'log \Anats-port argument is deprecated and unused\z'
