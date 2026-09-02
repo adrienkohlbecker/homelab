@@ -15,12 +15,9 @@
   import_role:
     name: fluentbit
 
-- name: _setup | Ensure /mnt/services and /mnt/media exist
+- name: _setup | Ensure /mnt/media exists
   file:
-    path: "{{ item }}"
+    path: /mnt/media
     state: directory
     mode: "0755"
-  loop:
-    - /mnt/services
-    - /mnt/media
   become: true
