@@ -17,17 +17,16 @@
 
 - name: _verify | F_require_root fails as non-root
   shell: |
-    runuser -u nobody -- bash -c '
-      source /usr/local/lib/functions.sh
-      f_require_root
-      echo "should-not-run"
-    '
+    source /usr/local/lib/functions.sh
+    f_require_root
+    echo "should-not-run"
   args:
     executable: /bin/bash
   register: _bash_require_root_fail
   changed_when: false
   failed_when: false
   become: true
+  become_user: nobody
 
 - name: _verify | F_require_root non-root assertions
   assert:
