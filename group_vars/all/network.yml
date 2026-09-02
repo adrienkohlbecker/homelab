@@ -13,8 +13,8 @@ prod_network: "{{ lookup('file', playbook_dir ~ '/data/network_topology.yml') | 
 
 network: "{{ prod_network }}"
 
-# Named-IP registry consumed by nginx vhosts, fail2ban allowlists,
-# samba binds, and other host-address consumers. Combines host primaries,
+# Named-IP registry consumed by nginx vhosts, samba binds, and other
+# host-address consumers. Combines host primaries,
 # the site gateway (udm), static device leases that consumers
 # reference by name, and the DNS VIP.
 external_ips:

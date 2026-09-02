@@ -9,7 +9,7 @@ define PODMAN_DEFAULT = {{ podman_default_network }}
 define PODMAN_POOL = {{ podman_bridge_pool }}
 {% set dns_keepalived_peer = inventory_hostname in dns_keepalived_peers or qemu_test | default(false) %}
 
-# Atomically replace only this table; netavark, libvirt, and fail2ban
+# Atomically replace only this table; netavark and libvirt
 # tables in the same kernel ruleset remain untouched.
 #
 # Family is `inet` (dual-stack) even though IPv6 is currently

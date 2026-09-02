@@ -28,7 +28,7 @@ compatibility_level = 3.6
 smtp_tls_CApath=/etc/ssl/certs
 
 myhostname = {{ inventory_hostname }}
-# Qualify bare local senders (cron/smartd/fail2ban `root`) with the host name;
+# Qualify bare local senders (cron/smartd `root`) with the host name;
 # smtp_generic_maps then rewrites that domain to the public per-host identity.
 myorigin = $myhostname
 alias_maps = texthash:/etc/postfix/aliases

@@ -122,9 +122,6 @@ certbot_extra_sans:
 # -- the headscale unit orders After=wg-quick@wg0 for exactly that.
 headscale_oidc_issuer: "https://auth.{{ domain }}"
 
-# fox is the only internet-facing host, so it runs fail2ban (the home hosts
-# have zero inbound). Drives netdata's fail2ban collector + alert here.
-fail2ban_enabled: true
 headscale_oidc_client_id: headscale
 
 # fox is a Tailscale node (2026-06-13, reversing the original control-plane-only
@@ -171,7 +168,6 @@ netdata_contexts:
 netdata_collectors:
   # No chrony collector: cmdport=0 blocks go.d UDP access (timex alarm covers clock-sync).
   - go.d:collector:docker:local
-  - go.d:collector:fail2ban:fail2ban
   - go.d:collector:logind:logind
   - go.d:collector:nginx:local
   - go.d:collector:prometheus:fluentbit

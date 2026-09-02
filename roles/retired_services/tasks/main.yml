@@ -63,13 +63,24 @@
     - retired_services
     - logrotate
 
-- name: Remove retired fail2ban jail overrides
+- name: Remove retired fail2ban package
+  apt:
+    name: fail2ban
+    state: absent
+    purge: true
+  become: true
+  tags:
+    - retired_services
+    - fail2ban
+
+- name: Remove retired fail2ban state
   file:
-    path: "/etc/fail2ban/jail.d/{{ item }}"
+    path: "{{ item }}"
     state: absent
   loop:
-    - 00-nftables.local
-    - 99-nftables.local
+    - /etc/fail2ban
+    - /var/lib/fail2ban
+    - /var/log/fail2ban.log
   become: true
   tags:
     - retired_services
@@ -509,13 +520,14 @@
     - retired_services
     - netdata
 
-- name: Remove retired Netdata collector overrides
+- name: Remove retired Netdata overrides
   file:
     path: "{{ item }}"
     state: absent
   loop:
     - /etc/netdata/go.d/smartctl.conf
     - /etc/netdata/go.d/fail2ban.conf
+    - /etc/netdata/health.d/fail2ban.conf
   become: true
   tags:
     - retired_services

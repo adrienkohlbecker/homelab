@@ -19,8 +19,7 @@
 # policy_rc_d: 101 prevents the dpkg postinst from auto-starting
 # nftables.service before our drop-in / template lands. Without it
 # there's a sub-second window where stock Ubuntu's example ruleset
-# (or no ruleset) is active. Matches the pattern used by keepalived /
-# fail2ban.
+# (or no ruleset) is active. Matches the keepalived pattern.
 - name: Install nftables
   apt:
     pkg:
@@ -33,7 +32,7 @@
     - firewall
 
 # Stock nftables.service ships `ExecStop=/usr/sbin/nft flush ruleset`,
-# which would tear down netavark / fail2ban / libvirt tables in the
+# which would tear down netavark and libvirt tables in the
 # same kernel ruleset on any `systemctl stop` or `restart`. Scope the
 # stop to our own table.
 - name: Install nftables.service ExecStop drop-in
@@ -313,7 +312,7 @@
 
 # The ExecReload drop-in installed above maps `state: reloaded` to atomic
 # `nft -f` (per-table flush+rebuild inside the file replaces only our
-# table; netavark / libvirt / fail2ban tables in iptables-nft compat
+# table; netavark and libvirt tables in iptables-nft compat
 # are untouched). On an inactive unit, Ansible starts it instead of
 # reloading; otherwise a changed ruleset fires ExecReload with no
 # stop/start window. The condition skips

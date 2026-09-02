@@ -274,25 +274,38 @@
     mode: "0644"
   become: true
 
-- name: _setup | Create legacy fail2ban jail directory
+- name: _setup | Install retired fail2ban package fixture
+  apt:
+    name: fail2ban
+    state: present
+    policy_rc_d: 101
+  become: true
+
+- name: _setup | Create retired fail2ban state directories
   file:
-    path: /etc/fail2ban/jail.d
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - /etc/fail2ban/jail.d
+    - /var/lib/fail2ban
   become: true
 
-- name: _setup | Create legacy fail2ban jail overrides
+- name: _setup | Create retired fail2ban state fixtures
   copy:
-    content: "[DEFAULT]\n"
-    dest: "/etc/fail2ban/jail.d/{{ item }}"
+    content: "retired fail2ban fixture\n"
+    dest: "{{ item }}"
     owner: root
     group: root
     mode: "0644"
   loop:
-    - 00-nftables.local
-    - 99-nftables.local
+    - /etc/fail2ban/jail.local
+    - /etc/fail2ban/jail.d/00-nftables.local
+    - /etc/fail2ban/jail.d/99-nftables.local
+    - /var/lib/fail2ban/fail2ban.sqlite3
+    - /var/log/fail2ban.log
   become: true
 
 - name: _setup | Create legacy Netdata collector directories
@@ -335,15 +348,16 @@
     mode: "0644"
   become: true
 
-- name: _setup | Create legacy Netdata fail2ban collector fixture
+- name: _setup | Create legacy Netdata fail2ban fixtures
   copy:
-    content: |-
-      jobs:
-        - name: fail2ban
-    dest: /etc/netdata/go.d/fail2ban.conf
+    content: "retired fail2ban fixture\n"
+    dest: "{{ item }}"
     owner: root
     group: root
     mode: "0644"
+  loop:
+    - /etc/netdata/go.d/fail2ban.conf
+    - /etc/netdata/health.d/fail2ban.conf
   become: true
 
 - name: _setup | Create hdparm Netdata fixtures on a diskless host

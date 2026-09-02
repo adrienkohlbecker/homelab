@@ -61,24 +61,6 @@
       Expected the rendered WireGuard alarm to encode its stale-age grace in
       the thresholds and retain only recovery hysteresis.
 
-- name: _verify | Read fail2ban health configuration
-  slurp:
-    src: /etc/netdata/health.d/fail2ban.conf
-  register: _netdata_fail2ban_health
-  become: true
-
-- name: _verify | Fail2ban alert uses sustained ban count
-  vars:
-    _health: "{{ _netdata_fail2ban_health.content | b64decode }}"
-  assert:
-    that:
-      - '"lookup: min -30m unaligned of banned" in _health'
-      - '"delay: up" not in _health'
-      - '"delay: down 1h" in _health'
-    fail_msg: >-
-      Expected the fail2ban alarm to require a sustained high ban count and
-      retain only recovery hysteresis.
-
 - name: _verify | Read Fluent Bit health configuration
   slurp:
     src: /etc/netdata/health.d/fluentbit.conf
@@ -234,7 +216,7 @@
 
 # Unit-test the collector chart-prefix derivation directly. The live
 # present=1 path above only exercises 'instanced' mode (systemdunits,
-# plugin != job); 'exact' mode (plugin == job -- nvme, fail2ban, zfspool,
+# plugin != job); 'exact' mode (plugin == job -- nvme and zfspool,
 # the dominant prod shape) and the non-go.d skip have no always-live witness
 # on the box fixture, so assert the pure derivation function here. Sourcing
 # the collector is side-effect-free (no curl/error at load time).
@@ -250,7 +232,6 @@
       fi
     }
     check "go.d:collector:nvme:nvme" "exact nvme"
-    check "go.d:collector:fail2ban:fail2ban" "exact fail2ban"
     check "go.d:collector:systemdunits:service-units" "instanced systemdunits_service-units"
     check "not-go.d:foo:bar:baz" ""
     exit $fail

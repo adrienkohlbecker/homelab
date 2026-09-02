@@ -101,24 +101,32 @@
   failed_when: retired_services_samba_mdns.stat.exists
   become: true
 
-- name: _verify | Retired fail2ban jail overrides are absent
+- name: _verify | Retired fail2ban package is absent
+  command: dpkg-query --show fail2ban
+  register: retired_services_fail2ban_package
+  changed_when: false
+  failed_when: retired_services_fail2ban_package.rc != 1
+
+- name: _verify | Retired fail2ban state is absent
   stat:
-    path: "/etc/fail2ban/jail.d/{{ item }}"
+    path: "{{ item }}"
   loop:
-    - 00-nftables.local
-    - 99-nftables.local
-  register: retired_services_fail2ban_jail_override
-  failed_when: retired_services_fail2ban_jail_override.stat.exists
+    - /etc/fail2ban
+    - /var/lib/fail2ban
+    - /var/log/fail2ban.log
+  register: retired_services_fail2ban_state
+  failed_when: retired_services_fail2ban_state.stat.exists
   become: true
 
-- name: _verify | Retired Netdata collector overrides are absent
+- name: _verify | Retired Netdata overrides are absent
   stat:
     path: "{{ item }}"
   loop:
     - /etc/netdata/go.d/smartctl.conf
     - /etc/netdata/go.d/fail2ban.conf
-  register: retired_services_netdata_collector
-  failed_when: retired_services_netdata_collector.stat.exists
+    - /etc/netdata/health.d/fail2ban.conf
+  register: retired_services_netdata_override
+  failed_when: retired_services_netdata_override.stat.exists
   become: true
 
 - name: _verify | Hdparm Netdata files are absent on a diskless host

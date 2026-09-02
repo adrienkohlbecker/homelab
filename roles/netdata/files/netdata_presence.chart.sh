@@ -89,7 +89,7 @@ _netdata_presence_fetch_charts() {
 # that 2.x chart is a tracked follow-up (see context_liveness.conf.j2).
 #
 # Naming rule (stable across 1.46 and 2.x): the chart-id is
-# "<plugin>.<context>" when plugin==job (e.g. zfspool, nvme, fail2ban),
+# "<plugin>.<context>" when plugin==job (e.g. zfspool and nvme),
 # otherwise "<plugin>_<job>.<context>" (e.g. chrony_local, x509check_host_cert),
 # and a per-instance job fans out to "<plugin>_<job>_<instance>.<context>".
 #

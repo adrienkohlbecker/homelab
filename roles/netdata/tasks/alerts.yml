@@ -38,18 +38,6 @@
   tags:
     - netdata
 
-# The alert targets the fail2ban chart, which only exists where the collector
-# runs; gate on the same fail2ban_enabled flag.
-- name: Configure netdata fail2ban ban-count alert
-  when: fail2ban_enabled
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: fail2ban_alerts.conf
-      dest: fail2ban.conf
-  tags:
-    - netdata
-
 - name: Configure netdata wireguard bunk-peer handshake alert
   import_tasks: health.yml
   vars:

@@ -44,7 +44,7 @@
   become: true
 
 # Stock nftables.service ExecStop is `nft flush ruleset` — would nuke
-# netavark/fail2ban tables on any systemctl stop. Confirm the drop-in
+# netavark tables on any systemctl stop. Confirm the drop-in
 # scopes the stop to inet homelab only. Sentinel table simulates a
 # co-tenant; if ExecStop still flushed everything, it'd disappear.
 # Runs last because the stop/start cycle resets per-rule counters.
