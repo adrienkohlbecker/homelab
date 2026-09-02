@@ -131,26 +131,8 @@
       # rewrites the envelope on its way to mailgun.
       destemail = {{ root_email }}
       action = %(action_mwl)s
-    owner: root
-    group: root
-    mode: "0640"
-    backup: true
-    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
-  register: fail2ban_default
-  become: true
-  tags:
-    - fail2ban
 
-# Per-jail sshd config. `backend = systemd` is scoped here (not in
-# [DEFAULT], see jail.local comment). journalmatch is pinned to
-# `_COMM=sshd` so the filter catches both `ssh.service` and the
-# `ssh.socket` + `ssh@N-.service` template-unit layout — the
-# stock filter ANDs on `_SYSTEMD_UNIT=sshd.service` and silently
-# misses the latter.
-- name: Write fail2ban sshd jail
-  copy:
-    dest: /etc/fail2ban/jail.d/sshd.local
-    content: |
+      # Match both ssh.service and the socket-activated ssh@.service units.
       [sshd]
       enabled = true
       backend = systemd
@@ -160,7 +142,7 @@
     mode: "0640"
     backup: true
     validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
-  register: fail2ban_sshd_jail
+  register: fail2ban_default
   become: true
   tags:
     - fail2ban
@@ -202,11 +184,10 @@
   tags:
     - fail2ban
 
-# Banaction-class changes live in jail.local -> restart, since
+# Jail and banaction changes live in jail.local -> restart, since
 # fail2ban-client reload does NOT migrate already-active f2b-*
-# chains to a new banaction's table. Per-jail tweaks (jail.d/*.local
-# or the legacy-cleanup) keep using SIGHUP reload to preserve
-# in-memory ban state; the on-disk db replays on restart anyway.
+# chains to a new banaction's table. The action override and legacy
+# cleanup use SIGHUP reload; the on-disk db replays bans on restart.
 - name: Enable fail2ban service
   when: not (ansible_check_mode and fail2ban_apt.changed)
   systemd:
@@ -216,7 +197,7 @@
       {{ 'restarted'
          if fail2ban_apt.changed or fail2ban_default.changed or fail2ban_daemon.changed
          else 'reloaded'
-         if fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed or fail2ban_mail_action.changed
+         if fail2ban_legacy_override.changed or fail2ban_mail_action.changed
          else 'started' }}
   become: true
   tags:
