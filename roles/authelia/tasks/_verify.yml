@@ -20,7 +20,6 @@
   uri:
     url: https://auth.{{ authelia_cookie_domain }}/api/health
     validate_certs: false
-    return_content: true
   register: authelia_verify_portal
   failed_when: >-
     authelia_verify_portal.status != 200
@@ -134,7 +133,6 @@
   uri:
     url: https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
     validate_certs: false
-    return_content: true
   register: authelia_verify_oidc_discovery
   failed_when: >-
     authelia_verify_oidc_discovery.status != 200
@@ -148,7 +146,6 @@
   uri:
     url: https://auth.{{ authelia_cookie_domain }}/jwks.json
     validate_certs: false
-    return_content: true
   register: authelia_verify_jwks
   # .json.keys here would resolve to the dict.keys method, not the
   # response's "keys" field; subscript via [] to dodge the collision.
