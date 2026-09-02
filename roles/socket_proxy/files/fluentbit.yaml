@@ -17,15 +17,6 @@ multiline_parsers:
 
 pipeline:
   filters:
-    # HAProxy emits these shutdown counters once through its configured stdout
-    # logger and once through its decorated process diagnostics. Keep the
-    # decorated copy, which carries explicit severity and process metadata.
-    - name: grep
-      match: svc.socket_proxy.service
-      logical_op: and
-      exclude:
-        - 'CONTAINER_TAG ^.+$'
-        - 'MESSAGE ^Proxy (dockerfrontend|dockerbackend|docker-events) stopped \(cumulated conns: FE: [0-9]+, BE: [0-9]+\)\.[[:space:]]*$'
     - name: multiline
       match: svc.socket_proxy.service
       multiline.parser: multiline_socket_proxy

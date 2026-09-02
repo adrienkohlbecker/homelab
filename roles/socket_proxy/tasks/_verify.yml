@@ -96,10 +96,6 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: "Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181)."
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
         - MESSAGE: socket-proxy-prose
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
@@ -140,7 +136,6 @@
 - name: _verify | Expected socket_proxy noise is omitted from aggregate
   assert:
     that:
-      - "'Proxy dockerbackend stopped (cumulated conns: FE: 0, BE: 1181).' not in fluentbit_verify_result.stdout"
       - "'-drop' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Allowed GET /version returns 200
