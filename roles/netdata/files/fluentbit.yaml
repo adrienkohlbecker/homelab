@@ -1,21 +1,5 @@
 pipeline:
   filters:
-    # High-volume netdata chatter retained in the journal but omitted from the
-    # operator aggregate. charts.d deliberately restarts every four hours, so
-    # its healthy bootstrap wave and the REMOVED->CLEAR registrations it causes
-    # are routine; actual alert transitions and plugin failures stay.
-    - name: grep
-      match: svc.netdata.service
-      exclude:
-        - 'MESSAGE (^Failed to prepare statement SQL_SELECT_HEALTH_LOG|^Failed to execute ''DROP TABLE|^LISTENER: Cannot validate ''localhost'')'
-        - 'MESSAGE ^voltage sensor ''[^'']+'' transitioned from state'
-        - 'MESSAGE ^temperature sensor ''temperature_nct6798-isa-'
-        - 'MESSAGE ^ALERT .* raised from REMOVED to CLEAR\.'
-        - 'MESSAGE ^(main: started from ''/usr/libexec/netdata/plugins\.d/charts\.d\.plugin'' with options: 5|main: Configuration file ''(/usr/lib/netdata/conf\.d|/etc/netdata)/charts\.d\.conf'' loaded\.|(example|libreswan|opensips): is disabled\.)'
-        # Netdata logs these exact cancellation/teardown messages during every
-        # orderly reload. Unexpected service failure remains visible through
-        # the unit result and all non-teardown Netdata errors.
-        - 'MESSAGE \A(PARSER: read failed: POLLHUP\.|PARSER: thread cancelled while waiting for data\.|PLUGINSD: buffered reader not OK \(-[0-9]+\)|Failed to delete socket [0-9]+ from nd_poll\(\) - called from poll_events_cleanup\(\) - is the socket already closed\?|stopped after [0-9]+ connects, [0-9]+ disconnects \(max concurrent [0-9]+\), [0-9]+ receptions and [0-9]+ sends)\z'
     # Netdata alert names describe the failing component and can contain words
     # such as collector_error even when the event is a successful recovery.
     # The tag scopes this to the native unit; transitions into a non-clear

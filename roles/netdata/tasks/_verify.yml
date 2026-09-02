@@ -650,7 +650,7 @@
       x509check.conf didn't render the host cert path correctly
       (parsed={{ _x509check }}, expected source={{ _expected_source }})
 
-- name: _verify | Exercise netdata fluent-bit noise filters
+- name: _verify | Exercise netdata fluent-bit recovery severity
   import_role:
     name: fluentbit
     tasks_from: verify_extension
@@ -658,22 +658,12 @@
     fluentbit_verify_args:
       name: netdata
       records:
-        - MESSAGE: "ALERT 'netdata_context_missing' of 'netdata_presence.context_conntrack' raised from REMOVED to CLEAR."
-          SYSTEMD_UNIT: netdata.service
-          marker: netdata-removed-clear-drop
-        - MESSAGE: "main: started from '/usr/libexec/netdata/plugins.d/charts.d.plugin' with options: 5"
-          SYSTEMD_UNIT: netdata.service
-          marker: netdata-charts-start-drop
         - MESSAGE: "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from WARNING to CLEAR."
           SYSTEMD_UNIT: netdata.service
           marker: netdata-warning-clear-keep
         - MESSAGE: "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from CLEAR to WARNING."
           SYSTEMD_UNIT: netdata.service
           marker: netdata-warning-keep
-        - MESSAGE: "PARSER: thread cancelled while waiting for data."
-          SYSTEMD_UNIT: netdata.service
-          ERRNO: "125"
-          marker: netdata-shutdown-drop
         - MESSAGE: "PARSER: malformed collector data"
           SYSTEMD_UNIT: netdata.service
           PRIORITY: "3"
@@ -690,7 +680,3 @@
         - level: error
           service: netdata
           fields.marker: netdata-parser-error-keep
-
-- name: _verify | Routine netdata noise was omitted
-  assert:
-    that: "'-drop' not in fluentbit_verify_result.stdout"
