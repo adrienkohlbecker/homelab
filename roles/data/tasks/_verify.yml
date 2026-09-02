@@ -12,22 +12,6 @@
 # up. Asserting `local` for the mountpoint as well as the extra
 # properties keeps the role's "I set this explicitly" contract honest.
 
-- name: _verify | Dataset exists
-  when: zfs_root
-  command:
-    argv:
-      - zfs
-      - list
-      - -H
-      - -o
-      - name
-      - "{{ data_pool }}/{{ item.name }}"
-  changed_when: false
-  loop: '{{ data_datasets }}'
-  loop_control:
-    label: '{{ data_pool }}/{{ item.name }}'
-  become: true
-
 - name: _verify | Mountpoint property set locally with expected value
   when: zfs_root
   command:
@@ -50,18 +34,14 @@
     label: '{{ data_pool }}/{{ item.name }} mountpoint={{ item.mountpoint }}'
   become: true
 
-- name: _verify | Dataset mounted at mountpoint
+- name: _verify | Dataset mount contract passes
   when: zfs_root
   command:
     argv:
-      - findmnt
-      - --noheadings
-      - --output
-      - SOURCE
+      - /usr/local/bin/zfs_check_mount
+      - "{{ data_pool }}/{{ item.name }}"
       - "{{ item.mountpoint }}"
-  register: data_verify_findmnt
   changed_when: false
-  failed_when: data_verify_findmnt.stdout | trim != data_pool ~ '/' ~ item.name
   loop: '{{ data_datasets }}'
   loop_control:
     label: '{{ item.mountpoint }} <- {{ data_pool }}/{{ item.name }}'
