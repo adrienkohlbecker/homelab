@@ -70,8 +70,6 @@
   loop:
     - name: authelia_jwt_secret
       data: "{{ authelia_jwt_secret }}"
-    - name: authelia_session_secret
-      data: "{{ authelia_session_secret }}"
     - name: authelia_storage_encryption_key
       data: "{{ authelia_storage_encryption_key }}"
     - name: authelia_smtp_password

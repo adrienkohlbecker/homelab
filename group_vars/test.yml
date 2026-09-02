@@ -261,10 +261,9 @@ authelia_cookie_domain: "{{ inventory_hostname }}.{{ domain }}"
 authelia_host: "{{ inventory_hostname }}"
 
 # Test-fixture secrets. Stubs are 64+ chars to satisfy Authelia's
-# session/secret minimums; SMTP password is just a placeholder
+# secret minimums; SMTP password is just a placeholder
 # because the test fixture flips disable_startup_check=true.
 authelia_jwt_secret: StubQemuJwtSecret_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-authelia_session_secret: StubQemuSessionSecret_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 authelia_storage_encryption_key: StubQemuStorageKey_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 authelia_smtp_password: changeme
 

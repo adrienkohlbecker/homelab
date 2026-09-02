@@ -47,8 +47,6 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/authelia:/config \
     --secret=authelia_jwt_secret,type=mount,target=jwt_secret \
     --env AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE=/run/secrets/jwt_secret \
-    --secret=authelia_session_secret,type=mount,target=session_secret \
-    --env AUTHELIA_SESSION_SECRET_FILE=/run/secrets/session_secret \
     --secret=authelia_storage_encryption_key,type=mount,target=storage_encryption_key \
     --env AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/run/secrets/storage_encryption_key \
     --secret=authelia_smtp_password,type=mount,target=smtp_password \
