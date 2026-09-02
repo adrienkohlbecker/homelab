@@ -108,7 +108,7 @@ Ports live in `group_vars/all/main.yml` under `service_ports:` — single source
 
 ### ZFS site mountpoints
 
-Per-site dataset gates in `group_vars/all/main.yml` under `zfs_has_<name>_mount:` (services/scratch/media/data/brumath/eckwersheim/minio). **Producers** create datasets unconditionally and **never read the flag**. **Consumers** gate on the flag for bind-mounts. Test fixtures flip every flag `false`. Don't gate the producer — it would no-op under the default test machine.
+Per-site dataset gates in `group_vars/all/main.yml` under `zfs_has_<name>_mount:` (services/scratch/media/data/minio). **Producers** create datasets unconditionally and **never read the flag**. **Consumers** gate on the flag for bind-mounts. Test fixtures flip every flag `false`. Don't gate the producer — it would no-op under the default test machine.
 
 ### Homepage bookmarks
 

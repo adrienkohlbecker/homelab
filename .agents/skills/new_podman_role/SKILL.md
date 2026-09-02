@@ -18,8 +18,8 @@ Collect or infer these before writing files:
 - Published loopback port. Check both `service_ports:` and existing
   `127.0.0.1:` literals before allocating.
 - Nginx subdomain and homepage label/icon.
-- Required site bind mounts: `services`, `scratch`, `media`, `data`,
-  `brumath`, `eckwersheim`, or `minio`.
+- Required site bind mounts: `services`, `scratch`, `media`, `data`, or
+  `minio`.
 - Secrets and injection mode.
 - Healthcheck command, verified against the image.
 
