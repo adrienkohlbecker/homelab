@@ -33,7 +33,6 @@
   failed_when: >-
     authelia_verify_portal_index.status != 200
     or 'text/html' not in authelia_verify_portal_index.content_type
-  become: true
 
 # auth-request endpoint reachable through nginx. Unauthenticated
 # callers with the standard nginx auth_request headers get 401
@@ -51,7 +50,6 @@
       X-Original-URL: "https://homepage.{{ inventory_hostname }}.{{ domain }}/"
     validate_certs: false
     status_code: 401
-  become: true
 
 - name: _verify | Homepage service account may read the Netdata alerts API
   uri:
@@ -64,7 +62,6 @@
       X-Original-URL: "https://netdata.{{ inventory_hostname }}.{{ domain }}/api/v1/alarms?active"
     validate_certs: false
     status_code: 200
-  become: true
 
 - name: _verify | Homepage service account cannot read other Netdata paths
   uri:
@@ -77,7 +74,6 @@
       X-Original-URL: "https://netdata.{{ inventory_hostname }}.{{ domain }}/api/v1/info"
     validate_certs: false
     status_code: 401
-  become: true
 
 - name: _verify | Wait for normalized authelia record in lnav store
   command:
@@ -134,7 +130,6 @@
     authelia_verify_oidc_discovery.status != 200
     or authelia_verify_oidc_discovery.json.issuer != ('https://auth.' ~ authelia_cookie_domain)
     or 'RS256' not in authelia_verify_oidc_discovery.json.id_token_signing_alg_values_supported
-  become: true
 
 # JWKS endpoint. Confirms the public key derived from the issuer
 # private key is exposed for clients to verify id_token signatures.
@@ -149,7 +144,6 @@
     authelia_verify_jwks.status != 200
     or (authelia_verify_jwks.json['keys'] | length) < 1
     or authelia_verify_jwks.json['keys'][0].kty != 'RSA'
-  become: true
 
 # Cross-host network plumbing (pug/bunk -> authelia_host's WG IP) is
 # exercised in multi-host nightlies, not testrole.py: on a single VM
