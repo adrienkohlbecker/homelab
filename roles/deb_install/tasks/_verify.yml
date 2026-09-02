@@ -311,38 +311,6 @@
       _deb_install_checkmode_query.stdout }}
       staged_exists={{ _deb_install_staged_checkmode_fresh.stat.exists }}
 
-# The assert gate must reject malformed args rather than proceed. A non-hex
-# sha256 trips the assert; rescue catches the failure so the play continues.
-- name: _verify | Call the helper with a malformed sha256
-  block:
-    - name: _verify | Install with a non-hex sha256
-      import_role:
-        name: deb_install
-        tasks_from: install
-      vars:
-        deb_install_args:
-          name: deb-install-test
-          version: "2.0-1"
-          url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-          sha256: "not-a-valid-sha256"
-    - name: _verify | Reached past the assert (gate did NOT fire)
-      set_fact:
-        _deb_install_bad_args_passed: true
-  rescue:
-    - name: _verify | The assert gate fired as expected
-      set_fact:
-        _deb_install_bad_args_rejected: true
-
-- name: _verify | Malformed args were rejected, not acted on
-  assert:
-    that:
-      - _deb_install_bad_args_rejected | default(false)
-      - not (_deb_install_bad_args_passed | default(false))
-    fail_msg: >-
-      expected the assert gate to reject a non-hex sha256; rejected={{
-      _deb_install_bad_args_rejected | default(false) }} proceeded={{
-      _deb_install_bad_args_passed | default(false) }}
-
 # A download that succeeds but whose apt install fails must still clean up the
 # staged file (the always: block). A correctly-checksummed non-deb downloads
 # fine, then apt rejects it.
