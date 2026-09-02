@@ -13,17 +13,17 @@
     cache_valid_time: 3600
   become: true
 
-# Doubles as the A2 check: the sshd jail was pinned explicitly rather
-# than left to upstream defaults. fail2ban cold-starts in a few seconds
-# after enable; status returns error before the daemon is ready.
-- name: _verify | Fail2ban-client status lists the sshd jail
-  command: fail2ban-client status
+# fail2ban cold-starts in a few seconds after enable; status returns an
+# error before the daemon is ready.
+- name: _verify | Sshd jail uses the systemd journal backend
+  command: fail2ban-client status sshd
   register: _fail2ban_status
   retries: 15
   delay: 2
   until:
     - _fail2ban_status.rc == 0
-    - "'sshd' in _fail2ban_status.stdout"
+    - "'Journal matches:' in _fail2ban_status.stdout"
+    - "'_COMM=sshd' in _fail2ban_status.stdout"
   changed_when: false
   become: true
 
@@ -38,56 +38,13 @@
   command: fail2ban-client get sshd ignoreip
   register: _fail2ban_ignoreip
   changed_when: false
+  failed_when: >-
+    _fail2ban_ignoreip.rc != 0
+    or '127.0.0.0/8' not in _fail2ban_ignoreip.stdout
+    or '::1' not in _fail2ban_ignoreip.stdout
+    or network.sites.home.cidr not in _fail2ban_ignoreip.stdout
+    or network.partitions.wireguard.cidr not in _fail2ban_ignoreip.stdout
   become: true
-
-# fail2ban canonicalises CIDRs to their network address — 127.0.0.1/8
-# is stored and surfaced as 127.0.0.0/8 — so the assert tracks the
-# normalized form, not the literal string in the override file.
-- name: _verify | Configured ignoreip includes all expected entries
-  assert:
-    that:
-      - "'127.0.0.0/8' in _fail2ban_ignoreip.stdout"
-      - "'::1' in _fail2ban_ignoreip.stdout"
-      - network.sites.home.cidr in _fail2ban_ignoreip.stdout
-      - network.partitions.wireguard.cidr in _fail2ban_ignoreip.stdout
-    fail_msg: >-
-      sshd jail ignoreip missing expected entries; check empty
-      interpolation of network topology CIDRs.
-      Got: {{ _fail2ban_ignoreip.stdout }}
-
-# Function check for backend=systemd: the daemon's status output
-# names the active backend (`Journal matches:` for systemd vs.
-# `File list:` for file). A regression where `backend = auto`
-# re-takes effect on a host without /var/log/auth.log would
-# silently report zero failures and pass every other assertion;
-# this catches it. Also doubles as a journalmatch assert — if
-# the upstream stock filter's `_SYSTEMD_UNIT=sshd.service` AND
-# clobbered our `_COMM=sshd` override (e.g. via a future Ubuntu
-# deb shuffle of filter.d), the noble socket-activation layout
-# would silently stop matching.
-#
-# A full functional test would inject failed-auth lines via
-# systemd-cat, but our journalmatch is intentionally `_COMM=sshd`
-# (so a local user with `logger -t sshd ...` cannot trigger bans
-# of arbitrary IPs), and only the real sshd binary processes
-# carry `_COMM=sshd`. So we state-check the backend wiring and
-# leave the BanManager-via-CLI path to the synthetic-ban below.
-- name: _verify | Sshd jail uses the systemd journal backend
-  command: fail2ban-client status sshd
-  register: _fail2ban_status_sshd
-  changed_when: false
-  become: true
-
-- name: _verify | Journal backend is engaged with our journalmatch
-  assert:
-    that:
-      - "'Journal matches:' in _fail2ban_status_sshd.stdout"
-      - "'_COMM=sshd' in _fail2ban_status_sshd.stdout"
-    fail_msg: >-
-      sshd jail status missing the journal backend's "Journal matches:"
-      line or our pinned `_COMM=sshd` filter. Backend may have silently
-      reverted to file-mode (auto-mode without /var/log/auth.log present
-      means zero failure detection). Got: {{ _fail2ban_status_sshd.stdout }}
 
 # Proves the sendmail-whois-lines.local override was parsed and the
 # inherited start/stop notification handlers are neutralized -- queried
@@ -97,25 +54,15 @@
 # expansion that the synthetic-ban path below already exercises).
 - name: _verify | Sendmail action start/stop handlers are empty
   command: fail2ban-client get sshd action sendmail-whois-lines {{ item }}
-  register: _fail2ban_mail_handlers
+  register: _fail2ban_mail_handler
   changed_when: false
+  failed_when: >-
+    _fail2ban_mail_handler.rc != 0
+    or _fail2ban_mail_handler.stdout | trim != ""
   become: true
   loop:
     - actionstart
     - actionstop
-
-- name: _verify | No start/stop notification command remains
-  assert:
-    that:
-      - item.stdout | trim == ""
-    fail_msg: >-
-      sendmail-whois-lines {{ item.item }} is non-empty; the .local
-      override did not take precedence over sendmail-common.conf, so
-      "started/stopped on <host>" emails will still fire. Got:
-      {{ item.stdout }}
-  loop: "{{ _fail2ban_mail_handlers.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
 # Synthetic ban against TEST-NET-1 (RFC 5737); never matches a real client.
 - name: _verify | Issue a synthetic ban
