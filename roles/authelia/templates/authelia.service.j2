@@ -45,9 +45,6 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     {{ authelia_user | podman_idmap_args | join(" ") }} \
     --volume /mnt/services/authelia:/config \
-    --env PUID=0 \
-    --env PGID=0 \
-    --env X_AUTHELIA_CONFIG=/config/configuration.yml \
     --secret=authelia_jwt_secret,type=mount,target=jwt_secret \
     --env AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE=/run/secrets/jwt_secret \
     --secret=authelia_session_secret,type=mount,target=session_secret \
