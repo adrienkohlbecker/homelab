@@ -85,10 +85,10 @@ def parse_efibootmgr():
         if m_data and entries:
             entries[-1]["options"] = _decode_data_hex(m_data.group(1)).strip()
             continue
-        m = re.match(r"^Boot([0-9A-Fa-f]{4})(\*)?\s+(.*?)\t(.*)", line)
+        m = re.match(r"^Boot([0-9A-Fa-f]{4})(?:\*)?\s+(.*?)\t(.*)", line)
         if not m:
             continue
-        num, active, label, devpath = m.groups()
+        num, label, devpath = m.groups()
         fp = re.search(r"File\(([^)]+)\)", devpath or "")
         gp = re.search(r"GPT,([0-9a-f-]+)", devpath or "", re.IGNORECASE)
         parts = re.split(r"File\([^)]+\)", devpath or "")
@@ -96,7 +96,6 @@ def parse_efibootmgr():
         entries.append(
             {
                 "num": num,
-                "active": active == "*",
                 "label": label.strip(),
                 "file": fp.group(1) if fp else "",
                 "gpt_uuid": gp.group(1).lower() if gp else "",
