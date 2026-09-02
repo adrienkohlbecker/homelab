@@ -10,30 +10,19 @@
   tags:
     - console
 
-- name: Configure console-setup
+- name: Configure console policy
   copy:
-    src: console-setup
-    dest: /etc/default/console-setup
+    src: "{{ item }}"
+    dest: /etc/default/{{ item }}
     owner: root
     group: root
     mode: "0644"
     backup: true
     validate: sh -n %s
+  loop:
+    - console-setup
+    - keyboard
   register: console_cfg
-  become: true
-  tags:
-    - console
-
-- name: Configure keyboard
-  copy:
-    src: keyboard
-    dest: /etc/default/keyboard
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: sh -n %s
-  register: console_keyboard_cfg
   become: true
   tags:
     - console
@@ -45,7 +34,7 @@
 # a hard reboot when X holds the console. The live VTs pick up the new
 # config at the next boot (reboot-required is touched below).
 - name: Apply console-setup + keyboard to live ttys
-  when: (console_cfg.changed or console_keyboard_cfg.changed) and not ansible_check_mode
+  when: console_cfg.changed and not ansible_check_mode
   command: setupcon --save
   changed_when: true
   become: true
@@ -54,7 +43,7 @@
 
 - name: Update initramfs
   when:
-    - console_cfg.changed or console_keyboard_cfg.changed
+    - console_cfg.changed
     - not (ansible_check_mode and console_apt.changed)
   command: update-initramfs -u -k all
   changed_when: true
@@ -105,7 +94,7 @@
 # The cmdline engine touches /var/run/reboot-required for the consoleblank arg on
 # either bootloader; this covers the console-setup / keyboard file changes.
 - name: Ask to reboot
-  when: console_cfg.changed or console_keyboard_cfg.changed
+  when: console_cfg.changed
   file:
     path: /var/run/reboot-required
     state: touch
