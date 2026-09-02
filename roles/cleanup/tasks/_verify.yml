@@ -63,7 +63,6 @@
     - /etc/_verify_prune/fresh.222.{{ ansible_date_time.date }}@{{ ansible_date_time.time }}~
     - /etc/_verify_prune/editor~
   register: _cleanup_verify_prune
-  become: true
 
 - name: _verify | Assert old pruned, fresh + non-matching kept
   assert:
