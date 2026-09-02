@@ -29,7 +29,7 @@ def _load():
 efi = _load()
 
 
-# --- Desired entry lists (mirror roles/boot/vars/main.yml) ----------------
+# --- Desired entry lists (mirror roles/boot/defaults/main.yml) ------------
 
 LOADERS = [
     {"label": "rEFInd", "loader": "\\EFI\\refind\\refind_x64.efi", "multi_disk": True},
@@ -37,33 +37,18 @@ LOADERS = [
     {"label": "ZFSBootMenu (Backup)", "loader": "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI"},
 ]
 
-# Entry with options exercises efibootmgr --unicode comparison support.
-ENTRY_WITH_OPTIONS = [
-    {
-        "label": "Linux",
-        "loader": "\\EFI\\Linux\\vmlinuz.efi",
-        "options": "root=zfs:rpool/ROOT/noble initrd=\\EFI\\Linux\\initrd console=tty0",
-        "multi_disk": True,
-    },
-    *LOADERS,
-]
-
-
 # --- Synthetic command output --------------------------------------------
 
 
 def _efibootmgr_v(entries, timeout=3, current="0000"):
     """Render a synthetic `efibootmgr -v` dump.
 
-    entries: list of (num, label, devpath[, options]) tuples.
+    entries: list of (num, label, devpath) tuples.
     """
     lines = [f"BootCurrent: {current}", f"Timeout: {timeout} seconds"]
     lines.append("BootOrder: " + ",".join(entry[0] for entry in entries))
-    for num, label, devpath, *options in entries:
+    for num, label, devpath in entries:
         lines.append(f"Boot{num}* {label}\t{devpath}")
-        if options:
-            encoded = options[0].encode("utf-16-le") + b"\x00\x00"
-            lines.append("      data: " + " ".join(f"{byte:02x}" for byte in encoded))
     return "\n".join(lines)
 
 
@@ -210,41 +195,6 @@ class TestMultiDisk:
         assert not any(a.startswith(("remove", "create")) for a in out["actions"]), out["actions"]
 
 
-# --- EFI-stub options -----------------------------------------------------
-
-
-class TestEntryOptions:
-    def test_idempotent_with_whitespace_variation(self, monkeypatch, capsys):
-        # efibootmgr -v may render the cmdline with collapsed/extra spaces; the
-        # normalized comparison must still treat it as converged.
-        rendered = "root=zfs:rpool/ROOT/noble  initrd=\\EFI\\Linux\\initrd console=tty0"  # double space
-        existing = _efibootmgr_v(
-            [
-                ("0000", "Linux", _hd("AAA-0", "\\EFI\\Linux\\vmlinuz.efi"), rendered),
-                ("0001", "rEFInd", _hd("AAA-0", "\\EFI\\refind\\refind_x64.efi")),
-                ("0002", "ZFSBootMenu", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ.EFI")),
-                ("0003", "ZFSBootMenu (Backup)", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI")),
-            ],
-        )
-        out = run_check(monkeypatch, capsys, ENTRY_WITH_OPTIONS, existing, **_SINGLE)
-        assert not out["changed"], out["actions"]
-
-    def test_optionless_stub_is_replaced(self, monkeypatch, capsys):
-        # A "Linux" entry that exists but carries no kernel cmdline must NOT be
-        # treated as converged (the false-match bug); it gets remove+recreate.
-        existing = _efibootmgr_v(
-            [
-                ("0000", "Linux", _hd("AAA-0", "\\EFI\\Linux\\vmlinuz.efi")),  # no options
-                ("0001", "rEFInd", _hd("AAA-0", "\\EFI\\refind\\refind_x64.efi")),
-                ("0002", "ZFSBootMenu", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ.EFI")),
-                ("0003", "ZFSBootMenu (Backup)", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI")),
-            ],
-        )
-        out = run_check(monkeypatch, capsys, ENTRY_WITH_OPTIONS, existing, **_SINGLE)
-        assert any("remove 'Linux'" in a for a in out["actions"]), out["actions"]
-        assert any("create 'Linux'" in a for a in out["actions"]), out["actions"]
-
-
 # --- Stale duplicate vs orphan protection (findings #1, #2) ---------------
 
 
@@ -275,7 +225,7 @@ class TestStaleRemoval:
 
 
 class TestValidation:
-    @pytest.mark.parametrize("key", ["label", "loader", "options"])
+    @pytest.mark.parametrize("key", ["label", "loader"])
     def test_leading_dash_rejected(self, key):
         entry = {"label": "X", "loader": "\\EFI\\x.efi"}
         entry[key] = "-evil"
@@ -303,18 +253,6 @@ class TestHelpers:
         assert efi.loader_eq("/EFI/refind/REFIND_X64.EFI", "\\EFI\\refind\\refind_x64.efi")
         assert not efi.loader_eq("", "\\EFI\\x.efi")
 
-    def test_norm_options_collapses_whitespace(self):
-        assert efi._norm_options("a   b\tc ") == "a b c"
-
-    def test_decode_data_hex_utf16_and_binary(self):
-        cmdline = "root=zfs:rpool/ROOT/noble console=tty0"
-        hexstr = " ".join(f"{b:02x}" for b in cmdline.encode("utf-16-le") + b"\x00\x00")
-        assert efi._decode_data_hex(hexstr) == cmdline
-        # A control character is not printable UTF-16LE: kept as raw hex text.
-        assert efi._decode_data_hex("07 00") == "07 00"
-        # A lone surrogate does not decode at all: kept as raw hex text.
-        assert efi._decode_data_hex("00 d8 00 00") == "00 d8 00 00"
-
     def test_removable_fallback_detection(self):
         assert efi._is_removable_fallback("\\EFI\\BOOT\\BOOTX64.EFI")
         assert efi._is_removable_fallback("\\EFI\\BOOT\\BOOTAA64.EFI")
@@ -322,27 +260,22 @@ class TestHelpers:
 
 
 class TestParseEfibootmgr:
-    """Optional data is carried on indented `dp:` / `data:` lines."""
-
-    def test_parse_v18_data_lines(self, monkeypatch):
-        cmdline = "root=zfs:rpool/ROOT/noble initrd=\\EFI\\Linux\\initrd"
-        hexstr = " ".join(f"{b:02x}" for b in cmdline.encode("utf-16-le") + b"\x00\x00")
+    def test_parse_v18_detail_lines(self, monkeypatch):
         uuid = "6191bc58-2e95-4493-b10c-b83df5181e9f"
         out = "\n".join(
             [
                 "BootCurrent: 0001",
                 "Timeout: 3 seconds",
                 "BootOrder: 0001,0002",
-                "Boot0001* Linux\t" + _hd(uuid, "\\EFI\\Linux\\vmlinuz.efi"),
+                "Boot0001* rEFInd\t" + _hd(uuid, "\\EFI\\refind\\refind_x64.efi"),
                 "      dp: 04 01 2a 00 02 00 00 00 / 7f ff 04 00",
-                "      data: " + hexstr,
-                "Boot0002* rEFInd\t" + _hd(uuid, "\\EFI\\refind\\refind_x64.efi"),
+                "      data: 00 42 4f",
+                "Boot0002* ZFSBootMenu\t" + _hd(uuid, "\\EFI\\ZBM\\VMLINUZ.EFI"),
                 "      dp: 04 01 2a 00 02 00 00 00 / 7f ff 04 00",
             ]
         )
         monkeypatch.setattr(efi, "run", lambda cmd: out)
         entries, order, timeout = efi.parse_efibootmgr()
-        assert entries[0]["options"] == cmdline
-        assert entries[1]["options"] == ""
+        assert [entry["label"] for entry in entries] == ["rEFInd", "ZFSBootMenu"]
         assert order == ["0001", "0002"]
         assert timeout == 3

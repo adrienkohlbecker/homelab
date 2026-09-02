@@ -18,8 +18,6 @@ boot_disable_lvm_services: "{{ zfs_root | default(false) }}"
 # expand to per-disk variants on mdadm-EFI hosts (one entry per component
 # disk) for single-disk-failure survivability. BootOrder is set to list
 # managed entries first, in this order, then unmanaged firmware entries.
-# Optional 'options' key passes --unicode to efibootmgr for entries that boot
-# an EFI-stub kernel directly from firmware.
 #
 # Override boot_efi_entries to replace the full managed-entry list.
 boot_efi_entries:

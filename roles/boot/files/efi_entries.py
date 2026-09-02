@@ -37,29 +37,6 @@ def _norm_loader(path):
     return (path or "").replace("/", "\\").lower()
 
 
-def _decode_data_hex(hexstr):
-    # efibootmgr moves optional data off the entry line onto an indented
-    # "data: xx xx .." hex dump. Decode a --unicode-written UTF-16LE
-    # payload back to the plain cmdline; anything that isn't printable UTF-16LE
-    # (some firmware entries carry binary blobs) is kept as the raw hex text so
-    # comparisons stay stable without pretending to understand it.
-    raw = bytes.fromhex(hexstr.replace(" ", ""))
-    try:
-        text = raw.decode("utf-16-le").rstrip("\x00")
-    except UnicodeDecodeError:
-        return hexstr
-    if text.isprintable():
-        return text
-    return hexstr
-
-
-def _norm_options(opts):
-    # Collapse whitespace so the jinja-assembled cmdline (which can emit stray or
-    # doubled spaces) compares equal to efibootmgr's -v rendering. Case is kept —
-    # kernel cmdline is case-sensitive.
-    return re.sub(r"\s+", " ", opts or "").strip()
-
-
 def _is_removable_fallback(loader):
     # \EFI\BOOT\BOOT*.EFI is the UEFI removable-media fallback the firmware boots
     # when NVRAM is empty — never prune it, even if it shares a loader with a
@@ -81,25 +58,18 @@ def parse_efibootmgr():
             if m_timeout:
                 timeout = int(m_timeout.group(1))
             continue
-        m_data = re.match(r"^\s+data:\s*((?:[0-9a-fA-F]{2}\s*)+)$", line)
-        if m_data and entries:
-            entries[-1]["options"] = _decode_data_hex(m_data.group(1)).strip()
-            continue
         m = re.match(r"^Boot([0-9A-Fa-f]{4})(?:\*)?\s+(.*?)\t(.*)", line)
         if not m:
             continue
         num, label, devpath = m.groups()
         fp = re.search(r"File\(([^)]+)\)", devpath or "")
         gp = re.search(r"GPT,([0-9a-f-]+)", devpath or "", re.IGNORECASE)
-        parts = re.split(r"File\([^)]+\)", devpath or "")
-        optional_data = parts[-1].strip() if len(parts) > 1 else ""
         entries.append(
             {
                 "num": num,
                 "label": label.strip(),
                 "file": fp.group(1) if fp else "",
                 "gpt_uuid": gp.group(1).lower() if gp else "",
-                "options": optional_data,
             }
         )
     return entries, boot_order, timeout
@@ -184,7 +154,6 @@ def expand_entries(desired, esp_disks, total_slots):
                 {
                     "label": f"{entry['label']} (disk {disk['index']})",
                     "loader": entry["loader"],
-                    "options": entry.get("options", ""),
                     "disk": disk["disk"],
                     "part": disk["part"],
                     "gpt_uuid": disk["gpt_uuid"],
@@ -197,7 +166,6 @@ def expand_entries(desired, esp_disks, total_slots):
                 {
                     "label": entry["label"],
                     "loader": entry["loader"],
-                    "options": entry.get("options", ""),
                     "disk": esp_disks[0]["disk"],
                     "part": esp_disks[0]["part"],
                     "gpt_uuid": esp_disks[0]["gpt_uuid"],
@@ -240,11 +208,10 @@ def loader_eq(a, b):
 
 
 def _validate_desired(desired):
-    # Labels/loaders/options become efibootmgr argv (-L/-l/--unicode). argv form
-    # already blocks shell injection, but a value starting with '-' can be parsed
-    # as a flag, and a control char can corrupt the entry — reject both loudly.
+    # Labels/loaders become efibootmgr argv (-L/-l). A value starting with '-'
+    # can be parsed as a flag, and a control char can corrupt the entry.
     for entry in desired:
-        for key in ("label", "loader", "options"):
+        for key in ("label", "loader"):
             val = entry.get(key, "")
             if not val:
                 continue
@@ -287,8 +254,6 @@ def main():
                 continue
             if de["match_disk"] and ce["gpt_uuid"] and de["gpt_uuid"] and ce["gpt_uuid"] != de["gpt_uuid"]:
                 continue
-            if de["options"] and _norm_options(ce["options"]) != _norm_options(de["options"]):
-                continue
             matched.add(ci)
             matched_de.add(di)
             matched_loaders.add(_norm_loader(de["loader"]))
@@ -323,22 +288,21 @@ def main():
     # --- Apply (create first, then remove — a failed create can't orphan the boot chain) ---
     if not check:
         for de in to_create:
-            cmd = [
-                "efibootmgr",
-                "-q",
-                "-c",
-                "-d",
-                de["disk"],
-                "-p",
-                str(de["part"]),
-                "-L",
-                de["label"],
-                "-l",
-                de["loader"],
-            ]
-            if de.get("options"):
-                cmd.extend(["--unicode", de["options"]])
-            run(cmd)
+            run(
+                [
+                    "efibootmgr",
+                    "-q",
+                    "-c",
+                    "-d",
+                    de["disk"],
+                    "-p",
+                    str(de["part"]),
+                    "-L",
+                    de["label"],
+                    "-l",
+                    de["loader"],
+                ]
+            )
         for ce in to_remove:
             run(["efibootmgr", "-q", "-b", ce["num"], "-B"])
 
