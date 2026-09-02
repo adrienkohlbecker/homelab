@@ -1,7 +1,0 @@
-# Force the opposite starting state so converge must recreate the thermald
-# policy group.
-- name: _setup | Remove power group (converge recreates it)
-  group:
-    name: power
-    state: absent
-  become: true
