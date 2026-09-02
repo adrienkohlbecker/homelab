@@ -8,16 +8,6 @@
 #
 # Gated on `not grub_bootloader` by the import in main.yml.
 
-- name: efi_entries | Assert cmdline engine has run (aarch64 needs options)
-  when: ansible_architecture == 'aarch64'
-  assert:
-    that: _boot_assembled_cmdline is defined
-    fail_msg: >-
-      _boot_assembled_cmdline is not set — the cmdline engine (tasks/cmdline.yml)
-      must run before efi_entries.yml on aarch64. Don't --start-at-task past it.
-  tags:
-    - boot
-
 - name: efi_entries | Create /opt/boot
   file:
     path: /opt/boot

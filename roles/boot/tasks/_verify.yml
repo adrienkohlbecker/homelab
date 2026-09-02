@@ -171,13 +171,8 @@
 
 # --- EFI NVRAM boot entries ---
 
-# _verify is a separate ansible invocation; re-seed the converge-time command
-# line from the authoritative org.zfsbootmenu:commandline property so any
-# overridden EFI entries that reference it compare against the applied value.
 - name: _verify | EFI entries are converged
   when: not grub_bootloader
-  vars:
-    _boot_assembled_cmdline: "{{ _boot_verify_cmdline.stdout }}"
   command:
     argv: "{{ ['python3', '/opt/boot/efi_entries.py', '--check'] }}"
   environment:
