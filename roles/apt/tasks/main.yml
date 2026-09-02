@@ -51,8 +51,6 @@
     # Languages: none -- skip Translation-* index downloads; servers run C.UTF-8.
     languages:
       - none
-    by_hash: 'yes'
-    pdiffs: 'yes'
     signed_by: /usr/share/keyrings/ubuntu-archive-keyring.gpg
   loop:
     - name: ubuntu

@@ -118,11 +118,9 @@ write_sources_list() {
 
   cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
 Architectures: $deb_arch
-By-Hash: yes
 Components: main universe restricted multiverse
 Languages: none
 X-Repolib-Name: ubuntu
-Pdiffs: yes
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 Suites: $UBUNTU_NAME $UBUNTU_NAME-updates $UBUNTU_NAME-backports
 Types: deb
@@ -131,11 +129,9 @@ EOF
 
   cat <<EOF >/etc/apt/sources.list.d/ubuntu-security.sources
 Architectures: $deb_arch
-By-Hash: yes
 Components: main universe restricted multiverse
 Languages: none
 X-Repolib-Name: ubuntu-security
-Pdiffs: yes
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 Suites: $UBUNTU_NAME-security
 Types: deb
