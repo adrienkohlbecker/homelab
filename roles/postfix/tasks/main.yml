@@ -32,6 +32,18 @@
   tags:
     - postfix
 
+- name: Install networkd-dispatcher log filters
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      for: networkd-dispatcher.service
+      src: networkd_dispatcher_override.conf
+      condition: "{{ not (ansible_check_mode and postfix_apt.changed) }}"
+  tags:
+    - postfix
+
 - name: Enable networkd-dispatcher for Postfix network hooks
   when: not (ansible_check_mode and postfix_apt.changed)
   systemd:

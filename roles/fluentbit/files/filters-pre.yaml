@@ -8,8 +8,6 @@ pipeline:
         - 'MESSAGE ^podman0: port'
         - 'MESSAGE ^veth[0-9]+( |@|: )'
         - 'MESSAGE name="/etc/gnutls/config"'
-        - 'MESSAGE Failed to get interface "(veth|podman)'
-        - 'MESSAGE Unknown index .* seen, reloading interface list'
         - 'MESSAGE which is not our child'
         - 'MESSAGE ^Configuration file /run/systemd/system/netplan-ovs-cleanup\.service is marked world-inaccessible'
         - 'MESSAGE container health_status .*health_status=healthy'
