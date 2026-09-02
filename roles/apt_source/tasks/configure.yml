@@ -43,10 +43,11 @@
       with name a [a-z0-9_-] slug and key_url an https URL;
       got {{ apt_source_args }}
 
-# Pre-warm /var/lib/apt/lists/ so python3-debian can be installed in check
-# mode. Packer ships an empty cache and the apt module's update_cache is a
-# no-op under --check. See roles/apt/tasks/main.yml for the full rationale.
+# Pre-warm /var/lib/apt/lists/ in check mode so python3-debian can be resolved.
+# Packer ships an empty cache and the apt module's update_cache is a no-op under
+# --check. Normal runs use the apt tasks' cache_valid_time handling.
 - name: Pre-warm apt cache (real fetch even in --check) for {{ apt_source_args.name }}  # noqa: command-instead-of-module
+  when: ansible_check_mode
   command: apt-get update
   changed_when: false
   check_mode: false
