@@ -18,8 +18,6 @@
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
 #   pin:           optional { package, version, priority } -> preferences.d/<name>
-#   state:         optional present (default) | absent; absent tombstones the
-#                  source -- removes its .list/.sources, keyring and pin file
 #
 # Exposes apt_source_<name>_changed (true when the repo, signing key, prereqs,
 # or legacy source cleanup changed) so the caller can gate its install out of
@@ -38,18 +36,12 @@
       - apt_source_args.name | default('') is match('^[a-z0-9_-]+\Z')
       # the key is the source's trust anchor; a plaintext fetch is MITM-able.
       - apt_source_args.key_url | default('') is match('https://')
-      - apt_source_args.state | default('present') in ['present', 'absent']
       - apt_source_args.suites | default('') is not search('[ ,]')
       - apt_source_args.components | default('') is not search('[ ,]')
     fail_msg: >-
       apt_source_args must define name, key_url, key_id, uris and suites,
       with name a [a-z0-9_-] slug and key_url an https URL;
       got {{ apt_source_args }}
-
-# Derived from the current args each call, so it never leaks across invocations.
-- name: Resolve apt_source state for {{ apt_source_args.name }}
-  set_fact:
-    apt_source_present: "{{ apt_source_args.state | default('present') == 'present' }}"
 
 # Sweep legacy apt_repository output by the scoped keyring reference rather
 # than a caller-provided filename. This catches URL-derived names, Fluent Bit's
@@ -87,7 +79,6 @@
 # mode. Packer ships an empty cache and the apt module's update_cache is a
 # no-op under --check. See roles/apt/tasks/main.yml for the full rationale.
 - name: Pre-warm apt cache (real fetch even in --check) for {{ apt_source_args.name }}  # noqa: command-instead-of-module
-  when: apt_source_present
   command: apt-get update
   changed_when: false
   check_mode: false
@@ -98,7 +89,6 @@
 # .changed so check mode still propagates a would-change signal when the
 # prereq install masks the repository task.
 - name: Install repository prereqs for {{ apt_source_args.name }}
-  when: apt_source_present
   apt:
     pkg:
       - gpg
@@ -110,7 +100,6 @@
 # Apt keys the signed-by file format on its suffix: a .gpg path must hold a
 # binary OpenPGP keyring. Stage the armored source separately and dearmor it.
 - name: Fetch repository key (armored) for {{ apt_source_args.name }}
-  when: apt_source_present
   get_url:
     url: "{{ apt_source_args.key_url }}"
     dest: /usr/share/keyrings/{{ apt_source_args.name }}.asc
@@ -121,9 +110,7 @@
   register: apt_source_key
 
 - name: Dearmor the repository key into the scoped keyring for {{ apt_source_args.name }}
-  when:
-    - apt_source_present
-    - apt_source_key is changed
+  when: apt_source_key is changed
   command: gpg --batch --yes --dearmor --output /usr/share/keyrings/{{ apt_source_args.name }}.gpg /usr/share/keyrings/{{ apt_source_args.name }}.asc
   changed_when: true
   become: true
@@ -132,18 +119,14 @@
 # against key_id, so assert the primary fingerprint before trusting the key.
 # Real converge only: command tasks skip under --check.
 - name: Read repository key fingerprint for {{ apt_source_args.name }}
-  when:
-    - apt_source_present
-    - not ansible_check_mode
+  when: not ansible_check_mode
   command: gpg --show-keys --with-colons /usr/share/keyrings/{{ apt_source_args.name }}.gpg
   changed_when: false
   register: apt_source_key_fpr
   become: true
 
 - name: Assert the fetched key matches key_id for {{ apt_source_args.name }}
-  when:
-    - apt_source_present
-    - not ansible_check_mode
+  when: not ansible_check_mode
   vars:
     # The first fpr record is the primary key; field 10 is its fingerprint.
     apt_source_fpr_fields: "{{ (apt_source_key_fpr.stdout_lines | select('match', 'fpr:') | list | first | default('')).split(':') }}"
@@ -165,7 +148,6 @@
     components: "{{ apt_source_args.components | default(omit) }}"
     architectures: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
     signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
-    state: "{{ apt_source_args.state | default('present') }}"
   become: true
   register: apt_source_repo
 
@@ -174,7 +156,6 @@
 # broken source fails here rather than as a missing package in the caller.
 - name: Refresh apt cache after repository change for {{ apt_source_args.name }}  # noqa: command-instead-of-module
   when:
-    - apt_source_present
     - apt_source_repo is changed or apt_source_legacy_lists_removed is changed
     - not ansible_check_mode
   command: apt-get update --error-on=any
@@ -191,7 +172,6 @@
 - name: Configure apt pin for {{ apt_source_args.name }}  # noqa: require-validate
   when:
     - apt_source_args.pin is defined
-    - apt_source_present
   template:
     src: preferences.j2
     dest: /etc/apt/preferences.d/{{ apt_source_args.name }}
@@ -199,23 +179,6 @@
     group: root
     mode: "0644"
     backup: true
-  become: true
-
-- name: Remove pin for {{ apt_source_args.name }}
-  when: not apt_source_present
-  file:
-    path: /etc/apt/preferences.d/{{ apt_source_args.name }}
-    state: absent
-  become: true
-
-- name: Remove keyring for {{ apt_source_args.name }}
-  when: not apt_source_present
-  file:
-    path: "/usr/share/keyrings/{{ apt_source_args.name }}.{{ item }}"
-    state: absent
-  loop:
-    - gpg
-    - asc
   become: true
 
 - name: Export change signal for {{ apt_source_args.name }}
