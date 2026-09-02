@@ -1039,6 +1039,14 @@
   tags:
     - retired_services
 
+- name: Remove retired Fluent Bit ANSI filter
+  file:
+    path: /etc/fluent-bit/strip_ansi.lua
+    state: absent
+  become: true
+  tags:
+    - retired_services
+
 - name: Find retired service Fluent Bit cursors
   find:
     paths: /var/lib/fluent-bit

@@ -328,6 +328,7 @@
   stat:
     path: "{{ item }}"
   loop:
+    - /etc/fluent-bit/strip_ansi.lua
     - /etc/fluent-bit/services/plex.yaml
     - /etc/fluent-bit/services/speedtest.yaml
     - /etc/fluent-bit/services/tautulli.yaml

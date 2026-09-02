@@ -668,6 +668,15 @@
     - tautulli
   become: true
 
+- name: _setup | Create retired Fluent Bit ANSI filter fixture
+  copy:
+    content: "return 0\n"
+    dest: /etc/fluent-bit/strip_ansi.lua
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: _setup | Align baked Fluent Bit config with the current role
   replace:
     path: /etc/fluent-bit/fluent-bit.yaml
