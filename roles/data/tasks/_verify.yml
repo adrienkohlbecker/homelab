@@ -54,23 +54,20 @@
 
 - name: _verify | Mountpoint is writable as ansible_user_id
   when: zfs_root
-  file:
-    path: "{{ item.mountpoint }}/.verify_probe"
-    state: touch
-    mode: '0600'
-  loop: '{{ data_datasets }}'
-  loop_control:
-    label: "{{ item.mountpoint }}/.verify_probe"
-  changed_when: false
-  become: false
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sys
+        from tempfile import TemporaryFile
 
-- name: _verify | Remove write probe
-  when: zfs_root
-  file:
-    path: "{{ item.mountpoint }}/.verify_probe"
-    state: absent
+        with TemporaryFile(dir=sys.argv[1]) as probe:
+            probe.write(b"data write probe\n")
+            probe.flush()
+      - "{{ item.mountpoint }}"
   loop: '{{ data_datasets }}'
   loop_control:
-    label: "{{ item.mountpoint }}/.verify_probe"
+    label: "{{ item.mountpoint }}"
   changed_when: false
   become: false
