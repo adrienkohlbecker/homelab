@@ -9,6 +9,18 @@
   tags:
     - keepalived
 
+- name: Install keepalived log filter
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      for: keepalived.service
+      src: keepalived_override.conf
+      condition: "{{ not (ansible_check_mode and keepalived_apt.changed) }}"
+  tags:
+    - keepalived
+
 # Services must bind the DNS VIP on a BACKUP node before it owns the address.
 - name: Install ip_nonlocal_bind sysctl
   ansible.posix.sysctl:
@@ -86,7 +98,11 @@
   systemd:
     name: keepalived.service
     enabled: true
-    state: "{{ 'reloaded' if keepalived_config.changed else 'started' }}"
+    state: >-
+      {{ 'reloaded'
+         if keepalived_config.changed
+            or keepalived_service_d_override_conf_result.changed
+         else 'started' }}
   become: true
   throttle: 1
   tags:

@@ -5,7 +5,6 @@ pipeline:
     - name: grep
       match: svc.*
       exclude:
-        - 'MESSAGE ^Printing VRRP as json for process'
         - 'MESSAGE ^pam_unix\(cron:session\)'
         - 'MESSAGE ^podman0: port'
         - 'MESSAGE ^veth[0-9]+( |@|: )'
