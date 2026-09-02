@@ -28,7 +28,7 @@
       - -o
       - property,value
       - "{{ data_expected_properties.keys() | join(',') }}"
-      - "{{ data_pool }}/{{ item.name }}"
+      - "{{ zfs_tank_filesystem }}/{{ item.name }}"
   register: data_verify_properties
   changed_when: false
   failed_when: >-
@@ -36,7 +36,7 @@
     != (data_expected_properties.items() | map('join', '\t') | sort)
   loop: '{{ data_datasets }}'
   loop_control:
-    label: '{{ data_pool }}/{{ item.name }}'
+    label: '{{ zfs_tank_filesystem }}/{{ item.name }}'
   become: true
 
 - name: _verify | Dataset mount contract passes
@@ -44,12 +44,12 @@
   command:
     argv:
       - /usr/local/bin/zfs_check_mount
-      - "{{ data_pool }}/{{ item.name }}"
+      - "{{ zfs_tank_filesystem }}/{{ item.name }}"
       - "{{ item.mountpoint }}"
   changed_when: false
   loop: '{{ data_datasets }}'
   loop_control:
-    label: '{{ item.mountpoint }} <- {{ data_pool }}/{{ item.name }}'
+    label: '{{ item.mountpoint }} <- {{ zfs_tank_filesystem }}/{{ item.name }}'
   become: true
 
 - name: _verify | Mountpoint is writable as ansible_user_id

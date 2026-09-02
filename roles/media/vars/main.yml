@@ -24,5 +24,5 @@ media_library_dirs:
   - /mnt/media/Other
   - /mnt/media/TV
 
-# Resolves the host's tank pool name; mirrors roles/data's data_pool.
+# Resolves the host's tank pool name for the verifier.
 media_pool: "{{ zfs_tank_filesystem }}"
