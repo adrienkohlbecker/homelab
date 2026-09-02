@@ -23,14 +23,6 @@
         - /etc/fluent-bit/filters-pre.yaml
         - /etc/fluent-bit/filters-post.yaml
       records:
-        - _tag: svc.zfs_autosnapshot.service
-          MESSAGE: ""
-          SYSTEMD_UNIT: zfs_autosnapshot.service
-          marker: zfs-blank-drop
-        - _tag: svc.zfs_autosnapshot.service
-          MESSAGE: "rsync error: unexplained error"
-          SYSTEMD_UNIT: zfs_autosnapshot.service
-          marker: zfs-error-keep
         - _tag: svc.init.scope
           MESSAGE: Starting homepage_alerts.service - Generate homepage alerts panel static files...
           SYSLOG_IDENTIFIER: systemd
@@ -95,8 +87,6 @@
           PRIORITY: "3"
           marker: multiline-enoent-keep
       expected:
-        - level: error
-          fields.marker: zfs-error-keep
         - level: error
           fields.marker: homepage-failed-keep
         - fields.marker: podman-unhealthy-keep

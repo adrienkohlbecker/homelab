@@ -50,13 +50,6 @@ pipeline:
       match: svc.*
       logical_op: and
       exclude:
-        - 'SYSTEMD_UNIT ^zfs_autosnapshot\.service$'
-        - 'MESSAGE ^$'
-
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
         - 'SYSLOG_IDENTIFIER ^systemd$'
         - 'MESSAGE ^tmp-crun\.[A-Za-z0-9]+\.mount: Deactivated successfully\.$'
 
