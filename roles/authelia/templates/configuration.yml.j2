@@ -11,31 +11,6 @@ server:
   buffers:
     read: 4096
     write: 4096
-  # Override the default CSP to allow inline scripts and styles. The
-  # portal SPA dynamically renders inline <style> blocks and emits
-  # inline scripts during the React lifecycle (TOTP enrollment, WebAuthn
-  # flows, error toasts each render unique content). Whitelisting by
-  # SHA-256 hash is whack-a-mole -- the hash changes per page-state, per
-  # Authelia release. CSP Level 3 ignores 'unsafe-inline' when a nonce
-  # or hash is also present, so we drop both and keep just 'self' +
-  # 'unsafe-inline' for script-src/style-src.
-  #
-  # Trade-off: this weakens defense-in-depth against XSS in the portal.
-  # Acceptable because (1) Authelia is a security product with a small
-  # audited surface, (2) the portal lives on its own subdomain so a
-  # compromise can't pivot to other services via DOM, (3) upstream's
-  # own default CSP isn't actually working with their own SPA -- this
-  # is fixing their gap, not introducing a new risk.
-  headers:
-    csp_template: >-
-      default-src 'self' 'unsafe-inline';
-      base-uri 'self';
-      connect-src 'self';
-      frame-ancestors 'none';
-      frame-src 'none';
-      object-src 'none';
-      script-src 'self' 'unsafe-inline';
-      style-src 'self' 'unsafe-inline'
 
 log:
   level: 'info'

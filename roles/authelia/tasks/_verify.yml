@@ -33,6 +33,8 @@
   failed_when: >-
     authelia_verify_portal_index.status != 200
     or 'text/html' not in authelia_verify_portal_index.content_type
+    or authelia_verify_portal_index.content_security_policy is not defined
+    or "'unsafe-inline'" in authelia_verify_portal_index.content_security_policy
 
 # auth-request endpoint reachable through nginx. Unauthenticated
 # callers with the standard nginx auth_request headers get 401
