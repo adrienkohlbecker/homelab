@@ -284,7 +284,7 @@ filtering:
     - domain: pi.hole
       answer: 127.0.0.1
       enabled: true
-{% for host in ['pug', 'lab', 'box'] %}
+{% for host in ['pug', 'lab'] %}
     - domain: {{ host }}.{{ domain }}
       answer: {{ external_ips[host] }}
       enabled: true
