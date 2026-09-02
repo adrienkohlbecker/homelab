@@ -1,9 +1,5 @@
-# Purge baseline packages we don't want and any snaps that came with
-# the upstream image. Converges two host lineages: packer-built ZFS
-# boxes (debootstrap'd — none of this is ever present, role no-ops)
-# and vanilla Ubuntu cloud images / server ISOs (the `minimal` test
-# variant + any future cloud VMs) where cloud-init / snapd / fwupd
-# come preinstalled.
+# Purge unwanted packages and snaps from vanilla Ubuntu images. Packer-built
+# ZFS hosts start clean, so the same tasks converge as no-ops there.
 
 - name: Probe for snap binary
   stat:
@@ -12,26 +8,14 @@
   tags:
     - cleanup
 
-# `snap remove --purge --terminate`: --purge skips snapshot saving
-# (no separate snap-forget cleanup needed); --terminate stops the
-# snap's processes and unmounts its squashfs before removing (no
-# separate mount-stop pass needed). Removal MUST be ordered apps →
-# bases → snapd: snapd refuses to remove a base (core*/bare) while an
-# app still depends on it (e.g. lxd pins core20), and snapd itself
-# goes last. `snap list` is alphabetical, not dependency-ordered, so
-# a naive head -1 picks core20 before lxd and spins until it gives
-# up — we instead tag each snap with a removal priority (app=0,
-# base=1, snapd=2) and remove the lowest-priority one per iteration.
-# The until-loop converges on the iteration where snap list comes
-# back empty; retries=30 caps at 30 snaps (cloud images ship a
-# handful, lab-class hosts none, so this is generous headroom).
+# --purge skips snapshots and --terminate stops processes and mounts. Remove
+# apps before bases and snapd last; snapd refuses bases with live dependants.
+# Since `snap list` is alphabetical, each iteration assigns a dependency class
+# and removes one snap. Thirty retries cap the supported inventory at 30 snaps.
 - name: Force-purge all snaps (apps → bases → snapd)
   shell: |
     set -euo pipefail
-    # Two concessions to `set -e -o pipefail`: `snap list` exits 1
-    # when nothing is installed (the done state), so we `|| true` it;
-    # and the priority pick is a single awk over the whole list (no
-    # head/sort early-exit) so nothing raises SIGPIPE mid-pipeline.
+    # Empty `snap list` exits 1; one awk avoids an early-exit SIGPIPE.
     s=$( { snap list --all --unicode=never --color=never 2>/dev/null || true; } \
          | awk 'NR>1 && $1!="" {
                   p = 0
@@ -56,13 +40,8 @@
   tags:
     - cleanup
 
-# Belt-and-braces against the rare case --terminate leaves a stuck
-# snap-*.mount unit standing; systemctl accepts globs natively, so
-# a single invocation handles all of them.
+# The systemd module lacks unit globs; no matching lingering mount is benign.
 - name: Stop any lingering snap-*.mount units  # noqa: command-instead-of-module
-  # systemctl accepts unit-name globs natively; the systemd module
-  # does not, so we shell out. `failed_when: false` covers the
-  # "no matching units" return.
   command: systemctl stop 'snap-*.mount'
   changed_when: false
   failed_when: false
@@ -112,9 +91,7 @@
   tags:
     - cleanup
 
-# `apt purge snapd` only removes dpkg-tracked files; the runtime
-# data roots survive as orphaned trees (multi-MB to multi-GB),
-# and on a debootstrap host they're absent so this is a no-op.
+# Apt purge leaves untracked snap runtime data; debootstrap hosts have none.
 - name: Remove snap data roots
   file:
     path: "{{ item }}"

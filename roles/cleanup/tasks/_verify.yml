@@ -27,10 +27,7 @@
   changed_when: false
   failed_when: _cleanup_verify_squashfs_mounts.rc != 1
 
-# Exercise prune_ansible_backups: it must evict a backup whose FILENAME
-# timestamp is older than the cutoff, keep a fresh one, and never touch files
-# that don't match the ansible <name>.<pid>.<ts>~ pattern. The fresh fixture's
-# timestamp comes from the target's gathered clock so it can't drift stale.
+# Exercise filename-time pruning: remove old, keep fresh, ignore near-matches.
 
 - name: _verify | Create the prune fixture dir
   file:
