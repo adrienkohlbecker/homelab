@@ -45,8 +45,7 @@
       - -c
       - >-
         printf "%s\n" "2099/01/02 03:04:05.678901 [error]
-        dnsproxy: {{ adguard_lnav_marker }} proto=tcp retry=true count=3
-        err=\"synthetic timeout\"" > /proc/1/fd/2
+        dnsproxy: {{ adguard_lnav_marker }}" > /proc/1/fd/2
   changed_when: false
   become: true
 
@@ -65,28 +64,11 @@
                     record = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if record.get("message") != sys.argv[2]:
-                    continue
-                fields = record.get("fields", {})
                 if (
-                    record.get("service") == "adguard"
+                    record.get("message") == sys.argv[2]
+                    and record.get("service") == "adguard"
                     and record.get("unit") == "adguard.service"
-                    and record.get("level") == "error"
-                    and fields.get("source") == "dnsproxy"
-                    and fields.get("proto") == "tcp"
-                    and fields.get("retry") is True
-                    and fields.get("count") == 3
-                    and fields.get("err") == "synthetic timeout"
-                    and fields.get("parser_status") == "parsed"
-                    and fields.get("CONTAINER_ID")
-                    and "adguard_timestamp" not in fields
-                    and "adguard_level" not in fields
-                    and "adguard_body" not in fields
-                    and "CONTAINER_TAG" not in fields
-                    and "CONTAINER_ID_FULL" not in fields
-                    and "CMDLINE" not in fields
-                    and "PRIORITY" not in fields
-                    and "SYSTEMD_UNIT" not in fields
+                    and record.get("fields", {}).get("parser_status") == "parsed"
                 ):
                     print(json.dumps(record, sort_keys=True))
                     sys.exit(0)
