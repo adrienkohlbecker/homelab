@@ -96,18 +96,9 @@ ntp:
   disable_startup_check: {% if qemu_test %}true{% else %}false{% endif %}
 
 notifier:
-  # disable_startup_check skips the SMTP connect probe at boot.
-  # Disabled on the qemu test fixture (stub credentials always fail
-  # auth against Mailgun); kept on for prod so a real SMTP misconfig
-  # -- rotated-but-not-vaulted password, suspended mailgun domain,
-  # mistyped username -- surfaces at startup rather than silently at
-  # the first password-reset attempt. The trade-off: a transient
-  # Mailgun outage at boot will fail Authelia and block forward-auth
-  # for every protected service until systemd's Restart=always
-  # cycles a successful probe. We accept that because the catch (a
-  # silently-broken email path) is worse than the transient downtime,
-  # and Mailgun's uptime is high enough that startup races are rare.
-  disable_startup_check: {% if qemu_test %}true{% else %}false{% endif %}
+  # Notification failures surface when identity verification sends mail;
+  # transient SMTP or DNS failures must not block the authentication gate.
+  disable_startup_check: true
 
   smtp:
     address: 'submission://{{ smtp_host }}:{{ smtp_port }}'
