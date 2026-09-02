@@ -3,7 +3,6 @@
 # Optional host-native shell executor for qemu CI fallback work on lab.
 gitlab_runner_shell_enabled: false
 gitlab_runner_shell_token: ""
-gitlab_runner_shell_limit: 0
 
 # Process-wide ceiling across every [[runners]] block. Each block also has an
 # independent `limit`; AWS host capacity is managed separately.

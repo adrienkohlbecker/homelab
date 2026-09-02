@@ -46,7 +46,6 @@ podman_operator_prune_enabled: true
 gitlab_runner_shell_enabled: true
 gitlab_runner_shell_token: "{{ gitlab_runner_lab_token | default('') }}"
 gitlab_runner_concurrent: 6
-gitlab_runner_shell_limit: 6
 
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
 lm_sensors_modules:

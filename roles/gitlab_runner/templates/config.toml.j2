@@ -56,8 +56,6 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   token = "{{ gitlab_runner_shell_token }}"
   executor = "shell"
   shell = "bash"
-  # Bounds this runner independently of the process-wide `concurrent`.
-  limit = {{ gitlab_runner_shell_limit }}
   # Keep enough requests outstanding to avoid long-poll stalls.
   request_concurrency = 4
 {% endif %}
