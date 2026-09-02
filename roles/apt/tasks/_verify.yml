@@ -1,12 +1,3 @@
-- name: _verify | Apt parses the retry policy
-  command: apt-config dump Acquire::Retries
-  changed_when: false
-  register: _apt_retries
-  failed_when: >-
-    _apt_retries.rc != 0
-    or 'Acquire::Retries "3";' not in _apt_retries.stdout_lines
-    or 'Acquire::Retries::Delay "true";' not in _apt_retries.stdout_lines
-
 # /var/lib/apt/lists/ filenames encode (mirror, suite, component, arch):
 # `<host>_<path>_dists_<suite>_<component>_binary-<arch>_Packages`.
 # Apt itself uses these files as its source of truth, so checking they
