@@ -1,17 +1,3 @@
-# _setup imports the full keepalived role, so its DNS VRRP configuration is
-# loaded by a running daemon here. The vmac child existing is the live
-# proof of `use_vmac` + `vmac_xmit_base`: without them the VIP would ride
-# eth0's primary MAC and UniFi's per-MAC client tracker would flip the
-# host's client entry to the DNS VIP on prod.
-- name: _verify | Keepalived raised the dedicated VRRP vmac interface
-  command: ip -o link show vrrp.{{ dns_keepalived_vrid }}
-  register: adguard_verify_vmac
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: adguard_verify_vmac.rc == 0
-  become: true
-
 - name: _verify | Container reports healthy
   command: /usr/bin/podman healthcheck run adguard
   register: adguard_verify_health

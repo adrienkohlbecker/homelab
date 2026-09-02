@@ -10,6 +10,18 @@
       - _keepalived_unit.status.ActiveState == 'active'
       - _keepalived_unit.status.UnitFileState == 'enabled'
 
+# The vmac child existing is the live proof of `use_vmac` +
+# `vmac_xmit_base`: without them the VIP would ride eth0's primary MAC
+# and UniFi's client tracker would assign the DNS VIP to the host.
+- name: _verify | Keepalived raised the dedicated VRRP vmac interface
+  command: ip -o link show vrrp.{{ dns_keepalived_vrid }}
+  register: _keepalived_vmac
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _keepalived_vmac.rc == 0
+  become: true
+
 # Force the role-owned template to change and prove the service reload is
 # hitless: a reload preserves ActiveEnterTimestampMonotonic, unlike a restart.
 - name: _verify | Perturb the installed configuration
