@@ -1,6 +1,4 @@
 - name: Configure apt retries
-  # Acquire::Retries::Delay adds backoff between attempts so a Nexus restart
-  # of a few seconds is not burned through instantly.
   copy:
     src: 80-retries.conf
     dest: /etc/apt/apt.conf.d/80-retries
