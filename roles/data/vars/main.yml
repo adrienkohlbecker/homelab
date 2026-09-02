@@ -10,18 +10,12 @@ data_datasets:
 
 # Extra zfs properties applied to every site dataset.
 #
-# autobackup:bak=true tags the dataset for zfs-autobackup; the picker
-# filters with `-s local` -- see _verify.yml's header for why source
-# matters here.
+# autobackup:bak=true tags the dataset for zfs-autobackup, whose picker requires
+# the property to have a local source.
 #
-# special_small_blocks=32K routes records <=32K to the pool's special
-# (allocation-class) vdev; pairs with the default 128K recordsize.
-# Live on tank, which has an NVMe special mirror (3x Kingston DC1000B);
-# small blocks + metadata land on NVMe so HDD random I/O stays low and
-# the platters can sleep. Inert on rpool (single-disk, no special vdev)
-# but kept set there too so data already lands correctly the day one
-# attaches. roles/media uses the same 32K threshold paired with a 1MB
-# recordsize, making the threshold proportionally stronger.
+# special_small_blocks=32K routes small blocks to production tank's NVMe
+# special mirror. It is inert on the single-vdev rpool test fixture, where the
+# same value preserves one converge path.
 data_extra_properties:
   'autobackup:bak': 'true'
   special_small_blocks: '32768'
