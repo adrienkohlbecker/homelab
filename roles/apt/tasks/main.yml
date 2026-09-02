@@ -106,7 +106,7 @@
   retries: 5
   delay: 30
   until: _apt_force_update.rc == 0
-  changed_when: _apt_force_update.rc == 0
+  changed_when: true
   become: true
   tags:
     - apt
