@@ -36,12 +36,10 @@
           - /tmp/deb_install_test/test_1.0-1.deb
       changed_when: false
     - name: _verify | Checksum v1
-      command:
-        argv:
-          - sha256sum
-          - /tmp/deb_install_test/test_1.0-1.deb
+      stat:
+        path: /tmp/deb_install_test/test_1.0-1.deb
+        checksum_algorithm: sha256
       register: _deb_install_v1_sha
-      changed_when: false
 
 - name: _verify | Install v1 (fresh)
   import_role:
@@ -52,7 +50,7 @@
       name: deb-install-test
       version: "1.0-1"
       url: "file:///tmp/deb_install_test/test_1.0-1.deb"
-      sha256: "{{ _deb_install_v1_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v1_sha.stat.checksum }}"
 
 - name: _verify | Query status after fresh install
   command:
@@ -83,7 +81,7 @@
       name: deb-install-test
       version: "1.0-1"
       url: "file:///tmp/deb_install_test/test_1.0-1.deb"
-      sha256: "{{ _deb_install_v1_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v1_sha.stat.checksum }}"
 
 - name: _verify | Re-running the same pin closed the gate (fact false)
   assert:
@@ -135,12 +133,10 @@
           - /tmp/deb_install_test/test_2.0-1.deb
       changed_when: false
     - name: _verify | Checksum v2
-      command:
-        argv:
-          - sha256sum
-          - /tmp/deb_install_test/test_2.0-1.deb
+      stat:
+        path: /tmp/deb_install_test/test_2.0-1.deb
+        checksum_algorithm: sha256
       register: _deb_install_v2_sha
-      changed_when: false
 
 - name: _verify | Install v2 (version bump)
   import_role:
@@ -151,7 +147,7 @@
       name: deb-install-test
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stat.checksum }}"
 
 - name: _verify | Query status after the bump
   command:
@@ -209,7 +205,7 @@
       name: deb-install-test
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stat.checksum }}"
 
 - name: _verify | A config-files package reinstalls (status gate, not version)
   assert:
@@ -250,7 +246,7 @@
       name: deb-install-test
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stat.checksum }}"
 
 - name: _verify | Stat the staged file after the current-pin check-mode run
   stat:
@@ -281,7 +277,7 @@
       name: deb-install-check
       version: "2.0-1"
       url: "file:///tmp/deb_install_test/test_2.0-1.deb"
-      sha256: "{{ _deb_install_v2_sha.stdout.split() | first }}"
+      sha256: "{{ _deb_install_v2_sha.stat.checksum }}"
 
 - name: _verify | Query the fresh package after the check-mode run
   command:
@@ -324,12 +320,10 @@
         content: |
           this is not a debian archive
     - name: _verify | Checksum the bogus file
-      command:
-        argv:
-          - sha256sum
-          - /tmp/deb_install_test/bogus.bin
+      stat:
+        path: /tmp/deb_install_test/bogus.bin
+        checksum_algorithm: sha256
       register: _deb_install_bogus_sha
-      changed_when: false
 
 - name: _verify | Install the bogus deb (download ok, apt rejects it)
   block:
@@ -342,7 +336,7 @@
           name: deb-install-bogus
           version: "9.9"
           url: "file:///tmp/deb_install_test/bogus.bin"
-          sha256: "{{ _deb_install_bogus_sha.stdout.split() | first }}"
+          sha256: "{{ _deb_install_bogus_sha.stat.checksum }}"
   rescue:
     - name: _verify | The bogus install failed as expected
       set_fact:
