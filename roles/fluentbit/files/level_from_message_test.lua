@@ -230,6 +230,14 @@ do
     check("prepinned.kept", record["_level"], "warn")
 end
 
+-- ANSI cleanup still marks an otherwise pre-pinned record as changed.
+do
+    local record = { log = "\27[1;32mOK\27[0m done", _level = "info" }
+    local code = set_priority("svc.some.service", 0, record)
+    check("prepinned.ansi.code", code, 1)
+    check("prepinned.ansi.clean", record.log, "OK done")
+end
+
 do
     local record = { log = "structured", _level = "Information" }
     local code = set_priority("svc.some.service", 0, record)
@@ -251,4 +259,21 @@ do
     local code = set_priority("svc.x.service", 0, record)
     check("nonstring.code", code, 0)
     check("nonstring.nolevel", record["_level"], nil)
+end
+
+-- seerr wraps its level token in SGR colour codes. Cleanup must happen before
+-- classification so the token remains visible to the boundary matcher.
+do
+    local record = { log = "2026-06-09T20:21:00.016Z [\27[34mdebug\27[39m][Jobs]: Starting" }
+    local code = set_priority("svc.seerr.service", 0, record)
+    check("seerr.ansi.clean", record.log, "2026-06-09T20:21:00.016Z [debug][Jobs]: Starting")
+    check("seerr.ansi.level", record["_level"], "debug")
+    check("seerr.ansi.code", code, 1)
+end
+
+-- Cursor controls use the same CSI shape as colour codes.
+do
+    local record = { log = "\27[2K\27[1Gprogress 50%" }
+    set_priority("svc.cron.service", 0, record)
+    check("cursor.ansi.clean", record.log, "progress 50%")
 end

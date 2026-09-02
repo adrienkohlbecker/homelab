@@ -58,7 +58,6 @@
     backup: true
   loop:
     - conmon_partial_message.lua
-    - strip_ansi.lua
     - level_from_message.lua
     - podman_events.lua
     - lnav_shape.lua

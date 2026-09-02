@@ -200,7 +200,7 @@
   become: true
 
 # A seerr-style colorized line: the level token is wrapped in SGR colour codes,
-# which strip_ansi must remove. printf interprets the \033 escapes into real ESC
+# which level_from_message must remove. printf interprets the \033 escapes into real ESC
 # bytes; systemd-run captures stdout to the journal preserving them.
 - name: _verify | ANSI | emit a colorized debug line via transient unit
   command: >-

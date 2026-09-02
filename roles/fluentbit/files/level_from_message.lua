@@ -26,8 +26,11 @@
 -- noise.
 --
 -- Reads from record["log"]. An upstream modify filter renames journald's
--- MESSAGE to log, so this is the only field that needs inspecting.
--- Skips records where an upstream filter already pinned a severity.
+-- MESSAGE to log, so this is the only field that needs inspecting. ANSI escape
+-- sequences are removed before classification so colourized level tokens match.
+
+-- ESC [ <params> <final byte>: covers colours (m) and cursor moves (A-Za-z).
+local CSI = "\27%[[0-9;?]*[A-Za-z]"
 
 local function has(head, token)
     return string.find(head, "[^%w]" .. token .. "[^%w]") ~= nil
@@ -116,13 +119,24 @@ local function match_rule(head, rule)
 end
 
 function set_priority(tag, ts, record)
+    local msg = record["log"]
+    local message_changed = false
+    if type(msg) == "string" then
+        local cleaned, count = msg:gsub(CSI, "")
+        if count > 0 then
+            record["log"] = cleaned
+            msg = cleaned
+            message_changed = true
+        end
+    end
+
     if record["_level"] ~= nil then
         local raw_level = record["_level"]
         if type(raw_level) == "string" then
             local level = LEVEL_ALIASES[raw_level:lower()]
             if level ~= nil then
                 if level == raw_level then
-                    return 0, ts, record
+                    return message_changed and 1 or 0, ts, record
                 end
                 record["_level"] = level
                 return 1, ts, record
@@ -147,7 +161,6 @@ function set_priority(tag, ts, record)
         return 1, ts, record
     end
 
-    local msg = record["log"]
     if type(msg) ~= "string" then
         return 0, ts, record
     end
