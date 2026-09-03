@@ -94,7 +94,7 @@
 
 - name: _verify | Default seccomp profile allows augmented syscalls
   vars:
-    _profile: "{{ podman_seccomp_rendered | slurp_json }}"
+    _profile: "{{ podman_seccomp_rendered | slurp_text | from_json }}"
     _allowed: "{{ _profile.syscalls | selectattr('action', 'eq', 'SCMP_ACT_ALLOW') | map(attribute='names') | flatten }}"
   assert:
     that:

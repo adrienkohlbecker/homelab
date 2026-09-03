@@ -9,11 +9,9 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-import yaml
 from ansible.errors import AnsibleError
 
 _ANSIBLE_VAR_KEY_RE = re.compile(r"[^A-Za-z0-9_]")
-_MISSING = object()
 
 
 def ansible_var_key(value: Any) -> str:
@@ -49,26 +47,6 @@ def slurp_text(result: Mapping[str, Any], default: str | None = None, trim: bool
     except Exception as exc:
         raise AnsibleError(f"slurp_text could not decode slurp content: {exc}") from exc
     return text.strip() if trim else text
-
-
-def slurp_json(result: Mapping[str, Any], default: Any = _MISSING) -> Any:
-    """Decode and parse JSON content from an Ansible slurp result."""
-    if "content" not in result and default is not _MISSING:
-        return default
-    try:
-        return json.loads(slurp_text(result))
-    except Exception as exc:
-        raise AnsibleError(f"slurp_json could not parse slurp content: {exc}") from exc
-
-
-def slurp_yaml(result: Mapping[str, Any], default: Any = _MISSING) -> Any:
-    """Decode and parse YAML content from an Ansible slurp result."""
-    if "content" not in result and default is not _MISSING:
-        return default
-    try:
-        return yaml.safe_load(slurp_text(result))
-    except Exception as exc:
-        raise AnsibleError(f"slurp_yaml could not parse slurp content: {exc}") from exc
 
 
 def rstrip_newlines(value: Any) -> str:
@@ -261,8 +239,6 @@ class FilterModule:
             "podman_health_wget": podman_health_wget,
             "podman_idmap_args": podman_idmap_args,
             "rstrip_newlines": rstrip_newlines,
-            "slurp_json": slurp_json,
             "slurp_text": slurp_text,
-            "slurp_yaml": slurp_yaml,
             "zfs_mount_unit": zfs_mount_unit,
         }

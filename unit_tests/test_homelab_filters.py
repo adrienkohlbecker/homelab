@@ -52,20 +52,6 @@ def test_slurp_text_rejects_missing_content_without_default() -> None:
         homelab.slurp_text({})
 
 
-def test_slurp_json_parses_slurp_content() -> None:
-    result = {"content": base64.b64encode(b'{"enabled": true}').decode()}
-    assert homelab.slurp_json(result) == {"enabled": True}
-
-
-def test_slurp_json_uses_default_for_missing_content() -> None:
-    assert homelab.slurp_json({}, default={}) == {}
-
-
-def test_slurp_yaml_parses_slurp_content() -> None:
-    result = {"content": base64.b64encode(b"jobs:\n  - name: cert\n").decode()}
-    assert homelab.slurp_yaml(result) == {"jobs": [{"name": "cert"}]}
-
-
 def test_rstrip_newlines_removes_only_trailing_newline_characters() -> None:
     assert homelab.rstrip_newlines("value  \n\n") == "value  "
 
@@ -218,8 +204,6 @@ def test_exposes_filters() -> None:
     assert filters["json_argv"] is homelab.json_argv
     assert filters["podman_health_wget"] is homelab.podman_health_wget
     assert filters["rstrip_newlines"] is homelab.rstrip_newlines
-    assert filters["slurp_json"] is homelab.slurp_json
-    assert filters["slurp_yaml"] is homelab.slurp_yaml
     assert filters["zfs_mount_unit"] is homelab.zfs_mount_unit
 
 
