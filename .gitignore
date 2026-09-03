@@ -1,12 +1,6 @@
 /.worktrees
-# notes/ is a private repo cloned in-place (git@github.com:adrienkohlbecker/homelab_notes),
-# not a submodule: an independent clone the main checkout owns and every worktree
-# symlinks to. Untracked here so the public repo carries no notes footprint.
+# Private in-place clones, owned by their sync workflows rather than this repo.
 /notes
-# roles/homeassistant/files/ha_gui_config is likewise a private repo cloned in-place
-# (git@github.com:adrienkohlbecker/homelab_ha_config), not a submodule — mise run ha:sync
-# owns it (commits/pushes/deploys to the HA host). Untracked so the public repo carries no
-# HA GUI config. The pin was never load-bearing; ha:sync works from the clone + origin.
 /roles/homeassistant/files/ha_gui_config
 __pycache__
 .vscode
@@ -14,20 +8,14 @@ test/out.tsv
 test/out.tsv.prev
 test/out/
 test/out_*.log
-# Newer edk2 aarch64 firmware fetched by `mise run test:firmware` (warm-reboot
-# fix); pinned + checksum-verified, so re-fetchable rather than committed.
+# Checksum-verified aarch64 firmware fetched by `mise run test:firmware`.
 test/firmware
 /.ansible-mitogen-strategy
 /packer/artifacts
 /zbm-build
 .DS_Store
 
-# Per Anthropic's Claude Code guidance: track everything in .claude/ that
-# is shared team-level config (settings.json, commands, agents, hooks,
-# skills, rules, output styles, plugins, ...). Only ignore the per-user
-# overrides file. The previous blocklist pattern auto-ignored any new
-# .claude/ subdir until it was explicitly whitelisted; the inverse here
-# means a new feature directory auto-tracks without a gitignore PR.
+# Track shared .claude state; ignore only per-user and scheduler state.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 

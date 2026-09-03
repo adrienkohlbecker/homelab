@@ -1,67 +1,28 @@
-# GitLab CI pipeline (notes/ci_aws_nested_qemu_cells.md).
-#
-# Runner pools:
-#   - gitlab.com hosted runners take stateless jobs: lint, unit tests, AWS
-#     control-plane jobs, and no-op child pipelines. They can't reach the home
-#     network (so no nexus); they run in the project-registry ci image published
-#     by the ci_image job below.
-#   - the AWS `aws-shell-qemu` fleeting pool (fleeting-plugin-aws + ASG) is the
-#     default test-cell target and also runs `detect`: the `test_cells` child
-#     matrix runs the nested qemu harness on autoscaled runner hosts, off fox so
-#     a wide fan-out can't threaten fox's headscale/nginx co-tenants. detect
-#     renders the child pipeline on the first host it boots, leaving it warm for
-#     the cells. Each host hydrates promoted qemu images from S3 and runs the
-#     same harness path as lab.
-#   - lab's shell runner (`lab-shell-qemu`) is the manual/fallback qemu target:
-#     a manual pipeline with HOMELAB_CI_TARGET=lab renders the same matrix and
-#     drives the local qemu harness directly on lab.
-#
-# Required project CI/CD variable: HOMELAB_VAULT_PASSWORD_TEST — the `test`
-# vault identity's password (masked).
-# The prod identity's password is never available to CI by design (CLAUDE.md:
-# Vault ids).
-#
-# Qemu targets: HOMELAB_CI_TARGET=aws_qemu (default) runs the cells on the AWS
-# `aws-shell-qemu` fleeting pool; set HOMELAB_CI_TARGET=lab on a manual/web
-# pipeline to render the same matrix for the `lab-shell-qemu` runner instead.
+# CI topology: hosted runners handle stateless jobs; the AWS fleeting pool runs
+# detect and qemu cells by default; HOMELAB_CI_TARGET=lab uses lab's shell runner.
+# Both qemu pools use the promoted images built on lab (S3 on AWS, local on lab).
+# CI receives only the masked HOMELAB_VAULT_PASSWORD_TEST identity.
 
-# `detect` runs first and generates the role-test child pipeline; everything
-# else (lint, unit tests, the test_cells trigger, manual builders) runs in
-# `test`. Jobs without an explicit stage default to `test`.
+# detect generates the child pipeline; jobs otherwise default to test.
 stages:
   - prepare
   - test
 
 default:
-  # Only the latest commit's status matters for these jobs — pairs with the
-  # project's auto-cancel-redundant-pipelines setting so a rapid follow-up
-  # push cancels the in-flight run instead of queueing behind it.
+  # Pairs with auto-cancel-redundant-pipelines.
   interruptible: true
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
-  # Render the qemu role-test matrix as manual instead of auto-running it. detect
-  # and the child pipeline still build (so the cells are there to click), but
-  # every cell is an optional manual job -- none runs unless the operator starts
-  # it. Lets an image-only push (an AMI / fox / zbm bake) skip the expensive
-  # fan-out while keeping a one-click spot-check available:
+  # Keep qemu cells available as manual jobs without auto-running the matrix:
   #   git push -o ci.variable=SKIP_TEST_CELLS=true
-  # The all-manual child resolves to "skipped"; the test_cells trigger carries
-  # allow_failure under SKIP so that skipped child does not redden the parent.
-  # A skip pipeline never becomes a green base (detect.py ignores allow_failure
-  # cells), so it can't suppress a later diff. A push option overrides this
-  # default. Empty = run the matrix as usual.
+  # The trigger tolerates the skipped child, and detect excludes it as a future
+  # green base so later diffs are not suppressed.
   SKIP_TEST_CELLS: ""
 
-# DETECT_RUNNER_TAG must be a *pipeline-global* variable, not a job
-# rules:variables: the detect job consumes it in `tags:`, and GitLab's tag
-# expansion ignores a job's rules:variables override -- a matched override is
-# silently dropped and the job-level default wins (observed: a web+lab pipeline
-# still landed detect on aws-shell-qemu). Setting it here at workflow scope makes
-# `tags: [$DETECT_RUNNER_TAG]` resolve correctly. Key only on HOMELAB_CI_TARGET,
-# not the pipeline source: the lab target arrives via web UI, `push -o
-# ci.variable`, or API alike, so source-gating would miss the push-option case.
-# The catch-all `when: always` keeps pipeline creation unchanged for every source.
+# GitLab expands tags before job rules:variables, so select the runner tag at
+# workflow scope. Target alone is authoritative across web, push-option, and API
+# pipelines; the catch-all preserves every other pipeline source.
 workflow:
   rules:
     - if: $HOMELAB_CI_TARGET == "lab"
@@ -71,16 +32,9 @@ workflow:
       variables:
         DETECT_RUNNER_TAG: aws-shell-qemu
 
-# Shared scaffolding for hosted-runner jobs: the ci image from this project's
-# registry (Dockerfile; rebuilt manually via the ci_image job below). The
-# image bakes the mise tool tree at /opt/mise and a warm uv wheel cache at
-# /opt/uv-cache, so jobs only rebuild .venv against the checkout's lockfile.
-# `ci:bootstrap` stays in each script as the drift self-heal: a no-op while
-# the image is current, and when mise.toml has moved past the published image
-# it installs just the delta (slower job, loud in the log — the cue to rerun
-# ci_image). mise auto-trusts the checkout's mise.toml under CI=true; the
-# op:// refs in its [env] resolve to literal strings without `op run`, which
-# nothing here reads.
+# Hosted jobs use the manually published CI image. Bootstrap is normally a
+# no-op, but installs toolchain drift and makes a stale image visible in logs.
+# CI auto-trusts mise.toml; unused op:// values remain literal without op run.
 .hosted:
   image: $CI_REGISTRY_IMAGE/ci:latest
   before_script:
@@ -105,62 +59,31 @@ workflow:
       when: manual
       allow_failure: true
 
-# Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md).
-# `detect` runs the classification core (ci:detect) and writes one
-# generated child job per `role:variant[:ubuntu]` cell. The default `aws_qemu`
-# pool hydrates promoted images from S3; the `lab` target boots them from its
-# local store. Both run the qemu backend directly.
-#
-# The diff base is the newest fully-green pipeline ancestor, resolved via the
-# GitLab pipelines API (detect.py: resolve_green_base_gitlab) — so a red-push ->
-# fix sequence retests everything changed since the last green commit, not just
-# the fix's own diff. When no green base resolves on the branch or the default
-# branch, CI runs the full universe rather than trusting a possibly-red previous
-# tip. A full-universe trigger also fires on a cross-cutting path change, a new
-# branch, or a schedule/ROLES=ALL dispatch.
-#
-# Optional CI/CD variable: GITLAB_API_TOKEN (a read_api project access token).
-# detect uses the automatic CI_JOB_TOKEN for the pipelines query by default;
-# set GITLAB_API_TOKEN only if that token can't list pipelines (the job log
-# says "pipelines query failed"). An API failure degrades to the same safe
-# no-green policy rather than failing the detect job itself.
+# detect emits one child job per role:variant[:ubuntu] cell. Its diff base is the
+# newest fully-green ancestor, so fixes retest everything since the last green;
+# missing or failed API resolution safely expands to the full universe.
+# CI_JOB_TOKEN queries pipelines by default; GITLAB_API_TOKEN is the optional
+# read_api fallback. See notes/ci_aws_nested_qemu_cells.md.
 detect:
   stage: prepare
-  # Runs on the qemu shell pool selected by HOMELAB_CI_TARGET: aws-shell-qemu
-  # (the AWS fleeting pool) by default, lab-shell-qemu for a manual lab-target
-  # pipeline. It only renders the child YAML -- no qemu, no AWS creds -- but
-  # running it on the cell pool boots the first fleeting host here, and the
-  # runner's idle_time keeps it warm for the cell matrix that dispatches right
-  # after, so detect's render overlaps the cold boot the cells would pay anyway.
-  # The tag follows the target via $DETECT_RUNNER_TAG, set at workflow scope
-  # (see the comment there: tags: cannot read a job's rules:variables).
+  # Rendering on the selected cell pool warms its first runner for the matrix.
   tags:
     - $DETECT_RUNNER_TAG
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
-    # SKIP_TEST_CELLS no longer skips detect: it still renders the child so the
-    # cells exist as manual jobs (detect.py reads SKIP_TEST_CELLS and emits them
-    # as optional manual). Booting a fleeting host to render is the price of
-    # keeping the click-to-run matrix available.
-    # lab target (any source -- web, push -o ci.variable, api): detect runs on
-    # lab's own shell runner, whose mise/uv are the host's own -- so no baked
-    # /opt caches here. Must precede the source rules so it wins for push+lab.
+    # Detect still renders manual cells under SKIP_TEST_CELLS. The lab rule must
+    # precede source rules because lab uses host tools rather than /opt caches.
     - if: $HOMELAB_CI_TARGET == "lab"
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
       variables:
         MISE_DATA_DIR: /opt/mise
         UV_CACHE_DIR: /opt/uv-cache
   variables:
-    # detect diffs HEAD against the resolved green base; 50 is deep enough for
-    # any realistic push, with a fetch-on-demand fallback in detect.py for a
-    # green base outside the shallow checkout.
+    # detect fetches an older resolved base on demand.
     GIT_DEPTH: "50"
-    # The qemu-host AMI bakes the mise tool tree + uv cache at /opt (matching the
-    # cell before_script); the aws-target rules point mise/uv there. UV_LINK_MODE
-    # copy is needed for that cross-fs cache and harmless on lab.
-    # UV_PROJECT_ENVIRONMENT is intentionally omitted so detect builds a per-job
-    # .venv from the warm cache on the shell runner.
+    # The AWS AMI cache is cross-filesystem. Omit UV_PROJECT_ENVIRONMENT so
+    # detect gets a per-job venv; copy mode is harmless on lab.
     UV_LINK_MODE: copy
   timeout: 15m
   script:
@@ -170,25 +93,15 @@ detect:
     paths:
       - test-child.yml
 
-# Run the generated child pipeline. `strategy: depend` mirrors the child's
-# status onto this job, so a failed cell fails the parent pipeline. Always
-# runs — GitLab evaluates `rules` at pipeline-creation time, so the runtime
-# "are there cells?" decision can't gate it here; instead detect writes a
-# single no-op job into the child when nothing is role-relevant (a near-instant
-# child pipeline rather than a skipped trigger).
+# strategy:depend mirrors child status. detect emits a no-op child when no role
+# is relevant because runtime cell presence cannot gate pipeline-creation rules.
 test_cells:
   stage: test
   needs:
     - job: detect
       artifacts: true
   rules:
-    # SKIP_TEST_CELLS no longer gates the trigger: the child is always built and
-    # run so the cells are present. Under SKIP_TEST_CELLS they render as optional
-    # manual jobs (detect.py), so triggering the child costs nothing -- the child
-    # completes immediately with its cells waiting to be click-started. Those
-    # all-manual cells leave the child in a "skipped" state, which `strategy:
-    # depend` would mirror onto this parent as a failure -- so under SKIP allow
-    # this trigger to fail, keeping the skip pipeline green.
+    # An all-manual child is "skipped"; tolerate that status only under SKIP.
     - if: '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push") && $SKIP_TEST_CELLS == "true"'
       allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
@@ -203,31 +116,18 @@ lint:
   extends:
     - .hosted
     - .push_or_web
-  # The default (small) hosted runner is 2 vCPU; lint fans its linters out in
-  # parallel, so the 4-vCPU medium tier roughly halves the wall-clock.
   tags:
     - saas-linux-medium-amd64
-  # ~5 min on a current image; a stale one adds the bootstrap delta.
-  # Bound well under the project-level 1h default so a wedged run fails fast.
   timeout: 30m
   variables:
-    # ansible-lint runs `ansible-playbook --syntax-check`, which loads
-    # vault-encrypted group_vars/host_vars. Restrict ansible to the `test`
-    # identity so the prod identity — undecryptable here — isn't attempted;
-    # without this, syntax-check of prod playbooks errors out.
+    # Syntax-check loads vaulted vars; CI must never attempt the prod identity.
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
-    # /builds is world-writable on hosted runners, which makes ansible skip
-    # ansible.cfg discovery from the cwd; pinning the path bypasses that
-    # check so syntax-check runs with the repo config (inventory, vault ids).
+    # Ansible ignores cwd config under world-writable /builds unless pinned.
     ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
   script:
     - mise run lint
 
-# Hermetic pytest suite (testpaths=unit_tests) plus Fluent Bit Lua filter tests.
-# Installs the full tool tree even though these only need python + uv + the
-# image's lua5.4: `mise run` auto-installs whatever is missing anyway, so a
-# partial install would just move the rest to task time (with noisy resolution
-# warnings).
+# Hermetic Python and Fluent Bit Lua unit suites.
 unit_tests:
   stage: prepare
   extends:
@@ -238,17 +138,9 @@ unit_tests:
     - mise run test
     - mise run test:fluentbit-lua
 
-# Rebuild of the CI container image (the repo Dockerfile), pushed to this
-# project's registry as $CI_REGISTRY_IMAGE/ci:<sha> (+ :latest from master).
-# Manual-only: jobs pin the currently published :latest, refreshed deliberately
-# when the toolchain changes rather than rebuilt under every pipeline. Builds
-# docker-in-docker on a hosted runner, so apt resolves upstream
-# (USE_NEXUS_MIRRORS=0) — the nexus mirror redirect is only reachable from the
-# lab network.
-#
-# Optional CI/CD variable: MISE_GITHUB_TOKEN (a no-scope PAT) raises mise's
-# GitHub API rate limit during the in-image `mise install`; without it the
-# build still works, mounted only as a BuildKit secret either way.
+# Manually publish Dockerfile as ci:<sha>; only master also moves :latest.
+# Hosted dind cannot reach Nexus, so the build uses upstream apt. An optional
+# no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit secret.
 ci_image:
   stage: prepare
   extends: .manual_job
@@ -257,8 +149,7 @@ ci_image:
     - docker:28.3.3-dind
   tags:
     - saas-linux-medium-amd64
-  # Two concurrent runs would race on the floating :latest push. Don't let
-  # auto-cancel kill a build mid-push either.
+  # Serialize and never cancel a possible :latest push.
   resource_group: ci_image
   interruptible: false
   timeout: 45m
@@ -266,9 +157,7 @@ ci_image:
     DOCKER_TLS_CERTDIR: "/certs"
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    # Warm the layer cache from the published image; BUILDKIT_INLINE_CACHE
-    # embeds cache metadata in the pushed image so the next rebuild can do
-    # the same. First-ever build has nothing to pull — that's fine.
+    # A missing cache is expected on the first build.
     - docker pull "$CI_REGISTRY_IMAGE/ci:latest" || true
     - |
       docker build ${MISE_GITHUB_TOKEN:+--secret id=mise_github_token,env=MISE_GITHUB_TOKEN} \
@@ -277,18 +166,15 @@ ci_image:
         --cache-from "$CI_REGISTRY_IMAGE/ci:latest" \
         --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA" .
     - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA"
-    # :latest moves only from master, so a branch dispatch can't retarget
-    # what other pipelines pin.
+    # Branch dispatches must not retarget what other pipelines pin.
     - |
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
         docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/ci:latest"
         docker push "$CI_REGISTRY_IMAGE/ci:latest"
       fi
 
-# Bake + promote the AWS nested-qemu runner-host AMI. This is the instance
-# executor target host, not a guest fixture: it carries gitlab-runner, qemu/KVM
-# tooling, the mise/uv tool tree, and readiness scripts. Terraform's ASG launch
-# template resolves /homelab-ci/ami/qemu-host/noble.
+# Bake the AWS nested-qemu runner host AMI, not a guest fixture. Terraform's ASG
+# resolves its promoted /homelab-ci/ami/qemu-host/noble parameter.
 qemu_host_ami:
   stage: prepare
   extends:
@@ -307,55 +193,30 @@ qemu_host_ami:
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID"
     - mise run packer:qemu-host-ami --promote
 
-# Build + promote the box / box_deps nested-qemu guest images the test cells
-# boot, one manual job per (image, release). Unlike qemu_host_ami (an EC2 AMI
-# bake orchestrated through AWS APIs), these are qemu fixtures that only build
-# under nested KVM, so they run on lab's shell runner: packer:publish-qemu builds
-# or seeds the requested fixture, then uploads/promotes the resulting bundle to
-# s3://homelab-ci-images and writes the promoted.json pointer object the aws_qemu
-# cells hydrate. Without these the S3 bundles only refresh from a manual local
-# build, so promoted images drift behind role code.
-#
-# Manual + protected-ref: the bake role trusts master only, and a promote is
-# fleet-global the instant it lands -- mitigated because the build verify-boots
-# (packer) and converges seed_deps (launch.py) before promoting, S3 versioning
-# retains the prior bundle, and upload-s3 prints the rollback line. The
-# resource_group is per (machine, release) -- `qemu_image_<machine>_<UBUNTU>`,
-# set in each machine template below -- so distinct builds run concurrently:
-# every release writes a disjoint HOMELAB_CI_DIR path (${HOMELAB_CI_DIR}/<rel>)
-# and writes a disjoint promoted.json object key per (machine, release), so
-# there is nothing to race. box_deps:<rel> still lands after box:<rel> via its
-# needs edge; the per-(machine,release) group only blocks a re-dispatch of the
-# *same* cell from overlapping its own in-flight publish.
+# Build protected box fixtures on lab's KVM runner, retain them locally for lab,
+# and promote versioned bundles plus promoted.json pointers to S3 for AWS cells.
+# Promotion is global but verify-boots first, retains prior S3 versions, and
+# prints rollback instructions. Per-machine/release resource groups serialize
+# only builds that share an output path and pointer; box_deps still needs box.
 .qemu_image:
   stage: prepare
   extends: .protected_manual_job
-  # lab's shell runner is the KVM builder (the same host the lab qemu target
-  # tests on). The build writes HOMELAB_CI_DIR, which doubles as lab's local
-  # image store: the lab cells boot those artifacts in place (no hydration), so
-  # a bake here is what refreshes the lab target's images. It also uploads to S3
-  # so the aws_qemu cells can hydrate the same promoted build.
+  # lab is both the sole KVM builder and the lab cells' local image store.
   tags:
     - lab-shell-qemu
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
-  # Never auto-cancel mid-build -- a killed run can leave a half-published bundle.
+  # Cancellation can leave a half-published bundle.
   interruptible: false
-  # box ~15m; box_deps adds the seed converge + reboot. Bounded well above a
-  # normal run so a wedged qemu boot fails the job rather than riding a default.
   timeout: 90m
   before_script:
     - mise run ci:bootstrap
-    # The bake role grants the S3 write + promoted.json publish rights.
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-$CI_JOB_ID"
 
-# box: the bare OS + zfs + networking platform every cell needs.
 "qemu_image:box":
   extends: .qemu_image
-  # A failed box bake must remain a failed dependency. The generic protected
-  # manual job is optional (allow_failure), which GitLab treats as successful
-  # for `needs:` and would let box_deps seed from the previous published box.
+  # A failed box must block box_deps rather than seed from an older publication.
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
@@ -371,12 +232,8 @@ qemu_host_ami:
           - noble
           - resolute
 
-# box_deps: box with podman/nginx/fluent-bit pre-baked. Layers seed_deps.yml onto
-# the box bake from the same pipeline -- each box_deps:<rel> `needs:` its matching
-# box:<rel> job and seeds off the artifact box just published to HOMELAB_CI_DIR
-# (both jobs land on the one lab-shell-qemu host, where that dir persists). So a
-# box_deps run must be preceded by its box job; seed-deps errors loudly with the
-# build-box-first hint if the artifact is absent.
+# box_deps layers seed_deps.yml onto the matching box artifact in lab's shared
+# HOMELAB_CI_DIR; the explicit need prevents using an older box.
 "qemu_image:box_deps":
   extends: .qemu_image
   rules:
@@ -391,8 +248,7 @@ qemu_host_ami:
       - UBUNTU:
           - noble
           - resolute
-  # needs:parallel:matrix keeps each box_deps:<ubuntu> behind the matching
-  # box:<ubuntu>; artifacts ride lab's HOMELAB_CI_DIR, not GitLab artifacts.
+  # Pair releases; artifacts stay in HOMELAB_CI_DIR rather than GitLab.
   needs:
     - job: "qemu_image:box"
       parallel:
@@ -400,16 +256,9 @@ qemu_host_ami:
           - UBUNTU: [ '$[[ matrix.UBUNTU ]]' ]
       artifacts: false
 
-# Scheduled-pipeline status guard. A schedule runs only the reaper (every code
-# job is when:never for the schedule source), so without this it is green
-# regardless of master's real test state -- flipping the branch badge green and
-# firing GitLab's "Pipeline fixed" email even when the last full test failed.
-# This job mirrors the branch's last full-universe verdict onto the scheduled
-# pipeline. Green requires a complete emitted cell universe in a green child
-# plus a non-failed parent; required manual image-bake jobs may leave that parent
-# blocked. Schedule-only and runs on the cheap hosted pool; it only queries the
-# GitLab API (CI_JOB_TOKEN), no qemu/AWS. NOT allow_failure -- that would zero
-# its effect on the pipeline status and defeat the whole point.
+# Reaper-only schedules would otherwise overwrite the branch badge. Mirror the
+# last complete full-universe verdict; this must remain required and queries only
+# GitLab with CI_JOB_TOKEN.
 schedule_status_guard:
   stage: prepare
   extends: .hosted
@@ -421,11 +270,8 @@ schedule_status_guard:
   script:
     - mise run ci:schedule-guard
 
-# Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
-# multipart leftovers and noncurrent versions; this job reads the promoted.json
-# pointer object and deletes old immutable build prefixes without touching promoted
-# builds. Manual runs are dry-run unless QEMU_IMAGE_REAPER_APPLY=true; schedules
-# apply automatically on protected refs.
+# Delete stale immutable S3 image prefixes without touching promoted.json targets.
+# Protected schedules apply; manual runs default to dry-run.
 qemu_image_reaper:
   stage: prepare
   extends: .hosted
@@ -451,57 +297,31 @@ qemu_image_reaper:
         mise run ci:reap-qemu-images
       fi
 
-# Bake + publish fox's Hetzner Cloud boot image (mechanic 2, qemu/KVM, no AWS).
-# `packer:build hetzner` builds the ZFS-root rpool disk in qemu on lab's shell
-# runner -- the same KVM host the lab qemu cells test on -- writing the raw image
-# into HOMELAB_CI_DIR; `packer:hetzner` then streams that image onto a throwaway
-# Hetzner server in rescue mode and snapshots it (pruning all but the 2 newest).
-# Both steps land on the one lab-shell-qemu host, so the build dir the upload
-# reads persists between them. Manual and protected-ref only; the published
-# snapshot is project-global -- terraform's data.hcloud_image selects by
-# most_recent, so it silently becomes fox's next boot image on rebuild.
-#
-# Required CI/CD variable: HCLOUD_TOKEN (masked + protected) — the homelab
-# Hetzner project's read/write token: the snapshot must land in the project
-# fox lives in (the only Hetzner project since the homelab-ci teardown).
-# Exposure is scoped to this protected-ref manual job. No AWS auth: the build is
-# local qemu and the publish authenticates to Hetzner with HCLOUD_TOKEN alone.
+# Build fox's ZFS-root disk on lab, stream it through a temporary Hetzner rescue
+# server, and retain the two newest snapshots. The published project-global
+# snapshot becomes Terraform's most_recent fox image. This protected manual job
+# alone receives the masked HCLOUD_TOKEN; no AWS credentials are involved.
 fox_image:
   stage: prepare
   extends: .protected_manual_job
-  # lab's shell runner is the KVM builder (the same host the lab qemu cells test
-  # on). The qemu build writes HOMELAB_CI_DIR, which packer:hetzner then reads to
-  # stream onto the rescue server -- both steps must land on this one host.
+  # Both build and upload need lab's persistent HOMELAB_CI_DIR.
   tags:
     - lab-shell-qemu
-  # One image pipeline at a time: two runs would race the snapshot family
-  # (create_image + prune-to-2-newest) and the shared HOMELAB_CI_DIR build dir;
-  # never auto-cancelled — a killed run can orphan the temp Hetzner server.
+  # Serialize the shared build and prune set; cancellation can orphan a server.
   resource_group: fox_image
   interruptible: false
   timeout: 90m
   script:
-    # Fail before the build, not after it, when the token is missing.
     - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
-    # Same drift self-heal as the qemu image jobs, against the image's /opt/mise.
     - mise run ci:bootstrap
     - mise run packer:init
-    # fox runs a noble root in prod; the bake stays noble-only. Build the rpool
-    # disk in qemu, then stream it onto a Hetzner rescue server and snapshot. The
-    # build pulls through lab's Nexus (reachable here); the shipped image points
-    # at upstream Ubuntu mirrors regardless, so no --upstream is needed.
+    # fox stays noble; the shipped image uses upstream mirrors despite the build.
     - mise run packer:build hetzner --ubuntu noble
     - mise run packer:hetzner
 
-# Manual rebuild of the custom ZFSBootMenu recovery image (zbm/,
-# mise-tasks/zbm/). Heavy (clones ZBM, xbps-installs a Void toolchain, runs
-# buildx), so never part of the regular pipeline: dispatch it after bumping
-# ZBM_VERSION / the zbm/ overlay, verify the artifacts, then pin the new
-# tarball in group_vars/all/versions.yml (or a host-specific artifact override).
-#
-# Runs docker-in-docker on a hosted runner. The job owns the service and
-# artifacts; zbm:ci-build owns buildx setup, registry cache, tarball assertions,
-# and default-branch package upload.
+# Manually rebuild ZFSBootMenu after a version or overlay change, verify the
+# artifacts, then pin the tarball. zbm:ci-build owns dind setup, cache, assertions,
+# and default-branch publication.
 zbm_build:
   stage: prepare
   extends:
@@ -509,20 +329,14 @@ zbm_build:
     - .manual_job
   services:
     - docker:28.3.3-dind
-  # xbps-install + dracut parallelize poorly but the buildx layer pulls and
-  # the ~1.5 GB --load benefit from the medium tier's extra cores and IO.
   tags:
     - saas-linux-medium-amd64
-  # Serialize across pipelines: concurrent builds would race on the shared
-  # registry cache ref; never auto-cancel a build mid cache-push/publish.
+  # Serialize the shared cache ref and never cancel a publish.
   resource_group: zbm_build
   interruptible: false
   timeout: 60m
   variables:
-    # The ci image is plain ubuntu — not the docker: image whose entrypoint
-    # autodetects dind TLS — so point the CLI at the service explicitly.
-    # /certs/client is the volume hosted runners share between the job and
-    # service containers.
+    # The Ubuntu CI image does not auto-configure the dind TLS client.
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_VERIFY: "1"
