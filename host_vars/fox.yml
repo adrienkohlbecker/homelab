@@ -181,49 +181,16 @@ gitlab_runner_concurrent: 82
 
 gitlab_runner_aws_qemu_enabled: true
 
-# Per-host job concurrency on each c8id.4xlarge qemu host (16 vCPU / 32 GiB,
-# dedicated to CI). The burst fans out across up to max_instances (below) such
-# hosts at 13 cells each -- the horizontal-burst form of the proven
-# one-8xlarge-at-26 shape: same ~2.46 GiB/cell density per host, but many small
-# hosts instead of one big one, for spot-placement spread and a smaller
-# per-host blast radius. The current five-host quota ceiling runs up to 65 role
-# cells at once; larger universes finish in a second wave.
-# Memory -- not CPU -- is the ceiling: vCPU oversubscription (13 x 4 = 52 on 16,
-# ~3.25x, identical to the 8xlarge ratio) is a non-issue; peak guest RSS during
-# synchronized converge is the hard wall.
-#
-# Density set from the full-host (c8id.8xlarge, 64 GiB) measurements, 2026-06-20:
-#   24 cells -> ~48 GiB RSS peak, ~9 GiB free, 0 OOM. Safe even with no swap.
-#   26 cells -> ~55.5 GiB RSS peak (88%), ~7.5 GiB free, ~4.6 GiB of 16 GiB swap,
-#               0 OOM, 0% steal, CPU idle floor 10%.
-#   28 cells -> ~51 GiB RSS peak, swap to ~10.4 of 16 GiB, ~5.4 GiB free, 0 OOM
-#               -- held, but the cushion ran ~65% full.
-#   30 cells -> RSS past 51 GiB, global OOM ~6 min in (no swap), kernel culled 2
-#               qemu guests (flaked cells).
-# 13 per 32 GiB host is exactly that 26-per-64-GiB density, so the same swap-as-
-# insurance margin carries over: the qemu-host AMI boot service
-# (homelab_ci_prepare_scratch) puts a 16 GiB swapfile on the idle NVMe scratch
-# with vm.swappiness=1, so a transient converge overshoot pages out cold pages
-# instead of OOM-killing a guest. If swap routinely fills, lower this rather than
-# enlarge it. KSM does NOT help here: enabled live at 30 it reclaimed ~0
-# (pages_sharing 0, full_scans 0) because converge keeps pages volatile/
-# unmergeable.
-# Lower this first if qemu boot flakes or OOM kills reappear.
+# Memory-bound safe ceiling on each 16-vCPU / 32-GiB worker. Its 16-GiB
+# low-swappiness scratch swap is an overrun backstop; lower this if swap fills
+# routinely or OOM kills reappear. Capacity evidence is in
+# notes/ci_aws_nested_qemu_cells.md.
 gitlab_runner_aws_qemu_capacity_per_instance: 13
-# Host ceiling fits the 96-vCPU All-Standard-Spot quota (L-34B43A08,
-# eu-central-1) while reserving 8 vCPUs for the c8id.2xlarge site worker:
-# floor((96 - 8) / 16) = 5 c8id.4xlarge role hosts. Fleeting counts accepted
-# ASG desired-capacity changes before AWS fulfills them, so exceeding the quota
-# leaves phantom instances in taskscaler and prevents later scale-ups. The
-# aws_autoscaling_group max_size must match (ci_qemu_host_pool.max_size in
-# terraform/aws_ci.tf). Raise the quota to at least 264 vCPUs before restoring
-# the 16-host ceiling.
+# Five workers consume 80 of the 96 regional Spot vCPUs, leaving eight for the
+# site worker. Keep this equal to ci_qemu_host_pool.max_size in terraform/aws_ci.tf.
 gitlab_runner_aws_qemu_max_instances: 5
-# A full-universe run is a short burst: cells land in about two waves, so warm
-# hosts are reused within the pipeline but cross-push reuse buys little. Hold the
-# drain just long enough for a straggler to claim a freed slot while avoiding
-# idle billing across every host the burst launched. This is the main AWS cost
-# lever against the free lab baseline. The site pool overrides it below.
+# Keep a worker for a straggler in the next wave without retaining the burst
+# across pushes. The site pool overrides this below.
 gitlab_runner_aws_qemu_idle_time: "2m"
 gitlab_runner_aws_qemu_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
