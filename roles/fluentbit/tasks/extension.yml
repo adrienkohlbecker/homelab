@@ -5,6 +5,15 @@
       - fluentbit_extension_args.name is string
       - fluentbit_extension_args.name is match('^[a-z0-9_]+$')
 
+- name: Create fluent-bit service extension directory
+  file:
+    path: /etc/fluent-bit/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Install fluent-bit service extension
   copy:
     src: "{{ playbook_dir }}/roles/{{ fluentbit_extension_args.name }}/files/fluentbit.yaml"
