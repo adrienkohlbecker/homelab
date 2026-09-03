@@ -227,6 +227,12 @@ class TestMachineUbuntuValidation:
         with pytest.raises(ValueError, match="Unknown Ubuntu release"):
             machine_factory(machine="box", role="test", ubuntu_name="bogus")
 
+    def test_write_image_requires_explicit_artifact_directory(
+        self, machine_factory: Callable[..., machine.Machine]
+    ) -> None:
+        with pytest.raises(ValueError, match="write_image=True requires an explicit image_dir"):
+            machine_factory(write_image=True)
+
 
 class TestAnsibleControllerStaging:
     def test_stages_once_on_first_ansible_command(

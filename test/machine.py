@@ -341,7 +341,6 @@ class LaunchOptions:
     display_window: bool = False
     headless: bool = False
     qmp_socket: Path | None = None
-    commit_in_place: bool = False
     extra_hostfwds: tuple[int, ...] = ()
 
 
@@ -469,6 +468,7 @@ class Machine:
         workdir_parent: Path | None = None,
         launch: LaunchOptions | None = None,
         loopback_host: str | None = None,
+        write_image: bool = False,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
@@ -523,18 +523,12 @@ class Machine:
         self._foreground = launch.foreground
         self._display_window = launch.display_window
         self._headless = launch.headless
-        # commit_in_place: skip the qcow2-overlay step for the OS disks and
-        # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
-        # drives directly. Writes during the run mutate those files in
-        # place — that's the whole point, since mise-tasks/test/build_box_deps.sh
-        # stages a fresh copy of box's artifacts into a tmpdir, runs
-        # launch.py --commit --seed against it, and then publishes the
-        # mutated tmpdir as box_deps. Refuses unless image_dir is also
-        # set, so a stray `launch.py --commit` against the published
-        # variant directory can't corrupt the source artifacts.
-        if launch.commit_in_place and launch.image_dir is None:
-            raise ValueError("commit_in_place=True requires image_dir to be set explicitly")
-        self._commit_in_place = launch.commit_in_place
+        # Derived-image builders may mount a caller-staged artifact tree
+        # directly so guest writes persist. Requiring an explicit image_dir
+        # prevents mutation of a published machine directory.
+        if write_image and launch.image_dir is None:
+            raise ValueError("write_image=True requires an explicit image_dir")
+        self._write_image = write_image
         self._qmp_socket = launch.qmp_socket
         self._extra_guest_ports: list[int] = list(launch.extra_hostfwds)
         self.extra_hostfwd_ports: dict[int, int] = {}
@@ -1357,10 +1351,10 @@ class Machine:
             os_src_paths, artifact_format = discover_packer_disks(image_dir)
 
             os_disk_paths: list[str] = []
-            if self._commit_in_place:
+            if self._write_image:
                 # No overlay: pass the source files straight to qemu in
                 # their on-disk format. Writes persist in image_dir so
-                # mise-tasks/test/build_box_deps.sh can publish it afterwards.
+                # the derived-image builder can publish it afterwards.
                 os_disk_paths = [str(path) for path in os_src_paths]
                 drive_format = artifact_format
             else:

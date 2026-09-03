@@ -207,9 +207,8 @@ locals {
     # default, so zee activates no named consumers.
     # See notes/ci_box_multidisk_drop_lab_pug_amis.md.
     # box_deps is derived from box by `mise run test:build_box_deps`, which
-    # boots box with launch.py --commit, applies
-    # test/playbooks/build_box_deps.yml, and publishes the result. It is not a
-    # packer source.
+    # boots a writable staged clone, applies test/playbooks/build_box_deps.yml,
+    # and publishes the result. It is not a packer source.
     # box keeps the container store on a dedicated 50G ext4 partition (p4).
     # box is the only fixture the _site_test cell
     # converges the *whole* fleet onto, and that store must hold every service

@@ -1,80 +1,134 @@
-"""Behavioral tests for test-fixture mise task wrappers."""
+"""Behavioral tests for the derived QEMU fixture builder."""
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import importlib.util
 import os
-import shlex
-import stat
-import subprocess
+import shutil
+import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import cast
+
+import pytest
+from machine import LaunchOptions
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BUILD_BOX_DEPS_SH = REPO_ROOT / "mise-tasks" / "test" / "build_box_deps.sh"
+BUILD_BOX_DEPS = REPO_ROOT / "test" / "build_box_deps.py"
 
 
-def _executable(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
-    path.chmod(0o755)
+def _load_builder() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("build_box_deps", BUILD_BOX_DEPS)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
-def test_build_box_deps_runs_once_per_ubuntu(tmp_path: Path) -> None:
-    worktree = tmp_path / "worktree"
-    launch_log = tmp_path / "launch.log"
-    _executable(
-        worktree / "test" / "launch.py",
-        "#!/usr/bin/env python3\n"
-        "import os\n"
-        "import sys\n"
-        "from pathlib import Path\n"
-        "args = sys.argv[1:]\n"
-        "image_dir = Path(args[args.index('--image-dir') + 1])\n"
-        "(image_dir / 'seeded').write_text('yes\\n')\n"
-        "with Path(os.environ['LAUNCH_TEST_LOG']).open('a') as log:\n"
-        "    log.write(' '.join(args) + '\\n')\n",
-    )
-    _executable(
-        worktree / "packer" / "publish.py",
-        "#!/usr/bin/env python3\n"
-        "import os\n"
-        "import shutil\n"
-        "import sys\n"
-        "from pathlib import Path\n"
-        "src, dst = map(Path, sys.argv[-2:])\n"
-        "if dst.exists():\n"
-        "    shutil.rmtree(dst)\n"
-        "os.replace(src, dst)\n",
-    )
-    env = dict(os.environ)
-    env.update(
-        HOMELAB_CI_DIR=str(tmp_path / "homelab_ci"),
-        usage_ubuntu="noble resolute",
-    )
-    env["LAUNCH_TEST_LOG"] = str(launch_log)
-    for ubuntu in ("noble", "resolute"):
-        source = Path(env["HOMELAB_CI_DIR"]) / ubuntu / "box"
-        source.mkdir(parents=True)
-        (source / "artifact").write_text("source\n")
+def test_clone_artifacts_copies_the_fixture_tree(tmp_path: Path) -> None:
+    builder = _load_builder()
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    (source / "artifact").write_text("fixture\n")
 
-    result = subprocess.run(
-        ["bash", str(BUILD_BOX_DEPS_SH)],
-        cwd=worktree,
-        env=env,
-        text=True,
-        capture_output=True,
-    )
+    builder.clone_artifacts(source, destination)
 
-    assert result.returncode == 0, result.stderr
-    calls = launch_log.read_text().splitlines()
-    assert len(calls) == 2
-    for ubuntu, call in zip(("noble", "resolute"), calls, strict=True):
-        args = shlex.split(call)
-        image_dir = Path(args[args.index("--image-dir") + 1])
-        destination = Path(env["HOMELAB_CI_DIR"]) / ubuntu / "box_deps"
-        assert f"--ubuntu {ubuntu}" in call
-        assert "--seed test/playbooks/build_box_deps.yml" in call
-        assert image_dir.parent == Path(env["HOMELAB_CI_DIR"])
-        assert image_dir.name.startswith(f".build-box-deps-{ubuntu}-")
-        assert (destination / "artifact").read_text() == "source\n"
-        assert (destination / "seeded").read_text() == "yes\n"
-        assert stat.S_IMODE(destination.stat().st_mode) == 0o2770
+    assert (destination / "artifact").read_text() == "fixture\n"
+
+
+def test_build_one_clones_seeds_and_publishes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    builder = _load_builder()
+    root = tmp_path / "homelab_ci"
+    source = root / "noble" / "box"
+    source.mkdir(parents=True)
+    (source / "artifact").write_text("source\n")
+
+    def clone_artifacts(src: Path, dst: Path) -> None:
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    async def seed_image(image_dir: Path, ubuntu: str) -> None:
+        assert ubuntu == "noble"
+        (image_dir / "seeded").write_text("yes\n")
+
+    def publish_artifacts(publish_root: Path, src: Path, dst: Path) -> None:
+        assert publish_root == root
+        os.replace(src, dst)
+
+    monkeypatch.setattr(builder, "clone_artifacts", clone_artifacts)
+    monkeypatch.setattr(builder, "seed_image", seed_image)
+    monkeypatch.setattr(builder, "publish_artifacts", publish_artifacts)
+
+    builder.build_one(root, "noble")
+
+    destination = root / "noble" / "box_deps"
+    assert (destination / "artifact").read_text() == "source\n"
+    assert (destination / "seeded").read_text() == "yes\n"
+    assert destination.stat().st_mode & 0o7777 == 0o2770
+
+
+def test_main_builds_each_requested_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    builder = _load_builder()
+    calls: list[tuple[Path, str]] = []
+    monkeypatch.setenv("HOMELAB_CI_DIR", str(tmp_path))
+    monkeypatch.setenv("usage_ubuntu", "noble resolute")
+    monkeypatch.setattr(builder, "build_one", lambda root, ubuntu: calls.append((root, ubuntu)))
+
+    assert builder.main() == 0
+    assert calls == [(tmp_path, "noble"), (tmp_path, "resolute")]
+
+
+def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    builder = _load_builder()
+    calls: list[object] = []
+    constructor: dict[str, object] = {}
+
+    class FakeMachine:
+        output_file = tmp_path / "output"
+        workdir_path = tmp_path
+
+        async def __aenter__(self) -> FakeMachine:
+            calls.append("enter")
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            calls.append("exit")
+
+        async def ensure_booted(self) -> None:
+            calls.append("booted")
+
+        async def ensure_ssh(self) -> None:
+            calls.append("ssh")
+
+        async def ssh_command(self, *args: str, check: bool = True) -> SimpleNamespace:
+            calls.append((args, check))
+            if args[:2] == ("systemctl", "is-system-running"):
+                return SimpleNamespace(exitcode=0, stdout=["running"])
+            return SimpleNamespace(exitcode=0, stdout=[])
+
+        async def ansible_command(self, playbook: str) -> None:
+            calls.append(("ansible", playbook))
+
+        async def wait(self) -> None:
+            calls.append("wait")
+
+    def machine_factory(**kwargs: object) -> FakeMachine:
+        constructor.update(kwargs)
+        return FakeMachine()
+
+    monkeypatch.setattr(builder, "Machine", machine_factory)
+    monkeypatch.setattr(builder, "cancel_on_signal", lambda task: contextlib.nullcontext())
+
+    asyncio.run(builder.seed_image(tmp_path, "noble"))
+
+    assert constructor["write_image"] is True
+    assert constructor["loopback_host"] == builder.SSH_HOST
+    launch = cast(LaunchOptions, constructor["launch"])
+    assert launch.image_dir == tmp_path
+    assert launch.headless is True
+    assert ("ansible", str(tmp_path / "build_box_deps.yml")) in calls
+    assert "wait" in calls

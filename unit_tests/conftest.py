@@ -43,6 +43,7 @@ _CONSTRUCTOR_PARAMS = frozenset(
         "workdir_parent",
         "launch",
         "loopback_host",
+        "write_image",
     }
 )
 

@@ -41,7 +41,6 @@ def test_exit_after_ready_skips_interactive_ssh_instructions(monkeypatch: pytest
             cast(launch.Machine, machine),
             wait_for_ssh=True,
             exit_after_ready=True,
-            seed=None,
             write_hostfwds=None,
         )
     )
