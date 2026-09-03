@@ -6,24 +6,19 @@
 # Lookup order: HOMELAB_VAULT_PASSWORD_<UPPER_ID>, macOS keychain, Linux pass file.
 set -euo pipefail
 
-id=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-  --vault-id)
-    id="${2:-}"
-    shift 2
-    ;;
-  --vault-id=*)
-    id="${1#--vault-id=}"
-    shift
-    ;;
-  *)
-    [ -z "$id" ] && id="$1"
-    shift
-    ;;
-  esac
-done
-id="${id:-prod}"
+if [ "${1:-}" = "--vault-id" ]; then
+  if [ "$#" -ne 2 ]; then
+    echo "usage: vault-client.sh [prod|test] | --vault-id prod|test" >&2
+    exit 1
+  fi
+  id="$2"
+else
+  if [ "$#" -gt 1 ]; then
+    echo "usage: vault-client.sh [prod|test] | --vault-id prod|test" >&2
+    exit 1
+  fi
+  id="${1:-prod}"
+fi
 
 case "$id" in
 prod | test) ;;
