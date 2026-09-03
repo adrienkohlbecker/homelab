@@ -152,7 +152,7 @@ zfs_autobackup_sources:
     dest_dataset: tank/pug
   - host: fox
     dest_dataset: tank/fox
-zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV4m+yJxWvdWwreul2M21yyDEhvIAh8hxS18zkAhVKz root@pug
+zfs_autobackup_ssh_public_key: "{{ zfs_autobackup_public_keys.pug }}"
 
 fan2go_enabled: true
 

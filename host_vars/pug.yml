@@ -52,7 +52,7 @@ netplan:
 zfs_autobackup_sources:
   - host: lab
     dest_dataset: apoc/lab
-zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
+zfs_autobackup_ssh_public_key: "{{ zfs_autobackup_public_keys.lab }}"
 
 fan2go_enabled: true
 

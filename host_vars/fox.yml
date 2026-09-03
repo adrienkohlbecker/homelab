@@ -52,7 +52,7 @@ zfs_pool_properties:
 # grants cross-site peers the physical /32, same path lab/pug use. The key
 # below authorizes root@lab on fox's zfs_autobackup user so lab's pull works.
 zfs_autobackup_sources: []
-zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
+zfs_autobackup_ssh_public_key: "{{ zfs_autobackup_public_keys.lab }}"
 
 # Hetzner is resetting this to 0
 boot_efi_timeout: 0
