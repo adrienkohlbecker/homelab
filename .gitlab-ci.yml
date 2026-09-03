@@ -210,6 +210,11 @@ qemu_host_ami:
   # Cancellation can leave a half-published bundle.
   interruptible: false
   timeout: 90m
+  parallel:
+    matrix:
+      - UBUNTU:
+          - noble
+          - resolute
   before_script:
     - mise run ci:bootstrap
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-$CI_JOB_ID"
@@ -226,11 +231,6 @@ qemu_host_ami:
   resource_group: qemu_image_box_$UBUNTU
   script:
     - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --promote
-  parallel:
-    matrix:
-      - UBUNTU:
-          - noble
-          - resolute
 
 # box_deps layers seed_deps.yml onto the matching box artifact in lab's shared
 # HOMELAB_CI_DIR; the explicit need prevents using an older box.
@@ -243,11 +243,6 @@ qemu_host_ami:
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
     - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --promote
-  parallel:
-    matrix:
-      - UBUNTU:
-          - noble
-          - resolute
   # Pair releases; artifacts stay in HOMELAB_CI_DIR rather than GitLab.
   needs:
     - job: "qemu_image:box"
