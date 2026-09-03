@@ -106,7 +106,6 @@ local EXCLUDE_FROM_FIELDS = {
     host = true,
     log = true,
     parser_status = true,
-    severity_text = true,
     _level = true,
     parse_error = true,
 }

@@ -147,17 +147,9 @@ function set_priority(tag, ts, record)
         return 1, ts, record
     end
 
-    -- An upstream modify filter scoped to nginx.access pre-stamps
-    -- record["severity_text"] = "debug" so this filter doesn't scan URL
-    -- noise for level keywords. Tag-gated to nginx.access: today's
-    -- only writer of record["severity_text"] is that modify filter
-    -- (systemd journal fields arrive uppercased, so SEVERITY_TEXT !=
-    -- severity_text). The gate is defence-in-depth:
-    -- a future tag-nginx.* input that parses attacker-influenced JSON
-    -- (e.g. structured-log nginx tail) would become a forgery channel
-    -- without it.
-    if tag == "nginx.access" and record["severity_text"] ~= nil then
-        record["_level"] = record["severity_text"]
+    -- Access paths are attacker-controlled, so do not infer severity from them.
+    if tag == "nginx.access" then
+        record["_level"] = "debug"
         return 1, ts, record
     end
 

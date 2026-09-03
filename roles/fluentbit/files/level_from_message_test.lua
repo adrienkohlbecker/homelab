@@ -174,22 +174,19 @@ do
     check("sudo.comm-matches", t, "info")
 end
 
--- nginx.access pre-stamp branch: an upstream modify filter sets
--- record.severity_text=debug so this filter trusts it and does NOT scan the URL
--- (which here contains "error") for keywords.
+-- nginx access logs are pinned directly to debug and their attacker-controlled
+-- URLs are not scanned for level keywords.
 do
     local t = sev(
         '10.89.0.4 - - [03/Jun/2026:17:41:02 +0000] "GET /admin/error-report?fatal=1 HTTP/1.1" 200 12',
-        "nginx.access",
-        { severity_text = "debug" }
+        "nginx.access"
     )
-    check("nginx.access.trusted.text", t, "debug")
+    check("nginx.access.direct", t, "debug")
 end
 
--- The nginx.access trust gate is tag-scoped: the same severity_text on a
--- non-nginx.access record is ignored, and the body is scanned normally.
+-- The nginx access rule is tag-scoped; other records are scanned normally.
 do
-    local t = sev("real ERROR happened", "svc.foo.service", { severity_text = "info" })
+    local t = sev("real ERROR happened", "svc.foo.service")
     check("nginx.access.gate-scoped", t, "error")
 end
 
