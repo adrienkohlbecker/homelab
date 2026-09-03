@@ -1,5 +1,16 @@
 pipeline:
   filters:
+    # Buffered multiline records re-enter at the pipeline head, so every
+    # service grammar must share this single first-position filter.
+    - name: multiline
+      match: svc.*
+      multiline.parser: multiline_homeassistant,multiline_homepage,multiline_sonarr,multiline_socket_proxy,python,go,java,ruby
+      multiline.key_content: MESSAGE
+      buffer: true
+      flush_ms: 1000
+      emitter_name: multiline_emitter
+      emitter_storage.type: filesystem
+
     # systemd logs a unit's own lifecycle from init.scope, so the target unit
     # is named by UNIT, not by SYSTEMD_UNIT (the logging process's unit).
     - name: grep
@@ -32,13 +43,3 @@ pipeline:
       parser: nginx_access_custom
       reserve_data: true
       preserve_key: true
-
-    # Services with header-aware grammars add their own multiline filter.
-    - name: multiline
-      match_regex: '^svc\.(?!(?:homeassistant|homepage|sonarr|socket_proxy)\.service$).*'
-      multiline.parser: python,go,java,ruby
-      multiline.key_content: MESSAGE
-      buffer: true
-      flush_ms: 1000
-      emitter_name: multiline_emitter
-      emitter_storage.type: filesystem

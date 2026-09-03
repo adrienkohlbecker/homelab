@@ -3,28 +3,8 @@ parsers:
     format: regex
     regex: '/\A\[(?<sonarr_level>Trace|Debug|Info|Warn|Error|Fatal)\] (?<sonarr_source>[^:]+): (?<sonarr_message>[^\r\n]*?)[ \t]*(?:\r?\n(?:[[:space:]]*\r?\n)*\[v(?<sonarr_version>[^]]+)\] (?<sonarr_exception>[\s\S]*?))?[[:space:]]*\z/'
 
-multiline_parsers:
-  - name: multiline_sonarr
-    type: regex
-    flush_timeout: 1000
-    rules:
-      - state: start_state
-        regex: '/^\[(Trace|Debug|Info|Warn|Error|Fatal)\] [^:]+: /'
-        next_state: continuation
-      - state: continuation
-        regex: '/^([[:space:]]*$|\[v[^]]+\] |[[:space:]]|<[^>]+>)/'
-        next_state: continuation
-
 pipeline:
   filters:
-    - name: multiline
-      match: svc.sonarr.service
-      multiline.parser: multiline_sonarr
-      multiline.key_content: MESSAGE
-      buffer: true
-      flush_ms: 1000
-      emitter_name: multiline_sonarr_emitter
-      emitter_storage.type: filesystem
     - name: modify
       match: svc.sonarr.service
       condition: key_exists CONTAINER_TAG

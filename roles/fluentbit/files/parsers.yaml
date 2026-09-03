@@ -6,3 +6,48 @@ parsers:
     format: regex
     regex: '^(?<remote_addr>[^ ]+) - (?<remote_user>[^ ]+) \[(?<time_local>[^\]]+)\] (?<http_host>[^ ]*) "(?:(?<method>\S+)(?: +(?<path>[^"]*?)(?: +(?<protocol>\S+))?)?)?" (?<server_name>[^ ]*) (?<status>\d{3}) (?<body_bytes_sent>\d+) (?<request_length>\d+) (?<request_time>[\d.]+) (?<upstream_response_time>[\d.]+|-) "(?<referer>[^"]*)" "(?<user_agent>[^"]*)" "(?<authelia_user>[^"]*)" (?<ssl_protocol>\S+) (?<ssl_cipher>\S+)$'
     types: status:integer body_bytes_sent:integer request_length:integer request_time:float
+
+multiline_parsers:
+  - name: multiline_homeassistant
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+ (DEBUG|INFO|WARNING|ERROR|CRITICAL) /'
+        next_state: continuation
+      - state: continuation
+        regex: '/^($|Traceback \(most recent call last\):|The above exception was|During handling of the above exception|[[:space:]]|(?:[A-Za-z_][A-Za-z0-9_.]*)?(Error|Exception|ExceptionGroup|Warning)(:|$))/'
+        next_state: continuation
+
+  - name: multiline_homepage
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^\[[^]]+\] (?:\x1b\[[0-9;]*m)?(error|warn|info|http|verbose|debug|silly)/'
+        next_state: continuation
+      - state: continuation
+        regex: '/^([[:space:]]+at |Caused by:|[A-Za-z_$][A-Za-z0-9_$.]*(Error|Exception):)/'
+        next_state: continuation
+
+  - name: multiline_sonarr
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^\[(Trace|Debug|Info|Warn|Error|Fatal)\] [^:]+: /'
+        next_state: continuation
+      - state: continuation
+        regex: '/^([[:space:]]*$|\[v[^]]+\] |[[:space:]]|<[^>]+>)/'
+        next_state: continuation
+
+  - name: multiline_socket_proxy
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^\[(ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\([0-9]+\)[[:space:]]+:/'
+        next_state: continuation
+      - state: continuation
+        regex: '/^[[:space:]]+\| /'
+        next_state: continuation

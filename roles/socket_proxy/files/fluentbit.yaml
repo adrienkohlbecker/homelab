@@ -3,28 +3,8 @@ parsers:
     format: regex
     regex: '/\A\[(?<socket_proxy_level>ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\((?<socket_proxy_process_id>[0-9]+)\)[[:space:]]+:[[:space:]]+(?<socket_proxy_message>[\s\S]*?)[[:space:]]*\z/'
     types: socket_proxy_process_id:integer
-multiline_parsers:
-  - name: multiline_socket_proxy
-    type: regex
-    flush_timeout: 1000
-    rules:
-      - state: start_state
-        regex: '/^\[(ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\([0-9]+\)[[:space:]]+:/'
-        next_state: continuation
-      - state: continuation
-        regex: '/^[[:space:]]+\| /'
-        next_state: continuation
-
 pipeline:
   filters:
-    - name: multiline
-      match: svc.socket_proxy.service
-      multiline.parser: multiline_socket_proxy
-      multiline.key_content: MESSAGE
-      buffer: true
-      flush_ms: 1000
-      emitter_name: multiline_socket_proxy_emitter
-      emitter_storage.type: filesystem
     - name: modify
       match: svc.socket_proxy.service
       condition: key_exists CONTAINER_TAG
