@@ -45,7 +45,7 @@ class TestQemuUserNetArgs:
 class TestQemuAnsibleArgs:
     def test_no_overlay_for_box(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        spec = machine.QemuMachineSpec(ssh_user="vagrant", inventory_host="box", packer_image="box")
+        spec = machine.QemuMachineSpec(ssh_user="vagrant", inventory_host="box")
         assert machine._qemu_ansible_args(spec) == []
 
     def test_overlay_for_lab(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,7 +53,7 @@ class TestQemuAnsibleArgs:
         overlay = tmp_path / "host_vars" / "lab-qemu.yml"
         overlay.parent.mkdir(parents=True)
         overlay.write_text("qemu_test: true\n")
-        spec = machine.QemuMachineSpec(ssh_user="vagrant", inventory_host="lab", packer_image="lab", os_disk_count=9)
+        spec = machine.QemuMachineSpec(ssh_user="vagrant", inventory_host="lab")
         result = machine._qemu_ansible_args(spec)
         assert len(result) == 2
         assert result[0] == "-e"
@@ -178,14 +178,43 @@ class TestConstants:
     def test_qemu_specs_match_choices(self) -> None:
         assert set(machine.QEMU_MACHINE_SPECS.keys()) == set(machine.MACHINE_CHOICES)
 
-    def test_minimal_has_no_packer_image(self) -> None:
-        assert machine.QEMU_MACHINE_SPECS["minimal"].packer_image is None
-
-    def test_box_has_packer_image(self) -> None:
-        assert machine.QEMU_MACHINE_SPECS["box"].packer_image == "box"
+    def test_only_minimal_uses_a_cloud_image(self) -> None:
+        assert machine.QEMU_MACHINE_SPECS["minimal"].cloud_image is True
+        assert machine.QEMU_MACHINE_SPECS["box"].cloud_image is False
 
     def test_box_deps_shares_inventory_host_with_box(self) -> None:
         assert machine.QEMU_MACHINE_SPECS["box_deps"].inventory_host == "box"
+
+
+class TestDiscoverPackerDisks:
+    def test_returns_contiguous_disks_and_format(self, tmp_path: Path) -> None:
+        second = tmp_path / "packer-ubuntu-2.raw"
+        first = tmp_path / "packer-ubuntu-1.raw"
+        second.touch()
+        first.touch()
+
+        paths, disk_format = machine.discover_packer_disks(tmp_path)
+
+        assert paths == [first, second]
+        assert disk_format == "raw"
+
+    def test_rejects_missing_disk_index(self, tmp_path: Path) -> None:
+        (tmp_path / "packer-ubuntu-1.qcow2").touch()
+        (tmp_path / "packer-ubuntu-3.qcow2").touch()
+
+        with pytest.raises(RuntimeError, match=r"indexes.*\[1, 3\].*\[1, 2\]"):
+            machine.discover_packer_disks(tmp_path)
+
+    def test_rejects_mixed_formats(self, tmp_path: Path) -> None:
+        (tmp_path / "packer-ubuntu-1.raw").touch()
+        (tmp_path / "packer-ubuntu-2.qcow2").touch()
+
+        with pytest.raises(RuntimeError, match="mix formats"):
+            machine.discover_packer_disks(tmp_path)
+
+    def test_rejects_empty_directory(self, tmp_path: Path) -> None:
+        with pytest.raises(RuntimeError, match="no Packer disks"):
+            machine.discover_packer_disks(tmp_path)
 
 
 # ---------------------------------------------------------------------------

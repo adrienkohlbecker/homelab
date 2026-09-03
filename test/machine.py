@@ -9,6 +9,7 @@ import ipaddress
 import json
 import os
 import platform
+import re
 import shlex
 import shutil
 import socket
@@ -232,14 +233,7 @@ if _ssh_key_path.exists():
 class QemuMachineSpec(NamedTuple):
     ssh_user: str
     inventory_host: str
-    # Packer image directory under /mnt/scratch/homelab_ci/<ubuntu_name>/. None means the
-    # variant uses an Ubuntu cloud image instead (minimal).
-    packer_image: str | None
-    # Number of disks the packer image stages as part of the OS install
-    # (includes rpool + every extra pool disk). prepare() overlays
-    # packer-ubuntu-1..N.{raw,qcow2} for those. Unused on minimal
-    # (packer_image=None), where the cloud-image branch returns early.
-    os_disk_count: int = 0
+    cloud_image: bool = False
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
     # 4 vCPUs keeps 6 concurrent VMs at 24 logical cores (1.2x oversub
     # on the i5-13500's 20 threads) — converge is I/O-bound so this
@@ -254,7 +248,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "minimal": QemuMachineSpec(
         ssh_user="ubuntu",
         inventory_host="minimal",
-        packer_image=None,
+        cloud_image=True,
         memory_mb=2048,
         vcpus=2,
     ),
@@ -266,8 +260,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # coverage (zfs trim/mount-cache loops), folding in the functional
         # coverage the dropped lab/pug AMIs carried. Prod-faithful
         # mirror/raidz geometry stays on the qemu-only lab/pug fixtures.
-        packer_image="box",
-        os_disk_count=2,
     ),
     "box_deps": QemuMachineSpec(
         ssh_user="vagrant",
@@ -282,9 +274,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # startup); the expanded nginx_site assert+validate chain runs
         # concurrently with the container startup, and 4 GiB is no
         # longer enough headroom.
-        packer_image="box_deps",
         memory_mb=5120,
-        os_disk_count=2,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
@@ -293,8 +283,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # 3-disk mirror rpool + dozer + tank + mouse, all baked in.
         # Push CI doesn't fan out to lab; kept for on-demand
         # --machine lab debug + nightly + packer script regression.
-        packer_image="lab",
-        os_disk_count=9,
     ),
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
@@ -303,13 +291,37 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # mirror, all baked in. Push CI doesn't fan out to pug;
         # kept for on-demand --machine pug + nightly + packer script
         # regression.
-        packer_image="pug",
-        os_disk_count=3,
     ),
 }
 
 
 MACHINE_CHOICES: tuple[str, ...] = tuple(QEMU_MACHINE_SPECS)
+_PACKER_DISK_RE = re.compile(r"packer-ubuntu-(\d+)\.(raw|qcow2)")
+
+
+def discover_packer_disks(image_dir: Path) -> tuple[list[Path], str]:
+    """Return contiguous Packer disks and their common on-disk format."""
+
+    indexed: list[tuple[int, Path, str]] = []
+    for path in image_dir.glob("packer-ubuntu-*"):
+        match = _PACKER_DISK_RE.fullmatch(path.name)
+        if match is None or not path.is_file():
+            raise RuntimeError(f"unexpected Packer disk artifact: {path}")
+        indexed.append((int(match.group(1)), path, match.group(2)))
+
+    if not indexed:
+        raise RuntimeError(f"no Packer disks found in {image_dir}")
+
+    indexed.sort()
+    indexes = [index for index, _, _ in indexed]
+    expected = list(range(1, len(indexed) + 1))
+    if indexes != expected:
+        raise RuntimeError(f"Packer disk indexes in {image_dir} are {indexes}; expected {expected}")
+
+    formats = {disk_format for _, _, disk_format in indexed}
+    if len(formats) != 1:
+        raise RuntimeError(f"Packer disks in {image_dir} mix formats: {sorted(formats)}")
+    return [path for _, path, _ in indexed], formats.pop()
 
 
 @dataclass(frozen=True)
@@ -488,16 +500,11 @@ class Machine:
         if role == "_site_test":
             spec = spec._replace(vcpus=6, memory_mb=12288)
 
-        # Imagedir layout is platform-gated (see imagedir_for_host); the disk
-        # format alongside it is too: raw on Linux (the host ZFS dataset already
-        # does CoW + zstd), qcow2 on Mac (APFS has no fs-level compression).
-        # Mirrors qemu.pkr.hcl's image_format var.
         self.imagedir: Path = imagedir_for_host()
-        self._packer_disk_format = "qcow2" if platform.system() == "Darwin" else "raw"
 
         self._spec = spec
-        if launch.image_dir is not None and spec.packer_image is None:
-            raise ValueError(f"image_dir override requires a variant with packer_image set, got {machine!r}")
+        if launch.image_dir is not None and spec.cloud_image:
+            raise ValueError(f"image_dir override requires an artifact-backed variant, got {machine!r}")
         if (launch.kernel is None) != (launch.initrd is None):
             raise ValueError("launch kernel and initrd must be provided together")
         self._image_dir_override = launch.image_dir.resolve() if launch.image_dir is not None else None
@@ -1310,7 +1317,7 @@ class Machine:
             # (port = 5900+display); pick it up front so we can print it.
             self.vnc_display = self._pick_vnc_display()
 
-        if self.machine == "minimal":
+        if self._spec.cloud_image:
             cloud_image = await self._ensure_minimal_cloudimg()
             seed_img = self.workdir_path / "seed.img"
             disk_img = self.workdir_path / "disk.img"
@@ -1342,43 +1349,29 @@ class Machine:
             if not self.arch.bios_boot_supported:
                 self.drives += await self._uefi_drives()
         else:
-            # ZFS variants pick a packer image (box/pug/lab), overlay
-            # every disk packer staged (rpool + extra pools), and attach
-            # any extra empty qcow2s on top. See AGENTS.md "Test
-            # Environment Design".
-            packer_image = self._spec.packer_image
-            if packer_image is None:
-                # Bare assertion would be elided under `python -O`; raise so the
-                # config error surfaces regardless of optimisation level.
-                raise RuntimeError(f"non-minimal variant {self.machine!r} must declare packer_image")
+            # Artifact-backed variants overlay every disk Packer published.
             if self._image_dir_override is not None:
-                image_dir = str(self._image_dir_override)
+                image_dir = self._image_dir_override
             else:
-                image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
-            os_disk_count = self._spec.os_disk_count
+                image_dir = self.imagedir / self.ubuntu_name / self.machine
+            os_src_paths, artifact_format = discover_packer_disks(image_dir)
 
-            # Packer renames per-OS disks to packer-ubuntu-N.<format> in its
-            # `extension` post-processor; mirror that suffix here. The format
-            # matches arch (raw on Linux, qcow2 on Mac).
-            os_src_paths = [
-                f"{image_dir}/packer-ubuntu-{idx}.{self._packer_disk_format}" for idx in range(1, os_disk_count + 1)
-            ]
             os_disk_paths: list[str] = []
             if self._commit_in_place:
                 # No overlay: pass the source files straight to qemu in
                 # their on-disk format. Writes persist in image_dir so
                 # mise-tasks/test/build_box_deps.sh can publish it afterwards.
-                os_disk_paths = list(os_src_paths)
-                drive_format = self._packer_disk_format
+                os_disk_paths = [str(path) for path in os_src_paths]
+                drive_format = artifact_format
             else:
                 for idx, src in enumerate(os_src_paths, start=1):
                     dest = self.workdir_path / f"packer-ubuntu-{idx}"
-                    await self._create_overlay(src, str(dest))
+                    await self._create_overlay(str(src), str(dest), backing_fmt=artifact_format)
                     os_disk_paths.append(str(dest))
                 drive_format = "qcow2"
 
             self.drives = [self._virtio_drive(path, drive_format) for path in os_disk_paths]
-            shutil.copyfile(Path(image_dir) / "efivars.fd", self.workdir_path / "efivars.fd")
+            shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
             self.drives += await self._uefi_drives()
 
         # launch.py --kernel/--initrd/--append: bypass the firmware boot
@@ -1396,16 +1389,8 @@ class Machine:
         if want_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
 
-    async def _create_overlay(
-        self, src: str, dest: str, size: str | None = None, backing_fmt: str | None = None
-    ) -> None:
+    async def _create_overlay(self, src: str, dest: str, *, backing_fmt: str, size: str | None = None) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize.
-
-        backing_fmt defaults to the packer artifact format, which is
-        platform-dependent (raw on Linux, qcow2 on Mac). The minimal variant
-        overrides it: its backing file is Ubuntu's cloud image, always qcow2
-        regardless of host platform, so passing the packer format would tell
-        qemu to read the qcow2 as raw and the guest would see a corrupt disk.
 
         lazy_refcounts defers refcount-table updates so cluster writes don't
         block on metadata flushes — safe because overlays are ephemeral (a
@@ -1423,7 +1408,7 @@ class Machine:
             "-b",
             src,
             "-F",
-            backing_fmt or self._packer_disk_format,
+            backing_fmt,
             dest,
         ]
         if size:
