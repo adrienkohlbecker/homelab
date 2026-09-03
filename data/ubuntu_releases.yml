@@ -1,0 +1,4 @@
+default: noble
+releases:
+  noble: "24.04"
+  resolute: "26.04"

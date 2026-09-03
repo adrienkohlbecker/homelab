@@ -26,11 +26,10 @@ from typing import NamedTuple
 
 import yaml
 
-UBUNTU_RELEASES: dict[str, str] = {
-    "noble": "24.04",
-    "resolute": "26.04",
-}
-DEFAULT_UBUNTU = "noble"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_UBUNTU_CATALOG = yaml.safe_load((_REPO_ROOT / "data" / "ubuntu_releases.yml").read_text())
+UBUNTU_RELEASES: dict[str, str] = _UBUNTU_CATALOG["releases"]
+DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
 DEFAULT_MACHINES = {"box": None}
 
 # Machines that only run on demand (`testrole.py --machine`) and the nightly

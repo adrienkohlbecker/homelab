@@ -23,7 +23,7 @@ data "external-raw" "host_arch" {
 
 variable "ubuntu_name" {
   type    = string
-  default = "noble"
+  default = null
 }
 
 variable "build_directory" {
@@ -57,8 +57,9 @@ locals {
 
   # Codename -> Ubuntu version, for the cloud image filename. No snapshot date:
   # see upstream_cloud_base below for why the build tracks the release symlink.
-  ubuntu_images  = jsondecode(file("ubuntu_images.json"))
-  ubuntu_version = local.ubuntu_images[var.ubuntu_name].version
+  ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))
+  ubuntu_name    = coalesce(var.ubuntu_name, local.ubuntu_catalog.default)
+  ubuntu_version = local.ubuntu_catalog.releases[local.ubuntu_name]
 
   # Arch-keyed configuration table. Centralizes everything that varies
   # between the supported builds. In this stack arch is a 1:1 proxy for
@@ -268,8 +269,8 @@ locals {
   #
   # For a reproducible bake, point these at `releases/<codename>/release-<date>/`
   # instead -- that tree is archival and goes back to each release's GA.
-  upstream_cloud_base = "https://cloud-images.ubuntu.com/releases/${var.ubuntu_name}/release"
-  nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/releases/${var.ubuntu_name}/release"
+  upstream_cloud_base = "https://cloud-images.ubuntu.com/releases/${local.ubuntu_name}/release"
+  nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/releases/${local.ubuntu_name}/release"
   cloud_base          = var.upstream_mirrors ? local.upstream_cloud_base : local.nexus_cloud_base
   cloud_checksum      = "file:${local.cloud_base}/SHA256SUMS"
   cloud_url           = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.arch_cfg.cloud_image_suffix}.img"
@@ -414,7 +415,7 @@ build {
     # classic sudo (which honors SETENV + -E) on resolute only; noble ships
     # classic sudo as the default already.
     inline = concat(
-      var.ubuntu_name == "resolute" ? ["sudo update-alternatives --set sudo /usr/bin/sudo.ws"] : [],
+      local.ubuntu_name == "resolute" ? ["sudo update-alternatives --set sudo /usr/bin/sudo.ws"] : [],
       ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"],
     )
     # Mirror URLs are resolved here (HCL) and passed as env. provision.sh
@@ -430,7 +431,7 @@ build {
       "PODMAN_SIZE"                     = local.variant_config[source.name].podman_size
       "META_SIZE"                       = local.variant_config[source.name].meta_size
       "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
-      "UBUNTU_NAME"                     = "${var.ubuntu_name}"
+      "UBUNTU_NAME"                     = "${local.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
       "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
@@ -458,7 +459,7 @@ build {
         "SOURCE_NAME=${source.name}",
         "IMAGE_FORMAT=${local.arch_cfg.image_format}",
         "IMAGE_TARGET=${local.variant_config[source.name].image_target}",
-        "UBUNTU_NAME=${var.ubuntu_name}",
+        "UBUNTU_NAME=${local.ubuntu_name}",
         "PUBLISH=${var.publish}",
         "OUTPUT_DIRECTORY=${var.output_directory}",
       ]
