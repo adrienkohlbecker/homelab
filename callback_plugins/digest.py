@@ -22,7 +22,6 @@ _STAT_KEEP = (
     "isdir",
     "isreg",
     "islnk",
-    "lnk_source",
     "lnk_target",
     "mode",
     "executable",
@@ -31,7 +30,6 @@ _STAT_KEEP = (
     "size",
     "mtime",
     "checksum",
-    "mimetype",
 )
 _JSON_DIGEST_THRESHOLD = 2048
 _JSON_KEY_LIMIT = 10
