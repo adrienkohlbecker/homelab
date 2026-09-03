@@ -1,6 +1,4 @@
 # Test-only overlay loaded with -e after host_vars/lab.yml for Lab QEMU runs.
-qemu_test: true
-
 # The QEMU NIC is not VLAN-trunked; its user network and `network.*` vars share
 # the test supernet, so the derived per-host macvlan block remains reachable.
 macvlan_blocks:

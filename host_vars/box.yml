@@ -6,7 +6,6 @@
 # defaults. Lab-prod's multi-pool shape is exercised by --machine lab/pug
 # nightly. Machine-shape qemu values live here directly; role-specific qemu
 # behavior belongs in the roles behind qemu_test gates.
-qemu_test: true
 
 # Volatile: VM is ephemeral and persistent journals would write to rpool
 # during throwaway test runs for no benefit.

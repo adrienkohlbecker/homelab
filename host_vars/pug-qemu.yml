@@ -1,6 +1,4 @@
 # Test-only overlay loaded with -e after host_vars/pug.yml for Pug QEMU runs.
-qemu_test: true
-
 # Match QEMU's single virtio NIC by name instead of Pug's physical MAC and driver.
 netplan:
   ethernets:

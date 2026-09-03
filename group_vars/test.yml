@@ -1,3 +1,5 @@
+qemu_test: true
+
 domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
 # DoT servers for the qemu test fixture. Local fixtures use the household

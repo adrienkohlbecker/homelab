@@ -340,11 +340,11 @@ def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
     directly in host_vars/<host>.yml and ansible loads it naturally; no
     extra-vars layer is needed. For variants whose inventory host
     doubles as a prod host (lab, pug), host_vars/<host>-qemu.yml carries
-    the VM-incompatible overrides (qemu_test, fake netplan, no UPS,
+    the VM-incompatible overrides (fake netplan, no UPS,
     test-mode macos_vm) on top of the prod-shaped host_vars/<host>.yml
     that inventory loads; we force-load it via -e so its values beat
-    the prod host_vars regardless of merge order. qemu_test itself
-    lives inside each fixture/overlay file, not harness-injected.
+    the prod host_vars regardless of merge order. qemu_test comes from
+    the test inventory group rather than being harness-injected.
     """
     override = Path(f"host_vars/{spec.inventory_host}-qemu.yml")
     if not override.exists():
