@@ -98,13 +98,6 @@ def test_podman_idmap_args_maps_one_container_identity() -> None:
     ]
 
 
-def test_podman_idmap_args_allows_distinct_container_gid() -> None:
-    assert (
-        homelab.podman_idmap_args({"uid": 120001, "gid": 120002}, container_uid=1000, container_gid=2000)[-1]
-        == "--gidmap=+2000:120002:1"
-    )
-
-
 def test_authelia_redirects_to_checks_status_auth_host_and_rd() -> None:
     result = {
         "status": 302,
