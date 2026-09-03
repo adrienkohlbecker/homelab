@@ -711,7 +711,7 @@ default_selection "{{ 'Ubuntu (Linux EFI Stub)' if ansible_architecture == 'aarc
 
 # Twin of the image-build refind.conf in packer/scripts/chroot.sh, with the
 # converge-time theme and backup-loader submenu added.
-{% set _zbm_cmdline = refind_zbm_cmdline_content | slurp_text %}
+{% set _zbm_cmdline = refind_zbm_cmdline_content.content | b64decode | trim %}
 {% set _zbm_launch_cmdline = [_zbm_cmdline, refind_zbm_extra_cmdline | default(''), _console_cmdline] | map('trim') | reject('equalto', '') | join(' ') %}
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI

@@ -1,6 +1,5 @@
 """Unit tests for shared homelab Ansible filters."""
 
-import base64
 import json
 
 import pytest
@@ -31,25 +30,6 @@ def test_zfs_mount_unit_preserves_historical_mapping() -> None:
 def test_zfs_mount_unit_rejects_invalid_or_ambiguous_mountpoints(mountpoint: str) -> None:
     with pytest.raises(AnsibleError):
         homelab.zfs_mount_unit(mountpoint)
-
-
-def test_slurp_text_decodes_content() -> None:
-    result = {"content": base64.b64encode(b"hello\n").decode()}
-    assert homelab.slurp_text(result) == "hello"
-
-
-def test_slurp_text_can_preserve_surrounding_whitespace() -> None:
-    result = {"content": base64.b64encode(b"hello\n").decode()}
-    assert homelab.slurp_text(result, trim=False) == "hello\n"
-
-
-def test_slurp_text_uses_default_for_missing_content() -> None:
-    assert homelab.slurp_text({}, default="{}") == "{}"
-
-
-def test_slurp_text_rejects_missing_content_without_default() -> None:
-    with pytest.raises(AnsibleError):
-        homelab.slurp_text({})
 
 
 def test_rstrip_newlines_removes_only_trailing_newline_characters() -> None:

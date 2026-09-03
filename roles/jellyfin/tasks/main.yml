@@ -346,7 +346,7 @@
   when: not qemu_test
   set_fact:
     jellyfin_oidc_desired_fp: "{{ jellyfin_oidc_state | to_json(sort_keys=true) | hash('sha256') }}"
-    jellyfin_oidc_current_fp: "{{ jellyfin_oidc_fp_slurp | slurp_text(default='') }}"
+    jellyfin_oidc_current_fp: "{{ jellyfin_oidc_fp_slurp.content | default('') | b64decode | trim }}"
   tags:
     - jellyfin
 

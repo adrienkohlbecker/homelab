@@ -63,7 +63,12 @@
 # before the copy can replace daemon-owned settings.
 - name: Render settings.json
   vars:
-    seerr_settings_json: "{{ _seerr_settings_b64 | slurp_text(default='{}') | from_json }}"
+    seerr_settings_json: >-
+      {{ _seerr_settings_b64.content
+         | default('')
+         | b64decode
+         | default('{}', true)
+         | from_json }}
   copy:
     # JSON.stringify(_, null, 1) writes no trailing newline; the template
     # file does. Strip ours so the bytes match what seerr persists.

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import ipaddress
 import json
 import re
@@ -33,20 +32,6 @@ def zfs_mount_unit(mountpoint: str) -> str:
 
     normalized = "/root" if mountpoint == "/" else mountpoint
     return f"zfs_mount{normalized.replace('/', '_')}.service"
-
-
-def slurp_text(result: Mapping[str, Any], default: str | None = None, trim: bool = True) -> str:
-    """Decode text content from an Ansible slurp result."""
-    if "content" not in result:
-        if default is not None:
-            return default.strip() if trim else default
-        raise AnsibleError("slurp_text requires a slurp result with content")
-
-    try:
-        text = base64.b64decode(result["content"]).decode()
-    except Exception as exc:
-        raise AnsibleError(f"slurp_text could not decode slurp content: {exc}") from exc
-    return text.strip() if trim else text
 
 
 def rstrip_newlines(value: Any) -> str:
@@ -211,6 +196,5 @@ class FilterModule:
             "podman_health_wget": podman_health_wget,
             "podman_idmap_args": podman_idmap_args,
             "rstrip_newlines": rstrip_newlines,
-            "slurp_text": slurp_text,
             "zfs_mount_unit": zfs_mount_unit,
         }

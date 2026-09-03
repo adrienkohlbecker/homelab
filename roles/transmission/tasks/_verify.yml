@@ -182,7 +182,7 @@
 - name: _verify | Templated settings.json survives transmission's writeback without drift
   assert:
     that:
-      - (_transmission_conf_ondisk | slurp_text(trim=false)) == _transmission_conf_expected
+      - (_transmission_conf_ondisk.content | b64decode) == _transmission_conf_expected
     fail_msg: >-
       transmission rewrote settings.json into a form settings.json.j2 no longer
       matches -- its key order/types drifted from the writeback, so deploying
