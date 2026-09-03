@@ -166,8 +166,6 @@ netdata_collectors:
   # gitlab_runner scrape goes missing (its config.toml metrics endpoint dies).
   - go.d:collector:prometheus:gitlab_runner
   - go.d:collector:zfspool:zfspool
-netdata_zfspool_thresholds: {}
-netdata_diskspace_blocklist: []
 
 # The Hetzner image carves this rebuild-only partition before rpool. Persistent
 # service state remains under /mnt/services; this ext4 filesystem carries only

@@ -1,19 +1,15 @@
-# Per-host alert/presence inputs. The alert templates iterate these
-# without a default (context_liveness.conf.j2, zfs_alerts_override.conf.j2),
-# so a host that forgets one fails the converge with a cryptic jinja
-# "is undefined" rather than this actionable message. Empty dict/list is
-# fine (box has no ZFS pools); only "set at all" is required.
-- name: Require the per-host netdata alert/collector inputs to be defined
+# Context and collector policies must stay explicit per host so an omitted
+# monitoring surface fails closed. ZFS thresholds and disk-space overrides are
+# optional and default empty.
+- name: Require the per-host netdata context and collector inputs
   assert:
     that:
       - netdata_contexts is defined
       - netdata_collectors is defined
-      - netdata_zfspool_thresholds is defined
-      - netdata_diskspace_blocklist is defined
     fail_msg: >-
-      netdata_contexts, netdata_collectors, netdata_zfspool_thresholds and
-      netdata_diskspace_blocklist must be set in host_vars (per-host alert +
-      presence-collector inputs). See host_vars/box.yml for the shape.
+      netdata_contexts and netdata_collectors must be set in host_vars
+      (per-host alert and presence-collector inputs). See host_vars/box.yml
+      for the shape.
   tags:
     - netdata
 
