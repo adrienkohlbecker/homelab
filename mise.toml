@@ -1,6 +1,3 @@
-[vars]
-homelab_ci_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/scratch/homelab_ci{% endif %}'
-
 [env]
 CLOUDFLARE_API_TOKEN = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
 NEXUS_USERNAME = "op://Lab/u2lem3tvichptsn37new73ftv4/username"
@@ -46,10 +43,7 @@ TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # the HCLOUD_TOKEN job variable. The `tf` task maps _OP -> HCLOUD_TOKEN under
 # `op run --`.
 HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
-# Expose [vars] entries as env so file-based mise-tasks/ scripts can read
-# them (mise vars are tera-expanded into toml `run` strings only). Toml
-# tasks still reference `{{vars.X}}`; both forms resolve to the same value.
-HOMELAB_CI_DIR = '{{vars.homelab_ci_dir}}'
+HOMELAB_CI_DIR = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/scratch/homelab_ci{% endif %}'
 # x86_64 (prod hosts + CI) stays pinned to the known-good 3.0.1/linux6.1
 # recovery line while lab kexec failures with newer ZBM kernels are
 # investigated. The aarch64 Mac test box -- the only arm builder, and not a
@@ -125,7 +119,7 @@ run = ['packer init "$@" .', 'packer init "$@" aws']
 
 [tasks."packer:clean"]
 description = "Remove leftover tmpdirs from failed packer builds and test-harness runs"
-run = 'rm -rf "{{vars.homelab_ci_dir}}"/.build-* "{{vars.homelab_ci_dir}}"/tmp*'
+run = 'rm -rf "$HOMELAB_CI_DIR"/.build-* "$HOMELAB_CI_DIR"/tmp*'
 
 [tasks.lint]
 description = "Run all linters"
