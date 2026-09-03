@@ -22,6 +22,19 @@
     or _netdata_unit.status.ActiveState != "active"
   become: true
 
+- name: _verify | Read Prometheus collector configuration
+  slurp:
+    src: /etc/netdata/go.d/prometheus.conf
+  register: _netdata_prometheus_conf
+  become: true
+
+- name: _verify | MinIO inputs enable its Prometheus scrape job
+  assert:
+    that:
+      - (_netdata_prometheus_conf.content | b64decode) is search('(?m)^  - name: minio$')
+    fail_msg: >-
+      Expected minio_buckets to enable the MinIO job in prometheus.conf.
+
 - name: _verify | Read systemd unit health configuration
   slurp:
     src: /etc/netdata/health.d/systemdunits.conf

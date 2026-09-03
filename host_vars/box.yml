@@ -86,7 +86,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkv
 
 dns_keepalived_priority: 5
 
-minio_enabled: true
 minio_buckets:
   - test
 netdata_contexts:
