@@ -176,12 +176,16 @@ def test_diff_dropped_when_persisted_under_facts():
                 "diff": {"before": "a\n", "after": "b\n", "before_header": "/etc/x"},
             },
             "loop_result": {"diff": [{"before": "a\n"}, {"after": "b\n"}]},
+            "literal": {"diff": "just a string"},
+            "empty": {"diff": []},
         }
     }
     out = display_result(result)
     persisted = out["ansible_facts"]["conf_result"]
     assert "diff" not in persisted
     assert "diff" not in out["ansible_facts"]["loop_result"]
+    assert "diff" not in out["ansible_facts"]["literal"]
+    assert "diff" not in out["ansible_facts"]["empty"]
     assert persisted["changed"] is True
     assert persisted["dest"] == "/etc/x"
 
@@ -189,14 +193,6 @@ def test_diff_dropped_when_persisted_under_facts():
 def test_default_callback_drops_top_level_diff_from_result_dump():
     result = {"changed": True, "diff": {"before": "a\n", "after": "b\n"}}
     assert "diff" not in display_result(result)
-
-
-def test_non_diff_fact_named_diff_kept():
-    # A fact literally named `diff` that isn't a diff structure stays.
-    result = {"ansible_facts": {"diff": "just a string", "empty_diff": {"diff": []}}}
-    out = display_result(result)
-    assert out["ansible_facts"]["diff"] == "just a string"
-    assert out["ansible_facts"]["empty_diff"]["diff"] == []
 
 
 def test_digest_does_not_mutate_input():

@@ -65,13 +65,6 @@ class CallbackModule(DefaultCallback):
     CALLBACK_NAME = "digest"
 
     def _dump_results(self, result, *args, **kwargs):
-        def is_diff(value):
-            if isinstance(value, dict):
-                return bool({"before", "after", "prepared"} & value.keys())
-            if isinstance(value, list):
-                return bool(value) and all(is_diff(item) for item in value)
-            return False
-
         def digest(obj, in_facts=False):
             if isinstance(obj, dict):
                 out = {}
@@ -79,7 +72,7 @@ class CallbackModule(DefaultCallback):
                 for key, value in obj.items():
                     if key == "ansible_facts" and isinstance(value, dict) and len(value) > _FACTS_DIGEST_THRESHOLD:
                         value = f"<{len(value)} facts hidden: {', '.join(sorted(value))}>"
-                    elif in_facts and key == "diff" and is_diff(value):
+                    elif in_facts and key == "diff":
                         continue
                     elif is_json_http_response and key == "json":
                         value = _json_summary(value)
