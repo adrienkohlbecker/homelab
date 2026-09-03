@@ -82,5 +82,4 @@ class CallbackModule(DefaultCallback):
                 return [digest(item, in_facts) for item in obj]
             return obj
 
-        result = digest(result)
-        return super()._dump_results(result, *args, **kwargs)
+        return super()._dump_results(digest(result), *args, **kwargs)
