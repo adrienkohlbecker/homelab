@@ -343,6 +343,7 @@
     - influxdb
 
 - name: Restore packaged podman tmpfiles configuration
+  when: not (ansible_check_mode and (podman_apt.changed | default(false)))
   lineinfile:
     regexp: '^# (.*) /run/podman (.*)$'
     line: '\1 /run/podman \2'
@@ -830,6 +831,7 @@
   getent:
     database: group
     key: ssl-cert
+    fail_key: false
   register: retired_services_ssl_cert_group
   become: true
   tags:
