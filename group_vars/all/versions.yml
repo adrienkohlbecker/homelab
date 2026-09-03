@@ -179,10 +179,12 @@ lnav_artifacts:
 # (The macOS release itself -- Sequoia "15" -- is host-overridable and lives
 # in roles/macos_vm/defaults/main.yml, not here.)
 macos_vm_osx_kvm_commit: 4c378a4b5e0b219783683012bec680325eb40719  # 2026-01-26
-macos_vm_opencore_qcow2_url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/OpenCore/OpenCore.qcow2"
-macos_vm_opencore_qcow2_sha256: "6ed36c0c2a4206ccc695f6b1a734a1cc6f94d288b0517c705d351c63cb92a6f3"
-macos_vm_fetch_macos_url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/fetch-macOS-v2.py"
-macos_vm_fetch_macos_sha256: "39ac6d26bd265f5d32198062f515ad15ef93afb7a74e702be2b008090d5bd5f3"
+macos_vm_opencore_artifact:
+  url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/OpenCore/OpenCore.qcow2"
+  sha256: "6ed36c0c2a4206ccc695f6b1a734a1cc6f94d288b0517c705d351c63cb92a6f3"
+macos_vm_fetch_macos_artifact:
+  url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/fetch-macOS-v2.py"
+  sha256: "39ac6d26bd265f5d32198062f515ad15ef93afb7a74e702be2b008090d5bd5f3"
 
 # The live MinIO dataset uses the legacy fs backend. Newer servers require a
 # data migration, plus console/OIDC and provisioning validation before upgrading.

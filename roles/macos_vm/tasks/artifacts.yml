@@ -26,9 +26,9 @@
   # check fails. On a real run the dir is real and the task proceeds.
   when: not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
   get_url:
-    url: "{{ macos_vm_opencore_qcow2_url }}"
+    url: "{{ macos_vm_opencore_artifact.url }}"
     dest: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
-    checksum: "sha256:{{ macos_vm_opencore_qcow2_sha256 }}"
+    checksum: "sha256:{{ macos_vm_opencore_artifact.sha256 }}"
     owner: root
     group: kvm
     mode: "0644"
@@ -55,9 +55,9 @@
     - macos_vm_install_mode
     - not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
   get_url:
-    url: "{{ macos_vm_fetch_macos_url }}"
+    url: "{{ macos_vm_fetch_macos_artifact.url }}"
     dest: "{{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py"
-    checksum: "sha256:{{ macos_vm_fetch_macos_sha256 }}"
+    checksum: "sha256:{{ macos_vm_fetch_macos_artifact.sha256 }}"
     owner: root
     group: root
     mode: "0755"
