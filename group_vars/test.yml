@@ -1,5 +1,19 @@
 qemu_test: true
 
+# Shared single-NIC profile for every QEMU fixture. Lab and Pug rebind netplan
+# to this value from their extra-vars overlays so it outranks prod host_vars.
+qemu_netplan:
+  ethernets:
+    en:
+      match:
+        name: "en*"
+      link-local: []
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+      critical: true
+netplan: "{{ qemu_netplan }}"
+
 domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
 # DoT servers for the qemu test fixture. Local fixtures use the household

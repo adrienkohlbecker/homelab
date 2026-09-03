@@ -76,24 +76,6 @@ macvlan_blocks:
     vlan: iot
     podman_network: true
 
-# Override prod-style MAC-matching netplan: the QEMU VM ships a single
-# virtio-net with a fresh MAC, so match by name like everything in
-# host_vars/{lab,pug}-qemu.yml does.
-netplan:
-  ethernets:
-    en:
-      match:
-        name: "en*"
-      link-local: [] # do not setup random link local address when no dhcp is present
-      wakeonlan: true
-      dhcp4: true
-      dhcp6: false
-      # Lease-preservation, mirroring prod (lab/pug): keeps the harness's
-      # SSH lease through the converge's own `netplan apply`. The _verify
-      # broken-config fixture is written directly and stays non-critical,
-      # so the rollback path is still exercised.
-      critical: true
-
 # Prod-shaped self-reference exercises source validation, template rendering,
 # receive-root creation, and idempotence. _verify runs the local backup script,
 # not the full autosnapshot orchestrator, so it never attempts the SSH pull.

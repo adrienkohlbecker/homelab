@@ -15,15 +15,6 @@ journald_storage: volatile
 # Inherits empty macvlan_blocks: minimal doesn't trunk any VLANs and doesn't
 # need an L2-on-LAN presence for containers.
 grub_bootloader: true
-netplan:
-  ethernets:
-    en:
-      match:
-        name: "en*"
-      link-local: [] # do not setup random link local address when no dhcp is present
-      wakeonlan: true
-      dhcp4: true
-      dhcp6: false
 
 # The role installs the optional kernel-module package omitted by this trimmed
 # cloud image, making minimal the zram-only fixture.

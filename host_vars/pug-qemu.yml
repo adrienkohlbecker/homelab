@@ -1,14 +1,3 @@
 # Test-only overlay loaded with -e after host_vars/pug.yml for Pug QEMU runs.
-# Match QEMU's single virtio NIC by name instead of Pug's physical MAC and driver.
-netplan:
-  ethernets:
-    en:
-      match:
-        name: "en*"
-      link-local: [] # do not setup random link local address when no dhcp is present
-      wakeonlan: true
-      dhcp4: true
-      dhcp6: false
-      # Preserve the harness SSH lease during converge; the non-critical
-      # broken-config fixture still exercises rollback.
-      critical: true
+# Override Pug's physical-NIC profile at extra-vars precedence.
+netplan: "{{ qemu_netplan }}"
