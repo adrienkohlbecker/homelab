@@ -83,6 +83,8 @@ workflow:
 # nothing here reads.
 .hosted:
   image: $CI_REGISTRY_IMAGE/ci:latest
+  before_script:
+    - mise run ci:bootstrap
 
 .push_or_web:
   rules:
@@ -219,7 +221,6 @@ lint:
     # check so syntax-check runs with the repo config (inventory, vault ids).
     ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
   script:
-    - mise run ci:bootstrap
     - mise run lint
 
 # Hermetic pytest suite (testpaths=unit_tests) plus Fluent Bit Lua filter tests.
@@ -234,7 +235,6 @@ unit_tests:
     - .push_or_web
   timeout: 15m
   script:
-    - mise run ci:bootstrap
     - mise run test
     - mise run test:fluentbit-lua
 
@@ -303,7 +303,6 @@ qemu_host_ami:
   interruptible: false
   timeout: 60m
   script:
-    - mise run ci:bootstrap
     - mise run packer:init
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID"
     - mise run packer:qemu-host-ami --promote
@@ -420,7 +419,6 @@ schedule_status_guard:
     - saas-linux-small-amd64
   timeout: 10m
   script:
-    - mise run ci:bootstrap
     - mise run ci:schedule-guard
 
 # Semantic cleanup for nested-qemu image bundles in S3. Bucket lifecycle handles
@@ -445,7 +443,6 @@ qemu_image_reaper:
   interruptible: false
   timeout: 15m
   script:
-    - mise run ci:bootstrap
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-reaper-$CI_JOB_ID"
     - |
       if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
@@ -540,5 +537,4 @@ zbm_build:
       - zbm-build/**/*.tar.gz
       - zbm-build/**/*.sha256sum
   script:
-    - mise run ci:bootstrap
     - mise run zbm:ci-build
