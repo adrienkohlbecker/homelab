@@ -49,33 +49,14 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # URL. The wheel cache is pre-warmed below, so this costs no per-run network
 # fetch in the steady state. pip is unused; uv is the package manager.
 
-# Harness needs qemu-system-x86 + qemu-utils for booting test VMs;
-# openssh-client for talking to the guests; xorriso for the `minimal` variant's
-# seed iso; python3-yaml so mise-tasks/ci scripts can run
-# without uv; lua5.4 for the Fluent Bit filter unit suite. build-essential is
-# for any wheel that needs to compile. gpg + apt-transport-https are for the
-# mise apt repo.
-#
-# curl + netcat-openbsd back the WAN-side delegate_to: localhost probes
-# in roles/iptables/tasks/_verify.yml — TCP via curl, UDP via `nc -u`.
-# Without netcat, the wireguard ingress probe fails with
-# "nc: command not found".
-#
-# passt backs the guest NIC over a unix socket (qemu `-netdev stream`,
-# present in this image's qemu 8.2) instead of qemu's libslirp, whose
-# single-threaded userspace stack drops UDP under load and flakes
-# external-DNS _verify. test/machine.py probes for passt + stream support
-# and only uses it when both are present, so older Linux hosts or macOS
-# transparently keep the slirp path. See
-# notes/ci_qemu_net_passt_migration.md.
+# qemu-system-x86 + qemu-utils support the macOS VM disk unit tests;
+# openssh-client provides ssh-keygen to the zbm build; lua5.4 runs the Fluent
+# Bit filter unit suite. build-essential covers wheels that need compilation.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git jq xz-utils unzip gpg gpg-agent apt-transport-https \
-      qemu-system-x86 qemu-utils ovmf \
+      ca-certificates curl git jq xz-utils unzip gpg gpg-agent \
+      qemu-system-x86 qemu-utils \
       openssh-client coreutils \
-      netcat-openbsd \
-      passt \
-      xorriso \
-      python3-yaml lua5.4 \
+      lua5.4 \
       build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -114,8 +95,7 @@ RUN install -dm 755 /etc/apt/keyrings && \
 # environment via UV_PROJECT_ENVIRONMENT and the no-shadowing intent holds.
 ENV MISE_DATA_DIR=/opt/mise \
     PATH="/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin"
-RUN install -dm 755 /etc/apt/keyrings && \
-    curl -fsSL https://mise.jdx.dev/gpg-key.pub \
+RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
       | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg && \
     echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" \
       > /etc/apt/sources.list.d/mise.list && \
