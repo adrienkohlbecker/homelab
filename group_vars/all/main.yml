@@ -7,10 +7,8 @@ qemu_test_minimal: false
 boot_esp_mount_opts: defaults,umask=0077
 boot_esp_mode: "0700"
 
-# Serial console fragment — arch-specific QEMU UART on test VMs, host_vars
-# boot_serial_console on real hardware (empty on lab/pug which have no UART).
-# Mirrors the boot role's _boot_serial derivation so refind and other roles
-# can consume the same value without re-implementing the logic.
+# Shared boot/rEFInd console fragment: use the architecture-specific QEMU UART
+# in tests and each physical host's boot_serial_console otherwise.
 _console_serial: >-
   {% if qemu_test %}
   {{ (ansible_architecture == 'aarch64')
