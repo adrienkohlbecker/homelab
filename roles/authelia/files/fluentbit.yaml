@@ -19,4 +19,3 @@ pipeline:
         - msg log
         - level _level
       remove: time
-      set: parser_status parsed

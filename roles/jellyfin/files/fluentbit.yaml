@@ -30,7 +30,6 @@ pipeline:
         - JellyfinFormat
       add:
         - _level Information
-      set: parser_status parsed
     - name: modify
       match: svc.jellyfin.service
       condition: key_exists '@l'

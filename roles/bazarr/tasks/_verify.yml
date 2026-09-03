@@ -31,7 +31,7 @@
                 except json.JSONDecodeError:
                     continue
                 fields = record.get("fields", {})
-                if record.get("service") == "bazarr" and fields.get("parser_status") == "parsed":
+                if record.get("service") == "bazarr" and fields.get("source_line") is not None:
                     sys.exit(0)
         sys.exit(1)
       - /var/log/fluent-bit/lnav.jsonl
@@ -72,9 +72,6 @@
         - message: bazarr-valid
           level: fatal
           service: bazarr
-          fields.parser_status: parsed
           fields.source_line: 42
         - message: bazarr-raw
           service: bazarr
-          _absent:
-            - fields.parser_status

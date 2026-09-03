@@ -38,7 +38,6 @@ pipeline:
         - message log
         - level _level
       remove: time
-      set: parser_status parsed
     - name: modify
       match: svc.minio.service
       condition:
@@ -46,6 +45,5 @@ pipeline:
         - key_value_matches log '^\{'
         - key_does_not_exist message
       add:
-        - parser_status failed
         - parse_error minio_json
         - _level warn

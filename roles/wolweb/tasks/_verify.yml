@@ -40,7 +40,6 @@
                     record.get("service") == "wolweb"
                     and record.get("unit") == "wolweb.service"
                     and record.get("level") == "warn"
-                    and fields.get("parser_status") == "parsed"
                     and fields.get("CONTAINER_ID")
                 ):
                     print(json.dumps(record, sort_keys=True))
@@ -162,21 +161,13 @@
         - message: 'Startup Webserver on "127.0.0.1:8089"'
           level: info
           service: wolweb
-          fields.parser_status: parsed
         - message: "101 bytes written, 102 expected!"
           level: warn
-          fields.parser_status: parsed
         - message: synthetic interface failure
           level: error
-          fields.parser_status: parsed
         - message: "Attempting to send a magic packet to MAC 00:11:22:33:44:55"
           level: info
-          fields.parser_status: parsed
         - message: wolweb-raw
           service: wolweb
-          _absent:
-            - fields.parser_status
         - message: "2099/01/02 03:04:09 same-unit lifecycle record"
           service: systemd
-          _absent:
-            - fields.parser_status

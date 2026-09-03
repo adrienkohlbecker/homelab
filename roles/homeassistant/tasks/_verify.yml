@@ -141,10 +141,7 @@
             Exception: homeassistant-valid
           level: fatal
           service: homeassistant
-          fields.parser_status: parsed
           fields.thread: MainThread
           fields.source: homeassistant.verify
         - message: homeassistant-raw
           service: homeassistant
-          _absent:
-            - fields.parser_status

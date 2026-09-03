@@ -28,4 +28,3 @@ pipeline:
         - lidarr_source source
         - lidarr_version app_version
         - lidarr_exception exception
-      set: parser_status parsed

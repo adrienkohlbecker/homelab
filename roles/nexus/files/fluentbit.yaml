@@ -42,7 +42,6 @@ pipeline:
         - level
       set:
         - _level debug
-        - parser_status parsed
     - name: modify
       match: svc.nexus.service
       condition:
@@ -54,7 +53,6 @@ pipeline:
         - threadName thread
         - loggerName source
         - throwable exception
-      set: parser_status parsed
     - name: modify
       match: svc.nexus.service
       condition:
@@ -70,7 +68,6 @@ pipeline:
         - timestamp
         - nodeId
       add: _level info
-      set: parser_status parsed
     - name: modify
       match: svc.nexus.service
       condition:
@@ -78,6 +75,5 @@ pipeline:
         - key_does_not_exist formattedMessage
         - key_does_not_exist domain
       add:
-        - parser_status failed
         - parse_error nexus_json
         - _level warn

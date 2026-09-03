@@ -24,7 +24,6 @@ pipeline:
         - msg log
         - level _level
       remove: time
-      set: parser_status parsed
     - name: modify
       match: svc.gitlab_runner.service
       condition:
@@ -32,6 +31,5 @@ pipeline:
         - key_value_matches log '^\{'
         - key_does_not_exist msg
       add:
-        - parser_status failed
         - parse_error gitlab_runner_json
         - _level warn

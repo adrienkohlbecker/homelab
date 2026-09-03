@@ -183,7 +183,6 @@
                 fields = record.get("fields", {})
                 if (
                     record.get("service") == "jellyfin"
-                    and fields.get("parser_status") == "parsed"
                     and fields.get("source")
                     and "@t" not in fields
                     and "@m" not in fields
@@ -236,10 +235,7 @@
         - message: jellyfin-valid
           level: warn
           service: jellyfin
-          fields.parser_status: parsed
           fields.source: Verify
           fields.service: attribute
         - message: jellyfin-raw
           service: jellyfin
-          _absent:
-            - fields.parser_status

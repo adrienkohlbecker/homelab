@@ -26,4 +26,3 @@ pipeline:
         - transmission_level _level
         - transmission_source source
         - transmission_source_line source_line
-      set: parser_status parsed

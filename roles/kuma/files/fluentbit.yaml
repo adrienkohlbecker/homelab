@@ -26,7 +26,6 @@ pipeline:
         - level _level
         - module source
       remove: time
-      set: parser_status parsed
     - name: modify
       match: svc.kuma.service
       condition:
@@ -34,6 +33,5 @@ pipeline:
         - key_value_matches log '^\{'
         - key_does_not_exist msg
       add:
-        - parser_status failed
         - parse_error kuma_json
         - _level warn

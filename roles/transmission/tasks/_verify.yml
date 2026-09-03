@@ -207,7 +207,6 @@
                 if (
                     record.get("service") == "transmission"
                     and record.get("message", "").startswith("Rejected request from 127.0.0.1")
-                    and fields.get("parser_status") == "parsed"
                 ):
                     sys.exit(0)
         sys.exit(1)
@@ -248,7 +247,6 @@
           service: transmission
           fields.source: utils.cc
           fields.source_line: 144
-          fields.parser_status: parsed
           _absent:
             - fields.transmission_level
             - fields.CONTAINER_TAG
@@ -256,12 +254,7 @@
           level: warn
           fields.source: rpc-server.cc
           fields.source_line: 570
-          fields.parser_status: parsed
         - message: '[ls.io-init] done.'
           service: transmission
-          _absent:
-            - fields.parser_status
         - message: Started transmission.
           service: systemd
-          _absent:
-            - fields.parser_status

@@ -134,7 +134,6 @@
                 fields = record.get("fields", {})
                 if (
                     record.get("service") == "kuma"
-                    and fields.get("parser_status") == "parsed"
                     and fields.get("source")
                     and fields.get("CONTAINER_ID")
                     and "time" not in fields
@@ -186,7 +185,6 @@
         - message: kuma-valid
           level: warn
           service: kuma
-          fields.parser_status: parsed
           fields.source: SERVER
           fields.service: attribute
           _absent:
@@ -197,20 +195,15 @@
           level: info
           service: kuma
           _absent:
-            - fields.parser_status
             - fields.source
         - message: '(node:42) [DEP0040] DeprecationWarning: punycode is deprecated.'
           level: info
           service: kuma
-          _absent:
-            - fields.parser_status
         - message: '{"time":"broken"'
           level: warn
           service: kuma
           parse_error: kuma_json
-          fields.parser_status: failed
         - message: '{"time":"2099-01-02T03:04:05Z","module":"SYSTEMD","level":"ERROR","msg":"must-not-parse"}'
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.source

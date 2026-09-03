@@ -19,7 +19,6 @@ pipeline:
         - message log
         - level _level
       remove: time
-      set: parser_status parsed
     # TLS terminates at nginx, so Headscale correctly listens as plain HTTP.
     - name: modify
       match: svc.headscale.service

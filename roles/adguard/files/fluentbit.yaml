@@ -36,7 +36,6 @@ pipeline:
         - host adguard_host
         - parse_error adguard_parse_error
         - parser_reason adguard_parser_reason
-        - parser_status adguard_parser_status
         - service adguard_service
         - severity_text adguard_severity_text
         - source adguard_source
@@ -57,4 +56,3 @@ pipeline:
         - adguard_timestamp
         - adguard_body
         - adguard_attributes
-      set: parser_status parsed

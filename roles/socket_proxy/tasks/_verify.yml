@@ -48,7 +48,6 @@
                     and record.get("message")
                     == sys.argv[2] + "\n   | first detail\n   | second detail"
                     and fields.get("process_id") == 42
-                    and fields.get("parser_status") == "parsed"
                     and fields.get("CONTAINER_ID")
                     and "socket_proxy_level" not in fields
                     and "socket_proxy_message" not in fields
@@ -107,7 +106,6 @@
           level: info
           service: socket_proxy
           fields.process_id: 2
-          fields.parser_status: parsed
           _absent:
             - fields.socket_proxy_level
             - fields.socket_proxy_message
@@ -116,26 +114,21 @@
         - message: Current worker (9) exited with code 0 (Exit)
           level: warn
           fields.process_id: 8
-          fields.parser_status: parsed
         - message: |-
             missing timeouts for backend 'docker-events'.
                | While not properly invalid, you will certainly encounter various problems
           level: warn
           fields.process_id: 8
-          fields.parser_status: parsed
         - message: missing timeouts for backend 'dockerbackend'.
           level: warn
           fields.process_id: 8
-          fields.parser_status: parsed
         - message: socket-proxy-prose
           service: socket_proxy
           _absent:
-            - fields.parser_status
             - fields.process_id
         - message: "[WARNING]  (8) : socket-proxy-lifecycle"
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.process_id
 
 - name: _verify | Allowed GET /version returns 200

@@ -72,6 +72,5 @@ function normalize_podman_event(_tag, ts, record)
     end
 
     record["MESSAGE"] = message
-    record["parser_status"] = "parsed"
     return 1, ts, record
 end

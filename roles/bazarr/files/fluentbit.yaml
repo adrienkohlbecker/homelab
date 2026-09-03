@@ -18,4 +18,3 @@ pipeline:
         - key_exists message
         - key_exists _level
       hard_rename: message log
-      set: parser_status parsed

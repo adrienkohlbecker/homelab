@@ -42,4 +42,3 @@ pipeline:
         - ha_thread thread
         - ha_source source
       remove: ha_timestamp
-      set: parser_status parsed

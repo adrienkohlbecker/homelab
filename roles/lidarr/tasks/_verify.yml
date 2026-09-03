@@ -73,7 +73,6 @@
                     and record.get("message") == "Data directory is being overridden to [/config]"
                     and record.get("level") == "info"
                     and fields.get("source") == "AppFolderInfo"
-                    and fields.get("parser_status") == "parsed"
                     and "CONTAINER_TAG" not in fields
                     and "CMDLINE" not in fields
                 ):
@@ -123,7 +122,6 @@
           level: info
           service: lidarr
           fields.source: VerifyInfo
-          fields.parser_status: parsed
           _absent:
             - fields.CONTAINER_TAG
             - fields.CMDLINE
@@ -138,12 +136,10 @@
         - message: "[migrations] no migrations found"
           level: info
           _absent:
-            - fields.parser_status
             - fields.source
         - message: "[Info] Lifecycle: lidarr-unit-record"
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.source
         - message: "RSS Sync Completed. Reports found: 1, Reports grabbed: 0"
           fields.source: RssSyncService

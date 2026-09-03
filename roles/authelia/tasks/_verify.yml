@@ -108,7 +108,6 @@
                 if (
                     record.get("service") == "authelia"
                     and record.get("level") == "info"
-                    and fields.get("parser_status") == "parsed"
                     and fields.get("method") == "GET"
                     and fields.get("path") == "/api/authz/auth-request"
                     and fields.get("remote_ip")
@@ -186,9 +185,6 @@
         - message: authelia-valid
           level: warn
           service: authelia
-          fields.parser_status: parsed
           fields.service: attribute
         - message: authelia-raw
           service: authelia
-          _absent:
-            - fields.parser_status

@@ -47,4 +47,3 @@ pipeline:
         - sonarr_source source
         - sonarr_version app_version
         - sonarr_exception exception
-      set: parser_status parsed

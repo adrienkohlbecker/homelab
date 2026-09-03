@@ -27,7 +27,7 @@
                 fields = record.get("fields", {})
                 if (
                     record.get("service") == "minio"
-                    and fields.get("parser_status") == "parsed"
+                    and fields.get("errKind")
                     and "time" not in fields
                     and "message" not in fields
                 ):
@@ -67,7 +67,6 @@
           level: warn
           service: minio
           fields.errKind: MINIO
-          fields.parser_status: parsed
           fields.service: attribute
           _absent:
             - fields.time
@@ -79,7 +78,6 @@
           fields.api.name: SYSTEM
           fields.error_source:
             - cmd/server-main.go:1:cmd.serverMain()
-          fields.parser_status: parsed
           _absent:
             - fields.time
             - fields.error
@@ -88,11 +86,8 @@
           level: warn
           service: minio
           parse_error: minio_json
-          fields.parser_status: failed
         - message: '{"level":"ERROR","message":"must-not-parse"}'
           service: systemd
-          _absent:
-            - fields.parser_status
 
 # The SPA reads this endpoint to choose between a login form and an IdP redirect.
 - name: _verify | MinIO console returns its login strategy through HTTPS

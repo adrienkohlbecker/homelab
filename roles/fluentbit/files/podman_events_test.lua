@@ -33,7 +33,6 @@ do
     check("start.name", rec.name, "homeassistant")
     check("start.image", rec.image, "ghcr.io/home-assistant/home-assistant:2026.6.3")
     check("start.object_id", rec.object_id, cid)
-    check("start.parser_status", rec.parser_status, "parsed")
     check("start.no_native_event", rec.PODMAN_EVENT, nil)
     check("start.no_empty_health", rec.health_status, nil)
     check("start.no_time", rec.PODMAN_TIME, nil)
@@ -94,7 +93,6 @@ do
     local rec, code = normalize({ MESSAGE = message, SYSLOG_IDENTIFIER = "podman" })
     check("daemon.code", code, 0)
     check("daemon.message", rec.MESSAGE, message)
-    check("daemon.no_parser_status", rec.parser_status, nil)
 end
 
 do

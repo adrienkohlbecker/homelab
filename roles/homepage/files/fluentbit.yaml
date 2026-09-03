@@ -41,7 +41,6 @@ pipeline:
         - homepage_level _level
         - homepage_source source
       remove: homepage_timestamp
-      set: parser_status parsed
     - name: modify
       match: svc.homepage.service
       condition: key_value_equals _level http

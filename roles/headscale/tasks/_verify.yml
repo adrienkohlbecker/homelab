@@ -96,12 +96,9 @@
         - message: headscale-valid
           level: warn
           service: headscale
-          fields.parser_status: parsed
           fields.service: attribute
         - message: headscale-raw
           service: headscale
-          _absent:
-            - fields.parser_status
         - message: Listening without TLS but ServerURL does not start with http://
           level: info
           service: headscale

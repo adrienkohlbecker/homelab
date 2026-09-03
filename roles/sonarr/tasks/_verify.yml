@@ -127,7 +127,6 @@
                     and fields.get("app_version") == "4.0.15.2941"
                     and exception.startswith("System.InvalidOperationException: failed")
                     and "at Verify.Run()" in exception
-                    and fields.get("parser_status") == "parsed"
                     and fields.get("CONTAINER_ID")
                     and "CONTAINER_TAG" not in fields
                     and "CONTAINER_ID_FULL" not in fields
@@ -174,7 +173,6 @@
           level: info
           service: sonarr
           fields.source: VerifyInfo
-          fields.parser_status: parsed
           _absent:
             - fields.sonarr_level
             - fields.sonarr_message
@@ -183,12 +181,10 @@
         - message: "[migrations] no migrations found"
           level: info
           _absent:
-            - fields.parser_status
             - fields.source
         - message: "[Info] Lifecycle: sonarr-unit-record"
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.source
         - message: "RSS Sync Completed. Reports found: 1, Reports grabbed: 1"
           fields.source: RssSyncService

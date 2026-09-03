@@ -95,7 +95,6 @@
                 if (
                     record.get("service") == "seerr"
                     and record.get("message", "").startswith("Starting Seerr version ")
-                    and fields.get("parser_status") == "parsed"
                     and "CONTAINER_TAG" not in fields
                     and "seerr_timestamp" not in fields
                     and "seerr_level" not in fields
@@ -146,31 +145,25 @@
         - message: 'Request failed {"error":500}'
           level: error
           fields.source: Jellyfin API
-          fields.parser_status: parsed
         - message: Starting Seerr version 3.2.0
           level: info
-          fields.parser_status: parsed
           _absent:
             - fields.source
         - message: '> seerr@3.2.0 start'
           service: seerr
           _absent:
-            - fields.parser_status
             - fields.source
         - message: 'malformed-json {"port":5055'
           level: info
           service: seerr
           fields.source: Server
-          fields.parser_status: parsed
         - message: '2099-01-02T03:04:09.012Z [info][Server]: must-not-parse'
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.source
         - message: non-routine-debug
           level: debug
           fields.source: Jobs
-          fields.parser_status: parsed
 
 # Canonical-shape contract. Unlike radarr (which rewrites config.xml on every
 # shutdown), seerr only writes settings.json when a setting actually changes --

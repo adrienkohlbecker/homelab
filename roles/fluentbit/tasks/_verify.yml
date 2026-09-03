@@ -205,6 +205,7 @@
       PODMAN_HEALTH_STATUS=
       PODMAN_TIME=2026-07-13T02:01:25.445274426Z
       PODMAN_LABELS={"org.opencontainers.image.description":"verbose metadata"}
+      parser_status=forged
   changed_when: false
   become: true
 
@@ -461,10 +462,10 @@
       - "row.fields.name == fluentbit_lnav_podman_event_marker"
       - "row.fields.image == 'ghcr.io/example/test:1'"
       - "row.fields.object_id == fluentbit_lnav_podman_event_cid"
-      - "row.fields.parser_status == 'parsed'"
       - "'PODMAN_EVENT' not in row.fields"
       - "'PODMAN_TIME' not in row.fields"
       - "'PODMAN_LABELS' not in row.fields"
+      - "'parser_status' not in row.fields"
     fail_msg: "podman event did not normalize into a compact structured record: {{ row }}"
 
 - name: _verify | Podman_healthcheck | assert rewrite shape

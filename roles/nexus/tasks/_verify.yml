@@ -62,7 +62,6 @@
         - message: nexus-valid
           level: warn
           service: nexus
-          fields.parser_status: parsed
           fields.thread: verify-thread
           fields.source: org.sonatype.nexus.Verify
           fields.mdc.userId: '*TASK'
@@ -77,17 +76,13 @@
         - message: nexus-raw
           level: info
           service: nexus
-          _absent:
-            - fields.parser_status
         - message: '{"level":"WARN","formattedMessage":"broken"'
           level: warn
           service: nexus
           parse_error: nexus_json
-          fields.parser_status: failed
         - message: nexus-partial
           level: warn
           service: nexus
-          fields.parser_status: parsed
           fields.source: org.sonatype.nexus.Verify
           fields.exception.className: java.lang.IllegalStateException
           fields.exception.message: split-boom
@@ -96,23 +91,19 @@
         - message: '{"level":"ERROR","threadName":"systemd","loggerName":"systemd","formattedMessage":"must-not-parse"}'
           service: systemd
           _absent:
-            - fields.parser_status
             - fields.source
         - message: "Task 'nexus-task-failed' [assetBlob.cleanup] state change RUNNING -> WAITING (FAILED)"
           level: error
           service: nexus
-          fields.parser_status: parsed
           fields.source: org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo
         - message: nexus-task-detail
           level: info
           service: nexus
-          fields.parser_status: parsed
           fields.source: org.sonatype.nexus.cleanup.internal.task.CleanupTask
           fields.mdc.taskIdAndDate: repository.cleanup-20260712010000008
         - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
           level: debug
           service: nexus
-          fields.parser_status: parsed
           fields.source: outboundRequests
           fields.method: GET
           fields.url: https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease
@@ -124,7 +115,6 @@
         - message: nexus-audit-useful
           level: info
           service: nexus
-          fields.parser_status: parsed
           fields.audit_domain: repository
           fields.event: created
           fields.actor: admin/127.0.0.1
@@ -175,7 +165,7 @@
                 fields = record.get("fields", {})
                 if (
                     record.get("service") != "nexus"
-                    or fields.get("parser_status") != "parsed"
+                    or record.get("parse_error")
                     or not record.get("message")
                 ):
                     continue
