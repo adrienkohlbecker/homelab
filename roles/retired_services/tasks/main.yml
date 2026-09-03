@@ -588,6 +588,7 @@
     - /etc/netdata/go.d/smartctl.conf
     - /etc/netdata/go.d/fail2ban.conf
     - /etc/netdata/health.d/fail2ban.conf
+  register: retired_services_netdata_overrides
   become: true
   tags:
     - retired_services
@@ -631,12 +632,12 @@
     - retired_services
     - hdparm
 
-- name: Check Netdata state after diskless hdparm cleanup
+- name: Check Netdata state after retired configuration cleanup
   when:
-    - rotational_disks_by_id | length == 0
     - not ansible_check_mode
     - >-
-      retired_services_hdparm_netdata_files.changed
+      retired_services_netdata_overrides.changed
+      or retired_services_hdparm_netdata_files.changed | default(false)
       or retired_services_hdparm_disk_group.changed | default(false)
   systemd:
     name: netdata
@@ -646,9 +647,10 @@
   become: true
   tags:
     - retired_services
+    - netdata
     - hdparm
 
-- name: Restart Netdata after diskless hdparm cleanup
+- name: Restart Netdata after retired configuration cleanup
   when:
     - retired_services_hdparm_netdata_state.status.ActiveState | default('') == 'active'
   systemd:
@@ -657,6 +659,7 @@
   become: true
   tags:
     - retired_services
+    - netdata
     - hdparm
 
 - name: Remove retired Netdata conffile diversion
