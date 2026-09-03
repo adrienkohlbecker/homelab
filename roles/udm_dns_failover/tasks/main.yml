@@ -60,11 +60,21 @@
 
 # -- keepalived (apt) -----------------------------------------------------
 
-# The install must skip check mode outright: no roles/apt maintains the
-# UDM's package cache, so a fresh appliance has nothing for --check's
-# no-refresh apt to resolve keepalived against. The stat probe stands in as
-# the fresh-host signal (binary absent <=> apt would install), same shape as
-# roles/adguard's keepalived guard.
+# The UDM does not reliably ship python3-apt after firmware updates. Bootstrap
+# the binding with apt-get before using Ansible's apt module.
+- name: Install python3-apt for Ansible's apt module  # noqa: command-instead-of-module -- bootstraps the module dependency
+  when: not ansible_check_mode
+  command: apt-get install -y -qq python3-apt
+  args:
+    creates: /usr/lib/python3/dist-packages/apt/__init__.py
+  become: true
+  tags:
+    - udm_dns_failover
+
+# The install must skip check mode outright: no role maintains the appliance's
+# package cache, so a fresh appliance has nothing for a no-refresh dry run to
+# resolve keepalived against. The stat probe stands in as the fresh-host signal
+# (binary absent <=> apt would install), same shape as roles/adguard's guard.
 - name: Check whether keepalived is installed
   stat:
     path: /usr/sbin/keepalived
