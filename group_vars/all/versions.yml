@@ -148,21 +148,10 @@ lnav_artifacts:
     url: "https://github.com/tstack/lnav/releases/download/v{{ lnav_version }}/lnav-{{ lnav_version }}-linux-musl-arm64.zip"
     sha256: "027e9f540567cd0e9ba00335ab9be0275a414b14608e10d49dc2d6a2633aa546"
 
-# macos_vm: pinned upstream artifacts from kholia/OSX-KVM.
-#
-# To bump:
-#   1. Pick a new commit on master (review the diff first; OpenCore config
-#      changes can break NVRAM/iCloud).
-#   2. Compute sha256 of OpenCore/OpenCore.qcow2 and fetch-macOS-v2.py at
-#      that commit, e.g.:
-#        curl -sSL "https://raw.githubusercontent.com/kholia/OSX-KVM/<sha>/OpenCore/OpenCore.qcow2" | sha256sum
-#        curl -sSL "https://raw.githubusercontent.com/kholia/OSX-KVM/<sha>/fetch-macOS-v2.py" | sha256sum
-#   3. Update both fields below in lockstep.
-#
-# Bumping OpenCore.qcow2 in-place will reset OpenCore NVRAM, which kicks
-# the guest out of iCloud -- only do it during a planned re-install.
-# (The macOS release itself -- Sequoia "15" -- is host-overridable and lives
-# in roles/macos_vm/defaults/main.yml, not here.)
+# Both OSX-KVM artifacts pin the same commit. Replace OpenCore only during a
+# planned reinstall: the per-VM copy carries NVRAM and iCloud state. Detailed
+# lifecycle guidance lives in notes/macos-vm-design.md; the macOS release itself
+# remains host-overridable through roles/macos_vm/defaults/main.yml.
 macos_vm_osx_kvm_commit: 4c378a4b5e0b219783683012bec680325eb40719  # 2026-01-26
 macos_vm_opencore_artifact:
   url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/OpenCore/OpenCore.qcow2"
