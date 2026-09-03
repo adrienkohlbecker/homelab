@@ -45,7 +45,7 @@ ExecStart=/usr/bin/podman run \
     --user {{ homeassistant_user.uid }}:{{ homeassistant_user.gid }} \
     --entrypoint /etc/services.d/home-assistant/run \
 {% for net in homeassistant_networks %}
-    --network={{ net.name }}{{ (':mac=' ~ net.mac) if net.mac is defined else '' }} \
+    --network={{ net.name }}:interface_name={{ net.interface_name }}{{ (',mac=' ~ net.mac) if net.mac is defined else '' }} \
 {% endfor %}
     --env HOME=/config \
     --env S6_KEEP_ENV=1 \

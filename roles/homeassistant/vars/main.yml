@@ -1,13 +1,6 @@
-# Podman networks the HA container joins, in declaration order. Both
-# the unit template (homeassistant.service.j2) and the core.network
-# template (core.network.j2) read this list -- the unit emits one
-# `--network=...` flag per entry, the core.network template uses the
-# index of "mac_iot" to compute the corresponding ethN container
-# interface name (podman names attached interfaces eth0, eth1, ... in
-# the order they appear on `podman run --network=` flags). Re-ordering
-# this list regenerates both templates consistently, and the network
-# restriction stays pinned to whichever interface ends up holding the
-# mac_iot IP -- no separate runtime probe needed.
+# Podman networks the HA container joins. Both the unit and core.network
+# templates read the explicit interface names from this list; netavark does not
+# guarantee that interface numbering follows --network flag order.
 homeassistant_networks:
   # homeassistant bridge: shared backend for HA, mosquitto, z2m, and influxdb.
   # HA needs one aardvark-dns view containing both mosquitto.dns.podman and
@@ -15,6 +8,7 @@ homeassistant_networks:
   # which names work. Discovery/zeroconf is intentionally NOT enabled on this
   # adapter (see core.network.j2 + main.yml).
   - name: homeassistant
+    interface_name: eth0
   # mac_iot: HA's L2 presence on the IoT VLAN. Netavark allocates its address
   # from the role-derived /29; discovery uses mDNS/UPnP identity and nothing
   # downstream keys on a specific IP.
@@ -26,4 +20,5 @@ homeassistant_networks:
   # host-iface MACs in roles/macvlan so all L2 identities under this
   # repo are derived from one rule.
   - name: mac_iot
+    interface_name: eth1
     mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname ~ '_homeassistant') }}"

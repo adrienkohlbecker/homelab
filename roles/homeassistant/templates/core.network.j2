@@ -2,15 +2,12 @@
 {# decide which adapters to advertise on (mDNS, SSDP, scanners). With no #}
 {# file present HA uses every adapter; that leaks the backend-bridge IP  #}
 {# onto the IoT VLAN via zeroconf announcements. We pin                  #}
-{# discovery to the mac_iot adapter only. The ethN name is computed      #}
-{# from homeassistant_networks (vars/main.yml) -- podman assigns         #}
-{# interface names in --network= declaration order, so the list's index  #}
-{# of "mac_iot" is the ordinal of the corresponding ethN.                #}
+{# discovery to the explicitly named mac_iot adapter only.               #}
 {
   "version": 1,
   "minor_version": 1,
   "key": "core.network",
   "data": {
-    "configured_adapters": ["eth{{ (homeassistant_networks | map(attribute='name') | list).index('mac_iot') }}"]
+    "configured_adapters": ["{{ homeassistant_networks | selectattr('name', 'equalto', 'mac_iot') | map(attribute='interface_name') | first }}"]
   }
 }

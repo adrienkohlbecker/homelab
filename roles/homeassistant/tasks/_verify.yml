@@ -86,7 +86,38 @@
       - 1.1.1.1
   register: _homeassistant_default_route
   changed_when: false
-  failed_when: "' dev eth0 ' not in _homeassistant_default_route.stdout"
+  failed_when: >-
+    ' dev ' ~ (
+      homeassistant_networks
+      | selectattr('name', 'equalto', 'homeassistant')
+      | map(attribute='interface_name')
+      | first
+    ) ~ ' ' not in _homeassistant_default_route.stdout
+  become: true
+
+- name: _verify | Homeassistant mac_iot adapter has its declared identity
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - cat
+      - >-
+        /sys/class/net/{{
+          homeassistant_networks
+          | selectattr('name', 'equalto', 'mac_iot')
+          | map(attribute='interface_name')
+          | first
+        }}/address
+  register: _homeassistant_mac_iot_address
+  changed_when: false
+  failed_when: >-
+    _homeassistant_mac_iot_address.stdout | trim != (
+      homeassistant_networks
+      | selectattr('name', 'equalto', 'mac_iot')
+      | map(attribute='mac')
+      | first
+    )
   become: true
 
 # Functional HACS check: grep HA's journal for the loader's "We found

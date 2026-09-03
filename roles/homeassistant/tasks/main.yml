@@ -57,10 +57,9 @@
 # internal backend-bridge IP -- to every adapter it can reach. LAN clients
 # pick up the bridge IP from mDNS, try to connect to it from outside, and the
 # packets land on lab's eth0 destined to a podman-only IP, triggering kernel
-# "martian source" logs (~120k/day on lab). The ethN name baked into
-# core.network.j2 is computed from the homeassistant_networks list in
-# vars/main.yml -- single source of truth shared with the unit template's
-# --network= ordering.
+# "martian source" logs (~120k/day on lab). The interface name baked into
+# core.network.j2 comes from the same homeassistant_networks entry that sets
+# Podman's interface_name option.
 #
 # force: false so an operator's UI edit (Settings -> System -> Network)
 # stays authoritative. First apply lands our default; subsequent UI
