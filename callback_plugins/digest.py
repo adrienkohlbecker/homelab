@@ -83,9 +83,11 @@ class CallbackModule(DefaultCallback):
                 out = {}
                 is_json_http_response = {"json", "status", "url"} <= obj.keys()
                 for key, value in obj.items():
-                    if in_facts and key == "diff" and is_diff(value):
+                    if key == "ansible_facts" and isinstance(value, dict) and len(value) > _FACTS_DIGEST_THRESHOLD:
+                        value = f"<{len(value)} facts hidden: {', '.join(sorted(value))}>"
+                    elif in_facts and key == "diff" and is_diff(value):
                         continue
-                    if is_json_http_response and key == "json":
+                    elif is_json_http_response and key == "json":
                         value = _json_summary(value)
                     elif (
                         is_json_http_response
@@ -107,7 +109,4 @@ class CallbackModule(DefaultCallback):
             return obj
 
         result = digest(result)
-        facts = result.get("ansible_facts") if isinstance(result, dict) else None
-        if isinstance(facts, dict) and len(facts) > _FACTS_DIGEST_THRESHOLD:
-            result["ansible_facts"] = f"<{len(facts)} facts hidden: {', '.join(sorted(facts))}>"
         return super()._dump_results(result, *args, **kwargs)

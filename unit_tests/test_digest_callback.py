@@ -217,6 +217,12 @@ def test_large_facts_collapsed_to_key_list():
     assert "k25" in out["ansible_facts"]
 
 
+def test_nested_large_facts_collapsed_to_key_list():
+    facts = {f"k{i:02d}": i for i in range(digest._FACTS_DIGEST_THRESHOLD + 1)}
+    out = display_result({"results": [{"ansible_facts": facts}]})
+    assert f"{len(facts)} facts hidden" in out["results"][0]["ansible_facts"]
+
+
 def test_small_facts_kept_in_full():
     facts = {"apt_source_present": True, "apt_source_arch": "arm64"}
     out = display_result({"ansible_facts": dict(facts)})
