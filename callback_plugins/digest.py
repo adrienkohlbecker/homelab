@@ -1,10 +1,4 @@
-"""Stdout callback matching default output with verbose result fields summarized.
-
-Keeps command stdout/stderr and diffs intact, but shortens systemd ``status``,
-``stat`` results, large JSON HTTP responses, duplicate diffs persisted under
-``ansible_facts``, and large fact-gather blobs. The documentation fragments
-keep ``callback_result_format`` available for this derived callback.
-"""
+"""Default Ansible stdout callback with noisy result payloads summarized."""
 
 import json
 
