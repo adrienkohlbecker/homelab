@@ -1,17 +1,10 @@
 import base64
 import hashlib
 
-from ansible.errors import AnsibleError
-
 _ITERATIONS = 210000
 
 
-def mosquitto_passwd(passwd, salt=None):
-    if salt is None:
-        # A fixed per-account salt keeps the rendered pwfile byte-stable, so the
-        # template stays idempotent instead of churning a restart every converge.
-        raise AnsibleError("mosquitto_passwd requires an explicit salt")
-
+def mosquitto_passwd(passwd, *, salt):
     # Mosquitto requires a 12-byte salt; derive it deterministically from the
     # configured string so the rendered password file remains idempotent.
     salt_bytes = hashlib.sha256(salt.encode()).digest()[:12]

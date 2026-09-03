@@ -6,9 +6,6 @@ and padded Base64 encoding; broker acceptance is covered by the QEMU test.
 
 import base64
 
-import pytest
-from ansible.errors import AnsibleError
-
 from filter_plugins.mosquitto_passwd import mosquitto_passwd
 
 KNOWN_HASH = (
@@ -31,8 +28,3 @@ def test_locks_known_hash_and_mosquitto_v7_format():
 
 def test_distinct_salts_yield_distinct_hashes():
     assert mosquitto_passwd("hunter2", salt="pepper") != mosquitto_passwd("hunter2", salt="paprika")
-
-
-def test_missing_salt_raises():
-    with pytest.raises(AnsibleError):
-        mosquitto_passwd("hunter2")
