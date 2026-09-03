@@ -39,7 +39,7 @@ server {
   # below. The URL is host-configurable for remote Authelia access.
   location /internal/authelia {
     internal;
-    proxy_pass {{ authelia_internal_url }};
+    proxy_pass {{ nginx_authelia_internal_url }};
     # Keep the per-request auth connection reusable.
     proxy_http_version 1.1;
     # Fail fast when remote Authelia is unreachable instead of using nginx's

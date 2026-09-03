@@ -251,9 +251,8 @@ minio_users:
 authelia_cookie_domain: "{{ inventory_hostname }}.{{ domain }}"
 
 # Each test host runs its own Authelia (real role on `authelia` testrole,
-# the stub on every other testrole that needs the listener), so the
-# authelia_host is the host itself. Net effect: authelia_internal_url
-# resolves to 127.0.0.1 on the test fixture, no cross-host hop.
+# the stub on every other testrole that needs the listener), so nginx's
+# backend default resolves to loopback without a cross-host hop.
 authelia_host: "{{ inventory_hostname }}"
 
 # Test-fixture secrets. The storage key is 64+ chars to satisfy Authelia's

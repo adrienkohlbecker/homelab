@@ -18,9 +18,8 @@
 #   auth                      optional bool, default false. When true, every
 #                             request through / is auth_request'd via Authelia;
 #                             a 401 redirects to the portal with returnUrl.
-#                             Requires authelia_internal_url to point at a reachable
-#                             /api/authz/auth-request endpoint; its local/remote
-#                             routing is derived in group_vars/all/main.yml.
+#                             The role's nginx_authelia_internal_url default chooses
+#                             the local or remote auth-request endpoint.
 #   auth_request_authorization optional bool, default false. Forward the
 #                             client's Authorization header to Authelia's auth
 #                             subrequest so its HeaderAuthorization strategy can
@@ -79,15 +78,15 @@
       - (nginx_site_args.csp_default_src | default('') | string) is not search('"')
       - (nginx_site_args.csp_frame_ancestors | default('') | string) is not search('"')
       - not (_nginx_site_enable_http and _nginx_site_auth_enabled)
-      - not _nginx_site_auth_enabled or authelia_internal_url is defined
-      - not _nginx_site_auth_enabled or (authelia_internal_url | default('')) is string
-      - not _nginx_site_auth_enabled or authelia_internal_url | default('') | string is match('^https?://')
+      - not _nginx_site_auth_enabled or nginx_authelia_internal_url is defined
+      - not _nginx_site_auth_enabled or (nginx_authelia_internal_url | default('')) is string
+      - not _nginx_site_auth_enabled or nginx_authelia_internal_url | default('') | string is match('^https?://')
       - not _nginx_site_auth_request_authorization or _nginx_site_auth_enabled
     fail_msg: >-
       Invalid nginx_site_args contract: subdomain must be one safe DNS label;
       proxy_pass, when set, must be an injection-safe http(s) URL; CSP overrides
       must not contain double quotes; enable_http cannot be combined with auth;
-      auth needs an http(s) authelia_internal_url; and
+      auth needs an http(s) nginx_authelia_internal_url; and
       auth_request_authorization requires auth.
   tags:
     - nginx_site

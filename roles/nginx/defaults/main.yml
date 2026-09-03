@@ -13,3 +13,8 @@ nginx_ipv6: false
 # The nginx role runs on every managed host, but only lab/pug expose the LAN
 # device admin UIs.
 nginx_static_proxies_enabled: false
+
+# Forward-auth stays on loopback where Authelia runs and crosses the WireGuard
+# mesh from other hosts, avoiding a public DNS, NAT, and TLS round trip for each
+# auth subrequest. The firewall admits the remote listener only through wg0.
+nginx_authelia_internal_url: "http://{% if inventory_hostname == authelia_host -%} 127.0.0.1{%- else -%} {{ network.hosts[authelia_host].wireguard }}{%- endif -%} :{{ service_ports.authelia }}/api/authz/auth-request"
