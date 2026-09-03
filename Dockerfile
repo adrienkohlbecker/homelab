@@ -21,7 +21,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ARG USE_NEXUS_MIRRORS=1
 
 # Route apt through the homelab nexus proxy. Same arch split as
-# group_vars/all.yml's mirror_apt_ubuntu_* vars: amd64 hits ubuntu-archive
+# group_vars/all/main.yml's mirror_apt_ubuntu_* vars: amd64 hits ubuntu-archive
 # + ubuntu-security; arm64 hits ubuntu-ports for both (ports.ubuntu.com
 # carries -security on non-x86 arches). HTTP because nexus's apt
 # proxies serve plaintext on port 80; the upstream Signed-By trust
@@ -147,7 +147,7 @@ COPY mise.toml pyproject.toml uv.lock ./
 
 # The mise_github_token build secret raises mise's GitHub API rate
 # limit (mise pulls tool releases from gh; anonymous is 60/hr,
-# authenticated is 5000/hr). Forwarded by ci-image.yml from
+# authenticated is 5000/hr). Forwarded by .gitlab-ci.yml from
 # the MISE_GITHUB_TOKEN repo secret (a long-lived PAT with no scopes
 # beyond public read). Mounted only for this RUN -- never lands in any
 # image layer.

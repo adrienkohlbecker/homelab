@@ -12,7 +12,7 @@ exclude_paths:
   # Leftover packer tmp* build trees each hold a full repo copy; descending into
   # them inflates wall-clock ~7x (~10s → ~70s).
   - packer/artifacts/
-  # HA GUI submodule: home-assistant YAML, not ansible content. ansible-lint
+  # HA GUI private clone: home-assistant YAML, not ansible content. ansible-lint
   # can't load the blueprints (load-failure) and mis-lints the automation files.
   - roles/homeassistant/files/ha_gui_config/
   # Harness driver playbooks reference `_role_under_test`, injected at runtime,

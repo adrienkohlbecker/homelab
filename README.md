@@ -6,7 +6,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 
 ## Hosts
 
-`hosts.ini` — five managed machines, a router, and two test VMs:
+`hosts.ini` defines the managed hosts, network devices, and test VMs:
 
 | Host        | Role                                                        | Disk shape          |
 | ----------- | ----------------------------------------------------------- | ------------------- |
@@ -35,7 +35,6 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 | `test/` | asyncio harness — `testrole.py` (one role on one VM), `testall.py` (matrix) |
 | `mise-tasks/`, `mise.toml` | Tool pinning, env (1Password refs), `lint` / `fmt` / `tf` / `packer:build` tasks |
 | `zbm/`, `zbm-build/` | ZFSBootMenu image build (docker buildx + upstream Dockerfile) and aarch64 scaffolding |
-| `wireguard/` | Peer keys live (vaulted) in `group_vars`; client configs are rendered on demand (`wg:show`), not stored here |
 | `notes/` | Long-form design notes referenced from code comments (private clone, gitignored) |
 | `vault-client.sh` | Resolves the ansible-vault password per vault-id (`prod`/`test`) from env var, macOS keychain, or `~/.config/homelab/vault-pass-<id>` |
 | `ansible.cfg` | Wires `hosts.ini` + `vault-client.sh`; enables mitogen strategy and persistent SSH |
