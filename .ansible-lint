@@ -3,8 +3,6 @@
 # No profile. The `shared`/`production` profiles pull in galaxy + meta rules
 # (meta-no-info, galaxy[*], meta-runtime) that don't apply here — roles carry
 # meta/test.yml, not galaxy metadata. We curate enable/skip explicitly instead.
-profile: null
-
 # exclude_paths are parsed relative to THIS file, not the CWD.
 exclude_paths:
   - .cache/

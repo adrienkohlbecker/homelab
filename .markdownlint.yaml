@@ -1,4 +1,3 @@
-default: true
 # Long prose lines are expected in design notes and runbooks.
 MD013: false
 # Table pipe alignment style — cosmetic, not enforced.
