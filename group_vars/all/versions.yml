@@ -129,25 +129,10 @@ homeassistant_hacs_archive:
   url: "{{ mirror_github }}/hacs/integration/releases/download/2.0.5/hacs.zip"
   sha256: "97be6b824a4f38e683728cc6dd72367f6b8bad0a43428b1b3b987a3087adf413"
 
-# Jellyfin SSO/OIDC plugin (9p4/jellyfin-plugin-sso). Provides the in-app
-# OIDC login flow against Authelia (see notes/jellyfin_sso_rollout.md). The
-# plugin is managed .NET (arch-independent) so there is a single url/sha256,
-# not the x86_64/aarch64 split other artifacts use.
-#
-# VERSION CEILING: Jellyfin refuses to load a plugin whose targetAbi
-# exceeds the server version. The server image is 10.11.11 (see
-# jellyfin_image above); v4.0.0.4 targets ABI 10.11.0.0. The older 3.5.x
-# line targets ABI 10.9.0.0 and is the ceiling for 10.10.x -- moving back
-# below 10.11 means reverting this pin too.
-#
-# The 4.x zip ships SSO-Auth.dll + Duende.IdentityModel.dll +
-# Duende.IdentityModel.OidcClient.dll + meta.json (meta.json is what makes
-# Jellyfin's plugin manager recognise + enable the plugin). The DLL set
-# differs from the 3.x line (which shipped IdentityModel.dll /
-# IdentityModel.OidcClient.dll), so the extract task wipes the plugin dir
-# on a version change to avoid orphaning the old assemblies, and _verify
-# asserts the 4.x names. The 4.0.0.4 release publishes a sha256 asset
-# directly; the value below was verified against it on download.
+# Jellyfin SSO/OIDC plugin (9p4/jellyfin-plugin-sso), arch-independent managed
+# .NET. Keep targetAbi at or below jellyfin_image; moving the server below 10.11
+# requires the 3.5.x plugin line. The role owns version-change cleanup; rollout
+# history lives in notes/archive/jellyfin_sso_rollout.md.
 jellyfin_sso_plugin_version: "4.0.0.4"  # 2026-03-20
 jellyfin_sso_plugin:
   url: https://github.com/9p4/jellyfin-plugin-sso/releases/download/v{{ jellyfin_sso_plugin_version }}/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
