@@ -49,32 +49,6 @@ pipeline:
       reserve_data: true
       preserve_key: true
 
-    - name: parser
-      match: certbot.file
-      key_name: log
-      parser: certbot_file
-      reserve_data: true
-      preserve_key: true
-
-    - name: modify
-      match: certbot.file
-      condition:
-        - key_exists certbot_message
-        - key_exists certbot_level
-      hard_rename:
-        - certbot_message log
-        - certbot_level _level
-        - certbot_source source
-      remove: certbot_timestamp
-      set: parser_status parsed
-
-    - name: modify
-      match: certbot.file
-      condition: key_does_not_exist parser_status
-      add:
-        - parse_error certbot_file
-        - _level warn
-
     # Services with header-aware grammars add their own multiline filter.
     - name: multiline
       match_regex: '^svc\.(?!(?:homeassistant|homepage|sonarr|socket_proxy)\.service$).*'

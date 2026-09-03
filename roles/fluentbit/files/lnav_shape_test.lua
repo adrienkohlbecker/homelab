@@ -144,14 +144,3 @@ do
     check("message.trim_trailing_whitespace", rec.message, "  updated\n\npackage")
     check("fields.no_severity_text", rec.fields.severity_text, nil)
 end
-
-do
-    local rec = shape("certbot.file", {
-        host = "lab",
-        log = "certificate renewed",
-    }, "info")
-    check("certbot.service", rec.service, "certbot")
-    check("certbot.stream", rec.stream, "certbot_file")
-    check("certbot.unit", rec.unit, "certbot.service")
-    check("certbot.identifier", rec.identifier, "certbot")
-end

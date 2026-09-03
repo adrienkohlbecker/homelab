@@ -77,15 +77,6 @@ local function unit_from_tag(tag)
     return nil
 end
 
-local SOURCE_SHAPES = {
-    ["certbot.file"] = {
-        service = "certbot",
-        stream = "certbot_file",
-        unit = "certbot.service",
-        identifier = "certbot",
-    },
-}
-
 local EXCLUDE_FROM_FIELDS = {
     BOOT_ID = true,
     CAP_EFFECTIVE = true,
@@ -120,11 +111,10 @@ local EXCLUDE_FROM_FIELDS = {
 }
 
 function shape_lnav(tag, ts, record)
-    local source_shape = SOURCE_SHAPES[tag] or {}
-    local unit = source_shape.unit or record["SYSTEMD_UNIT"] or record["UNIT"] or unit_from_tag(tag)
-    local identifier = source_shape.identifier or record["SYSLOG_IDENTIFIER"]
-    local service = source_shape.service or service_from_tag(tag, record)
-    local stream = source_shape.stream or stream_from_tag(tag)
+    local unit = record["SYSTEMD_UNIT"] or record["UNIT"] or unit_from_tag(tag)
+    local identifier = record["SYSLOG_IDENTIFIER"]
+    local service = service_from_tag(tag, record)
+    local stream = stream_from_tag(tag)
     local level = record["_level"] or "info"
 
     local healthcheck_unit = record["UNIT"]
