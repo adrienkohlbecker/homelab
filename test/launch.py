@@ -323,7 +323,7 @@ async def _run_async(
                 # is relative to the playbook's dir; the original
                 # test/playbooks/build_box_deps.yml has no group_vars
                 # sibling, so `ubuntu_mirror` (and friends from
-                # group_vars/all.yml) would otherwise be undefined.
+                # group_vars/all/main.yml) would otherwise be undefined.
                 staged_seed = m.workdir_path / seed.name
                 shutil.copy(seed, staged_seed)
                 print_line(f"Seeding image via {seed}")

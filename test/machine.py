@@ -832,7 +832,7 @@ class Machine:
             *self.ansible_args,
         ]
         # --upstream-mirrors clears nexus_url so all mirror_* Jinja in
-        # group_vars/all.yml resolves to upstream URLs even though
+        # group_vars/all/main.yml resolves to upstream URLs even though
         # group_vars/test.yml sets nexus_url. An AWS guest can't reach the LAN
         # Nexus at all, so in_aws clears it too (covers the aws_qemu cell).
         if self.upstream_mirrors or self.in_aws:

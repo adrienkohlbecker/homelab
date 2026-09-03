@@ -6,7 +6,7 @@
 # hours/days. Scoping via `chart labels:` to the bunk peer's public_key
 # limits the alarm to the always-on offsite link.
 #
-# The peer.keepalive_from=[lab, pug] field in group_vars/all.yml's bunk
+# The peer.keepalive_from=[lab, pug] field in group_vars/all/main.yml's bunk
 # entry causes lab+pug to send a 25s PersistentKeepalive to bunk, keeping
 # their view of bunk's handshake_ago < ~30s steady-state. Without that
 # keepalive, this alarm would have no useful threshold -- bunk only
