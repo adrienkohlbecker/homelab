@@ -78,15 +78,13 @@ mise run fmt
 ansible-vault encrypt_string
 ```
 
-## Test harness in one paragraph
+## Test harness
 
-`test/testrole.py <role>` boots a QEMU VM (`box` by default; `--machine {minimal,box,lab,pug}`), runs the role's `_setup.yml`, applies the role in check-mode, then for real, then a second time to assert idempotence, then runs the role's `_verify.yml` if present. `test/testall.py` fans this out across N workers and writes a TSV joblog. Failed-run artifacts go to `test/out/<machine>.<ubuntu>.<role>.*.ansi`. Variants vary only in disk topology — bootloader (ZBM via rEFInd), filesystem (ZFS-on-root for prod-shaped variants), and arch (x86_64 + Linux/KVM, aarch64 + Mac/HVF) are deliberately fixed. See CLAUDE.md → "Test Environment Design" for why.
+The QEMU harness lives in `test/`; use `testrole.py` for one role and `testall.py` for the matrix. See [Testing Guidelines](CLAUDE.md#testing-guidelines) for its lifecycle, fixtures, exit codes, and artifacts.
 
 ## Secrets
 
-- Ansible vault: per-id passwords come from `vault-client.sh` (macOS keychain `homelab-vault-<id>`, Linux file `~/.config/homelab/vault-pass-<id>`, or `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` env var for CI). Two ids in use: `prod` (workstation-only) and `test` (also available to CI as a GitLab CI/CD variable). Vaulted values live inline in `group_vars/*.yml` and `host_vars/*.yml`. See CLAUDE.md "Vault ids" for details.
-- 1Password: `mise.toml [env]` declares `op://Lab/...` refs for Cloudflare, Nexus, MinIO and the OpenTofu state passphrase. `mise run tf` is wrapped in `op run --` so values are only ever in the wrapped process's env.
-- WireGuard: peer private keys are vaulted in `group_vars/{prod,test}.yml` and PSKs derive from a vaulted seed (`filter_plugins/wireguard_psk.py`); client configs are rendered on demand by `mise run wg:show <device>` (terminal QR for iOS, `--conf` to stdout for macOS) and never written to disk.
+Ansible uses two vault ids: `prod` is workstation-only, while `test` is also available to CI. `vault-client.sh` resolves their passwords; see [Vault ids](CLAUDE.md#vault-ids-prod-vs-test) for storage and lookup details. Other external credentials remain `op://` references in `mise.toml`, and WireGuard client configs are rendered on demand with `mise run wg:show`.
 
 ## License
 
