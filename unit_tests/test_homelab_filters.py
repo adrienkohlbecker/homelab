@@ -221,7 +221,6 @@ def test_exposes_filters() -> None:
     assert "authelia_redirects_to" not in filters
     assert filters["host_vlan_block"] is homelab.host_vlan_block
     assert filters["json_argv"] is homelab.json_argv
-    assert filters["only_by_attr"] is homelab.one_by_attr
     assert filters["podman_health_wget"] is homelab.podman_health_wget
     assert filters["rstrip_newlines"] is homelab.rstrip_newlines
     assert filters["slurp_json"] is homelab.slurp_json

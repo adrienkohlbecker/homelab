@@ -264,7 +264,6 @@ class FilterModule:
             "nft_rule_by_counter": nft_rule_by_counter,
             "nft_rules_by_counter": nft_rules_by_counter,
             "one_by_attr": one_by_attr,
-            "only_by_attr": one_by_attr,
             "podman_health_curl": podman_health_curl,
             "podman_health_wget": podman_health_wget,
             "podman_idmap_args": podman_idmap_args,
