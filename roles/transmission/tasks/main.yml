@@ -3,7 +3,7 @@
     that:
       - transmission_rpc_password is defined
       - (transmission_rpc_password | default('')) | length > 0
-      - not (transmission_rpc_password | transmission_password_is_salted_hash)
+      - transmission_rpc_password is not match('^\{[0-9a-f]{40}.+$')
     fail_msg: >-
       transmission_rpc_password must be a plaintext password (vaulted in
       group_vars/{prod,test}.yml), not Transmission's persisted salted hash.
