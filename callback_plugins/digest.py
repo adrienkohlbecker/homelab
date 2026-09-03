@@ -32,22 +32,13 @@ _STAT_KEEP = (
     "checksum",
 )
 _JSON_DIGEST_THRESHOLD = 2048
-_JSON_KEY_LIMIT = 10
 
 
 def _json_summary(value):
     encoded = json.dumps(value, separators=(",", ":"))
     if len(encoded) <= _JSON_DIGEST_THRESHOLD:
         return value
-    if isinstance(value, dict):
-        keys = sorted(value)[:_JSON_KEY_LIMIT]
-        suffix = ", ..." if len(value) > len(keys) else ""
-        shape = f"object with keys: {', '.join(keys)}{suffix}"
-    elif isinstance(value, list):
-        shape = f"array with {len(value)} items"
-    else:
-        shape = type(value).__name__
-    return f"<{len(encoded)}-character JSON {shape} hidden>"
+    return f"<{len(encoded)}-character JSON hidden>"
 
 
 class CallbackModule(DefaultCallback):

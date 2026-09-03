@@ -129,7 +129,7 @@ def test_large_uri_json_response_collapsed():
 
     out = display_result(result)
 
-    assert out["json"].endswith("JSON object with keys: alarms hidden>")
+    assert out["json"] == f"<{len(json.dumps(payload, separators=(',', ':')))}-character JSON hidden>"
     assert "content" not in out
     assert out["status"] == 200
     assert out["url"] == result["url"]
