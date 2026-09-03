@@ -150,27 +150,26 @@ def host_vlan_block(
     return str(subnet)
 
 
-def _get_path(item: Any, path: str) -> Any:
-    current = item
+def _get_path(item: Mapping[str, Any], path: str) -> Any:
+    current: Any = item
     for part in path.split("."):
-        if isinstance(current, Mapping):
-            if part not in current:
-                return None
-            current = current[part]
-        else:
-            if not hasattr(current, part):
-                return None
-            current = getattr(current, part)
+        if not isinstance(current, Mapping):
+            return None
+        current = current.get(part)
     return current
 
 
-def matching_by_attr(items: Iterable[Any], attr: str | Mapping[str, Any], value: Any = None) -> list[Any]:
+def matching_by_attr(
+    items: Iterable[Mapping[str, Any]], attr: str | Mapping[str, Any], value: Any = None
+) -> list[Mapping[str, Any]]:
     """Return items matching one attribute value or a mapping of criteria."""
     criteria = attr if isinstance(attr, Mapping) else {attr: value}
     return [item for item in items if all(_get_path(item, path) == expected for path, expected in criteria.items())]
 
 
-def one_by_attr(items: Iterable[Any], attr: str | Mapping[str, Any], value: Any = None) -> Any:
+def one_by_attr(
+    items: Iterable[Mapping[str, Any]], attr: str | Mapping[str, Any], value: Any = None
+) -> Mapping[str, Any]:
     """Return exactly one matching item, raising when zero or many match."""
     matches = matching_by_attr(items, attr, value)
     if len(matches) != 1:
