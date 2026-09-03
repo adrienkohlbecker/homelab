@@ -276,7 +276,7 @@ locals {
   cloud_url           = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.arch_cfg.cloud_image_suffix}.img"
 
   # Apt mirrors. By default the build pulls through the lab Nexus proxy
-  # (`group_vars/all.yml` uses the same `repository/ubuntu-*` layout); set
+  # (`group_vars/all/main.yml` uses the same `repository/ubuntu-*` layout); set
   # `-var upstream_mirrors=true` to bypass it. The `upstream_*` pair is
   # always the canonical Ubuntu URL — chroot.sh writes those into the
   # final `/etc/apt/sources.list` so we don't ship Nexus-internal URLs.
