@@ -31,7 +31,9 @@
 - name: _verify | MinIO inputs enable its Prometheus scrape job
   assert:
     that:
-      - (_netdata_prometheus_conf.content | b64decode) is search('(?m)^  - name: minio$')
+      - >-
+        (_netdata_prometheus_conf.content | b64decode)
+        is search('(?m)^  - name: minio$')
     fail_msg: >-
       Expected minio_buckets to enable the MinIO job in prometheus.conf.
 
