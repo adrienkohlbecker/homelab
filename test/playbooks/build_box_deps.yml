@@ -32,8 +32,8 @@
         name: fluentbit
         tasks_from: configure
 
-    # Everything above wrote its apt sources through the lab Nexus. Rewrite each
-    # shared apt mirror to its value without Nexus before shipping the fixture so
+    # Everything above wrote its apt sources through the lab Nexus. Re-converge
+    # the source-owning roles in upstream mode before publishing the fixture so
     # AWS nested-qemu cells do not try to route through the lab.
     - name: Assert the source Nexus URL is defined
       assert:
@@ -41,54 +41,33 @@
           - nexus_url | length > 0
         fail_msg: nexus_url must identify the source mirror before sanitizing box_deps.
 
-    - name: Capture Nexus-backed apt mirror URLs
-      set_fact:
-        box_deps_apt_mirror_sources: >-
-          {{ box_deps_apt_mirror_sources | default({}) |
-             combine({item: lookup('vars', item)}) }}
-      loop: "{{ query('varnames', '^mirror_apt_') | sort }}"
-
-    - name: Resolve upstream apt mirror URLs
+    - name: Configure apt to use upstream mirrors
+      import_role:
+        name: apt
+        tasks_from: configure
       vars:
-        nexus_url: ""
-        test_in_aws: false
-      set_fact:
-        box_deps_apt_mirror_rewrites: >-
-          {{ box_deps_apt_mirror_rewrites | default([]) +
-             [{'source': item.value, 'replacement': lookup('vars', item.key)}] }}
-      loop: "{{ box_deps_apt_mirror_sources | dict2items }}"
+        nexus_url: "" # noqa: var-naming[no-role-prefix] -- shared mirror selector under test
+        test_in_aws: false # noqa: var-naming[no-role-prefix] -- shared environment selector under test
 
-    - name: Find Nexus-backed apt source files
-      find:
-        paths: /etc/apt
-        file_type: file
-        recurse: true
-        patterns:
-          - sources.list
-          - "*.list"
-          - "*.sources"
-        contains: "{{ nexus_url | regex_escape }}"
-        read_whole_file: true
-      register: box_deps_apt_sources
+    - name: Configure podman to use upstream mirrors
+      import_role:
+        name: podman
+        tasks_from: install
+      vars:
+        nexus_url: "" # noqa: var-naming[no-role-prefix] -- shared mirror selector under test
+        test_in_aws: false # noqa: var-naming[no-role-prefix] -- shared environment selector under test
 
-    - name: Rewrite baked apt sources to upstream
-      replace:
-        path: "{{ item.0.path }}"
-        regexp: "{{ item.1.source | regex_escape }}"
-        replace: "{{ item.1.replacement }}"
-        backup: true
-      loop: >-
-        {{ box_deps_apt_sources.files |
-           product(box_deps_apt_mirror_rewrites) | list }}
-      loop_control:
-        label: "{{ item.0.path }}: {{ item.1.source }}"
+    - name: Configure fluent-bit to use upstream mirrors
+      import_role:
+        name: fluentbit
+        tasks_from: configure
+      vars:
+        nexus_url: "" # noqa: var-naming[no-role-prefix] -- shared mirror selector under test
+        test_in_aws: false # noqa: var-naming[no-role-prefix] -- shared environment selector under test
 
-    # Fail closed: the rewrite pairs above only cover URLs derived from
-    # mirror_apt_* vars, so an apt source pointing at Nexus through any other
-    # shape would ship silently and only surface as a strict apt-get update
-    # failure inside an AWS cell. Re-scan and refuse to ship a fixture that
-    # still references the lab. The rewrite's `<file>.<pid>.<ts>~` backups
-    # keep the old URLs by design and fall outside the patterns below.
+    # Fail closed if a source-owning entrypoint missed any active apt source.
+    # Ansible backups retain the old URLs by design and fall outside these
+    # patterns.
     - name: Re-scan for apt sources still pointing at Nexus
       find:
         paths: /etc/apt
