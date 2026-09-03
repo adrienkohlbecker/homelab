@@ -65,7 +65,8 @@
     _verify_bucket: >-
       {{ _influxdb_verify_bucket.stdout
          | from_json
-         | one_by_attr('name', 'verify_bucket') }}
+         | selectattr('name', 'eq', 'verify_bucket')
+         | first }}
     _verify_write_permission: >-
       write:orgs/{{ _verify_bucket.orgID }}/buckets/{{ _verify_bucket.id }}
   command:
@@ -83,7 +84,7 @@
   changed_when: false
   failed_when: >-
     ((_influxdb_verify_auth_list.stdout | from_json)
-     | matching_by_attr('permissions', [_verify_write_permission])
+     | selectattr('permissions', 'eq', [_verify_write_permission])
      | list | length) == 0
   become: true
 

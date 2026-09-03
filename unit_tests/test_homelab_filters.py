@@ -162,19 +162,6 @@ def test_any_successful_stdout_finds_successful_nonempty_result() -> None:
     assert not homelab_tests.any_successful_stdout([{"rc": 0, "stdout": ""}, {"rc": 1, "stdout": "ignored"}])
 
 
-def test_one_by_attr_supports_simple_and_nested_paths() -> None:
-    items = [{"name": "servers", "user": {"name": "infra"}}, {"name": "clients", "user": {"name": "infra"}}]
-    assert homelab.one_by_attr(items, "name", "servers") == items[0]
-    assert homelab.one_by_attr(items, {"user.name": "infra", "name": "clients"}) == items[1]
-
-
-def test_one_by_attr_rejects_zero_or_multiple_matches() -> None:
-    with pytest.raises(AnsibleError):
-        homelab.one_by_attr([], "name", "missing")
-    with pytest.raises(AnsibleError):
-        homelab.one_by_attr([{"name": "same"}, {"name": "same"}], "name", "same")
-
-
 def test_nft_helpers_extract_counters_and_rules_by_counter_reference() -> None:
     payload = {
         "nftables": [

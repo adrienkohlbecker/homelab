@@ -27,7 +27,8 @@
     _influxdb_bucket_record: >-
       {{ _influxdb_bucket_bucket_id_query.stdout
           | from_json
-          | one_by_attr('name', influxdb_bucket_args.bucket) }}
+          | selectattr('name', 'eq', influxdb_bucket_args.bucket)
+          | first }}
     _influxdb_org_id: >-
       {{ _influxdb_bucket_record.orgID }}
     _influxdb_bucket_id: "{{ _influxdb_bucket_record.id }}"
@@ -128,7 +129,8 @@
         _influxdb_bucket_bucket_id_query.rc != 0
         or (_influxdb_bucket_bucket_id_query.stdout
             | from_json
-            | matching_by_attr('name', influxdb_bucket_args.bucket)
+            | selectattr('name', 'eq', influxdb_bucket_args.bucket)
+            | list
             | length) == 0
       become: true
 

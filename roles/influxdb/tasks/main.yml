@@ -184,7 +184,8 @@
       - _influxdb_auth_check.rc == 0
       - (_influxdb_auth_check.stdout
           | from_json
-          | matching_by_attr('name', influxdb_root_org)
+          | selectattr('name', 'eq', influxdb_root_org)
+          | list
           | length) > 0
     fail_msg: >-
       `influx org list` did not return the managed '{{ influxdb_root_org }}'

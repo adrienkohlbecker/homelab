@@ -90,7 +90,7 @@
     - name: register | Assert the headscale user for this node exists exactly once
       assert:
         that:
-          - (tailscale_users.stdout | from_json | matching_by_attr('name', tailscale_headscale_user) | length) == 1
+          - (tailscale_users.stdout | from_json | selectattr('name', 'eq', tailscale_headscale_user) | list | length) == 1
         fail_msg: >-
           headscale user {{ tailscale_headscale_user }} is not present exactly once
           on {{ tailscale_headscale_host }}. The `users create` above swallows all
@@ -101,7 +101,7 @@
     - name: register | Mint a single-use pre-auth key
       command: >-
         podman exec headscale headscale preauthkeys create
-        --user {{ (tailscale_users.stdout | from_json | one_by_attr('name', tailscale_headscale_user)).id }}
+        --user {{ (tailscale_users.stdout | from_json | selectattr('name', 'eq', tailscale_headscale_user) | first).id }}
         --expiration 5m
         -o json
       delegate_to: "{{ tailscale_headscale_host }}"
@@ -185,7 +185,9 @@
       delay: 2
       until: >-
         ((tailscale_nodes.stdout | default('[]', true) | from_json)
-            | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)})
+            | selectattr('user.name', 'eq', tailscale_headscale_user)
+            | selectattr('given_name', 'eq', ansible_hostname | lower)
+            | list
             | length > 0)
 
     # Headscale lowercases given_name, including DSM's mixed-case hostname. Scope
@@ -194,7 +196,9 @@
       vars:
         tailscale_node_matches: >-
           {{ (tailscale_nodes.stdout | default('[]', true) | from_json)
-             | matching_by_attr({'user.name': tailscale_headscale_user, 'given_name': (ansible_hostname | lower)}) }}
+             | selectattr('user.name', 'eq', tailscale_headscale_user)
+             | selectattr('given_name', 'eq', ansible_hostname | lower)
+             | list }}
       block:
         - name: register | Fail if this host has no headscale node yet
           assert:

@@ -35,7 +35,7 @@
   vars:
     _tailscale_node: >-
       {{ (_tailscale_nodes.stdout | from_json)
-         | matching_by_attr('given_name', ansible_hostname | lower)
+         | selectattr('given_name', 'eq', ansible_hostname | lower)
          | first | default({}) }}
     _tailscale_desired_routes: >-
       {{ tailscale_advertise_routes + ['0.0.0.0/0', '::/0'] }}

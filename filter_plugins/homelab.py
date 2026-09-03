@@ -6,7 +6,7 @@ import base64
 import ipaddress
 import json
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ansible.errors import AnsibleError
@@ -159,24 +159,6 @@ def _get_path(item: Mapping[str, Any], path: str) -> Any:
     return current
 
 
-def matching_by_attr(
-    items: Iterable[Mapping[str, Any]], attr: str | Mapping[str, Any], value: Any = None
-) -> list[Mapping[str, Any]]:
-    """Return items matching one attribute value or a mapping of criteria."""
-    criteria = attr if isinstance(attr, Mapping) else {attr: value}
-    return [item for item in items if all(_get_path(item, path) == expected for path, expected in criteria.items())]
-
-
-def one_by_attr(
-    items: Iterable[Mapping[str, Any]], attr: str | Mapping[str, Any], value: Any = None
-) -> Mapping[str, Any]:
-    """Return exactly one matching item, raising when zero or many match."""
-    matches = matching_by_attr(items, attr, value)
-    if len(matches) != 1:
-        raise AnsibleError(f"one_by_attr expected exactly one match, got {len(matches)}")
-    return matches[0]
-
-
 def _nftables(value: str | Mapping[str, Any]) -> list[dict[str, Any]]:
     if isinstance(value, str):
         value = json.loads(value)
@@ -222,11 +204,9 @@ class FilterModule:
             "ansible_var_key": ansible_var_key,
             "host_vlan_block": host_vlan_block,
             "json_argv": json_argv,
-            "matching_by_attr": matching_by_attr,
             "nft_counters_by_name": nft_counters_by_name,
             "nft_rule_by_counter": nft_rule_by_counter,
             "nft_rules_by_counter": nft_rules_by_counter,
-            "one_by_attr": one_by_attr,
             "podman_health_curl": podman_health_curl,
             "podman_health_wget": podman_health_wget,
             "podman_idmap_args": podman_idmap_args,
