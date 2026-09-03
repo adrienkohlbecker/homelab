@@ -1,9 +1,5 @@
 domain: fahm.fr
 
-# `network` and `prod_network` both come from group_vars/all/network.yml
-# (`network` defaults to `prod_network`, the canonical 10.123.x topology).
-# Test overrides `network` with a gsub'd 10.234.x view.
-
 mac_addresses:
   pug: 9c:6b:00:26:ef:5d
   lab_i210: e8:ea:6a:09:97:67
@@ -660,22 +656,14 @@ homeassistant_smtp_password: !vault |
           37393034653837366136323061386365663533373666356539636263356639616536653733383166
           33623362316465363234663763376337653361643031326235353732376631666464336237626236
           353333303935623138333165633330376663
-# Authelia portal location + cookie scope. The portal's parent
-# domain must cover every protected subdomain so the session cookie
-# is visible everywhere. On prod (`domain: fahm.fr`) the default
-# resolves to `auth.fahm.fr` + cookie `.fahm.fr`, which covers
-# *.lab.fahm.fr / *.pug.fahm.fr / *.bunk.fahm.fr / *.fahm.fr. On the
-# `box` test fixture `domain` is mhaf.fr but only `*.box.mhaf.fr`
-# resolves via terraform/cloudflare (parent zone is dev-only), so
-# box.yml overrides authelia_cookie_domain to box.mhaf.fr.
+# Use one production-wide cookie scope so auth.fahm.fr sessions cover every
+# protected host subdomain.
 authelia_cookie_domain: "{{ domain }}"
 
-# Hosts other than authelia_host route forward-auth subrequests to
-# this host's wireguard IP (see authelia_internal_url in
-# group_vars/all.yml). One Authelia per prod cluster -- lab today.
+# Forward-auth subrequests from other hosts use lab over WireGuard.
 authelia_host: lab
 
-# Secrets are 64+ charts. Generate one with:
+# Secrets are 64+ chars. Generate one with:
 #
 #   podman run --rm -it authelia/authelia:4.39.19 \
 #     authelia crypto rand --length 64 --charset alphanumeric
@@ -928,10 +916,7 @@ jellyfin_api_token: !vault |
           66666431343030633233373938396464626561323864303164333037366436373939353163363236
           3831653334313765643233616231386139303339326361633062
 
-# User database for Authelia's file authentication backend. Each key
-# is the username (also the OIDC subject for future OIDC clients);
-# each value is a dict with displayname / password_hash / email /
-# groups.
+# User database for Authelia's file backend. Usernames are also OIDC subjects.
 #
 # password_hash is an argon2id hash, NOT cleartext. Generate one with:
 #
