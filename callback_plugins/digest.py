@@ -89,13 +89,8 @@ class CallbackModule(DefaultCallback):
                         continue
                     elif is_json_http_response and key == "json":
                         value = _json_summary(value)
-                    elif (
-                        is_json_http_response
-                        and key == "content"
-                        and isinstance(value, str)
-                        and len(value) > _JSON_DIGEST_THRESHOLD
-                    ):
-                        value = f"<{len(value)}-character JSON content hidden>"
+                    elif is_json_http_response and key == "content":
+                        continue
                     elif key == "status" and isinstance(value, dict) and "ActiveState" in value:
                         value = {k: value[k] for k in _STATUS_KEEP if k in value}
                     elif key == "stat" and isinstance(value, dict) and "exists" in value:

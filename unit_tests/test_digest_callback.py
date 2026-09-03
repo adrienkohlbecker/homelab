@@ -130,13 +130,13 @@ def test_large_uri_json_response_collapsed():
     out = display_result(result)
 
     assert out["json"].endswith("JSON object with keys: alarms hidden>")
-    assert out["content"] == f"<{len(content)}-character JSON content hidden>"
+    assert "content" not in out
     assert out["status"] == 200
     assert out["url"] == result["url"]
     assert result == snapshot
 
 
-def test_small_uri_json_response_kept():
+def test_small_uri_json_response_keeps_parsed_json():
     payload = {"status": "ok"}
     result = {
         "status": 200,
@@ -144,7 +144,11 @@ def test_small_uri_json_response_kept():
         "json": payload,
         "content": '{"status":"ok"}',
     }
-    assert display_result(result) == result
+    assert display_result(result) == {
+        "status": 200,
+        "url": "http://localhost:19999/api/v1/info",
+        "json": payload,
+    }
 
 
 def test_non_uri_json_result_kept():
