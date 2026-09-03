@@ -121,8 +121,6 @@ certbot_extra_sans:
 # -- the headscale unit orders After=wg-quick@wg0 for exactly that.
 headscale_oidc_issuer: "https://auth.{{ domain }}"
 
-headscale_oidc_client_id: headscale
-
 # Tailnet node and Hetzner exit/subnet router, registered against its co-located
 # Headscale. Route and DNS acceptance stay off so wg0 remains Fox's independent
 # path home; see notes/headscale_mesh_redesign.md.

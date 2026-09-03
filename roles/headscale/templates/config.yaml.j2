@@ -105,7 +105,7 @@ dns:
 # User devices enroll through Authelia; headless hosts use pre-auth keys.
 oidc:
   issuer: "{{ headscale_oidc_issuer }}"
-  client_id: "{{ headscale_oidc_client_id }}"
+  client_id: headscale
   client_secret_path: "/run/secrets/oidc_client_secret"
   scope: ["openid", "profile", "email"]
   # An Authelia outage should degrade only interactive enrollment.

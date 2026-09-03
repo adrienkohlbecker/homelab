@@ -11,11 +11,10 @@
   assert:
     that:
       - headscale_oidc_issuer | default('') | length > 0
-      - headscale_oidc_client_id | default('') | length > 0
       - headscale_oidc_client_secret | default('') | length > 0
     fail_msg: >-
-      Headscale requires non-empty headscale_oidc_issuer,
-      headscale_oidc_client_id, and headscale_oidc_client_secret inputs.
+      Headscale requires non-empty headscale_oidc_issuer and
+      headscale_oidc_client_secret inputs.
   tags:
     - headscale
 

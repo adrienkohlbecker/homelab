@@ -429,5 +429,4 @@ tailscale_headscale_user: test-harness
 # Headscale keeps OIDC fail-open in tests; these placeholders exercise the
 # rendered secret-backed configuration without requiring an issuer fixture.
 headscale_oidc_issuer: http://127.0.0.1:1/oidc
-headscale_oidc_client_id: headscale
 headscale_oidc_client_secret: test-oidc-client-secret
