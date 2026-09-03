@@ -13,6 +13,23 @@
   tags:
     - netdata
 
+- name: Require unique derived netdata context names
+  vars:
+    _netdata_context_names: >-
+      {{ netdata_contexts
+         | map('regex_replace', '[^a-zA-Z0-9_]', '_')
+         | list }}
+  assert:
+    that:
+      - >-
+        (_netdata_context_names | unique | list | length)
+        == (_netdata_context_names | length)
+    fail_msg: >-
+      netdata_contexts contains IDs that collapse to the same chart name after
+      punctuation is replaced with underscores: {{ _netdata_context_names }}
+  tags:
+    - netdata
+
 - name: Install netdata package
   import_tasks: install.yml
   tags:

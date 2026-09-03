@@ -19,12 +19,8 @@
 # answers and we still surface the missing entry.
 #
 # Per-host config comes from /etc/netdata/charts.d/netdata_presence.conf:
-#   netdata_presence_contexts=( "name=<context_id>" ... )
+#   netdata_presence_contexts=( "<context_id>" ... )
 #   netdata_presence_collectors=( "<go.d:collector:plugin:job>" ... )
-# Bash 4 lacks portable associative-array export through `source`, so
-# contexts use a flat "name=id" array that we split on the first '='.
-# (A context id legitimately can contain '.', '_', or ':', so split
-# at the *first* '=' only.)
 
 netdata_presence_update_every=60
 netdata_presence_priority=90200
@@ -114,7 +110,7 @@ _netdata_presence_collector_chart_prefix() {
 }
 
 netdata_presence_update() {
-  local entry name ctx_id present ready safe expected line _chart_id _mode
+  local entry ctx_id present ready safe expected line _chart_id _mode
   local contexts_ready=1 charts_ready=1
   local -A api_contexts=()
   local -A api_charts=()
@@ -142,27 +138,24 @@ netdata_presence_update() {
     [ "${#api_charts[@]}" -gt 0 ] || charts_ready=0
   fi
 
-  for entry in "${netdata_presence_contexts[@]}"; do
+  for ctx_id in "${netdata_presence_contexts[@]}"; do
     [ "$contexts_ready" = 1 ] || break # contexts API fetch failed this cycle; let the chart go stale
-    name=${entry%%=*}
-    ctx_id=${entry#*=}
-    if [ "$name" = "$entry" ] || [ -z "$name" ] || [ -z "$ctx_id" ]; then
-      error "netdata_presence: malformed context entry '$entry' (expected name=context_id)"
+    if [ -z "$ctx_id" ]; then
+      error "netdata_presence: empty context entry"
       continue
     fi
-    safe=$(_netdata_presence_safe "$name")
+    safe=$(_netdata_presence_safe "$ctx_id")
     present=0
     [ -n "${api_contexts[$ctx_id]:-}" ] && present=1
-    if [ -z "${_netdata_presence_seen_contexts[$name]:-}" ]; then
+    if [ -z "${_netdata_presence_seen_contexts[$ctx_id]:-}" ]; then
       cat <<EOF
-CHART netdata_presence.context_${safe} '' "Netdata context presence: ${name}" "present" netdata_presence netdata_presence.context line ${netdata_presence_priority} ${netdata_presence_update_every}
-CLABEL context "${name}" 1
+CHART netdata_presence.context_${safe} '' "Netdata context presence: ${ctx_id}" "present" netdata_presence netdata_presence.context line ${netdata_presence_priority} ${netdata_presence_update_every}
 CLABEL context_id "${ctx_id}" 1
 CLABEL_COMMIT
 DIMENSION present '' absolute 1 1
 DIMENSION ready '' absolute 1 1
 EOF
-      _netdata_presence_seen_contexts[$name]=1
+      _netdata_presence_seen_contexts[$ctx_id]=1
     fi
     cat <<EOF
 BEGIN netdata_presence.context_${safe} ${1}

@@ -130,27 +130,27 @@ tailscale_advertise_routes:
 # Fox omits physical-hardware and keepalived metrics that the VM cannot expose.
 # Its ZFS root and zram-backed swap remain part of the monitored host surface.
 netdata_contexts:
-  conntrack:       netfilter.conntrack_sockets
-  containers:      cgroup.cpu_limit
-  diskspace:       disk.space
-  diskstatistics:  disk.io
-  entropy:         system.entropy
-  extfrag:         mem.numa_node_zone_fragmentation_index
-  idlejitter:      system.idlejitter
-  interrupts:      system.interrupts
-  ipc:             system.ipc_semaphores
-  loadavg:         system.load
-  meminfo:         system.ram
-  netdev:          system.net
-  netstat:         system.ip
-  postfix:         postfix.qsize
-  pressure:        system.cpu_some_pressure
-  procstat:        system.cpu
-  softirqs:        system.softirqs
-  systemd_service: systemd.service.cpu.utilization
-  uptime:          system.uptime
-  vmstat:          mem.swapio
-  zfs:             zfs.arc_size
+  - netfilter.conntrack_sockets
+  - cgroup.cpu_limit
+  - disk.space
+  - disk.io
+  - system.entropy
+  - mem.numa_node_zone_fragmentation_index
+  - system.idlejitter
+  - system.interrupts
+  - system.ipc_semaphores
+  - system.load
+  - system.ram
+  - system.net
+  - system.ip
+  - postfix.qsize
+  - system.cpu_some_pressure
+  - system.cpu
+  - system.softirqs
+  - systemd.service.cpu.utilization
+  - system.uptime
+  - mem.swapio
+  - zfs.arc_size
 netdata_collectors:
   # No chrony collector: cmdport=0 blocks go.d UDP access (timex alarm covers clock-sync).
   - go.d:collector:docker:local

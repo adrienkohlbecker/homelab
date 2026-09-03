@@ -90,8 +90,8 @@ minio_enabled: true
 minio_buckets:
   - test
 netdata_contexts:
-  system_cpu: system.cpu              # always-live chart, baseline
-  ghost: foo.does_not_exist           # never-existed chart, probes the "missing-chart" gap
+  - system.cpu              # always-live chart, baseline
+  - foo.does_not_exist      # never-existed chart, probes the "missing-chart" gap
 # Box is the positive fixture for the primary-only alert; its priority remains
 # outside the production election map.
 netdata_keepalived_lost_master_alert: true

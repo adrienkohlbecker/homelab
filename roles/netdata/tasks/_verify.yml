@@ -2,13 +2,13 @@
 # context_liveness templates that consume netdata_contexts /
 # netdata_collectors. host_vars/box.yml seeds:
 #   netdata_contexts:
-#     system_cpu: system.cpu             (real chart, always live)
-#     ghost: foo.does_not_exist          (never-existed chart)
+#     - system.cpu             (real chart, always live)
+#     - foo.does_not_exist     (never-existed chart)
 #   netdata_collectors:
 #     - go.d:collector:systemdunits:service-units  (real, always-live -- the role configures it)
 #     - go.d:collector:fake_plugin:fake_job        (never-existed collector)
-# So the collector emits present=1 for system_cpu + systemdunits and
-# present=0 for ghost + fake_plugin:fake_job, and the health templates fan
+# So the collector emits present=1 for system.cpu + systemdunits and
+# present=0 for foo.does_not_exist + fake_plugin:fake_job, and the health templates fan
 # out across the resulting charts. systemdunits is the present=1 witness for
 # the collector prefix match (instanced mode, plugin != job) -- not just the
 # trivial present=0 path; fake_plugin:fake_job is the present=0 witness.
@@ -182,7 +182,7 @@
   until: >-
     _netdata_charts.status == 200
     and 'netdata_presence.context_system_cpu' in _charts
-    and 'netdata_presence.context_ghost' in _charts
+    and 'netdata_presence.context_foo_does_not_exist' in _charts
     and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in _charts
     and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in _charts
 
@@ -197,7 +197,7 @@
   vars:
     _system_cpu: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_system_cpu'] | default({}) }}"
     _systemdunits: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_systemdunits_service_units'] | default({}) }}"
-    _ghost: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_ghost'] | default({}) }}"
+    _missing_context: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_foo_does_not_exist'] | default({}) }}"
     _fake_collector: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_fake_plugin_fake_job'] | default({}) }}"
   until: >-
     _netdata_presence_metrics.status == 200
@@ -205,8 +205,8 @@
     and _system_cpu.dimensions.ready.value | default(-1) | int == 1
     and _systemdunits.dimensions.present.value | default(-1) | int == 1
     and _systemdunits.dimensions.ready.value | default(-1) | int == 1
-    and _ghost.dimensions.present.value | default(-1) | int == 0
-    and _ghost.dimensions.ready.value | default(-1) | int == 1
+    and _missing_context.dimensions.present.value | default(-1) | int == 0
+    and _missing_context.dimensions.ready.value | default(-1) | int == 1
     and _fake_collector.dimensions.present.value | default(-1) | int == 0
     and _fake_collector.dimensions.ready.value | default(-1) | int == 1
 
@@ -235,19 +235,16 @@
     executable: /bin/bash
   changed_when: false
 
-# Each chart carries CLABELs (context+context_id for context charts,
-# collector for collector charts); the alert templates use ${label:foo}
-# in their summary/info so the alert text identifies which entry
-# failed. Verify the labels are set as expected.
-- name: _verify | System_cpu chart carries context labels + shared context
+# Each chart carries its configured ID as a CLABEL; the alert templates use it
+# in their summary/info so the alert text identifies which entry failed.
+- name: _verify | System_cpu chart carries context ID + shared context
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.context_system_cpu
   register: _netdata_system_cpu_chart
-- name: _verify | Assert system_cpu labels + context
+- name: _verify | Assert system_cpu context ID + context
   assert:
     that:
       - _netdata_system_cpu_chart.json.context == "netdata_presence.context"
-      - _netdata_system_cpu_chart.json.chart_labels.context | default('') == "system_cpu"
       - _netdata_system_cpu_chart.json.chart_labels.context_id | default('') == "system.cpu"
     fail_msg: >-
       chart {{ _netdata_system_cpu_chart.json.id }} context={{ _netdata_system_cpu_chart.json.context }}
@@ -270,8 +267,8 @@
 #   1) netdata_context_missing / netdata_collector_missing (presence alerts)
 #      should instantiate per-chart on the shared contexts.
 #   2) liveness_<name> (per-context staleness) from context_liveness.conf.j2
-#      should instantiate only for real charts -- liveness_ghost is expected
-#      to silently drop because foo.does_not_exist isn't in the registry.
+#      should instantiate only for real charts -- liveness_foo_does_not_exist
+#      is expected to silently drop because the context isn't in the registry.
 # Health passes register alert fan-outs per chart, so gate the fetch on every
 # instantiation the assertions below consume: the presence/liveness fan-outs
 # against the fresh charts, and the stock systemdunits alarm the sustained-state
@@ -304,7 +301,7 @@
   until: >-
     _netdata_alarms.status == 200
     and _keys | select('search', 'netdata_presence.context_system_cpu.netdata_context_missing') | list | length > 0
-    and _keys | select('search', 'netdata_presence.context_ghost.netdata_context_missing') | list | length > 0
+    and _keys | select('search', 'netdata_presence.context_foo_does_not_exist.netdata_context_missing') | list | length > 0
     and _keys | select('search', 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job.netdata_collector_missing') | list | length > 0
     and _keys | select('search', 'liveness_system_cpu') | list | length > 0
     and _keys | select('search', 'systemd_service_unit_failed_state') | list | length > 0
@@ -337,7 +334,7 @@
   vars:
     _alarms: "{{ _netdata_alarms.json.alarms }}"
     _names:
-      - netdata_presence.context_ghost.netdata_context_missing
+      - netdata_presence.context_foo_does_not_exist.netdata_context_missing
       - netdata_presence.collector_go_d_collector_fake_plugin_fake_job.netdata_collector_missing
     _alarm: "{{ _alarms[item] | default({}) }}"
   assert:
@@ -353,16 +350,17 @@
       continuous absence without notification-only delay. Got: {{ _alarm }}
   loop: "{{ _names }}"
 
-- name: _verify | Liveness_system_cpu present, liveness_ghost absent
+- name: _verify | Real-context liveness present, missing-context liveness absent
   vars:
     _keys: "{{ _netdata_alarms.json.alarms.keys() | list }}"
   assert:
     that:
       - _keys | select('search', 'liveness_system_cpu') | list | length > 0
-      - _keys | select('search', 'liveness_ghost') | list | length == 0
+      - _keys | select('search', 'liveness_foo_does_not_exist') | list | length == 0
     fail_msg: >-
-      Expected liveness_system_cpu to be registered and liveness_ghost to be
-      silently dropped (foo.does_not_exist isn't in the chart registry).
+      Expected liveness_system_cpu to be registered and
+      liveness_foo_does_not_exist to be silently dropped because its context
+      is not in the chart registry.
       Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
 
 - name: _verify | Context liveness alarm uses an explicit stale age
