@@ -8,6 +8,9 @@
 # entry point runs.
 #
 # JSON output avoids table-shape drift; argv slots keep tenant names inert.
+# There is no useful check-mode simulation: the helper queries live application
+# state and derives IDs needed by later commands, so skip it until the service
+# exists after a real converge.
 
 - name: bucket | Assert args
   assert:
@@ -19,6 +22,7 @@
 
 # Keep derived IDs block-scoped so repeated imports cannot leak tenant state.
 - name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_root_org }}
+  when: not ansible_check_mode
   vars:
     _influxdb_bucket_record: >-
       {{ _influxdb_bucket_bucket_id_query.stdout
