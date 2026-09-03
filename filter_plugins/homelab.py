@@ -48,17 +48,12 @@ def json_argv(argv: Sequence[Any]) -> str:
     return "'" + json.dumps([str(arg) for arg in argv], separators=(",", ":")) + "'"
 
 
-def podman_health_curl(
-    url: str,
-    *,
-    location: bool = True,
-) -> str:
+def podman_health_curl(url: str) -> str:
     """Render the repo's standard curl-based podman health probe."""
-    argv: list[str] = ["curl"]
-    if location:
-        argv.append("--location")
-    argv.extend(
+    return json_argv(
         [
+            "curl",
+            "--location",
             "--fail",
             "--silent",
             "--show-error",
@@ -71,7 +66,6 @@ def podman_health_curl(
             url,
         ]
     )
-    return json_argv(argv)
 
 
 def podman_health_wget(url: str) -> str:

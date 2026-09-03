@@ -48,14 +48,6 @@ def test_podman_health_curl_renders_repo_default_probe() -> None:
     )
 
 
-def test_podman_health_curl_can_skip_location() -> None:
-    rendered = homelab.podman_health_curl("http://localhost:8080/health", location=False)
-    argv = json.loads(rendered.strip("'"))
-    assert "--location" not in argv
-    assert "--fail" in argv
-    assert argv[-1] == "http://localhost:8080/health"
-
-
 def test_podman_health_wget_renders_get_probe_to_dev_null() -> None:
     rendered = homelab.podman_health_wget("http://localhost:5055/api/v1/status")
     assert json.loads(rendered.strip("'")) == [
