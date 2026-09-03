@@ -15,7 +15,7 @@ DOCUMENTATION = """
     - result_format_callback
 """
 
-_STATUS_KEEP = ("Id", "ActiveState", "SubState", "Result", "ExecMainPID")
+_STATUS_KEEP = ("ActiveState", "SubState", "Result")
 _STAT_KEEP = (
     "exists",
     "path",

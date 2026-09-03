@@ -7,13 +7,13 @@ from typing import Any, cast
 import callback_plugins.digest as digest
 
 SUMMARY_STATUS = {
-    "Id": "nginx.service",
     "ActiveState": "active",
     "SubState": "running",
     "Result": "success",
-    "ExecMainPID": "1234",
 }
 FULL_STATUS = SUMMARY_STATUS | {
+    "Id": "nginx.service",
+    "ExecMainPID": "1234",
     "WatchdogUSec": "0",
     "MemoryCurrent": "12345678",
     "ControlGroup": "/system.slice/nginx.service",
