@@ -68,7 +68,10 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="seerr" \
     --user 1000:1000 \
-    {{ seerr_user | podman_idmap_args(container_uid=1000) | join(" ") }} \
+    --uidmap=0:0:65536 \
+    --uidmap=+1000:{{ seerr_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+1000:{{ seerr_user.gid }}:1 \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/seerr:/app/config \
     --network media \

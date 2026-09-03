@@ -48,7 +48,10 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --network homepage \
     --user 0:0 \
-    {{ homepage_user | podman_idmap_args | join(" ") }} \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ homepage_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ homepage_user.gid }}:1 \
     --volume /mnt/services/homepage/services.yaml:/app/config/services.yaml:ro \
     --volume /mnt/services/homepage/bookmarks.yaml:/app/config/bookmarks.yaml:ro \
     --volume /mnt/services/homepage/settings.yaml:/app/config/settings.yaml:ro \

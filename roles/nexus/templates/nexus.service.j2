@@ -71,7 +71,10 @@ ExecStart=/usr/bin/podman run \
     --env INSTALL4J_ADD_VM_PARAMS="{{ nexus_jvm_params }} -Djava.util.prefs.userRoot=/user-root" \
     --env NEXUS_SECRETS_KEY_FILE=/user-root/encryption.json \
     --user 200:200 \
-    {{ nexus_user | podman_idmap_args(container_uid=200) | join(" ") }} \
+    --uidmap=0:0:65536 \
+    --uidmap=+200:{{ nexus_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+200:{{ nexus_user.gid }}:1 \
     --volume /mnt/services/nexus/data:/nexus-data \
     --volume /mnt/scratch/nexus:/nexus-data/blobs/default \
     --volume /mnt/services/nexus/user:/user-root \

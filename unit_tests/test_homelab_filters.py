@@ -69,15 +69,6 @@ def test_podman_health_wget_renders_get_probe_to_dev_null() -> None:
     ]
 
 
-def test_podman_idmap_args_maps_one_container_identity() -> None:
-    assert homelab.podman_idmap_args({"uid": 120001, "gid": 120002}, container_uid=1000) == [
-        "--uidmap=0:0:65536",
-        "--uidmap=+1000:120001:1",
-        "--gidmap=0:0:65536",
-        "--gidmap=+1000:120002:1",
-    ]
-
-
 def test_authelia_redirects_to_checks_status_auth_host_and_rd() -> None:
     result = {
         "status": 302,

@@ -89,23 +89,6 @@ def podman_health_wget(url: str) -> str:
     )
 
 
-def podman_idmap_args(
-    user: Mapping[str, Any],
-    container_uid: int | str = 0,
-) -> list[str]:
-    """Return podman uid/gid map args for one in-container identity."""
-    host_uid = _get_path(user, "uid")
-    host_gid = _get_path(user, "gid")
-    if host_uid is None or host_gid is None:
-        raise AnsibleError("podman_idmap_args requires a user mapping with uid and gid")
-    return [
-        "--uidmap=0:0:65536",
-        f"--uidmap=+{container_uid}:{host_uid}:1",
-        "--gidmap=0:0:65536",
-        f"--gidmap=+{container_uid}:{host_gid}:1",
-    ]
-
-
 def host_vlan_block(
     network: Mapping[str, Any],
     inventory_hostname: str,
@@ -194,7 +177,6 @@ class FilterModule:
             "nft_rules_by_counter": nft_rules_by_counter,
             "podman_health_curl": podman_health_curl,
             "podman_health_wget": podman_health_wget,
-            "podman_idmap_args": podman_idmap_args,
             "rstrip_newlines": rstrip_newlines,
             "zfs_mount_unit": zfs_mount_unit,
         }
