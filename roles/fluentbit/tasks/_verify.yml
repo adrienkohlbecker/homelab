@@ -76,6 +76,10 @@
           UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
           PRIORITY: "3"
           marker: healthcheck-failed-keep
+        - _tag: certbot.file
+          log: "2099-07-12 12:00:00,123:ERROR:certbot._internal.main:certbot-valid"
+        - _tag: certbot.file
+          log: certbot-unparsed
       expected:
         - level: error
           fields.marker: homepage-failed-keep
@@ -84,6 +88,20 @@
         - fields.marker: healthcheck-enoent-keep
         - level: error
           fields.marker: healthcheck-failed-keep
+        - service: certbot
+          unit: certbot.service
+          identifier: certbot
+          stream: certbot_file
+          level: error
+          message: certbot-valid
+          fields.source: certbot._internal.main
+          _absent:
+            - parse_error
+            - fields.parser_status
+        - service: certbot
+          level: warn
+          message: certbot-unparsed
+          parse_error: certbot_file
 
 - name: _verify | Shared core noise was omitted
   assert:
@@ -95,6 +113,7 @@
     fluentbit_lnav_nginx_marker: "verify_nginx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_access_marker: "verify_nginxaccess_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_nginx_empty_marker: "verify_nginxempty_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    fluentbit_lnav_certbot_marker: "verify_certbot_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_ansi_marker: "verify_ansi_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_priority_marker: "verify_priority_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
     fluentbit_lnav_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
@@ -141,6 +160,17 @@
   command: tee -a /var/log/nginx/access.log
   args:
     stdin: "203.0.113.7 - - [08/Jun/2099:12:00:02 +0200]  \"\"  400 0 0 9.856 - \"-\" \"{{ fluentbit_lnav_nginx_empty_marker }}\" \"\" - -\n"
+  changed_when: false
+  become: true
+
+- name: _verify | Certbot tail | append a multiline error
+  command: tee -a /var/log/letsencrypt/letsencrypt.log
+  args:
+    stdin: |
+      2099-07-12 12:00:00,123:ERROR:certbot._internal.main:Renewal failed {{ fluentbit_lnav_certbot_marker }}
+      Traceback (most recent call last):
+        File "/usr/lib/python3/dist-packages/certbot/main.py", line 1, in main
+      ValueError: {{ fluentbit_lnav_certbot_marker }}
   changed_when: false
   become: true
 
@@ -269,6 +299,10 @@
     - name: nginx_empty
       marker: "{{ fluentbit_lnav_nginx_empty_marker }}"
       service: nginx_access
+    - name: certbot
+      marker: "{{ fluentbit_lnav_certbot_marker }}"
+      service: certbot
+      extra: Traceback
     - name: ansi
       marker: "{{ fluentbit_lnav_ansi_marker }}"
       service: fluentbit_verify_ansi
@@ -410,6 +444,24 @@
       - "row.fields.status is integer"
       - "'parse_error' not in row"
     fail_msg: "nginx empty-field access line did not parse: {{ row }}"
+
+- name: _verify | Certbot tail | assert parsed multiline shape
+  vars:
+    row: "{{ _fluentbit_lnav_by_name.certbot }}"
+  assert:
+    that:
+      - "row.level == 'error'"
+      - "row.service == 'certbot'"
+      - "row.unit == 'certbot.service'"
+      - "row.identifier == 'certbot'"
+      - "row.stream == 'certbot_file'"
+      - "fluentbit_lnav_certbot_marker in row.message"
+      - "'Traceback' in row.message"
+      - "'ValueError' in row.message"
+      - "row.fields.source == 'certbot._internal.main'"
+      - "'parser_status' not in row.fields"
+      - "'parse_error' not in row"
+    fail_msg: "certbot file record did not parse into one shaped record: {{ row }}"
 
 - name: _verify | ANSI | assert colors stripped and level reclassified
   vars:

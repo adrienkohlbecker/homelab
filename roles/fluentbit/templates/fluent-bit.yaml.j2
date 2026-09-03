@@ -47,6 +47,25 @@ pipeline:
       storage.type: filesystem
       storage.pause_on_chunks_overlimit: true
 
+    # Certbot's detailed logger only writes to this file. Tail the active path;
+    # Fluent Bit follows its inode across rotation without also globbing old
+    # files and duplicating their records.
+    - name: tail
+      tag: certbot.file
+      path: /var/log/letsencrypt/letsencrypt.log
+      db: /var/lib/fluent-bit/certbot.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      refresh_interval: 5
+      multiline.parser: multiline_certbot_file
+      skip_empty_lines: true
+      skip_long_lines: false
+      rotate_wait: 30
+      buffer_max_size: 1M
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
     - name: tail
       tag: host_packages
       path: /var/log/apt/*.log,/var/log/dpkg.log,/var/log/unattended-upgrades/*.log,/var/log/alternatives.log,/var/log/ubuntu-advantage.log,/var/log/ubuntu-advantage-apt-hook.log

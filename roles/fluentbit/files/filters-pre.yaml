@@ -43,3 +43,21 @@ pipeline:
       parser: nginx_access_custom
       reserve_data: true
       preserve_key: true
+
+    - name: parser
+      match: certbot.file
+      key_name: log
+      parser: certbot_file
+      reserve_data: true
+      preserve_key: true
+
+    - name: modify
+      match: certbot.file
+      condition:
+        - key_exists certbot_message
+        - key_exists certbot_level
+      hard_rename:
+        - certbot_message log
+        - certbot_level _level
+        - certbot_source source
+      remove: certbot_timestamp

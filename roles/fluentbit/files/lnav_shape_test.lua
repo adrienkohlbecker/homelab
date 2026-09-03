@@ -147,3 +147,26 @@ do
     check("message.trim_trailing_whitespace", rec.message, "  updated\n\npackage")
     check("fields.no_parser_status", rec.fields.parser_status, nil)
 end
+
+do
+    local rec = shape("certbot.file", {
+        host = "lab",
+        log = "certificate renewed",
+        source = "certbot._internal.main",
+    }, "info")
+    check("certbot.service", rec.service, "certbot")
+    check("certbot.stream", rec.stream, "certbot_file")
+    check("certbot.unit", rec.unit, "certbot.service")
+    check("certbot.identifier", rec.identifier, "certbot")
+    check("certbot.source", rec.fields.source, "certbot._internal.main")
+    check("certbot.no_parse_error", rec.parse_error, nil)
+end
+
+do
+    local rec = shape("certbot.file", {
+        host = "lab",
+        log = "unparsed certbot record",
+    }, "info")
+    check("certbot.failure.level", rec.level, "warn")
+    check("certbot.failure.parse_error", rec.parse_error, "certbot_file")
+end
