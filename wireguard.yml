@@ -12,7 +12,7 @@
   tasks:
     - name: Assert the target device is a known client peer
       vars:
-        client_peers: "{{ wireguard_peers | dict2items | rejectattr('value.is_server') | map(attribute='key') | list }}"
+        client_peers: "{{ wireguard_peers | dict2items | selectattr('key', 'in', network.wireguard.roaming) | map(attribute='key') | list }}"
       assert:
         that:
           - wg_show_peer is defined

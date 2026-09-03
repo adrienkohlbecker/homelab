@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Show a WireGuard client config on demand: terminal QR (phone) or --conf to stdout (laptop). Never written to disk."
-#USAGE arg "<device>" help="client peer name (a non-server wireguard_peers entry, e.g. laptop or phone)"
-#USAGE complete "device" run="yq -r '.wireguard_peers | to_entries[] | select(.value.is_server != true) | .key' group_vars/all/main.yml"
+#USAGE arg "<device>" help="roaming peer name (e.g. laptop or phone)"
+#USAGE complete "device" run="yq -r '.wireguard.roaming | keys[]' data/network_topology.yml"
 #USAGE flag "--conf" help="emit the raw config to stdout instead of a QR (macOS: pipe to pbcopy, then Add Empty Tunnel -> paste)"
 set -euo pipefail
 
@@ -25,7 +25,7 @@ config="$(jq -r '.plays[].tasks[]? | select(.task.name == "Render the client con
 if [ -z "$config" ]; then
   {
     echo "wg:show: could not render a config for '${device}'."
-    echo "It must be a client peer (a non-server entry in wireguard_peers), and the vault must be unlocked."
+    echo "It must be a roaming peer in the network topology, and the vault must be unlocked."
     jq -r '.. | objects | select(.failed? == true) | .msg? // empty' <<<"$payload" 2>/dev/null || true
     cat "$err"
   } >&2

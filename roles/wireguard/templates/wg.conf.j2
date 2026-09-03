@@ -1,6 +1,7 @@
 {% set render_peer_name = own_peer_name | default(inventory_hostname) -%}
 {% set own_peer = wireguard_peers[render_peer_name] -%}
 {% set own_keys = wireguard_keys[render_peer_name] -%}
+{% set own_is_server = render_peer_name in network.hosts -%}
 [Interface]
 # PublicKey = {{ own_keys.public_key }}
 PrivateKey = {{ own_keys.private_key }}
@@ -12,7 +13,7 @@ Address = {{ own_peer.address }}/32
    packets succeed, large packets stall silently. 1280 is the IPv6
    minimum MTU -- universally fragmentation-safe. Server-side keeps
    auto-discovery (stable uplinks). -#}
-{% if not own_peer.is_server %}
+{% if not own_is_server %}
 MTU = 1280
 {% endif %}
 {# Table = auto is wg-quick's default; pinned to document that wg-quick owns
@@ -36,8 +37,9 @@ ListenPort = {{ service_ports.wireguard }}
    out. Same-site peers reach each other on the LAN; roaming clients (no site,
    own_host == {}) keep the pure wg-/32 split tunnel. #}
 {% set own_host = network.hosts.get(render_peer_name, {}) %}
-{% for peer_name, peer in wireguard_peers.items() if (peer.is_server or own_peer.is_server) and (peer_name != render_peer_name) %}
+{% for peer_name, peer in wireguard_peers.items() if ((peer_name in network.hosts) or own_is_server) and (peer_name != render_peer_name) %}
 {% set peer_host = network.hosts.get(peer_name, {}) %}
+{% set peer_is_server = peer_name in network.hosts %}
 [Peer]
 # Name = {{ peer_name }}
 PublicKey = {{ wireguard_keys[peer_name].public_key }}
@@ -49,7 +51,7 @@ AllowedIPs = {{ peer.address }}/32
 {# PSK derived from the vaulted seed, never stored on disk: the filter sorts
    the peer names so both ends compute the same key. #}
 PresharedKey = {{ [render_peer_name, peer_name] | wireguard_psk(wireguard_psk_seed) }}
-{% if own_peer.is_server and peer.is_server and own_host.site is defined and peer_host.site is defined and peer_host.site == own_host.site %}
+{% if own_is_server and peer_is_server and own_host.site is defined and peer_host.site is defined and peer_host.site == own_host.site %}
 Endpoint = {{ peer_host.physical }}:{{ service_ports.wireguard }}
 {% elif peer.public_endpoint is defined %}
 {# Public endpoints are bare IP:port literals (the off-site/home public IPs live

@@ -34,7 +34,7 @@
       ({{ service_ports.wireguard }})
 
 # Count equals all-peers-minus-self only because converge is server-only
-# (main.yml asserts own_peer.is_server), so the template's loop includes every
+# (main.yml asserts the host belongs to network.hosts), so the template includes every
 # other peer; against a non-server converge it would be servers-only.
 - name: _verify | Assert peer count matches wireguard_peers - 1
   assert:

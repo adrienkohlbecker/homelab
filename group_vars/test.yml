@@ -73,30 +73,24 @@ mac_addresses:
 # 6-peer test fixture (lab/pug/pom/box + fox + laptop). pom is same-site with
 # no public endpoint to exercise the topology-derived LAN endpoint; fox is
 # cross-site (hetzner) to exercise the AllowedIPs physical-/32 branch; laptop
-# is a roaming peer (is_server:false, no endpoint) to exercise the non-server
+# is a roaming peer with no endpoint to exercise the client
 # [Peer] branch — plain /32, no Endpoint, no keepalive — in wg.conf.j2.
 wireguard_peers:
   lab:
     address: "{{ network.hosts.lab.wireguard }}"
     public_endpoint: 192.0.2.1:51823
-    is_server: true
   pug:
     address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: 192.0.2.1:51823
-    is_server: true
   pom:
     address: "{{ network.hosts.pom.wireguard }}"
-    is_server: true
   box:
     address: "{{ network.hosts.box.wireguard }}"
     public_endpoint: 192.0.2.1:51823
-    is_server: true
   fox:
     address: "{{ network.hosts.fox.wireguard }}"
-    is_server: true
   laptop:
     address: "{{ network.wireguard.roaming.laptop }}"
-    is_server: false
 
 # Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):
 # PresharedKey = base64(HMAC-SHA256(seed, sorted-pair-name)). One value, no

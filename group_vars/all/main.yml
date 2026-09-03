@@ -288,25 +288,19 @@ wireguard_peers:
   lab:
     address: "{{ network.hosts.lab.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51821"
-    is_server: true
   pug:
     address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51822"
-    is_server: true
   box:
     address: "{{ network.hosts.box.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51823"
-    is_server: true
   laptop:
     address: "{{ network.wireguard.roaming.laptop }}"
-    is_server: false
   phone:
     address: "{{ network.wireguard.roaming.phone }}"
-    is_server: false
   bunk:
     address: "{{ network.hosts.bunk.wireguard }}"
     public_endpoint: "{{ bunk_endpoint }}:51820"
-    is_server: true
     # Lab, pug, and fox are the consumers of the bunk offsite link (nightly
     # zfs autobackup: lab/pug push their datasets, fox rsyncs its own). Having
     # each send a 25s PersistentKeepalive keeps its view of bunk's
@@ -333,7 +327,6 @@ wireguard_peers:
     # tailnet rides on, so it must dial the public IP directly or it deadlocks.
     address: "{{ network.hosts.fox.wireguard }}"
     public_endpoint: "{{ fox_endpoint }}:51820"
-    is_server: true
     keepalive_from: [ lab, pug ]
 
 podman_default_network: 10.88.0.0/16
