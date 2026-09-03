@@ -86,10 +86,7 @@ workflow:
 
 .push_or_web:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
 
 .manual_job:
   rules:
@@ -148,11 +145,7 @@ detect:
     # lab's own shell runner, whose mise/uv are the host's own -- so no baked
     # /opt caches here. Must precede the source rules so it wins for push+lab.
     - if: $HOMELAB_CI_TARGET == "lab"
-    - if: $CI_PIPELINE_SOURCE == "web"
-      variables:
-        MISE_DATA_DIR: /opt/mise
-        UV_CACHE_DIR: /opt/uv-cache
-    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
       variables:
         MISE_DATA_DIR: /opt/mise
         UV_CACHE_DIR: /opt/uv-cache
@@ -187,22 +180,16 @@ test_cells:
     - job: detect
       artifacts: true
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     # SKIP_TEST_CELLS no longer gates the trigger: the child is always built and
     # run so the cells are present. Under SKIP_TEST_CELLS they render as optional
     # manual jobs (detect.py), so triggering the child costs nothing -- the child
     # completes immediately with its cells waiting to be click-started. Those
     # all-manual cells leave the child in a "skipped" state, which `strategy:
     # depend` would mirror onto this parent as a failure -- so under SKIP allow
-    # this trigger to fail, keeping the skip pipeline green. (Source gating is
-    # unchanged: still web/push only, just split to attach allow_failure.)
-    - if: $CI_PIPELINE_SOURCE == "web" && $SKIP_TEST_CELLS == "true"
+    # this trigger to fail, keeping the skip pipeline green.
+    - if: '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push") && $SKIP_TEST_CELLS == "true"'
       allow_failure: true
-    - if: $CI_PIPELINE_SOURCE == "push" && $SKIP_TEST_CELLS == "true"
-      allow_failure: true
-    - if: $CI_PIPELINE_SOURCE == "web"
-    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
   trigger:
     include:
       - artifact: test-child.yml
