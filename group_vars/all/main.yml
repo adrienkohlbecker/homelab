@@ -360,6 +360,6 @@ dns_keepalived_vrid: 1
 # One balanced aggregate covers ads and tracking, TIF extends threat coverage,
 # and the separate DoH list keeps the encrypted-DNS bypass control.
 adguard_adlists:
-  - "{{ mirror_raw_githubusercontent }}/hagezi/dns-blocklists/main/adblock/multi.txt"
+  - "{{ mirror_raw_githubusercontent }}/hagezi/dns-blocklists/main/adblock/pro.txt"
   - "{{ mirror_raw_githubusercontent }}/hagezi/dns-blocklists/main/adblock/tif.txt"
   - "{{ mirror_raw_githubusercontent }}/hagezi/dns-blocklists/main/adblock/doh.txt"
