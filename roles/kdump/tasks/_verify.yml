@@ -29,11 +29,28 @@
         name: reboot
         tasks_from: reboot
 
+    - name: _verify | Detect a perf PMU for the NMI watchdog
+      when: ansible_architecture == 'x86_64'
+      command:
+        argv:
+          - find
+          - /sys/bus/event_source/devices
+          - -maxdepth
+          - "1"
+          - -name
+          - cpu*
+          - -print
+          - -quit
+      register: kdump_verify_perf_pmu
+      changed_when: false
+
     # The timer fires three minutes after boot, after KVM and PowerTOP have had
     # time to disable the detector. Verify the policy outcome rather than the
     # timer's requested enablement state.
     - name: _verify | NMI watchdog is armed post-reboot
-      when: ansible_architecture == 'x86_64'
+      when:
+        - ansible_architecture == 'x86_64'
+        - kdump_verify_perf_pmu.stdout | trim | length > 0
       command: cat /proc/sys/kernel/nmi_watchdog
       register: kdump_verify_nmi_watchdog
       changed_when: false
@@ -41,6 +58,36 @@
       delay: 5
       until: kdump_verify_nmi_watchdog.stdout | trim == '1'
       become: true
+
+    # A vCPU without a perf PMU cannot back the hard-lockup detector. Exercise
+    # the unit directly and require its capability condition to skip cleanly.
+    - name: _verify | Exercise unsupported-PMU watchdog condition
+      when:
+        - ansible_architecture == 'x86_64'
+        - kdump_verify_perf_pmu.stdout | trim | length == 0
+      systemd:
+        name: kdump_nmi_watchdog.service
+        state: started
+      become: true
+
+    - name: _verify | Read unsupported-PMU watchdog state
+      when:
+        - ansible_architecture == 'x86_64'
+        - kdump_verify_perf_pmu.stdout | trim | length == 0
+      systemd:
+        name: kdump_nmi_watchdog.service
+      register: kdump_verify_nmi_watchdog_unsupported
+      become: true
+
+    - name: _verify | Unsupported-PMU watchdog unit is cleanly skipped
+      when: not (kdump_verify_nmi_watchdog_unsupported is skipped)
+      assert:
+        that:
+          - kdump_verify_nmi_watchdog_unsupported.status.ActiveState == 'inactive'
+          - kdump_verify_nmi_watchdog_unsupported.status.ConditionResult == 'no'
+        fail_msg: >-
+          expected the watchdog unit to skip on a guest without a perf PMU, got
+          {{ kdump_verify_nmi_watchdog_unsupported.status }}
 
     # kdump-tools regenerates the capture-kernel initrd and kexec-loads it on
     # each start, so wait for its package-native loaded-state check after reboot.

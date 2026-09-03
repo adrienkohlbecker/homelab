@@ -1,8 +1,10 @@
 [Unit]
 # KVM and system tuners can disable the detector after the kernel command line
-# arms it. The paired timer re-asserts it once after boot.
+# arms it. The paired timer re-asserts it once after boot. KVM can expose the
+# sysctl without a usable perf PMU, so require the kernel's CPU event source.
 Description=Re-arm NMI hard-lockup watchdog after KVM bring-up disables it
 ConditionPathExists=/proc/sys/kernel/nmi_watchdog
+ConditionPathExistsGlob=/sys/bus/event_source/devices/cpu*
 
 [Service]
 Type=oneshot
