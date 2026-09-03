@@ -13,17 +13,10 @@ http:
   address: 0.0.0.0:3000
   session_ttl: 30d
 {#
-  No app-level users: the admin UI/API is only published on the host
-  loopback and fronted by the Authelia-gated nginx vhost (auth: true
-  in tasks/main.yml), which is the sole LAN ingress. Host-local processes
-  and every container on the default podman bridge can reach the API
-  unauthenticated -- and it controls upstreams/rewrites, so a compromised
-  co-located container could hijack household DNS. Accepted for this home
-  environment. The obvious hardenings do not work here: binding
-  127.0.0.1 breaks the loopback publish (the DNAT targets the container
-  IP, verified on the harness), and the firewall deliberately allows
-  published/VIP DNAT hairpins while blocking direct cross-network
-  container-IP traffic.
+  The UI/API has no app user because its only LAN ingress is the
+  Authelia-gated nginx vhost over the loopback publish. Published-port
+  hairpins still let local containers reach the unauthenticated API;
+  accepted here. Binding the container to 127.0.0.1 breaks that DNAT.
 #}
 users: []
 auth_attempts: 5
@@ -37,9 +30,8 @@ dns:
   port: 53
   anonymize_client_ip: false
 {#
-  Per-client (/32) request budget. The upstream default of 20 rps is too
-  tight for a busy household client; 300 keeps one misbehaving LAN/IoT
-  device from monopolizing the resolver without throttling real use.
+  The upstream 20 rps default is too tight for a busy household client;
+  retain a per-client /32 budget.
 #}
   ratelimit: 300
   ratelimit_subnet_len_ipv4: 32
@@ -47,26 +39,13 @@ dns:
   ratelimit_whitelist: []
   refuse_any: true
   upstream_dns:
-{#
-  Primary resolver: Cloudflare DoH keeps household DNS encrypted over normal
-  HTTPS/443 and avoids EDNS Client Subnet, favoring privacy over occasionally
-  sharper CDN geo-steering.
-#}
     - https://cloudflare-dns.com/dns-query
   upstream_dns_file: ""
   bootstrap_dns:
-{#
-  Bootstrap must be plain DNS; it resolves DoH hostnames before encrypted
-  upstreams are reachable. Keep using the shared bootstrap escape hatch.
-#}
 {% for resolver in bootstrap_dns_resolver %}
     - {{ resolver ~ ':53' }}
 {% endfor %}
   fallback_dns:
-{#
-  Fallback resolver: Google DoH is a broad, reliable secondary when Cloudflare
-  is unavailable. ECS stays disabled below for privacy.
-#}
     - https://dns.google/dns-query
   upstream_mode: load_balance
   fastest_timeout: 1s
@@ -74,11 +53,9 @@ dns:
   disallowed_clients: []
   blocked_hosts: []
 {#
-  X-Forwarded-For is honored only from nginx's path into the container:
-  the loopback publish DNATs onto the named adguard network, so requests
-  arrive sourced from that network's gateway. Trust exactly that address,
-  not the whole bridge range -- any co-located container could otherwise
-  forge its client identity.
+  The nginx loopback publish reaches the container from this network's
+  gateway. Trust that address, not the bridge range, so containers cannot
+  forge X-Forwarded-For.
 #}
   trusted_proxies:
     - 127.0.0.0/8
@@ -89,10 +66,8 @@ dns:
   cache_ttl_min: 0
   cache_ttl_max: 0
 {#
-  Serve-stale: during a WAN or DoH-upstream outage, answer cached names
-  with expired data (TTL 30s) while refreshing in the background, instead
-  of going dark for the whole household. Entries older than 12h are
-  evicted rather than served.
+  During an upstream outage, serve cached names for at most 12h with a
+  short answer TTL while refreshing them in the background.
 #}
   cache_optimistic: true
   cache_optimistic_answer_ttl: 30s
@@ -119,33 +94,17 @@ dns:
   use_dns64: false
   dns64_prefixes: []
   serve_http3: false
-{#
-  HTTP/3 upstreams are off: in practice QUIC 0-RTT resumption to the DoH
-  upstreams fails on this path (dnsproxy logs "Get_0rtt ... use of closed
-  network connection" / "H3_NO_ERROR" -- ~3/hour), so the promised
-  faster-reconnect benefit is the very thing that breaks and each failure
-  falls back to HTTP/2 anyway. Pinning HTTP/2 DoH removes the error churn for
-  no real latency cost.
-#}
+{# QUIC 0-RTT repeatedly failed on this path, so upstreams stay on HTTP/2. #}
   use_http3_upstreams: false
   serve_plain_dns: true
   hostsfile_enabled: false
   pending_requests:
     enabled: true
-{#
-  DoT for household clients: Android Private DNS probes the VIP,
-  strict-mode clients pin dns.<domain>, and DHCP DNR advertises the
-  endpoint to Windows and Apple clients.
-#}
 tls:
   enabled: true
   server_name: dns.{{ domain }}
   force_https: false
-{#
-  port_https 0 keeps the in-app HTTPS/DoH server off: nginx owns 443 on
-  these hosts. port_dns_over_quic is also 0 because only DoT 853/tcp is
-  published on the VIP.
-#}
+{# nginx owns HTTPS; only DoT 853/tcp is published on the VIP. #}
   port_https: 0
   port_dns_over_tls: 853
   port_dns_over_quic: 0
@@ -156,13 +115,7 @@ tls:
   certificate_path: /opt/adguardhome/conf/tls/fullchain.pem
   private_key_path: /opt/adguardhome/conf/tls/privkey.pem
   strict_sni_check: false
-{#
-  Query log disabled entirely: it is browsing-history-equivalent data for
-  the whole household, and /mnt/services/adguard/work rides ZFS snapshots
-  plus off-host replication, where snapshot retention would keep it far
-  beyond any in-app interval. Aggregate statistics below stay on for the
-  dashboard.
-#}
+{# Query history must not ride service-state snapshots and replication. #}
 querylog:
   dir_path: ""
   ignored: []
@@ -173,10 +126,7 @@ querylog:
   file_enabled: false
 statistics:
   dir_path: ""
-{#
-  The keepalived healthcheck digs adguard.home every second per host;
-  without this the synthetic probes drown the top-domains statistics.
-#}
+{# Exclude the once-per-second keepalived probe from statistics. #}
   ignored:
     - adguard.home
   interval: 10d
@@ -190,13 +140,9 @@ filters:
     id: {{ loop.index }}
 {% endfor %}
 whitelist_filters: []
-{# Entries starting with ! are adblock-style comments: data to AdGuard,
-   shown in the Custom filtering rules UI, and preserved by its startup
-   rewrite (which strips YAML comments -- hence Jinja comments elsewhere
-   in this file). Serialization parity with that rewrite, or the file
-   re-templates and restarts DNS on every converge: the regex must stay
-   a plain scalar, while entries starting with ! or | must be
-   single-quoted, matching how yaml.v3 writes them back. #}
+{# These ! entries are Adblock data preserved by AdGuard's rewrite. Match
+   yaml.v3 serialization: the regex stays plain, while ! and | entries are
+   quoted, or every converge re-templates and restarts DNS. #}
 user_rules:
   - '! Keep internal typos local: NXDOMAIN for single-label names and'
   - '! undelegated LAN suffixes instead of leaking them upstream.'
@@ -256,11 +202,7 @@ filtering:
       answer: {{ external_ips[host] }}
       enabled: true
 {% endfor %}
-{#
-  No fox rewrite: fox is off-home (Hetzner), so the estate reaches it over the
-  tailnet, not a LAN/wg path. fox.fahm.fr therefore resolves to its Tailscale IP
-  for home clients too (the public record, un-overridden) -- same as roaming.
-#}
+{# fox stays on its public tailnet record because it is off-home. #}
     - domain: auth.{{ domain }}
       answer: {{ external_ips.lab }}
       enabled: true
@@ -281,33 +223,20 @@ filtering:
   protection_enabled: true
 clients:
   runtime_sources:
-{#
-  WHOIS only labels public client IPs over cleartext TCP/43 -- every
-  client here is RFC1918, so it is dead weight with an external-egress
-  footprint. rDNS stays on: private PTRs resolve through
-  local_ptr_upstreams (the UDM), so dashboard names come from DHCP
-  without leaving the LAN.
-#}
+{# Clients are private, so use UDM-backed rDNS without public WHOIS. #}
     whois: false
     arp: true
     rdns: true
     dhcp: true
     hosts: true
 {#
-  Serialization parity with AdGuard's startup rewrite: field order
-  mirrors the clientObject struct (internal/home/clients.go), entries
-  are listed sorted by name (AdGuard writes them back via
-  Storage.RangeByName), and uids are pinned -- AdGuard would otherwise
-  generate a random UUIDv7 on first load and the file would re-template
-  (and restart DNS) on the next converge.
+  Match AdGuard's clientObject field order and name sorting. Pin UIDs so
+  its startup rewrite cannot generate UUIDs and cause restart drift.
 #}
   persistent:
 {#
-  The bridge gateway is this host's own traffic: netavark's hairpin DNAT
-  masquerades host-local and container queries to a published port into the
-  bridge gateway, so the host plus every container resolving through aardvark
-  collapse into one client. Label it honestly instead of showing
-  host.containers.internal.
+  netavark hairpin NAT collapses host and container queries onto the bridge
+  gateway, so represent that shared source as one client.
 #}
     - safe_search:
         enabled: false
