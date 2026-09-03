@@ -256,7 +256,6 @@ depends = [
   "fmt:terraform",
   "fmt:packer",
   "fmt:python",
-  "fmt:mise",
   "fmt:shfmt",
   "fmt:lua",
   "fmt:markdown",
@@ -279,10 +278,6 @@ run = "packer fmt -recursive packer"
 [tasks."fmt:python"]
 description = "Format Python files (black)"
 run = "black ."
-
-[tasks."fmt:mise"]
-description = "Format mise.toml"
-run = "mise fmt"
 
 [tasks."fmt:shfmt"]
 description = "Format shell scripts (shfmt)"
