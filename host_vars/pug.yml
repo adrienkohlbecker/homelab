@@ -60,9 +60,7 @@ dns_reboot_guard_enabled: true
 dns_keepalived_priority: 10
 netdata_keepalived_vrrp_enabled: true
 
-# dns.{{ domain }} is the DoT (Private DNS) name: it resolves to the DNS
-# VIP via an adguard rewrite, so whichever DNS peer holds the VIP must
-# present a cert covering it. Mirrored in host_vars/lab.yml.
+# The shared DoT name follows the DNS VIP between pug and lab.
 certbot_extra_sans:
   - dns.{{ domain }}
 
@@ -124,18 +122,13 @@ netdata_diskspace_blocklist:
   - /mnt/old_services
   - /mnt/services
 
-# Tailscale home exit node (HA pair with lab -- see notes/headscale_mesh_redesign.md §C).
-# Advertise the physical partition. On Trusted WiFi, DHCP's more-specific
-# 10.123.0.0/21 option-121 route wins and the DNS VIP stays local; off-home,
-# this /18 reaches the physical sites without selecting an exit node.
+# Home exit/subnet router paired with lab. The advertised physical partition is
+# less specific than Trusted WiFi's DHCP route, keeping on-site traffic local.
+# See notes/headscale_mesh_redesign.md §C.
 tailscale_advertise_routes:
   - "{{ prod_network.partitions.physical.cidr }}"
-# Direct public endpoint for roaming clients (symmetric/CGNAT mobile) so home-exit
-# and subnet traffic lands directly instead of relaying through fox's DERP. pug
-# shares the home WAN with lab, so it pins 41642 (lab uses 41644) to
-# get an unambiguous forwarded endpoint. The firewall role opens WAN ingress on
-# this port. MANUAL operator step: add the UniFi port-forward
-# WAN:41642 -> pug:41642 (udp).
+# Dedicated shared-WAN endpoint for direct roaming-client traffic; the firewall
+# opens it, but the UniFi router still needs UDP 41642 forwarded 1:1 to pug.
 tailscale_port: 41642
 tailscale_wan_direct: true
 

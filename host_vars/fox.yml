@@ -123,17 +123,9 @@ headscale_oidc_issuer: "https://auth.{{ domain }}"
 
 headscale_oidc_client_id: headscale
 
-# fox is a Tailscale node (2026-06-13, reversing the original control-plane-only
-# decision -- see notes/headscale_mesh_redesign.md "fox joins the tailnet"). It
-# advertises a Hetzner exit node (a DE egress alongside the home lab/pug and
-# Bonniers bunk exits) plus its private net 10.123.55.0/24. It registers against
-# its OWN headscale (tailscale_headscale_host: fox in group_vars/prod.yml), the
-# same co-located pattern the box harness already exercises.
-#
-# accept-routes stays OFF (role default): fox reaches lab/pug over wg0, never the
-# mesh, so the tailnet never sits on fox's path home -- the coordination-
-# independent lifeline the redesign note insists on. accept-dns stays OFF too:
-# fox keeps its own resolv.conf and does not consume MagicDNS.
+# Tailnet node and Hetzner exit/subnet router, registered against its co-located
+# Headscale. Route and DNS acceptance stay off so wg0 remains Fox's independent
+# path home; see notes/headscale_mesh_redesign.md.
 tailscale_advertise_routes:
   - "{{ prod_network.sites.hetzner.cidr }}"
 

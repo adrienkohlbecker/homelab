@@ -1,16 +1,7 @@
-# Test-only overlay applied via -e on top of inventory-loaded
-# host_vars/pug.yml. Activated by test/machine.py when --machine pug
-# is requested -- push CI doesn't fan out to pug, but nightly
-# and on-demand `testrole.py --machine pug` go through here.
+# Test-only overlay loaded with -e after host_vars/pug.yml for Pug QEMU runs.
 qemu_test: true
 
-# Inherits prod pug's dedicated Podman device; the rebuilt host and fixture both
-# use /dev/disk/by-partlabel/podman.
-
-# Override prod's pug.yml netplan: it matches by physical NIC MAC + r8169
-# driver, but the QEMU VM ships a single virtio-net with a different MAC,
-# so `netplan apply` finds no matching interface and brings the only link
-# down. Match the QEMU NIC by name like box/lab-qemu do.
+# Match QEMU's single virtio NIC by name instead of Pug's physical MAC and driver.
 netplan:
   ethernets:
     en:
@@ -20,8 +11,6 @@ netplan:
       wakeonlan: true
       dhcp4: true
       dhcp6: false
-      # Lease-preservation, mirroring prod (lab/pug): keeps the harness's
-      # SSH lease through the converge's own `netplan apply`. The _verify
-      # broken-config fixture is written directly and stays non-critical,
-      # so the rollback path is still exercised.
+      # Preserve the harness SSH lease during converge; the non-critical
+      # broken-config fixture still exercises rollback.
       critical: true

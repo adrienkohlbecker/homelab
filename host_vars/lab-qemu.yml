@@ -1,18 +1,8 @@
-# Test-only overlay applied via -e on top of inventory-loaded
-# host_vars/lab.yml. Activated by test/machine.py when --machine lab
-# is requested -- push CI doesn't fan out to lab, but nightly
-# and on-demand `testrole.py --machine lab` go through here.
+# Test-only overlay loaded with -e after host_vars/lab.yml for Lab QEMU runs.
 qemu_test: true
 
-# Inherits prod lab's podman partition backend: the rebuilt host and fixture
-# both use the same /dev/md/podman RAID5 geometry.
-
-# Same block as host_vars/lab.yml; only `parent` differs because the
-# QEMU NIC is not VLAN-trunked. The harness pins
-# qemu's user-net to the gsub'd test supernet (10.234.0.0/18 — see
-# test/machine.py's qemu_user_net_args) and test/inventory.ini puts
-# lab in [test] so `network.*` is also gsub'd to 10.234 — the parent
-# NIC's subnet then contains every per-host /28 the topology emits.
+# The QEMU NIC is not VLAN-trunked; its user network and `network.*` vars share
+# the test supernet, so the derived per-host macvlan block remains reachable.
 macvlan_blocks:
   - name: mac_iot
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
@@ -21,10 +11,7 @@ macvlan_blocks:
 
 has_transcoding_acceleration: false
 
-# Override prod's lab.yml netplan: it matches by physical NIC MAC, but
-# the QEMU VM ships a single virtio-net with a different MAC, so
-# `netplan apply` brings the only interface down. Match the QEMU NIC by
-# name like box does.
+# Match QEMU's single virtio NIC by name instead of Lab's physical MACs.
 netplan:
   ethernets:
     en:

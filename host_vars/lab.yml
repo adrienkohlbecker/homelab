@@ -264,32 +264,20 @@ samba_shares:
 
 has_transcoding_acceleration: true
 
-# auth.{{ domain }} is an apex-zone CNAME → lab.{{ domain }} (public DNS), with a
-# local DNS override resolving the LAN clients to lab's internal IP. The
-# per-host wildcard cert covers `*.lab.{{ domain }}` but NOT apex names, so
-# the Authelia portal needs auth.{{ domain }} on its SAN list. Adding entries
-# here trips the SAN-drift detector in roles/certbot and force-renews.
+# Apex names are outside the per-host wildcard, so the Authelia portal and the
+# shared DoT name must be explicit SANs. SAN drift triggers certificate renewal.
 certbot_extra_sans:
   - auth.{{ domain }}
-  # dns.{{ domain }} is the DoT (Private DNS) name: it resolves to the DNS
-  # VIP via an adguard rewrite, so whichever DNS peer holds the VIP must
-  # present a cert covering it. Mirrored in host_vars/pug.yml.
+  # The shared DoT name follows the DNS VIP between lab and pug.
   - dns.{{ domain }}
 
-# Tailscale home exit node (mesh client registering against the fox headscale
-# control plane -- see notes/headscale_mesh_redesign.md §C). HA pair with pug.
-# Advertise the physical partition. On Trusted WiFi, DHCP's more-specific
-# 10.123.0.0/21 option-121 route wins and the DNS VIP stays local; off-home,
-# this /18 reaches the physical sites without selecting an exit node.
+# Home exit/subnet router paired with pug. The advertised physical partition is
+# less specific than Trusted WiFi's DHCP route, keeping on-site traffic local.
+# See notes/headscale_mesh_redesign.md §C.
 tailscale_advertise_routes:
   - "{{ prod_network.partitions.physical.cidr }}"
-# Direct public endpoint for roaming clients (symmetric/CGNAT mobile) so home-exit
-# and subnet traffic lands directly instead of relaying through fox's DERP. lab
-# and pug share the home WAN, so each pins a DISTINCT underlay port with its own
-# 1:1 UniFi forward: lab uses 41644 to avoid collisions with clients using
-# tailscaled's default 41641 (pug uses 41642). The firewall role opens WAN
-# ingress on this port. MANUAL operator step: add the UniFi port-forward
-# WAN:41644 -> lab:41644 (udp).
+# Dedicated shared-WAN endpoint for direct roaming-client traffic; the firewall
+# opens it, but the UniFi router still needs UDP 41644 forwarded 1:1 to lab.
 tailscale_port: 41644
 tailscale_wan_direct: true
 
