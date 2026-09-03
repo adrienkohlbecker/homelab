@@ -46,12 +46,12 @@
     # Nexus path-based routing treats the mirror location's repository suffix
     # as the first image namespace beneath its native /v2/ API.
     content: |
-      {% for source, prefix in test_registry_mirrors | dictsort %}
+      {% for source, location in test_registry_mirrors | dictsort %}
       [[registry]]
       location = "{{ source }}"
 
       [[registry.mirror]]
-      location = "{{ test_registry_mirror_base }}/{{ prefix }}"
+      location = "{{ location }}"
       {% endfor %}
   become: true
 

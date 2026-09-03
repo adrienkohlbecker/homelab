@@ -16,22 +16,17 @@ test_dot_servers: >-
 # test_in_aws is true.
 test_aws_region: eu-central-1
 test_ecr_registry: "000390721279.dkr.ecr.{{ test_aws_region }}.amazonaws.com"
-test_ecr_registry_mirrors:
-  docker.io: docker-hub
-  ghcr.io: github
-  registry.gitlab.com: gitlab
-  quay.io: quay
 # aws_qemu cells egress through AWS and mirror through ECR. Local cells use
 # Nexus unless --upstream-mirrors clears nexus_url, in which case the empty map
 # suppresses registry configuration entirely.
-test_registry_mirror_base: >-
-  {{ test_ecr_registry
-     if test_in_aws
-     else nexus_url }}
 test_registry_mirrors: >-
-  {{ test_ecr_registry_mirrors
+  {{ {'docker.io': test_ecr_registry ~ '/docker-hub',
+      'ghcr.io': test_ecr_registry ~ '/github',
+      'registry.gitlab.com': test_ecr_registry ~ '/gitlab',
+      'quay.io': test_ecr_registry ~ '/quay'}
      if test_in_aws
-     else ({'docker.io': 'docker.io', 'ghcr.io': 'ghcr.io'}
+     else ({'docker.io': nexus_url ~ '/docker.io',
+            'ghcr.io': nexus_url ~ '/ghcr.io'}
            if nexus_url | length > 0 else {}) }}
 
 # Test-only placeholder for lab's GitLab shell runner. Prod supplies the real
