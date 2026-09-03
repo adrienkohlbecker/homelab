@@ -133,9 +133,13 @@ def test_nft_helpers_extract_counters_and_rules_by_counter_reference() -> None:
             {"rule": {"expr": [{"counter": "other"}, {"accept": None}]}},
         ]
     }
-    assert homelab.nft_counters_by_name(payload)["input_http"]["packets"] == 2
-    assert homelab.nft_rule_by_counter(payload, "input_http")["expr"] == [{"counter": "input_http"}, {"accept": None}]
-    assert homelab.nft_rules_by_counter(payload, "missing") == []
+    payload_json = json.dumps(payload)
+    assert homelab.nft_counters_by_name(payload_json)["input_http"]["packets"] == 2
+    assert homelab.nft_rule_by_counter(payload_json, "input_http")["expr"] == [
+        {"counter": "input_http"},
+        {"accept": None},
+    ]
+    assert homelab.nft_rules_by_counter(payload_json, "missing") == []
 
 
 def test_exposes_filters() -> None:

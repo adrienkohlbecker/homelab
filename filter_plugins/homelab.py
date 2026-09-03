@@ -121,15 +121,14 @@ def _get_path(item: Mapping[str, Any], path: str) -> Any:
     return current
 
 
-def _nftables(value: str | Mapping[str, Any]) -> list[dict[str, Any]]:
-    if isinstance(value, str):
-        value = json.loads(value)
-    if not isinstance(value, Mapping) or not isinstance(value.get("nftables"), list):
+def _nftables(value: str) -> list[dict[str, Any]]:
+    parsed = json.loads(value)
+    if not isinstance(parsed, Mapping) or not isinstance(parsed.get("nftables"), list):
         raise AnsibleError("nft filter expects nft JSON with an nftables list")
-    return value["nftables"]
+    return parsed["nftables"]
 
 
-def nft_counters_by_name(value: str | Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+def nft_counters_by_name(value: str) -> dict[str, dict[str, Any]]:
     """Return standalone nft counter declarations keyed by counter name."""
     counters: dict[str, dict[str, Any]] = {}
     for entry in _nftables(value):
@@ -139,7 +138,7 @@ def nft_counters_by_name(value: str | Mapping[str, Any]) -> dict[str, dict[str, 
     return counters
 
 
-def nft_rules_by_counter(value: str | Mapping[str, Any], counter_name: str) -> list[dict[str, Any]]:
+def nft_rules_by_counter(value: str, counter_name: str) -> list[dict[str, Any]]:
     """Return nft rules whose expression references a named counter."""
     rules: list[dict[str, Any]] = []
     for entry in _nftables(value):
@@ -152,7 +151,7 @@ def nft_rules_by_counter(value: str | Mapping[str, Any], counter_name: str) -> l
     return rules
 
 
-def nft_rule_by_counter(value: str | Mapping[str, Any], counter_name: str) -> dict[str, Any]:
+def nft_rule_by_counter(value: str, counter_name: str) -> dict[str, Any]:
     """Return exactly one nft rule referencing a named counter."""
     rules = nft_rules_by_counter(value, counter_name)
     if len(rules) != 1:
