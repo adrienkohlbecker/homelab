@@ -106,12 +106,6 @@ workflow:
       when: manual
       allow_failure: true
 
-.protected_on_success_job:
-  rules: &protected_on_success_rules
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-
 # Change detection + dynamic child pipeline (notes/ci_aws_nested_qemu_cells.md).
 # `detect` runs the classification core (ci:detect) and writes one
 # generated child job per `role:variant[:ubuntu]` cell. The default `aws_qemu`
@@ -371,7 +365,7 @@ qemu_host_ami:
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-$CI_JOB_ID"
 
 # box: the bare OS + zfs + networking platform every cell needs.
-.qemu_image_box:
+"qemu_image:box":
   extends: .qemu_image
   # A failed box bake must remain a failed dependency. The generic protected
   # manual job is optional (allow_failure), which GitLab treats as successful
@@ -385,6 +379,11 @@ qemu_host_ami:
   resource_group: qemu_image_box_$UBUNTU
   script:
     - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --promote
+  parallel:
+    matrix:
+      - UBUNTU:
+          - noble
+          - resolute
 
 # box_deps: box with podman/nginx/fluent-bit pre-baked. Layers seed_deps.yml onto
 # the box bake from the same pipeline -- each box_deps:<rel> `needs:` its matching
@@ -392,30 +391,22 @@ qemu_host_ami:
 # (both jobs land on the one lab-shell-qemu host, where that dir persists). So a
 # box_deps run must be preceded by its box job; seed-deps errors loudly with the
 # build-box-first hint if the artifact is absent.
-.qemu_image_box_deps:
+"qemu_image:box_deps":
   extends: .qemu_image
-  rules: *protected_on_success_rules
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
     - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --promote
-
-"qemu_image:box":
-  extends: .qemu_image_box
   parallel:
     matrix:
       - UBUNTU:
           - noble
           - resolute
-
-# needs:parallel:matrix keeps each box_deps:<ubuntu> behind the matching
-# box:<ubuntu>; artifacts ride lab's HOMELAB_CI_DIR, not GitLab artifacts.
-"qemu_image:box_deps":
-  extends: .qemu_image_box_deps
-  parallel:
-    matrix:
-      - UBUNTU:
-          - noble
-          - resolute
+  # needs:parallel:matrix keeps each box_deps:<ubuntu> behind the matching
+  # box:<ubuntu>; artifacts ride lab's HOMELAB_CI_DIR, not GitLab artifacts.
   needs:
     - job: "qemu_image:box"
       parallel:
