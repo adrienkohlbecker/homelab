@@ -555,16 +555,12 @@ class Machine:
         self._ssh_master_proc: asyncio.subprocess.Process | None = None
         self._live_lock_fd = -1
         self._publish_lock_fd = -1
+        self._ansible_staged = False
         self.peak_rss_kb = 0
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
 
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
-        # Refresh the .ansible-mitogen-strategy symlink before we run any
-        # ansible-playbook subprocess. Lifted out of module-import time so
-        # bare imports (tests reading constants, tooling) skip the work;
-        # constructing a Machine implies we're about to drive ansible.
-        ensure_mitogen_symlink()
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
         self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
@@ -849,7 +845,45 @@ class Machine:
     async def ansible_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
+        self._stage_ansible_controller()
         return await run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
+
+    def _stage_ansible_controller(self) -> None:
+        """Populate controller inputs on demand before the first Ansible run."""
+
+        if self._ansible_staged:
+            return
+
+        ensure_mitogen_symlink()
+
+        for required_tree in ("group_vars", "host_vars", "roles", "data"):
+            Path(required_tree).copy_into(self.workdir_path)
+
+        # Role-local filter plugins are copied with roles/. A top-level
+        # filter_plugins/, if present, also needs to sit beside the playbooks.
+        # wireguard/ is gitignored (vaulted keys, never committed), so it is
+        # optional; roles that need it fail later with the real missing input.
+        for optional_tree in ("filter_plugins", "wireguard"):
+            src = Path(optional_tree)
+            if src.exists():
+                src.copy_into(self.workdir_path)
+
+        # These root files are valid playbook_dir-relative role inputs.
+        for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
+            src = Path(repo_root_file)
+            if src.exists():
+                src.copy_into(self.workdir_path)
+
+        # site_test.py may stage the production site.yml before its first
+        # Ansible call; preserve that caller-owned override.
+        for playbook in Path("test/playbooks").glob("*.yml"):
+            destination = self.workdir_path / playbook.name
+            if not destination.exists():
+                playbook.copy_into(self.workdir_path)
+        Path("test/playbooks/tasks").copy_into(self.workdir_path)
+        Path("test/playbooks/templates").copy_into(self.workdir_path)
+
+        self._ansible_staged = True
 
     async def boot(self) -> None:
         """Bring up the passt sidecar (if any), then launch qemu under a timeout wrapper."""
@@ -1196,41 +1230,7 @@ class Machine:
         raise RuntimeError(f"No free VNC display in 0..99 on {self.ssh_host}")
 
     async def prepare(self) -> None:
-        """Stage the workdir, then create overlay images and seed data for the selected template."""
-
-        # Stage the inventory snippets, roles, and data files that playbooks
-        # read relative to their workdir.
-        for required_tree in ("group_vars", "host_vars", "roles", "data"):
-            Path(required_tree).copy_into(self.workdir_path)
-
-        # Role-local filter plugins are copied with roles/. A top-level
-        # filter_plugins/, if present, also needs to sit beside the playbooks.
-        # wireguard/ is gitignored (vaulted keys, never committed), so it is
-        # optional; roles that need it fail later with the real missing input.
-        for optional_tree in ("filter_plugins", "wireguard"):
-            src = Path(optional_tree)
-            if src.exists():
-                src.copy_into(self.workdir_path)
-
-        # mise.toml + uv lock + pyproject are repo-root files a role may
-        # reference via `{{ playbook_dir }}/<file>` during converge. Stage
-        # them so the harness's workdir mirrors what ansible sees on a
-        # production controller run.
-        for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
-            src = Path(repo_root_file)
-            if src.exists():
-                src.copy_into(self.workdir_path)
-
-        # Copy the static role-agnostic playbooks (site / _setup /
-        # _verify / _bootstrap) into the workdir so ansible loads
-        # group_vars/host_vars from this directory and the playbooks
-        # reference `{{ _role_under_test }}` injected via -e in
-        # format_ansible_cmd. testrole.py decides which hook playbook to
-        # invoke by checking roles/<role>/tasks/<hook>.yml at the source.
-        for playbook in Path("test/playbooks").glob("*.yml"):
-            playbook.copy_into(self.workdir_path)
-        Path("test/playbooks/tasks").copy_into(self.workdir_path)
-        Path("test/playbooks/templates").copy_into(self.workdir_path)
+        """Create overlay images and seed data for the selected template."""
 
         # Acquire the publish-lock before any read of the imagedir starts.
         # _create_overlay's qemu-img embeds the backing file's absolute path

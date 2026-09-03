@@ -199,6 +199,50 @@ class TestMachineUbuntuValidation:
             machine_factory(machine="box", role="test", ubuntu_name="bogus")
 
 
+class TestAnsibleControllerStaging:
+    def test_stages_once_on_first_ansible_command(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        for directory in (
+            "group_vars",
+            "host_vars",
+            "roles",
+            "data",
+            "test/playbooks/tasks",
+            "test/playbooks/templates",
+        ):
+            (tmp_path / directory).mkdir(parents=True)
+        (tmp_path / "test/playbooks/site.yml").write_text("fixture site\n")
+        (tmp_path / "test/playbooks/_bootstrap.yml").write_text("bootstrap\n")
+
+        staged_calls = 0
+
+        def ensure_mitogen() -> None:
+            nonlocal staged_calls
+            staged_calls += 1
+
+        async def run_command(*args: object, **kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(exitcode=0, stdout=[])
+
+        monkeypatch.setattr(machine, "ensure_mitogen_symlink", ensure_mitogen)
+        monkeypatch.setattr(machine, "run_command", run_command)
+
+        m = machine_factory()
+        (m.workdir_path / "site.yml").write_text("production site\n")
+        assert not (m.workdir_path / "roles").exists()
+
+        asyncio.run(m.ansible_command(str(m.workdir_path / "site.yml")))
+        asyncio.run(m.ansible_command(str(m.workdir_path / "_bootstrap.yml")))
+
+        assert staged_calls == 1
+        assert (m.workdir_path / "roles").is_dir()
+        assert (m.workdir_path / "_bootstrap.yml").read_text() == "bootstrap\n"
+        assert (m.workdir_path / "site.yml").read_text() == "production site\n"
+
+
 def test_ensure_booted_reports_early_qemu_exit(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
