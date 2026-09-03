@@ -35,7 +35,7 @@ ssh_public_keys_additional: |
 # (tailscale_login_server / _headscale_host / _headscale_user) live in
 # group_vars/prod.yml; these are bunk-specific.
 tailscale_advertise_routes:
-  - 10.123.57.0/24
+  - "{{ prod_network.sites.bonniers.cidr }}"
 # DSM package binary path (vs lab/pug's apt-installed `tailscale` on PATH).
 tailscale_bin: /var/packages/Tailscale/target/bin/tailscale
 # Pin a distinct underlay port so bunk has a stable public endpoint at Bonniers:

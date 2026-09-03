@@ -135,7 +135,7 @@ headscale_oidc_client_id: headscale
 # independent lifeline the redesign note insists on. accept-dns stays OFF too:
 # fox keeps its own resolv.conf and does not consume MagicDNS.
 tailscale_advertise_routes:
-  - 10.123.55.0/24
+  - "{{ prod_network.sites.hetzner.cidr }}"
 
 # Trimmed from the pug-derived list to what a Hetzner cloud VM actually
 # exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
