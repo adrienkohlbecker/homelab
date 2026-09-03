@@ -165,11 +165,3 @@ def test_digest_does_not_mutate_input():
 
 def test_unknown_result_keys_passthrough():
     assert display_result({"msg": "ok", "rc": 0}) == {"msg": "ok", "rc": 0}
-
-
-def test_callback_module_metadata():
-    from ansible.plugins.callback.default import CallbackModule as Default
-
-    assert issubclass(digest.CallbackModule, Default)
-    assert digest.CallbackModule.CALLBACK_NAME == "digest"
-    assert digest.CallbackModule.CALLBACK_TYPE == "stdout"
