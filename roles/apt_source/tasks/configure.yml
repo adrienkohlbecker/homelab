@@ -9,7 +9,7 @@
 # Callers pass everything through a single apt_source_args dict so each
 # invocation replaces it wholesale and inter-call vars-leak cannot happen:
 #
-#   name:          identifier -- scoped keyring file, .sources name, pin file
+#   name:          identifier -- scoped keyring file and .sources name
 #   key_url:       URL of the signing key (fetched into the scoped keyring)
 #   key_sha256:    checksum of the exact armored key payload
 #   uris:          repo base URL (usually a mirror_apt_* var)
