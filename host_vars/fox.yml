@@ -129,13 +129,8 @@ headscale_oidc_client_id: headscale
 tailscale_advertise_routes:
   - "{{ prod_network.sites.hetzner.cidr }}"
 
-# Trimmed from the pug-derived list to what a Hetzner cloud VM actually
-# exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
-# module), vmstat/mem.swapio (no swap configured). Dropped collectors:
-# intelgpu/nvme/sensors/smartctl/upsd/zfspool (no such hardware) and the
-# keepalived prometheus job (no keepalived here). These would fire
-# netdata_presence on any netdata version -- they're real absences, not the
-# 1.46-vs-2.x context rename that the extfrag entry hit.
+# Fox omits physical-hardware and keepalived metrics that the VM cannot expose.
+# Its ZFS root and zram-backed swap remain part of the monitored host surface.
 netdata_contexts:
   conntrack:       netfilter.conntrack_sockets
   containers:      cgroup.cpu_limit
@@ -156,6 +151,8 @@ netdata_contexts:
   softirqs:        system.softirqs
   systemd_service: systemd.service.cpu.utilization
   uptime:          system.uptime
+  vmstat:          mem.swapio
+  zfs:             zfs.arc_size
 netdata_collectors:
   # No chrony collector: cmdport=0 blocks go.d UDP access (timex alarm covers clock-sync).
   - go.d:collector:docker:local
@@ -170,6 +167,7 @@ netdata_collectors:
   # Doubles as a runner liveness signal: the presence alert fires if the
   # gitlab_runner scrape goes missing (its config.toml metrics endpoint dies).
   - go.d:collector:prometheus:gitlab_runner
+  - go.d:collector:zfspool:zfspool
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
 
