@@ -36,13 +36,19 @@ function normalize_podman_event(_tag, ts, record)
         return 0, ts, record
     end
 
+    local health_status = nonempty(record["PODMAN_HEALTH_STATUS"])
+    -- Keep unhealthy transitions; routine probes remain available in journald.
+    if event == "health_status" and (health_status == "healthy" or health_status == "starting") then
+        return -1, ts, record
+    end
+
     event = move(record, "PODMAN_EVENT", "event")
     object_type = move(record, "PODMAN_TYPE", "object_type")
     local name = move(record, "PODMAN_NAME", "name")
     local image = move(record, "PODMAN_IMAGE", "image")
     local object_id = move(record, "PODMAN_ID", "object_id")
     local exit_code = move(record, "PODMAN_EXIT_CODE", "exit_code", true)
-    local health_status = move(record, "PODMAN_HEALTH_STATUS", "health_status")
+    health_status = move(record, "PODMAN_HEALTH_STATUS", "health_status")
 
     -- PODMAN_TIME duplicates the journal timestamp. PODMAN_LABELS is a JSON
     -- rendering of image labels already repeated in the original MESSAGE; it

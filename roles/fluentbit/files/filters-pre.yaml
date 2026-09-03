@@ -1,12 +1,5 @@
 pipeline:
   filters:
-    # High-volume records retained in their source journal/file but omitted from
-    # the operator aggregate.
-    - name: grep
-      match: svc.*
-      exclude:
-        - 'MESSAGE container health_status .*health_status=healthy'
-
     # systemd logs a unit's own lifecycle from init.scope, so the target unit
     # is named by UNIT, not by SYSTEMD_UNIT (the logging process's unit).
     - name: grep
@@ -20,15 +13,6 @@ pipeline:
       match: svc.*
       script: /etc/fluent-bit/podman_events.lua
       call: normalize_podman_event
-
-    # The final healthy/unhealthy event carries the operational result. The
-    # repeated startup probes are retained in journald and add no new state.
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
-        - 'event ^health_status$'
-        - 'health_status ^starting$'
 
     - name: grep
       match: svc.*

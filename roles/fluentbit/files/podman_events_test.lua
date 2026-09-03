@@ -40,7 +40,7 @@ do
 end
 
 do
-    local rec = normalize({
+    local _, code = normalize({
         MESSAGE = "verbose health event",
         SYSLOG_IDENTIFIER = "podman",
         PODMAN_EVENT = "health_status",
@@ -49,8 +49,33 @@ do
         PODMAN_ID = "1698fd043abc036968649389789b79b5b68f772cce6c69ed09053dae035a7021",
         PODMAN_HEALTH_STATUS = "starting",
     })
-    check("health.message", rec.MESSAGE, "container health_status nexus (health=starting)")
-    check("health.status", rec.health_status, "starting")
+    check("health.starting.code", code, -1)
+end
+
+do
+    local _, code = normalize({
+        MESSAGE = "verbose health event",
+        SYSLOG_IDENTIFIER = "podman",
+        PODMAN_EVENT = "health_status",
+        PODMAN_TYPE = "container",
+        PODMAN_NAME = "nexus",
+        PODMAN_HEALTH_STATUS = "healthy",
+    })
+    check("health.healthy.code", code, -1)
+end
+
+do
+    local rec, code = normalize({
+        MESSAGE = "verbose health event",
+        SYSLOG_IDENTIFIER = "podman",
+        PODMAN_EVENT = "health_status",
+        PODMAN_TYPE = "container",
+        PODMAN_NAME = "nexus",
+        PODMAN_HEALTH_STATUS = "unhealthy",
+    })
+    check("health.unhealthy.code", code, 1)
+    check("health.unhealthy.message", rec.MESSAGE, "container health_status nexus (health=unhealthy)")
+    check("health.unhealthy.status", rec.health_status, "unhealthy")
 end
 
 do
