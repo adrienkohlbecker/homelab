@@ -71,13 +71,6 @@ def slurp_yaml(result: Mapping[str, Any], default: Any = _MISSING) -> Any:
         raise AnsibleError(f"slurp_yaml could not parse slurp content: {exc}") from exc
 
 
-def slurp_lines(result: Mapping[str, Any], default: Any = _MISSING) -> list[str]:
-    """Decode an Ansible slurp result into text lines."""
-    if "content" not in result and default is not _MISSING:
-        return default
-    return slurp_text(result, trim=False).splitlines()
-
-
 def rstrip_newlines(value: Any) -> str:
     """Remove only trailing newline characters from rendered text."""
     return str(value).rstrip("\n")
@@ -269,7 +262,6 @@ class FilterModule:
             "podman_idmap_args": podman_idmap_args,
             "rstrip_newlines": rstrip_newlines,
             "slurp_json": slurp_json,
-            "slurp_lines": slurp_lines,
             "slurp_text": slurp_text,
             "slurp_yaml": slurp_yaml,
             "zfs_mount_unit": zfs_mount_unit,

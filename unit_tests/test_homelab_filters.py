@@ -66,11 +66,6 @@ def test_slurp_yaml_parses_slurp_content() -> None:
     assert homelab.slurp_yaml(result) == {"jobs": [{"name": "cert"}]}
 
 
-def test_slurp_lines_preserves_line_content() -> None:
-    result = {"content": base64.b64encode(b"one\n\n two \n").decode()}
-    assert homelab.slurp_lines(result) == ["one", "", " two "]
-
-
 def test_rstrip_newlines_removes_only_trailing_newline_characters() -> None:
     assert homelab.rstrip_newlines("value  \n\n") == "value  "
 
@@ -224,7 +219,6 @@ def test_exposes_filters() -> None:
     assert filters["podman_health_wget"] is homelab.podman_health_wget
     assert filters["rstrip_newlines"] is homelab.rstrip_newlines
     assert filters["slurp_json"] is homelab.slurp_json
-    assert filters["slurp_lines"] is homelab.slurp_lines
     assert filters["slurp_yaml"] is homelab.slurp_yaml
     assert filters["zfs_mount_unit"] is homelab.zfs_mount_unit
 
