@@ -194,7 +194,6 @@ seerr_vapid_private: changeme
 seerr_vapid_public: changeme
 seerr_client_id: changeme
 seerr_session_secret: "0000000000000000000000000000000000000000000000000000000000000000"
-themoviedb_api_key: changeme
 gitea_jwt_secret: dGVzdF9vYXV0aF9qd3Rfc2VjcmV0XzMyYnl0ZXNfX18
 gitea_internal_token: changeme
 gitea_smtp_from: changeme@example.com
