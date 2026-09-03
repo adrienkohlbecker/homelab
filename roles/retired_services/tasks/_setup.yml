@@ -37,6 +37,7 @@
 - name: _setup | Start configured macvlan fixtures
   import_role:
     name: macvlan
+    tasks_from: main
 
 - name: _setup | Create retired GitLab Runner account
   import_role:

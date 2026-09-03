@@ -16,6 +16,7 @@
 - name: _setup | Install fluent-bit for structured-log integration
   import_role:
     name: fluentbit
+    tasks_from: configure
 
 - name: _setup | Create /mnt/services parent
   shell: |

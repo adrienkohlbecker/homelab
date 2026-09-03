@@ -11,3 +11,4 @@
 - name: _setup | Install fluent-bit for structured-log integration
   import_role:
     name: fluentbit
+    tasks_from: configure

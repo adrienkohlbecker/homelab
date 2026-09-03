@@ -6,3 +6,4 @@
 - name: _setup | Install fluent-bit for broker logging
   import_role:
     name: fluentbit
+    tasks_from: configure

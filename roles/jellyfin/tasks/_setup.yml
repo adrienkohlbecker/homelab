@@ -9,6 +9,7 @@
 - name: _setup | Converge the media role
   import_role:
     name: media
+    tasks_from: main
 
 - name: _setup | Install nginx
   import_role:
@@ -18,6 +19,7 @@
 - name: _setup | Install fluent-bit for structured-log integration
   import_role:
     name: fluentbit
+    tasks_from: configure
 
 - name: _setup | Ensure /mnt/services and /mnt/scratch exist
   file:

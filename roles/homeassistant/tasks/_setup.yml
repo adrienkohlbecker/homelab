@@ -11,6 +11,7 @@
 - name: _setup | Install fluent-bit
   import_role:
     name: fluentbit
+    tasks_from: configure
 
 - name: _setup | Create dummy iot interface
   # The role's macvlan network uses `iot` as its parent. Production hosts
@@ -39,6 +40,7 @@
 - name: _setup | Install macvlan
   import_role:
     name: macvlan
+    tasks_from: main
 
 # Run the real influxdb role so the bootstrap exercises the same image
 # tag + the same `home` org / default bucket the prod host runs against
@@ -46,6 +48,7 @@
 - name: _setup | Install influxdb
   import_role:
     name: influxdb
+    tasks_from: main
 
 # Pre-create the homeassistant influxdb tenant so main.yml's
 # `Bootstrap influxdb tenant` call sees the bucket already there

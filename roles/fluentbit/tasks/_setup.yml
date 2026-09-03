@@ -6,6 +6,7 @@
 - name: _setup | Install logrotate
   import_role:
     name: logrotate
+    tasks_from: main
 
 - name: _setup | Create the certbot log fixture directory
   file:

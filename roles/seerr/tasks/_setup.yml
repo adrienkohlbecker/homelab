@@ -6,6 +6,7 @@
 - name: _setup | Install fluent-bit for log normalization
   import_role:
     name: fluentbit
+    tasks_from: configure
 
 - name: _setup | Install nginx
   import_role:

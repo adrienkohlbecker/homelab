@@ -112,6 +112,33 @@ class TestRequireNamedRoleEntrypoint:
         )
         assert result is False
 
+    def test_role_fixture_requires_tasks_from_for_role_with_named_entrypoints(self, tmp_path: Path) -> None:
+        dependency_tasks = tmp_path / "roles" / "dependency" / "tasks"
+        dependency_tasks.mkdir(parents=True)
+        (dependency_tasks / "main.yml").write_text("---\n")
+        (dependency_tasks / "configure.yml").write_text("---\n")
+        fixture = tmp_path / "roles" / "consumer" / "tasks" / "_setup.yml"
+
+        result = RequireNamedRoleEntrypoint().matchtask(
+            _task("import_role", name="dependency"),
+            _lintable(str(fixture)),
+        )
+
+        assert result == "static test fixture role imports must set `tasks_from:`"
+
+    def test_role_fixture_allows_main_only_role(self, tmp_path: Path) -> None:
+        dependency_tasks = tmp_path / "roles" / "dependency" / "tasks"
+        dependency_tasks.mkdir(parents=True)
+        (dependency_tasks / "main.yml").write_text("---\n")
+        fixture = tmp_path / "roles" / "consumer" / "tasks" / "_verify.yml"
+
+        result = RequireNamedRoleEntrypoint().matchtask(
+            _task("import_role", name="dependency"),
+            _lintable(str(fixture)),
+        )
+
+        assert result is False
+
     @pytest.mark.parametrize(
         "path",
         ["test/playbooks/site.yml", "roles/example/tasks/main.yml"],

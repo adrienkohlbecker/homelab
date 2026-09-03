@@ -63,6 +63,7 @@
 - name: _verify | Reconverge without changing persisted policy
   import_role:
     name: macvlan
+    tasks_from: main
 
 - name: _verify | Check that reconvergence repaired ARP drift
   import_tasks: _verify_arp.yml

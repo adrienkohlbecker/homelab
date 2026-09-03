@@ -61,6 +61,24 @@ def _is_test_playbook(file: Lintable | None) -> bool:
     return any(parts[index : index + 2] == ("test", "playbooks") for index in range(len(parts) - 1))
 
 
+def _role_fixture_has_named_entrypoints(file: Lintable | None, role_name: object) -> bool:
+    if file is None or not isinstance(role_name, str) or "{{" in role_name:
+        return False
+    path = file.path
+    if not _is_test_hook(file) or path.parent.name != "tasks" or path.parent.parent.parent.name != "roles":
+        return False
+    tasks_dir = path.parent.parent.parent / role_name / "tasks"
+    if not tasks_dir.is_dir():
+        return False
+    return any(
+        task_file.is_file()
+        and task_file.suffix in {".yml", ".yaml"}
+        and task_file.stem != "main"
+        and not task_file.stem.startswith("_")
+        for task_file in tasks_dir.iterdir()
+    )
+
+
 def _is_test_file(file: Lintable | None) -> bool:
     if file is None:
         return False
@@ -119,15 +137,14 @@ class RequireNamedRoleEntrypoint(AnsibleLintRule):
     version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if (
-            task["__ansible_action_type__"] != "task"
-            or _module_name(task) != "import_role"
-            or not _is_test_playbook(file)
-            or (file is not None and file.path.name == "site.yml")
-        ):
+        if task["__ansible_action_type__"] != "task" or _module_name(task) != "import_role":
             return False
 
         if task["action"].get("tasks_from"):
+            return False
+        central_fixture = _is_test_playbook(file) and file is not None and file.path.name != "site.yml"
+        role_fixture = _role_fixture_has_named_entrypoints(file, task["action"].get("name"))
+        if not central_fixture and not role_fixture:
             return False
         return "static test fixture role imports must set `tasks_from:`"
 

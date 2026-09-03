@@ -14,3 +14,4 @@
 - name: _setup | Install fluent-bit for container-log normalization
   import_role:
     name: fluentbit
+    tasks_from: configure
