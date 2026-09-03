@@ -53,9 +53,9 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # openssh-client provides ssh-keygen to the zbm build; lua5.4 runs the Fluent
 # Bit filter unit suite. build-essential covers wheels that need compilation.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git jq xz-utils unzip gpg gpg-agent \
+      ca-certificates curl git jq xz-utils unzip gpg \
       qemu-system-x86 qemu-utils \
-      openssh-client coreutils \
+      openssh-client \
       lua5.4 \
       build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -67,20 +67,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # shape); the signing key comes from download.docker.com either way — the
 # lab build host reaches it fine, it is one tiny fetch, and the Signed-By
 # trust chain stays upstream.
-RUN install -dm 755 /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-      | gpg --dearmor -o /etc/apt/keyrings/docker-archive-keyring.gpg && \
-    if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
-      docker_repo="https://nexus.lab.fahm.fr/repository/docker-ce"; \
-    else \
-      docker_repo="https://download.docker.com/linux/ubuntu"; \
-    fi && \
-    echo "deb [signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] ${docker_repo} noble stable" \
-      > /etc/apt/sources.list.d/docker.list && \
-    apt-get update && apt-get install -y --no-install-recommends \
-      docker-ce-cli docker-buildx-plugin && \
-    rm -rf /var/lib/apt/lists/*
-
+#
 # Install mise via its apt repo — bypasses the tar-with-setgid-bit issue
 # that the curl|sh installer hits under rootless podman build (the buildah
 # userns doesn't allow tar to preserve those bits, even for files mise
@@ -95,11 +82,22 @@ RUN install -dm 755 /etc/apt/keyrings && \
 # environment via UV_PROJECT_ENVIRONMENT and the no-shadowing intent holds.
 ENV MISE_DATA_DIR=/opt/mise \
     PATH="/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin"
-RUN curl -fsSL https://mise.jdx.dev/gpg-key.pub \
+RUN install -dm 755 /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker-archive-keyring.gpg && \
+    curl -fsSL https://mise.jdx.dev/gpg-key.pub \
       | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg && \
+    if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
+      docker_repo="https://nexus.lab.fahm.fr/repository/docker-ce"; \
+    else \
+      docker_repo="https://download.docker.com/linux/ubuntu"; \
+    fi && \
+    echo "deb [signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] ${docker_repo} noble stable" \
+      > /etc/apt/sources.list.d/docker.list && \
     echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" \
       > /etc/apt/sources.list.d/mise.list && \
-    apt-get update && apt-get install -y --no-install-recommends mise && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      docker-ce-cli docker-buildx-plugin mise && \
     rm -rf /var/lib/apt/lists/*
 
 # Pin uv's cache to a fixed absolute path instead of the default
