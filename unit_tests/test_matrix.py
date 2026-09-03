@@ -76,10 +76,8 @@ class TestRoleMeta:
         assert matrix.release_ubuntu_for("plain") == []
 
     def test_release_ubuntu_reads_list(self, roles_tree: Path) -> None:
-        # Raw passthrough of whatever meta/test.yml declares, so the codenames
-        # here are data rather than a claim about the current default.
-        _make_role(roles_tree, "multi", {"ubuntu": ["noble", "resolute"]})
-        assert matrix.release_ubuntu_for("multi") == ["noble", "resolute"]
+        _make_role(roles_tree, "multi", {"ubuntu": ["resolute"]})
+        assert matrix.release_ubuntu_for("multi") == ["resolute"]
 
     def test_base_prerequisites_defaults_to_true(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "plain")
@@ -196,9 +194,10 @@ class TestSkip:
         _make_role(roles_tree, "svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
         assert matrix.build_role_cells("svc") == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
 
-    def test_listing_the_default_release_adds_no_duplicate_cell(self, roles_tree: Path) -> None:
+    def test_listing_the_default_release_is_rejected(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "svc", {"machines": {"box": None}, "ubuntu": [matrix.DEFAULT_UBUNTU]})
-        assert matrix.build_role_cells("svc") == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
+        with pytest.raises(matrix.RoleTestConfigError, match="the default release"):
+            matrix.build_role_cells("svc")
 
     def test_build_test_matrix_drops_skipped_propagated_extra(self, roles_tree: Path) -> None:
         # A consumer's release cell pushed in via CI fan-out must still drop

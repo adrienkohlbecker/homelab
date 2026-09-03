@@ -16,8 +16,11 @@ Human-readable (for local inspection):
 """
 
 import argparse
+import functools
 import json
 import sys
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -36,6 +39,7 @@ DEFAULT_MACHINES = {"box": None}
 # hydrate box/box_deps bundles) cannot boot them. detect drops them from every
 # generated pipeline; local testall.py keeps them.
 ON_DEMAND_MACHINES = frozenset({"lab", "pug"})
+_ROLE_META_KEYS = {"base_prerequisites", "machines", "skip", "ubuntu"}
 
 
 class TestCell(NamedTuple):
@@ -46,6 +50,24 @@ class TestCell(NamedTuple):
     role: str
 
 
+@dataclass(frozen=True)
+class RoleTestConfig:
+    """Validated role-test metadata consumed by local and CI matrix builders."""
+
+    base_prerequisites: bool
+    machines: Mapping[str, dict | None]
+    ubuntu: tuple[str, ...]
+    skip: Mapping[object, object]
+
+
+class RoleTestConfigError(ValueError):
+    """One role metadata file failed schema validation."""
+
+    def __init__(self, path: Path, messages: list[str]) -> None:
+        self.messages = tuple(f"{path}: {message}" for message in messages)
+        super().__init__("\n".join(self.messages))
+
+
 def list_testable_roles() -> list[str]:
     """Return all roles with tasks/main.yml, sorted."""
     roles_dir = Path("roles")
@@ -54,15 +76,113 @@ def list_testable_roles() -> list[str]:
     return [d.name for d in sorted(roles_dir.iterdir()) if d.is_dir() and (d / "tasks" / "main.yml").exists()]
 
 
-def _read_role_meta(role: str) -> dict:
-    meta_path = Path(f"roles/{role}/meta/test.yml")
+def load_role_test_config(role: str, machine_names: tuple[str, ...] = ()) -> RoleTestConfig:
+    """Load and validate one role's cached test metadata."""
+
+    meta_path = Path(f"roles/{role}/meta/test.yml").resolve()
+    return _load_role_test_config(meta_path, machine_names)
+
+
+@functools.cache
+def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> RoleTestConfig:
+    """Parse one absolute metadata path once per process."""
+
     if not meta_path.exists():
-        return {}
+        return RoleTestConfig(True, dict(DEFAULT_MACHINES), (), {})
     try:
-        return yaml.safe_load(meta_path.read_text()) or {}
+        data = yaml.safe_load(meta_path.read_text()) or {}
     except yaml.YAMLError as e:
-        print(f"error: {meta_path}: {e}", file=sys.stderr)
-        sys.exit(1)
+        raise RoleTestConfigError(meta_path, [f"parse error: {e}"]) from e
+
+    if not isinstance(data, dict):
+        raise RoleTestConfigError(meta_path, [f"top-level must be a mapping, got {type(data).__name__}"])
+
+    errors: list[str] = []
+    if "machine" in data:
+        errors.append("uses legacy 'machine:' key -- migrate to 'machines:'")
+    errors.extend(
+        f"unknown top-level key {key!r}; expected one of {sorted(_ROLE_META_KEYS)}"
+        for key in sorted(set(data) - _ROLE_META_KEYS)
+    )
+
+    raw_base_prerequisites = data.get("base_prerequisites", True)
+    if isinstance(raw_base_prerequisites, bool):
+        base_prerequisites = raw_base_prerequisites
+    else:
+        errors.append(f"base_prerequisites must be a boolean, got {type(raw_base_prerequisites).__name__}")
+        base_prerequisites = True
+
+    raw_machines = data.get("machines")
+    machines: dict[str, dict | None] = {}
+    if raw_machines is None:
+        pass
+    elif not isinstance(raw_machines, dict):
+        errors.append(f"machines must be a mapping, got {type(raw_machines).__name__}")
+    else:
+        for name, machine_config in raw_machines.items():
+            if not isinstance(name, str):
+                errors.append(f"machines key must be a string, got {type(name).__name__}")
+                continue
+            if machine_names and name not in machine_names:
+                errors.append(f"machines key {name!r} not in {list(machine_names)}")
+            if machine_config is not None and not isinstance(machine_config, dict):
+                errors.append(f"machines.{name} must be empty or a mapping, got {type(machine_config).__name__}")
+                continue
+            machines[name] = machine_config
+    if not machines:
+        machines = dict(DEFAULT_MACHINES)
+
+    raw_ubuntu = data.get("ubuntu")
+    ubuntu: list[str] = []
+    if raw_ubuntu is None:
+        pass
+    elif not isinstance(raw_ubuntu, list):
+        errors.append(f"ubuntu must be a list, got {type(raw_ubuntu).__name__}")
+    else:
+        for codename in raw_ubuntu:
+            if not isinstance(codename, str):
+                errors.append(f"ubuntu entries must be strings, got {type(codename).__name__}")
+            elif codename == DEFAULT_UBUNTU:
+                errors.append(
+                    f"ubuntu lists {DEFAULT_UBUNTU!r}, the default release"
+                    " -- it expands to no cell, so drop it (list only extra releases)"
+                )
+            elif codename not in UBUNTU_RELEASES:
+                errors.append(f"ubuntu={codename!r} not in {sorted(UBUNTU_RELEASES)}")
+            else:
+                ubuntu.append(codename)
+
+    raw_skip = data.get("skip")
+    if raw_skip is None:
+        skip = {}
+    elif not isinstance(raw_skip, dict):
+        errors.append(f"skip must be a mapping of cell-spec -> reason, got {type(raw_skip).__name__}")
+        skip = {}
+    else:
+        skip = raw_skip
+        for spec, reason in raw_skip.items():
+            parts = str(spec).split(":")
+            if len(parts) > 2:
+                errors.append(f"skip {spec!r}: too many ':' (want machine or machine:codename)")
+                continue
+            machine = parts[0]
+            codename = parts[1] if len(parts) == 2 else DEFAULT_UBUNTU
+            if machine_names and machine not in machine_names:
+                errors.append(f"skip {spec!r}: machine {machine!r} not in {list(machine_names)}")
+            if len(parts) == 2 and codename == DEFAULT_UBUNTU:
+                errors.append(
+                    f"skip {spec!r}: {DEFAULT_UBUNTU!r} is the default release,"
+                    f" so this cancels the base cell -- write {machine!r} if that is intended"
+                )
+            elif codename not in UBUNTU_RELEASES:
+                errors.append(f"skip {spec!r}: ubuntu {codename!r} not in {sorted(UBUNTU_RELEASES)}")
+            if not reason or not str(reason).strip():
+                errors.append(f"skip {spec!r}: needs a non-empty reason")
+
+    if errors:
+        raise RoleTestConfigError(meta_path, errors)
+
+    return RoleTestConfig(base_prerequisites, machines, tuple(ubuntu), skip)
 
 
 def machines_for(role: str) -> dict:
@@ -71,7 +191,7 @@ def machines_for(role: str) -> dict:
     Returns the machines: dict.  First key is the primary machine (used
     for release cells); additional keys get only a base cell.
     """
-    return _read_role_meta(role).get("machines") or dict(DEFAULT_MACHINES)
+    return dict(load_role_test_config(role).machines)
 
 
 def default_machine_for(role: str) -> str:
@@ -81,12 +201,12 @@ def default_machine_for(role: str) -> str:
 
 def release_ubuntu_for(role: str) -> list[str]:
     """Extra Ubuntu releases from meta/test.yml (empty when none)."""
-    return _read_role_meta(role).get("ubuntu") or []
+    return list(load_role_test_config(role).ubuntu)
 
 
 def base_prerequisites_for(role: str) -> bool:
     """Whether hostname and Apt prerequisites should run before this role."""
-    return _read_role_meta(role).get("base_prerequisites", True)
+    return load_role_test_config(role).base_prerequisites
 
 
 def skip_for(role: str) -> set[tuple[str, str]]:
@@ -100,7 +220,7 @@ def skip_for(role: str) -> set[tuple[str, str]]:
     runs a skipped cell directly (it bypasses this matrix), which is how
     you iterate on the fix that lets the skip be removed.
     """
-    skip = _read_role_meta(role).get("skip") or {}
+    skip = load_role_test_config(role).skip
     out: set[tuple[str, str]] = set()
     for spec in skip:
         parts = str(spec).split(":")
