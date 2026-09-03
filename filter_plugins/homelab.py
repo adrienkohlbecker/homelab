@@ -67,24 +67,20 @@ def podman_health_curl(
     url: str,
     *,
     location: bool = True,
-    fail: bool = True,
-    connect_timeout: int = 1,
-    max_time: int = 5,
 ) -> str:
     """Render the repo's standard curl-based podman health probe."""
     argv: list[str] = ["curl"]
     if location:
         argv.append("--location")
-    if fail:
-        argv.append("--fail")
     argv.extend(
         [
+            "--fail",
             "--silent",
             "--show-error",
             "--connect-timeout",
-            str(connect_timeout),
+            "1",
             "--max-time",
-            str(max_time),
+            "5",
             "-o",
             "/dev/null",
             url,
