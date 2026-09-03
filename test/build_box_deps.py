@@ -93,7 +93,7 @@ def build_one(root: Path, ubuntu: str) -> None:
     destination = root / ubuntu / "box_deps"
     if not source.is_dir():
         raise RuntimeError(
-            f"Source box artifacts missing at {source}\n" f"Run 'mise run packer:build box --ubuntu {ubuntu}' first."
+            f"Source box artifacts missing at {source}\nRun 'mise run packer:build box --ubuntu {ubuntu}' first."
         )
 
     staging = Path(tempfile.mkdtemp(prefix=f".build-box-deps-{ubuntu}-", dir=root))
