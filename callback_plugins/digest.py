@@ -60,8 +60,6 @@ def _json_summary(value):
 
 
 class CallbackModule(DefaultCallback):
-    CALLBACK_VERSION = 2.0
-    CALLBACK_TYPE = "stdout"
     CALLBACK_NAME = "digest"
 
     def _dump_results(self, result, *args, **kwargs):
