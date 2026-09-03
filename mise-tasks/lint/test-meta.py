@@ -17,7 +17,7 @@ from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 
 MACHINE_NAMES = sorted(MACHINE_CHOICES)
 UBUNTU_NAMES = sorted(UBUNTU_RELEASES)
-TOP_LEVEL_KEYS = {"bootstrap", "machines", "skip", "ubuntu"}
+TOP_LEVEL_KEYS = {"base_prerequisites", "machines", "skip", "ubuntu"}
 
 
 def main() -> int:
@@ -40,8 +40,10 @@ def main() -> int:
             for key in sorted(set(data) - TOP_LEVEL_KEYS)
         )
 
-        if "bootstrap" in data and not isinstance(data["bootstrap"], bool):
-            errors.append(f"{meta}: bootstrap must be a boolean, got {type(data['bootstrap']).__name__}")
+        if "base_prerequisites" in data and not isinstance(data["base_prerequisites"], bool):
+            errors.append(
+                f"{meta}: base_prerequisites must be a boolean, " f"got {type(data['base_prerequisites']).__name__}"
+            )
 
         if (machines := data.get("machines")) is not None:
             if not isinstance(machines, dict):

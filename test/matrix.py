@@ -84,9 +84,9 @@ def release_ubuntu_for(role: str) -> list[str]:
     return _read_role_meta(role).get("ubuntu") or []
 
 
-def bootstrap_for(role: str) -> bool:
-    """Whether the shared bootstrap should run before this role."""
-    return _read_role_meta(role).get("bootstrap", True)
+def base_prerequisites_for(role: str) -> bool:
+    """Whether hostname and Apt prerequisites should run before this role."""
+    return _read_role_meta(role).get("base_prerequisites", True)
 
 
 def skip_for(role: str) -> set[tuple[str, str]]:

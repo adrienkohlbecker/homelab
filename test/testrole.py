@@ -23,7 +23,12 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
-from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES, bootstrap_for, default_machine_for
+from matrix import (
+    DEFAULT_UBUNTU,
+    UBUNTU_RELEASES,
+    base_prerequisites_for,
+    default_machine_for,
+)
 from utils import (
     CommandFailedException,
     IdempotenceFailedException,
@@ -226,7 +231,7 @@ async def run_test(
 
                         # The vanilla cloud image runs cloud-init's config/final
                         # stages (apt sources, manage_etc_hosts, package installs)
-                        # after sshd comes up, so the bootstrap playbook + snapd
+                        # after sshd comes up, so the prerequisite playbook + snapd
                         # purge below would race them. Settle cloud-init first.
                         # Only `minimal` carries a live cloud-init datasource; the
                         # packer images pin NoCloud and would stall the wait.
@@ -234,12 +239,15 @@ async def run_test(
                             async with _phase("cloud-init wait"):
                                 await m.ensure_cloud_init()
 
-                        # Configure shared test prerequisites unless the role's
-                        # metadata requires the Packer image's pristine state.
-                        if not bootstrap_for(m.role):
-                            print_line(f"Skipping bootstrap: {m.role!r} declares bootstrap: false")
+                        async with _phase("test environment"):
+                            await m.ansible_command(str(m.workdir_path / "_environment.yml"))
+
+                        # Keep the role-owned parts of the base image pristine
+                        # when testing those roles themselves.
+                        if not base_prerequisites_for(m.role):
+                            print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
                         else:
-                            async with _phase("bootstrap playbook"):
+                            async with _phase("base prerequisites"):
                                 await m.ansible_command(str(m.workdir_path / "_bootstrap.yml"))
 
                         if m.machine == "minimal" and m.role != "cleanup":

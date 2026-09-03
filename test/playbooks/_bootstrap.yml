@@ -1,12 +1,6 @@
-- name: Configure shared role-test prerequisites
+- name: Configure shared base-role prerequisites
   hosts: all
   tasks:
-    - name: Configure test-only connectivity and credentials
-      import_tasks: tasks/environment.yml
-
-    - name: Verify test-only connectivity
-      import_tasks: tasks/verify_environment.yml
-
     - name: Set hostname and seed /etc/hosts
       import_role:
         name: hostname

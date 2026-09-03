@@ -252,7 +252,7 @@ class TestTestMetaValidation:
         )
         assert result.returncode == 0, result.stderr
 
-    def test_bootstrap_must_be_boolean(self, tmp_path: Path) -> None:
-        result = self._run_against(tmp_path, "svc", "bootstrap: pristine\n")
+    def test_base_prerequisites_must_be_boolean(self, tmp_path: Path) -> None:
+        result = self._run_against(tmp_path, "svc", "base_prerequisites: pristine\n")
         assert result.returncode == 1
-        assert "bootstrap must be a boolean" in result.stderr
+        assert "base_prerequisites must be a boolean" in result.stderr
