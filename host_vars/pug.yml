@@ -56,10 +56,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PW
 
 fan2go_enabled: true
 
-dns_reboot_guard_enabled: true
-dns_keepalived_priority: 10
-netdata_keepalived_vrrp_enabled: true
-
 # The shared DoT name follows the DNS VIP between pug and lab.
 certbot_extra_sans:
   - dns.{{ domain }}

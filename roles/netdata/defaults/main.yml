@@ -1,2 +1,4 @@
-netdata_keepalived_vrrp_enabled: false
-netdata_keepalived_lost_master_alert: false
+netdata_keepalived_vrrp_enabled: "{{ (dns_keepalived_priority | default(0) | int) > 0 }}"
+netdata_keepalived_lost_master_alert: >-
+  {{ (dns_keepalived_priority | default(0) | int)
+     == (dns_keepalived_priorities.values() | max) }}

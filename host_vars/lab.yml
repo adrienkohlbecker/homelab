@@ -154,11 +154,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV4m+yJxWvdW
 
 fan2go_enabled: true
 
-dns_reboot_guard_enabled: true
-dns_keepalived_priority: 100
-netdata_keepalived_vrrp_enabled: true
-netdata_keepalived_lost_master_alert: true
-
 minio_enabled: true
 minio_buckets:
   - arq-adrien

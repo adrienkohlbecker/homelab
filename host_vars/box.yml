@@ -110,7 +110,8 @@ minio_buckets:
 netdata_contexts:
   system_cpu: system.cpu              # always-live chart, baseline
   ghost: foo.does_not_exist           # never-existed chart, probes the "missing-chart" gap
-netdata_keepalived_vrrp_enabled: true
+# Box is the positive fixture for the primary-only alert; its priority remains
+# outside the production election map.
 netdata_keepalived_lost_master_alert: true
 netdata_keepalived_vrrp_ip: 198.51.100.10
 netdata_keepalived_vrrp_update_every: 5
