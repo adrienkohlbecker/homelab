@@ -204,16 +204,9 @@ table inet homelab {
         iifname . ip saddr @lan_admin_pairs tcp dport {{ service_ports.nut }} counter name "input_admin_nut" accept comment "nut (admin)"
 
 {% if inventory_hostname == authelia_host %}
-        # Authelia forward-auth ingress from wireguard peers. Lab's own
-        # nginx hits Authelia via loopback (covered by `iifname "lo"`
-        # earlier); WG peers (pug, bunk if it ever gets protected sites)
-        # route forward-auth subrequests to authelia_host's WG IP -- see
-        # authelia_internal_url in group_vars/all.yml. The container is
-        # published on 0.0.0.0 (single publish on
-        # roles/authelia/templates/authelia.service.j2), so this rule
-        # is the access-control boundary: tight scope (wg0 + WG_SUBNET)
-        # keeps LAN devices out of an endpoint they have no business
-        # hitting.
+        # authelia_internal_url in group_vars/all/main.yml uses loopback locally
+        # and the host's WG IP remotely. The container listens on every host
+        # interface, so this tight wg0 + WG_SUBNET rule is the access boundary.
         iifname "wg0" ip saddr $WG_SUBNET tcp dport {{ service_ports.authelia }} counter name "input_authelia_wg" accept comment "Authelia forward-auth (wireguard peers)"
 {% endif %}
 

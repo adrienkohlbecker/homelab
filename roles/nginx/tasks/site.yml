@@ -19,9 +19,8 @@
 #                             request through / is auth_request'd via Authelia;
 #                             a 401 redirects to the portal with returnUrl.
 #                             Requires authelia_internal_url to point at a reachable
-#                             /api/authz/auth-request endpoint (defaults to lab's
-#                             local Authelia; pug/bunk need a per-host override if
-#                             they ever enable forward-auth).
+#                             /api/authz/auth-request endpoint; its local/remote
+#                             routing is derived in group_vars/all/main.yml.
 #   auth_request_authorization optional bool, default false. Forward the
 #                             client's Authorization header to Authelia's auth
 #                             subrequest so its HeaderAuthorization strategy can
