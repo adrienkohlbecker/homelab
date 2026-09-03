@@ -98,6 +98,6 @@ RUN mkdir -p /etc/mise && \
 ENV PACKER_PLUGIN_PATH=/opt/packer/plugins
 COPY packer/qemu.pkr.hcl ./packer/
 COPY packer/aws/qemu_host.pkr.hcl ./packer/aws/
-RUN mise run packer:init && rm -rf ./packer
+RUN mise run packer:init && rm -rf /tmp/build
 
 WORKDIR /
