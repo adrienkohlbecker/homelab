@@ -41,10 +41,6 @@ def rstrip_newlines(value: Any) -> str:
 
 def json_argv(argv: Sequence[Any]) -> str:
     """Render a command argv as a single-quoted compact JSON string."""
-    if not isinstance(argv, Sequence) or isinstance(argv, str):
-        raise AnsibleError("json_argv expects a sequence of arguments")
-    if not argv:
-        raise AnsibleError("json_argv requires at least one argument")
     return "'" + json.dumps([str(arg) for arg in argv], separators=(",", ":")) + "'"
 
 
