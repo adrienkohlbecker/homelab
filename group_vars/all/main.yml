@@ -233,9 +233,8 @@ service_ports:
 # reach it; access is gated by the firewall rule that accepts tcp
 # {{ service_ports.authelia }} only from wg0 + WG_SUBNET on the
 # authelia_host (see roles/firewall/templates/nftables.conf.j2). The
-# lookup pulls authelia_host's wireguard_peers entry; if you add a new
-# authelia_host, make sure it has a wireguard_peers entry first.
-authelia_internal_url: "http://{% if inventory_hostname == authelia_host -%} 127.0.0.1{%- else -%} {{ wireguard_peers[authelia_host].address }}{%- endif -%} :{{ service_ports.authelia }}/api/authz/auth-request"
+# lookup pulls authelia_host's canonical topology entry.
+authelia_internal_url: "http://{% if inventory_hostname == authelia_host -%} 127.0.0.1{%- else -%} {{ network.hosts[authelia_host].wireguard }}{%- endif -%} :{{ service_ports.authelia }}/api/authz/auth-request"
 
 # Sonatype Nexus pull-through cache. Empty = use upstream URLs directly.
 # Overridden in group_vars/test.yml to route fetches through nexus.lab.fahm.fr.
@@ -279,27 +278,20 @@ ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror
 default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
 
 # wireguard-vanity-keygen -c $NAME/
-# Peer addresses derive from `network.*` (see group_vars/all/network.yml
-# and data/network_topology.yml). Keys, and the public off-site/home endpoints
-# (fox_endpoint/home_endpoint/bunk_endpoint), are vaulted -- they live outside
-# the public topology's scope. Same-site endpoints derive from the topology;
-# only public endpoints remain explicit here.
+# Peer membership and connection policy live here. Addresses and server/client
+# classification derive from `network.*` (see group_vars/all/network.yml and
+# data/network_topology.yml). Keys and public endpoints are vaulted because they
+# live outside the public topology's scope.
 wireguard_peers:
   lab:
-    address: "{{ network.hosts.lab.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51821"
   pug:
-    address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51822"
   box:
-    address: "{{ network.hosts.box.wireguard }}"
     public_endpoint: "{{ home_endpoint }}:51823"
-  laptop:
-    address: "{{ network.wireguard.roaming.laptop }}"
-  phone:
-    address: "{{ network.wireguard.roaming.phone }}"
+  laptop: {}
+  phone: {}
   bunk:
-    address: "{{ network.hosts.bunk.wireguard }}"
     public_endpoint: "{{ bunk_endpoint }}:51820"
     # Lab, pug, and fox are the consumers of the bunk offsite link (nightly
     # zfs autobackup: lab/pug push their datasets, fox rsyncs its own). Having
@@ -325,7 +317,6 @@ wireguard_peers:
     # fox_endpoint is fox's public Hetzner IP, vaulted -- NOT fox.fahm.fr, which
     # now resolves to fox's tailnet IP (100.64.0.x). wg0 is the underlay the
     # tailnet rides on, so it must dial the public IP directly or it deadlocks.
-    address: "{{ network.hosts.fox.wireguard }}"
     public_endpoint: "{{ fox_endpoint }}:51820"
     keepalive_from: [ lab, pug ]
 

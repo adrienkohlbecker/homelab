@@ -59,14 +59,14 @@
       pom endpoint {{ pom_peer_fields[0][2] | default('(missing)') }} !=
       topology endpoint {{ expected_pom_endpoint }}
 
-- name: _verify | Assert interface carries own_peer.address
+- name: _verify | Assert interface carries its topology address
   vars:
-    own_peer: "{{ wireguard_peers[inventory_hostname] }}"
+    own_address: "{{ network.hosts[inventory_hostname].wireguard }}"
   command: ip -4 -o addr show dev wg0
   register: wireguard_ip_addr
   become: true
   changed_when: false
-  failed_when: ('inet ' ~ own_peer.address ~ '/32') not in wireguard_ip_addr.stdout
+  failed_when: ('inet ' ~ own_address ~ '/32') not in wireguard_ip_addr.stdout
 
 - name: _verify | Assert preshared keys are loaded for every peer
   vars:

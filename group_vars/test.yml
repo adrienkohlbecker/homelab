@@ -77,20 +77,14 @@ mac_addresses:
 # [Peer] branch — plain /32, no Endpoint, no keepalive — in wg.conf.j2.
 wireguard_peers:
   lab:
-    address: "{{ network.hosts.lab.wireguard }}"
     public_endpoint: 192.0.2.1:51823
   pug:
-    address: "{{ network.hosts.pug.wireguard }}"
     public_endpoint: 192.0.2.1:51823
-  pom:
-    address: "{{ network.hosts.pom.wireguard }}"
+  pom: {}
   box:
-    address: "{{ network.hosts.box.wireguard }}"
     public_endpoint: 192.0.2.1:51823
-  fox:
-    address: "{{ network.hosts.fox.wireguard }}"
-  laptop:
-    address: "{{ network.wireguard.roaming.laptop }}"
+  fox: {}
+  laptop: {}
 
 # Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):
 # PresharedKey = base64(HMAC-SHA256(seed, sorted-pair-name)). One value, no

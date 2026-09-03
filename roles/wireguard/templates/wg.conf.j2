@@ -1,11 +1,12 @@
 {% set render_peer_name = own_peer_name | default(inventory_hostname) -%}
-{% set own_peer = wireguard_peers[render_peer_name] -%}
 {% set own_keys = wireguard_keys[render_peer_name] -%}
 {% set own_is_server = render_peer_name in network.hosts -%}
+{% set own_host = network.hosts.get(render_peer_name, {}) -%}
+{% set own_address = own_host.wireguard if own_is_server else network.wireguard.roaming[render_peer_name] -%}
 [Interface]
 # PublicKey = {{ own_keys.public_key }}
 PrivateKey = {{ own_keys.private_key }}
-Address = {{ own_peer.address }}/32
+Address = {{ own_address }}/32
 {# wg-quick auto-discovers MTU from the endpoint route minus 80 bytes
    (1500 ethernet -> 1420). That breaks for mobile peers on PPPoE
    uplinks (capped at 1492 -> 1412 effective WG), cellular 4G/5G
@@ -36,17 +37,17 @@ ListenPort = {{ service_ports.wireguard }}
    declared *subnet* is what let fox inherit the bonniers /24, so that stays
    out. Same-site peers reach each other on the LAN; roaming clients (no site,
    own_host == {}) keep the pure wg-/32 split tunnel. #}
-{% set own_host = network.hosts.get(render_peer_name, {}) %}
 {% for peer_name, peer in wireguard_peers.items() if ((peer_name in network.hosts) or own_is_server) and (peer_name != render_peer_name) %}
 {% set peer_host = network.hosts.get(peer_name, {}) %}
 {% set peer_is_server = peer_name in network.hosts %}
+{% set peer_address = peer_host.wireguard if peer_is_server else network.wireguard.roaming[peer_name] %}
 [Peer]
 # Name = {{ peer_name }}
 PublicKey = {{ wireguard_keys[peer_name].public_key }}
 {% if peer_host.physical is defined and own_host.site is defined and peer_host.site != own_host.site %}
-AllowedIPs = {{ peer.address }}/32, {{ peer_host.physical }}/32
+AllowedIPs = {{ peer_address }}/32, {{ peer_host.physical }}/32
 {% else %}
-AllowedIPs = {{ peer.address }}/32
+AllowedIPs = {{ peer_address }}/32
 {% endif %}
 {# PSK derived from the vaulted seed, never stored on disk: the filter sorts
    the peer names so both ends compute the same key. #}

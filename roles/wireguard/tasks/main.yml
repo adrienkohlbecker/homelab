@@ -1,14 +1,15 @@
-# Validate peer and key mappings before rendering so missing entries fail with
-# a useful message instead of a cryptic Jinja error.
-- name: Assert wireguard_peers entry exists for this host
+# Validate peer, topology, and key mappings before rendering so missing entries
+# fail with a useful message instead of a cryptic Jinja error.
+- name: Assert wireguard peer inputs are complete
   vars:
-    own_peer: "{{ (wireguard_peers | default({})).get(inventory_hostname, {}) }}"
     peer_names: "{{ wireguard_peers | default({}) | list }}"
-    peer_values: "{{ wireguard_peers | default({}) | dict2items | map(attribute='value') | list }}"
     peer_keys: "{{ wireguard_keys | default({}) | dict2items | selectattr('key', 'in', peer_names) | map(attribute='value') | list }}"
     server_names: "{{ peer_names | select('in', network.hosts) | list }}"
     roaming_names: "{{ peer_names | select('in', network.wireguard.roaming) | list }}"
     server_hosts: "{{ server_names | map('extract', network.hosts) | list }}"
+    server_addresses: "{{ server_hosts | map(attribute='wireguard') | list }}"
+    roaming_addresses: "{{ roaming_names | map('extract', network.wireguard.roaming) | list }}"
+    peer_addresses: "{{ server_addresses + roaming_addresses }}"
   assert:
     quiet: true
     that:
@@ -20,31 +21,28 @@
       # seed makes all derived PSKs brute-forceable at once (single point of
       # failure), so require ~256 bits of material.
       - wireguard_psk_seed | length >= 32
-      - peer_values | map(attribute='address') | unique | list | length == wireguard_peers | length
       - peer_names | difference(wireguard_keys | default({}) | list) | length == 0
       - peer_keys | selectattr('public_key', 'defined') | map(attribute='public_key') | unique | list | length == wireguard_peers | length
       - peer_keys | selectattr('private_key', 'defined') | list | length == wireguard_peers | length
       - server_names | union(roaming_names) | length == wireguard_peers | length
       - server_names | intersect(roaming_names) | length == 0
       - inventory_hostname in server_names
-      - own_peer.address is defined
-      # Every server peer must resolve to a topology host with site + physical:
-      # the template derives same-site endpoint selection from .site and the
-      # cross-site host route from .physical (wg.conf.j2). A missing entry
-      # silently drops the cross-site route.
+      - peer_addresses | select('string') | list | length == wireguard_peers | length
+      - peer_addresses | unique | list | length == wireguard_peers | length
+      # The template derives addresses, same-site endpoint selection, and
+      # cross-site host routes from these topology fields.
+      - server_hosts | selectattr('wireguard', 'undefined') | list | length == 0
       - server_hosts | selectattr('site', 'undefined') | list | length == 0
       - server_hosts | selectattr('physical', 'undefined') | list | length == 0
       - peer_names | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
     fail_msg: >-
       wireguard_peers must be defined and contain a server entry for
-      {{ inventory_hostname }} with address set; every peer must belong to
-      exactly one of network.hosts or network.wireguard.roaming;
-      every peer name must match ^[a-z][a-z0-9_]*$; addresses
-      must be unique; every peer must have public_key and private_key entries in
-      wireguard_keys and public_keys must be unique; wireguard_psk_seed must be
-      >= 32 chars;
-      every server peer must resolve to a network.hosts entry with site and
-      physical.
+      {{ inventory_hostname }}; every peer must belong to exactly one of
+      network.hosts or network.wireguard.roaming; every peer name must match
+      ^[a-z][a-z0-9_]*$; topology addresses must be strings and unique; every
+      peer must have public_key and private_key entries in wireguard_keys and
+      public_keys must be unique; wireguard_psk_seed must be >= 32 chars; every
+      server peer must expose wireguard, site, and physical topology fields.
   tags:
     - wireguard
 
