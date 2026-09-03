@@ -1090,7 +1090,7 @@ authelia_oidc_clients:
     redirect_uris:
       - 'https://headscale.{{ domain }}/oidc/callback'
 
-gitlab_runner_lab_token: !vault |
+gitlab_runner_shell_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
           32613833393030646633663161353436656430613461366239366337633864346430373831386135
           6335333566306464393861373735346537363432336532610a333364373563383539623737656663
