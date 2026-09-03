@@ -56,10 +56,3 @@ static_group_ids:
 static_human_ids:
   operator: 1000
   spouse: 60740
-
-# Public keys for host-owned backup identities. These are shared by the
-# pull-side authorization and bunk's restricted offsite push keys.
-zfs_autobackup_public_keys:
-  lab: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
-  pug: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV4m+yJxWvdWwreul2M21yyDEhvIAh8hxS18zkAhVKz root@pug
-  fox: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDyYBrn9Im8oTbstBQZseVT+KhO4hLU6QbcJhcPiQ2ug root@fox
