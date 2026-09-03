@@ -162,11 +162,7 @@ noble) ;;
   ;;
 esac
 
-read -r runner_url runner_sha256 < <(
-  yq -r '.gitlab_runner_archive.x86_64 | [.url, .sha256] | @tsv' group_vars/all/versions.yml
-)
 echo "==> qemu-host target architecture: x86_64"
-echo "==> gitlab-runner binary: ${runner_url}"
 
 on_error=cleanup
 if [ -t 0 ] && [ -z "${CI:-}" ]; then
@@ -190,8 +186,6 @@ packer build \
   -var "ubuntu_name=${ubuntu}" \
   -var "qemu_host_build_id=${build_id}" \
   -var "qemu_host_manifest_path=${manifest}" \
-  -var "gitlab_runner_url=${runner_url}" \
-  -var "gitlab_runner_sha256=${runner_sha256}" \
   packer/aws
 
 ami=$(python3 -c '

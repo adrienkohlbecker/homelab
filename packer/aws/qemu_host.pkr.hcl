@@ -20,18 +20,6 @@ variable "ubuntu_name" {
   description = "Ubuntu release name."
 }
 
-variable "gitlab_runner_url" {
-  type        = string
-  default     = ""
-  description = "Pinned gitlab-runner binary URL, passed by mise-tasks/packer/qemu-host-ami.sh from group_vars/all/versions.yml."
-}
-
-variable "gitlab_runner_sha256" {
-  type        = string
-  default     = ""
-  description = "Pinned gitlab-runner binary checksum, passed by mise-tasks/packer/qemu-host-ami.sh from group_vars/all/versions.yml."
-}
-
 variable "qemu_host_build_id" {
   type        = string
   default     = "local"
@@ -45,6 +33,8 @@ variable "qemu_host_manifest_path" {
 }
 
 locals {
+  versions = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
+
   qemu_host_common_tags = {
     role     = "ci-ami"
     ubuntu   = var.ubuntu_name
@@ -130,8 +120,8 @@ build {
   provisioner "shell" {
     script = "${path.root}/files/provision_qemu_host.sh"
     env = {
-      "GITLAB_RUNNER_URL"    = var.gitlab_runner_url
-      "GITLAB_RUNNER_SHA256" = var.gitlab_runner_sha256
+      "GITLAB_RUNNER_URL"    = local.versions.gitlab_runner_archive.x86_64.url
+      "GITLAB_RUNNER_SHA256" = local.versions.gitlab_runner_archive.x86_64.sha256
     }
   }
 
