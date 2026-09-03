@@ -2,8 +2,8 @@
 # vim:ft=sh
 # shellcheck shell=bash  # sourced by netdata charts.d.plugin, no shebang
 #
-# Netdata charts.d collector: contexts + collectors registered with the
-# local netdata instance.
+# Netdata charts.d collector: contexts, collectors, and exact charts registered
+# with the local netdata instance.
 #
 # Native $last_collected_t templates only bind to charts that already
 # exist; a template with `on: <missing-chart>` silently fails to
@@ -21,12 +21,14 @@
 # Per-host config comes from /etc/netdata/charts.d/netdata_presence.conf:
 #   netdata_presence_contexts=( "<context_id>" ... )
 #   netdata_presence_collectors=( "<go.d:collector:plugin:job>" ... )
+#   netdata_presence_charts=( "<name>|<chart_id>" ... )
 
 netdata_presence_update_every=60
 netdata_presence_priority=90200
 
 netdata_presence_contexts=()
 netdata_presence_collectors=()
+netdata_presence_charts=()
 
 netdata_presence_api="${netdata_presence_api:-http://127.0.0.1:19999}"
 netdata_presence_startup_grace="${netdata_presence_startup_grace:-300}"
@@ -59,6 +61,7 @@ netdata_presence_create() {
 
 declare -A _netdata_presence_seen_contexts
 declare -A _netdata_presence_seen_collectors
+declare -A _netdata_presence_seen_charts
 
 # /api/v2/contexts returns {"contexts":{"<id>":{...},...}}; one-liner
 # pulls just the key set. --fail makes curl emit nothing and exit non-zero
@@ -110,7 +113,7 @@ _netdata_presence_collector_chart_prefix() {
 }
 
 netdata_presence_update() {
-  local entry ctx_id present ready safe expected line _chart_id _mode
+  local entry name chart_id ctx_id present ready safe expected line _chart_id _mode
   local contexts_ready=1 charts_ready=1
   local -A api_contexts=()
   local -A api_charts=()
@@ -131,7 +134,7 @@ netdata_presence_update() {
     [ "${#api_contexts[@]}" -gt 0 ] || contexts_ready=0
   fi
 
-  if [ "${#netdata_presence_collectors[@]}" -gt 0 ]; then
+  if [ "${#netdata_presence_collectors[@]}" -gt 0 ] || [ "${#netdata_presence_charts[@]}" -gt 0 ]; then
     while IFS= read -r line; do
       [ -n "$line" ] && api_charts[$line]=1
     done < <(_netdata_presence_fetch_charts)
@@ -205,6 +208,35 @@ EOF
     fi
     cat <<EOF
 BEGIN netdata_presence.collector_${safe} ${1}
+SET present = $present
+SET ready = $ready
+END
+EOF
+  done
+
+  for entry in "${netdata_presence_charts[@]}"; do
+    [ "$charts_ready" = 1 ] || break # charts API fetch failed this cycle; let the chart go stale
+    IFS='|' read -r name chart_id <<<"$entry"
+    if [ -z "$name" ] || [ -z "$chart_id" ]; then
+      error "netdata_presence: invalid expected chart entry: $entry"
+      continue
+    fi
+    safe=$(_netdata_presence_safe "$name")
+    present=0
+    [ -n "${api_charts[$chart_id]:-}" ] && present=1
+    if [ -z "${_netdata_presence_seen_charts[$name]:-}" ]; then
+      cat <<EOF
+CHART netdata_presence.chart_${safe} '' "Netdata chart presence: ${name}" "present" netdata_presence netdata_presence.chart line $((netdata_presence_priority + 2)) ${netdata_presence_update_every}
+CLABEL name "${name}" 1
+CLABEL chart_id "${chart_id}" 1
+CLABEL_COMMIT
+DIMENSION present '' absolute 1 1
+DIMENSION ready '' absolute 1 1
+EOF
+      _netdata_presence_seen_charts[$name]=1
+    fi
+    cat <<EOF
+BEGIN netdata_presence.chart_${safe} ${1}
 SET present = $present
 SET ready = $ready
 END

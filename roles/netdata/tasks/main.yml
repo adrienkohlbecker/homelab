@@ -30,6 +30,27 @@
   tags:
     - netdata
 
+- name: Require valid expected netdata charts
+  vars:
+    _netdata_expected_chart_names: >-
+      {{ netdata_expected_charts.keys()
+         | map('regex_replace', '[^a-zA-Z0-9_]', '_')
+         | list }}
+  assert:
+    that:
+      - netdata_expected_charts is mapping
+      - netdata_expected_charts.keys() | reject('equalto', '') | list | length == netdata_expected_charts | length
+      - netdata_expected_charts.values() | reject('equalto', '') | list | length == netdata_expected_charts | length
+      - >-
+        (_netdata_expected_chart_names | unique | list | length)
+        == (_netdata_expected_chart_names | length)
+    fail_msg: >-
+      netdata_expected_charts must map non-empty names to exact chart IDs, and
+      its names must remain unique after punctuation is replaced with
+      underscores: {{ netdata_expected_charts }}
+  tags:
+    - netdata
+
 - name: Install netdata package
   import_tasks: install.yml
   tags:

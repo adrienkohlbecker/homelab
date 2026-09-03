@@ -1,7 +1,8 @@
 # Managed by ansible (roles/netdata/templates/charts_d_netdata_presence.conf.j2).
 # Sourced by /usr/libexec/netdata/charts.d/netdata_presence.chart.sh before
 # netdata_presence_check. Context entries are Netdata context IDs; collectors
-# are go.d:collector:<plugin>:<job> IDs.
+# are go.d:collector:<plugin>:<job> IDs; expected charts pair a stable name
+# with an exact chart ID.
 netdata_presence_api="http://127.0.0.1:{{ service_ports.netdata }}"
 # Test fixtures poll immediately so functional verification does not wait for
 # the production startup grace and one-minute collector cadence.
@@ -15,5 +16,10 @@ netdata_presence_contexts=(
 netdata_presence_collectors=(
 {% for cid in netdata_collectors %}
   "{{ cid }}"
+{% endfor %}
+)
+netdata_presence_charts=(
+{% for name, chart_id in netdata_expected_charts.items() %}
+  "{{ name }}|{{ chart_id }}"
 {% endfor %}
 )

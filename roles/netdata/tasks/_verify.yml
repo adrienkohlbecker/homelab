@@ -7,11 +7,15 @@
 #   netdata_collectors:
 #     - go.d:collector:systemdunits:service-units  (real, always-live -- the role configures it)
 #     - go.d:collector:fake_plugin:fake_job        (never-existed collector)
+#   netdata_expected_charts:
+#     system_cpu_chart: system.cpu                 (real exact chart)
+#     missing_fixture_chart: fixture.does_not_exist (never-existed exact chart)
 # So the collector emits present=1 for system.cpu + systemdunits and
-# present=0 for foo.does_not_exist + fake_plugin:fake_job, and the health templates fan
-# out across the resulting charts. systemdunits is the present=1 witness for
-# the collector prefix match (instanced mode, plugin != job) -- not just the
-# trivial present=0 path; fake_plugin:fake_job is the present=0 witness.
+# system_cpu_chart, present=0 for foo.does_not_exist + fake_plugin:fake_job +
+# missing_fixture_chart, and the health templates fan out across the resulting
+# charts. systemdunits is the present=1 witness for the collector prefix match
+# (instanced mode, plugin != job) -- not just the trivial present=0 path;
+# fake_plugin:fake_job is the present=0 witness.
 
 - name: _verify | Netdata.service is loaded and active
   systemd:
@@ -200,6 +204,8 @@
     and 'netdata_presence.context_foo_does_not_exist' in _charts
     and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in _charts
     and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in _charts
+    and 'netdata_presence.chart_system_cpu_chart' in _charts
+    and 'netdata_presence.chart_missing_fixture_chart' in _charts
 
 # allmetrics reports the last collected sample per chart directly, so no
 # query-window bucketing can leave the newest value invisible.
@@ -214,6 +220,8 @@
     _systemdunits: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_systemdunits_service_units'] | default({}) }}"
     _missing_context: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_foo_does_not_exist'] | default({}) }}"
     _fake_collector: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_fake_plugin_fake_job'] | default({}) }}"
+    _system_cpu_chart: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.chart_system_cpu_chart'] | default({}) }}"
+    _missing_chart: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.chart_missing_fixture_chart'] | default({}) }}"
   until: >-
     _netdata_presence_metrics.status == 200
     and _system_cpu.dimensions.present.value | default(-1) | int == 1
@@ -224,6 +232,10 @@
     and _missing_context.dimensions.ready.value | default(-1) | int == 1
     and _fake_collector.dimensions.present.value | default(-1) | int == 0
     and _fake_collector.dimensions.ready.value | default(-1) | int == 1
+    and _system_cpu_chart.dimensions.present.value | default(-1) | int == 1
+    and _system_cpu_chart.dimensions.ready.value | default(-1) | int == 1
+    and _missing_chart.dimensions.present.value | default(-1) | int == 0
+    and _missing_chart.dimensions.ready.value | default(-1) | int == 1
 
 # Unit-test the collector chart-prefix derivation directly. The live
 # present=1 path above only exercises 'instanced' mode (systemdunits,
@@ -278,6 +290,21 @@
       chart {{ _netdata_fake_collector_chart.json.id }} context={{ _netdata_fake_collector_chart.json.context }}
       labels={{ _netdata_fake_collector_chart.json.chart_labels | default({}) }}
 
+- name: _verify | Missing exact chart carries name, chart ID, and shared context
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.chart_missing_fixture_chart
+  register: _netdata_missing_exact_chart
+
+- name: _verify | Assert exact chart labels + context
+  assert:
+    that:
+      - _netdata_missing_exact_chart.json.context == "netdata_presence.chart"
+      - _netdata_missing_exact_chart.json.chart_labels.name | default('') == "missing_fixture_chart"
+      - _netdata_missing_exact_chart.json.chart_labels.chart_id | default('') == "fixture.does_not_exist"
+    fail_msg: >-
+      chart {{ _netdata_missing_exact_chart.json.id }} context={{ _netdata_missing_exact_chart.json.context }}
+      labels={{ _netdata_missing_exact_chart.json.chart_labels | default({}) }}
+
 # Two alert template fan-outs to assert here:
 #   1) netdata_context_missing / netdata_collector_missing (presence alerts)
 #      should instantiate per-chart on the shared contexts.
@@ -318,6 +345,7 @@
     and _keys | select('search', 'netdata_presence.context_system_cpu.netdata_context_missing') | list | length > 0
     and _keys | select('search', 'netdata_presence.context_foo_does_not_exist.netdata_context_missing') | list | length > 0
     and _keys | select('search', 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job.netdata_collector_missing') | list | length > 0
+    and _keys | select('search', 'netdata_presence.chart_missing_fixture_chart.netdata_chart_missing') | list | length > 0
     and _keys | select('search', 'liveness_system_cpu') | list | length > 0
     and _keys | select('search', 'systemd_service_unit_failed_state') | list | length > 0
     and _keys | select('search', 'out_of_disk_space_time') | list | length > 0
@@ -351,6 +379,7 @@
     _names:
       - netdata_presence.context_foo_does_not_exist.netdata_context_missing
       - netdata_presence.collector_go_d_collector_fake_plugin_fake_job.netdata_collector_missing
+      - netdata_presence.chart_missing_fixture_chart.netdata_chart_missing
     _alarm: "{{ _alarms[item] | default({}) }}"
   assert:
     that:
