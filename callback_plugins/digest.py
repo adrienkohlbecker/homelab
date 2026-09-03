@@ -33,7 +33,6 @@ _STAT_KEEP = (
     "checksum",
     "mimetype",
 )
-_FACTS_DIGEST_THRESHOLD = 25
 _JSON_DIGEST_THRESHOLD = 2048
 _JSON_KEY_LIMIT = 10
 
@@ -57,16 +56,12 @@ class CallbackModule(DefaultCallback):
     CALLBACK_NAME = "digest"
 
     def _dump_results(self, result, *args, **kwargs):
-        def digest(obj, in_facts=False):
+        def digest(obj):
             if isinstance(obj, dict):
                 out = {}
                 is_json_http_response = {"json", "status", "url"} <= obj.keys()
                 for key, value in obj.items():
-                    if key == "ansible_facts" and isinstance(value, dict) and len(value) > _FACTS_DIGEST_THRESHOLD:
-                        value = f"<{len(value)} facts hidden: {', '.join(sorted(value))}>"
-                    elif in_facts and key == "diff":
-                        continue
-                    elif is_json_http_response and key == "json":
+                    if is_json_http_response and key == "json":
                         value = _json_summary(value)
                     elif is_json_http_response and key == "content":
                         continue
@@ -75,11 +70,11 @@ class CallbackModule(DefaultCallback):
                     elif key == "stat" and isinstance(value, dict) and "exists" in value:
                         value = {k: value[k] for k in _STAT_KEEP if k in value}
                     else:
-                        value = digest(value, in_facts or key == "ansible_facts")
+                        value = digest(value)
                     out[key] = value
                 return out
             if isinstance(obj, list):
-                return [digest(item, in_facts) for item in obj]
+                return [digest(item) for item in obj]
             return obj
 
         return super()._dump_results(digest(result), *args, **kwargs)
