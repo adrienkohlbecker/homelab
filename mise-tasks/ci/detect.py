@@ -300,7 +300,7 @@ def _gl_api_get(
                 time.sleep(retry_delay)
             else:
                 return None
-        except (urllib.error.URLError, OSError):
+        except urllib.error.URLError, OSError:
             if attempt < retries:
                 time.sleep(retry_delay)
             else:

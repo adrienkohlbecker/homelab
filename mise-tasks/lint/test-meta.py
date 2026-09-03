@@ -54,8 +54,7 @@ def main() -> int:
                 for name, machine_config in machines.items():
                     if machine_config is not None and not isinstance(machine_config, dict):
                         errors.append(
-                            f"{meta}: machines.{name} must be empty or a mapping, "
-                            f"got {type(machine_config).__name__}"
+                            f"{meta}: machines.{name} must be empty or a mapping, got {type(machine_config).__name__}"
                         )
 
         if (ubuntu := data.get("ubuntu")) is not None:

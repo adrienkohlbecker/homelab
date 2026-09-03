@@ -74,7 +74,7 @@ def test_unit_filter_normalizes_names_and_preserves_globs() -> None:
     expression = lnav_journal.unit_filter(["homeassistant", "session-*.scope", "odd'name.service"])
 
     assert expression == (
-        ":unit = 'homeassistant.service' OR " ":unit GLOB 'session-*.scope' OR " ":unit = 'odd''name.service'"
+        ":unit = 'homeassistant.service' OR :unit GLOB 'session-*.scope' OR :unit = 'odd''name.service'"
     )
 
 

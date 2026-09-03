@@ -135,7 +135,6 @@ depends = [
   "lint:tflint",
   "lint:packer",
   "lint:packer-validate",
-  "lint:python",
   "lint:ruff",
   "lint:pyright",
   "lint:yaml",
@@ -184,13 +183,9 @@ run = [
   "packer validate packer/aws",
 ]
 
-[tasks."lint:python"]
-description = "Check Python formatting (black)"
-run = "black --check ."
-
 [tasks."lint:ruff"]
-description = "Run ruff Python linter"
-run = "ruff check ."
+description = "Lint and check Python formatting with Ruff"
+run = ["ruff check .", "ruff format --check ."]
 
 [tasks."lint:pyright"]
 description = "Run pyright Python type checker"
@@ -276,8 +271,8 @@ description = "Format Packer files"
 run = "packer fmt -recursive packer"
 
 [tasks."fmt:python"]
-description = "Format Python files (black)"
-run = "black ."
+description = "Format Python files with Ruff"
+run = "ruff format ."
 
 [tasks."fmt:shfmt"]
 description = "Format shell scripts (shfmt)"

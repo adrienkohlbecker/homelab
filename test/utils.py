@@ -116,7 +116,7 @@ def _stdout_writer_loop() -> None:
         try:
             sys.stdout.write(item)
             sys.stdout.flush()
-        except (BrokenPipeError, ValueError):
+        except BrokenPipeError, ValueError:
             # Consumer closed the pipe, or stdout was closed during shutdown:
             # nothing to write to. Keep draining so producers never block.
             pass

@@ -351,7 +351,6 @@ source = { virtual = "." }
 dependencies = [
     { name = "ansible" },
     { name = "ansible-lint" },
-    { name = "black" },
     { name = "boto3" },
     { name = "check-jsonschema" },
     { name = "dnspython" },
@@ -368,7 +367,6 @@ dependencies = [
 requires-dist = [
     { name = "ansible", specifier = ">=13.6.0" },
     { name = "ansible-lint", specifier = ">=25.11.0" },
-    { name = "black", specifier = ">=25.11.0" },
     { name = "boto3", specifier = ">=1.40.0" },
     { name = "check-jsonschema", specifier = ">=0.37.2" },
     { name = "dnspython", specifier = ">=2.8.0" },

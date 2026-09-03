@@ -161,7 +161,7 @@ def _passt_available(qemu_binary: str) -> bool:
             text=True,
             timeout=10,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return False
     # qemu lists netdev types on stdout (older builds: stderr); check both.
     return "stream" in (probe.stdout + probe.stderr)
@@ -614,14 +614,13 @@ class Machine:
         """
         self._require_binary(
             self.arch.qemu_binary,
-            "Install via `brew install qemu` (macOS) "
-            f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
+            f"Install via `brew install qemu` (macOS) or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
         )
         # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
         # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
         self._require_binary(
             "timeout",
-            "Install via `brew install coreutils` (macOS) or via the coreutils " "package on Linux.",
+            "Install via `brew install coreutils` (macOS) or via the coreutils package on Linux.",
         )
 
     @staticmethod
@@ -891,8 +890,7 @@ class Machine:
         while not id_path.exists():
             if self.proc and self.proc.returncode is not None:
                 raise RuntimeError(
-                    f"Launching machine failed (qemu wrapper exited with {self.proc.returncode}); "
-                    f"see {self.boot_file}"
+                    f"Launching machine failed (qemu wrapper exited with {self.proc.returncode}); see {self.boot_file}"
                 )
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
@@ -982,14 +980,14 @@ class Machine:
                 asyncio.open_connection(self.ssh_host, self.ssh_port),
                 timeout=2,
             )
-        except (OSError, TimeoutError):
+        except OSError, TimeoutError:
             # sshd not yet accepting connections; caller will retry.
             return False
 
         try:
             banner_bytes = await asyncio.wait_for(reader.read(1024), timeout=2)
             return bool(banner_bytes.decode().strip())
-        except (OSError, TimeoutError):
+        except OSError, TimeoutError:
             # Connected but no banner in time; treat as not-ready.
             return False
         finally:
@@ -1618,7 +1616,7 @@ class Machine:
                 f"hostfwd={proto}:{self.ssh_host}:{host_port}-:{guest_port}"
                 for guest_port, host_port in self.wan_forward_ports[proto].items()
             )
-        netdev = f"user,id=user.0," f"{','.join(hostfwds)}" f"{qemu_user_net_args(self.inventory_host)}"
+        netdev = f"user,id=user.0,{','.join(hostfwds)}{qemu_user_net_args(self.inventory_host)}"
         return netdev, "virtio-net,netdev=user.0"
 
     def _passt_port_specs(self) -> tuple[str, str | None]:
@@ -1951,7 +1949,7 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
             if ps_args is None:
                 try:
                     ps_args = subprocess.run(["ps", "-Ao", "args="], check=True, capture_output=True, text=True).stdout
-                except (subprocess.CalledProcessError, FileNotFoundError):
+                except subprocess.CalledProcessError, FileNotFoundError:
                     # Don't reap when we can't verify staleness.
                     return
             if d.name in ps_args:
@@ -2002,6 +2000,6 @@ def _read_vm_hwm(pid: int) -> int:
         for line in Path(f"/proc/{pid}/status").read_text().splitlines():
             if line.startswith("VmHWM:"):
                 return int(line.split()[1])
-    except (FileNotFoundError, ProcessLookupError, ValueError):
+    except FileNotFoundError, ProcessLookupError, ValueError:
         pass
     return 0

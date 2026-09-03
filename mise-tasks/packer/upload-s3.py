@@ -72,7 +72,7 @@ def output(argv: list[str], **kwargs: Any) -> str:
 def git_output(args: list[str], default: str = "unknown") -> str:
     try:
         return output(["git", "-C", str(REPO_ROOT), *args])
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return default
 
 
@@ -141,7 +141,7 @@ def sha256(path: Path) -> str:
 def qemu_info(path: Path) -> dict[str, Any]:
     try:
         raw = output(["qemu-img", "info", "--output=json", str(path)])
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return {}
     try:
         data = json.loads(raw)

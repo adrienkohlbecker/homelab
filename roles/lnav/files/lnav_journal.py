@@ -114,7 +114,7 @@ def first_timestamp(path: Path) -> float | None:
             for line in stream:
                 if line.strip():
                     return parse_timestamp(json.loads(line)["time"])
-    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+    except OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError:
         # Unknown file bounds keep the file eligible for lnav inspection.
         return None
     return None

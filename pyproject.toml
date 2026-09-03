@@ -7,7 +7,6 @@ dependencies = [
   "ansible>=13.6.0",
   "ansible-lint>=25.11.0",
   "mitogen>=0.3.27",
-  "black>=25.11.0",
   "ruff>=0.14.5",
   "yamllint>=1.38.0",
   "tabulate>=0.9.0",
@@ -20,11 +19,9 @@ dependencies = [
   "boto3>=1.40.0",            # mise-tasks/ci/{reap-qemu-images,audit-aws}.py (in-process S3/EC2 calls)
 ]
 
-[tool.black]
-line-length = 120
-
 [tool.ruff]
 exclude = [".claude"]
+line-length = 120
 
 [tool.ruff.lint]
 extend-select = ["B", "I", "PERF", "PIE", "PT", "RET", "RUF", "SIM", "UP"]

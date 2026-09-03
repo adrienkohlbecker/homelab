@@ -207,7 +207,7 @@ def _build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
         role = token.split(":")[0]
         if role not in universe:
             print(
-                f"error: role '{role}' is not in the testable universe " f"(no roles/{role}/tasks/main.yml)",
+                f"error: role '{role}' is not in the testable universe (no roles/{role}/tasks/main.yml)",
                 file=sys.stderr,
             )
             sys.exit(1)

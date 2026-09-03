@@ -163,8 +163,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-ssh-wait",
         action="store_true",
-        help="Skip the SSH ready-check after boot -- e.g. when launching ZBM "
-        "or any payload that doesn't expose sshd",
+        help="Skip the SSH ready-check after boot -- e.g. when launching ZBM or any payload that doesn't expose sshd",
     )
     parser.add_argument(
         "--exit-after-ready",
@@ -310,9 +309,7 @@ async def _run_async(
                 else:
                     failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
                     failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                    print_line(
-                        f"System reached state {state!r} (rc={result.exitcode}); failed units:\n" f"{failed_units}"
-                    )
+                    print_line(f"System reached state {state!r} (rc={result.exitcode}); failed units:\n{failed_units}")
                     raise RuntimeError(f"systemd is-system-running returned {state!r}")
             if seed is not None:
                 # Run the seed playbook against the booted VM, then ask

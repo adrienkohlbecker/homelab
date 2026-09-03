@@ -81,7 +81,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
     # _setup() bypasses prepare(), so only the always-present SSH hostfwd
     # appears until prepare() populates the controller-side WAN forwards.
     netdev_idx = cmd.index("-netdev")
-    assert cmd[netdev_idx + 1] == (f"user,id=user.0," f"hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22")
+    assert cmd[netdev_idx + 1] == (f"user,id=user.0,hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22")
 
 
 def test_default_aarch64_no_keep_no_direct_boot(

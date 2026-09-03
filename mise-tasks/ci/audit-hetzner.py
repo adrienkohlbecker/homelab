@@ -152,12 +152,12 @@ def main():
             expected.append(desc)
         else:
             anomalies.append(f"{desc} -- ubuntu-zfs snapshot past the newest-2 prune horizon")
-            deletes.append(f'hcloud image delete {i["id"]}')
+            deletes.append(f"hcloud image delete {i['id']}")
     for i in (i for i in snaps if i.get("labels", {}).get("os") != "ubuntu-zfs"):
         anomalies.append(
             f"snapshot {i['id']} ({gb(i)}, {i.get('created', '')[:10]}, {i.get('description', '')!r}) -- not an ubuntu-zfs image, unknown source"
         )
-        deletes.append(f'hcloud image delete {i["id"]}')
+        deletes.append(f"hcloud image delete {i['id']}")
 
     # ── Server backups (type=backup images): billable, none expected ──
     for b in safe("backups", lambda: hcloud_list("image", "--type", "backup")):

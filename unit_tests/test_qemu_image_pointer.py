@@ -70,9 +70,7 @@ class TestPointerBody:
         body = upload.pointer_body(_args())
         assert body.endswith("\n")
         # sort_keys=True, indent=2
-        assert body == (
-            "{\n" '  "build_id": "ci-42-gdeadbeef0000",\n' '  "machine": "box",\n' '  "ubuntu": "noble"\n' "}\n"
-        )
+        assert body == ('{\n  "build_id": "ci-42-gdeadbeef0000",\n  "machine": "box",\n  "ubuntu": "noble"\n}\n')
 
     def test_round_trip(self) -> None:
         body = upload.pointer_body(_args(build_id="b1", machine="box_deps", ubuntu="noble"))

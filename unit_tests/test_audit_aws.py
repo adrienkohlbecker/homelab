@@ -50,7 +50,7 @@ def test_unknown_ami_is_reported_without_cleanup(monkeypatch):
 
     audit_aws.audit_ami_inventory("eu-central-1", [unknown], snapshots)
 
-    expected = "[eu-central-1] unexpected AMI ami-unknown (unrecognized, 2026-07-10) " "-- manual review required"
+    expected = "[eu-central-1] unexpected AMI ami-unknown (unrecognized, 2026-07-10) -- manual review required"
     assert audit_aws.anomalies == [expected]
     assert audit_aws.deletes == []
 

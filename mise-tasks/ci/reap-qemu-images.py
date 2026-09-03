@@ -206,10 +206,7 @@ def main() -> int:
     args = parse_args()
     s3 = boto3.client("s3", region_name=AWS_REGION, config=CFG)
 
-    print(
-        f"== QEMU image reaper: s3://{S3_BUCKET}/ "
-        f"(keep promoted + newest {KEEP_NEWEST} + younger than {KEEP_DAYS}d)"
-    )
+    print(f"== QEMU image reaper: s3://{S3_BUCKET}/ (keep promoted + newest {KEEP_NEWEST} + younger than {KEEP_DAYS}d)")
     if not args.apply:
         print("DRY RUN: pass --apply to delete stale build prefixes")
 

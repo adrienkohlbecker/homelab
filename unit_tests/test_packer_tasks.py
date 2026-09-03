@@ -97,10 +97,7 @@ def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None
     log = tmp_path / "ssh.log"
     _executable(
         fake_bin / "ssh",
-        "#!/bin/sh\n"
-        "set -eu\n"
-        "printf '<call>\\n' >>\"$SSH_TEST_LOG\"\n"
-        'printf \'%s\\n\' "$@" >>"$SSH_TEST_LOG"\n',
+        '#!/bin/sh\nset -eu\nprintf \'<call>\\n\' >>"$SSH_TEST_LOG"\nprintf \'%s\\n\' "$@" >>"$SSH_TEST_LOG"\n',
     )
     env = dict(os.environ)
     env.update(PATH=f"{fake_bin}:{env['PATH']}", SSH_TEST_LOG=str(log))
