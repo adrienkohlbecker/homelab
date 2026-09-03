@@ -109,6 +109,8 @@ test_cells:
     include:
       - artifact: test-child.yml
         job: detect
+    forward:
+      pipeline_variables: true
     strategy: depend
 
 lint:
