@@ -7,8 +7,8 @@
 #USAGE flag "--path <path>" help="Worktree location (default: <repo>/.worktrees/<name>)"
 # shellcheck disable=SC2154  # usage_name / usage_base / usage_path injected by mise from the #USAGE spec
 
-# The populate step (packer/artifacts symlink + .worktreeinclude copies +
-# mise trust) is factored into mise-tasks/worktree/populate so the same
+# The populate step (shared symlinks + local config copies + mise trust) is
+# factored into mise-tasks/worktree/populate so the same
 # logic runs from Claude Code's WorktreeCreate hook (.claude/settings.json).
 set -euo pipefail
 

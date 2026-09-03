@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Populate a freshly-created worktree: packer/artifacts symlink, .worktreeinclude copies, mise trust"
+#MISE description="Populate a freshly-created worktree: shared state, local config, mise trust"
 #MISE alias="wt:populate"
 #USAGE arg "<worktree>" help="Absolute path to the new worktree"
 # shellcheck disable=SC2154  # usage_worktree injected by mise from the #USAGE spec
@@ -45,22 +45,18 @@ symlink_existing_dir "$repo/test/firmware" "$wt/test/firmware"
 # dangling symlink would break the plugin's own `mkdir -p .remember/tmp`.
 symlink_existing_dir "$repo/.remember" "$wt/.remember"
 
-if [ -f "$repo/.worktreeinclude" ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in '' | '#'*) continue ;; esac
-    src="$repo/$line"
-    dst="$wt/$line"
-    if [ -e "$dst" ] || [ -L "$dst" ]; then
-      continue
-    fi
-    if [ ! -e "$src" ] && [ ! -L "$src" ]; then
-      echo "worktree:populate: skipping '$line' (not present in $repo)" >&2
-      continue
-    fi
-    mkdir -p "$(dirname "$dst")"
-    cp -RP "$src" "$dst"
-  done <"$repo/.worktreeinclude"
-fi
+for copied_path in .ansible-mitogen-strategy mise.local.toml; do
+  src="$repo/$copied_path"
+  dst="$wt/$copied_path"
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    continue
+  fi
+  if [ ! -e "$src" ] && [ ! -L "$src" ]; then
+    echo "worktree:populate: skipping '$copied_path' (not present in $repo)" >&2
+    continue
+  fi
+  cp -RP "$src" "$dst"
+done
 
 if command -v mise >/dev/null; then
   mise trust "$wt/mise.toml"
