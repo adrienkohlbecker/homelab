@@ -5,6 +5,15 @@
 # and dumping it proves the script's real behavior, not just that the
 # file landed on disk.
 
+# The socket-activation probe needs a stopped daemon, not an active virtual
+# network. Stop the test network first so libvirtd owns no dnsmasq child during
+# graceful shutdown; restore the fixture after proving socket activation.
+- name: _verify | Stop default network before the socket-activation probe
+  community.libvirt.virt_net:
+    name: default
+    state: inactive
+  become: true
+
 # libvirtd is socket-activated and exits after 120 idle seconds. Stop the
 # daemon first so the operator probe below proves the managed socket brings it
 # back instead of inheriting a process the converge forced active.
@@ -89,6 +98,12 @@
     fail_msg: >-
       libvirtd.service is {{ _libvirt_verify_activated.status.ActiveState }}
       after a successful virsh connection -- the socket did not activate it.
+
+- name: _verify | Restore default network after the activation probe
+  community.libvirt.virt_net:
+    name: default
+    state: active
+  become: true
 
 - name: _verify | Gather default network state
   command: virsh net-info default
