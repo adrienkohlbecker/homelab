@@ -36,11 +36,11 @@ _JSON_KEY_LIMIT = 10
 
 
 def _json_summary(value):
-    encoded = json.dumps(value, separators=(",", ":"), default=str)
+    encoded = json.dumps(value, separators=(",", ":"))
     if len(encoded) <= _JSON_DIGEST_THRESHOLD:
         return value
     if isinstance(value, dict):
-        keys = sorted(map(str, value))[:_JSON_KEY_LIMIT]
+        keys = sorted(value)[:_JSON_KEY_LIMIT]
         suffix = ", ..." if len(value) > len(keys) else ""
         shape = f"object with keys: {', '.join(keys)}{suffix}"
     elif isinstance(value, list):

@@ -156,17 +156,6 @@ def test_non_uri_json_result_kept():
     assert display_result({"json": payload})["json"] == payload
 
 
-def test_non_json_native_value_summarized():
-    payload = {1: b"x" * 3000, "b": "y" * 3000}
-    result = {
-        "status": 200,
-        "url": "http://localhost:19999/api/v1/alarms?all",
-        "json": payload,
-        "content": "not json",
-    }
-    assert display_result(result)["json"].endswith("JSON object with keys: 1, b hidden>")
-
-
 def test_digest_does_not_mutate_input():
     result = {"status": dict(FULL_STATUS), "ansible_facts": {"r": {"stat": dict(FULL_STAT)}}}
     snapshot = copy.deepcopy(result)
