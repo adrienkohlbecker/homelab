@@ -30,7 +30,7 @@
     - not (ansible_check_mode and zfsbootmenu_cache_directory.changed)
   get_url:
     url: "{{ zfsbootmenu_artifact.url }}"
-    checksum: "sha256:{{ zfsbootmenu_artifact.sha256_url }}"
+    checksum: "sha256:{{ zfsbootmenu_artifact.url }}.sha256sum"
     dest: "{{ zfsbootmenu_tarball_path }}"
     mode: "0644"
     owner: root
