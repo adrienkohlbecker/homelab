@@ -113,8 +113,8 @@ netdata_collectors:
 # See the web_log note in netdata_collectors above.
 nginx_web_log_metrics: false
 netdata_zfspool_thresholds:
-  rpool: [ 85, 90, 95 ] #  464GiB => 70GiB, 47GiB, 24GiB
-  apoc: [ 85, 90, 95 ] # 9,312GiB => 464GiB => 1,397GiB, 932GiB, 467GiB
+  rpool: [ 85, 90, 95 ]
+  apoc: [ 85, 90, 95 ]
 netdata_diskspace_blocklist:
   - /
   - /boot
