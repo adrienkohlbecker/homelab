@@ -109,8 +109,6 @@ netdata_collectors:
 homepage_netdata_hosts:
   - box
 
-samba_enabled: true
-
 # Test shares so samba's smb.conf.j2 renders actual [share] blocks. The /srv
 # path also proves the snapshot-ordering template ignores non-ZFS shares.
 samba_shares:

@@ -8,6 +8,7 @@ define WG_SUBNET = {{ network.partitions.wireguard.cidr }}
 define PODMAN_DEFAULT = {{ podman_default_network }}
 define PODMAN_POOL = {{ podman_bridge_pool }}
 {% set dns_keepalived_peer = inventory_hostname in dns_keepalived_peers or qemu_test | default(false) %}
+{% set samba_exposed = (samba_shares | default([]) | length) > 0 %}
 
 # Atomically replace only this table; netavark and libvirt
 # tables in the same kernel ruleset remain untouched.
@@ -45,7 +46,7 @@ table inet homelab {
     counter forward_nonsyn {}
     counter forward_catchall {}
     counter input_public_tcp {}
-{% if samba_enabled | default(false) %}
+{% if samba_exposed %}
     counter input_admin_samba {}
 {% endif %}
     counter input_admin_nut {}
@@ -198,7 +199,7 @@ table inet homelab {
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
         tcp dport { 22, 80, 443 } counter name "input_public_tcp" accept comment "SSH, HTTP, HTTPS"
-{% if samba_enabled | default(false) %}
+{% if samba_exposed %}
         iifname . ip saddr @lan_admin_pairs tcp dport 445 counter name "input_admin_samba" accept comment "Samba (admin)"
 {% endif %}
         iifname . ip saddr @lan_admin_pairs tcp dport {{ service_ports.nut }} counter name "input_admin_nut" accept comment "nut (admin)"
