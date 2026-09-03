@@ -209,11 +209,18 @@ do
     check("prepinned.ansi.clean", record.log, "OK done")
 end
 
-do
-    local record = { log = "structured", _level = "Information" }
+local alias_cases = {
+    Information = "info",
+    http = "debug",
+    verbose = "debug",
+    silly = "trace",
+}
+
+for input, want in pairs(alias_cases) do
+    local record = { log = "structured", _level = input }
     local code = set_priority("svc.some.service", 0, record)
-    check("structured.alias.code", code, 1)
-    check("structured.alias.level", record["_level"], "info")
+    check("structured.alias." .. input .. ".code", code, 1)
+    check("structured.alias." .. input .. ".level", record["_level"], want)
 end
 
 do

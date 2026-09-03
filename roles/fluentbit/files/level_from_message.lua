@@ -64,7 +64,7 @@ local LEVEL_RULES = {
 
 local LEVEL_ALIASES = {
     trace = "trace",
-    verbose = "trace",
+    verbose = "debug",
     silly = "trace",
     debug = "debug",
     dbg = "debug",
@@ -72,7 +72,7 @@ local LEVEL_ALIASES = {
     inf = "info",
     information = "info",
     notice = "info",
-    http = "info",
+    http = "debug",
     log = "info",
     warn = "warn",
     warning = "warn",
