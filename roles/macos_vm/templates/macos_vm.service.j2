@@ -2,6 +2,7 @@
 Description=macOS VM {{ macos_vm_name }}
 Wants=network-online.target
 After=network-online.target zfs-volumes.target
+StartLimitIntervalSec=0
 ConditionPathExists={{ macos_vm_workdir }}/OpenCore.qcow2
 ConditionPathExists={{ macos_vm_workdir }}/OVMF_VARS.fd
 ConditionPathExists={{ macos_vm_disk_source }}
@@ -16,6 +17,8 @@ RuntimeDirectoryMode=0755
 WorkingDirectory={{ macos_vm_workdir }}
 Restart=on-failure
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 TimeoutStopSec=45
 KillSignal=SIGTERM
 {% if macos_vm_install_mode %}

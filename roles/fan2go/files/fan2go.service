@@ -2,11 +2,14 @@
 Description=fan2go hardware fan control daemon
 Documentation=https://github.com/markusressel/fan2go
 After=lm-sensors.service
+StartLimitIntervalSec=0
 
 [Service]
 ExecStart=/usr/local/bin/fan2go -c /etc/fan2go/fan2go.yaml --no-style
 Restart=always
-RestartSec=10
+RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 
 NoNewPrivileges=true
 

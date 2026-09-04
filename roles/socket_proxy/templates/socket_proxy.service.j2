@@ -16,8 +16,7 @@
 Description=socket_proxy
 After=podman.socket
 Requires=podman.socket
-StartLimitIntervalSec=600
-StartLimitBurst=3
+StartLimitIntervalSec=0
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
@@ -25,6 +24,8 @@ Delegate=yes
 Restart=always
 TimeoutSec=120
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N

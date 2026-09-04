@@ -4,8 +4,7 @@
 Description=kuma
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=600
-StartLimitBurst=3
+StartLimitIntervalSec=0
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
@@ -24,6 +23,8 @@ Delegate=yes
 TimeoutStartSec=120
 TimeoutStopSec=150
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N

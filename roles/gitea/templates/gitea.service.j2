@@ -4,8 +4,7 @@
 Description=gitea
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=600
-StartLimitBurst=3
+StartLimitIntervalSec=0
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
@@ -23,6 +22,8 @@ Restart=always
 TimeoutStartSec=60
 TimeoutStopSec=30
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 SyslogIdentifier=%N
 
 # gitea 1.20+ calls sd_notify after the HTTP listener is bound

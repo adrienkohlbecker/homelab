@@ -4,9 +4,7 @@
 Description=GitLab Runner
 After=network-online.target
 Wants=network-online.target
-# Keep slow network recovery inside the restart burst window.
-StartLimitIntervalSec=600
-StartLimitBurst=5
+StartLimitIntervalSec=0
 {% if zfs_root and zfs_has_services_mount %}
 # The working directory lives on the services dataset.
 After=zfs_mount_mnt_services.service
@@ -28,7 +26,9 @@ ExecStart=/usr/local/bin/gitlab-runner run \
     --config /mnt/services/gitlab_runner/config.toml \
     --working-directory /mnt/services/gitlab_runner
 Restart=always
-RestartSec=10
+RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 # SIGQUIT drains to shutdown_timeout; systemd kills only after that bound.
 KillSignal=SIGQUIT
 TimeoutStopSec=1860

@@ -10,8 +10,7 @@ Wants=network-online.target
    (--sdnotify=healthy gates active on a passing health probe). #}
 Before=nss-lookup.target
 Wants=nss-lookup.target
-StartLimitInterval=600
-StartLimitBurst=3
+StartLimitIntervalSec=0
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
@@ -27,6 +26,8 @@ Restart=always
 Delegate=yes
 TimeoutSec=60
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N

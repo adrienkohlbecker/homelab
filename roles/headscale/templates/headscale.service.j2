@@ -4,6 +4,7 @@
 Description=headscale
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 {% if not qemu_test %}
 # Fox reaches its Authelia issuer over wg0; the fixture has no such unit.
 After=wg-quick@wg0.service
@@ -24,6 +25,8 @@ Delegate=yes
 TimeoutStartSec=120
 TimeoutStopSec=70
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N

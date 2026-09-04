@@ -4,12 +4,7 @@
 Description=nexus
 After=network-online.target
 Wants=network-online.target
-# StartLimitIntervalSec must comfortably exceed StartLimitBurst × TimeoutStartSec
-# (here 3 × 240s = 720s) or the burst limit never fires -- three slow starts
-# blow past the window and the counter resets, so a wedged JVM restarts forever
-# instead of landing in `failed` where netdata's systemdunits collector sees it.
-StartLimitIntervalSec=1800
-StartLimitBurst=3
+StartLimitIntervalSec=0
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
@@ -32,6 +27,8 @@ TimeoutStartSec=240
 # stop doesn't eat into the start budget.
 TimeoutStopSec=150
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N

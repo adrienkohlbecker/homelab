@@ -4,8 +4,7 @@
 Description=z2m
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=1200
-StartLimitBurst=3
+StartLimitIntervalSec=0
 After=mosquitto.service
 Wants=mosquitto.service
 {% if zfs_root %}
@@ -23,6 +22,8 @@ Restart=always
 Delegate=yes
 TimeoutSec=240
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N

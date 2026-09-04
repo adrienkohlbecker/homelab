@@ -4,14 +4,7 @@
 Description=jellyfin
 After=network-online.target
 Wants=network-online.target
-# StartLimitInterval must comfortably exceed StartLimitBurst × TimeoutSec
-# (here 3 × 360s = 1080s) or the burst limit never fires — three slow
-# starts blow past the window and the counter resets. 1800s gives a real
-# ceiling on fast-crash loops while still letting EF Core's first-boot
-# migrations on emulated aarch64 ride out as many TimeoutSec=360
-# attempts as the burst allows.
-StartLimitInterval=1800
-StartLimitBurst=3
+StartLimitIntervalSec=0
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
@@ -39,6 +32,8 @@ Delegate=yes
 # TimeoutSec must outlast --health-start-period for the wait to win.
 TimeoutSec=360
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N

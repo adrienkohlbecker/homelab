@@ -3,8 +3,7 @@
 Description=lidarr
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=600
-StartLimitBurst=3
+StartLimitIntervalSec=0
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
@@ -31,6 +30,8 @@ TimeoutStartSec=120
 # reaches its stop deadline.
 TimeoutStopSec=180
 RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
