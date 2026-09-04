@@ -49,6 +49,9 @@ ExecStart=/usr/bin/podman run \
     --network={{ net.name }}:interface_name={{ net.interface_name }}{{ (',mac=' ~ net.mac) if net.mac is defined else '' }} \
 {% endfor %}
     --env HOME=/config \
+    {# The image's UV_SYSTEM_PYTHON targets its root-owned system site. #}
+    --unsetenv UV_SYSTEM_PYTHON \
+    --env PYTHONUSERBASE=/config/deps \
     --env S6_KEEP_ENV=1 \
     --env TZ={{ system_timezone }} \
     --env NO_COLOR=1 \

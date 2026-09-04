@@ -16,6 +16,72 @@
   changed_when: false
   become: true
 
+- name: _verify | Install an integration Python dependency as the service user
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - python3
+      - -c
+      - |
+        import asyncio
+        import importlib
+        import os
+        import sys
+
+        from homeassistant.util.package import async_get_user_site, install_package
+
+        assert os.getuid() == {{ static_service_ids.homeassistant }}
+        assert "UV_SYSTEM_PYTHON" not in os.environ
+        assert os.environ["PYTHONUSERBASE"] == "/config/deps"
+        dependency_path = asyncio.run(async_get_user_site("/config/deps"))
+        if dependency_path not in sys.path:
+            sys.path.insert(0, dependency_path)
+        assert install_package("Unidecode>=1.3.6")
+        importlib.invalidate_caches()
+        from unidecode import unidecode
+
+        assert unidecode("électricité") == "electricite"
+  changed_when: false
+  become: true
+
+- name: _verify | Restart homeassistant after dependency installation
+  systemd:
+    name: homeassistant
+    state: restarted
+  become: true
+
+- name: _verify | Wait for homeassistant to become healthy after restart
+  command:
+    argv:
+      - podman
+      - inspect
+      - homeassistant
+      - --format
+      - "{{ '{{.State.Health.Status}}' }}"
+  register: _homeassistant_health_after_dependency_restart
+  changed_when: false
+  retries: 30
+  delay: 4
+  until: _homeassistant_health_after_dependency_restart.stdout == "healthy"
+  become: true
+
+- name: _verify | Import the persisted integration Python dependency
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - python3
+      - -c
+      - |
+        from unidecode import unidecode
+
+        assert unidecode("électricité") == "electricite"
+  changed_when: false
+  become: true
+
 # Exercise the complete nginx-proxied path.
 # Map the vhost FQDN to loopback so SNI matches the served certificate.
 # Probing https://localhost with a Host: header leaves SNI=localhost, which
