@@ -98,6 +98,21 @@
   tags:
     - ssh
 
+# Package upgrades stop ssh.service and leave ssh.socket active. Because
+# /run/sshd is its RuntimeDirectory, it stays absent while Ansible reuses the
+# existing ControlMaster instead of opening a connection that triggers the socket.
+- name: Create the sshd runtime directory
+  file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  register: ssh_runtime_dir
+  become: true
+  tags:
+    - ssh
+
 - name: Configure sshd
   template:
     src: 00-hardening.conf.j2
@@ -110,7 +125,8 @@
     # drop-in on write. This validates the drop-in in isolation; the merged
     # Include-chain check is the separate `sshd -t` task below.
     validate: sshd -t -f %s
-  when: not (ansible_check_mode and ssh_apt.changed)
+  when: >-
+    not (ansible_check_mode and (ssh_apt.changed or ssh_runtime_dir.changed))
   register: ssh_sshd_config
   become: true
   tags:
@@ -132,7 +148,8 @@
 # so keep this whole-chain gate before reload.
 - name: Validate sshd config before reload
   when:
-    - not (ansible_check_mode and ssh_apt.changed)
+    - >-
+      not (ansible_check_mode and (ssh_apt.changed or ssh_runtime_dir.changed))
     - >-
       ssh_sshd_config.changed or ssh_sshd_config_x11_remove.changed
   command: sshd -t

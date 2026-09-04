@@ -3,3 +3,11 @@
 - name: _setup | Configure the services datasets
   import_role:
     name: services
+
+# Match the state left by a Noble openssh-server upgrade. The harness keeps its
+# existing ControlMaster session alive, so ssh.socket does not restart sshd.
+- name: _setup | Stop sshd behind its active socket
+  systemd:
+    name: ssh.service
+    state: stopped
+  become: true
