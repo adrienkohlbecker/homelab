@@ -237,13 +237,17 @@
     and _missing_chart.dimensions.present.value | default(-1) | int == 0
     and _missing_chart.dimensions.ready.value | default(-1) | int == 1
 
-# Unit-test the collector chart-prefix derivation directly. The live
+# Unit-test the collector's pure derivations directly. The live
 # present=1 path above only exercises 'instanced' mode (systemdunits,
 # plugin != job); 'exact' mode (plugin == job -- nvme and zfspool,
-# the dominant prod shape) and the non-go.d skip have no always-live witness
-# on the box fixture, so assert the pure derivation function here. Sourcing
-# the collector is side-effect-free (no curl/error at load time).
-- name: _verify | Assert the collector chart-prefix derivation (exact + instanced + skip)
+# the dominant prod shape) and the non-go.d skip have no always-live
+# witness on the box fixture, so assert the pure derivation here.
+# The agent-start derivation gets the same treatment: its grace-suppress
+# behavior only manifests on a prod-cadence plugin respawn, so assert
+# the derivation (pid 1 == boot epoch, unallocated pid == now fallback)
+# instead. Sourcing the collector is side-effect-free (no curl/error at
+# load time).
+- name: _verify | Assert the collector derivations (chart prefix + agent start)
   shell: |
     source /usr/libexec/netdata/charts.d/netdata_presence.chart.sh
     fail=0
@@ -257,6 +261,22 @@
     check "go.d:collector:nvme:nvme" "exact nvme"
     check "go.d:collector:systemdunits:service-units" "instanced systemdunits_service-units"
     check "not-go.d:foo:bar:baz" ""
+    # ready keys off the agent start (via the plugin parent /proc start
+    # time): pid 1 is born at boot, so its result must be the boot epoch.
+    # An unallocated pid must fall back to now, never to a bogus old
+    # epoch that would keep alerts suppressed.
+    now=$EPOCHSECONDS
+    boot_epoch=$(( now - $(awk '{print int($1)}' /proc/uptime) ))
+    got=$(_netdata_presence_agent_started_at 1)
+    if [ "$got" -lt $(( boot_epoch - 60 )) ] || [ "$got" -gt $(( boot_epoch + 60 )) ]; then
+      echo "FAIL: agent_started_at(pid 1) = $got, expected ~boot epoch $boot_epoch"
+      fail=1
+    fi
+    got=$(_netdata_presence_agent_started_at "$(cat /proc/sys/kernel/pid_max)")
+    if [ "$got" -lt $(( now - 5 )) ]; then
+      echo "FAIL: agent_started_at(unallocated pid) = $got, expected ~now $now"
+      fail=1
+    fi
     exit $fail
   args:
     executable: /bin/bash

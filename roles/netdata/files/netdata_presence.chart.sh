@@ -18,6 +18,14 @@
 # netdata is up but a specific go.d job didn't register, the API
 # answers and we still surface the missing entry.
 #
+# The `ready` dimension tracks the netdata AGENT's age, not this plugin's
+# process age. charts.d.plugin self-exits every four hours (upstream
+# restart_timeout) and netdata respawns it; a plugin-age ready would
+# re-arm the startup grace on every respawn, falsely clearing active
+# missing-entry alerts for one grace period and re-firing right after
+# it -- a CRIT/CLEAR notification flap every four hours while the
+# underlying entry stays missing.
+#
 # Per-host config comes from /etc/netdata/charts.d/netdata_presence.conf:
 #   netdata_presence_contexts=( "<context_id>" ... )
 #   netdata_presence_collectors=( "<go.d:collector:plugin:job>" ... )
@@ -32,7 +40,31 @@ netdata_presence_charts=()
 
 netdata_presence_api="${netdata_presence_api:-http://127.0.0.1:19999}"
 netdata_presence_startup_grace="${netdata_presence_startup_grace:-300}"
-netdata_presence_started_at=$EPOCHSECONDS
+
+# Start epoch of the process that spawns this plugin. charts.d.plugin's
+# parent is netdata's persistent spawner process, born with the agent and
+# alive across every plugin respawn, so its /proc start time is a stable
+# proxy for the agent's (whose own restart wipes the chart registry --
+# the only case where the grace should apply). Unreadable /proc falls
+# back to "now", re-arming the grace: degraded to plugin-age behavior,
+# never to a bogus old epoch.
+_netdata_presence_agent_started_at() {
+  local pid=$1 start_ticks boot clk
+  start_ticks=$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $20}')
+  boot=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)
+  if [ -n "$start_ticks" ] && [ -n "$boot" ]; then
+    clk=$(getconf CLK_TCK 2>/dev/null) || clk=100
+    printf '%s' "$((EPOCHSECONDS - boot + start_ticks / clk))"
+  else
+    printf '%s' "$EPOCHSECONDS"
+  fi
+}
+
+# $PPID must be expanded here in the sourcing plugin's context: inside
+# $(...) it would be the plugin process itself, whose respawn is exactly
+# what the grace must ignore.
+netdata_presence_started_at=$(_netdata_presence_agent_started_at "$PPID")
+
 # curl is in our `roles/user` baseline package list; jq likewise. If
 # either is missing on a host we don't ship to, _check fails loud.
 
