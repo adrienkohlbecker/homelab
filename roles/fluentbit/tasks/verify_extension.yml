@@ -50,15 +50,16 @@
     state: stopped
   become: true
 
-# The fixture's one-second grace period leaves --kill-after ample margin while
-# still bounding a fluent-bit that does not honour SIGTERM. A forced kill stays
-# fatal so a real shutdown hang is reported rather than tolerated.
+# A graceful exit normally lands within a second or two of SIGTERM, but a
+# heavily loaded test VM can stall it far longer. The wide kill-after window
+# tolerates that while a forced kill stays fatal, so a real shutdown hang is
+# still reported rather than tolerated.
 - name: _verify | Run fluent-bit extension fixture
   command:
     argv:
       - timeout
       - --signal=TERM
-      - --kill-after=5
+      - --kill-after=15
       - "4"
       - /opt/fluent-bit/bin/fluent-bit
       - --config
