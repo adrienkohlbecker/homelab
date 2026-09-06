@@ -55,7 +55,7 @@ _PASST_GUEST_GATEWAY = "192.0.2.1"
 # container -> VIP -> adguard DNAT path the firewall already permits (roles/
 # firewall: "container -> VIP -> container" accept). Every host that takes the
 # passt path is on lab's network -- the lab CI container and a bare-host
-# `packer:build` on lab itself, since _passt_available only holds on Linux with
+# `packer:build` on lab itself, since _passt_usable only holds on Linux with
 # passt installed and qemu >= 7.2; a dev Mac execs slirp untouched. So coupling
 # to lab's resolver here is acceptable.
 _PASST_DNS = "10.123.1.224"
