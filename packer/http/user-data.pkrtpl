@@ -1,7 +1,5 @@
 #cloud-config
 hostname: ubuntu
-package_update: false
-package_upgrade: false
 ssh_pwauth: false
 users:
   - name: vagrant
