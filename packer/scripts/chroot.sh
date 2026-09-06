@@ -344,13 +344,9 @@ fi
 mkdosfs -F 32 -s 1 -n EFI "$EFI_DEVICE"
 mkswap -f "$SWAP_DEVICE"
 
-sync
-sleep 2
-
-# Get UUIDs, they exist only after the filesystem has been created
-
-blkid
-
+# UUIDs exist only after the filesystems above have been created; blkid
+# reads the signatures back through the same page cache they were written
+# with, so no settle is needed.
 if [ "$LAYOUT" = "" ]; then
   EFI_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$EFI_DEVICE")"
   SWAP_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$SWAP_DEVICE")"
