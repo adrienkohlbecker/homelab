@@ -479,9 +479,7 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
   # Initial staging — same code path as every subsequent kernel
   # upgrade will take.
   /etc/kernel/postinst.d/zz-stage-efi-stub
-fi
 
-if [ "$ZBM_ARCH" = "aarch64" ]; then
   refind_default_selection="Ubuntu (Linux EFI Stub)"
   refind_dont_scan_dirs="EFI:/EFI/ZBM,EFI:/EFI/Linux"
 else
