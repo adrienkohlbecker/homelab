@@ -4,8 +4,8 @@
 Packer emits a `-netdev user,...hostfwd=...` NIC for the build VM. In lab CI,
 that nested slirp path can drop DNS traffic under parallel build load, so this
 shim starts a passt sidecar and rewrites the netdev to qemu's stream socket
-transport. Hosts without passt support, explicit PACKER_NET_BACKEND=slirp, and
-probe invocations such as `qemu_binary -version` exec qemu unchanged.
+transport. Hosts without passt support and probe invocations such as
+`qemu_binary -version` exec qemu unchanged.
 
 Decision logs go to stderr and, when a build disk path is visible, to
 qemu_net_wrapper.log beside the build artifacts. QEMU_NET_WRAPPER_LOG can point
@@ -168,15 +168,6 @@ def _find_user_netdev(args: list[str]) -> int | None:
     return None
 
 
-def _early_passthrough_reason(override: str, netdev_idx: int | None) -> str | None:
-    """Why this invocation can bypass passt detection, if any."""
-    if override == "slirp":
-        return "forced by override"
-    if netdev_idx is None:
-        return "no user-netdev to rewrite"
-    return None
-
-
 def _parse_netdev_user(value: str) -> tuple[str | None, list[tuple[str, str, str]]]:
     """Pull the netdev id and (proto, host_port, guest_port) host-forwards out
     of a `user,id=...,hostfwd=...` netdev value."""
@@ -292,28 +283,17 @@ def main() -> None:
     real_qemu, args = _real_qemu(sys.argv[1:])
     _open_log(args)
 
-    override = os.environ.get("PACKER_NET_BACKEND", "auto").strip().lower()
-    if override not in ("auto", "slirp", "passt"):
-        sys.exit(f"qemu-net-wrapper: PACKER_NET_BACKEND={override!r} not in auto/slirp/passt")
-
     netdev_idx = _find_user_netdev(args)
     _log(
-        f"invoked: real_qemu={real_qemu}, PACKER_NET_BACKEND={override}, "
+        f"invoked: real_qemu={real_qemu}, "
         f"user-netdev {'found' if netdev_idx is not None else 'absent'}, {len(args)} args"
     )
-    passthrough_reason = _early_passthrough_reason(override, netdev_idx)
-    if passthrough_reason is not None:
-        _log(f"backing build-VM NIC with slirp (passthrough): {passthrough_reason}")
+    if netdev_idx is None:
+        _log("backing build-VM NIC with slirp (passthrough): no user-netdev to rewrite")
         os.execv(real_qemu, [real_qemu, *args])
 
     assert netdev_idx is not None
-    usable = _passt_usable(real_qemu)
-
-    if override == "passt" and not usable:
-        sys.exit("qemu-net-wrapper: PACKER_NET_BACKEND=passt but passt/`-netdev stream` is unusable here")
-
-    # Passt not usable -> run real qemu untouched with packer's slirp netdev.
-    if not usable:
+    if not _passt_usable(real_qemu):
         _log("backing build-VM NIC with slirp (passthrough): passt unusable here")
         os.execv(real_qemu, [real_qemu, *args])
 
