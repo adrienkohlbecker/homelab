@@ -27,7 +27,6 @@ import time
 # file behind _LOG_FH, so _start_passt can drop passt's own debug log beside it.
 _LOG_FH = None
 _LOG_PATH = None
-_WRAPPER_QEMU_BINARY_ARG = "-qemu-net-wrapper-binary"
 
 # Keep the guest on a synthetic link instead of passt's default host address.
 # Reusing the host address makes a bare-host build shadow lab's 10.123.0.2
@@ -111,29 +110,15 @@ def _build_dir_from_args(args: list[str]) -> str | None:
     return None
 
 
-def _real_qemu(args: list[str]) -> tuple[str, list[str]]:
-    configured = None
-    stripped = []
-    i = 0
-    while i < len(args):
-        if args[i] == _WRAPPER_QEMU_BINARY_ARG:
-            try:
-                configured = args[i + 1]
-            except IndexError:
-                sys.exit(f"qemu-net-wrapper: {_WRAPPER_QEMU_BINARY_ARG} needs a value")
-            i += 2
-            continue
-        stripped.append(args[i])
-        i += 1
-
-    if configured is None:
-        arch = platform.machine()
-        arch = "aarch64" if arch == "arm64" else arch
-        configured = f"qemu-system-{arch}"
-    binary = shutil.which(configured)
+def _real_qemu() -> str:
+    """Resolve this host arch's emulator from PATH."""
+    arch = platform.machine()
+    arch = "aarch64" if arch == "arm64" else arch
+    name = f"qemu-system-{arch}"
+    binary = shutil.which(name)
     if binary is None:
-        sys.exit(f"qemu-net-wrapper: {configured} not found on PATH")
-    return binary, stripped
+        sys.exit(f"qemu-net-wrapper: {name} not found on PATH")
+    return binary
 
 
 def _passt_usable(real_qemu: str) -> bool:
@@ -280,7 +265,8 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
 
 
 def main() -> None:
-    real_qemu, args = _real_qemu(sys.argv[1:])
+    real_qemu = _real_qemu()
+    args = sys.argv[1:]
     _open_log(args)
 
     netdev_idx = _find_user_netdev(args)

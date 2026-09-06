@@ -9,6 +9,8 @@ them as passt port specs -- is pure string work and gets pinned here.
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _WRAPPER = Path(__file__).parents[1] / "packer" / "qemu_net_wrapper.py"
 _spec = importlib.util.spec_from_file_location("qemu_net_wrapper", _WRAPPER)
 assert _spec is not None
@@ -38,20 +40,26 @@ def test_find_user_netdev_none_on_a_version_probe() -> None:
     assert wrapper._find_user_netdev(["-version"]) is None
 
 
-def test_real_qemu_strips_wrapper_binary_arg(monkeypatch) -> None:
+def test_real_qemu_derives_the_emulator_from_the_host_arch(monkeypatch) -> None:
     monkeypatch.setattr(wrapper.shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr(wrapper.platform, "machine", lambda: "x86_64")
 
-    real_qemu, args = wrapper._real_qemu(
-        [
-            "-qemu-net-wrapper-binary",
-            "qemu-system-test",
-            "-m",
-            "4096",
-        ]
-    )
+    assert wrapper._real_qemu() == "/usr/bin/qemu-system-x86_64"
 
-    assert real_qemu == "/usr/bin/qemu-system-test"
-    assert args == ["-m", "4096"]
+
+def test_real_qemu_normalizes_mac_arm64(monkeypatch) -> None:
+    monkeypatch.setattr(wrapper.shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr(wrapper.platform, "machine", lambda: "arm64")
+
+    assert wrapper._real_qemu() == "/usr/bin/qemu-system-aarch64"
+
+
+def test_real_qemu_exits_when_the_emulator_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr(wrapper.shutil, "which", lambda binary: None)
+    monkeypatch.setattr(wrapper.platform, "machine", lambda: "x86_64")
+
+    with pytest.raises(SystemExit, match="not found on PATH"):
+        wrapper._real_qemu()
 
 
 def test_parse_netdev_user_extracts_id_and_forward() -> None:

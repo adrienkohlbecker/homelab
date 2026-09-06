@@ -81,7 +81,6 @@ locals {
   nexus_base = "http://nexus.lab.fahm.fr/repository"
   arch_table = {
     x86_64 = {
-      qemu_binary  = "qemu-system-x86_64"
       machine_type = "q35"
       accelerator  = "kvm"
       zbm_version  = local.versions.zfsbootmenu_release.x86_64.version
@@ -98,7 +97,6 @@ locals {
       nexus_security     = "${local.nexus_base}/ubuntu-security"
     }
     aarch64 = {
-      qemu_binary       = "qemu-system-aarch64"
       machine_type      = "virt"
       accelerator       = "hvf"
       zbm_version       = local.versions.zfsbootmenu_release.aarch64.version
@@ -326,11 +324,11 @@ source "qemu" "ubuntu" {
   memory       = 4096
   net_device   = "virtio-net"
   # Shim over the arch's real emulator (which it resolves from PATH): on a
-  # host with passt + qemu's `-netdev stream` (the noble ci-image) it backs
-  # the build-VM NIC with passt instead of libslirp, whose UDP drops under
-  # parallel-build contention flake the VM's DNS. Falls back to running qemu
-  # untouched (slirp) on a dev Mac or older qemu. See the file header and
-  # test/machine.py for the matching harness-side change.
+  # host with passt + qemu's `-netdev stream` (the lab CI shell runner) it
+  # backs the build-VM NIC with passt instead of libslirp, whose UDP drops
+  # under parallel-build contention flake the VM's DNS. Falls back to
+  # running qemu untouched (slirp) on a dev Mac or older qemu. See the file
+  # header and test/machine.py for the matching harness-side change.
   qemu_binary          = "${path.root}/qemu_net_wrapper.py"
   shutdown_command     = "sudo /usr/sbin/shutdown -h now"
   skip_compaction      = true
@@ -342,7 +340,6 @@ source "qemu" "ubuntu" {
   # then connect a VNC client to localhost:5900.
   vnc_bind_address = "127.0.0.1"
   qemuargs = concat([
-    ["-qemu-net-wrapper-binary", local.arch_cfg.qemu_binary],
     ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
     ["-device", "virtio-rng-pci,rng=rng0"],
   ], local.arch_cfg.qemuargs)
