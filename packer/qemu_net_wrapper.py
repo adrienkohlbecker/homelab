@@ -295,7 +295,6 @@ def main() -> None:
     sock = os.path.join(tempfile.mkdtemp(prefix="packer-passt-"), "passt.sock")
     _start_passt(sock, fwds)
 
-    args = list(args)
     args[netdev_idx + 1] = f"stream,id={netid},server=off,addr.type=unix,addr.path={sock}"
     _log(f"rewrote netdev to: {args[netdev_idx + 1]}; exec {real_qemu}")
     os.execv(real_qemu, [real_qemu, *args])
