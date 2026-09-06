@@ -7,9 +7,9 @@ shim starts a passt sidecar and rewrites the netdev to qemu's stream socket
 transport. Hosts without passt support and probe invocations such as
 `qemu_binary -version` exec qemu unchanged.
 
-Decision logs go to stderr and, when a build disk path is visible, to
-qemu_net_wrapper.log beside the build artifacts. QEMU_NET_WRAPPER_LOG can point
-elsewhere, or "off"/"0" can disable file logging.
+Decision logs go to stderr and, when QEMU_NET_WRAPPER_LOG is set (build.sh
+points it at a per-build netlog), to that file. "off"/"0"/"none" disable
+file logging.
 """
 
 import datetime
@@ -21,10 +21,11 @@ import sys
 import tempfile
 import time
 
-# Resolved once in main() before any logging. Stays None when no build dir can
-# be derived (e.g. packer's `-version` probe) -- stderr then carries the log
-# alone, which is all PACKER_LOG would have surfaced anyway. _LOG_PATH is the
-# file behind _LOG_FH, so _start_passt can drop passt's own debug log beside it.
+# Resolved once in main() before any logging. Stays None when
+# QEMU_NET_WRAPPER_LOG is unset or disabled (e.g. a bare packer `-version`
+# probe) -- stderr then carries the log alone, which is all PACKER_LOG would
+# have surfaced anyway. _LOG_PATH is the file behind _LOG_FH, so _start_passt
+# can drop passt's own debug log beside it.
 _LOG_FH = None
 _LOG_PATH = None
 
@@ -71,21 +72,13 @@ def _log(msg: str) -> None:
         _LOG_FH.flush()
 
 
-def _open_log(args: list[str]) -> None:
-    """Point _LOG_FH at a per-build-dir qemu_net_wrapper.log. The dir is the
-    one packer feeds qemu its primary disk from (`-drive file=<dir>/packer-
-    ubuntu,...`); QEMU_NET_WRAPPER_LOG overrides it or disables (off/0)."""
+def _open_log() -> None:
+    """Point _LOG_FH at QEMU_NET_WRAPPER_LOG (build.sh's netlog), if set and
+    not disabled (off/0/none)."""
     global _LOG_FH, _LOG_PATH
-    override = os.environ.get("QEMU_NET_WRAPPER_LOG", "").strip()
-    if override.lower() in ("off", "0", "none"):
+    path = os.environ.get("QEMU_NET_WRAPPER_LOG", "").strip()
+    if not path or path.lower() in ("off", "0", "none"):
         return
-    if override:
-        path = override
-    else:
-        build_dir = _build_dir_from_args(args)
-        if build_dir is None:
-            return
-        path = os.path.join(build_dir, "qemu_net_wrapper.log")
     try:
         _LOG_FH = open(path, "a", encoding="utf-8")  # noqa: SIM115 - global handle stays open for child logs.
         _LOG_PATH = path
@@ -93,21 +86,6 @@ def _open_log(args: list[str]) -> None:
         # A missing/unwritable sink must never sink the build -- stderr still
         # carries the log under PACKER_LOG.
         print(f"qemu-net-wrapper: could not open log {path!r}: {exc}", file=sys.stderr, flush=True)
-
-
-def _build_dir_from_args(args: list[str]) -> str | None:
-    """Directory packer writes the build VM's disks into, read off the `-drive
-    file=<dir>/packer-ubuntu...` arg. None when there's no such drive (a probe
-    invocation), which keeps file logging off where there's nothing to trace."""
-    for arg in args:
-        for part in arg.split(","):
-            if part.startswith("file="):
-                disk = part[len("file=") :]
-                if os.path.basename(disk).startswith("packer-ubuntu"):
-                    parent = os.path.dirname(disk)
-                    if parent and os.path.isdir(parent):
-                        return parent
-    return None
 
 
 def _real_qemu() -> str:
@@ -267,7 +245,7 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
 def main() -> None:
     real_qemu = _real_qemu()
     args = sys.argv[1:]
-    _open_log(args)
+    _open_log()
 
     netdev_idx = _find_user_netdev(args)
     _log(
