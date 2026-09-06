@@ -292,7 +292,6 @@ def main() -> None:
         _log("backing build-VM NIC with slirp (passthrough): no user-netdev to rewrite")
         os.execv(real_qemu, [real_qemu, *args])
 
-    assert netdev_idx is not None
     if not _passt_usable(real_qemu):
         _log("backing build-VM NIC with slirp (passthrough): passt unusable here")
         os.execv(real_qemu, [real_qemu, *args])
