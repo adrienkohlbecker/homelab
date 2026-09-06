@@ -71,12 +71,12 @@ preflight() {
     return 1
     ;;
   esac
-  case ${IMAGE_TARGET:-qemu} in qemu | hetzner) ;; *)
+  case $IMAGE_TARGET in qemu | hetzner) ;; *)
     echo "provision.sh: IMAGE_TARGET must be qemu or hetzner (got '$IMAGE_TARGET')" >&2
     return 1
     ;;
   esac
-  case ${QEMU_TEST_IMAGE:-false} in true | false) ;; *)
+  case $QEMU_TEST_IMAGE in true | false) ;; *)
     echo "provision.sh: QEMU_TEST_IMAGE must be true or false (got '$QEMU_TEST_IMAGE')" >&2
     return 1
     ;;
@@ -95,7 +95,7 @@ preflight() {
     return 1
   fi
 
-  if [ "${IMAGE_TARGET:-qemu}" != hetzner ]; then
+  if [ "$IMAGE_TARGET" != hetzner ]; then
     if ! [[ -v SSH_KEY_PUB ]] || ! [[ $SSH_KEY_PUB =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]]; then
       echo "provision.sh: SSH_KEY_PUB must contain a supported public key" >&2
       return 1
@@ -114,6 +114,12 @@ preflight() {
     seen_disks[$disk]=1
   done
 }
+
+# Normalize the two packer flags once so every downstream site (this script
+# and chroot.sh) reads plain variables. Packer always sets both; bare-metal
+# callers get the qemu/not-a-test defaults.
+export IMAGE_TARGET="${IMAGE_TARGET:-qemu}"
+export QEMU_TEST_IMAGE="${QEMU_TEST_IMAGE:-false}"
 
 preflight
 
@@ -564,7 +570,7 @@ cp /etc/hostid /mnt/etc
 # the two flags below, so "neither" is exactly the bare-metal path. Gates the
 # build-only speed hacks that trade durability for wall-clock.
 building_image=false
-if [ "${QEMU_TEST_IMAGE:-false}" = "true" ] || [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+if [ "$QEMU_TEST_IMAGE" = "true" ] || [ "$IMAGE_TARGET" = "hetzner" ]; then
   building_image=true
 fi
 
@@ -603,7 +609,7 @@ export CHROOT_REPO
 # the target root. Under /var/tmp, not /tmp: arch-chroot shadows the
 # chroot's /tmp with a private tmpfs, hiding files pre-staged there. Skipped
 # on the qemu fixtures and the bare-metal path (IMAGE_TARGET != hetzner).
-if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+if [ "$IMAGE_TARGET" = "hetzner" ]; then
   cp -a "$SCRIPTS_DIR/hetzner" /mnt/var/tmp/hetzner
 fi
 

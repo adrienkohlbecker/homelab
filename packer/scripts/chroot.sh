@@ -21,8 +21,9 @@ trap 'exit 130' INT TERM
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
 #   SSH_KEY_PUB, ZBM_VERSION.
-# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_REPO,
-#   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME.
+# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_REPO, IMAGE_TARGET,
+#   QEMU_TEST_IMAGE, PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN,
+#   HOSTNAME, USERNAME.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
 #   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
 #   when PODMAN_SIZE is (raid5 /dev/md/podman on a mirror).
@@ -254,11 +255,11 @@ fi
 # which carries the same console=tty0 base.
 COMMANDLINE="console=tty0"
 
-if [ "${QEMU_TEST_IMAGE:-false}" = "true" ]; then
+if [ "$QEMU_TEST_IMAGE" = "true" ]; then
   COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE mitigations=off"
   mkdir -p /etc/zfsbootmenu
   echo "mitigations=off" >/etc/zfsbootmenu/mitigations
-elif [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+elif [ "$IMAGE_TARGET" = "hetzner" ]; then
   # Hetzner Cloud exposes a serial console, so keep the serial args.
   COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE"
 fi
@@ -585,7 +586,7 @@ apt-get install --yes openssh-server
 # inert. Install it only on the virtualized targets -- the qemu test fixtures
 # (QEMU_TEST_IMAGE) and the Hetzner cloud image (IMAGE_TARGET=hetzner). A
 # bare-metal copy-paste run sets neither flag and skips it.
-if [ "${QEMU_TEST_IMAGE:-false}" = "true" ] || [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+if [ "$QEMU_TEST_IMAGE" = "true" ] || [ "$IMAGE_TARGET" = "hetzner" ]; then
   apt-get install --yes qemu-guest-agent
 fi
 
@@ -600,7 +601,7 @@ echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-hardening.conf
 # snapshot would ship a known key on the one internet-facing host); instead it
 # installs cloud-init so terraform's user_data creates `ak` + injects the SSH
 # key on first boot, exactly as the stock hcloud image does.
-if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+if [ "$IMAGE_TARGET" = "hetzner" ]; then
   bash /var/tmp/hetzner/install.sh
   rm -rf /var/tmp/hetzner
 
@@ -675,7 +676,7 @@ fi
 # Each unit is masked only if systemd already knows a real unit file for it
 # (list-unit-files lists it as anything other than not-found); masking an absent
 # unit would leave a dangling /dev/null symlink.
-if [ "${QEMU_TEST_IMAGE:-false}" = "true" ]; then
+if [ "$QEMU_TEST_IMAGE" = "true" ]; then
   for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service \
     multipathd.service multipathd.socket; do
     if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
