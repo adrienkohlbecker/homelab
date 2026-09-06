@@ -80,8 +80,9 @@ def _open_log(args: list[str]) -> None:
     override = os.environ.get("QEMU_NET_WRAPPER_LOG", "").strip()
     if override.lower() in ("off", "0", "none"):
         return
-    path = override or None
-    if path is None:
+    if override:
+        path = override
+    else:
         build_dir = _build_dir_from_args(args)
         if build_dir is None:
             return
@@ -203,7 +204,7 @@ def _passt_port_args(fwds: list[tuple[str, str, str]]) -> list[str]:
     """
     by_proto: dict[str, list[str]] = {"tcp": [], "udp": []}
     for proto, host_port, guest_port in fwds:
-        by_proto.setdefault(proto, []).append(f"{host_port}:{guest_port}")
+        by_proto[proto].append(f"{host_port}:{guest_port}")
     out: list[str] = []
     if by_proto["tcp"]:
         out += ["--tcp-ports", "127.0.0.1/" + ",".join(by_proto["tcp"])]
