@@ -26,8 +26,6 @@ trap 'exit 130' INT TERM
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
 #   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
 #   when PODMAN_SIZE is (raid5 /dev/md/podman on a mirror).
-# - Optional: REFIND_TIMEOUT (default 3) — rEFInd menu countdown in
-#   seconds before the default entry boots.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -490,14 +488,10 @@ else
 fi
 
 # Menu countdown. 3 matches the role template (a converge overwrites this
-# file with that value); the AWS bake sets -1 so EC2 cells, which boot
-# unwatched via the firmware-fallback path, skip the countdown entirely
-# (~6s/boot measured) — the EC2 serial console is interactive, so holding
-# a key during rEFInd startup still reaches the menu.
-REFIND_TIMEOUT="${REFIND_TIMEOUT:-3}"
+# file with that value).
 
 cat <<EOF >/boot/efi/EFI/refind/refind.conf
-timeout $REFIND_TIMEOUT
+timeout 3
 default_selection "$refind_default_selection"
 dont_scan_dirs $refind_dont_scan_dirs
 
