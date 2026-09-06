@@ -21,7 +21,7 @@ trap 'exit 130' INT TERM
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
 #   SSH_KEY_PUB, ZBM_VERSION.
-# - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT, CHROOT_REPO,
+# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_REPO,
 #   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
 #   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
@@ -53,6 +53,8 @@ aarch64)
   exit 1
   ;;
 esac
+
+DISKS_COUNT=$(wc -w <<<"$DISKS")
 
 # Set a hostname
 

@@ -117,9 +117,6 @@ preflight() {
 
 preflight
 
-export DISKS_COUNT
-DISKS_COUNT=$(wc -w <<<"$DISKS")
-
 # Placeholder hostname for the shipped image — the deploy step
 # (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
 # it before first boot. USERNAME is the vagrant user chroot.sh creates
