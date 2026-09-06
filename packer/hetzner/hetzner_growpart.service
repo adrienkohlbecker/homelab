@@ -1,0 +1,13 @@
+[Unit]
+Description=Grow rpool into the rest of the boot disk on first boot
+After=zfs.target
+ConditionPathExists=!/var/lib/hetzner_growpart.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/hetzner_growpart.sh
+ExecStartPost=/usr/bin/touch /var/lib/hetzner_growpart.done
+
+[Install]
+WantedBy=multi-user.target

@@ -601,74 +601,8 @@ echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-hardening.conf
 # installs cloud-init so terraform's user_data creates `ak` + injects the SSH
 # key on first boot, exactly as the stock hcloud image does.
 if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
-  # cloud-guest-utils ships growpart, used by hetzner_growpart.service below.
-  apt-get install --yes cloud-init cloud-guest-utils
-
-  # Install the Hetzner cloud-init drop-in this release's stock hcloud image
-  # ships (captured verbatim under packer/hetzner/, staged into /var/tmp by
-  # provision.sh). It carries the mirror.hetzner.com package_mirrors and the
-  # Hetzner module set, so our debootstrap'd cloud-init behaves like the stock
-  # image: apt_configure points sources.list.d at the Hetzner mirror on first
-  # boot. Its default_user is root, but terraform user_data's `users:` block
-  # replaces that list with `ak` (verified: ak is the sole login user, root
-  # locked). The 99-hetzner.cfg datasource pin below sorts last and wins.
-  install -m 0644 /var/tmp/90-hetznercloud.cfg /etc/cloud/cloud.cfg.d/90-hetznercloud.cfg
-  rm /var/tmp/90-hetznercloud.cfg
-
-  # Pin the datasource so a fresh cloud-init (debootstrap'd, not the
-  # Hetzner-tuned stock image) finds Hetzner's metadata + user-data fast
-  # instead of probing the full list. Hetzner provides networking + user-data
-  # here, so cloud-init owns the netplan (provision.sh skipped its static one).
-  # VALIDATE on a throwaway cpx22: confirm `ak` is created and SSH works — if
-  # the Hetzner DS isn't detected (DMI mismatch), fall back to ConfigDrive/
-  # NoCloud or force ds=hetzner on the kernel cmdline. See notes.
-  cat <<EOF >/etc/cloud/cloud.cfg.d/99-hetzner.cfg
-datasource_list: [ Hetzner, ConfigDrive, NoCloud, None ]
-EOF
-
-  # Image ships at 60G but deploys onto cpx22's ~76G, leaving rpool's partition
-  # (p5, last on disk) short with the GPT backup header mid-disk. The preceding
-  # 40G Podman partition stays fixed while p5 consumes the added capacity.
-  # hetzner_growpart.service grows p5 (growpart relocates the backup header) and
-  # runs `zpool online -e` once on first boot — late + sentinel-gated so a
-  # failure can't wedge the root mount. autoexpand covers any later disk resize.
-  zpool set autoexpand=on rpool
-
-  cat <<'EOF' >/usr/local/sbin/hetzner_growpart.sh
-#!/bin/bash
-set -euo pipefail
-
-disk=/dev/sda
-part=5
-
-rc=0
-growpart "$disk" "$part" || rc=$?
-# growpart: 0 = resized, 1 = NOCHANGE (already full), >1 = real error.
-if [ "$rc" -gt 1 ]; then
-  exit "$rc"
-fi
-
-udevadm settle || true
-zpool online -e rpool "${disk}${part}"
-EOF
-  chmod 0755 /usr/local/sbin/hetzner_growpart.sh
-
-  cat <<'EOF' >/etc/systemd/system/hetzner_growpart.service
-[Unit]
-Description=Grow rpool into the rest of the boot disk on first boot
-After=zfs.target
-ConditionPathExists=!/var/lib/hetzner_growpart.done
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/sbin/hetzner_growpart.sh
-ExecStartPost=/usr/bin/touch /var/lib/hetzner_growpart.done
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  systemctl enable hetzner_growpart.service
+  bash /var/tmp/hetzner/install.sh
+  rm -rf /var/tmp/hetzner
 
 else
 
@@ -684,7 +618,7 @@ else
   # LACP setups need bare-metal callers to overwrite this file with an
   # explicit netplan before first boot.
   #
-  # Skipped on hetzner: cloud-init (configured in chroot.sh for the Hetzner
+  # Skipped on hetzner: cloud-init (configured by packer/hetzner/install.sh)
   # datasource) owns networking there, exactly as the stock hcloud image does —
   # a competing static netplan here would fight cloud-init's generated one.
   cat <<EOF >/etc/netplan/01-netcfg.yaml

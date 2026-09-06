@@ -598,14 +598,13 @@ tar -xf "${HOMELAB_SOURCE_ARCHIVE}" -C /mnt/var/tmp/homelab-source
 CHROOT_REPO=/var/tmp/homelab-source
 export CHROOT_REPO
 
-# Stage the Hetzner cloud-init drop-in for this release so chroot.sh can install
-# it into /etc/cloud/cloud.cfg.d, making the image behave like the stock hcloud
-# image (mirror.hetzner.com apt, Hetzner module set). Under /var/tmp, not /tmp:
-# arch-chroot shadows the chroot's /tmp with a private tmpfs, hiding files
-# pre-staged there. Skipped on the qemu fixtures and the bare-metal path (no
-# hetzner dir, IMAGE_TARGET != hetzner).
+# Stage the Hetzner image setup (cloud-init drop-in for this release,
+# datasource pin, first-boot growpart unit) so chroot.sh can run it inside
+# the target root. Under /var/tmp, not /tmp: arch-chroot shadows the
+# chroot's /tmp with a private tmpfs, hiding files pre-staged there. Skipped
+# on the qemu fixtures and the bare-metal path (IMAGE_TARGET != hetzner).
 if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
-  install -D -m 0644 "$SCRIPTS_DIR/hetzner/90-hetznercloud.cfg.$UBUNTU_NAME" /mnt/var/tmp/90-hetznercloud.cfg
+  cp -a "$SCRIPTS_DIR/hetzner" /mnt/var/tmp/hetzner
 fi
 
 # Chroot into the new OS via arch-chroot (arch-install-scripts). It

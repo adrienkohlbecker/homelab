@@ -388,9 +388,10 @@ build {
     destination = "/home/vagrant/"
   }
 
-  # Per-release Hetzner cloud-init drop-ins. provision.sh stages the one
-  # matching $UBUNTU_NAME into the new install for the hetzner image target;
-  # harmless extra ~4KB upload for the qemu fixture sources, which ignore it.
+  # Per-release Hetzner cloud-init drop-ins. provision.sh stages the whole
+  # packer/hetzner dir into the build VM; chroot.sh runs its install.sh for
+  # the hetzner image target; the qemu fixture sources ignore the ~10KB
+  # upload.
   provisioner "file" {
     source      = "${path.root}/hetzner"
     destination = "/home/vagrant/"
