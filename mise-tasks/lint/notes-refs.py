@@ -3,7 +3,7 @@
 """Check bare notes/ paths mentioned in non-Markdown tracked files.
 
 Comments and docstrings cite design notes by repo-root-relative path
-(`# See notes/archive/foo.md.`). Nothing else validates those: lint:md-links
+(`# See notes/archive/<note>.md.`). Nothing else validates those: lint:md-links
 covers Markdown *link syntax* inside *.md and resolves relative to the citing
 file, while these are bare paths in .py/.yml/.tf/.sh/.j2 resolved from the repo
 root. Archiving or renaming a note silently breaks every one of them -- twelve
