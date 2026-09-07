@@ -67,7 +67,7 @@ terraform {
   # PBKDF2-derived key from var.state_passphrase, AES-GCM encrypting
   # state and plan before they leave the process. The MinIO backend
   # stores ciphertext only.
-  # Rotation procedure: notes/terraform-state-encryption-rotation.md
+  # Rotation procedure: notes/runbooks/terraform-state-encryption-rotation.md
   encryption {
     key_provider "pbkdf2" "main" {
       passphrase = var.state_passphrase

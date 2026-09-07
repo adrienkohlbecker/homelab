@@ -3,7 +3,7 @@
 # armhf. Flat layout (trailing-slash Suites, no Components), signed with
 # Netdatabot's key (6E155DC1…). The apt_preferences pin holds netdata at
 # 2.* so a fresh install lands on the latest 2.x and only a deliberate
-# pin bump moves to a future major. See notes/netdata_v2_migration_analysis.md.
+# pin bump moves to a future major. See notes/archive/netdata_v2_migration_analysis.md.
 
 # Flat repo (no components). The apt_source helper pins the armored key payload
 # in the scoped /usr/share/keyrings/netdata.asc (not the global trust store).
@@ -105,4 +105,4 @@
 # `apt install netdata` resolves on the Apple-Silicon test box too. On amd64
 # ebpf.plugin lands but stays idle (`[plugins] ebpf = no` in main.yml).
 # Verified by testrole.py netdata on the arm64 box (netdata 2.10.3).
-# See notes/netdata_v2_migration_analysis.md.
+# See notes/archive/netdata_v2_migration_analysis.md.

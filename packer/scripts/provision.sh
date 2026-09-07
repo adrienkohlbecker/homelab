@@ -304,7 +304,7 @@ create_extra_tank_mouse() {
     # dataset by the zfs role) land on NVMe. A mirror across all the meta
     # partitions tolerates the same disk loss as the raidz2 (losing the special
     # vdev loses the pool). Empty on single-disk hosts (no meta partition), so
-    # tank then has no special vdev. See notes/special-vdev-sizing.md.
+    # tank then has no special vdev. See notes/archive/special-vdev-sizing.md.
     local special_args=()
     if [ -n "${PARTITIONS_META:-}" ]; then
       # shellcheck disable=SC2206  # word-split PARTITIONS_META into vdev members

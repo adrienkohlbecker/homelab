@@ -174,7 +174,7 @@ def resolve_net_backend(qemu_binary: str) -> str:
     passt is a userspace connector with a robust UDP datapath; it replaces
     qemu's libslirp on the guest-facing hop, killing the SLIRP-under-load UDP
     drops that flake external-DNS _verify in CI (see
-    notes/ci_qemu_net_passt_migration.md). It's only usable where
+    notes/archive/ci_qemu_net_passt_migration.md). It's only usable where
     `_passt_available` holds, so everywhere else (macOS or an image without
     the passt package) falls back to the unchanged slirp path.
 

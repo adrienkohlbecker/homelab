@@ -10,7 +10,7 @@
 # here, never in test/.
 #
 # First-apply bootstrap (AMI parameter seeding, GitLab cutover):
-# notes/ci_aws_test_cells.md, "Bootstrap".
+# notes/archive/ci_aws_test_cells.md, "Bootstrap".
 
 locals {
   ci_aws_region = "eu-central-1"

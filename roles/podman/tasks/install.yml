@@ -160,7 +160,7 @@
 
 # Noble's stock profile lacks fchmodat2 for tar-based entrypoints and the
 # io_uring syscall family needed by QEMU CI. Derive a purely additive profile;
-# see notes/podman_seccomp_fchmodat2.md. A fresh check-mode run only predicts
+# see notes/archive/podman_seccomp_fchmodat2.md. A fresh check-mode run only predicts
 # installing the stock profile, so skip until the package has placed it.
 - name: install | Read stock seccomp profile
   when: not (ansible_check_mode and podman_apt.changed)

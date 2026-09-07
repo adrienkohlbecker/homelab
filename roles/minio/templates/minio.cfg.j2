@@ -57,7 +57,7 @@ MINIO_PROMETHEUS_AUTH_TYPE=public
 # attaches the IAM policy named "admins", which this role provisions
 # in-band from files/admins.json (see tasks/data.yml). The policy name
 # matches the Authelia group so the claim->policy lookup just works
-# (see notes/authelia_rollout.md).
+# (see notes/archive/authelia_rollout.md).
 MINIO_IDENTITY_OPENID_CONFIG_URL=https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
 MINIO_IDENTITY_OPENID_CLIENT_ID=minio
 MINIO_IDENTITY_OPENID_CLIENT_SECRET={{ minio_oidc_client_secret }}

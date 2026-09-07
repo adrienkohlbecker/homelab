@@ -441,7 +441,7 @@ cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME
 # stanza's `options` directive. The ZBM components entry remains available for
 # recovery/menu access; the rEFInd -> ZBM -> kexec chain is not the default on
 # this arch because it panics on EDK2/aarch64
-# (notes/zbm-aarch64-kexec-bug-report.md).
+# (notes/archive/zbm-aarch64-kexec-bug-report.md).
 #
 # Wire the staging up as a kernel + initramfs hook so apt-driven kernel
 # upgrades (and zfs-initramfs / similar initrd-only rebuilds) refresh

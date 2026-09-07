@@ -204,7 +204,7 @@ locals {
     # Prod producer datasets (data/media/scratch/minio/services) still land
     # flat on rpool here -- zfs_{dozer,tank}_filesystem keep their rpool
     # default, so zee activates no named consumers.
-    # See notes/ci_box_multidisk_drop_lab_pug_amis.md.
+    # See notes/archive/ci_box_multidisk_drop_lab_pug_amis.md.
     # box_deps is derived from box by `mise run test:build_box_deps`, which
     # boots a writable staged clone, applies test/playbooks/build_box_deps.yml,
     # and publishes the result. It is not a packer source.
