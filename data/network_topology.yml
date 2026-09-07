@@ -4,7 +4,7 @@
 # **Status: live.** Wired into `group_vars/all/network.yml`, which
 # loads this file via `lookup('file', ...) | from_yaml` as `network`.
 # Edits here flow into the prod inventory automatically; design
-# rationale in `notes/network_review.md`. Test hosts use a separate
+# rationale in `notes/archive/network_review.md`. Test hosts use a separate
 # 10.234.0.0/16 inventory view (see `group_vars/test.yml`).
 #
 # ────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ sites:
     gateway: 10.123.0.1
     vlans:
       management:
-        id: 1   # VLAN 1 antipattern; UDM won't expose this for edit. See `notes/network_review.md §B.9`.
+        id: 1   # VLAN 1 antipattern; UDM won't expose this for edit. See `notes/archive/network_review.md §B.9`.
         cidr: 10.123.0.0/23
         gateway: 10.123.0.1
         # Upper /24 (.1.x) carved into `extra_blocks` below: the
