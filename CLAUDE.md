@@ -119,6 +119,14 @@ New user-facing services get a bookmark in [roles/homepage/templates/bookmarks.y
 
 Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). The files live in `roles/homeassistant/files/ha_gui_config` — an **in-place gitignored clone** of the private `homelab_ha_config` repo (not a submodule); `ha:sync` owns it (commits + pushes there, deploys to the HA host). The HA role only creates dirs + include-target stubs.
 
+### Home Assistant `.storage` config
+
+Home Assistant keeps migrating integrations out of `configuration.yaml` into GUI-owned JSON under `/mnt/services/homeassistant/.storage/`. Three tiers, in decreasing order of code ownership — pick the highest one that works and record the choice in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md):
+
+1. **`configuration.yaml.j2`** for anything HA still reads from YAML.
+2. **Templated `.storage/<key>` with `force: false`** for a *single-purpose* store file HA owns alone (`core.network`, `http`). Converge seeds it on a fresh host and never touches it again, so operator UI edits stay authoritative.
+3. **Reconciled into `.storage/core.config_entries`** for a config-flow integration, which has no YAML and no offline API. Only `smtp` does this today ([roles/homeassistant/files/smtp_config_entry.py](roles/homeassistant/files/smtp_config_entry.py)); it merges one entry and leaves the rest of the registry alone. **HA must be stopped before the write** — it flushes the registry from memory on shutdown, so patching a running instance is undone by the restart meant to pick it up. Everything else in that registry stays operator-configured and rides the ZFS snapshots.
+
 ### `notes/` private clone
 
 `notes/` is an independent **private clone** of [adrienkohlbecker/homelab_notes](https://github.com/adrienkohlbecker/homelab_notes), living at `<repo>/notes` and **gitignored** — not a submodule, not tracked, not pinned per code commit. The public repo carries no notes footprint beyond the `.gitignore` entry; notes content must never land in it (no committing notes files, no `git subtree`).
