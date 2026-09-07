@@ -79,6 +79,32 @@
   tags:
     - homeassistant
 
+# HA 2026.9 migrated the `http:` integration out of configuration.yaml into a
+# GUI-owned store; YAML is ignored once the migration flag is set. Seeding the
+# store keeps the reverse-proxy contract (use_x_forwarded_for + trusted_proxies
+# derived from podman_bridge_pool) declared in this repo rather than only in
+# HA's UI, so a from-scratch HA comes up trusting nginx instead of logging,
+# rate-limiting, and IP-banning every client as the one podman bridge gateway.
+#
+# force: false for the same reason as core.network above -- first converge
+# lands our default, later UI edits win. Deleting the file reverts HA to its
+# built-in defaults (and re-imports YAML `http:` if any exists), so there is a
+# recovery path.
+- name: Seed homeassistant http configuration store
+  template:
+    src: http.j2
+    dest: /mnt/services/homeassistant/.storage/http
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    force: false
+    backup: true
+    validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
+  register: homeassistant_http_storage
+  become: true
+  tags:
+    - homeassistant
+
 # The influxdb integration is configured through HA's UI (not via
 # configuration.yaml); the helper below lands the org / user / bucket /
 # write-auth. It does NOT surface the token (influxd 2.8+ redacts it from
@@ -307,7 +333,7 @@
     systemd_unit_args:
       src: homeassistant.service.j2
       condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
-      restart: "{{ homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed }}"
+      restart: "{{ homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed }}"
   tags:
     - homeassistant
 

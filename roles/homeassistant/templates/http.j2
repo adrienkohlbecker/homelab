@@ -1,0 +1,50 @@
+{# Home Assistant 2026.9 moved the `http:` integration out of                #}
+{# configuration.yaml into this GUI-owned store (Settings -> System ->       #}
+{# Network). Once `yaml_migration_done` is true HA ignores YAML `http:`      #}
+{# entirely and raises a repair issue if any is left behind, so this file is #}
+{# the only place these settings can be declared. Seeded, never enforced:    #}
+{# `force: false` in the role leaves operator UI edits authoritative, and    #}
+{# HA rewrites the file from memory whenever the UI saves.                   #}
+{#                                                                           #}
+{# HA loads the store raw -- no voluptuous defaults are applied on read --    #}
+{# so every key HA itself writes has to be present here even where it        #}
+{# matches the upstream default, or the http setup raises KeyError.          #}
+{#                                                                           #}
+{# use_x_forwarded_for/trusted_proxies are the load-bearing pair. nginx      #}
+{# (host-native) proxies via loopback. The published-port DNAT lands on HA's #}
+{# podman-bridge IP and SNAT rewrites the source to the bridge              #}
+{# gateway, so HA sees every proxied request as coming from somewhere inside #}
+{# the netavark default pool rather than from 127.0.0.1 -- trusted_proxies   #}
+{# has to cover that prefix or X-Forwarded-For is discarded and every client #}
+{# is logged (and rate-limited, and IP-banned) as the one bridge gateway.    #}
+{#                                                                           #}
+{# Trade-off: trusting the whole /16 also trusts every sibling container on  #}
+{# every other netavark-allocated bridge -- a compromise on any of them lets #}
+{# the attacker spoof X-Forwarded-For. The narrower fix is to trust only the #}
+{# bridge subnets HA actually joins; deferred because the threat model       #}
+{# (compromised sibling container) is low-prob in this homelab.              #}
+{
+  "version": 2,
+  "minor_version": 2,
+  "key": "http",
+  "data": {
+    "stable": {
+      {# Container-internal listen port. The unit publishes                  #}
+      {# service_ports.homeassistant -> 8123, so this stays 8123 even if the #}
+      {# host-side port is remapped.                                         #}
+      "server_port": 8123,
+      "use_x_forwarded_for": true,
+      "trusted_proxies": ["{{ podman_bridge_pool }}"],
+      "cors_allowed_origins": ["https://cast.home-assistant.io"],
+      "login_attempts_threshold": -1,
+      "ip_ban_enabled": true,
+      "ssl_profile": "modern",
+      "use_x_frame_options": true,
+      "created_at": "{{ now(utc=true).isoformat() }}",
+      "error": null,
+      "error_message": null
+    },
+    "pending": null,
+    "yaml_migration_done": true
+  }
+}

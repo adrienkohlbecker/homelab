@@ -104,6 +104,38 @@
   delay: 2
   until: _homeassistant_http_nginx.status == 200
 
+# Prove the seeded .storage/http actually took effect end-to-end: HA's ban
+# logger prints the source it attributes a request to. Without
+# use_x_forwarded_for + trusted_proxies covering podman_bridge_pool, every
+# nginx-proxied request is attributed to the bridge gateway, so a single
+# client's failed logins would rate-limit and IP-ban the whole household. One
+# bogus-token request through the vhost is enough; login_attempts_threshold is
+# -1 (banning disabled) so the probe cannot lock the host out of itself.
+- name: _verify | Homeassistant attributes proxied requests to the real client
+  uri:
+    url: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/api/
+    validate_certs: false
+    headers:
+      Authorization: Bearer not-a-valid-token
+    status_code: 401
+
+- name: _verify | Homeassistant logged the proxied client, not the podman bridge
+  command:
+    argv:
+      - journalctl
+      - -u
+      - homeassistant
+      - -b
+      - --no-pager
+      - --grep=Login attempt or request with invalid authentication
+  register: _homeassistant_forwarded_for
+  changed_when: false
+  retries: 15
+  delay: 2
+  until: >-
+    '(127.0.0.1)' in _homeassistant_forwarded_for.stdout
+  become: true
+
 - name: _verify | Homeassistant reaches influxdb over the homeassistant podman network
   command:
     argv:
