@@ -74,7 +74,14 @@ dns:
   cache_optimistic_max_age: 12h
   bogus_nxdomain: []
   aaaa_disabled: false
-  enable_dnssec: true
+{#
+  Off: AdGuard's validator rejects some provably-insecure delegations that
+  its own upstreams accept, returning SERVFAIL with nothing logged (the whole
+  meteofrance.com zone, which broke home-assistant's meteo_france integration).
+  Both upstreams configured above validate DNSSEC themselves, so the real
+  protection is retained; this layer only re-checked their AD flag.
+#}
+  enable_dnssec: false
   edns_client_subnet:
     custom_ip: ""
     enabled: false
