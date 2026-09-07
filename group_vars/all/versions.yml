@@ -23,7 +23,7 @@ bazarr_image:        docker.io/linuxserver/bazarr:1.5.2  # 2026-05-11
 
 headscale_image:     docker.io/headscale/headscale:0.26.1  # 2026-06-06
 
-homeassistant_image: ghcr.io/home-assistant/home-assistant:2026.6.3  # 2026-06-12
+homeassistant_image: ghcr.io/home-assistant/home-assistant:2026.9.1  # 2026-09-05
 homepage_image:      ghcr.io/gethomepage/homepage:v1.13  # 2026-05-08 (v1.13.0)
 # Stays on the InfluxDB 2.x line. 3.x is a ground-up Rust rewrite (TSM ->
 # columnar Arrow/Parquet/DataFusion) on a separate track, NOT a version bump:
