@@ -142,6 +142,7 @@ depends = [
   "lint:markdown",
   "lint:md-links",
   "lint:notes",
+  "lint:notes-refs",
   "lint:toml",
   "lint:gitlab-ci",
 ]
