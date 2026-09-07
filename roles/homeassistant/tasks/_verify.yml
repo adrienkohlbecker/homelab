@@ -136,6 +136,33 @@
     '(127.0.0.1)' in _homeassistant_forwarded_for.stdout
   become: true
 
+# Prove HA actually consumed the config entry the role wrote into
+# core.config_entries: it only logs a setup result for `email`/smtp once it has
+# parsed that entry, recognised the domain, and reached the SMTP client. A
+# malformed entry never gets this far -- HA drops it while loading the registry
+# and says nothing about `email` at all.
+#
+# The result here is always a failure, and that is the point: the fixture points
+# the entry at the real relay with the placeholder credentials from
+# group_vars/test.yml, so authentication cannot succeed. Giving the test
+# environment working credentials would silence this line and invalidate the
+# check; assert on a successful send instead if that ever changes.
+- name: _verify | Homeassistant loaded the smtp config entry written by ansible
+  command:
+    argv:
+      - journalctl
+      - -u
+      - homeassistant
+      - -b
+      - --no-pager
+      - --grep=entry email for smtp
+  register: _homeassistant_smtp_entry
+  changed_when: false
+  retries: 30
+  delay: 4
+  until: _homeassistant_smtp_entry.stdout | length > 0
+  become: true
+
 - name: _verify | Homeassistant reaches influxdb over the homeassistant podman network
   command:
     argv:

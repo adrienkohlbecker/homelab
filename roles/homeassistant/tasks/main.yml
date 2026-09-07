@@ -135,39 +135,6 @@
 # (key missing) both parse fine here -- the stub returns None and YAML
 # is structurally valid. HA's own schema + integration loaders catch
 # those at startup, where they're loud but post-deploy.
-- name: Assert SMTP notify inputs are set
-  assert:
-    that:
-      - homeassistant_smtp_from | default('') | length > 0
-      - homeassistant_smtp_user | default('') | length > 0
-      - homeassistant_smtp_password | default('') | length > 0
-    fail_msg: >-
-      homeassistant_smtp_from/user/password must be set (host_vars/group_vars) --
-      they render the notify.email SMTP platform in configuration.yaml.
-  tags:
-    - homeassistant
-
-# The SMTP password is the only secret in configuration.yaml, so it goes through
-# HA's secrets.yaml (referenced as `!secret homeassistant_smtp_password`) rather
-# than being inlined. lineinfile (not template) so any other keys an operator or
-# integration placed in secrets.yaml are preserved -- this role owns only its own
-# key. create: true seeds the file on a fresh host before HA first reads it.
-- name: Render homeassistant SMTP password into secrets.yaml
-  lineinfile:
-    path: /mnt/services/homeassistant/secrets.yaml
-    regexp: '^homeassistant_smtp_password:'
-    line: "homeassistant_smtp_password: {{ homeassistant_smtp_password | to_json }}"
-    create: true
-    owner: homeassistant
-    group: homeassistant
-    mode: "0600"
-    backup: true
-    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-  register: homeassistant_secrets
-  become: true
-  tags:
-    - homeassistant
-
 - name: Configure homeassistant
   template:
     src: configuration.yaml.j2
@@ -190,7 +157,8 @@
 # HA owns these files thereafter and rewrites them at 0644 whenever they are
 # edited in the GUI, so match that mode -- forcing 0600 only re-chmods (and
 # re-touches) them every converge, fighting HA. The dir already gates access
-# and these carry no secrets (those live in secrets.yaml via !secret).
+# and these carry no secrets (integration credentials live in HA's own
+# config-entry store -- see notes/runbooks/homeassistant_gui_config.md).
 - name: Ensure files exist
   file:
     path: /mnt/services/homeassistant/{{ item }}
@@ -325,6 +293,72 @@
   tags:
     - homeassistant
 
+# HA 2026.9 replaced the SMTP notify YAML platform with a config entry, and
+# ships no offline API for one -- so the role reconciles the entry inside
+# .storage/core.config_entries itself, keeping the relay, the sender identity,
+# and the vaulted password declared here rather than only in HA's UI.
+#
+# Ordering is the subtle part. HA holds that registry in memory and flushes it
+# on shutdown, so a write to a *running* instance is undone by the very restart
+# meant to pick it up. The service therefore has to be stopped before the write,
+# and the very next task starts it again (it sees an inactive unit and issues
+# `started`). That adjacency is deliberate: it keeps the window where HA is
+# down to the write itself, so a converge that aborts mid-role is unlikely to
+# leave the household without Home Assistant. The check pass runs first so a
+# converge with nothing to reconcile never stops the service at all -- which is
+# every converge, since the entry only changes when these inputs do.
+- name: Assert SMTP notify inputs are set
+  assert:
+    that:
+      - homeassistant_smtp_from | default('') | length > 0
+      - homeassistant_smtp_user | default('') | length > 0
+      - homeassistant_smtp_password | default('') | length > 0
+    fail_msg: >-
+      homeassistant_smtp_from/user/password must be set (host_vars/group_vars) --
+      they configure HA notify.email SMTP config entry.
+  tags:
+    - homeassistant
+
+# check_mode: false because the pass is read-only and the tasks below need its
+# verdict; without it a --check run reports no SMTP work regardless of drift.
+- name: Check the homeassistant smtp config entry
+  script: smtp_config_entry.py --check {{ homeassistant_smtp_entry_args }}
+  environment:
+    HOMEASSISTANT_SMTP_PASSWORD: "{{ homeassistant_smtp_password }}"
+  register: homeassistant_smtp_check
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - homeassistant
+
+- name: Stat the homeassistant unit before stopping it
+  stat:
+    path: /etc/systemd/system/homeassistant.service
+  register: homeassistant_unit_file
+  tags:
+    - homeassistant
+
+- name: Stop homeassistant to reconcile its config entry registry
+  when:
+    - (homeassistant_smtp_check.stdout | from_json).changed
+    - homeassistant_unit_file.stat.exists
+  systemd:
+    name: homeassistant
+    state: stopped
+  become: true
+  tags:
+    - homeassistant
+
+- name: Configure the homeassistant smtp config entry
+  when: (homeassistant_smtp_check.stdout | from_json).changed
+  script: smtp_config_entry.py {{ homeassistant_smtp_entry_args }}
+  environment:
+    HOMEASSISTANT_SMTP_PASSWORD: "{{ homeassistant_smtp_password }}"
+  become: true
+  tags:
+    - homeassistant
+
 - name: Manage homeassistant service
   import_role:
     name: systemd_unit
@@ -333,7 +367,7 @@
     systemd_unit_args:
       src: homeassistant.service.j2
       condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
-      restart: "{{ homeassistant_conf.changed or homeassistant_secrets.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed }}"
+      restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed }}"
   tags:
     - homeassistant
 

@@ -22,3 +22,18 @@ homeassistant_networks:
   - name: mac_iot
     interface_name: eth1
     mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname ~ '_homeassistant') }}"
+
+# Inputs for the SMTP config-entry reconciler, which the role runs twice -- a
+# read-only check, then the write it gates. One definition so the two can never
+# disagree about what they are reconciling. Derived, not overridable: the
+# host-level inputs it reads (homeassistant_smtp_*) live in group_vars.
+homeassistant_smtp_entry_args: >-
+  --storage /mnt/services/homeassistant/.storage/core.config_entries
+  --name email
+  --server {{ smtp_host }}
+  --port {{ smtp_port }}
+  --encryption starttls
+  --sender {{ homeassistant_smtp_from }}
+  --sender-name "Home Assistant"
+  --username {{ homeassistant_smtp_user }}
+  --recipient {{ root_email }}

@@ -645,6 +645,9 @@ udm_dns_failover_heartbeat_url: !vault |
           35346333323932306536373932633633313231343236666333393139633133396565656165356131
           37653137633730353664
 
+# Credentials for HA's SMTP integration. HA 2026.9 dropped YAML config for it,
+# so the role reconciles them into HA's config-entry registry instead of
+# rendering a file -- see notes/runbooks/homeassistant_gui_config.md.
 homeassistant_smtp_from: homeassistant@{{ email_domain }}
 homeassistant_smtp_user: homeassistant@{{ email_domain }}
 homeassistant_smtp_password: !vault |
