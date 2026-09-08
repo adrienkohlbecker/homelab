@@ -1,5 +1,2 @@
 # Lua 5.1 plus Fluent Bit's `call` entry points.
 std = "lua51+fluentbit"
-
-# Fluent Bit embeds LuaJIT; if filters need \xHH escapes, allow Selene's
-# strict-Lua-5.1 `bad_string_escape` lint instead of rewriting runtime code.
