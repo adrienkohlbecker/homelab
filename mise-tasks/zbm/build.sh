@@ -32,28 +32,20 @@ fi
 workdir="$(mktemp -d "${repo_root}/zbm-build/zbm-builder.${arch}.XXXXXX")"
 trap 'rm -rf "$workdir"' EXIT INT TERM
 
-work_src="${workdir}/src"
-git clone --no-hardlinks --branch "v${ZBM_VERSION}" "$src_dir" "$work_src" >/dev/null
-
-git -C "$work_src" apply "$repo_root/zbm/recovery-overlay.patch"
-
 build_root="${workdir}/build-root"
 mkdir -p "$build_root/dracut.conf.d"
-cp -L "$work_src/etc/zfsbootmenu/recovery.yaml" "$build_root/config.yaml"
-cp "$work_src"/etc/zfsbootmenu/recovery.conf.d/*.conf "$build_root/dracut.conf.d/"
+cp -L "$src_dir/etc/zfsbootmenu/recovery.yaml" "$build_root/config.yaml"
+cp "$src_dir"/etc/zfsbootmenu/recovery.conf.d/*.conf "$build_root/dracut.conf.d/"
 cp "$repo_root/zbm/dracut.conf.d/recovery.conf" "$build_root/dracut.conf.d/zz-homelab-recovery.conf"
 cp -a "$repo_root/zbm/hooks" "$build_root/"
 
-(
-  cd "$work_src"
-  bash ./zbm-builder.sh \
-    -d \
-    -b "$build_root" \
-    -i "$builder_tag" \
-    -l "$work_src" \
-    -H \
-    -- -e ".Kernel.CommandLine = \"${command_line}\""
-)
+bash "$src_dir/zbm-builder.sh" \
+  -d \
+  -b "$build_root" \
+  -i "$builder_tag" \
+  -l "$src_dir" \
+  -H \
+  -- -e ".Kernel.CommandLine = \"${command_line}\""
 
 package_dir="${build_root}/build"
 
