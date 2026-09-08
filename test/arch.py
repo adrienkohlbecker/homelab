@@ -21,7 +21,7 @@ from pathlib import Path
 # below): uefi_code_path_for raises with fetch guidance when it is absent rather
 # than silently falling back to Homebrew's broken blob. macOS-only concern:
 # aarch64 qemu is the local fixture; CI runs x86 EC2 cells and prod is amd64.
-_AARCH64_PINNED_FIRMWARE = Path(__file__).resolve().parent / "firmware" / "edk2-aarch64-code-202511.fd"
+_AARCH64_PINNED_FIRMWARE = Path(__file__).resolve().parent / "firmware" / "edk2-aarch64-code.fd"
 
 
 @dataclasses.dataclass(frozen=True)

@@ -15,14 +15,13 @@ set -euo pipefail
 # http://deb.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2025.11-5_all.deb).
 # Bump the version, URL, and firmware hash together: query
 #   https://snapshot.debian.org/mr/binary/qemu-efi-aarch64/<ver>/binfiles
-# for the new sha1, download to derive the firmware sha256, and update arch.py's
-# firmware filename to match.
+# for the new sha1 and download it to derive the firmware sha256.
 DEB_VERSION="2025.11-5" # edk2-stable202511
 DEB_URL="https://snapshot.debian.org/file/137d1a34bd9ec2e10b1d81331e92d163824579c4"
 FW_SHA256="4003fc28e677193432558b717b74221fae671c92aeef174b84ecc2c3242fd013"
 
 root="$(git rev-parse --show-toplevel)"
-dest="${root}/test/firmware/edk2-aarch64-code-202511.fd"
+dest="${root}/test/firmware/edk2-aarch64-code.fd"
 
 # shasum is the macOS builtin (the aarch64 fixture is the local Mac); fall back
 # to sha256sum on Linux so a Linux-aarch64 dev can run this too.
