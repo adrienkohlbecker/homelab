@@ -31,7 +31,6 @@ symlink_existing_dir() {
 
 symlink_missing packer/artifacts
 symlink_missing terraform/.terraform
-symlink_missing .claude/settings.local.json
 
 # test/firmware/ holds the fetched aarch64 edk2 blob (gitignored; see test/arch.py).
 # Share the main checkout's so one `mise run test:firmware` covers every worktree.
