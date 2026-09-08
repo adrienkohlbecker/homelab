@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Build a ZFSBootMenu recovery tarball through upstream zbm-builder.sh"
+#MISE description="Build a ZFSBootMenu recovery tarball with upstream zbm-builder.sh"
 set -euo pipefail
 
 # shellcheck source=mise-tasks/zbm/lib.sh
@@ -13,7 +13,6 @@ repo_root="$(zbm_repo_root)"
 src_dir="${repo_root}/zbm-build/src"
 out_dir="${repo_root}/zbm-build/${arch}"
 builder_tag="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
-command_line="ro loglevel=0 nomodeset"
 
 mkdir -p "$out_dir"
 rm -f "$out_dir"/*
@@ -23,45 +22,44 @@ if [ ! -d "$src_dir/.git" ]; then
   exit 1
 fi
 
-builder_entrypoint="$(docker image inspect "$builder_tag" --format '{{json .Config.Entrypoint}}' 2>/dev/null || true)"
-if [ "$builder_entrypoint" != '["/build-init.sh"]' ]; then
-  echo "ZBM builder image ${builder_tag} has entrypoint ${builder_entrypoint:-<missing>}, expected [\"/build-init.sh\"]" >&2
-  echo "run 'mise run zbm:builder-image' to rebuild the upstream-compatible local builder image" >&2
-  exit 1
-fi
-workdir="$(mktemp -d "${repo_root}/zbm-build/zbm-builder.${arch}.XXXXXX")"
+workdir="$(mktemp -d "${repo_root}/zbm-build/build.${arch}.XXXXXX")"
 trap 'rm -rf "$workdir"' EXIT INT TERM
+build_root="${workdir}/root"
+package_dir="${workdir}/package"
+mkdir -p "$build_root" "$package_dir"
+cp -a "${repo_root}/zbm/." "$build_root/"
 
-build_root="${workdir}/build-root"
-mkdir -p "$build_root/dracut.conf.d"
-cp -L "$src_dir/etc/zfsbootmenu/recovery.yaml" "$build_root/config.yaml"
-cp "$src_dir"/etc/zfsbootmenu/recovery.conf.d/*.conf "$build_root/dracut.conf.d/"
-cp "$repo_root/zbm/dracut.conf.d/recovery.conf" "$build_root/dracut.conf.d/zz-homelab-recovery.conf"
-cp -a "$repo_root/zbm/hooks" "$build_root/"
-
+# Keep build inputs under the checkout so GitLab dind can bind-mount them.
 bash "$src_dir/zbm-builder.sh" \
   -d \
   -b "$build_root" \
   -i "$builder_tag" \
   -l "$src_dir" \
   -H \
-  -- -e ".Kernel.CommandLine = \"${command_line}\""
+  -O --entrypoint=/build-init.sh \
+  -O --env=DRACUT_NO_XATTR=1 \
+  -- -b /build -V
 
-package_dir="${build_root}/build"
-
-mapfile -t kernel_images < <(find "$package_dir" -maxdepth 1 -type f -name 'vmlin*-bootmenu')
+build_output="${build_root}/build"
+mapfile -t kernel_images < <(find "$build_output" -maxdepth 1 -type f -name 'vmlin*-bootmenu')
 if [ "${#kernel_images[@]}" -ne 1 ]; then
-  echo "expected exactly one vmlin*-bootmenu in $package_dir, found ${#kernel_images[@]}" >&2
+  echo "expected exactly one vmlin*-bootmenu in $build_output, found ${#kernel_images[@]}" >&2
   exit 1
 fi
-mapfile -t efi_images < <(find "$package_dir" -maxdepth 1 -type f -name 'vmlin*.EFI')
+mapfile -t efi_images < <(find "$build_output" -maxdepth 1 -type f -name 'vmlin*.EFI')
 if [ "${#efi_images[@]}" -ne 1 ]; then
-  echo "expected exactly one vmlin*.EFI in $package_dir, found ${#efi_images[@]}" >&2
+  echo "expected exactly one vmlin*.EFI in $build_output, found ${#efi_images[@]}" >&2
   exit 1
 fi
-mv "${efi_images[0]}" "$package_dir/zfsbootmenu.EFI"
+if [ ! -s "${build_output}/initramfs-bootmenu.img" ]; then
+  echo "missing initramfs-bootmenu.img in $build_output" >&2
+  exit 1
+fi
 
-printf '%s\n' "$command_line" >"$package_dir/cmdline"
+cp "${kernel_images[0]}" "$package_dir/"
+cp "${build_output}/initramfs-bootmenu.img" "$package_dir/"
+cp "${efi_images[0]}" "$package_dir/zfsbootmenu.EFI"
+yq -er '.Kernel.CommandLine' "${repo_root}/zbm/config.yaml" >"$package_dir/cmdline"
 
 initramfs_listing="${workdir}/initramfs.lsinitrd"
 docker run --rm \

@@ -47,4 +47,14 @@ zbm_assert_core_listing() {
       return 1
     fi
   done
+
+  for required in \
+    "var/lib/dracut/hooks/cmdline/20-parse-i18n.sh" \
+    "usr/bin/loadkeys" \
+    "usr/share/kbd/keymaps/i386/azerty/fr.map.gz"; do
+    if ! grep -qF "$required" "$listing"; then
+      echo "ZBM initramfs: missing French console keymap dependency /${required}" >&2
+      return 1
+    fi
+  done
 }

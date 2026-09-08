@@ -1,0 +1,13 @@
+Global:
+  ManageImages: true
+  DracutFlags:
+    - "--no-early-microcode"
+Components:
+  Versions: false
+  Enabled: true
+EFI:
+  Versions: false
+  Enabled: true
+  SplashImage: /zbm/media/splash.bmp
+Kernel:
+  CommandLine: ro loglevel=0 nomodeset rd.vconsole.keymap=fr

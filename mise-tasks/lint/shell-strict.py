@@ -12,6 +12,7 @@ ALLOWLIST_PATTERNS = (
     "mise-tasks/packer/_hetzner_rescue.sh",
     "mise-tasks/worktree/lib.sh",
     "mise-tasks/zbm/lib.sh",
+    "zbm/dracut-modules/89zbm-power-commands/module-setup.sh",
     "roles/netdata/files/*.chart.sh",
     "roles/hdparm/files/*.chart.sh",
     "roles/systemd_timer/files/*.chart.sh",
