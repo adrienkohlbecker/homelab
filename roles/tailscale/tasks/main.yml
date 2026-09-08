@@ -64,17 +64,6 @@
   tags:
     - tailscale
 
-- name: Remove retired tailscale fluent-bit extension
-  import_role:
-    name: fluentbit
-    tasks_from: extension_remove
-  vars:
-    fluentbit_extension_remove_args:
-      names:
-        - tailscale
-  tags:
-    - tailscale
-
 # The drop-in orders tailscaled after the services mount, quiesces it for
 # snapshots, and persists GRO tuning. Mount ordering prevents tailscaled from
 # writing identity state to the bare mountpoint during boot.

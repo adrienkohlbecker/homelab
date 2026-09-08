@@ -90,17 +90,6 @@
   tags:
     - mosquitto
 
-- name: Remove retired mosquitto fluent-bit extension
-  import_role:
-    name: fluentbit
-    tasks_from: extension_remove
-  vars:
-    fluentbit_extension_remove_args:
-      names:
-        - mosquitto
-  tags:
-    - mosquitto
-
 - name: Pull mosquitto image
   import_role:
     name: podman
