@@ -242,7 +242,7 @@ locals {
 }
 
 source "qemu" "ubuntu" {
-  accelerator        = "${local.arch_cfg.accelerator}"
+  accelerator        = local.arch_cfg.accelerator
   boot_wait          = "2s"
   cpu_model          = "host"
   cores              = 4
@@ -259,12 +259,12 @@ source "qemu" "ubuntu" {
   # ship — the size only matters for the build-time pivot.
   disk_size         = "10G"
   efi_boot          = true
-  efi_firmware_code = "${local.arch_cfg.efi_firmware_code}"
-  efi_firmware_vars = "${local.arch_cfg.efi_firmware_vars}"
-  format            = "${local.arch_cfg.image_format}"
+  efi_firmware_code = local.arch_cfg.efi_firmware_code
+  efi_firmware_vars = local.arch_cfg.efi_firmware_vars
+  format            = local.arch_cfg.image_format
   headless          = true
-  iso_checksum      = "${local.cloud_checksum}"
-  iso_url           = "${local.cloud_url}"
+  iso_checksum      = local.cloud_checksum
+  iso_url           = local.cloud_url
   # NoCloud datasource: cloud-init auto-detects an attached CD/ISO
   # labelled `cidata` containing user-data + meta-data. cd_content
   # renders these inline via templatefile() so the vagrant pubkey and
@@ -279,7 +279,7 @@ source "qemu" "ubuntu" {
     })
     "meta-data" = ""
   }
-  machine_type = "${local.arch_cfg.machine_type}"
+  machine_type = local.arch_cfg.machine_type
   memory       = 4096
   net_device   = "virtio-net"
   # Shim over the arch's real emulator (which it resolves from PATH): on a
@@ -388,7 +388,7 @@ build {
       "PODMAN_SIZE"                     = local.variant_config[source.name].podman_size
       "META_SIZE"                       = local.variant_config[source.name].meta_size
       "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
-      "UBUNTU_NAME"                     = "${local.ubuntu_name}"
+      "UBUNTU_NAME"                     = local.ubuntu_name
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
       "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
