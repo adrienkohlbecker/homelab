@@ -23,8 +23,8 @@
 #   matures.
 #
 # - mailboxes / email forwardings / glue records / livedns records:
-#   all empty across the 3 domains (email goes through CF Email
-#   Routing + Fastmail/Gmail; DNS at CF). If any of these grow,
+#   all empty across the 3 domains (mail is hosted outside Gandi;
+#   DNS is at CF). If any of these grow,
 #   gandi_mailbox / gandi_email_forwarding / gandi_glue_record /
 #   gandi_livedns_record are the resources to reach for.
 

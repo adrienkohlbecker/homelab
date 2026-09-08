@@ -8,11 +8,6 @@
 # body is a thin pass-through with no key parsing. Adding a record:
 # pick a slug that doesn't collide and fill in type/name/content.
 #
-# The CF Email Routing outbound DKIM TXT (cf2024-1._domainkey.fahm.fr)
-# needs lifecycle { ignore_changes = [content] } because CF auto-rotates
-# the key server-side. It stays as a standalone resource at the bottom of
-# this file -- lifecycle blocks can't reference each.value.
-
 # ---- A/CNAME/TXT/MX records ----
 #
 # DMARC posture: fahm.fr + noreply.fahm.fr at p=quarantine; pct=25.

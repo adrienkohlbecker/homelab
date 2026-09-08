@@ -1,6 +1,6 @@
 provider "nexus" {
   url = "https://nexus.lab.fahm.fr"
-  # NEXUS_USERNAME / NEXUS_PASSWORD come from terraform/.env via `op run`.
+  # NEXUS_USERNAME / NEXUS_PASSWORD come from 1Password via mise.toml and `op run`.
 }
 
 resource "nexus_blobstore_file" "default" {
