@@ -49,35 +49,7 @@
       - efibootmgr
       - initramfs-tools
       - mdadm
-    policy_rc_d: 101
     cache_valid_time: 3600
-  register: boot_apt
-  become: true
-  tags:
-    - boot
-
-- name: Enable mdadm monitoring timers
-  when: not (ansible_check_mode and boot_apt.changed)
-  systemd:
-    name: "{{ item }}"
-    enabled: true
-    state: started
-  loop:
-    - mdcheck_start.timer
-    - mdmonitor-oneshot.timer
-  become: true
-  tags:
-    - boot
-
-# mdcheck_continue.timer is runtime-owned by the mdcheck script: started via
-# mdcheck_start.service Wants= while a scrub is under way, stopped once nothing
-# is left to check (immediately so on array-less hosts). Forcing state: started
-# here would flap against that after every mdcheck_start elapse.
-- name: Enable the mdcheck continuation timer
-  when: not (ansible_check_mode and boot_apt.changed)
-  systemd:
-    name: mdcheck_continue.timer
-    enabled: true
   become: true
   tags:
     - boot

@@ -169,30 +169,3 @@
     fail_msg: >-
       /tmp is '{{ _boot_verify_tmp_fstype.stdout | trim }}', expected tmpfs
       after the tmp.mount enable + reboot.
-
-# --- mdadm monitoring timers ---
-
-# The role enables mdcheck_continue.timer but never starts it because the
-# mdcheck script owns its runtime state: mdcheck_start.service pulls it up
-# (Wants=) and the script stops it again once nothing is left to check. The
-# fixture has no MD arrays, so firing the entry service must leave it
-# inactive — the same handoff that made force-starting it flap on prod.
-- name: _verify | Fire mdcheck_start like its timer does
-  systemd:
-    name: mdcheck_start.service
-    state: started
-  become: true
-
-- name: _verify | Read the continuation timer state # noqa: command-instead-of-module
-  command: systemctl show -p ActiveState --value mdcheck_continue.timer
-  changed_when: false
-  register: _boot_verify_mdcheck_continue
-  become: true
-
-- name: _verify | Continuation timer stopped by mdcheck
-  assert:
-    that: _boot_verify_mdcheck_continue.stdout | trim == 'inactive'
-    fail_msg: >-
-      mdcheck_start.service ran but mdcheck_continue.timer is
-      {{ _boot_verify_mdcheck_continue.stdout | trim }} — the mdcheck script
-      should own its runtime state and stop it when nothing is left to check.
