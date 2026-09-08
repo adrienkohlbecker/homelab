@@ -71,9 +71,8 @@ stages:
     # ignores the baked caches and re-downloads the whole
     # toolchain on every fresh host (~20s of the cold-start tail). Set here
     # rather than in the runner config so tuning them is a repo change with no
-    # fox converge. The baked /opt/venv is intentionally not reused: each job
-    # keeps its own .venv built from the warm cache, so cells running
-    # concurrently on one host (capacity_per_instance > 1) never share a venv.
+    # fox converge. Each job builds its own .venv from the warm cache, so cells
+    # running concurrently on one host never share an environment.
     MISE_DATA_DIR: /opt/mise
     UV_CACHE_DIR: /opt/uv-cache
     UV_LINK_MODE: copy
