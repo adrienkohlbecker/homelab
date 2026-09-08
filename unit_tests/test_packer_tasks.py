@@ -182,3 +182,34 @@ ssh_rescue_bulk receive-image
     assert bulk[bulk.index("-F") + 1] == "none"
     assert "Ciphers=^aes128-gcm@openssh.com" in bulk
     assert bulk[-2:] == ["root@192.0.2.1", "receive-image"]
+
+
+@pytest.mark.parametrize(("success_after", "expected_rc", "expected_attempts"), [(3, 0, 3), (41, 1, 40)])
+def test_hetzner_rescue_ssh_wait_is_bounded(
+    success_after: int,
+    expected_rc: int,
+    expected_attempts: int,
+) -> None:
+    script = (
+        f"source {shlex.quote(str(HETZNER_RESCUE_SH))}\n"
+        + """
+sleep() { :; }
+attempts=0
+ssh_rescue() {
+  attempts=$((attempts + 1))
+  [ "$attempts" -ge "$SUCCESS_AFTER" ]
+}
+if wait_for_rescue_sshd; then
+  rc=0
+else
+  rc=$?
+fi
+printf '%s %s\n' "$rc" "$attempts"
+"""
+    )
+    env = dict(os.environ, SUCCESS_AFTER=str(success_after))
+
+    result = subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"{expected_rc} {expected_attempts}"

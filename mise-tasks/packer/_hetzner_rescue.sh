@@ -51,6 +51,16 @@ ssh_rescue() { ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=acce
 # prefers hardware-accelerated AES-GCM.
 ssh_rescue_bulk() { ssh -F none -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=5 -o 'Ciphers=^aes128-gcm@openssh.com' "root@$RESCUE_IP" "$@"; }
 
+# Wait for the authenticated rescue sshd, with a fixed upper bound.
+wait_for_rescue_sshd() {
+  sleep 40
+  for _ in $(seq 1 40); do
+    ssh_rescue true 2>/dev/null && return 0
+    sleep 4
+  done
+  return 1
+}
+
 # True when host:22 has a live sshd. Probe with PreferredAuthentications=none:
 # sshd rejects us instantly with "permission denied" without running anything,
 # which proves the OS booted far enough to start sshd. Crucially this never
@@ -129,12 +139,7 @@ rescue_create() {
   echo "==> enabling rescue + hard reset"
   hcloud server enable-rescue "$SERVER" --type linux64 --ssh-key "$KEYNAME" >/dev/null
   hcloud server reset "$SERVER" >/dev/null
-  sleep 40
-  for _ in $(seq 1 40); do
-    ssh_rescue true 2>/dev/null && break
-    sleep 4
-  done
-  ssh_rescue true || {
+  wait_for_rescue_sshd || {
     echo "rescue ssh never came up at $RESCUE_IP" >&2
     exit 1
   }
@@ -206,16 +211,7 @@ rescue_collect_diagnostics() {
   echo "==> collecting boot-verify diagnostics (rebooting $SERVER into rescue)" >&2
   hcloud server enable-rescue "$SERVER" --type linux64 --ssh-key "$KEYNAME" >/dev/null 2>&1 || true
   hcloud server reset "$SERVER" >/dev/null 2>&1 || true
-  sleep 40
-  local up=
-  for _ in $(seq 1 40); do
-    ssh_rescue true 2>/dev/null && {
-      up=1
-      break
-    }
-    sleep 4
-  done
-  [ -n "$up" ] || {
+  wait_for_rescue_sshd || {
     echo "    rescue did not come back up -- no diagnostics collected" >&2
     return 0
   }
