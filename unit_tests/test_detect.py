@@ -1267,11 +1267,11 @@ class TestCmdGitlab:
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
 
     @pytest.mark.parametrize(
-        ("args", "pipeline_source", "roles", "expected_jobs"),
+        ("args", "pipeline_source", "roles"),
         [
-            pytest.param(["--all"], None, None, {"_site_test:box"}, id="all-flag"),
-            pytest.param([], "schedule", None, {"nginx:box", "_site_test:box"}, id="schedule"),
-            pytest.param([], "web", "ALL", {"nginx:box"}, id="dispatch-all"),
+            pytest.param(["--all"], None, None, id="all-flag"),
+            pytest.param([], "schedule", None, id="schedule"),
+            pytest.param([], "web", "ALL", id="dispatch-all"),
         ],
     )
     def test_full_universe_triggers(
@@ -1281,7 +1281,6 @@ class TestCmdGitlab:
         args: list[str],
         pipeline_source: str | None,
         roles: str | None,
-        expected_jobs: set[str],
     ) -> None:
         for name, value in {"CI_PIPELINE_SOURCE": pipeline_source, "ROLES": roles}.items():
             if value is None:
@@ -1291,7 +1290,7 @@ class TestCmdGitlab:
         child = tmp_path / "child.yml"
         assert detect._cmd_gitlab([*args, "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
-        assert expected_jobs <= loaded.keys()
+        assert {"nginx:box", "_site_test:box"} <= loaded.keys()
 
     @pytest.mark.parametrize(
         ("target", "runner_tag", "in_aws"),
