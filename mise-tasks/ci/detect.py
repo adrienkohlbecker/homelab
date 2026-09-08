@@ -41,12 +41,7 @@ from matrix import (
     release_ubuntu_for,
 )
 
-# ---------------------------------------------------------------------------
-# Path classification regexes
-# ---------------------------------------------------------------------------
-
-# Full-universe triggers: a change to any of these can't be attributed to
-# specific roles, so the full universe is tested.
+# Changes that cannot be attributed to individual roles test the full universe.
 FULL_UNIVERSE_PATTERNS: list[str] = [
     r"group_vars/all/[^/]+\.(yml|yaml)",
     r"group_vars/test\.yml",
@@ -63,15 +58,8 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"mise-tasks/ci/.+",
 ]
 
-# Machine-universe triggers: a change to a test-VM host_vars or fixture
-# file can't be attributed to specific roles but only affects the test
-# cells that run on that machine. Maps pattern -> machine name.
-#
-# Only box and minimal appear: a change to host_vars/lab.yml or host_vars/pug.yml
-# is intentionally not a machine-universe trigger -- those are the heavyweight
-# prod-faithful fixtures, so a single host_vars edit there must not fan out to
-# every role that tests on them. Those roles still get a cell when their own code
-# changes.
+# Machine-wide fixtures fan out only to that machine. Heavyweight lab/pug
+# fixtures remain role-triggered rather than fanning out on host_vars changes.
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
     (r"host_vars/box\.yml", "box"),
     (r"host_vars/minimal\.yml", "minimal"),
@@ -84,11 +72,6 @@ PACKER_PATH_PREFIXES = ("packer/", "mise-tasks/packer/")
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
-
-
-# ---------------------------------------------------------------------------
-# File classification
-# ---------------------------------------------------------------------------
 
 
 class ChangeClassification(NamedTuple):
@@ -128,11 +111,6 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
     )
 
 
-# ---------------------------------------------------------------------------
-# Release-cell propagation
-# ---------------------------------------------------------------------------
-
-
 def propagate_release_cells(
     direct_roles: list[str],
     consumers: dict[str, list[str]],
@@ -164,11 +142,6 @@ def propagate_release_cells(
                     extra.add(f"{consumer}:{machine}:{codename}")
 
     return sorted(extra)
-
-
-# ---------------------------------------------------------------------------
-# Git helpers
-# ---------------------------------------------------------------------------
 
 
 def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -233,35 +206,9 @@ def _shallow_since_arg(created_at: str) -> str | None:
     return (dt - timedelta(days=1)).date().isoformat()
 
 
-# ---------------------------------------------------------------------------
-# GitLab API — green-base resolution
-# ---------------------------------------------------------------------------
-#
-# Query the project's pipeline history for the newest *successful* pipeline
-# whose commit is an ancestor of HEAD, and diff against that. This turns a
-# red-push -> fix sequence into "retest everything since the last fully-green
-# commit" rather than only the fix's own diff.
-#
-# A green base must be a pipeline that actually *ran the cell matrix* and passed
-# it — `success` status alone is not enough. Two kinds of successful push can
-# carry zero executed cells:
-#   - a docs-only `push` renders the lone `no_cells` placeholder into its child
-#     (detect found nothing role-relevant since the prior base);
-#   - a `SKIP_TEST_CELLS=true` push still builds the child, but every cell is an
-#     optional manual job (allow_failure: true) that may never have run.
-# Anchoring the diff at such a commit would skip retesting role code that was
-# never exercised there — exactly the red-push the schedule's green status masks.
-# So a candidate is accepted only when its triggered child pipeline holds at
-# least one real gating cell job (see _pipeline_ran_cells). The `web` source (manual
-# ROLES dispatch — a partial matrix) and `parent_pipeline` (the cell child
-# `schedule`, `web`, and `parent_pipeline` sources are dropped up front by
-# CELL_PIPELINE_SOURCES.
-#
-# Ancestry is checked locally with git (merge-base --is-ancestor), fetching the
-# candidate on demand when it sits outside the shallow checkout — the same
-# fetch-on-demand fallback the base resolver already uses, so it needs no
-# second API surface (e.g. a server-side compare). The cheap cells-ran API check
-# runs first, so a reaper-only schedule is rejected before any git deepen.
+# Diff from the newest successful push ancestor whose child ran a gating cell.
+# Docs-only and SKIP_TEST_CELLS pushes cannot become green bases. Shallow clones
+# fetch candidate history on demand; tree matching recovers rewritten commits.
 
 CELL_PIPELINE_SOURCES = ("push",)
 
@@ -361,13 +308,8 @@ def tree_equivalent_ancestor(sha: str, head: str = "HEAD", *, since: str | None 
 def _pipeline_ran_cells(project_api: str, pipeline_id: int, token: str, token_kind: str) -> bool:
     """True when the pipeline's triggered child holds at least one real cell job.
 
-    The cell matrix lives in the child pipeline behind the `test_cells` bridge;
-    detect writes a lone `no_cells` placeholder when nothing is role-relevant, and
-    a schedule pipeline (reaper only) triggers no child at all. Either way the
-    pipeline can be `success` without a cell having executed, so it is not a valid
-    green base — anchoring the diff there would skip retesting role code that was
-    never run at that commit. Any child job other than `no_cells` is a cell; the
-    parent's `success` status (with `strategy: depend`) already implies it passed.
+    A no_cells or all-optional child can succeed without testing role code, so
+    neither qualifies as a green base.
     """
     for bridge in _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/bridges", token, token_kind) or []:
         child = bridge.get("downstream_pipeline") or {}
@@ -375,11 +317,7 @@ def _pipeline_ran_cells(project_api: str, pipeline_id: int, token: str, token_ki
         if not child_id:
             continue
         for job in _gl_api_get_all(f"{project_api}/pipelines/{child_id}/jobs", token, token_kind) or []:
-            # A SKIP_TEST_CELLS pipeline renders its cells as optional manual jobs
-            # (allow_failure: true) that may never have run -- so they don't make
-            # this a valid base regardless of whether the operator click-started
-            # any. Only a real gating cell (allow_failure: false, which the
-            # parent's success implies passed) counts as the matrix having run.
+            # Optional manual cells do not prove the matrix ran.
             if job.get("name") != "no_cells" and not job.get("allow_failure"):
                 return True
     return False
@@ -395,12 +333,7 @@ def newest_green_pipeline(
     log_fn,
     max_pages: int = 5,
 ) -> dict | None:
-    """Find the newest successful push/schedule pipeline on branch that ran the
-    cell matrix and is an ancestor of head.
-
-    Returns the pipeline object (its ``sha`` is the diff base; its ``id`` keys
-    the per-cell runtime lookup), or None when none resolves.
-    """
+    """Newest successful push ancestor on branch that ran the cell matrix."""
     log_fn(f"  searching green pipelines on '{branch}'...")
     page = 1
     while page <= max_pages:
@@ -427,8 +360,7 @@ def newest_green_pipeline(
             created = pipe.get("created_at", "")
             if not sha or source not in CELL_PIPELINE_SOURCES:
                 continue
-            # Cheap API check before the (possibly git-deepening) ancestry test:
-            # reject reaper-only schedules and no_cells docs pushes outright.
+            # Reject no_cells pushes before possibly deepening git history.
             if not _pipeline_ran_cells(project_api, pipe["id"], token, token_kind):
                 log_fn(f"    skip {sha[:12]} ({created}, {source}): no cells executed")
                 continue
@@ -455,11 +387,7 @@ def resolve_green_base_gitlab(
     default_branch: str = "master",
     log_fn,
 ) -> dict | None:
-    """Resolve the newest green pipeline ancestor (branch, then default).
-
-    Returns the pipeline object, whose ``sha`` is the diff base and whose
-    ``id`` keys the per-cell runtime lookup.
-    """
+    """Resolve the newest green pipeline ancestor (branch, then default)."""
     if not (project_api and token and branch and head_sha):
         return None
     pipe = newest_green_pipeline(
@@ -499,32 +427,10 @@ def _gitlab_api_creds() -> tuple[str, str, str] | None:
     return f"{api_url}/projects/{project_id}", token, token_kind
 
 
-# ---------------------------------------------------------------------------
-# GitLab API — cell runtime ordering
-# ---------------------------------------------------------------------------
-#
 # Cells are emitted longest-first so the slowest jobs get the lowest build ids
-# and a runner claims them before the short ones (GitLab seeds ids in YAML order
-# within a stage). Runtimes are per-cell job `duration` (execution time, matched
-# by job name == cell spec); a cell with no recorded runtime is emitted first,
-# so a new/unmeasured -- possibly long -- cell is never left to start last.
-#
-# Each cell's runtime is the *median* of its successful job durations across the
-# last RUNTIME_SAMPLE_PIPELINES pipelines on the default branch. Three things
-# make this work where the obvious "read the green base's jobs" does not:
-#
-#   - Sample *successful cell jobs*, not whole-green pipelines. A pipeline with
-#     one flaky cell is 'failed' overall, but its 100+ passing cells are
-#     perfectly good duration samples; filtering to status=success pipelines
-#     discards nearly every run and starves the table to a cell or two.
-#   - Aggregate across many pipelines. A single push tests only the cells in its
-#     own diff (usually a handful), so one pipeline leaves most cells unmeasured
-#     and the order collapses to the alphabetical name tie-break.
-#   - Take the median, not the latest. A single run can be a cold-cache outlier
-#     or a fast partial; the median over recent runs is the stable estimate.
-#
-# Durations are only an ordering estimate, so pipeline status and ancestry are
-# both irrelevant; any recent run that finished the cell is a fine sample.
+# before short ones. Median successful-job durations from recent pushes keep
+# failed pipelines useful and smooth cold-cache outliers. Unmeasured cells go
+# first because they may be slow.
 RUNTIME_SAMPLE_PIPELINES = 10
 
 
@@ -577,13 +483,7 @@ def _collect_pipeline_jobs(
 
 
 def _recent_pipeline_ids(branch: str, project_api: str, token: str, token_kind: str, limit: int) -> list[int]:
-    """Up to `limit` recent push/schedule pipeline ids on branch, newest first, any status.
-
-    No status filter: runtime samples come from individual *successful cell
-    jobs* (see _cell_runtimes), so a pipeline that failed overall on a flaky
-    cell still contributes its passing cells. web/manual and parent_pipeline
-    sources are dropped -- they re-run a hand-picked subset, not the matrix.
-    """
+    """Up to `limit` recent push pipeline ids, newest first, at any status."""
     params = urllib.parse.urlencode({"ref": branch, "order_by": "id", "sort": "desc", "per_page": 100})
     data = _gl_api_get(f"{project_api}/pipelines?{params}", token, token_kind=token_kind)
     if not data:
@@ -593,16 +493,7 @@ def _recent_pipeline_ids(branch: str, project_api: str, token: str, token_kind: 
 
 
 def _cell_runtimes(branch: str, log, *, sample: int = RUNTIME_SAMPLE_PIPELINES) -> dict[str, float]:
-    """Map cell-job name -> median `duration` (s), sampled from recent pipelines; {} when unavailable.
-
-    Collects the durations of *successful* cell jobs across the last `sample`
-    pipelines on `branch` and takes the median per cell name. Sampling
-    successful jobs (not whole-green pipelines) and aggregating across runs is
-    what keeps the table dense: most pipelines carry a flaky cell or two and are
-    'failed' overall, yet their passing cells are valid samples. Returns an
-    empty map -- the caller then emits cells in default order -- when the
-    API/token is unavailable.
-    """
+    """Median successful duration by cell across recent push pipelines."""
     creds = _gitlab_api_creds()
     if not creds:
         return {}
@@ -610,8 +501,7 @@ def _cell_runtimes(branch: str, log, *, sample: int = RUNTIME_SAMPLE_PIPELINES) 
     ids = _recent_pipeline_ids(branch, project_api, token, token_kind, sample)
     seen: set[int] = set()
     samples: dict[str, list[float]] = defaultdict(list)
-    # _collect_pipeline_jobs collapses retries within a pipeline to the latest
-    # attempt, so each pipeline yields at most one success sample per cell.
+    # Retries collapse to the latest attempt before sampling.
     for pid in ids:
         jobs = _collect_pipeline_jobs(project_api, pid, token, token_kind, seen)
         for name, job in jobs.items():
@@ -631,11 +521,6 @@ def sort_specs_by_runtime(specs: list[str], runtimes: dict[str, float]) -> list[
     order is deterministic.
     """
     return sorted(specs, key=lambda s: (s in runtimes, -runtimes.get(s, 0.0), s))
-
-
-# ---------------------------------------------------------------------------
-# Role dependency map
-# ---------------------------------------------------------------------------
 
 
 def _walk_tasks(tasks, role: str, inv: dict) -> None:
@@ -665,86 +550,33 @@ def build_role_deps_map() -> dict[str, list[str]]:
     return {k: sorted(v) for k, v in inv.items()}
 
 
-# ---------------------------------------------------------------------------
-# CLI subcommands
-# ---------------------------------------------------------------------------
-
-
 def _full_universe_specs() -> list[str]:
     """All testable role specifications."""
     return cells_to_ci_specs(build_test_matrix(list_testable_roles()))
 
 
-# ---------------------------------------------------------------------------
-# GitLab dynamic child pipeline
-# ---------------------------------------------------------------------------
-#
-# The `detect` job emits a *generated child pipeline*: one qemu test cell per
-# job. Both targets (`aws_qemu`, `lab`) render the same matrix on qemu shell
-# runners. AWS cells hydrate promoted bundles from S3; lab cells boot the
-# co-located artifacts directly.
-#
-# The parent `detect` job (.gitlab-ci.yml) runs the `ci:detect` mise task, which
-# writes the child YAML (one job per cell, all extending a shared `.cell` scaffold);
-# the `test_cells` trigger always includes it, so an empty matrix is carried as
-# a single no-op placeholder job rather than a runtime-gated trigger.
-
-# IAM role the qemu cells assume (via GitLab OIDC) to read the promoted qemu
-# image bundles from S3 (terraform/aws_ci.tf); its OIDC trust accepts any
-# branch, so feature-branch pushes can test too.
+# Branch-safe read-only role used to hydrate AWS qemu images.
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 
-# Both targets run the qemu backend; they differ only in the fields below.
-#   cell_runner_tag — which shell runner claims the cells.
-#   site_runner_tag — the dedicated _site_test pool on AWS; the normal lab
-#                     runner for lab-target pipelines.
-#   in_aws          — true when the guest egresses through AWS, so roles pick
-#                     the in-region EC2 mirrors + public DNS over the LAN Nexus
-#                     / AdGuard VIP (surfaced as HOMELAB_TEST_IN_AWS).
-#   baked_toolchain — true when the shell host is the packer-baked qemu-host AMI
-#                     (qemu_host.pkr.hcl), which ships the mise tool tree + uv
-#                     cache at /opt; the cell points mise/uv at them so a fresh
-#                     host skips the toolchain re-download.
-#   image_oidc      — true when the cell assumes the AWS bake/cell role via
-#                     GitLab OIDC to hydrate the promoted qemu image bundles
-#                     from AWS S3. False means the cell boots images already on
-#                     local disk and skips hydration entirely: the lab bake
-#                     writes them into lab's /mnt/scratch/homelab_ci and the
-#                     co-located cells read them in place (no object store).
 TARGETS = {
     "aws_qemu": {
         "cell_runner_tag": "aws-shell-qemu",
-        # Dedicated single-host 4-vCPU pool (gitlab_runner_aws_qemu_site on fox,
-        # terraform ASG homelab-ci-qemu-site) so the critical-path converge runs
-        # uncontended off the role-cell pool.
+        # Keep the critical-path converge off the role-cell pool.
         "site_runner_tag": "aws-shell-qemu-site",
         "in_aws": True,
         "baked_toolchain": True,
         "image_oidc": True,
     },
     "lab": {
-        # lab's shell runner is on the operator LAN: the qemu guest reaches the
-        # LAN Nexus + AdGuard VIP, so it is not "in AWS"; its mise is its own.
         "cell_runner_tag": "lab-shell-qemu",
         "site_runner_tag": "lab-shell-qemu",
         "in_aws": False,
         "baked_toolchain": False,
-        # Boot images straight from lab's local /mnt/scratch/homelab_ci (the lab
-        # bake wrote them there); no S3/OIDC, no hydration.
         "image_oidc": False,
     },
 }
 
-# The child pipeline is a Jinja2 template so the static scaffold (`.cell`
-# before_script, artifacts, retry) is reviewable as real YAML; only the
-# per-cell job loop and the site_test/no_cells branches are templated.
 _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
-
-# The GitLab pipeline UI only renders the first 100 jobs of a stage, so the
-# full-universe matrix (140+ cells) spills off-screen in a single stage. Split
-# the cells evenly across two display stages (test1 / test2); the cell jobs
-# carry `needs: []` (DAG form) so test2 doesn't wait on test1 — the split is
-# purely a display grouping, every cell still starts in parallel.
 
 
 def render_child_pipeline(
@@ -782,14 +614,8 @@ def render_child_pipeline(
             cell_groups.append({"stage": "test2", "cells": cells[mid:]})
     else:
         cell_groups = []
-    # _site_test is the critical-path cell (longest, ~40m). GitLab seeds build
-    # ids stage-by-stage and a runner picks the lowest id first, so give it a
-    # dedicated leading `site` stage: it then gets the lowest ids and a runner
-    # claims it immediately instead of queueing behind the matrix. needs:[]
-    # (from .cell) keeps every cell -- site_test included -- starting in
-    # parallel, so the leading stage orders job ids and groups the UI without
-    # gating anything. no_cells falls back to a bare test1 so the empty
-    # pipeline stays valid.
+    # Stage order gives the critical-path site job the lowest build id; needs:[]
+    # keeps every stage parallel. Empty pipelines still need one stage.
     cell_stages = [g["stage"] for g in cell_groups]
     stages = (["site"] if site_test else []) + cell_stages or ["test1"]
     return template.render(
@@ -828,14 +654,11 @@ def _emit_gitlab(
     if target not in TARGETS:
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
-    # lab/pug fixtures only run on demand -- neither qemu CI target can hydrate
-    # their images -- so they never enter a generated pipeline.
+    # lab/pug fixtures run only on demand and have no CI image source.
     specs, on_demand = drop_on_demand_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
-    # SKIP_TEST_CELLS still builds + triggers the child, but renders the cells as
-    # optional manual jobs so none auto-runs (the operator click-starts the few
-    # they want). A GitLab pipeline variable, so it is present in detect's env.
+    # Keep a valid child while letting the operator start selected cells.
     manual_cells = os.environ.get("SKIP_TEST_CELLS") == "true"
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target, manual_cells=manual_cells))
@@ -868,13 +691,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
         log(f"{reason} -> testing the FULL universe")
         return _full_universe_specs(), True
 
-    # Diff base, in priority order:
-    #   1. CI_BASE_REF                  -- explicit override (local/preview).
-    #   2. newest green pipeline ancestor -- the last fully-green commit, via the
-    #      GitLab pipelines API; turns a red-push -> fix sequence into "retest
-    #      everything since green" instead of only the fix's own diff.
-    #   3. full universe                -- neither the branch nor the default
-    #      branch has a trustworthy green base.
+    # Explicit override, then the newest green ancestor, otherwise full universe.
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
     if ci_base_ref:
         base_ref = ci_base_ref
@@ -968,10 +785,7 @@ def _cmd_gitlab(args: list[str]) -> int:
     def log(msg):
         print(f"[detect] {msg}", file=sys.stderr)
 
-    # The newest green pipeline ancestor serves two roles, so resolve it once:
-    # its commit is the change-detection diff base, and its per-cell job
-    # durations order every mode's emitted cells longest-first. Returns None
-    # (and runtimes {} -> default order) when the GitLab API is unavailable.
+    # Resolve the diff base independently from runtime samples.
     branch = os.environ.get("CI_COMMIT_BRANCH", "")
     head_sha = os.environ.get("CI_COMMIT_SHA", "")
     default_branch = os.environ.get("CI_DEFAULT_BRANCH", "master")
@@ -990,9 +804,6 @@ def _cmd_gitlab(args: list[str]) -> int:
     else:
         log("  no green pipeline (need CI_API_V4_URL + CI_PROJECT_ID + a token + branch)")
         green = None
-    # Diff base needs a fully-green ancestor (above); runtime ordering only needs
-    # duration samples, so it draws from the default branch's recent runs
-    # independently -- a starved green base no longer collapses the order.
     runtimes = _cell_runtimes(default_branch, log)
 
     if opts.all:
@@ -1002,8 +813,7 @@ def _cmd_gitlab(args: list[str]) -> int:
     event = os.environ.get("CI_PIPELINE_SOURCE", "")
     roles_input = os.environ.get("ROLES", "")
 
-    # A web/manual pipeline with a ROLES variable is an explicit dispatch:
-    # test exactly those roles (or the full universe when ROLES=ALL).
+    # A manual ROLES dispatch bypasses change detection.
     if roles_input:
         log(f"mode: dispatch ROLES='{roles_input}'")
         if roles_input == "ALL":
