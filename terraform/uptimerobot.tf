@@ -83,7 +83,6 @@ resource "uptimerobot_monitor" "headscale" {
   type     = "HTTP"
   url      = each.value.url
   interval = 300
-  timeout  = 30
 
   response_time_threshold = try(each.value.response_time_threshold, null)
 
@@ -116,7 +115,6 @@ resource "uptimerobot_monitor" "resume" {
   keyword_type      = "ALERT_NOT_EXISTS"
   keyword_case_type = "CaseSensitive"
   keyword_value     = "Strasbourg"
-  timeout           = 30
 
   auth_type           = "NONE"
   follow_redirections = true
