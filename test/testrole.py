@@ -8,11 +8,9 @@ streaming around an end-to-end converge of one role.
 
 import argparse
 import asyncio
-import contextlib
 import os
 import re
 import sys
-import time
 import traceback
 from pathlib import Path
 
@@ -35,40 +33,6 @@ from utils import (
     print_line,
     tee_output,
 )
-
-# Benchmark mode: harness phase timings + per-task ansible profiling. Off by
-# default; flip on with --benchmark when investigating why a role is slow.
-_BENCHMARK = False
-_PHASE_TIMINGS: list[tuple[str, float]] = []
-
-
-@contextlib.asynccontextmanager
-async def _phase(label: str):
-    if not _BENCHMARK:
-        yield
-        return
-    t0 = time.monotonic()
-    try:
-        yield
-    finally:
-        dt = time.monotonic() - t0
-        _PHASE_TIMINGS.append((label, dt))
-        print_line(f"[phase] {label}: {dt:.1f}s")
-
-
-def _print_phase_summary() -> None:
-    if not _BENCHMARK or not _PHASE_TIMINGS:
-        return
-    total = sum(dt for _, dt in _PHASE_TIMINGS)
-    print_line("=" * 60)
-    print_line("PHASE TIMINGS")
-    print_line("=" * 60)
-    width = max(len(label) for label, _ in _PHASE_TIMINGS)
-    for label, dt in _PHASE_TIMINGS:
-        pct = (dt / total * 100) if total > 0 else 0.0
-        print_line(f"  {label:<{width}}  {dt:6.1f}s  ({pct:4.1f}%)")
-    print_line(f"  {'TOTAL':<{width}}  {total:6.1f}s")
-    print_line("=" * 60)
 
 
 def _positive_int(value: str) -> int:
@@ -119,7 +83,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
         "--benchmark",
         action="store_true",
         default=False,
-        help="Print harness phase timings and enable ansible's profile_tasks callback for per-task timing",
+        help="Enable ansible's profile_tasks callback for per-task timing",
     )
     parser.add_argument(
         "--workdir-parent",
@@ -164,8 +128,7 @@ def _count_changed_tasks(stdout: list[str]) -> int:
 async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Re-run the role and fail if any task reports changed."""
     print_line("Verifying idempotence (re-running the role)...")
-    async with _phase("idempotence rerun"):
-        result = await m.ansible_command(site_yml, *pass_args)
+    result = await m.ansible_command(site_yml, *pass_args)
     changed = _count_changed_tasks(result.stdout)
     if changed > 0:
         raise IdempotenceFailedException(
@@ -184,29 +147,25 @@ async def run_test(
 
     async with machine_session(m, timeout):
         try:
-            async with _phase("boot"):
-                await m.ensure_booted()
+            await m.ensure_booted()
             print_line("Booted")
 
-            async with _phase("ssh wait"):
-                await m.ensure_ssh()
+            await m.ensure_ssh()
             print_line("SSH up")
 
             # The vanilla cloud image runs cloud-init's config/final stages
             # after sshd comes up, so settle it before changing packages.
             if m.machine == "minimal":
-                async with _phase("cloud-init wait"):
-                    await m.ensure_cloud_init()
+                await m.ensure_cloud_init()
 
             if not base_prerequisites:
                 print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
 
-            async with _phase("test preparation"):
-                await m.ansible_command(
-                    str(m.workdir_path / "_environment.yml"),
-                    "-e",
-                    f"test_base_prerequisites={str(base_prerequisites).lower()}",
-                )
+            await m.ansible_command(
+                str(m.workdir_path / "_environment.yml"),
+                "-e",
+                f"test_base_prerequisites={str(base_prerequisites).lower()}",
+            )
 
             if m.machine == "minimal" and m.role != "cleanup":
                 # Avoid validating the cloud image's newer snapd unit against
@@ -217,21 +176,17 @@ async def run_test(
 
             # Invoke the setup entrypoint only when the role ships it.
             if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
-                async with _phase("hook _setup.yml"):
-                    await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
+                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
 
-            async with _phase("checkmode --check"):
-                await m.ansible_command(site_yml, "--check", *pass_args)
+            await m.ansible_command(site_yml, "--check", *pass_args)
 
-            async with _phase("main apply"):
-                await m.ansible_command(site_yml, *pass_args)
+            await m.ansible_command(site_yml, *pass_args)
 
             await _verify_idempotence(site_yml, m, pass_args)
 
             # Post-role assertions, if the role declares any.
             if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
-                async with _phase("verify.yml"):
-                    await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
+                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
         except CommandFailedException:
             print_line("Command failed")
             await m.collect_failure_artifacts()
@@ -247,8 +202,6 @@ def main() -> int:
     parsed_args, pass_args, role_config = parse_args()
 
     if parsed_args.benchmark:
-        global _BENCHMARK
-        _BENCHMARK = True
         # profile_tasks tags every TASK header with elapsed time and prints a
         # TASKS RECAP at end of each play; env var picks it up for every
         # ansible-playbook subprocess without editing ansible.cfg.
@@ -328,8 +281,6 @@ def main() -> int:
             print_line(traceback.format_exc().rstrip(), error=True)
             print_line(f"{parsed_args.role}.{parsed_args.machine} crashed", error=True)
             rc = 1
-        finally:
-            _print_phase_summary()
 
     # Clean passes keep the joblog summary and drop noisy per-run artifacts;
     # failures keep everything for post-mortem inspection.
