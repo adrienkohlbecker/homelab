@@ -31,8 +31,6 @@ resource "cloudflare_dns_record" "caa_authorization" {
   type    = "CAA"
   name    = each.value.zone_name
   ttl     = 1
-  tags    = []
-
   data = {
     flags = 0
     tag   = each.value.tag
@@ -47,8 +45,6 @@ resource "cloudflare_dns_record" "caa_iodef" {
   type    = "CAA"
   name    = each.key
   ttl     = 1
-  tags    = []
-
   data = {
     flags = 0
     tag   = "iodef"

@@ -88,7 +88,6 @@ resource "cloudflare_dns_record" "fahm_fr" {
   proxied  = try(each.value.proxied, false)
   ttl      = 1
   comment  = try(each.value.comment, null)
-  tags     = []
 
   data = try(each.value.data, null)
 }
