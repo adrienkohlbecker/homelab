@@ -14,11 +14,6 @@ default:
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
-  # Keep qemu cells available as manual jobs without auto-running the matrix:
-  #   git push -o ci.variable=SKIP_TEST_CELLS=true
-  # The trigger tolerates the skipped child, and detect excludes it as a future
-  # green base so later diffs are not suppressed.
-  SKIP_TEST_CELLS: ""
 
 # GitLab expands tags before job rules:variables, so select the runner tag at
 # workflow scope. Target alone is authoritative across web, push-option, and API
@@ -72,8 +67,8 @@ detect:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
-    # Detect still renders manual cells under SKIP_TEST_CELLS. The lab rule must
-    # precede source rules because lab uses host tools rather than /opt caches.
+    # The lab rule must precede source rules because lab uses host tools rather
+    # than /opt caches.
     - if: $HOMELAB_CI_TARGET == "lab"
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
       variables:
@@ -101,9 +96,6 @@ test_cells:
     - job: detect
       artifacts: true
   rules:
-    # An all-manual child is "skipped"; tolerate that status only under SKIP.
-    - if: '($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push") && $SKIP_TEST_CELLS == "true"'
-      allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
   trigger:
     include:

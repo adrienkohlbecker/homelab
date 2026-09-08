@@ -13,11 +13,6 @@ stages:
 .cell:
   stage: test1
   needs: []
-{% if manual_cells %}
-  # Manual cells neither auto-run nor qualify the pipeline as a green base.
-  when: manual
-  allow_failure: true
-{% endif %}
   # Qemu cells use protected shell runners; AWS hydrates S3 images while lab
   # boots its co-located bake artifacts.
   tags:

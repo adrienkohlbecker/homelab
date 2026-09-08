@@ -206,9 +206,8 @@ def _shallow_since_arg(created_at: str) -> str | None:
     return (dt - timedelta(days=1)).date().isoformat()
 
 
-# Diff from the newest successful push ancestor whose child ran a gating cell.
-# Docs-only and SKIP_TEST_CELLS pushes cannot become green bases. Shallow clones
-# fetch candidate history on demand; tree matching recovers rewritten commits.
+# Diff from the newest successful push ancestor. Shallow clones fetch candidate
+# history on demand; tree matching recovers rewritten commits.
 
 CELL_PIPELINE_SOURCES = ("push",)
 
@@ -305,24 +304,6 @@ def tree_equivalent_ancestor(sha: str, head: str = "HEAD", *, since: str | None 
     return None
 
 
-def _pipeline_ran_cells(project_api: str, pipeline_id: int, token: str, token_kind: str) -> bool:
-    """True when the pipeline's triggered child holds at least one real cell job.
-
-    A no_cells or all-optional child can succeed without testing role code, so
-    neither qualifies as a green base.
-    """
-    for bridge in _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/bridges", token, token_kind) or []:
-        child = bridge.get("downstream_pipeline") or {}
-        child_id = child.get("id")
-        if not child_id:
-            continue
-        for job in _gl_api_get_all(f"{project_api}/pipelines/{child_id}/jobs", token, token_kind) or []:
-            # Optional manual cells do not prove the matrix ran.
-            if job.get("name") != "no_cells" and not job.get("allow_failure"):
-                return True
-    return False
-
-
 def newest_green_pipeline(
     branch: str,
     *,
@@ -333,7 +314,7 @@ def newest_green_pipeline(
     log_fn,
     max_pages: int = 5,
 ) -> dict | None:
-    """Newest successful push ancestor on branch that ran the cell matrix."""
+    """Newest successful push ancestor on a branch."""
     log_fn(f"  searching green pipelines on '{branch}'...")
     page = 1
     while page <= max_pages:
@@ -359,10 +340,6 @@ def newest_green_pipeline(
             source = pipe.get("source", "")
             created = pipe.get("created_at", "")
             if not sha or source not in CELL_PIPELINE_SOURCES:
-                continue
-            # Reject no_cells pushes before possibly deepening git history.
-            if not _pipeline_ran_cells(project_api, pipe["id"], token, token_kind):
-                log_fn(f"    skip {sha[:12]} ({created}, {source}): no cells executed")
                 continue
             if is_local_ancestor(sha, head_sha, since=created, branch=branch):
                 log_fn(f"  green ancestor: {sha[:12]} ({created}, {source})")
@@ -579,9 +556,7 @@ TARGETS = {
 _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 
 
-def render_child_pipeline(
-    specs: list[str], site_test: bool, target: str = "aws_qemu", *, manual_cells: bool = False
-) -> str:
+def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_qemu") -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One job per cell spec (``role:variant[:ubuntu]``), each extending the
@@ -590,10 +565,6 @@ def render_child_pipeline(
     downstream trigger is gated off. Cells are split evenly across two display
     stages (test1 / test2) but run as a single DAG (``needs: []``).
 
-    ``manual_cells`` (SKIP_TEST_CELLS=true) renders every cell as an optional
-    manual job (``when: manual`` + ``allow_failure: true``): the child pipeline
-    is still built and triggered, but no cell auto-runs and none blocks the
-    parent -- the operator click-starts only the cells they want.
     """
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(_CHILD_TEMPLATE.parent)),
@@ -630,7 +601,6 @@ def render_child_pipeline(
         baked_toolchain=target_config["baked_toolchain"],
         image_oidc=target_config["image_oidc"],
         cell_role_arn=CELL_ROLE_ARN,
-        manual_cells=manual_cells,
     )
 
 
@@ -658,14 +628,9 @@ def _emit_gitlab(
     specs, on_demand = drop_on_demand_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
-    # Keep a valid child while letting the operator start selected cells.
-    manual_cells = os.environ.get("SKIP_TEST_CELLS") == "true"
-
-    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target, manual_cells=manual_cells))
+    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
 
     log(f"target={target} runner={target_config['cell_runner_tag']}")
-    if manual_cells:
-        log("SKIP_TEST_CELLS=true -> cells rendered as optional manual jobs (none auto-runs)")
     log(f"matrix={json.dumps(specs)}")
     if on_demand:
         log(f"dropped {len(on_demand)} on-demand lab/pug cell(s): {' '.join(sorted(on_demand))}")

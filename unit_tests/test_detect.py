@@ -543,7 +543,6 @@ class TestNewestGreenPipeline:
                 {"id": 1, "sha": "newsha", "source": "push", "created_at": "2026-01-02"},
             ],
         )
-        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: True)
         assert detect.newest_green_pipeline("master", **self._kw())["sha"] == "newsha"
 
@@ -563,7 +562,6 @@ class TestNewestGreenPipeline:
                 else []
             ),
         )
-        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         seen = []
 
         def fake_anc(sha, head, **kw):
@@ -575,10 +573,9 @@ class TestNewestGreenPipeline:
         # ancestry is only ever checked for the push pipeline
         assert seen == ["pushsha"]
 
-    def test_skips_pipeline_without_cells(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # A newer ancestor push that ran no cells (docs-only -> no_cells child) is
-        # skipped without ever consulting ancestry; the older push that ran the
-        # matrix is the real base.
+    def test_accepts_successful_no_cells_push(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # A docs-only push can safely advance the base because its diff contained
+        # no role-relevant changes.
         monkeypatch.setattr(
             detect,
             "_gl_api_get",
@@ -591,7 +588,6 @@ class TestNewestGreenPipeline:
                 else []
             ),
         )
-        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda pa, pid, t, tk: pid == 1)
         seen = []
 
         def fake_anc(sha, head, **kw):
@@ -599,12 +595,9 @@ class TestNewestGreenPipeline:
             return True
 
         monkeypatch.setattr(detect, "is_local_ancestor", fake_anc)
-        logs = []
-        result = detect.newest_green_pipeline("master", **self._kw(log_fn=logs.append))
-        assert result["sha"] == "ranmatrix"
-        # the cell-less candidate never reaches the ancestry test
-        assert seen == ["ranmatrix"]
-        assert any("no cells executed" in m for m in logs)
+        result = detect.newest_green_pipeline("master", **self._kw())
+        assert result["sha"] == "nocells"
+        assert seen == ["nocells"]
 
     def test_skips_non_ancestor_then_paginates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_api(url, token, **kw):
@@ -615,7 +608,6 @@ class TestNewestGreenPipeline:
             return []
 
         monkeypatch.setattr(detect, "_gl_api_get", mock_api)
-        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         monkeypatch.setattr(detect, "is_local_ancestor", lambda sha, head, **kw: sha == "oldgreen")
         monkeypatch.setattr(detect, "tree_equivalent_ancestor", lambda sha, head, **kw: None)
         logs = []
@@ -631,7 +623,6 @@ class TestNewestGreenPipeline:
                 [{"id": 7, "sha": "oldgreen", "source": "push", "created_at": "2026-01-05"}] if "&page=1" in url else []
             ),
         )
-        monkeypatch.setattr(detect, "_pipeline_ran_cells", lambda *a, **kw: True)
         monkeypatch.setattr(detect, "is_local_ancestor", lambda *a, **kw: False)
         monkeypatch.setattr(
             detect,
@@ -812,50 +803,6 @@ class TestCollectPipelineJobs:
         assert jobs["lint"]["duration"] == 5
 
 
-class TestPipelineRanCells:
-    def test_true_when_child_has_a_cell(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def mock_get_all(base_url, token, token_kind, **kw):
-            if base_url.endswith("/pipelines/1/bridges"):
-                return [{"downstream_pipeline": {"id": 2}}]
-            if base_url.endswith("/pipelines/2/jobs"):
-                return [{"name": "no_cells"}, {"name": "nginx:box"}]
-            return []
-
-        monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
-        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is True
-
-    def test_false_when_child_only_no_cells(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # docs-only push: detect renders the lone placeholder, no cell ran.
-        def mock_get_all(base_url, token, token_kind, **kw):
-            if base_url.endswith("/pipelines/1/bridges"):
-                return [{"downstream_pipeline": {"id": 2}}]
-            if base_url.endswith("/pipelines/2/jobs"):
-                return [{"name": "no_cells"}]
-            return []
-
-        monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
-        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is False
-
-    def test_false_when_no_child(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # schedule pipeline: only the reaper ran, no test_cells bridge at all.
-        monkeypatch.setattr(detect, "_gl_api_get_all", lambda base_url, token, token_kind, **kw: [])
-        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is False
-
-    def test_false_when_cells_are_allow_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # SKIP_TEST_CELLS pipeline: the child holds the cells, but they are
-        # optional manual jobs (allow_failure: true) that may never have run, so
-        # the pipeline is not a valid green base even though a cell job is present.
-        def mock_get_all(base_url, token, token_kind, **kw):
-            if base_url.endswith("/pipelines/1/bridges"):
-                return [{"downstream_pipeline": {"id": 2}}]
-            if base_url.endswith("/pipelines/2/jobs"):
-                return [{"name": "no_cells"}, {"name": "nginx:box", "allow_failure": True}]
-            return []
-
-        monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
-        assert detect._pipeline_ran_cells("http://api", 1, "t", "job") is False
-
-
 class TestCellRuntimes:
     def test_keeps_only_successful_cell_jobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: ("http://api", "t", "job"))
@@ -1023,13 +970,9 @@ class TestListTestableRoles:
         assert detect.list_testable_roles() == []
 
 
-def _render_child_doc(
-    specs: list[str], site_test: bool, target: str = "aws_qemu", *, manual_cells: bool = False
-) -> dict:
+def _render_child_doc(specs: list[str], site_test: bool, target: str = "aws_qemu") -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
-    return detect.yaml.safe_load(
-        detect.render_child_pipeline(specs, site_test, target=target, manual_cells=manual_cells)
-    )
+    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
 
 
 class TestGitlabChangeMatrix:
@@ -1089,24 +1032,9 @@ class TestRenderChildPipeline:
         assert "no_cells" not in doc
 
     def test_cells_auto_run_by_default(self) -> None:
-        # Without SKIP_TEST_CELLS the cells carry no when:/allow_failure: -- they
-        # run automatically as soon as the child pipeline starts.
-        doc = _render_child_doc(["nginx:box"], site_test=True, manual_cells=False)
+        doc = _render_child_doc(["nginx:box"], site_test=True)
         assert "when" not in doc[".cell"]
         assert "allow_failure" not in doc[".cell"]
-
-    def test_manual_cells_renders_optional_manual(self) -> None:
-        # SKIP_TEST_CELLS=true: .cell (inherited by every cell, incl. _site_test)
-        # becomes an optional manual job so none auto-runs and none gates the
-        # parent. allow_failure also keeps a skip pipeline out of green-base
-        # detection (see TestPipelineRanCells).
-        doc = _render_child_doc(["nginx:box"], site_test=True, manual_cells=True)
-        assert doc[".cell"]["when"] == "manual"
-        assert doc[".cell"]["allow_failure"] is True
-        # Cells inherit it via extends: .cell -- they don't set their own.
-        assert "when" not in doc["nginx:box"]
-        assert "when" not in doc["_site_test:box"]
-        assert "when" not in doc["_site_check:box"]
 
     def test_no_cells_placeholder_runs_on_hosted_runner(self) -> None:
         # A no-cell pipeline does not consume a persistent or autoscaled qemu
