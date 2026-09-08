@@ -60,9 +60,10 @@ def test_relative_bound_uses_the_same_precision_for_lnav_and_selection() -> None
     assert parsed[0].epoch == datetime.fromisoformat(parsed[-1][1]).timestamp()
 
 
-def test_line_count_mode_is_rejected() -> None:
-    with pytest.raises(SystemExit):
-        lnav_journal.parse_args(["-n", "100"])
+@pytest.mark.parametrize("argv", [["-n", "100"], ["--lines", "100"], ["--lines=100"]])
+def test_line_count_mode_is_rejected(argv: list[str]) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        lnav_journal.parse_args(argv)
 
 
 def test_unit_filter_normalizes_names_and_preserves_globs() -> None:
@@ -161,12 +162,6 @@ def test_argument_order_and_delimiter_are_preserved() -> None:
 def test_missing_option_values_are_rejected(option: str) -> None:
     with pytest.raises(SystemExit, match="2"):
         lnav_journal.parse_args([option])
-
-
-@pytest.mark.parametrize("argv", [["--lines", "100"], ["--lines=100"]])
-def test_long_line_count_options_are_rejected(argv: list[str]) -> None:
-    with pytest.raises(SystemExit, match="2"):
-        lnav_journal.parse_args(argv)
 
 
 @pytest.mark.parametrize(
