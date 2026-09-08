@@ -24,30 +24,15 @@ out_dir="${repo_root}/zbm-build/${arch}"
 
 workdir="$(mktemp -d)"
 launcher_pid=""
-qmp_sock="${workdir}/qmp.sock"
 serial_fifo="${workdir}/serial.in"
 boot_log="${workdir}/serial.log"
 mkfifo "$serial_fifo"
 exec 3<>"$serial_fifo"
 
 cleanup() {
-  if [ -S "$qmp_sock" ]; then
-    python3 - "$qmp_sock" <<'PY' 2>/dev/null || true
-import json
-import socket
-import sys
-
-s = socket.socket(socket.AF_UNIX)
-s.connect(sys.argv[1])
-f = s.makefile("rw")
-f.readline()
-for cmd in ({"execute": "qmp_capabilities"}, {"execute": "quit"}):
-    f.write(json.dumps(cmd) + "\n")
-    f.flush()
-    f.readline()
-PY
-  fi
   if [ -n "$launcher_pid" ]; then
+    # launch.py uses QEMU's mon:stdio multiplexer; Ctrl-A x asks QEMU to quit.
+    printf '\001x' >&3 2>/dev/null || true
     for _ in $(seq 1 15); do
       kill -0 "$launcher_pid" 2>/dev/null || break
       sleep 1
@@ -98,7 +83,6 @@ HOMELAB_NET_BACKEND=slirp "${repo_root}/test/launch.py" \
   --append "$base_cmdline loglevel=7 zbm.show" \
   --mem 2048 \
   --with-pflash \
-  --qmp "$qmp_sock" \
   --no-ssh-wait \
   --foreground <"$serial_fifo" >"$boot_log" 2>&1 &
 launcher_pid=$!
