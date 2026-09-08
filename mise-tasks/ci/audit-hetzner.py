@@ -23,8 +23,7 @@ a floating IP, a load balancer, server backups (a +20% surcharge), or snapshots
 piling up past the prune horizon. This sweeps the project for all of those.
 
 It NEVER mutates. For each prunable/orphaned snapshot it prints the exact
-hcloud delete line (and, for the ubuntu-zfs rotation, the one-shot prune task)
-for the operator to review and run by hand.
+hcloud delete line for the operator to review and run by hand.
 
 Scope note: HCLOUD_TOKEN only sees Hetzner *Cloud*, and only the one project it
 belongs to. Hetzner Robot (dedicated servers, Storage Boxes) is a separate
@@ -181,11 +180,9 @@ def main():
     print("\n── Anomalies (billable / unexpected) ──")
     if anomalies:
         print("\n".join(f"  {line}" for line in anomalies))
-        print("\n── Suggested cleanup (review, then run by hand -- NOT executed) ──")
-        print("  ubuntu-zfs snapshot rotation, in one shot:")
-        print("    mise run packer:hcloud-prune-snapshots -- 'os=ubuntu-zfs,ubuntu=noble'")
-        for cmd in deletes:
-            print(f"  {cmd}")
+        if deletes:
+            print("\n── Suggested cleanup (review, then run by hand -- NOT executed) ──")
+            print("\n".join(f"  {cmd}" for cmd in deletes))
     else:
         print("  none -- project holds only the expected fox infra")
 
