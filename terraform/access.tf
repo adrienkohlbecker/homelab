@@ -1,7 +1,7 @@
-# Zero Trust Access surface. Kept around as a fixture for testing the
-# traefik-auth-cloudflare repo against a real CF Access endpoint
-# (echo.mhaf.fr), not as production auth -- nothing in this repo
-# depends on it.
+# Zero Trust Access surface. Deliberately retained despite having no in-repo
+# consumer: echo.mhaf.fr is the live integration fixture for testing the
+# traefik-auth-cloudflare repo against a real CF Access endpoint. Do not retire
+# it based on repository reference searches alone.
 
 # Cookie / session hardening: http_only blocks JS access to the
 # CF_Authorization cookie (XSS-via-echo can't exfil the token);
