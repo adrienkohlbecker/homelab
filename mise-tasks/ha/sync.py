@@ -96,13 +96,6 @@ def host_file(rel: str) -> bytes | None:
     return r.stdout if r.returncode == 0 else None
 
 
-def reload_plan(changes: dict[SyncFile, bytes | None]) -> list[str]:
-    reloads = {file.reload_service for file in changes}
-    if "homeassistant.restart" in reloads:
-        return ["homeassistant.restart"]
-    return sorted(reload for reload in reloads if reload)
-
-
 def validate_syntax(relpaths: list[str]) -> None:
     """Parse each .yaml/.jinja file; abort with the full failure list if any won't load.
 
@@ -336,11 +329,16 @@ def do_push(dry_run: bool = False) -> None:
         print("push: HEAD matches host, nothing to do")
         return
     files = list(changed)
+    reloads = {file.reload_service for file in files}
+    services = (
+        ["homeassistant.restart"]
+        if "homeassistant.restart" in reloads
+        else sorted(reload for reload in reloads if reload)
+    )
     relpaths = [file.rel for file in files]
     show_push_diff(changed)
     validate_syntax(relpaths)
     if dry_run:
-        services = reload_plan(changed)
         reload_desc = ", ".join(services) or "none"
         print(f"\n\033[1;33mdry-run\033[0m: would upload {relpaths}")
         print(f"\033[1;33mdry-run\033[0m: would advance {SYNCED_TAG} and trigger: {reload_desc}")
@@ -349,7 +347,6 @@ def do_push(dry_run: bool = False) -> None:
     upload_to_host(files)
     advance_synced_tag()
     print(f"push: uploaded {relpaths}")
-    services = reload_plan(changed)
     if services == ["homeassistant.restart"]:
         print("at least one changed file requires a restart -- restarting homeassistant")
     for service in services:
