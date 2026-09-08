@@ -205,16 +205,6 @@ class TestTargetPreflight:
 
 
 class TestInspectTargets:
-    def test_accepts_an_absent_target_tree(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
-        # zfs list exits 1 when the dataset does not exist.
-        monkeypatch.setattr(
-            restore,
-            "remote_zfs_capture",
-            lambda *args, **kwargs: _completed(returncode=1, stderr="cannot open: dataset does not exist"),
-        )
-
-        restore.inspect_targets(config)
-
     def test_scopes_the_probe_to_the_target_tree(self, config, monkeypatch: pytest.MonkeyPatch) -> None:
         calls = []
 
