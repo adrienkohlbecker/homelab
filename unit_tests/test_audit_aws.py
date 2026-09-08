@@ -58,7 +58,6 @@ def test_report_omits_empty_cleanup_section(monkeypatch, capsys):
         def get_caller_identity():
             return {"Account": "123", "Arn": "test-role"}
 
-    reset_output()
     audit_aws.anomalies.append("manual review only")
     monkeypatch.setattr(audit_aws, "client", lambda *_args: Sts())
     monkeypatch.setattr(audit_aws, "safe", lambda *_args, **_kwargs: [])

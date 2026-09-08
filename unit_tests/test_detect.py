@@ -879,8 +879,8 @@ class TestRecentPipelineIds:
 
         monkeypatch.setattr(detect, "_gl_api_get", mock_get)
         ids = detect._recent_pipeline_ids("master", "http://api", "t", "job", 2)
-        # newest-first, only push/schedule, capped at the limit
-        assert ids == [5, 3]
+        # newest-first pushes, capped at the limit
+        assert ids == [5, 1]
         # no status filter -- failed-overall pipelines must be sampled too
         assert "status=success" not in seen["url"]
 
