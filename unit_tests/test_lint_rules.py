@@ -1,6 +1,5 @@
 """Unit tests for custom ansible-lint rules."""
 
-import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -9,16 +8,18 @@ import pytest
 from ansiblelint.file_utils import Lintable
 from ansiblelint.utils import Task
 
+from lint.ansible_rules.homelab import (
+    NoHandlers,
+    NoInventoryHostnameWhen,
+    NoNoLog,
+    PreferImport,
+    RequireBackup,
+    RequireNamedRoleEntrypoint,
+    RequireValidate,
+    ShellStrictMode,
+)
+
 _ROOT = Path(__file__).resolve().parent.parent
-_RULES = runpy.run_path(str(_ROOT / "lint" / "ansible_rules" / "homelab.py"))
-NoHandlers = _RULES["NoHandlers"]
-NoInventoryHostnameWhen = _RULES["NoInventoryHostnameWhen"]
-NoNoLog = _RULES["NoNoLog"]
-PreferImport = _RULES["PreferImport"]
-RequireBackup = _RULES["RequireBackup"]
-RequireNamedRoleEntrypoint = _RULES["RequireNamedRoleEntrypoint"]
-RequireValidate = _RULES["RequireValidate"]
-ShellStrictMode = _RULES["ShellStrictMode"]
 
 
 def _task(module: str, module_args=None, *, kind: str = "tasks", **task_fields) -> Task:
