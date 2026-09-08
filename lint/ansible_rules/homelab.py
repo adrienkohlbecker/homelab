@@ -27,7 +27,6 @@ _FILE_WRITE_MODULES = {
     "ini_file",
 }
 _TEST_HOOK_PREFIXES = ("_verify", "_setup")
-_TEST_FIXTURE_ROLES = {"packer"}
 _INCLUDE_MODULES = {"include_role", "include_tasks"}
 _CONFIG_WRITE_MODULES = {"copy", "template"}
 _CONFIG_DEST_RE = re.compile(
@@ -68,17 +67,7 @@ def _role_fixture_has_named_entrypoints(file: Lintable | None, role_name: object
 
 
 def _is_test_file(file: Lintable | None) -> bool:
-    if file is None:
-        return False
-    if _is_test_hook(file):
-        return True
-    if _is_test_playbook(file):
-        return True
-    parts = file.path.parts
-    if "roles" not in file.path.parts:
-        return False
-    role = parts.index("roles") + 1
-    return role < len(parts) and parts[role] in _TEST_FIXTURE_ROLES
+    return _is_test_hook(file) or _is_test_playbook(file)
 
 
 class _HomelabRule(AnsibleLintRule):
