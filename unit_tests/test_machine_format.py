@@ -138,16 +138,21 @@ def test_ansible_env_default_envelope(
     assert env["ANSIBLE_FACT_CACHING_TIMEOUT"] == "7200"
 
 
-@pytest.mark.parametrize("role", ["_site_test", "_site_check"])
-def test_ansible_env_full_site_runs_suppress_verbose_output(
+def test_ansible_env_quiet_runs_suppress_verbose_output(
     machine_factory: Callable[..., machine.Machine],
-    role: str,
 ) -> None:
-    env = machine_factory(role=role).ansible_env()
+    env = machine_factory(run_options=machine.MachineRunOptions(quiet_ansible=True)).ansible_env()
 
     assert env["ANSIBLE_DISPLAY_OK_HOSTS"] == "false"
     assert env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] == "false"
     assert env["ANSIBLE_VERBOSITY"] == "0"
+
+
+def test_run_options_override_machine_resources(machine_factory: Callable[..., machine.Machine]) -> None:
+    m = machine_factory(run_options=machine.MachineRunOptions(vcpus=6, memory_mb=12288))
+
+    assert m._spec.vcpus == 6
+    assert m._spec.memory_mb == 12288
 
 
 def test_format_ansible_cmd_upstream_mirrors_clears_nexus(

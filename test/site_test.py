@@ -27,6 +27,7 @@ from pathlib import Path
 
 from machine import (
     Machine,
+    MachineRunOptions,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
@@ -47,6 +48,11 @@ from utils import (
 # legitimate drain with wide margin while still catching a genuine wedge. The
 # serial console (boot.ansi) records which stop jobs hung.
 POWEROFF_TIMEOUT = 120
+
+# The converge runs dozens of services on a dedicated 8-vCPU/16-GiB CI host;
+# check mode renders the same site without starting them and keeps box sizing.
+SITE_CONVERGE_OPTIONS = MachineRunOptions(vcpus=6, memory_mb=12288, quiet_ansible=True)
+SITE_CHECK_OPTIONS = MachineRunOptions(quiet_ansible=True)
 
 
 class PoweroffTimeoutError(Exception):
@@ -178,15 +184,14 @@ def main() -> int:
 
     m = Machine(
         machine="box",
-        # A distinct role name so the check run's artifacts (output_file,
-        # failure dumps) don't collide with a converge run's and machine.py can
-        # tell the two apart (the log-volume tuning applies to both; the
-        # dedicated-host spec bump only to the real converge).
+        # Distinct artifact names keep simultaneous check and converge logs
+        # separate; run behavior is carried explicitly by run_options.
         role="_site_check" if args.check else "_site_test",
         keep_vm=args.keep,
         ubuntu_name=args.ubuntu,
         machine_timeout=args.timeout,
         workdir_parent=args.workdir_parent,
+        run_options=SITE_CHECK_OPTIONS if args.check else SITE_CONVERGE_OPTIONS,
     )
 
     rc = 0

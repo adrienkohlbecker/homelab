@@ -332,6 +332,15 @@ class LaunchOptions:
     write_image: bool = False
 
 
+@dataclass(frozen=True)
+class MachineRunOptions:
+    """Per-run policy that is independent of the role or artifact name."""
+
+    vcpus: int | None = None
+    memory_mb: int | None = None
+    quiet_ansible: bool = False
+
+
 def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
     """Return any -e overlay needed on top of inventory-loaded host_vars.
 
@@ -451,12 +460,13 @@ class Machine:
         *,
         workdir_parent: Path | None = None,
         launch: LaunchOptions | None = None,
+        run_options: MachineRunOptions | None = None,
         loopback_host: str | None = None,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
-        launch carries launch.py-only qemu overrides. Role tests and the site
-        converge use the default image/firmware/network path.
+        launch carries launch.py-only qemu overrides. run_options carries
+        explicit per-run resource and logging policy.
 
         loopback_host pins the 127.x bind address for this cell's hostfwds/SSH;
         None derives a per-process address (see _cell_loopback_host) so parallel
@@ -464,24 +474,16 @@ class Machine:
         --write-hostfwds contract (consumers assume the default loopback).
         """
         self.launch = launch or LaunchOptions()
+        self.run_options = run_options or MachineRunOptions()
         try:
             spec = QEMU_MACHINE_SPECS[machine]
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
-        # _site_test converges the whole fleet onto one box guest, so by the end
-        # dozens of services are running concurrently — far past the 4 vCPU /
-        # 4 GiB the per-role box default is sized for. Unlike a per-role cell it
-        # gets a dedicated AWS host with no co-tenants (terraform
-        # ci_qemu_pools.site — c8id.2xlarge, 8 vCPU / 16 GiB), so widen the guest
-        # to actually use it: 6 vCPU leaves the host 2 cores for qemu's
-        # iothreads + nested-virt servicing + the instance OS, and 12 GiB keeps
-        # the running services off the zvol-backed swap (whose I/O is doubly
-        # expensive under nesting) while leaving the host 4 GiB. Scoped to
-        # _site_test alone — bumping the shared box spec would oversubscribe the
-        # role-cell pool (6 guests x 6 vCPU > the 32-vCPU host).
-        if role == "_site_test":
-            spec = spec._replace(vcpus=6, memory_mb=12288)
+        spec = spec._replace(
+            vcpus=self.run_options.vcpus if self.run_options.vcpus is not None else spec.vcpus,
+            memory_mb=self.run_options.memory_mb if self.run_options.memory_mb is not None else spec.memory_mb,
+        )
 
         self.imagedir: Path = imagedir_for_host()
 
@@ -733,7 +735,7 @@ class Machine:
         # regardless of verbosity), so drop the ok/skipped firehose and the
         # -v result bodies for non-failing tasks here. Per-role tests keep the
         # verbose detail for single-role debugging.
-        if self.role in ("_site_test", "_site_check"):
+        if self.run_options.quiet_ansible:
             env["ANSIBLE_DISPLAY_OK_HOSTS"] = "false"
             env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
             env["ANSIBLE_VERBOSITY"] = "0"
