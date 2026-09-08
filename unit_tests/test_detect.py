@@ -1260,84 +1260,69 @@ class TestEmitGitlab:
 
 class TestCmdGitlab:
     @pytest.fixture(autouse=True)
-    def _no_green_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _offline_full_universe(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Keep these tests offline: a real CI environment exports the GitLab API
         # vars, which would otherwise drive a live green-pipeline lookup.
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
-
-    def test_all_flag_full_universe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
-        child = tmp_path / "child.yml"
-        rc = detect._cmd_gitlab(["--all", "--child-path", str(child)])
-        assert rc == 0
-        assert "_site_test:box" in detect.yaml.safe_load(child.read_text())
 
-    def test_schedule_full_universe(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("CI_PIPELINE_SOURCE", "schedule")
-        monkeypatch.delenv("ROLES", raising=False)
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+    @pytest.mark.parametrize(
+        ("args", "pipeline_source", "roles", "expected_jobs"),
+        [
+            pytest.param(["--all"], None, None, {"_site_test:box"}, id="all-flag"),
+            pytest.param([], "schedule", None, {"nginx:box", "_site_test:box"}, id="schedule"),
+            pytest.param([], "web", "ALL", {"nginx:box"}, id="dispatch-all"),
+        ],
+    )
+    def test_full_universe_triggers(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        args: list[str],
+        pipeline_source: str | None,
+        roles: str | None,
+        expected_jobs: set[str],
+    ) -> None:
+        for name, value in {"CI_PIPELINE_SOURCE": pipeline_source, "ROLES": roles}.items():
+            if value is None:
+                monkeypatch.delenv(name, raising=False)
+            else:
+                monkeypatch.setenv(name, value)
         child = tmp_path / "child.yml"
-        rc = detect._cmd_gitlab(["--child-path", str(child)])
-        assert rc == 0
+        assert detect._cmd_gitlab([*args, "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
-        assert "nginx:box" in loaded
-        assert "_site_test:box" in loaded
+        assert expected_jobs <= loaded.keys()
 
-    def test_dispatch_roles_all(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("CI_PIPELINE_SOURCE", "web")
-        monkeypatch.setenv("ROLES", "ALL")
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
-        child = tmp_path / "child.yml"
-        assert detect._cmd_gitlab(["--child-path", str(child)]) == 0
-        assert "nginx:box" in detect.yaml.safe_load(child.read_text())
-
-    def test_target_env_selects_lab_pipeline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("HOMELAB_CI_TARGET", "lab")
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+    @pytest.mark.parametrize(
+        ("target", "runner_tag", "in_aws"),
+        [
+            pytest.param("lab", "lab-shell-qemu", "false", id="lab"),
+            pytest.param("aws_qemu", "aws-shell-qemu", "true", id="aws-qemu"),
+            pytest.param(None, "aws-shell-qemu", "true", id="default"),
+        ],
+    )
+    def test_target_selection(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        target: str | None,
+        runner_tag: str,
+        in_aws: str,
+    ) -> None:
+        if target is None:
+            monkeypatch.delenv("HOMELAB_CI_TARGET", raising=False)
+        else:
+            monkeypatch.setenv("HOMELAB_CI_TARGET", target)
         child = tmp_path / "child.yml"
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
-        assert loaded[".cell"]["tags"] == ["lab-shell-qemu"]
-        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
+        assert loaded[".cell"]["tags"] == [runner_tag]
+        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == in_aws
 
-    def test_target_env_selects_aws_qemu_pipeline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("HOMELAB_CI_TARGET", "aws_qemu")
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+    @pytest.mark.parametrize("command", [[], ["gitlab"]], ids=["direct", "legacy-subcommand"])
+    def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: list[str]) -> None:
         child = tmp_path / "child.yml"
-        assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
-        loaded = detect.yaml.safe_load(child.read_text())
-        assert loaded[".cell"]["tags"] == ["aws-shell-qemu"]
-        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
-
-    def test_default_target_is_aws_qemu(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # With no HOMELAB_CI_TARGET, the default target is aws_qemu.
-        monkeypatch.delenv("HOMELAB_CI_TARGET", raising=False)
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
-        child = tmp_path / "child.yml"
-        assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
-        loaded = detect.yaml.safe_load(child.read_text())
-        assert loaded[".cell"]["tags"] == ["aws-shell-qemu"]
-        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
-
-
-class TestMainEntrypoint:
-    @pytest.fixture(autouse=True)
-    def _no_green_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
-
-    def test_direct_task_args_render_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        child = tmp_path / "child.yml"
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
-        monkeypatch.setattr("sys.argv", ["detect.py", "--all", "--child-path", str(child)])
-
-        assert detect.main() == 0
-        assert "nginx:box" in detect.yaml.safe_load(child.read_text())
-
-    def test_legacy_gitlab_subcommand_still_works(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        child = tmp_path / "child.yml"
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
-        monkeypatch.setattr("sys.argv", ["detect.py", "gitlab", "--all", "--child-path", str(child)])
-
+        monkeypatch.setattr("sys.argv", ["detect.py", *command, "--all", "--child-path", str(child)])
         assert detect.main() == 0
         assert "nginx:box" in detect.yaml.safe_load(child.read_text())
 
