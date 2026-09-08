@@ -15,9 +15,6 @@ _FILE_WRITE_MODULES = {
     "assemble",
     "ini_file",
 }
-_TEST_HOOK_PREFIXES = ("_verify", "_setup")
-_INCLUDE_MODULES = {"include_role", "include_tasks"}
-_CONFIG_WRITE_MODULES = {"copy", "template"}
 _CONFIG_DEST_RE = re.compile(
     r"(^/etc/|/\.config/|"
     r"\.(?:conf|cfg|ini|json|rules|service|timer|toml|yaml|yml)$|"
@@ -30,7 +27,7 @@ def _module_name(task: Task) -> str:
 
 
 def _is_test_hook(file: Lintable | None) -> bool:
-    return file is not None and file.path.name.startswith(_TEST_HOOK_PREFIXES)
+    return file is not None and file.path.name.startswith(("_verify", "_setup"))
 
 
 def _is_test_playbook(file: Lintable | None) -> bool:
@@ -178,7 +175,7 @@ class PreferImport(_HomelabRule):
             return False
 
         module = _module_name(task)
-        if module not in _INCLUDE_MODULES:
+        if module not in {"include_role", "include_tasks"}:
             return False
 
         if "loop" in task.raw_task or any(str(key).startswith("with_") for key in task.raw_task):
@@ -202,7 +199,7 @@ class RequireValidate(_HomelabRule):
             return False
 
         module = _module_name(task)
-        if module not in _CONFIG_WRITE_MODULES:
+        if module not in {"copy", "template"}:
             return False
 
         action = task["action"]
