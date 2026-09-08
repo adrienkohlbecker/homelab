@@ -28,6 +28,17 @@ def _make_role(root: Path, name: str, meta: dict | None = None) -> None:
         (meta_dir / "test.yml").write_text(yaml.dump(meta))
 
 
+def _run_matrix_cli(roles_tree: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "matrix", *args],
+        capture_output=True,
+        text=True,
+        cwd=roles_tree,
+        env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
+        timeout=30,
+    )
+
+
 # ---------------------------------------------------------------------------
 # list_testable_roles
 # ---------------------------------------------------------------------------
@@ -286,14 +297,7 @@ class TestCli:
     def test_json_all(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
         _make_role(roles_tree, "beta", {"machines": {"box_deps": None}})
-        result = subprocess.run(
-            [sys.executable, "-m", "matrix", "--json", "--all"],
-            capture_output=True,
-            text=True,
-            cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
-            timeout=30,
-        )
+        result = _run_matrix_cli(roles_tree, "--json", "--all")
         assert result.returncode == 0
         specs = json.loads(result.stdout)
         assert "alpha:box" in specs
@@ -301,49 +305,19 @@ class TestCli:
 
     def test_json_dispatch(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
-        result = subprocess.run(
-            [sys.executable, "-m", "matrix", "--json", "--dispatch", "alpha"],
-            capture_output=True,
-            text=True,
-            cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
-            timeout=30,
-        )
+        result = _run_matrix_cli(roles_tree, "--json", "--dispatch", "alpha")
         assert result.returncode == 0
         specs = json.loads(result.stdout)
         assert specs == ["alpha:box"]
 
     def test_json_empty(self, roles_tree: Path) -> None:
-        result = subprocess.run(
-            [sys.executable, "-m", "matrix", "--json"],
-            capture_output=True,
-            text=True,
-            cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
-            timeout=30,
-        )
+        result = _run_matrix_cli(roles_tree, "--json")
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
 
     def test_json_extra_with_roles(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "matrix",
-                "--json",
-                "--extra",
-                "alpha:box:resolute",
-                "--",
-                "alpha",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
-            timeout=30,
-        )
+        result = _run_matrix_cli(roles_tree, "--json", "--extra", "alpha:box:resolute", "--", "alpha")
         assert result.returncode == 0
         specs = json.loads(result.stdout)
         assert "alpha:box" in specs
@@ -351,26 +325,12 @@ class TestCli:
 
     def test_human_readable(self, roles_tree: Path) -> None:
         _make_role(roles_tree, "alpha")
-        result = subprocess.run(
-            [sys.executable, "-m", "matrix"],
-            capture_output=True,
-            text=True,
-            cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
-            timeout=30,
-        )
+        result = _run_matrix_cli(roles_tree)
         assert result.returncode == 0
         assert "box\tnoble\talpha" in result.stdout
 
     def test_dispatch_mutual_exclusion(self, roles_tree: Path) -> None:
-        result = subprocess.run(
-            [sys.executable, "-m", "matrix", "--json", "--dispatch", "x", "--all"],
-            capture_output=True,
-            text=True,
-            cwd=roles_tree,
-            env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
-            timeout=30,
-        )
+        result = _run_matrix_cli(roles_tree, "--json", "--dispatch", "x", "--all")
         assert result.returncode != 0
 
 
