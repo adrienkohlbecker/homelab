@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-SKIP_SCHEMES = {"http", "https", "ftp", "mailto"}
 INLINE_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 REF_RE = re.compile(r"^\[[^\]]+\]:\s+(\S+)", re.MULTILINE)
 FENCE_RE = re.compile(r"^(`{3,}|~{3,})[^\n]*\n.*?\n\1", re.MULTILINE | re.DOTALL)
@@ -28,7 +27,7 @@ def iter_links(text):
 
 def local_path(raw):
     parsed = urlsplit(raw.strip().strip("<>"))
-    if parsed.scheme in SKIP_SCHEMES or not parsed.path:
+    if parsed.scheme or not parsed.path:
         return None
     return parsed.path
 
