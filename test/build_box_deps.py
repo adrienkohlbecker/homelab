@@ -14,7 +14,7 @@ from pathlib import Path
 
 from machine import SSH_HOST, LaunchOptions, Machine
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
-from utils import cancel_on_signal, print_line, tee_output
+from utils import print_line, tee_output
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_TIMEOUT = 1200
@@ -45,10 +45,8 @@ async def seed_image(image_dir: Path, ubuntu: str) -> None:
         launch=LaunchOptions(image_dir=image_dir, headless=True, write_image=True),
         loopback_host=SSH_HOST,
     )
-    task = asyncio.current_task()
-    assert task is not None
-    with tee_output(machine.output_file), cancel_on_signal(task):
-        async with machine:
+    with tee_output(machine.output_file):
+        async with machine.session(BUILD_TIMEOUT):
             await machine.ensure_booted()
             print_line("Booted")
             await machine.ensure_ssh()

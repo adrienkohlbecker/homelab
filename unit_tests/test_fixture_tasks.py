@@ -73,6 +73,12 @@ def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pyt
         output_file = tmp_path / "output"
         workdir_path = tmp_path
 
+        @contextlib.asynccontextmanager
+        async def session(self, timeout: int):
+            calls.append(("session", timeout))
+            async with self:
+                yield
+
         async def __aenter__(self) -> FakeMachine:
             calls.append("enter")
             return self
@@ -104,7 +110,6 @@ def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pyt
         return FakeMachine()
 
     monkeypatch.setattr(builder, "Machine", machine_factory)
-    monkeypatch.setattr(builder, "cancel_on_signal", lambda task: contextlib.nullcontext())
 
     asyncio.run(builder.seed_image(tmp_path, "noble"))
 
@@ -113,6 +118,7 @@ def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pyt
     assert launch.image_dir == tmp_path
     assert launch.headless is True
     assert launch.write_image is True
+    assert ("session", builder.BUILD_TIMEOUT) in calls
     assert "system_running" in calls
     assert ("ansible", str(tmp_path / "build_box_deps.yml")) in calls
     assert "wait" in calls
