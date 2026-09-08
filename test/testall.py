@@ -18,7 +18,7 @@ import csv
 import signal
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -63,6 +63,28 @@ class JobResult:
     peak_kb: int = 0
 
 
+def _comma_separated(
+    *,
+    choices: Collection[str] | None = None,
+    label: str = "value",
+) -> Callable[[str], frozenset[str]]:
+    """Build an argparse type for a non-empty comma-separated set."""
+
+    def parse(value: str) -> frozenset[str]:
+        values = frozenset(item.strip() for item in value.split(",") if item.strip())
+        if not values:
+            raise argparse.ArgumentTypeError("must contain at least one value")
+
+        unknown = values.difference(choices or ())
+        if choices is not None and unknown:
+            raise argparse.ArgumentTypeError(
+                f"unknown {label}(s): {', '.join(sorted(unknown))}; valid: {', '.join(sorted(choices))}"
+            )
+        return values
+
+    return parse
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for selecting machines, roles, and concurrency."""
     parser = argparse.ArgumentParser(
@@ -86,7 +108,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--machines",
-        type=str,
+        type=_comma_separated(choices=MACHINE_CHOICES, label="machine profile"),
         default=None,
         metavar="X",
         help="Comma-separated machine filter; only run cells matching these machines "
@@ -95,7 +117,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--ubuntu",
-        type=str,
+        type=_comma_separated(choices=UBUNTU_RELEASES, label="Ubuntu codename"),
         default=None,
         metavar="X",
         help="Comma-separated Ubuntu codename filter; only run cells matching these releases "
@@ -104,16 +126,16 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--only-role",
-        type=str,
-        default="",
+        type=_comma_separated(label="role"),
+        default=frozenset(),
         metavar="X",
         help="Comma-separated list of roles to run; merges into out.tsv (default: all roles with tasks/main.yml, replacing out.tsv)",
     )
 
     parser.add_argument(
         "--except-role",
-        type=str,
-        default="",
+        type=_comma_separated(label="role"),
+        default=frozenset(),
         metavar="X",
         help="Comma-separated list of roles to skip; merges into out.tsv. Composes with --only-role (subset, then exclude).",
     )
@@ -393,45 +415,19 @@ def main() -> int:
         cells = build_test_matrix(roles)
 
         if args.machines is not None:
-            machines = [m.strip() for m in args.machines.split(",") if m.strip()]
-            if not machines:
-                print("Error: No machines provided to --machines", file=sys.stderr)
-                return 1
-            for m in machines:
-                if m not in MACHINE_CHOICES:
-                    print(
-                        f"Error: unknown machine profile '{m}'; valid: {list(MACHINE_CHOICES)}",
-                        file=sys.stderr,
-                    )
-                    return 1
-            machine_set = set(machines)
-            cells = [cell for cell in cells if cell.machine in machine_set]
+            cells = [cell for cell in cells if cell.machine in args.machines]
 
         if args.ubuntu is not None:
-            ubuntus = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
-            if not ubuntus:
-                print("Error: No codenames provided to --ubuntu", file=sys.stderr)
-                return 1
-            for u in ubuntus:
-                if u not in UBUNTU_RELEASES:
-                    print(
-                        f"Error: unknown Ubuntu codename '{u}'; valid: {sorted(UBUNTU_RELEASES)}",
-                        file=sys.stderr,
-                    )
-                    return 1
-            ubuntu_set = set(ubuntus)
-            cells = [cell for cell in cells if cell.ubuntu in ubuntu_set]
+            cells = [cell for cell in cells if cell.ubuntu in args.ubuntu]
 
     if args.only_role:
-        wanted = {r.strip() for r in args.only_role.split(",") if r.strip()}
-        cells = [cell for cell in cells if cell.role in wanted]
+        cells = [cell for cell in cells if cell.role in args.only_role]
         if not cells:
             print("No roles match --only-role", file=sys.stderr)
             return 0
 
     if args.except_role:
-        unwanted = {r.strip() for r in args.except_role.split(",") if r.strip()}
-        cells = [cell for cell in cells if cell.role not in unwanted]
+        cells = [cell for cell in cells if cell.role not in args.except_role]
         if not cells:
             print("All roles excluded by --except-role", file=sys.stderr)
             return 0

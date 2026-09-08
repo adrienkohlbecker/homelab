@@ -1,11 +1,30 @@
 """Unit tests for test/testall.py — joblog I/O and result types."""
 
+import argparse
 import asyncio
 from pathlib import Path
 from typing import cast
 
 import pytest
 import testall
+
+
+def test_comma_separated_normalizes_values() -> None:
+    parse = testall._comma_separated()
+
+    assert parse(" nginx, podman,nginx ") == frozenset({"nginx", "podman"})
+
+
+def test_comma_separated_rejects_empty_values() -> None:
+    with pytest.raises(argparse.ArgumentTypeError, match="at least one value"):
+        testall._comma_separated()(" , ")
+
+
+def test_comma_separated_rejects_unknown_choices() -> None:
+    parse = testall._comma_separated(choices=("box", "lab"), label="machine profile")
+
+    with pytest.raises(argparse.ArgumentTypeError, match=r"unknown machine profile\(s\): pug"):
+        parse("box,pug")
 
 
 def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
