@@ -1017,15 +1017,14 @@ class Machine:
             with contextlib.suppress(OSError, TimeoutError):
                 await asyncio.wait_for(writer.wait_closed(), timeout=2)
 
-    async def _collect_remote_to_file(self, label: str, dest: Path, *remote_cmd: str) -> bool:
+    async def _collect_remote_to_file(self, label: str, dest: Path, *remote_cmd: str) -> None:
         """Run *remote_cmd* over SSH, capture stdout into *dest*.
 
-        Returns True on remote-exit-zero, False otherwise. stderr is streamed
-        to the main log; stdout goes only to *dest*. *label* is what we print
-        when the capture fails or succeeds. Used by the per-run failure
-        diagnostics so each artifact (journal, dmesg, systemctl --failed) is
-        a separate file the operator (or CI artifact upload) can read in
-        isolation.
+        stderr is streamed to the main log; stdout goes only to *dest*.
+        *label* is what we print when the capture fails or succeeds. Used by
+        the per-run failure diagnostics so each artifact (journal, dmesg,
+        systemctl --failed) is a separate file the operator (or CI artifact
+        upload) can read in isolation.
         """
         cmd = self.format_ssh_cmd(*remote_cmd)
         print_cmd_line(cmd)
@@ -1049,9 +1048,8 @@ class Machine:
 
         if exitcode != 0:
             print_line(f"Failed to collect {label}: exit code {exitcode}")
-            return False
-        print_line(f"{label}: {dest}")
-        return True
+        else:
+            print_line(f"{label}: {dest}")
 
     async def collect_failure_artifacts(self) -> None:
         """Collect post-mortem diagnostics from the guest after a failed run.
