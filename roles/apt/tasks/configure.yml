@@ -16,6 +16,40 @@
   tags:
     - apt
 
+# Resolute's Rust coreutils selector differs from GNU timeout's signal/exit
+# contract used by the QEMU watchdog. Keep the complete GNU implementation
+# rather than carrying per-command compatibility workarounds.
+- name: Read GNU coreutils selection on Resolute
+  when: ansible_distribution_release == 'resolute'
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Status}
+      - coreutils-from-gnu
+  register: apt_coreutils_from_gnu
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  tags:
+    - apt
+
+# Solver3 will not infer removal of the conflicting uutils provider. Express
+# both sides in one apt transaction so dry-run and converge have the same plan.
+- name: Select GNU coreutils on Resolute  # noqa: command-instead-of-module
+  when:
+    - ansible_distribution_release == 'resolute'
+    - apt_coreutils_from_gnu.rc != 0 or 'install ok installed' not in apt_coreutils_from_gnu.stdout
+  command: >-
+    apt-get -y --allow-remove-essential -o DPkg::Lock::Timeout=300
+    {{ "--simulate" if ansible_check_mode else "" }}
+    install coreutils-from-gnu coreutils-from-uutils-
+  changed_when: true
+  check_mode: false
+  become: true
+  tags:
+    - apt
+
 - name: Configure package-manager log compression
   import_role:
     name: logrotate

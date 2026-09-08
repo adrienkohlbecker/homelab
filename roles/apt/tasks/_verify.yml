@@ -1,12 +1,14 @@
-# /var/lib/apt/lists/ filenames encode (mirror, suite, component, arch):
-# `<host>_<path>_dists_<suite>_<component>_binary-<arch>_Packages`.
-# Apt itself uses these files as its source of truth, so checking they
-# exist for each expected (mirror, suite) confirms both that the source
-# is configured AND that apt successfully fetched its index.
-- name: _verify | Each (mirror, suite) has fetched index files
+# /var/lib/apt/lists/ filenames encode the mirror and suite. A populated
+# component adds a binary Packages index; an empty pocket, such as
+# resolute-backports before its first upload, legitimately has only InRelease.
+# Apt itself uses these files as its source of truth, so either form confirms
+# that the expected source is configured and fetched.
+- name: _verify | Each (mirror, suite) has fetched metadata
   find:
     paths: /var/lib/apt/lists/
-    patterns: "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_main_*"
+    patterns:
+      - "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_InRelease"
+      - "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_main_*"
   register: _apt_lists
   failed_when: _apt_lists.matched == 0
   vars:
@@ -27,3 +29,103 @@
   command: apt-get update --error-on=any
   changed_when: false
   become: true
+
+- name: _verify | Create a coreutils compatibility workspace
+  tempfile:
+    state: directory
+    suffix: coreutils_compat
+  register: _apt_verify_coreutils_dir
+  become: true
+
+- name: _verify | Exercise coreutils and APT compatibility contracts
+  block:
+    - name: _verify | Write checksum fixture
+      copy:
+        content: "coreutils compatibility probe\n"
+        dest: "{{ _apt_verify_coreutils_dir.path }}/probe"
+        mode: "0600"
+      become: true
+
+    - name: _verify | Write expected SHA-256 manifest
+      copy:
+        content: "46095a89c3c66bc71e59294085e4bee2c94d242929b6d1f65cfa4345c09d9dc5  probe\n"
+        dest: "{{ _apt_verify_coreutils_dir.path }}/SHA256SUMS"
+        mode: "0600"
+      become: true
+
+    - name: _verify | Verify SHA-256 manifest
+      command: sha256sum -c SHA256SUMS
+      args:
+        chdir: "{{ _apt_verify_coreutils_dir.path }}"
+      changed_when: false
+      become: true
+
+    - name: _verify | Install a root-owned directory with an explicit mode
+      command:
+        argv:
+          - install
+          - -d
+          - -m
+          - "0750"
+          - -o
+          - root
+          - -g
+          - root
+          - "{{ _apt_verify_coreutils_dir.path }}/installed"
+      changed_when: true
+      become: true
+
+    - name: _verify | Read installed directory ownership and mode
+      stat:
+        path: "{{ _apt_verify_coreutils_dir.path }}/installed"
+      register: _apt_verify_installed_dir
+      become: true
+
+    - name: _verify | Install preserves requested ownership and mode
+      assert:
+        that:
+          - _apt_verify_installed_dir.stat.pw_name == 'root'
+          - _apt_verify_installed_dir.stat.gr_name == 'root'
+          - _apt_verify_installed_dir.stat.mode == '0750'
+
+    - name: _verify | Exercise timeout TERM-to-KILL escalation
+      command:
+        argv:
+          - /bin/bash
+          - -c
+          - >-
+            timeout --kill-after=1s 1s /usr/bin/python3 -c
+            "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(10)"
+      register: _apt_verify_timeout
+      failed_when: false
+      changed_when: false
+
+    - name: _verify | Timeout propagates the final KILL signal
+      assert:
+        that: _apt_verify_timeout.rc == -9
+        fail_msg: >-
+          timeout --kill-after exited {{ _apt_verify_timeout.rc }}, expected
+          the subprocess SIGKILL result -9 after escalating from TERM to KILL.
+
+    - name: _verify | Simulate the complete APT full-upgrade plan  # noqa: command-instead-of-module
+      command:
+        argv:
+          - apt-get
+          - --simulate
+          - --no-remove
+          - full-upgrade
+      register: _apt_verify_full_upgrade
+      changed_when: false
+      become: true
+
+    - name: _verify | Full-upgrade plan contains no removals
+      assert:
+        that:
+          - "'Remv ' not in _apt_verify_full_upgrade.stdout"
+          - "'The following packages will be REMOVED' not in _apt_verify_full_upgrade.stdout"
+  always:
+    - name: _verify | Remove the coreutils compatibility workspace
+      file:
+        path: "{{ _apt_verify_coreutils_dir.path }}"
+        state: absent
+      become: true

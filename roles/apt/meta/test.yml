@@ -1,1 +1,3 @@
 base_prerequisites: false
+ubuntu:
+  - resolute
