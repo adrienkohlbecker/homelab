@@ -65,10 +65,6 @@ if [ "${usage_dry_run:-false}" != "true" ]; then
 
 ==> Synced to ${host}:${dest}, and installed the test vault password at
     ~/.config/homelab/vault-pass-test (prod is never shipped).
-    To bake fox's image there (see notes/runbooks/fox_rebuild.md):
-    ssh ${host}
-    cd ${dest} && mise trust && mise install && mise run packer:init
-    mise run packer:build hetzner --ubuntu noble
-    mise run packer:hetzner       --ubuntu noble
+    See notes/runbooks/fox_rebuild.md Phase 1 for the current image bake steps.
 EOF
 fi
