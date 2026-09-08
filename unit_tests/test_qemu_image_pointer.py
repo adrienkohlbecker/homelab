@@ -83,23 +83,17 @@ class TestManifest:
         ]
         assert hydrate.read_manifest(manifest_path, args, args.build_id) == manifest
 
-    def test_legacy_manifest_is_accepted(self, tmp_path: Path) -> None:
+    def test_manifest_without_files_is_rejected(self, tmp_path: Path) -> None:
         manifest = {
             "machine": "box",
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
-            "disks": [{"name": "disk.raw", "sha256": "a" * 64, "size_bytes": 1}],
-            "support_files": [{"name": "efivars.fd", "sha256": "b" * 64}],
-            "tar_members": ["disk.raw", "efivars.fd"],
         }
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert hydrate.read_manifest(manifest_path, _args(), manifest["build_id"]) == manifest
-        assert hydrate.manifest_files(manifest) == [
-            {"name": "disk.raw", "sha256": "a" * 64},
-            {"name": "efivars.fd", "sha256": "b" * 64},
-        ]
+        with pytest.raises(SystemExit, match="manifest files must be a non-empty list"):
+            hydrate.read_manifest(manifest_path, _args(), manifest["build_id"])
 
     def test_missing_hash_is_rejected(self, tmp_path: Path) -> None:
         manifest = {

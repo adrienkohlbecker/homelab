@@ -56,13 +56,6 @@ def validate_member_name(member: str) -> None:
 
 def manifest_files(manifest: dict[str, Any]) -> list[dict[str, str]]:
     files = manifest.get("files")
-    if files is None:
-        # Published v1 bundles split disks and support files into two lists.
-        disks = manifest.get("disks", [])
-        support_files = manifest.get("support_files", [])
-        if not isinstance(disks, list) or not isinstance(support_files, list):
-            raise ValueError("legacy manifest file groups must be lists")
-        files = [*disks, *support_files]
     if not isinstance(files, list) or not files:
         raise ValueError("manifest files must be a non-empty list")
 
