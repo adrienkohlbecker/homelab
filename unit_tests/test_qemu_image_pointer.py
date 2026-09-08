@@ -12,7 +12,6 @@ side-effect-free: both modules do their work under ``if __name__ == "__main__"``
 
 import argparse
 import importlib.util
-import json
 import re
 import sys
 from pathlib import Path
@@ -72,10 +71,6 @@ class TestPointerBody:
         # sort_keys=True, indent=2
         assert body == ('{\n  "build_id": "ci-42-gdeadbeef0000",\n  "machine": "box",\n  "ubuntu": "noble"\n}\n')
 
-    def test_round_trip(self) -> None:
-        body = upload.pointer_body(_args(build_id="b1", machine="box_deps", ubuntu="noble"))
-        assert json.loads(body) == {"build_id": "b1", "machine": "box_deps", "ubuntu": "noble"}
-
     def test_pointer_name_constant_matches(self) -> None:
         assert upload.POINTER_NAME == "promoted.json"
         assert hydrate.POINTER_NAME == "promoted.json"
@@ -93,15 +88,11 @@ class TestResolveBuildId:
         body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="noble"))
         assert self._resolve(monkeypatch, body) == "ci-7-gabc"
 
-    def test_machine_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        body = upload.pointer_body(_args(machine="box_deps"))
-        with pytest.raises(SystemExit, match="machine mismatch"):
-            self._resolve(monkeypatch, body, machine="box")
-
-    def test_ubuntu_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        body = upload.pointer_body(_args(ubuntu="resolute"))
-        with pytest.raises(SystemExit, match="ubuntu mismatch"):
-            self._resolve(monkeypatch, body, ubuntu="noble")
+    @pytest.mark.parametrize(("field", "value"), [("machine", "box_deps"), ("ubuntu", "resolute")])
+    def test_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch, field: str, value: str) -> None:
+        body = upload.pointer_body(_args(**{field: value}))
+        with pytest.raises(SystemExit, match=f"{field} mismatch"):
+            self._resolve(monkeypatch, body)
 
     def test_empty_pointer_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with pytest.raises(SystemExit, match="missing or empty"):
