@@ -152,11 +152,6 @@ class TestTerminateSubprocess:
 
 
 # ---------------------------------------------------------------------------
-# CommandResult
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # run_command
 # ---------------------------------------------------------------------------
 
@@ -190,15 +185,3 @@ class TestRunCommand:
             assert any("err" in line for line in result.stderr)
 
         asyncio.run(_run())
-
-
-class TestCommandResult:
-    def test_named_fields(self) -> None:
-        r = utils.CommandResult(exitcode=0, stdout=["ok"], stderr=[])
-        assert r.exitcode == 0
-        assert r.stdout == ["ok"]
-        assert r.stderr == []
-
-    def test_tuple_unpacking(self) -> None:
-        exitcode, _stdout, _stderr = utils.CommandResult(1, ["a"], ["b"])
-        assert exitcode == 1
