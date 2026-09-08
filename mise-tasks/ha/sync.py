@@ -364,20 +364,18 @@ def main() -> None:
     mode = (positional[0] if positional else "sync").strip()
     if dry_run and mode not in ("push", "sync"):
         sys.exit("--dry-run only applies to push")
-    if mode == "sync":
-        if dry_run:
-            # pull mutates (commits host edits); a dry-run previews the push half only.
-            print("dry-run: skipping pull; previewing push only")
-            do_push(dry_run=True)
-            return
-        do_pull()
-        do_push()
-    elif mode == "push":
-        do_push(dry_run=dry_run)
-    elif mode == "pull":
-        do_pull()
-    else:
+    if mode not in ("pull", "push", "sync"):
         sys.exit(f"unknown mode {mode!r}; use pull | push | sync")
+    if dry_run:
+        # Pull mutates by committing host edits, so dry-run previews push only.
+        if mode == "sync":
+            print("dry-run: skipping pull; previewing push only")
+        do_push(dry_run=True)
+        return
+    if mode in ("pull", "sync"):
+        do_pull()
+    if mode in ("push", "sync"):
+        do_push()
 
 
 if __name__ == "__main__":
