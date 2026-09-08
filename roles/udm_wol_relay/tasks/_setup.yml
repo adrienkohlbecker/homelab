@@ -1,13 +1,3 @@
-# _setup is test-only (runs only under test/testrole.py, never against
-# prod). UniFi OS ships iptables; the stock box fixture does not.
 - name: _setup | Install the site-level UDM on-boot prerequisite
   import_role:
     name: udm_on_boot
-
-- name: _setup | Install iptables for the legacy-rule removal task
-  apt:
-    pkg:
-      - iptables
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true

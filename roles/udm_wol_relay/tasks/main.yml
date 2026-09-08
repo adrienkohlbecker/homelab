@@ -62,27 +62,6 @@
   tags:
     - udm_wol_relay
 
-# No ACCEPT rules of our own: UniFi keeps the INPUT policy ACCEPT with all
-# verdicts inside its own jumped chains, so an appended accept can never
-# change a packet's fate -- proven live (rule counters stayed 0 across real
-# relays). This tombstone clears the rules the first deployment appended;
-# packets reach the relay through the vendor chains, and source filtering is
-# the script's ALLOWED_SOURCES check.
-- name: Remove WoL relay iptables rules
-  iptables:
-    chain: INPUT
-    protocol: udp
-    source: "{{ item }}"
-    destination_port: "{{ udm_wol_relay_port }}"
-    comment: wol relay
-    jump: ACCEPT
-    wait: "5"
-    state: absent
-  loop: "{{ udm_wol_relay_source_cidrs }}"
-  become: true
-  tags:
-    - udm_wol_relay
-
 - name: Start WoL relay
   when: not (ansible_check_mode and udm_wol_relay_unit_link.changed)
   systemd:
