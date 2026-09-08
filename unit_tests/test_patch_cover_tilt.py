@@ -1,24 +1,11 @@
 """Unit tests for roles/z2m/files/patch_cover_tilt.py — Z2M tilt nullifier."""
 
-import importlib.util
 import sys
-from pathlib import Path
 
 import yaml
+from conftest import load_role_module
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "z2m" / "files" / "patch_cover_tilt.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("patch_cover_tilt", _MODULE_PATH)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-pct = _load()
+pct = load_role_module("roles/z2m/files/patch_cover_tilt.py")
 
 
 class TestPatch:

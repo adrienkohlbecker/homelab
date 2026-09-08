@@ -1,17 +1,12 @@
 import gzip
-import importlib.util
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from conftest import load_role_module
 
-MODULE_PATH = Path(__file__).parents[1] / "roles/lnav/files/lnav_journal.py"
-SPEC = importlib.util.spec_from_file_location("lnav_journal", MODULE_PATH)
-assert SPEC
-assert SPEC.loader
-lnav_journal = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(lnav_journal)
+lnav_journal = load_role_module("roles/lnav/files/lnav_journal.py")
 
 
 def write_record(path: Path, timestamp: str, *, compressed: bool = False) -> None:

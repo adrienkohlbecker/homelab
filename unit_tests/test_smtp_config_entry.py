@@ -4,27 +4,15 @@ Exercises the registry reconciliation against a temporary
 .storage/core.config_entries without a running Home Assistant.
 """
 
-import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from conftest import load_role_module
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "homeassistant" / "files" / "smtp_config_entry.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("smtp_config_entry", _MODULE_PATH)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-sce = _load()
+sce = load_role_module("roles/homeassistant/files/smtp_config_entry.py")
 
 
 def _args(**overrides: Any) -> SimpleNamespace:

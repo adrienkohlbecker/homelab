@@ -4,24 +4,10 @@ Tests rendering and the authenticated HTTP client without needing a running
 netdata instance.
 """
 
-import importlib.util
-from pathlib import Path
-
 import pytest
+from conftest import load_role_module
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "homepage" / "files" / "alerts_generate.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("alerts_generate", _MODULE_PATH)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-ag = _load()
+ag = load_role_module("roles/homepage/files/alerts_generate.py")
 
 
 # ---------------------------------------------------------------------------

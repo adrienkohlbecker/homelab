@@ -1,20 +1,14 @@
 """Protect OpenCore seed publication and unrelated guest identity data."""
 
 import fcntl
-import importlib.util
 import plistlib
 import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import load_role_module
 
-_SPEC = importlib.util.spec_from_file_location(
-    "seed_opencore", Path(__file__).resolve().parents[1] / "roles/macos_vm/files/seed_opencore.py"
-)
-assert _SPEC
-assert _SPEC.loader
-seed = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(seed)
+seed = load_role_module("roles/macos_vm/files/seed_opencore.py")
 
 
 @pytest.mark.parametrize("fmt", [plistlib.FMT_XML, plistlib.FMT_BINARY])

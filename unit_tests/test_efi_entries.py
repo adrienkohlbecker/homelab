@@ -6,27 +6,14 @@ the matching, removal, per-disk expansion and BootOrder logic is exercised
 without touching real firmware NVRAM.
 """
 
-import importlib.util
 import json
 import sys
-from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import load_role_module
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "roles" / "boot" / "files" / "efi_entries.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("efi_entries", _MODULE_PATH)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-efi = _load()
+efi = load_role_module("roles/boot/files/efi_entries.py")
 
 
 # --- Desired entry lists (mirror roles/boot/defaults/main.yml) ------------
