@@ -45,22 +45,14 @@ provider "gandi" {
 
 # Pin the registrar-side NS delegation to whatever CF assigned the
 # zone (emma/eric.ns.cloudflare.com today). Reading from
-# cloudflare_zone.X.name_servers means a CF-side NS rotation (rare
-# but documented) flows through with a single tofu apply rather
-# than a manual UI fix at Gandi.
-resource "gandi_nameservers" "fahm_fr" {
-  domain      = "fahm.fr"
-  nameservers = cloudflare_zone.fahm_fr.name_servers
-}
+# the keyed Cloudflare zone resources means a CF-side NS rotation (rare but
+# documented) flows through with a single tofu apply rather than a manual UI
+# fix at Gandi.
+resource "gandi_nameservers" "this" {
+  for_each = cloudflare_zone.this
 
-resource "gandi_nameservers" "mhaf_fr" {
-  domain      = "mhaf.fr"
-  nameservers = cloudflare_zone.mhaf_fr.name_servers
-}
-
-resource "gandi_nameservers" "adrienkohlbecker_com" {
-  domain      = "adrienkohlbecker.com"
-  nameservers = cloudflare_zone.adrienkohlbecker_com.name_servers
+  domain      = each.key
+  nameservers = each.value.name_servers
 }
 
 # DNSSEC DS registration. gandi_dnssec_key uploads the KSK material
@@ -84,51 +76,25 @@ resource "gandi_nameservers" "adrienkohlbecker_com" {
 #
 # CF returns algorithm as a stringified number ("13" for
 # ECDSAP256SHA256); gandi wants a Number, hence tonumber().
-resource "gandi_dnssec_key" "fahm_fr" {
-  domain     = "fahm.fr"
-  algorithm  = tonumber(cloudflare_zone_dnssec.fahm_fr.algorithm)
-  public_key = cloudflare_zone_dnssec.fahm_fr.public_key
+resource "gandi_dnssec_key" "this" {
+  for_each = local.zone_dnssec
+
+  domain     = each.key
+  algorithm  = tonumber(each.value.algorithm)
+  public_key = each.value.public_key
   type       = "ksk"
 
   lifecycle {
     precondition {
-      condition     = contains(["active", "pending"], cloudflare_zone_dnssec.fahm_fr.status)
-      error_message = "DNSSEC disabled at CF for fahm.fr (status=${cloudflare_zone_dnssec.fahm_fr.status}). Re-enable CF signing before touching the Gandi DS, or the zone goes bogus to validating resolvers."
-    }
-  }
-}
-
-resource "gandi_dnssec_key" "mhaf_fr" {
-  domain     = "mhaf.fr"
-  algorithm  = tonumber(cloudflare_zone_dnssec.mhaf_fr.algorithm)
-  public_key = cloudflare_zone_dnssec.mhaf_fr.public_key
-  type       = "ksk"
-
-  lifecycle {
-    precondition {
-      condition     = contains(["active", "pending"], cloudflare_zone_dnssec.mhaf_fr.status)
-      error_message = "DNSSEC disabled at CF for mhaf.fr (status=${cloudflare_zone_dnssec.mhaf_fr.status}). Re-enable CF signing before touching the Gandi DS, or the zone goes bogus to validating resolvers."
-    }
-  }
-}
-
-resource "gandi_dnssec_key" "adrienkohlbecker_com" {
-  domain     = "adrienkohlbecker.com"
-  algorithm  = tonumber(cloudflare_zone_dnssec.adrienkohlbecker_com.algorithm)
-  public_key = cloudflare_zone_dnssec.adrienkohlbecker_com.public_key
-  type       = "ksk"
-
-  lifecycle {
-    precondition {
-      condition     = contains(["active", "pending"], cloudflare_zone_dnssec.adrienkohlbecker_com.status)
-      error_message = "DNSSEC disabled at CF for adrienkohlbecker.com (status=${cloudflare_zone_dnssec.adrienkohlbecker_com.status}). Re-enable CF signing before touching the Gandi DS, or the zone goes bogus to validating resolvers."
+      condition     = contains(["active", "pending"], each.value.status)
+      error_message = "DNSSEC disabled at CF for ${each.key} (status=${each.value.status}). Re-enable CF signing before touching the Gandi DS, or the zone goes bogus to validating resolvers."
     }
   }
 }
 
 # Gandi NS delegation must match CF's authoritative NS list. Tautology by
-# construction today (gandi_nameservers is built from cloudflare_zone.X.
-# name_servers), but catches the future case where someone manually edits
+# construction today (gandi_nameservers is built from cloudflare_zone.this),
+# but catches the future case where someone manually edits
 # the NS list at Gandi-as-registrar between applies -- without this, the
 # next `tofu plan` would silently reconcile the drift while resolvers were
 # already failing to find the zone.
@@ -136,21 +102,49 @@ resource "gandi_dnssec_key" "adrienkohlbecker_com" {
 # This stays a `check` rather than a `lifecycle.precondition` (unlike the
 # DNSSEC chain one in this file): a precondition can only read `self`'s
 # configured (HCL-declared) value, not its post-refresh state, so a
-# precondition on gandi_nameservers comparing self.nameservers to
-# cloudflare_zone.X.name_servers would always pass by construction.
+# precondition on gandi_nameservers comparing self.nameservers to the
+# Cloudflare resource would always pass by construction.
 # Catching post-refresh Gandi-side drift requires the `check` block's
 # refreshed-state visibility (or an out-of-band DNS data-source probe).
 check "ns_delegation" {
   assert {
-    condition     = sort(gandi_nameservers.fahm_fr.nameservers) == sort(cloudflare_zone.fahm_fr.name_servers)
-    error_message = "Gandi NS delegation for fahm.fr doesn't match CF: Gandi=${join(",", sort(gandi_nameservers.fahm_fr.nameservers))} CF=${join(",", sort(cloudflare_zone.fahm_fr.name_servers))}. Lookups against this zone will fail."
+    condition = alltrue([
+      for zone, delegation in gandi_nameservers.this :
+      sort(delegation.nameservers) == sort(cloudflare_zone.this[zone].name_servers)
+    ])
+    error_message = "Gandi NS delegation differs from Cloudflare for: ${join(", ", [
+      for zone, delegation in gandi_nameservers.this : zone
+      if sort(delegation.nameservers) != sort(cloudflare_zone.this[zone].name_servers)
+    ])}. Lookups against these zones will fail."
   }
-  assert {
-    condition     = sort(gandi_nameservers.mhaf_fr.nameservers) == sort(cloudflare_zone.mhaf_fr.name_servers)
-    error_message = "Gandi NS delegation for mhaf.fr doesn't match CF: Gandi=${join(",", sort(gandi_nameservers.mhaf_fr.nameservers))} CF=${join(",", sort(cloudflare_zone.mhaf_fr.name_servers))}. Lookups against this zone will fail."
-  }
-  assert {
-    condition     = sort(gandi_nameservers.adrienkohlbecker_com.nameservers) == sort(cloudflare_zone.adrienkohlbecker_com.name_servers)
-    error_message = "Gandi NS delegation for adrienkohlbecker.com doesn't match CF: Gandi=${join(",", sort(gandi_nameservers.adrienkohlbecker_com.nameservers))} CF=${join(",", sort(cloudflare_zone.adrienkohlbecker_com.name_servers))}. Lookups against this zone will fail."
-  }
+}
+
+moved {
+  from = gandi_nameservers.adrienkohlbecker_com
+  to   = gandi_nameservers.this["adrienkohlbecker.com"]
+}
+
+moved {
+  from = gandi_nameservers.fahm_fr
+  to   = gandi_nameservers.this["fahm.fr"]
+}
+
+moved {
+  from = gandi_nameservers.mhaf_fr
+  to   = gandi_nameservers.this["mhaf.fr"]
+}
+
+moved {
+  from = gandi_dnssec_key.adrienkohlbecker_com
+  to   = gandi_dnssec_key.this["adrienkohlbecker.com"]
+}
+
+moved {
+  from = gandi_dnssec_key.fahm_fr
+  to   = gandi_dnssec_key.this["fahm.fr"]
+}
+
+moved {
+  from = gandi_dnssec_key.mhaf_fr
+  to   = gandi_dnssec_key.this["mhaf.fr"]
 }
