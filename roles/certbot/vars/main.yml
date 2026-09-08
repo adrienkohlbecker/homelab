@@ -1,5 +1,16 @@
 ---
+certbot_test_domain_seed: >-
+  {{ lookup('env', 'CI_JOB_ID')
+     | default(ansible_ssh_host ~ ':' ~ ansible_ssh_port, true) }}
+certbot_test_domain_label: >-
+  {{ 'qemu-' + ((certbot_test_domain_seed | hash('sha256'))[:16])
+     if qemu_test
+     else '' }}
+certbot_requested_domain: >-
+  {{ inventory_hostname + '.'
+     + ((certbot_test_domain_label + '.') if certbot_test_domain_label else '')
+     + domain }}
 certbot_domains: >-
-  {{ [inventory_hostname + '.' + domain,
-      '*.' + inventory_hostname + '.' + domain]
+  {{ [certbot_requested_domain,
+      '*.' + certbot_requested_domain]
      + certbot_extra_sans }}
