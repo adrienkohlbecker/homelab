@@ -138,6 +138,16 @@ class TestSweepStaleWorkdirs:
         machine.sweep_stale_workdirs(tmp_path)
         assert other.exists()
 
+    def test_ignores_packer_build_dirs(self, tmp_path: Path) -> None:
+        workdir = tmp_path / ".build-stale"
+        workdir.mkdir()
+        old_time = time.time() - 120
+        os.utime(str(workdir), (old_time, old_time))
+
+        machine.sweep_stale_workdirs(tmp_path)
+
+        assert workdir.exists()
+
 
 # ---------------------------------------------------------------------------
 # _read_vm_hwm

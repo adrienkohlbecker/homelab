@@ -1845,38 +1845,20 @@ def imagedir_for_host() -> Path:
 
 
 def sweep_stale_workdirs(imagedir: Path) -> None:
-    """Reap orphaned tmp* (harness) and .build-* (image builders) dirs from prior runs.
+    """Reap orphaned tmp* harness workdirs from prior runs.
 
-    Cleanup normally rides Machine.__aexit__'s finally chain for tmp* and the
-    trailing cleanup in the Packer and box_deps build tasks for .build-*.
-    Both bypass on SIGKILL / OOM / power-loss, leaving orphan dirs. Each is a
-    full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
-    until .ansible-lint excludes the path, so leaks are doubly expensive.
-
-    Liveness check is split by dir kind:
-
-    * tmp* (harness workdirs) -- each live Machine holds an exclusive flock on
-      <workdir>/.live. Sweep tries LOCK_EX|LOCK_NB on that file: contended =
-      live (skip), uncontended = orphan (reap). flock is inode-scoped, so it
-      works across PID namespaces -- critical because Gitea Actions test cells
-      run in separate containers that bind-mount a shared workdir parent
-      (/scratch). The mtime grace still guards the tiny window between
-      mkdtemp and Machine.__init__'s flock acquisition.
-
-    * .build-* (packer) -- packer doesn't (yet) hold a liveness lock, so these
-      keep the ps-args check. Safe because packer-build runs alone under the
-      `concurrency: lab-qemu-artifacts` workflow lock, so a single ps scan
-      sees the only candidate process.
+    Each live Machine holds an exclusive flock on <workdir>/.live. The mtime
+    grace guards the window between mkdtemp and lock acquisition; after that,
+    an uncontended lock identifies a workdir left by a dead process.
     """
     if not imagedir.is_dir():
         return
 
     grace_seconds = 60
     now = time.time()
-    ps_args: str | None = None
 
     for d in imagedir.iterdir():
-        if not d.is_dir() or not (d.name.startswith("tmp") or d.name.startswith(".build-")):
+        if not d.is_dir() or not d.name.startswith("tmp"):
             continue
         try:
             age = now - d.stat().st_mtime
@@ -1885,19 +1867,8 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
         if age < grace_seconds:
             continue
 
-        if d.name.startswith("tmp"):
-            if not _workdir_is_orphan(d):
-                continue
-        else:
-            # .build-* path: fall back to ps scan, lazily computed.
-            if ps_args is None:
-                try:
-                    ps_args = subprocess.run(["ps", "-Ao", "args="], check=True, capture_output=True, text=True).stdout
-                except subprocess.CalledProcessError, FileNotFoundError:
-                    # Don't reap when we can't verify staleness.
-                    return
-            if d.name in ps_args:
-                continue
+        if not _workdir_is_orphan(d):
+            continue
 
         print_line(f"Reaping orphaned workdir {d}")
         try:
