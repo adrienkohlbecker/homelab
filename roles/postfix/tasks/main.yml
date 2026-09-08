@@ -32,27 +32,13 @@
   tags:
     - postfix
 
-- name: Remove retired networkd-dispatcher log filters
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      for: networkd-dispatcher.service
-      condition: "{{ not (ansible_check_mode and postfix_apt.changed) }}"
-  tags:
-    - postfix
-
 - name: Enable networkd-dispatcher for Postfix network hooks
   when: not (ansible_check_mode and postfix_apt.changed)
   systemd:
     name: networkd-dispatcher.service
     enabled: true
     masked: false
-    state: >-
-      {{ 'restarted'
-         if networkd_dispatcher_service_d_override_conf_result.changed
-         else 'started' }}
+    state: started
   become: true
   tags:
     - postfix

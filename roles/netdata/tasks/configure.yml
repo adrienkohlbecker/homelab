@@ -109,15 +109,6 @@
   tags:
     - netdata
 
-- name: Remove stale go.d.conf override
-  file:
-    path: /etc/netdata/go.d.conf
-    state: absent
-  register: netdata_godconf_absent
-  become: true
-  tags:
-    - netdata
-
 - name: Configure postfix metrics
   import_tasks: config.yml
   vars:
@@ -224,7 +215,6 @@
          if netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed
             or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed
             or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed
-            or netdata_godconf_absent.changed
          else 'started' }}
   become: true
   tags:
