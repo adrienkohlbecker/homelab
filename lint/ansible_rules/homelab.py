@@ -36,11 +36,6 @@ _CONFIG_DEST_RE = re.compile(
     r"/(?:config|config\.yaml|config\.yml|env|environment)$)"
 )
 
-_SET_TOKEN_RE = r"(?<![\w-])set(?![\w-])"
-_SET_E_RE = re.compile(rf"{_SET_TOKEN_RE}[^\n;]*-[A-Za-z]*e", re.MULTILINE)
-_SET_U_RE = re.compile(rf"{_SET_TOKEN_RE}[^\n;]*-[A-Za-z]*u", re.MULTILINE)
-_PIPEFAIL_RE = re.compile(rf"{_SET_TOKEN_RE}[^\n]*pipefail", re.MULTILINE)
-
 
 def _module_name(task: Task) -> str:
     return task["action"]["__ansible_module__"].rsplit(".", 1)[-1]
@@ -161,12 +156,9 @@ class ShellStrictMode(AnsibleLintRule):
         executable = task["action"].get("executable") or ""
 
         missing = []
-        if not _SET_E_RE.search(cmd):
-            missing.append("set -e")
-        if not _SET_U_RE.search(cmd):
-            missing.append("set -u")
-        if not _PIPEFAIL_RE.search(cmd):
-            missing.append("set -o pipefail")
+        preamble = "set -euo pipefail"
+        if cmd != preamble and not cmd.startswith((f"{preamble}\n", f"{preamble};")):
+            missing.append(preamble)
         if not executable.endswith("bash"):
             missing.append("executable: /bin/bash")
 

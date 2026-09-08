@@ -39,14 +39,10 @@ class TestShellStrictMode:
         ("cmd", "missing"),
         [
             ("set -euo pipefail\necho hello", []),
-            ("set -e\nset -u\nset -o pipefail\necho hello", []),
-            ("set -uo pipefail\necho hello", ["set -e"]),
-            ("set -eo pipefail\necho hello", ["set -u"]),
-            ("set -eu\necho hello", ["set -o pipefail"]),
-            ("echo hello", ["set -e", "set -u", "set -o pipefail"]),
-            ("unset -e FOO", ["set -e", "set -u", "set -o pipefail"]),
-            ("reset-property -e something", ["set -e", "set -u", "set -o pipefail"]),
             ("set -euo pipefail; echo hello", []),
+            ("echo hello", ["set -euo pipefail"]),
+            ("echo before\nset -euo pipefail", ["set -euo pipefail"]),
+            ("set -euo pipefailure", ["set -euo pipefail"]),
         ],
     )
     def test_strict_mode_requirements(self, cmd: str, missing: list[str]) -> None:
