@@ -246,7 +246,7 @@ class TestAnsibleControllerStaging:
             "host_vars",
             "roles",
             "data",
-            "test/playbooks/templates",
+            "test/playbooks",
         ):
             (tmp_path / directory).mkdir(parents=True)
         (tmp_path / "test/playbooks/site.yml").write_text("fixture site\n")

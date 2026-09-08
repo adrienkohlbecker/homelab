@@ -11,13 +11,18 @@
       become: true
 
     - name: Install DNS-over-TLS configuration
-      template:
-        src: templates/10-test-dns-over-tls.conf.j2
+      copy:
         dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
         owner: root
         group: root
         mode: "0644"
         backup: true
+        content: |
+          [Resolve]
+          DNS={{ test_dot_servers | join(' ') }}
+          FallbackDNS=
+          DNSOverTLS=yes
+          Domains=~.
         validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
       register: test_resolved_conf
       become: true
