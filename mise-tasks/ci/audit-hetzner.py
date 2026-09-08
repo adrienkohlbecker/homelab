@@ -47,26 +47,8 @@ expected: list[str] = []  # legitimate standing infra, reported for context
 errors: list[str] = []
 
 
-def preflight() -> None:
-    """The hcloud CLI authenticates on its own -- from $HCLOUD_TOKEN (CI/CD
-    variable) or the active local context (~/.config/hcloud/cli.toml, e.g.
-    `hcloud context create homelab` seeded from 1Password). Fail early with
-    guidance if the binary is missing or no credential resolves, rather than
-    letting every per-resource query below append an identical auth error."""
-    if not shutil.which("hcloud"):
-        sys.exit("hcloud CLI not found -- it is pinned in mise.toml [tools]; run `mise install`.")
-    probe = subprocess.run(["hcloud", "server", "list", "-o", "noheader"], capture_output=True, text=True)
-    if probe.returncode != 0:
-        sys.exit(
-            "hcloud cannot authenticate -- set HCLOUD_TOKEN or configure a "
-            f"context (`hcloud context create`).\n  {probe.stderr.strip()}"
-        )
-
-
 def hcloud_list(resource: str, *flags: str) -> list:
-    """Run `hcloud <resource> list <flags> -o json` and return the parsed
-    array. hcloud follows pagination internally, so the result is the full
-    resource set."""
+    """Return the complete JSON list for one hcloud resource."""
     out = subprocess.run(
         ["hcloud", resource, "list", *flags, "-o", "json"],
         capture_output=True,
@@ -76,7 +58,25 @@ def hcloud_list(resource: str, *flags: str) -> list:
     return json.loads(out.stdout)
 
 
-def safe(label, fn, default=None):
+def preflight() -> list:
+    """The hcloud CLI authenticates on its own -- from $HCLOUD_TOKEN (CI/CD
+    variable) or the active local context (~/.config/hcloud/cli.toml, e.g.
+    `hcloud context create homelab` seeded from 1Password). Fail early with
+    guidance if the binary is missing or no credential resolves, rather than
+    letting every per-resource query below append an identical auth error."""
+    if not shutil.which("hcloud"):
+        sys.exit("hcloud CLI not found -- it is pinned in mise.toml [tools]; run `mise install`.")
+    try:
+        return hcloud_list("server")
+    except (subprocess.CalledProcessError, OSError, ValueError) as error:
+        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) and error.stderr else error
+        sys.exit(
+            "hcloud cannot authenticate -- set HCLOUD_TOKEN or configure a "
+            f"context (`hcloud context create`).\n  {detail}"
+        )
+
+
+def safe(label, fn):
     """Run a query, recording (not raising) any failure so the sweep finishes
     and the operator sees which queries could not be trusted."""
     try:
@@ -84,7 +84,7 @@ def safe(label, fn, default=None):
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         detail = e.stderr.strip() if isinstance(e, subprocess.CalledProcessError) and e.stderr else e
         errors.append(f"{label}: {detail}")
-        return default if default is not None else []
+        return []
 
 
 def gb(image) -> str:
@@ -93,11 +93,10 @@ def gb(image) -> str:
 
 
 def main():
-    preflight()
+    servers = preflight()
     print("== Hetzner Cloud project audit (scope: the project HCLOUD_TOKEN belongs to) ==\n")
 
     # ── Servers: only fox (cpx22) is expected; backups are a billable surcharge ──
-    servers = safe("servers", lambda: hcloud_list("server"))
     for s in servers:
         st, status = s["server_type"]["name"], s["status"]
         if s["name"] == "fox":
