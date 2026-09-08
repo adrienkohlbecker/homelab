@@ -10,6 +10,8 @@ main_worktree() {
 resolve_side_worktree() {
   local repo=$1 requested=$2 abs="" wt=""
 
+  # Automation supplies paths, but operators may use a branch name when the
+  # worktree path is inconvenient to copy from `git worktree list`.
   if [ -d "$requested" ]; then
     abs=$(git -C "$requested" rev-parse --show-toplevel 2>/dev/null || true)
   fi
