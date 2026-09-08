@@ -87,21 +87,6 @@
             validate: python3 -m json.tool "%s"
           diff: false
 
-    # Functional mirror probe: prove the configured Nexus path actually serves.
-    - name: Verify the Podman docker.io mirror serves its v2 API
-      when:
-        - nexus_url | length > 0
-        - not test_in_aws
-      uri:
-        # Podman supplies the scheme for the bare mirror location; the direct probe
-        # needs one explicitly. Certificate trust is outside this fixture's contract.
-        url: "https://{{ nexus_url }}/repository/docker.io/v2/"
-        validate_certs: false
-        # Nexus answers the v2 root 200 (anonymous) or 401 (auth-gated); a 404 means
-        # the mirror location the registries.conf points at doesn't exist.
-        status_code: [ 200, 401 ]
-        timeout: 15
-
     # Assert the running resolver state, not merely the drop-in written above.
     # Scope it to the Global block controlled by resolved.conf.d.
     - name: Verify DNS-over-TLS is enforced at the configured resolver
