@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 import site_test
+from machine import Machine
 
 
 class CheckModeMachine:
@@ -22,6 +23,9 @@ class CheckModeMachine:
 
     async def __aexit__(self, *args: object) -> None:
         return None
+
+    def session(self, timeout: int):
+        return Machine.session(cast(Machine, self), timeout)
 
     async def ensure_booted(self) -> None:
         return None
@@ -43,7 +47,7 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("machine_session.cancel_on_signal", lambda _task: contextlib.nullcontext())
+    monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = CheckModeMachine(tmp_path)
 
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10, check_mode=True))

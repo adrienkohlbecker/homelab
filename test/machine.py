@@ -16,6 +16,7 @@ import socket
 import subprocess
 import tempfile
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
@@ -26,6 +27,7 @@ from matrix import UBUNTU_RELEASES
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
+    cancel_on_signal,
     print_cmd_line,
     print_line,
     read_and_write_stream,
@@ -1093,6 +1095,38 @@ class Machine:
     async def wait(self) -> None:
         if self.proc:
             await self.proc.wait()
+
+    @contextlib.asynccontextmanager
+    async def session(self, timeout: int) -> AsyncIterator[None]:
+        """Run under the harness timeout, signal, and keep-VM policy."""
+        task = asyncio.current_task()
+        assert task is not None
+        timer_absorbed = False
+
+        with cancel_on_signal(task):
+            async with asyncio.timeout(timeout) as timeout_cm:
+                async with self:
+                    try:
+                        try:
+                            yield
+                        except asyncio.CancelledError:
+                            if self.keep_vm and timeout_cm.expired() and task.cancelling():
+                                task.uncancel()
+                                timer_absorbed = True
+                                print_line(f"Timed out after {timeout}s; --keep set, dropping to SSH for debug")
+                            else:
+                                raise
+                    finally:
+                        if self.keep_vm and not task.cancelling():
+                            with contextlib.suppress(RuntimeError):
+                                # A fired deadline cannot be rescheduled, but it is
+                                # already spent and no longer bounds the debug wait.
+                                timeout_cm.reschedule(None)
+                            self.print_ssh_instructions()
+                            await self.wait()
+
+        if timer_absorbed:
+            raise TimeoutError()
 
     async def __aenter__(self) -> Self:
         await self.prepare()

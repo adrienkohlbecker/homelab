@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 from typing import cast
 
-import machine_session
+import machine as machine_module
 import pytest
 from machine import Machine
 
@@ -32,11 +32,11 @@ class FakeMachine:
 
 
 def test_session_enters_and_exits_machine(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(machine_session, "cancel_on_signal", lambda _task: contextlib.nullcontext())
+    monkeypatch.setattr(machine_module, "cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = FakeMachine()
 
     async def run() -> None:
-        async with machine_session.machine_session(cast(Machine, machine), 10):
+        async with Machine.session(cast(Machine, machine), 10):
             assert machine.entered
 
     asyncio.run(run())
@@ -46,11 +46,11 @@ def test_session_enters_and_exits_machine(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_keep_waits_after_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(machine_session, "cancel_on_signal", lambda _task: contextlib.nullcontext())
+    monkeypatch.setattr(machine_module, "cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = FakeMachine(keep_vm=True)
 
     async def run() -> None:
-        async with machine_session.machine_session(cast(Machine, machine), 10):
+        async with Machine.session(cast(Machine, machine), 10):
             pass
 
     asyncio.run(run())
@@ -60,11 +60,11 @@ def test_keep_waits_after_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_keep_waits_after_timeout_then_resurfaces_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(machine_session, "cancel_on_signal", lambda _task: contextlib.nullcontext())
+    monkeypatch.setattr(machine_module, "cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = FakeMachine(keep_vm=True)
 
     async def run() -> None:
-        async with machine_session.machine_session(cast(Machine, machine), 0):
+        async with Machine.session(cast(Machine, machine), 0):
             await asyncio.sleep(0)
 
     with pytest.raises(TimeoutError):

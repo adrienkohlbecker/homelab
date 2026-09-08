@@ -30,7 +30,6 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
-from machine_session import machine_session
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import (
     CommandFailedException,
@@ -97,7 +96,7 @@ def parse_args() -> argparse.Namespace:
 
 
 async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
-    async with machine_session(m, timeout):
+    async with m.session(timeout):
         await m.ensure_booted()
         print_line("Booted")
 

@@ -20,7 +20,6 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
-from machine_session import machine_session
 from matrix import (
     DEFAULT_UBUNTU,
     UBUNTU_RELEASES,
@@ -145,7 +144,7 @@ async def run_test(
 ) -> None:
     """Provision a machine, run the role under test, and stream output."""
 
-    async with machine_session(m, timeout):
+    async with m.session(timeout):
         try:
             await m.ensure_booted()
             print_line("Booted")
