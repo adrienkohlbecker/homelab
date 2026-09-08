@@ -3,23 +3,11 @@
 base: lua51
 name: fluentbit
 globals:
-  set_priority:
+  set_priority: &filter_callback
     args:
       - type: any
       - type: any
       - type: any
-  normalize_podman_event:
-    args:
-      - type: any
-      - type: any
-      - type: any
-  shape_lnav:
-    args:
-      - type: any
-      - type: any
-      - type: any
-  reassemble_conmon_message:
-    args:
-      - type: any
-      - type: any
-      - type: any
+  normalize_podman_event: *filter_callback
+  shape_lnav: *filter_callback
+  reassemble_conmon_message: *filter_callback
