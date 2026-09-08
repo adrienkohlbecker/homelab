@@ -23,14 +23,6 @@ pub = _load()
 
 
 class TestAcquireExclusive:
-    def test_acquires_unlocked_fd(self, tmp_path: Path) -> None:
-        lockfile = tmp_path / "test.lock"
-        fd = os.open(str(lockfile), os.O_RDWR | os.O_CREAT, 0o644)
-        try:
-            pub.acquire_exclusive(fd, str(lockfile), 1.0)
-        finally:
-            os.close(fd)
-
     def test_timeout_on_held_lock(self, tmp_path: Path) -> None:
         import fcntl
 
@@ -47,23 +39,6 @@ class TestAcquireExclusive:
 
 
 class TestMainAtomicPublish:
-    def test_publishes_new_artifact(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        src = tmp_path / "src"
-        src.mkdir()
-        (src / "image.qcow2").write_text("new")
-        artifact_dir = tmp_path / "artifacts"
-        artifact_dir.mkdir()
-        dst = artifact_dir / "dst"
-        lockfile = tmp_path / ".publish-lock"
-
-        monkeypatch.setattr("sys.argv", ["publish.py", str(lockfile), str(src), str(dst)])
-        pub.main()
-
-        assert dst.exists()
-        assert (dst / "image.qcow2").read_text() == "new"
-        assert not src.exists()
-        assert lockfile.exists()
-
     def test_replaces_existing_artifact(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         src = tmp_path / "src"
         src.mkdir()
@@ -156,6 +131,8 @@ class TestMainAtomicPublish:
         finally:
             os.umask(old_umask)
 
+        assert (dst / "image.qcow2").read_text() == "new"
+        assert not src.exists()
         assert stat.S_IMODE(lockfile.stat().st_mode) == 0o640
 
     def test_grants_group_access_to_published_directories(
