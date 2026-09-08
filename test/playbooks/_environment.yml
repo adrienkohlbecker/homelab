@@ -128,3 +128,16 @@
       retries: 5
       delay: 3
       until: test_public_resolve.rc == 0
+
+    - name: Configure shared base-role prerequisites
+      when: test_base_prerequisites | default(false) | bool
+      block:
+        - name: Set hostname and seed /etc/hosts
+          import_role:
+            name: hostname
+            tasks_from: configure
+
+        - name: Configure apt retries and sources
+          import_role:
+            name: apt
+            tasks_from: configure

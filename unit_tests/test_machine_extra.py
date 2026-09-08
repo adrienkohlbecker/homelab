@@ -250,7 +250,7 @@ class TestAnsibleControllerStaging:
         ):
             (tmp_path / directory).mkdir(parents=True)
         (tmp_path / "test/playbooks/site.yml").write_text("fixture site\n")
-        (tmp_path / "test/playbooks/_bootstrap.yml").write_text("bootstrap\n")
+        (tmp_path / "test/playbooks/_environment.yml").write_text("environment\n")
 
         staged_calls = 0
 
@@ -269,11 +269,11 @@ class TestAnsibleControllerStaging:
         assert not (m.workdir_path / "roles").exists()
 
         asyncio.run(m.ansible_command(str(m.workdir_path / "site.yml")))
-        asyncio.run(m.ansible_command(str(m.workdir_path / "_bootstrap.yml")))
+        asyncio.run(m.ansible_command(str(m.workdir_path / "_environment.yml")))
 
         assert staged_calls == 1
         assert (m.workdir_path / "roles").is_dir()
-        assert (m.workdir_path / "_bootstrap.yml").read_text() == "bootstrap\n"
+        assert (m.workdir_path / "_environment.yml").read_text() == "environment\n"
         assert (m.workdir_path / "site.yml").read_text() == "production site\n"
 
 

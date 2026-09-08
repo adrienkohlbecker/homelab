@@ -96,7 +96,7 @@ class TestRequireNamedRoleEntrypoint:
     def test_named_entrypoint_is_allowed(self) -> None:
         result = RequireNamedRoleEntrypoint().matchtask(
             _task("ansible.builtin.import_role", {"name": "apt", "tasks_from": "configure"}),
-            Lintable("/repo/test/playbooks/_bootstrap.yml"),
+            Lintable("/repo/test/playbooks/_environment.yml"),
         )
         assert result is False
 
