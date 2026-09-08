@@ -67,18 +67,19 @@
   register: _netdata_wireguard_health
   become: true
 
-- name: _verify | WireGuard stale thresholds carry the full grace period
+- name: _verify | WireGuard bunk handshake alarm remains disabled
   vars:
     _health: "{{ _netdata_wireguard_health.content | b64decode }}"
   assert:
     that:
-      - '"warn: $this > 900" in _health'
-      - '"crit: $this > 1200" in _health'
-      - '"delay: up" not in _health'
-      - '"delay: down 30m" in _health'
+      - >-
+        _health
+        | regex_findall('(?m)^template:\s+wireguard_bunk_peer_handshake_stale$')
+        | length == 0
+      - '"# template: wireguard_bunk_peer_handshake_stale" in _health'
     fail_msg: >-
-      Expected the rendered WireGuard alarm to encode its stale-age grace in
-      the thresholds and retain only recovery hysteresis.
+      Expected the bunk handshake alarm stanza to remain commented out while
+      the offsite host is unavailable.
 
 - name: _verify | Read Fluent Bit health configuration
   slurp:

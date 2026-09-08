@@ -38,7 +38,7 @@
   tags:
     - netdata
 
-- name: Configure netdata wireguard bunk-peer handshake alert
+- name: Configure netdata wireguard bunk-peer alert policy
   import_tasks: health.yml
   vars:
     netdata_args:

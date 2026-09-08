@@ -1,3 +1,6 @@
+# The bunk handshake alarm is disabled while bunk is unavailable. Uncomment
+# the stanza when the offsite host is back online.
+#
 # WireGuard peer handshake-age alarm, scoped to the bunk offsite-backup
 # peer. The wireguard go.d collector emits one chart per (device, peer)
 # under context `wireguard.peer_latest_handshake_ago` -- if we template
@@ -20,18 +23,18 @@
 # trailing padding character on the public key shows as `:`. Apply the
 # same replacement when injecting from group_vars/prod.yml.
 
-template: wireguard_bunk_peer_handshake_stale
-      on: wireguard.peer_latest_handshake_ago
-chart labels: public_key={{ wireguard_keys.bunk.public_key | replace('=', ':') }}
-   class: Errors
-    type: System
-component: Network
-    calc: $time
-   units: seconds
-   every: 30s
-    warn: $this > 900
-    crit: $this > 1200
-   delay: down 30m multiplier 1.5 max 1h
- summary: WireGuard bunk peer (${label:device}) handshake stale
-    info: lab/pug sends a 25s keepalive to bunk; handshake_ago > 900s means the offsite backup link is unreachable. Catches the failure before the next nightly zfs send (which would also fail via systemd_service_unit_failed_state).
-      to: sysadmin
+# template: wireguard_bunk_peer_handshake_stale
+#       on: wireguard.peer_latest_handshake_ago
+# chart labels: public_key={{ wireguard_keys.bunk.public_key | replace('=', ':') }}
+#    class: Errors
+#     type: System
+# component: Network
+#     calc: $time
+#    units: seconds
+#    every: 30s
+#     warn: $this > 900
+#     crit: $this > 1200
+#    delay: down 30m multiplier 1.5 max 1h
+#  summary: WireGuard bunk peer (${label:device}) handshake stale
+#     info: lab/pug sends a 25s keepalive to bunk; handshake_ago > 900s means the offsite backup link is unreachable. Catches the failure before the next nightly zfs send (which would also fail via systemd_service_unit_failed_state).
+#       to: sysadmin
