@@ -1,99 +1,95 @@
 - name: Prepare the test environment
   hosts: all
   tasks:
-    - name: Create systemd-resolved configuration directory
-      file:
-        path: /etc/systemd/resolved.conf.d
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
+    - name: Configure test-only connectivity and credentials
       become: true
+      block:
+        - name: Create systemd-resolved configuration directory
+          file:
+            path: /etc/systemd/resolved.conf.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
 
-    - name: Install DNS-over-TLS configuration
-      copy:
-        dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-        content: |
-          [Resolve]
-          DNS={{ test_dot_servers | join(' ') }}
-          FallbackDNS=
-          DNSOverTLS=yes
-          Domains=~.
-        validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
-      register: test_resolved_conf
-      become: true
+        - name: Install DNS-over-TLS configuration
+          copy:
+            dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
+            owner: root
+            group: root
+            mode: "0644"
+            backup: true
+            content: |
+              [Resolve]
+              DNS={{ test_dot_servers | join(' ') }}
+              FallbackDNS=
+              DNSOverTLS=yes
+              Domains=~.
+            validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
+          register: test_resolved_conf
 
-    - name: Restart systemd-resolved to pick up DoT config
-      systemd:
-        name: systemd-resolved
-        state: restarted
-      when: test_resolved_conf.changed
-      become: true
+        - name: Restart systemd-resolved to pick up DoT config
+          systemd:
+            name: systemd-resolved
+            state: restarted
+          when: test_resolved_conf.changed
 
-    - name: Ensure /etc/containers/registries.conf.d exists
-      when: test_registry_mirrors | length > 0
-      file:
-        path: /etc/containers/registries.conf.d
-        state: directory
-        mode: "0755"
-        owner: root
-        group: root
-      become: true
+        - name: Ensure /etc/containers/registries.conf.d exists
+          when: test_registry_mirrors | length > 0
+          file:
+            path: /etc/containers/registries.conf.d
+            state: directory
+            mode: "0755"
+            owner: root
+            group: root
 
-    - name: Configure podman registry mirrors
-      when: test_registry_mirrors | length > 0
-      copy:
-        dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
-        mode: "0644"
-        owner: root
-        group: root
-        # Nexus path-based routing treats the mirror location's repository suffix
-        # as the first image namespace beneath its native /v2/ API.
-        content: |
-          {% for source, location in test_registry_mirrors | dictsort %}
-          [[registry]]
-          location = "{{ source }}"
+        - name: Configure podman registry mirrors
+          when: test_registry_mirrors | length > 0
+          copy:
+            dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
+            mode: "0644"
+            owner: root
+            group: root
+            # Nexus path-based routing treats the mirror location's repository suffix
+            # as the first image namespace beneath its native /v2/ API.
+            content: |
+              {% for source, location in test_registry_mirrors | dictsort %}
+              [[registry]]
+              location = "{{ source }}"
 
-          [[registry.mirror]]
-          location = "{{ location }}"
-          {% endfor %}
-      become: true
+              [[registry.mirror]]
+              location = "{{ location }}"
+              {% endfor %}
 
-    - name: Ensure root containers auth dir exists
-      when: test_in_aws
-      file:
-        path: /root/.config/containers
-        state: directory
-        mode: "0700"
-        owner: root
-        group: root
-      become: true
+        - name: Ensure root containers auth dir exists
+          when: test_in_aws
+          file:
+            path: /root/.config/containers
+            state: directory
+            mode: "0700"
+            owner: root
+            group: root
 
-    - name: Write ECR auth for root podman pulls
-      when: test_in_aws
-      # Each cell starts from a fresh overlay, and one token covers the bounded
-      # harness run. Replacing it on every converge only defeats idempotence.
-      copy:
-        dest: /root/.config/containers/auth.json
-        mode: "0600"
-        owner: root
-        group: root
-        force: false
-        content: |
-          {
-            "auths": {
-              "{{ test_ecr_registry }}": {
-                "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_aws_region ~ ' ecr get-login-password')) | b64encode }}"
+        - name: Write ECR auth for root podman pulls
+          when: test_in_aws
+          # Each cell starts from a fresh overlay, and one token covers the bounded
+          # harness run. Replacing it on every converge only defeats idempotence.
+          copy:
+            dest: /root/.config/containers/auth.json
+            mode: "0600"
+            owner: root
+            group: root
+            force: false
+            content: |
+              {
+                "auths": {
+                  "{{ test_ecr_registry }}": {
+                    "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_aws_region ~ ' ecr get-login-password')) | b64encode }}"
+                  }
+                }
               }
-            }
-          }
-        validate: python3 -m json.tool "%s"
-      diff: false
-      become: true
+            validate: python3 -m json.tool "%s"
+          diff: false
 
     # Functional mirror probe: prove the configured Nexus path actually serves.
     - name: Verify the Podman docker.io mirror serves its v2 API
