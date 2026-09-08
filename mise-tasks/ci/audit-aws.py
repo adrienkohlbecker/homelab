@@ -321,8 +321,9 @@ def main():
     print("\n── Anomalies (billable / unexpected) ──")
     if anomalies:
         print("\n".join(f"  {line}" for line in anomalies))
-        print("\n── Suggested cleanup (review, then run by hand — NOT executed) ──")
-        print("\n".join(f"  {cmd}" for cmd in deletes))
+        if deletes:
+            print("\n── Suggested cleanup (review, then run by hand — NOT executed) ──")
+            print("\n".join(f"  {cmd}" for cmd in deletes))
     else:
         print("  none — account holds only the expected CI infra")
 

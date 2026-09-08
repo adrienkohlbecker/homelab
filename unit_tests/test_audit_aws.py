@@ -52,6 +52,26 @@ def test_unknown_ami_is_reported_without_cleanup(monkeypatch):
     assert audit_aws.deletes == []
 
 
+def test_report_omits_empty_cleanup_section(monkeypatch, capsys):
+    class Sts:
+        @staticmethod
+        def get_caller_identity():
+            return {"Account": "123", "Arn": "test-role"}
+
+    reset_output()
+    audit_aws.anomalies.append("manual review only")
+    monkeypatch.setattr(audit_aws, "client", lambda *_args: Sts())
+    monkeypatch.setattr(audit_aws, "safe", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(audit_aws, "paginated", lambda *_args, **_kwargs: [])
+
+    with pytest.raises(SystemExit, match="1"):
+        audit_aws.main()
+
+    output = capsys.readouterr().out
+    assert "manual review only" in output
+    assert "Suggested cleanup" not in output
+
+
 def test_incomplete_inventory_emits_no_classification():
     audit_aws.audit_ami_inventory("eu-central-1", [], None)
 
