@@ -18,7 +18,6 @@
             owner: root
             group: root
             mode: "0644"
-            backup: true
             content: |
               [Resolve]
               DNS={{ test_dot_servers | join(' ') }}
