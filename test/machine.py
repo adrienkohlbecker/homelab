@@ -325,8 +325,6 @@ class LaunchOptions:
     append: str = ""
     mem: str | None = None
     with_pflash: bool = False
-    efi_code: Path | None = None
-    efi_vars: Path | None = None
     virtfs: tuple[tuple[Path, str], ...] = ()
     foreground: bool = False
     display_window: bool = False
@@ -1370,12 +1368,9 @@ class Machine:
             self.drives += await self._uefi_drives()
 
         # Attach pflash on variants that don't already have it (x86_64
-        # minimal BIOS) when launch.py asked for it via --with-pflash or an
-        # explicit --efi-code/--efi-vars. Idempotent: skip when an earlier
-        # branch already attached pflash (every ZFS variant + aarch64
-        # minimal); the override flowed through there already.
-        want_pflash = self.launch.with_pflash or self.launch.efi_code is not None or self.launch.efi_vars is not None
-        if want_pflash and not any("if=pflash" in d for d in self.drives):
+        # minimal BIOS) when launch.py asked for it. Every ZFS variant and
+        # aarch64 minimal already attached pflash above.
+        if self.launch.with_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
 
     async def _create_overlay(self, src: str, dest: str, *, backing_fmt: str, size: str | None = None) -> None:
@@ -1505,14 +1500,12 @@ class Machine:
         return f"file={path},if=virtio,cache=unsafe,aio={aio},discard=unmap,format={format},detect-zeroes=unmap"
 
     async def _uefi_drives(self) -> list[str]:
-        """UEFI pflash code+vars pair, honouring efi_code/efi_vars overrides.
+        """Return the auto-detected UEFI code and writable vars pair.
 
         The CODE blob defaults to arch.uefi_code_path_for (Homebrew on macOS,
-        ovmf/qemu-efi-aarch64 on Linux); --efi-code overrides for custom
-        EDK2/OVMF builds. The VARS blob is one of:
+        ovmf/qemu-efi-aarch64 on Linux). The VARS blob is one of:
 
-        - --efi-vars override, if supplied;
-        - else {workdir}/efivars.fd, copied from the packer image for ZFS
+        - {workdir}/efivars.fd, copied from the packer image for ZFS
           variants so bootloader entries survive across runs;
         - else a fresh empty file sized to the code blob -- right for
           ad-hoc launches like minimal or launch.py --with-pflash where
@@ -1520,19 +1513,14 @@ class Machine:
           the same size, and EDK2 builds aren't uniform: aarch64 EDK2 ships
           at 64 MiB, x86_64 OVMF typically at 4 MiB.
         """
-        code_path = (
-            self.launch.efi_code.resolve() if self.launch.efi_code is not None else uefi_code_path_for(self.arch)
-        )
-        if self.launch.efi_vars is not None:
-            vars_path = self.launch.efi_vars.resolve()
+        code_path = uefi_code_path_for(self.arch)
+        packer_vars = self.workdir_path / "efivars.fd"
+        if packer_vars.exists():
+            vars_path = packer_vars
         else:
-            packer_vars = self.workdir_path / "efivars.fd"
-            if packer_vars.exists():
-                vars_path = packer_vars
-            else:
-                vars_path = self.workdir_path / "uefi-vars.fd"
-                with vars_path.open("wb") as handle:
-                    handle.truncate(code_path.stat().st_size)
+            vars_path = self.workdir_path / "uefi-vars.fd"
+            with vars_path.open("wb") as handle:
+                handle.truncate(code_path.stat().st_size)
         return [
             f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
             f"file={vars_path},if=pflash,unit=1,format=raw",

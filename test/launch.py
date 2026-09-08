@@ -91,27 +91,6 @@ def parse_args() -> argparse.Namespace:
         "attached (x86_64 ZFS, aarch64 minimal).",
     )
     parser.add_argument(
-        "--efi-code",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="Override the auto-detected UEFI CODE blob (e.g. a custom "
-        "EDK2/OVMF build, secure-boot variant, etc.). Implies pflash "
-        "attachment. Combine with --efi-vars to pin both halves; if vars "
-        "is omitted, the harness creates an empty vars file sized to this "
-        "code blob (or reuses the packer-shipped efivars.fd when present).",
-    )
-    parser.add_argument(
-        "--efi-vars",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="Override the EFI vars file (the writable half of the pflash "
-        "pair). Implies pflash attachment. Combine with --efi-code to pin "
-        "both halves; if code is omitted, the harness's auto-detected blob "
-        "is used and this vars file must match its size.",
-    )
-    parser.add_argument(
         "--virtfs",
         action="append",
         type=_virtfs_arg,
@@ -319,8 +298,6 @@ def main() -> int:
             append=args.append,
             mem=args.mem,
             with_pflash=args.with_pflash,
-            efi_code=args.efi_code,
-            efi_vars=args.efi_vars,
             virtfs=tuple(args.virtfs),
             foreground=args.foreground,
             display_window=args.display_window,
