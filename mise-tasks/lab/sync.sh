@@ -10,7 +10,7 @@ set -euo pipefail
 # linked worktree's .git file points into a local-only path, so only the main
 # checkout can produce a usable remote repository.
 repo_root=$(git rev-parse --show-toplevel)
-if [ "$(git -C "$repo_root" rev-parse --git-dir)" != ".git" ]; then
+if [ ! -d "$repo_root/.git" ]; then
   echo "lab:sync: linked worktrees are unsupported; run from the main checkout" >&2
   exit 1
 fi
