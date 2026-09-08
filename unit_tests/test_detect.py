@@ -1249,9 +1249,7 @@ class TestEmitGitlab:
         # lab/pug fixtures only run on demand -- neither qemu CI target can
         # hydrate their images, so they never reach a generated pipeline.
         child = tmp_path / "child.yml"
-        detect._emit_gitlab(
-            json.dumps(["zfs:box", "zfs:lab", "zfs:pug"]), False, str(child), {}, lambda *_: None, target=target
-        )
+        detect._emit_gitlab(["zfs:box", "zfs:lab", "zfs:pug"], False, str(child), {}, lambda *_: None, target=target)
         loaded = detect.yaml.safe_load(child.read_text())
         assert "zfs:box" in loaded
         assert "zfs:lab" not in loaded
@@ -1270,7 +1268,6 @@ class TestCmdGitlab:
         ("args", "pipeline_source", "roles"),
         [
             pytest.param(["--all"], None, None, id="all-flag"),
-            pytest.param([], "schedule", None, id="schedule"),
             pytest.param([], "web", "ALL", id="dispatch-all"),
         ],
     )
@@ -1318,10 +1315,9 @@ class TestCmdGitlab:
         assert loaded[".cell"]["tags"] == [runner_tag]
         assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == in_aws
 
-    @pytest.mark.parametrize("command", [[], ["gitlab"]], ids=["direct", "legacy-subcommand"])
-    def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: list[str]) -> None:
+    def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         child = tmp_path / "child.yml"
-        monkeypatch.setattr("sys.argv", ["detect.py", *command, "--all", "--child-path", str(child)])
+        monkeypatch.setattr("sys.argv", ["detect.py", "--all", "--child-path", str(child)])
         assert detect.main() == 0
         assert "nginx:box" in detect.yaml.safe_load(child.read_text())
 

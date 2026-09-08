@@ -243,11 +243,8 @@ def _shallow_since_arg(created_at: str) -> str | None:
 # commit" rather than only the fix's own diff.
 #
 # A green base must be a pipeline that actually *ran the cell matrix* and passed
-# it — `success` status alone is not enough. Three ways a `success` pipeline can
+# it — `success` status alone is not enough. Two kinds of successful push can
 # carry zero executed cells:
-#   - a `schedule` pipeline runs only the qemu-image reaper (every code job is
-#     `when: never` for schedule in .gitlab-ci.yml), so it is green without
-#     touching a single role;
 #   - a docs-only `push` renders the lone `no_cells` placeholder into its child
 #     (detect found nothing role-relevant since the prior base);
 #   - a `SKIP_TEST_CELLS=true` push still builds the child, but every cell is an
@@ -257,7 +254,8 @@ def _shallow_since_arg(created_at: str) -> str | None:
 # So a candidate is accepted only when its triggered child pipeline holds at
 # least one real gating cell job (see _pipeline_ran_cells). The `web` source (manual
 # ROLES dispatch — a partial matrix) and `parent_pipeline` (the cell child
-# itself, same sha as its push parent) are dropped up front by GREEN_BASE_SOURCES.
+# `schedule`, `web`, and `parent_pipeline` sources are dropped up front by
+# CELL_PIPELINE_SOURCES.
 #
 # Ancestry is checked locally with git (merge-base --is-ancestor), fetching the
 # candidate on demand when it sits outside the shallow checkout — the same
@@ -265,7 +263,7 @@ def _shallow_since_arg(created_at: str) -> str | None:
 # second API surface (e.g. a server-side compare). The cheap cells-ran API check
 # runs first, so a reaper-only schedule is rejected before any git deepen.
 
-GREEN_BASE_SOURCES = ("push", "schedule")
+CELL_PIPELINE_SOURCES = ("push",)
 
 
 def _gl_api_get(
@@ -427,7 +425,7 @@ def newest_green_pipeline(
             sha = pipe.get("sha", "")
             source = pipe.get("source", "")
             created = pipe.get("created_at", "")
-            if not sha or source not in GREEN_BASE_SOURCES:
+            if not sha or source not in CELL_PIPELINE_SOURCES:
                 continue
             # Cheap API check before the (possibly git-deepening) ancestry test:
             # reject reaper-only schedules and no_cells docs pushes outright.
@@ -590,7 +588,7 @@ def _recent_pipeline_ids(branch: str, project_api: str, token: str, token_kind: 
     data = _gl_api_get(f"{project_api}/pipelines?{params}", token, token_kind=token_kind)
     if not data:
         return []
-    ids = [p["id"] for p in data if p.get("id") and p.get("source") in GREEN_BASE_SOURCES]
+    ids = [p["id"] for p in data if p.get("id") and p.get("source") in CELL_PIPELINE_SOURCES]
     return ids[:limit]
 
 
@@ -1014,21 +1012,14 @@ def _cmd_gitlab(args: list[str]) -> int:
         cells = _build_dispatch_matrix(roles_input)
         return _emit_gitlab(cells_to_ci_specs(cells), False, opts.child_path, runtimes, log, target=opts.target)
 
-    if event == "schedule":
-        log("mode: schedule (nightly full build)")
-        return _emit_gitlab(_full_universe_specs(), True, opts.child_path, runtimes, log, target=opts.target)
-
     log(f"mode: change detection (source={event or 'local'})")
     specs, site_test = _gitlab_change_matrix(green, log)
     return _emit_gitlab(specs, site_test, opts.child_path, runtimes, log, target=opts.target)
 
 
 def main() -> int:
-    args = sys.argv[1:]
-    if args[:1] == ["gitlab"]:
-        args = args[1:]
     try:
-        return _cmd_gitlab(args)
+        return _cmd_gitlab(sys.argv[1:])
     except SystemExit as exc:
         return int(exc.code or 0)
 

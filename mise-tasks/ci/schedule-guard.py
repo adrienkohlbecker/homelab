@@ -28,7 +28,7 @@ from pathlib import Path
 # must precede the import so a bare `mise run` resolves it without the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from detect import (
-    GREEN_BASE_SOURCES,
+    CELL_PIPELINE_SOURCES,
     _full_universe_specs,
     _gitlab_api_creds,
     _gl_api_get,
@@ -122,7 +122,7 @@ def latest_full_test_status(
             pid = pipe.get("id")
             if not pid or pid == exclude_id:
                 continue
-            if pipe.get("source") not in GREEN_BASE_SOURCES:
+            if pipe.get("source") not in CELL_PIPELINE_SOURCES:
                 continue
             parent_status = pipe.get("status")
             if parent_status not in DECIDED_PARENT_STATUSES:
