@@ -6,8 +6,8 @@
 # Auth uses a Gandi Personal Access Token (the old API key was
 # deprecated in 2024). Provisioned in the Gandi UI under
 # Account > Personal Access Tokens, scoped to the organization that
-# owns these 3 domains. Stored in 1Password and surfaced via the
-# standard TF_VAR_gandi_pat mechanism in mise.toml [env].
+# owns these 3 domains. Stored in 1Password and surfaced through
+# GANDI_PERSONAL_ACCESS_TOKEN in mise.toml [env].
 #
 # Surfaces intentionally NOT under tofu:
 #
@@ -27,21 +27,6 @@
 #   Routing + Fastmail/Gmail; DNS at CF). If any of these grow,
 #   gandi_mailbox / gandi_email_forwarding / gandi_glue_record /
 #   gandi_livedns_record are the resources to reach for.
-
-variable "gandi_pat" {
-  type      = string
-  sensitive = true
-  ephemeral = true
-
-  validation {
-    condition     = length(var.gandi_pat) > 0
-    error_message = "gandi_pat must be non-empty (resolved via TF_VAR_gandi_pat from 1Password through `op run`)."
-  }
-}
-
-provider "gandi" {
-  personal_access_token = var.gandi_pat
-}
 
 # Pin the registrar-side NS delegation to whatever CF assigned the
 # zone (emma/eric.ns.cloudflare.com today). Reading from

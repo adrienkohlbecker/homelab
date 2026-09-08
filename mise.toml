@@ -21,7 +21,7 @@ TF_VAR_google_idp_client_secret = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/password"
 # Personal Access Tokens, scoped to the organization owning fahm.fr /
 # mhaf.fr / adrienkohlbecker.com. The old Gandi API key was retired
 # in 2024 so PAT is the only auth path.
-TF_VAR_gandi_pat = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
+GANDI_PERSONAL_ACCESS_TOKEN = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
 # Mailgun Private API key used by the provider for domain configuration.
 # SMTP sending credentials stay in Ansible Vault and are not managed by tofu.
 TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
