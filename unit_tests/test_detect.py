@@ -779,28 +779,34 @@ class TestGlApiGetAll:
         assert detect._gl_api_get_all("http://api/jobs", "t", "job") is None
 
 
-class TestCollectPipelineJobs:
-    def test_recurses_bridges_and_collapses_retries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+class TestCollectCellJobs:
+    def test_reads_named_child_and_collapses_retries(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def mock_get_all(base_url, token, token_kind, **kw):
-            if base_url.endswith("/pipelines/1/jobs"):
-                return [{"name": "lint", "id": 10, "duration": 5}]
             if base_url.endswith("/pipelines/1/bridges"):
-                return [{"downstream_pipeline": {"id": 2}}]
+                return [
+                    {"name": "unrelated", "downstream_pipeline": {"id": 99}},
+                    {"name": "test_cells", "downstream_pipeline": {"id": 2}},
+                ]
             if base_url.endswith("/pipelines/2/jobs"):
                 # An earlier attempt and its retry; the retry (higher id) wins.
                 return [
                     {"name": "nginx:box", "id": 20, "duration": 111},
                     {"name": "nginx:box", "id": 21, "duration": 222},
                 ]
-            if base_url.endswith("/pipelines/2/bridges"):
-                return []
             return []
 
         monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
-        jobs = detect._collect_pipeline_jobs("http://api", 1, "t", "job", set())
+        jobs = detect._collect_cell_jobs("http://api", 1, "t", "job")
         assert jobs["nginx:box"]["id"] == 21
         assert jobs["nginx:box"]["duration"] == 222
-        assert jobs["lint"]["duration"] == 5
+
+    def test_empty_without_test_cells_child(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            detect,
+            "_gl_api_get_all",
+            lambda *a, **kw: [{"name": "unrelated", "downstream_pipeline": {"id": 99}}],
+        )
+        assert detect._collect_cell_jobs("http://api", 1, "t", "job") == {}
 
 
 class TestCellRuntimes:
@@ -809,7 +815,7 @@ class TestCellRuntimes:
         monkeypatch.setattr(detect, "_recent_pipeline_ids", lambda *a, **k: [42])
         monkeypatch.setattr(
             detect,
-            "_collect_pipeline_jobs",
+            "_collect_cell_jobs",
             lambda *a, **k: {
                 "nginx:box": {"id": 1, "duration": 200, "status": "success"},
                 "zfs:box": {"id": 2, "duration": 50, "status": "failed"},  # failed -- dropped
@@ -834,7 +840,7 @@ class TestCellRuntimes:
                 "zfs:box": {"id": 21, "duration": 400, "status": "success"},
             },
         }
-        monkeypatch.setattr(detect, "_collect_pipeline_jobs", lambda pa, pid, t, tk, seen: per_pipeline[pid])
+        monkeypatch.setattr(detect, "_collect_cell_jobs", lambda pa, pid, t, tk: per_pipeline[pid])
         runtimes = detect._cell_runtimes("master", lambda m: None)
         # median([100, 300, 1000]) == 300 -- the outlier doesn't pull it up.
         assert runtimes == {"nginx:box": 300, "zfs:box": 400}
@@ -848,7 +854,7 @@ class TestCellRuntimes:
             3: {"nginx:box": {"id": 30, "duration": 5, "status": "failed"}},
             2: {"nginx:box": {"id": 20, "duration": 300, "status": "success"}},
         }
-        monkeypatch.setattr(detect, "_collect_pipeline_jobs", lambda pa, pid, t, tk, seen: per_pipeline[pid])
+        monkeypatch.setattr(detect, "_collect_cell_jobs", lambda pa, pid, t, tk: per_pipeline[pid])
         runtimes = detect._cell_runtimes("master", lambda m: None)
         assert runtimes == {"nginx:box": 300}
 

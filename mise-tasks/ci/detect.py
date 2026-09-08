@@ -429,33 +429,22 @@ def _gl_api_get_all(base_url: str, token: str, token_kind: str, *, max_pages: in
     return items
 
 
-def _collect_pipeline_jobs(
-    project_api: str, pipeline_id: int, token: str, token_kind: str, seen: set[int]
-) -> dict[str, dict]:
-    """All jobs of a pipeline and its downstream child pipelines, keyed by name.
+def _collect_cell_jobs(project_api: str, pipeline_id: int, token: str, token_kind: str) -> dict[str, dict]:
+    """Jobs from the pipeline's test_cells child, keyed by name.
 
-    The cells live in a triggered child, so bridges are recursed. Duplicate
-    names (retries, or a name present at two levels) collapse to the highest
-    job id -- the latest attempt.
+    Duplicate names from retried jobs collapse to the highest job id.
     """
-    if pipeline_id in seen:
+    bridges = _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/bridges", token, token_kind) or []
+    bridge = next((item for item in bridges if item.get("name") == "test_cells"), None)
+    child_id = ((bridge or {}).get("downstream_pipeline") or {}).get("id")
+    if not child_id:
         return {}
-    seen.add(pipeline_id)
 
     by_name: dict[str, dict] = {}
-
-    def keep(job: dict) -> None:
+    for job in _gl_api_get_all(f"{project_api}/pipelines/{child_id}/jobs", token, token_kind) or []:
         existing = by_name.get(job["name"])
         if existing is None or job["id"] > existing["id"]:
             by_name[job["name"]] = job
-
-    for job in _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/jobs", token, token_kind) or []:
-        keep(job)
-    for bridge in _gl_api_get_all(f"{project_api}/pipelines/{pipeline_id}/bridges", token, token_kind) or []:
-        downstream = bridge.get("downstream_pipeline") or {}
-        if downstream.get("id"):
-            for job in _collect_pipeline_jobs(project_api, downstream["id"], token, token_kind, seen).values():
-                keep(job)
     return by_name
 
 
@@ -476,11 +465,10 @@ def _cell_runtimes(branch: str, log, *, sample: int = RUNTIME_SAMPLE_PIPELINES) 
         return {}
     project_api, token, token_kind = creds
     ids = _recent_pipeline_ids(branch, project_api, token, token_kind, sample)
-    seen: set[int] = set()
     samples: dict[str, list[float]] = defaultdict(list)
     # Retries collapse to the latest attempt before sampling.
     for pid in ids:
-        jobs = _collect_pipeline_jobs(project_api, pid, token, token_kind, seen)
+        jobs = _collect_cell_jobs(project_api, pid, token, token_kind)
         for name, job in jobs.items():
             if job.get("status") == "success" and job.get("duration") is not None:
                 samples[name].append(job["duration"])
