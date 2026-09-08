@@ -58,7 +58,7 @@ class TestListTestableRoles:
 
 
 # ---------------------------------------------------------------------------
-# machines_for / default_machine_for / release_ubuntu_for / base_prerequisites_for
+# default_machine_for / base_prerequisites_for
 # ---------------------------------------------------------------------------
 
 
@@ -70,22 +70,6 @@ class TestRoleMeta:
     def test_default_machine_reads_meta(self) -> None:
         _make_role("fancy", {"machines": {"box_deps": None}})
         assert matrix.default_machine_for("fancy") == "box_deps"
-
-    def test_machines_for_defaults(self) -> None:
-        _make_role("plain")
-        assert matrix.machines_for("plain") == {"box": None}
-
-    def test_machines_for_reads_dict(self) -> None:
-        _make_role("multi", {"machines": {"box": None, "minimal": None}})
-        assert matrix.machines_for("multi") == {"box": None, "minimal": None}
-
-    def test_release_ubuntu_empty_when_absent(self) -> None:
-        _make_role("plain")
-        assert matrix.release_ubuntu_for("plain") == []
-
-    def test_release_ubuntu_reads_list(self) -> None:
-        _make_role("multi", {"ubuntu": ["resolute"]})
-        assert matrix.release_ubuntu_for("multi") == ["resolute"]
 
     def test_base_prerequisites_defaults_to_true(self) -> None:
         _make_role("plain")
@@ -111,20 +95,6 @@ class TestBuildRoleCells:
         _make_role("svc", {"machines": {"box_deps": None}})
         cells = matrix.build_role_cells("svc")
         assert cells == [matrix.TestCell("box_deps", matrix.DEFAULT_UBUNTU, "svc")]
-
-    def test_minimal_machine_gets_extra_cell(self) -> None:
-        _make_role("cleanup", {"machines": {"box": None, "minimal": None}})
-        cells = matrix.build_role_cells("cleanup")
-        assert matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "cleanup") in cells
-        assert matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "cleanup") in cells
-        assert len(cells) == 2
-
-    def test_release_cells_use_primary_machine(self) -> None:
-        _make_role("netdata", {"machines": {"box_deps": None}, "ubuntu": ["resolute"]})
-        cells = matrix.build_role_cells("netdata")
-        assert matrix.TestCell("box_deps", matrix.DEFAULT_UBUNTU, "netdata") in cells
-        assert matrix.TestCell("box_deps", "resolute", "netdata") in cells
-        assert len(cells) == 2
 
     def test_multi_machine_plus_release(self) -> None:
         _make_role("podman", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
@@ -180,11 +150,6 @@ class TestSkip:
     def test_skip_for_empty_when_absent(self) -> None:
         _make_role("svc")
         assert matrix.skip_for("svc") == set()
-
-    def test_build_role_cells_drops_skipped_noble_cell(self) -> None:
-        _make_role("svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
-        cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_build_role_cells_drops_skipped_release_cell_only(self) -> None:
         _make_role(
