@@ -44,7 +44,23 @@ index 392c9be..a3e61a5 100755
  
  buildtmp="$( mktemp -d )" || error "cannot create build directory"
  
-@@ -104,12 +101,19 @@ for style in release recovery; do
+@@ -45,6 +42,6 @@ buildtmp="$( mktemp -d )" || error "cannot create build directory"
+ # - Current repo is the tree from which builds will be made
+ # - A read-only "build" directory (to be made) will contain configuration
+ volmounts=(
+-  "-v" ".:/zbm:ro"
++  "-v" "$( pwd -P ):/zbm:ro"
+   "-v" "${buildtmp}/build:/build:ro"
+ )
+@@ -52,5 +49,3 @@ volmounts=(
+-if ! assets="$( realpath -e releng )/assets/${release}"; then
+-  error "unable to define path to built assets"
+-fi
+-
++assets="$( pwd -P )/releng/assets/${release}"
++
+ if [ -d "${assets}" ]; then
+@@ -104,12 +99,19 @@ for style in release recovery; do
          efifile="${zbmtriplet}-vmlinuz.EFI"
        fi
  

@@ -38,7 +38,8 @@ workdir="$(mktemp -d "${repo_root}/zbm-build/make-binary.${arch}.XXXXXX")"
 trap 'rm -rf "$workdir"' EXIT INT TERM
 
 wrapper_dir="${workdir}/bin"
-zbm_install_make_binary_wrappers "$wrapper_dir"
+mkdir -p "$wrapper_dir"
+ln -s "$(command -v docker)" "${wrapper_dir}/podman"
 export PATH="${wrapper_dir}:${PATH}"
 
 work_src="${workdir}/src"
