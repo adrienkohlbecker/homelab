@@ -979,27 +979,28 @@ resource "aws_budgets_budget" "ci" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_email_addresses = ["adrien.kohlbecker@gmail.com"]
-  }
+  dynamic "notification" {
+    for_each = {
+      actual_80 = {
+        threshold         = 80
+        notification_type = "ACTUAL"
+      }
+      actual_100 = {
+        threshold         = 100
+        notification_type = "ACTUAL"
+      }
+      forecasted_100 = {
+        threshold         = 100
+        notification_type = "FORECASTED"
+      }
+    }
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_email_addresses = ["adrien.kohlbecker@gmail.com"]
-  }
-
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_email_addresses = ["adrien.kohlbecker@gmail.com"]
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value.threshold
+      threshold_type             = "PERCENTAGE"
+      notification_type          = notification.value.notification_type
+      subscriber_email_addresses = ["adrien.kohlbecker@gmail.com"]
+    }
   }
 }
