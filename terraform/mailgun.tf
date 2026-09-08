@@ -50,10 +50,5 @@ provider "mailgun" {
 resource "mailgun_domain" "noreply_fahm_fr" {
   name                          = "noreply.fahm.fr"
   region                        = "eu"
-  spam_action                   = "disabled"
-  wildcard                      = false
-  open_tracking                 = false
-  click_tracking                = false
-  web_scheme                    = "http"
   use_automatic_sender_security = true
 }
