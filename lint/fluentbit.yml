@@ -1,7 +1,6 @@
 ---
 # Fluent Bit calls these Lua filters by name through its `call` config key.
 base: lua51
-name: fluentbit
 globals:
   set_priority: &filter_callback
     args:
