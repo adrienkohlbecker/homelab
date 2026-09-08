@@ -84,13 +84,16 @@ def _is_test_file(file: Lintable | None) -> bool:
     return role < len(parts) and parts[role] in _TEST_FIXTURE_ROLES
 
 
-class RequireBackup(AnsibleLintRule):
+class _HomelabRule(AnsibleLintRule):
+    tags: ClassVar[list[str]] = ["idiom"]
+    version_changed = "1.0.0"
+
+
+class RequireBackup(_HomelabRule):
     """File-writing tasks must set `backup: true`."""
 
     id = "require-backup"
     severity = "MEDIUM"
-    tags: ClassVar[list[str]] = ["idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task":
@@ -111,13 +114,11 @@ class RequireBackup(AnsibleLintRule):
         return f"{module} task is missing `backup: true`"
 
 
-class RequireNamedRoleEntrypoint(AnsibleLintRule):
+class RequireNamedRoleEntrypoint(_HomelabRule):
     """Static test fixtures must select the role task file they depend on."""
 
     id = "require-named-role-entrypoint"
     severity = "HIGH"
-    tags: ClassVar[list[str]] = ["idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task" or _module_name(task) != "import_role":
@@ -132,13 +133,12 @@ class RequireNamedRoleEntrypoint(AnsibleLintRule):
         return "static test fixture role imports must set `tasks_from:`"
 
 
-class ShellStrictMode(AnsibleLintRule):
+class ShellStrictMode(_HomelabRule):
     """Shell tasks must start with `set -euo pipefail` under /bin/bash."""
 
     id = "shell-strict-mode"
     severity = "MEDIUM"
     tags: ClassVar[list[str]] = ["command-shell", "idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task" or _module_name(task) != "shell" or _is_test_hook(file):
@@ -157,13 +157,11 @@ class ShellStrictMode(AnsibleLintRule):
         return False if not missing else f"shell task missing {', '.join(missing)}"
 
 
-class NoHandlers(AnsibleLintRule):
+class NoHandlers(_HomelabRule):
     """Service restarts must be driven inline instead of through handlers."""
 
     id = "no-handlers"
     severity = "HIGH"
-    tags: ClassVar[list[str]] = ["idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _is_test_file(file):
@@ -177,13 +175,11 @@ class NoHandlers(AnsibleLintRule):
         return False
 
 
-class NoNoLog(AnsibleLintRule):
+class NoNoLog(_HomelabRule):
     """Tasks must not hide diffs or failure output with `no_log: true`."""
 
     id = "no-no-log"
     severity = "MEDIUM"
-    tags: ClassVar[list[str]] = ["idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task" or _is_test_file(file):
@@ -195,13 +191,11 @@ class NoNoLog(AnsibleLintRule):
         return False
 
 
-class NoInventoryHostnameWhen(AnsibleLintRule):
+class NoInventoryHostnameWhen(_HomelabRule):
     """Task branching must use host vars, not hard-coded inventory names."""
 
     id = "no-inventory-hostname-when"
     severity = "MEDIUM"
-    tags: ClassVar[list[str]] = ["idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task" or _is_test_file(file):
@@ -213,13 +207,11 @@ class NoInventoryHostnameWhen(AnsibleLintRule):
         return False
 
 
-class PreferImport(AnsibleLintRule):
+class PreferImport(_HomelabRule):
     """Prefer static imports unless the include is genuinely dynamic."""
 
     id = "prefer-import"
     severity = "LOW"
-    tags: ClassVar[list[str]] = ["idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task" or _is_test_file(file):
@@ -240,13 +232,11 @@ class PreferImport(AnsibleLintRule):
         return f"use import_{module.removeprefix('include_')} unless this include needs runtime evaluation"
 
 
-class RequireValidate(AnsibleLintRule):
+class RequireValidate(_HomelabRule):
     """Config-writing copy/template tasks should parse-test rendered content."""
 
     id = "require-validate"
     severity = "LOW"
-    tags: ClassVar[list[str]] = ["idiom"]
-    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task" or _is_test_file(file):
