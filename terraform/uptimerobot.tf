@@ -151,25 +151,3 @@ resource "uptimerobot_monitor" "resume" {
     regions = ["eu"]
   }
 }
-
-# The two headscale endpoints collapsed into one for_each resource; these keep
-# the already-applied monitors in place instead of destroying and recreating them.
-moved {
-  from = uptimerobot_monitor.headscale["ipv4"]
-  to   = uptimerobot_monitor.headscale["headscale_ipv4"]
-}
-
-moved {
-  from = uptimerobot_monitor.headscale["ipv6"]
-  to   = uptimerobot_monitor.headscale["headscale_ipv6"]
-}
-
-moved {
-  from = uptimerobot_monitor.headscale_derp["ipv4"]
-  to   = uptimerobot_monitor.headscale["derp_ipv4"]
-}
-
-moved {
-  from = uptimerobot_monitor.headscale_derp["ipv6"]
-  to   = uptimerobot_monitor.headscale["derp_ipv6"]
-}
