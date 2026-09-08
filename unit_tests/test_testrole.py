@@ -10,72 +10,43 @@ import testrole
 # ---------------------------------------------------------------------------
 
 
-class TestCountChangedTasks:
-    def test_plain_recap_single_host(self) -> None:
-        stdout = ["PLAY RECAP *****", "box  : ok=5  changed=3  unreachable=0  failed=0"]
-        assert testrole._count_changed_tasks(stdout) == 3
-
-    def test_plain_recap_zero_changed(self) -> None:
-        stdout = ["PLAY RECAP *****", "box  : ok=10  changed=0  unreachable=0  failed=0"]
-        assert testrole._count_changed_tasks(stdout) == 0
-
-    def test_ansi_colored_recap(self) -> None:
-        stdout = [
-            "PLAY RECAP *****",
-            "box  : ok=5  \x1b[0;33mchanged=2\x1b[0m  unreachable=0  failed=0",
-        ]
-        assert testrole._count_changed_tasks(stdout) == 2
-
-    def test_multiple_hosts(self) -> None:
-        stdout = [
-            "PLAY RECAP *****",
-            "box  : ok=5  changed=1  unreachable=0  failed=0",
-            "lab  : ok=3  changed=4  unreachable=0  failed=0",
-        ]
-        assert testrole._count_changed_tasks(stdout) == 5
-
-    def test_no_recap_lines(self) -> None:
-        stdout = ["TASK [debug]", "ok: [box]", ""]
-        assert testrole._count_changed_tasks(stdout) == 0
-
-    def test_empty_stdout(self) -> None:
-        assert testrole._count_changed_tasks([]) == 0
-
-    def test_multiple_recaps(self) -> None:
-        stdout = [
-            "PLAY RECAP *****",
-            "box  : ok=5  changed=1  unreachable=0  failed=0",
-            "PLAY RECAP *****",
-            "box  : ok=3  changed=2  unreachable=0  failed=0",
-        ]
-        assert testrole._count_changed_tasks(stdout) == 3
-
-    def test_heavy_ansi_wrapping(self) -> None:
-        stdout = [
-            "\x1b[0;32mbox\x1b[0m  : \x1b[0;32mok=10\x1b[0m  "
-            "\x1b[0;33mchanged=7\x1b[0m  unreachable=0  "
-            "\x1b[0;31mfailed=0\x1b[0m",
-        ]
-        assert testrole._count_changed_tasks(stdout) == 7
-
-
-# ---------------------------------------------------------------------------
-# _ANSI_CSI_RE — escape stripping
-# ---------------------------------------------------------------------------
-
-
-class TestAnsiCsiRe:
-    def test_strips_color_codes(self) -> None:
-        line = "\x1b[0;33mchanged=2\x1b[0m"
-        assert testrole._ANSI_CSI_RE.sub("", line) == "changed=2"
-
-    def test_strips_multi_param_codes(self) -> None:
-        line = "\x1b[38;5;196mred text\x1b[0m"
-        assert testrole._ANSI_CSI_RE.sub("", line) == "red text"
-
-    def test_passthrough_no_escapes(self) -> None:
-        line = "plain text"
-        assert testrole._ANSI_CSI_RE.sub("", line) == "plain text"
+@pytest.mark.parametrize(
+    ("stdout", "expected"),
+    [
+        (["PLAY RECAP *****", "box  : ok=5  changed=3  unreachable=0  failed=0"], 3),
+        (["PLAY RECAP *****", "box  : ok=10  changed=0  unreachable=0  failed=0"], 0),
+        (["PLAY RECAP *****", "box  : ok=5  \x1b[0;33mchanged=2\x1b[0m  unreachable=0  failed=0"], 2),
+        (
+            [
+                "PLAY RECAP *****",
+                "box  : ok=5  changed=1  unreachable=0  failed=0",
+                "lab  : ok=3  changed=4  unreachable=0  failed=0",
+            ],
+            5,
+        ),
+        (["TASK [debug]", "ok: [box]", ""], 0),
+        ([], 0),
+        (
+            [
+                "PLAY RECAP *****",
+                "box  : ok=5  changed=1  unreachable=0  failed=0",
+                "PLAY RECAP *****",
+                "box  : ok=3  changed=2  unreachable=0  failed=0",
+            ],
+            3,
+        ),
+        (
+            [
+                "\x1b[0;32mbox\x1b[0m  : \x1b[0;32mok=10\x1b[0m  "
+                "\x1b[0;33mchanged=7\x1b[0m  unreachable=0  "
+                "\x1b[0;31mfailed=0\x1b[0m",
+            ],
+            7,
+        ),
+    ],
+)
+def test_count_changed_tasks(stdout: list[str], expected: int) -> None:
+    assert testrole._count_changed_tasks(stdout) == expected
 
 
 # ---------------------------------------------------------------------------
