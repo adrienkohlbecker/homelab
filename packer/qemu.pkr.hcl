@@ -118,50 +118,13 @@ locals {
   }
   arch_cfg = local.arch_table[local.arch]
 
-  # Per-source config consumed downstream:
-  # - disks: space-delimited list of whole-disk paths the build VM
-  #   exposes to provision.sh as $DISKS. These become the rpool
-  #   partitioned disks. The qemu source declares disk_additional_size
-  #   covering rpool + extras; this string is just the rpool slice.
-  # - extra_disks: space-delimited list of the remaining attached
-  #   disks (not in $DISKS). provision.sh consumes these in order for
-  #   the non-rpool pools named in extra_pools.
-  # - disk_sizes: array of all attached disk sizes, rpool first.
-  #   disk_additional_size cardinality must equal len(disks) +
-  #   len(extra_disks).
-  # - layout: rpool zpool create layout token. "" for single-disk,
-  #   "mirror" for an rpool mirror. Consumed by provision.sh and
-  #   chroot.sh.
-  # - swap_size: per-disk size of the swap partition (p3, 8200), baked on
-  #   every host. Single-disk mkswaps it directly; mirror mdadm's the per-disk
-  #   p3s into a raid1 (/dev/md/swap). The swap role runs it as the cold
-  #   overflow behind zram (notes/swap_strategy.md). Consumed by provision.sh
-  #   as $SWAP_SIZE.
-  # - podman_size: per-disk size of the dedicated podman-store partition
-  #   (p4). "" => no podman partition, used only by minimal fixtures that keep
-  #   the store on their root filesystem. Single-disk bakes one plain ext4
-  #   partition; mirror bakes one per rpool disk and chroot.sh mdadm's them into
-  #   a raid5 (/dev/md/podman). The podman role formats + mounts it. Fixture
-  #   sizes only prove the mechanism; prod sizes itself at rebuild (notes/
-  #   runbooks/podman_partition_rebuild.md). Consumed by provision.sh as
-  #   $PODMAN_SIZE.
-  # - meta_size: per-disk size of tank's special-vdev partition (p6, mirror
-  #   only). "" => no meta partition (tank has no special vdev). provision.sh
-  #   ZFS-mirrors the per-disk p6s into tank's special vdev; the fixture size
-  #   only proves the wiring (prod is 128G, notes/unified_disk_layout.md).
-  #   Consumed by provision.sh as $META_SIZE.
-  # - extra_pools: space-delimited list of non-rpool pool layouts
-  #   provision.sh creates after the rpool arch-chroot completes.
-  #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
-  #   tank_mouse (4 disks; tank raidz2 + mouse mirror over shared
-  #   partitions, matches lab prod). Empty => rpool-only image.
-  # - image_target: qemu images are harness-verified; hetzner images grow on
-  #   first cloud boot and are verified by mise-tasks/packer/hetzner.sh.
-  # - image_target also identifies qemu test fixtures for test-only kernel
-  #   tuning and ambient-unit masking in chroot.sh.
-  # - zfs_arc_max: optional ARC cap for small-RAM cloud images; 0 disables it.
-  # Add an entry whenever a new source "qemu.ubuntu" block joins the
-  # build.
+  # Each qemu source below has one entry. disk_sizes covers every attached disk
+  # in device order; the space-delimited disks prefix becomes rpool and
+  # extra_disks supplies the remaining devices to extra_pools in order.
+  # Supported layouts are "" and mirror; extra_pools accepts apoc, dozer, zee,
+  # and tank_mouse. image_target controls post-build verification and derives
+  # QEMU_TEST_IMAGE. Empty optional fields disable their feature; zfs_arc_max=0
+  # disables the cap.
   variant_config = {
     # pug: single-disk rpool + a dedicated podman partition + apoc mirror.
     # The small fixture partition proves the prod backend without carrying the
