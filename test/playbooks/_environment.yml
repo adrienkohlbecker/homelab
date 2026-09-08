@@ -1,8 +1,143 @@
 - name: Prepare the test environment
   hosts: all
   tasks:
-    - name: Configure test-only connectivity and credentials
-      import_tasks: tasks/environment.yml
+    - name: Create systemd-resolved configuration directory
+      file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
 
-    - name: Verify test-only connectivity
-      import_tasks: tasks/verify_environment.yml
+    - name: Install DNS-over-TLS configuration
+      template:
+        src: templates/10-test-dns-over-tls.conf.j2
+        dest: /etc/systemd/resolved.conf.d/10-test-dns-over-tls.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+        validate: python3 -c 'import configparser,sys; configparser.ConfigParser(strict=False, delimiters=("=",)).read(sys.argv[1])' %s
+      register: test_resolved_conf
+      become: true
+
+    - name: Restart systemd-resolved to pick up DoT config
+      systemd:
+        name: systemd-resolved
+        state: restarted
+      when: test_resolved_conf.changed
+      become: true
+
+    - name: Ensure /etc/containers/registries.conf.d exists
+      when: test_registry_mirrors | length > 0
+      file:
+        path: /etc/containers/registries.conf.d
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+      become: true
+
+    - name: Configure podman registry mirrors
+      when: test_registry_mirrors | length > 0
+      copy:
+        dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
+        mode: "0644"
+        owner: root
+        group: root
+        # Nexus path-based routing treats the mirror location's repository suffix
+        # as the first image namespace beneath its native /v2/ API.
+        content: |
+          {% for source, location in test_registry_mirrors | dictsort %}
+          [[registry]]
+          location = "{{ source }}"
+
+          [[registry.mirror]]
+          location = "{{ location }}"
+          {% endfor %}
+      become: true
+
+    - name: Ensure root containers auth dir exists
+      when: test_in_aws
+      file:
+        path: /root/.config/containers
+        state: directory
+        mode: "0700"
+        owner: root
+        group: root
+      become: true
+
+    - name: Write ECR auth for root podman pulls
+      when: test_in_aws
+      # Each cell starts from a fresh overlay, and one token covers the bounded
+      # harness run. Replacing it on every converge only defeats idempotence.
+      copy:
+        dest: /root/.config/containers/auth.json
+        mode: "0600"
+        owner: root
+        group: root
+        force: false
+        content: |
+          {
+            "auths": {
+              "{{ test_ecr_registry }}": {
+                "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_aws_region ~ ' ecr get-login-password')) | b64encode }}"
+              }
+            }
+          }
+        validate: python3 -m json.tool "%s"
+      diff: false
+      become: true
+
+    # Functional mirror probe: prove the configured Nexus path actually serves.
+    - name: Verify the Podman docker.io mirror serves its v2 API
+      when:
+        - nexus_url | length > 0
+        - not test_in_aws
+      uri:
+        # Podman supplies the scheme for the bare mirror location; the direct probe
+        # needs one explicitly. Certificate trust is outside this fixture's contract.
+        url: "https://{{ nexus_url }}/repository/docker.io/v2/"
+        validate_certs: false
+        # Nexus answers the v2 root 200 (anonymous) or 401 (auth-gated); a 404 means
+        # the mirror location the registries.conf points at doesn't exist.
+        status_code: [ 200, 401 ]
+        timeout: 15
+
+    # Assert the running resolver state, not merely the drop-in written above.
+    # Scope it to the Global block controlled by resolved.conf.d.
+    - name: Read resolvectl status
+      command: resolvectl status
+      register: test_resolvectl
+      changed_when: false
+
+    - name: Verify DNS-over-TLS is enforced at the configured resolver
+      vars:
+        # Per-link DHCP resolvers must not satisfy the global drop-in contract.
+        _test_resolvectl_global: >-
+          {{ test_resolvectl.stdout.split('\nLink ') | first }}
+        _test_resolvectl_global_protocols: >-
+          {{ _test_resolvectl_global.splitlines()
+             | select('search', 'Protocols:') | list | first | default('') }}
+        # Preserve the #dns.fahm.fr SNI suffix in the expected resolver value.
+        _test_expected_resolvers: "{{ test_dot_servers }}"
+      assert:
+        that:
+          - "'+DNSOverTLS' in _test_resolvectl_global_protocols"
+          - >-
+            (_test_expected_resolvers | select('in', _test_resolvectl_global) | list | length)
+            == (_test_expected_resolvers | length)
+        fail_msg: >-
+          systemd-resolved isn't enforcing DNS-over-TLS via {{ _test_expected_resolvers | join(', ') }};
+          the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can
+          fall back to UDP. Global Protocols line: {{ _test_resolvectl_global_protocols }}
+
+    # Prove public resolution end-to-end; retry boundedly for a cold DoT handshake.
+    - name: Verify public resolution over the enforced resolver
+      command: resolvectl query --cache=no wikipedia.org
+      register: test_public_resolve
+      changed_when: false
+      retries: 5
+      delay: 3
+      until: test_public_resolve.rc == 0

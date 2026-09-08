@@ -246,7 +246,6 @@ class TestAnsibleControllerStaging:
             "host_vars",
             "roles",
             "data",
-            "test/playbooks/tasks",
             "test/playbooks/templates",
         ):
             (tmp_path / directory).mkdir(parents=True)

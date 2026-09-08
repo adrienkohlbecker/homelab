@@ -881,7 +881,6 @@ class Machine:
             destination = self.workdir_path / playbook.name
             if not destination.exists():
                 playbook.copy_into(self.workdir_path)
-        Path("test/playbooks/tasks").copy_into(self.workdir_path)
         Path("test/playbooks/templates").copy_into(self.workdir_path)
 
         self._ansible_staged = True
