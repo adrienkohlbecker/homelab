@@ -71,21 +71,21 @@ locals {
       upstream_registry_url = "registry-1.docker.io"
       secret_name           = "ecr-pullthroughcache/docker-hub"
       secret_description    = "Docker Hub credentials for ECR pull-through cache"
-      username              = var.ci_ecr_docker_hub_username
+      username              = "akohlbecker"
       access_token          = var.ci_ecr_docker_hub_access_token
     }
     github = {
       upstream_registry_url = "ghcr.io"
       secret_name           = "ecr-pullthroughcache/github"
       secret_description    = "GHCR credentials for ECR pull-through cache"
-      username              = var.ci_ecr_github_username
+      username              = "adrienkohlbecker"
       access_token          = var.ci_ecr_github_access_token
     }
     gitlab = {
       upstream_registry_url = "registry.gitlab.com"
       secret_name           = "ecr-pullthroughcache/gitlab"
       secret_description    = "GitLab Container Registry credentials for ECR pull-through cache"
-      username              = var.ci_ecr_gitlab_username
+      username              = "akohlbecker"
       access_token          = var.ci_ecr_gitlab_access_token
     }
     quay = {
@@ -100,17 +100,6 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
-variable "ci_ecr_docker_hub_username" {
-  type        = string
-  nullable    = false
-  description = "Docker Hub username for ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_docker_hub_username from 1Password through `op run`."
-
-  validation {
-    condition     = length(var.ci_ecr_docker_hub_username) > 0
-    error_message = "ci_ecr_docker_hub_username must be non-empty (resolved via TF_VAR_ci_ecr_docker_hub_username from 1Password through `op run`)."
-  }
-}
-
 variable "ci_ecr_docker_hub_access_token" {
   type        = string
   nullable    = false
@@ -123,17 +112,6 @@ variable "ci_ecr_docker_hub_access_token" {
   }
 }
 
-variable "ci_ecr_github_username" {
-  type        = string
-  nullable    = false
-  description = "GitHub username for GHCR ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_github_username from 1Password through `op run`."
-
-  validation {
-    condition     = length(var.ci_ecr_github_username) > 0
-    error_message = "ci_ecr_github_username must be non-empty (resolved via TF_VAR_ci_ecr_github_username from 1Password through `op run`)."
-  }
-}
-
 variable "ci_ecr_github_access_token" {
   type        = string
   nullable    = false
@@ -143,17 +121,6 @@ variable "ci_ecr_github_access_token" {
   validation {
     condition     = length(var.ci_ecr_github_access_token) > 0
     error_message = "ci_ecr_github_access_token must be non-empty (resolved via TF_VAR_ci_ecr_github_access_token from 1Password through `op run`)."
-  }
-}
-
-variable "ci_ecr_gitlab_username" {
-  type        = string
-  nullable    = false
-  description = "GitLab username for registry.gitlab.com ECR pull-through cache credentials. Sourced via TF_VAR_ci_ecr_gitlab_username from 1Password through `op run`."
-
-  validation {
-    condition     = length(var.ci_ecr_gitlab_username) > 0
-    error_message = "ci_ecr_gitlab_username must be non-empty (resolved via TF_VAR_ci_ecr_gitlab_username from 1Password through `op run`)."
   }
 }
 
