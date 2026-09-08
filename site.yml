@@ -143,7 +143,7 @@
 - name: Decomission services
   hosts: box,lab,pug,fox
   roles:
-    # Tear down decommissioned service state (drop once prod has re-converged).
+    # Keep this role as scaffolding for future service retirements.
     - retired_services
 
 - name: Reboot check
