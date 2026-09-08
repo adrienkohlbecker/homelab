@@ -14,17 +14,18 @@
 locals {
   caa_issuers = ["letsencrypt.org", "pki.goog"]
 
-  caa_issue_pairs = {
-    for pair in setproduct(keys(local.zones), local.caa_issuers) :
-    "${pair[0]}/${pair[1]}" => {
-      zone_name = pair[0]
-      ca        = pair[1]
+  caa_authorizations = {
+    for authorization in setproduct(keys(local.zones), ["issue", "issuewild"], local.caa_issuers) :
+    "${authorization[0]}/${authorization[1]}/${authorization[2]}" => {
+      zone_name = authorization[0]
+      tag       = authorization[1]
+      ca        = authorization[2]
     }
   }
 }
 
-resource "cloudflare_dns_record" "caa_issue" {
-  for_each = local.caa_issue_pairs
+resource "cloudflare_dns_record" "caa_authorization" {
+  for_each = local.caa_authorizations
 
   zone_id = local.zones[each.value.zone_name]
   type    = "CAA"
@@ -34,23 +35,7 @@ resource "cloudflare_dns_record" "caa_issue" {
 
   data = {
     flags = 0
-    tag   = "issue"
-    value = each.value.ca
-  }
-}
-
-resource "cloudflare_dns_record" "caa_issuewild" {
-  for_each = local.caa_issue_pairs
-
-  zone_id = local.zones[each.value.zone_name]
-  type    = "CAA"
-  name    = each.value.zone_name
-  ttl     = 1
-  tags    = []
-
-  data = {
-    flags = 0
-    tag   = "issuewild"
+    tag   = each.value.tag
     value = each.value.ca
   }
 }
@@ -69,4 +54,64 @@ resource "cloudflare_dns_record" "caa_iodef" {
     tag   = "iodef"
     value = "mailto:adrien.kohlbecker@gmail.com"
   }
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issue["adrienkohlbecker.com/letsencrypt.org"]
+  to   = cloudflare_dns_record.caa_authorization["adrienkohlbecker.com/issue/letsencrypt.org"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issue["adrienkohlbecker.com/pki.goog"]
+  to   = cloudflare_dns_record.caa_authorization["adrienkohlbecker.com/issue/pki.goog"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issue["fahm.fr/letsencrypt.org"]
+  to   = cloudflare_dns_record.caa_authorization["fahm.fr/issue/letsencrypt.org"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issue["fahm.fr/pki.goog"]
+  to   = cloudflare_dns_record.caa_authorization["fahm.fr/issue/pki.goog"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issue["mhaf.fr/letsencrypt.org"]
+  to   = cloudflare_dns_record.caa_authorization["mhaf.fr/issue/letsencrypt.org"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issue["mhaf.fr/pki.goog"]
+  to   = cloudflare_dns_record.caa_authorization["mhaf.fr/issue/pki.goog"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issuewild["adrienkohlbecker.com/letsencrypt.org"]
+  to   = cloudflare_dns_record.caa_authorization["adrienkohlbecker.com/issuewild/letsencrypt.org"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issuewild["adrienkohlbecker.com/pki.goog"]
+  to   = cloudflare_dns_record.caa_authorization["adrienkohlbecker.com/issuewild/pki.goog"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issuewild["fahm.fr/letsencrypt.org"]
+  to   = cloudflare_dns_record.caa_authorization["fahm.fr/issuewild/letsencrypt.org"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issuewild["fahm.fr/pki.goog"]
+  to   = cloudflare_dns_record.caa_authorization["fahm.fr/issuewild/pki.goog"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issuewild["mhaf.fr/letsencrypt.org"]
+  to   = cloudflare_dns_record.caa_authorization["mhaf.fr/issuewild/letsencrypt.org"]
+}
+
+moved {
+  from = cloudflare_dns_record.caa_issuewild["mhaf.fr/pki.goog"]
+  to   = cloudflare_dns_record.caa_authorization["mhaf.fr/issuewild/pki.goog"]
 }
