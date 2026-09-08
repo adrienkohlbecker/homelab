@@ -6,7 +6,6 @@
 # fixture.
 - name: Bake homelab test deps into the box_deps variant image
   hosts: all
-  become: true
   tasks:
     # This seed runs outside site.yml, so configure the same Nexus-backed apt
     # sources that normal converges get before installing the baked dependencies.
