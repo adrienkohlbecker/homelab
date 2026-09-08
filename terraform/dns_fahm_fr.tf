@@ -58,7 +58,7 @@ locals {
     txt_dmarc         = { type = "TXT", name = "_dmarc.fahm.fr", content = "v=DMARC1; p=quarantine; pct=25; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net" }
     txt_dmarc_noreply = { type = "TXT", name = "_dmarc.noreply.fahm.fr", content = "v=DMARC1; p=quarantine; pct=25; fo=1; ri=3600; rua=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com; ruf=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com;", comment = "mailgun" }
     txt_spf_noreply   = { type = "TXT", name = "noreply.fahm.fr", content = "v=spf1 include:mailgun.org ~all", comment = "mailgun" }
-    txt_spf           = { type = "TXT", name = "fahm.fr", content = "v=spf1 include:spf.messagingengine.com include:_spf.mx.cloudflare.net ~all" }
+    txt_spf           = { type = "TXT", name = "fahm.fr", content = "v=spf1 include:spf.messagingengine.com ~all" }
 
     # MX
     mx_fahm_fr_in1  = { type = "MX", name = "fahm.fr", content = "in1-smtp.messagingengine.com", priority = 10 }
@@ -123,23 +123,5 @@ resource "cloudflare_dns_record" "fahm_fr_srv" {
     priority = each.value.priority
     target   = each.value.target
     weight   = each.value.weight
-  }
-}
-
-# CF Email Routing's outbound DKIM key. Auto-provisioned and rotated
-# server-side; tofu only tracks existence + presence here, not the key
-# material. Let CF roll the key without flagging drift on every plan.
-# Standalone because lifecycle blocks can't reference each.value.
-resource "cloudflare_dns_record" "fahm_fr_txt_cf2024_1__domainkey" {
-  content = "\"v=DKIM1; h=sha256; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiweykoi+o48IOGuP7GR3X0MOExCUDY/BCRHoWBnh3rChl7WhdyCxW3jgq1daEjPPqoi7sJvdg5hEQVsgVRQP4DcnQDVjGMbASQtrY4WmB1VebF+RPJB2ECPsEDTpeiI5ZyUAwJaVX7r6bznU67g7LvFq35yIo4sdlmtZGV+i0H4cpYH9+3JJ78k\" \"m4KXwaf9xUJCWF6nxeD+qG6Fyruw1Qlbds2r85U9dkNDVAS3gioCvELryh1TxKGiVTkg4wqHTyHfWsp7KD3WQHYJn0RyfJJu6YEmL77zonn7p2SRMvTMP3ZEXibnC9gz3nnhR6wcYL8Q7zXypKTMD58bTixDSJwIDAQAB\""
-  name    = "cf2024-1._domainkey.fahm.fr"
-  proxied = false
-  ttl     = 1
-  type    = "TXT"
-  zone_id = local.zones["fahm.fr"]
-  tags    = []
-
-  lifecycle {
-    ignore_changes = [content]
   }
 }
