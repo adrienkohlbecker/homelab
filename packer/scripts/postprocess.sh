@@ -35,10 +35,10 @@ for disk in "${disks[@]}"; do
 done
 
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  "$script_dir/../../test/launch.py" \
+  timeout --kill-after=30s 300 \
+    "$script_dir/../../test/launch.py" \
     --machine "$SOURCE_NAME" \
     --ubuntu "$UBUNTU_NAME" \
-    --timeout 300 \
     --exit-after-ready \
     --image-dir "$build_dir"
 fi

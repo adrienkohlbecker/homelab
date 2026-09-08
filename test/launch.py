@@ -59,13 +59,6 @@ def parse_args() -> argparse.Namespace:
         help="Ubuntu release codename",
     )
     parser.add_argument(
-        "--timeout",
-        type=int,
-        default=0,
-        metavar="SECONDS",
-        help="Force-shutdown after N seconds (0 = no timeout, default)",
-    )
-    parser.add_argument(
         "--kernel",
         type=Path,
         help="Override kernel for direct -kernel boot (also requires --initrd)",
@@ -330,7 +323,7 @@ def main() -> int:
         role="_launch",
         keep_vm=True,
         ubuntu_name=args.ubuntu,
-        machine_timeout=args.timeout,
+        machine_timeout=0,
         launch=LaunchOptions(
             image_dir=args.image_dir,
             kernel=args.kernel,

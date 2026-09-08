@@ -17,6 +17,7 @@ HETZNER_SH = REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
+QEMU_POSTPROCESS_SH = REPO_ROOT / "packer" / "scripts" / "postprocess.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
 UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
@@ -150,6 +151,14 @@ def test_ubuntu_completions_use_release_catalog() -> None:
         assert "printf 'noble\\nresolute\\n'" not in content
 
     assert "noble | resolute)" not in QEMU_HOST_AMI_SH.read_text()
+
+
+def test_qemu_postprocess_bounds_boot_verification() -> None:
+    postprocess = QEMU_POSTPROCESS_SH.read_text()
+
+    assert "timeout --kill-after=30s 300" in postprocess
+    assert '"$script_dir/../../test/launch.py"' in postprocess
+    assert "--timeout 300" not in postprocess
 
 
 def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None:
