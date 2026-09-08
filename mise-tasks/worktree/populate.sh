@@ -39,12 +39,6 @@ symlink_missing .claude/settings.local.json
 # would misread -- a worktree created before the first fetch just fetches its own.
 symlink_existing_dir test/firmware
 
-# remember-plugin memory store: the plugin hardcodes $CLAUDE_PROJECT_DIR/.remember,
-# so a per-worktree store dies with `git worktree remove`. Share the main checkout's
-# (ignored via the common git dir's info/exclude). Guard on the source existing — a
-# dangling symlink would break the plugin's own `mkdir -p .remember/tmp`.
-symlink_existing_dir .remember
-
 for copied_path in .ansible-mitogen-strategy mise.local.toml; do
   src="$repo/$copied_path"
   dst="$wt/$copied_path"
@@ -68,9 +62,9 @@ fi
 
 # notes/ is a single shared clone the main checkout owns (gitignored; see the repo
 # .gitignore). Every worktree symlinks to it, so notes written from any worktree
-# land on the one notes history -- no per-worktree clone, branch, or merge. Matches
-# the packer/artifacts and .remember symlinks above. Skipped when the main checkout
-# has no notes clone (fresh setup, or a CI checkout that never populated it).
+# land on the one notes history -- no per-worktree clone, branch, or merge. Skipped
+# when the main checkout has no notes clone (fresh setup, or a CI checkout that
+# never populated it).
 if [ -d "$repo/notes/.git" ]; then
   symlink_missing notes
 fi
