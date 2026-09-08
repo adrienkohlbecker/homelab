@@ -107,22 +107,15 @@
           timeout --kill-after exited {{ _apt_verify_timeout.rc }}, expected
           the subprocess SIGKILL result -9 after escalating from TERM to KILL.
 
-    - name: _verify | Simulate the complete APT full-upgrade plan  # noqa: command-instead-of-module
+    - name: _verify | Require a removal-free APT full-upgrade plan  # noqa: command-instead-of-module
       command:
         argv:
           - apt-get
           - --simulate
           - --no-remove
           - full-upgrade
-      register: _apt_verify_full_upgrade
       changed_when: false
       become: true
-
-    - name: _verify | Full-upgrade plan contains no removals
-      assert:
-        that:
-          - "'Remv ' not in _apt_verify_full_upgrade.stdout"
-          - "'The following packages will be REMOVED' not in _apt_verify_full_upgrade.stdout"
   always:
     - name: _verify | Remove the coreutils compatibility workspace
       file:
