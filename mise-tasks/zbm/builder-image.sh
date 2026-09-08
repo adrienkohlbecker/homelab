@@ -12,7 +12,7 @@
 #   --mount=type=cache, which podman 4.9 / buildah 1.33 can't parse
 # - docker buildx spawns a BuildKit container (moby/buildkit) that
 #   handles these natively, connected to podman via its socket
-# - this lets us build the upstream Dockerfile unmodified
+# - this keeps the build on the upstream Dockerfile and its build script
 #
 # Requires: docker-ce-cli + docker-buildx-plugin, podman socket active.
 # On pug: `systemctl --user start podman.socket`
@@ -60,6 +60,7 @@ else
 fi
 git -C "$src_dir" reset --hard "v${ZBM_VERSION}" >/dev/null
 git -C "$src_dir" clean -fdx >/dev/null
+git -C "$src_dir" apply "$repo_root/zbm/recovery-overlay.patch"
 
 # PACKAGES are extra Void packages layered onto upstream's base image to satisfy
 # recovery.conf's install_items need mdadm + nvme-cli for operator recovery.
@@ -73,9 +74,7 @@ img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 # non-fatal warning. --cache-to type=registry,mode=max pushes cache manifests
 # for EVERY intermediate layer to the registry during the build (not just the
 # final image's layers as inline would). This makes cache hits granular at
-# the xbps-install layer level even across version bumps. Keep cache export on
-# the build because the metadata-only docker commit below strips BuildKit cache
-# metadata from the local image.
+# the xbps-install layer level even across version bumps.
 # Default empty so local workstation builds stay self-contained; the
 # .gitlab-ci.yml zbm_build job sets ZBM_BUILDER_CACHE_REF explicitly.
 : "${ZBM_BUILDER_CACHE_REF:=}"
@@ -100,20 +99,6 @@ docker buildx build \
   --tag "$img" \
   -f "$src_dir/releng/docker/Dockerfile" \
   "$src_dir/releng/docker"
-
-# Upstream's exec-form ENTRYPOINT does not expand its ZBM_BUILDER argument.
-# Commit the resolved entrypoint and local dracut setting after cache export,
-# because docker commit strips BuildKit cache metadata from the local image.
-ctr="zbm_metadata_$$"
-docker rm -f "$ctr" >/dev/null 2>&1 || true
-trap 'docker rm -f "$ctr" >/dev/null 2>&1 || true' EXIT
-docker create --name "$ctr" "$img" >/dev/null
-docker commit \
-  --change 'ENTRYPOINT ["/build-init.sh"]' \
-  --change 'ENV DRACUT_NO_XATTR=1' \
-  "$ctr" "$img" >/dev/null
-docker rm -f "$ctr" >/dev/null
-trap - EXIT
 
 docker run --rm --entrypoint /usr/bin/bash "$img" -lc '
   set -euo pipefail

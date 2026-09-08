@@ -82,3 +82,13 @@ index 392c9be..a3e61a5 100755
      fi
  
      have_components=
+diff --git a/releng/docker/Dockerfile b/releng/docker/Dockerfile
+--- a/releng/docker/Dockerfile
++++ b/releng/docker/Dockerfile
+@@ -86,4 +86,4 @@ RUN rm -f /var/cache/xbps/*
+ ARG ZBM_BUILDER=build-init.sh
+ COPY --chmod=755 ${ZBM_BUILDER} /
+-# Run the build script with no arguments by default
+-ENTRYPOINT [ "/${ZBM_BUILDER}" ]
++ENV DRACUT_NO_XATTR=1
++ENTRYPOINT [ "/build-init.sh" ]
