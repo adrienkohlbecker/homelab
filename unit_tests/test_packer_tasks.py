@@ -7,8 +7,6 @@ import shlex
 import subprocess
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
 HETZNER_RESCUE_SH = REPO_ROOT / "mise-tasks" / "packer" / "_hetzner_rescue.sh"
@@ -33,8 +31,8 @@ def _environment(tmp_path: Path, ubuntus: str) -> dict[str, str]:
     return env
 
 
-@pytest.mark.parametrize("ubuntus", ["noble", "noble resolute"])
-def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
+def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
+    ubuntus = ("noble", "resolute")
     fake_bin = tmp_path / "bin"
     log = tmp_path / "packer.log"
     archive_log = tmp_path / "archive.log"
@@ -51,7 +49,7 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
         "done\n"
         'tar -tf "$build_directory/homelab-source.tar" >"$PACKER_ARCHIVE_LOG"\n',
     )
-    env = _environment(tmp_path, ubuntus)
+    env = _environment(tmp_path, " ".join(ubuntus))
     env.update(
         PATH=f"{fake_bin}:{env['PATH']}",
         PACKER_ARCHIVE_LOG=str(archive_log),
@@ -63,12 +61,12 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path, ubuntus: str) -> None:
 
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines()
-    assert len(calls) == len(ubuntus.split())
-    for ubuntu, call in zip(ubuntus.split(), calls, strict=True):
+    assert len(calls) == len(ubuntus)
+    for ubuntu, call in zip(ubuntus, calls, strict=True):
         assert f"ubuntu_name={ubuntu}" in call
         assert f"output_directory={env['HOMELAB_CI_DIR']}/{ubuntu}" in call
         assert "-only=qemu.box" in call
-    assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus.split())
+    assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus)
 
     archive_entries = archive_log.read_text().splitlines()
     assert "roles/refind/files/zz-stage-efi-stub" in archive_entries
