@@ -8,4 +8,4 @@ set -euo pipefail
 # This operator-facing task provides a discoverable, read-only entrypoint after
 # firewall template edits. `-c` skips the ruleset load; the optimizer prints
 # merge suggestions and redundant-rule warnings to stdout.
-exec ansible -i hosts.ini "$usage_host" -b -m command -a "nft -c --optimize -f /etc/nftables.conf"
+exec ansible "$usage_host" -b -a "nft -c --optimize -f /etc/nftables.conf"
