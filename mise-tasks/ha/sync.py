@@ -389,10 +389,8 @@ def do_push(dry_run: bool = False) -> None:
 
 
 def main() -> None:
-    # Parse --dry-run from argv (mise forwards args verbatim); also honour the
-    # usage-spec env var mise sets for the declared flag, so either path works.
     raw = sys.argv[1:]
-    dry_run = "--dry-run" in raw or os.environ.get("usage_dry_run") == "true"
+    dry_run = "--dry-run" in raw
     positional = [a for a in raw if a != "--dry-run"]
     mode = (positional[0] if positional else "sync").strip()
     if dry_run and mode not in ("push", "sync"):
