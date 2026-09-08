@@ -5,19 +5,6 @@ set -euo pipefail
 # shellcheck source=mise-tasks/zbm/lib.sh
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-: "${CI_PIPELINE_ID:?CI_PIPELINE_ID is required}"
-: "${CI_JOB_ID:?CI_JOB_ID is required}"
-: "${CI_REGISTRY_IMAGE:?CI_REGISTRY_IMAGE is required}"
-: "${CI_REGISTRY:?CI_REGISTRY is required}"
-: "${CI_REGISTRY_USER:?CI_REGISTRY_USER is required}"
-: "${CI_REGISTRY_PASSWORD:?CI_REGISTRY_PASSWORD is required}"
-: "${CI_COMMIT_BRANCH:?CI_COMMIT_BRANCH is required}"
-: "${CI_DEFAULT_BRANCH:?CI_DEFAULT_BRANCH is required}"
-: "${DOCKER_HOST:?DOCKER_HOST is required}"
-: "${DOCKER_CERT_PATH:?DOCKER_CERT_PATH is required}"
-: "${ZBM_VERSION:?ZBM_VERSION is required}"
-: "${ZBM_KERNEL_VERSION:?ZBM_KERNEL_VERSION is required}"
-
 arch="$(zbm_host_arch)"
 
 timeout 60 bash -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
