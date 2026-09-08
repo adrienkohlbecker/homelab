@@ -53,7 +53,6 @@ NO_RELOAD = "__no_reload__"
 @dataclass(frozen=True)
 class SyncFile:
     rel: str
-    mode: str
     reload_service: str | None
     pull: bool
 
@@ -64,47 +63,43 @@ class PendingChange:
     host_bytes: bytes | None
 
 
-# Spec tuple: (glob, mode, reload_service, pull).
+# Spec tuple: (glob, reload_service, pull).
 # `None` reload means a changed file needs homeassistant.restart; one restart
 # covers every changed file, otherwise the touched domains reload individually.
 # NO_RELOAD means the file just needs to be on disk (no service call).
 # `pull=False` makes a file push-only (repo -> host, never captured back): used
 # for repo-owned artifacts the HA UI can't edit, so a pull must not clobber the
 # clone copy with the host's stub.
-# Mode is 0644 to match the homeassistant role's "Ensure files exist" stub —
-# otherwise push (0600) and converge (0644) fight over the bits every run. None
-# of these GUI YAML files carry secrets (those stay in the un-synced
-# secrets.yaml), so group/other read is harmless.
 SYNC_SPEC = [
-    ("automations.yaml", "0644", "automation.reload", True),
-    ("scripts.yaml", "0644", "script.reload", True),
-    ("scenes.yaml", "0644", "scene.reload", True),
-    ("templates.yaml", "0644", "template.reload", True),
-    ("input_numbers.yaml", "0644", "input_number.reload", True),
-    ("input_selects.yaml", "0644", "input_select.reload", True),
-    ("timers.yaml", "0644", "timer.reload", True),
+    ("automations.yaml", "automation.reload", True),
+    ("scripts.yaml", "script.reload", True),
+    ("scenes.yaml", "scene.reload", True),
+    ("templates.yaml", "template.reload", True),
+    ("input_numbers.yaml", "input_number.reload", True),
+    ("input_selects.yaml", "input_select.reload", True),
+    ("timers.yaml", "timer.reload", True),
     # The `counter` integration registers no reload service (only increment/
     # decrement/reset/set_value), so a new or changed counter only loads on
     # restart — None triggers homeassistant.restart for the whole file.
-    ("counters.yaml", "0644", None, True),
+    ("counters.yaml", None, True),
     # `statistics` sensors have no hot reload, so restart for the whole file.
-    ("sensors.yaml", "0644", None, True),
+    ("sensors.yaml", None, True),
     # climate_template is a legacy `climate:` platform — no hot reload, restart.
-    ("climate.yaml", "0644", None, True),
+    ("climate.yaml", None, True),
     # HA returns a clear API warning if this reload service is unavailable.
-    ("custom_templates/*", "0644", "homeassistant.reload_custom_templates", True),
+    ("custom_templates/*", "homeassistant.reload_custom_templates", True),
     # Reload automations so blueprint consumers re-read changed sources.
-    ("blueprints/automation/*", "0644", "automation.reload", True),
+    ("blueprints/automation/*", "automation.reload", True),
     # YAML-mode Lovelace dashboards: repo-owned (read-only in the HA UI), so
     # push-only; HA re-reads them on the next load, so no reload service.
-    ("dashboards/*", "0644", NO_RELOAD, False),
+    ("dashboards/*", NO_RELOAD, False),
 ]
 
 
 def enumerate_files(for_pull: bool = False) -> list[SyncFile]:
     return [
-        SyncFile(path.relative_to(CLONE).as_posix(), mode, reload_service, pull)
-        for glob, mode, reload_service, pull in SYNC_SPEC
+        SyncFile(path.relative_to(CLONE).as_posix(), reload_service, pull)
+        for glob, reload_service, pull in SYNC_SPEC
         if pull or not for_pull
         for path in sorted(CLONE.glob(glob))
         if path.is_file()
@@ -231,6 +226,8 @@ def advance_synced_tag() -> None:
 
 def upload_to_host(files: list[SyncFile]) -> None:
     """Upload via /tmp, then sudo install with owner, mode, and backup."""
+    # Match the role's 0644 stubs so sync and converge do not fight over modes.
+    # Synced GUI YAML contains no secrets; those stay in secrets.yaml.
     pid = os.getpid()
     for file in files:
         safe = file.rel.replace("/", "_")
@@ -242,7 +239,7 @@ def upload_to_host(files: list[SyncFile]) -> None:
             [
                 "ssh",
                 HOST,
-                f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m {file.mode} -b {tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
+                f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m 0644 -b {tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
             ]
         )
 
