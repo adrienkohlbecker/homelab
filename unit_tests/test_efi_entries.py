@@ -43,6 +43,10 @@ def _hd(uuid, loader):
     return f"HD(1,GPT,{uuid},0x800,0x100000)/File({loader})"
 
 
+def _hd_wrapperless(uuid, loader):
+    return f"HD(1,GPT,{uuid},0x800,0x100000)/{loader}"
+
+
 def _make_run(efibootmgr_out, mdadm_export, lsblk_map, findmnt):
     def _run(cmd):
         if cmd[0] == "efibootmgr":
@@ -115,6 +119,21 @@ class TestSingleDisk:
                 ("0000", "rEFInd", _hd("AAA-0", "/EFI/REFIND/REFIND_X64.EFI")),
                 ("0001", "ZFSBootMenu", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ.EFI")),
                 ("0002", "ZFSBootMenu (Backup)", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI")),
+            ],
+        )
+        out = run_check(monkeypatch, capsys, LOADERS, converged, **_SINGLE)
+        assert not out["changed"], out["actions"]
+
+    def test_converged_wrapperless_is_idempotent(self, monkeypatch, capsys):
+        converged = _efibootmgr_v(
+            [
+                ("0000", "rEFInd", _hd_wrapperless("AAA-0", "\\EFI\\refind\\refind_x64.efi")),
+                ("0001", "ZFSBootMenu", _hd_wrapperless("AAA-0", "\\EFI\\ZBM\\VMLINUZ.EFI")),
+                (
+                    "0002",
+                    "ZFSBootMenu (Backup)",
+                    _hd_wrapperless("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI"),
+                ),
             ],
         )
         out = run_check(monkeypatch, capsys, LOADERS, converged, **_SINGLE)
@@ -257,4 +276,13 @@ class TestParseEfibootmgr:
         entries, order, timeout = efi.parse_efibootmgr()
         assert [entry["label"] for entry in entries] == ["rEFInd", "ZFSBootMenu"]
         assert order == ["0001", "0002"]
+        assert timeout == 3
+
+    def test_parse_v19_wrapperless_loader(self, monkeypatch):
+        uuid = "6191bc58-2e95-4493-b10c-b83df5181e9f"
+        out = _efibootmgr_v([("0001", "rEFInd", _hd_wrapperless(uuid, "\\EFI\\refind\\refind_x64.efi"))])
+        monkeypatch.setattr(efi, "run", lambda cmd: out)
+        entries, order, timeout = efi.parse_efibootmgr()
+        assert entries[0]["file"] == "\\EFI\\refind\\refind_x64.efi"
+        assert order == ["0001"]
         assert timeout == 3

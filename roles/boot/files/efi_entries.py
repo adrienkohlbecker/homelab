@@ -44,6 +44,17 @@ def _is_removable_fallback(loader):
     return bool(re.search(r"[\\/]EFI[\\/]BOOT[\\/]BOOT[^\\/]*\.EFI$", loader or "", re.IGNORECASE))
 
 
+def _loader_from_devpath(devpath):
+    wrapped = re.search(r"File\(([^)]+)\)", devpath or "", re.IGNORECASE)
+    if wrapped:
+        return wrapped.group(1)
+
+    # efivar 39 renders a media-file path directly after HD(...) instead of
+    # retaining efivar 38's File(...) wrapper.
+    wrapperless = re.search(r"(\\EFI\\.*)$", devpath or "", re.IGNORECASE)
+    return wrapperless.group(1) if wrapperless else ""
+
+
 def parse_efibootmgr():
     out = run(["efibootmgr", "-v"])
     entries = []
@@ -62,13 +73,12 @@ def parse_efibootmgr():
         if not m:
             continue
         num, label, devpath = m.groups()
-        fp = re.search(r"File\(([^)]+)\)", devpath or "")
         gp = re.search(r"GPT,([0-9a-f-]+)", devpath or "", re.IGNORECASE)
         entries.append(
             {
                 "num": num,
                 "label": label.strip(),
-                "file": fp.group(1) if fp else "",
+                "file": _loader_from_devpath(devpath),
                 "gpt_uuid": gp.group(1).lower() if gp else "",
             }
         )
