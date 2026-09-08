@@ -69,22 +69,16 @@ locals {
   ci_ecr_registries = {
     docker-hub = {
       upstream_registry_url = "registry-1.docker.io"
-      secret_name           = "ecr-pullthroughcache/docker-hub"
-      secret_description    = "Docker Hub credentials for ECR pull-through cache"
       username              = "akohlbecker"
       access_token          = var.ci_ecr_docker_hub_access_token
     }
     github = {
       upstream_registry_url = "ghcr.io"
-      secret_name           = "ecr-pullthroughcache/github"
-      secret_description    = "GHCR credentials for ECR pull-through cache"
       username              = "adrienkohlbecker"
       access_token          = var.ci_ecr_github_access_token
     }
     gitlab = {
       upstream_registry_url = "registry.gitlab.com"
-      secret_name           = "ecr-pullthroughcache/gitlab"
-      secret_description    = "GitLab Container Registry credentials for ECR pull-through cache"
       username              = "akohlbecker"
       access_token          = var.ci_ecr_gitlab_access_token
     }
@@ -94,7 +88,7 @@ locals {
   }
   ci_ecr_credentials = {
     for name, registry in local.ci_ecr_registries : name => registry
-    if try(registry.secret_name, null) != null
+    if try(registry.username, null) != null
   }
 }
 
@@ -252,8 +246,7 @@ resource "aws_s3_bucket_policy" "ci_qemu_images" {
 resource "aws_secretsmanager_secret" "ci_ecr" {
   for_each = local.ci_ecr_credentials
 
-  name        = each.value.secret_name
-  description = each.value.secret_description
+  name = "ecr-pullthroughcache/${each.key}"
 
   tags = {
     role = "ci"
