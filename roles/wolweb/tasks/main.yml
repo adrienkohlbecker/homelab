@@ -89,14 +89,6 @@
   tags:
     - wolweb
 
-- name: Remove unused wolweb config file
-  file:
-    path: /mnt/services/wolweb/config.json
-    state: absent
-  become: true
-  tags:
-    - wolweb
-
 - name: Configure nginx
   import_role:
     name: nginx
