@@ -121,16 +121,14 @@
         _test_resolvectl_global_protocols: >-
           {{ _test_resolvectl_global.splitlines()
              | select('search', 'Protocols:') | list | first | default('') }}
-        # Preserve the #dns.fahm.fr SNI suffix in the expected resolver value.
-        _test_expected_resolvers: "{{ test_dot_servers }}"
       assert:
         that:
           - "'+DNSOverTLS' in _test_resolvectl_global_protocols"
           - >-
-            (_test_expected_resolvers | select('in', _test_resolvectl_global) | list | length)
-            == (_test_expected_resolvers | length)
+            (test_dot_servers | select('in', _test_resolvectl_global) | list | length)
+            == (test_dot_servers | length)
         fail_msg: >-
-          systemd-resolved isn't enforcing DNS-over-TLS via {{ _test_expected_resolvers | join(', ') }};
+          systemd-resolved isn't enforcing DNS-over-TLS via {{ test_dot_servers | join(', ') }};
           the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can
           fall back to UDP. Global Protocols line: {{ _test_resolvectl_global_protocols }}
 
