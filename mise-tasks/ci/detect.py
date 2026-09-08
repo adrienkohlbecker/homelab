@@ -31,7 +31,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from matrix import (
-    _build_dispatch_matrix,
+    build_dispatch_matrix,
     build_test_matrix,
     cells_to_ci_specs,
     ci_spec_to_cell,
@@ -771,7 +771,7 @@ def _cmd_gitlab(args: list[str]) -> int:
         if roles_input == "ALL":
             log("ROLES=ALL -> full universe")
             return _emit_gitlab(_full_universe_specs(), True, opts.child_path, runtimes, log, target=opts.target)
-        cells = _build_dispatch_matrix(roles_input)
+        cells = build_dispatch_matrix(roles_input)
         return _emit_gitlab(cells_to_ci_specs(cells), False, opts.child_path, runtimes, log, target=opts.target)
 
     log(f"mode: change detection (source={event or 'local'})")

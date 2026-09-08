@@ -1,23 +1,10 @@
-#!/usr/bin/env python3
-"""Test matrix generation — single source of truth for CI and local runs.
+"""Test matrix generation shared by CI and local test runners.
 
 Reads roles/*/meta/test.yml to produce the (machine, ubuntu, role) cell list
 that both test/testall.py and mise-tasks/ci/detect.py consume.
-
-CLI (JSON, for local inspection / tooling):
-  python3 test/matrix.py --json --all                        # full universe
-  python3 test/matrix.py --json --dispatch "foo,bar:minimal"  # dispatch input
-  python3 test/matrix.py --json --extra C1 C2 -- R1 R2       # push path
-  python3 test/matrix.py --json                               # empty matrix
-
-Human-readable (for local inspection):
-  python3 test/matrix.py            # full universe, tab-separated
-  python3 test/matrix.py foo bar    # specific roles
 """
 
-import argparse
 import functools
-import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -265,7 +252,7 @@ def ci_spec_to_cell(spec: str) -> TestCell:
     raise ValueError(f"Invalid CI spec: {spec!r}")
 
 
-def _build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
+def build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
     """Parse a comma-separated dispatch input into cells.
 
     Tokens without colons are expanded via build_role_cells (with machine
@@ -290,54 +277,3 @@ def _build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
         else:
             cells.extend(build_role_cells(token))
     return cells
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Generate the test matrix from roles/*/meta/test.yml",
-    )
-    parser.add_argument("roles", nargs="*", help="Roles to expand")
-    parser.add_argument("--json", action="store_true", help="Output CI-format JSON array")
-    parser.add_argument("--all", action="store_true", help="Expand all testable roles")
-    parser.add_argument(
-        "--dispatch",
-        metavar="INPUT",
-        help="Parse comma-separated dispatch input (role or role:variant)",
-    )
-    parser.add_argument(
-        "--extra",
-        nargs="*",
-        default=[],
-        metavar="SPEC",
-        help="Extra CI specs to merge (role:machine[:ubuntu])",
-    )
-    args = parser.parse_args()
-
-    if args.dispatch:
-        if args.all or args.roles:
-            parser.error("--dispatch is mutually exclusive with --all and positional roles")
-        cells = _build_dispatch_matrix(args.dispatch)
-    elif args.all:
-        if args.roles:
-            parser.error("--all is mutually exclusive with positional roles")
-        cells = build_test_matrix(list_testable_roles())
-    elif args.roles:
-        extra = [ci_spec_to_cell(s) for s in args.extra] if args.extra else None
-        cells = build_test_matrix(args.roles, extra)
-    elif not args.json:
-        cells = build_test_matrix(list_testable_roles())
-    else:
-        extra = [ci_spec_to_cell(s) for s in args.extra] if args.extra else None
-        cells = build_test_matrix([], extra)
-
-    if args.json:
-        print(json.dumps(cells_to_ci_specs(cells)))
-    else:
-        for cell in cells:
-            print(f"{cell.machine}\t{cell.ubuntu}\t{cell.role}")
-
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -1,8 +1,5 @@
 """Unit tests for test/matrix.py — test matrix generation."""
 
-import json
-import subprocess
-import sys
 from pathlib import Path
 
 import machine
@@ -28,16 +25,6 @@ def _make_role(name: str, meta: dict | None = None) -> None:
         import yaml
 
         (meta_dir / "test.yml").write_text(yaml.dump(meta))
-
-
-def _run_matrix_cli(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "matrix", *args],
-        capture_output=True,
-        text=True,
-        env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "test")},
-        timeout=30,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -244,83 +231,37 @@ class TestCiSpecs:
 
 
 # ---------------------------------------------------------------------------
-# _build_dispatch_matrix
+# build_dispatch_matrix
 # ---------------------------------------------------------------------------
 
 
 class TestDispatchMatrix:
     def test_bare_role_expands(self) -> None:
         _make_role("alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
-        cells = matrix._build_dispatch_matrix("alpha")
+        cells = matrix.build_dispatch_matrix("alpha")
         assert matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha") in cells
         assert matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "alpha") in cells
 
     def test_exact_spec_no_escalation(self) -> None:
         _make_role("alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
-        cells = matrix._build_dispatch_matrix("alpha:box")
+        cells = matrix.build_dispatch_matrix("alpha:box")
         assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")]
 
     def test_unknown_role_exits(self) -> None:
         with pytest.raises(SystemExit):
-            matrix._build_dispatch_matrix("nonexistent")
+            matrix.build_dispatch_matrix("nonexistent")
 
     def test_comma_separated(self) -> None:
         _make_role("alpha")
         _make_role("beta")
-        cells = matrix._build_dispatch_matrix("alpha,beta")
+        cells = matrix.build_dispatch_matrix("alpha,beta")
         roles = {c.role for c in cells}
         assert roles == {"alpha", "beta"}
 
     def test_ignores_empty_tokens(self) -> None:
         _make_role("alpha")
-        cells = matrix._build_dispatch_matrix("alpha,,")
+        cells = matrix.build_dispatch_matrix("alpha,,")
         assert len(cells) == 1
-
-
-# ---------------------------------------------------------------------------
-# CLI (subprocess) — integration-level
-# ---------------------------------------------------------------------------
-
-
-class TestCli:
-    def test_json_all(self) -> None:
-        _make_role("alpha")
-        _make_role("beta", {"machines": {"box_deps": None}})
-        result = _run_matrix_cli("--json", "--all")
-        assert result.returncode == 0
-        specs = json.loads(result.stdout)
-        assert "alpha:box" in specs
-        assert "beta:box_deps" in specs
-
-    def test_json_dispatch(self) -> None:
-        _make_role("alpha")
-        result = _run_matrix_cli("--json", "--dispatch", "alpha")
-        assert result.returncode == 0
-        specs = json.loads(result.stdout)
-        assert specs == ["alpha:box"]
-
-    def test_json_empty(self) -> None:
-        result = _run_matrix_cli("--json")
-        assert result.returncode == 0
-        assert json.loads(result.stdout) == []
-
-    def test_json_extra_with_roles(self) -> None:
-        _make_role("alpha")
-        result = _run_matrix_cli("--json", "--extra", "alpha:box:resolute", "--", "alpha")
-        assert result.returncode == 0
-        specs = json.loads(result.stdout)
-        assert "alpha:box" in specs
-        assert "alpha:box:resolute" in specs
-
-    def test_human_readable(self) -> None:
-        _make_role("alpha")
-        result = _run_matrix_cli()
-        assert result.returncode == 0
-        assert "box\tnoble\talpha" in result.stdout
-
-    def test_dispatch_mutual_exclusion(self) -> None:
-        result = _run_matrix_cli("--json", "--dispatch", "x", "--all")
-        assert result.returncode != 0
 
 
 class TestOnDemandMachines:
