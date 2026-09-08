@@ -93,6 +93,9 @@ rEFInd loads the architecture-specific `drivers_*/*.efi` directory before
 presenting its menu, so the artifact registers the HII keyboard layout and
 makes it current before the kernel args editor runs.
 
+The build pads each no-UI driver to at least 4096 bytes because rEFInd 0.14.2
+rejects shorter EFI images during its loader-header probe.
+
 The current mapping targets the common French PC AZERTY layout:
 
 ```text
