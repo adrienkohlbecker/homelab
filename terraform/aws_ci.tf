@@ -22,49 +22,33 @@ locals {
   ci_account_id              = data.aws_caller_identity.current.account_id
   ci_qemu_image_bucket_name  = "homelab-ci-images"
   ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
-  ci_qemu_host_pool = {
-    # Instance-type-agnostic name: aws_autoscaling_group.name and
-    # aws_launch_template.name are ForceNew, so encoding the type in the name
-    # would force a replacement (and churn the gitlab_runner asg_name default
-    # plus the IAM groupName condition) on every future instance-type change.
-    # instance_type below is the source of truth.
-    name = "homelab-ci-qemu-host"
-    # 16 vCPU / 32 GiB / 950 GB NVMe -- half a c8id.8xlarge, at 13 cells each
-    # (~2.46 GiB/cell, same density as one 8xlarge at 26). The runner scales out
-    # to as many of these as the queued burst needs. max_size fits five role
-    # hosts plus the separate 8-vCPU site host inside the 96-vCPU Spot quota:
-    # floor((96 - 8) / 16) = 5. It must match
-    # gitlab_runner_aws_qemu_max_instances in host_vars/fox.yml. Per-host
-    # concurrency is gitlab_runner_aws_qemu_capacity_per_instance there; a future
-    # resize touches only this LT-version field, not the ASG name.
-    instance_type = "c8id.4xlarge"
-    max_size      = 5
-    # The "d" family carries a local instance-store NVMe disk. A boot service
-    # (packer/aws/files/homelab_ci_prepare_scratch.sh) formats and mounts it at
-    # /mnt/scratch, so all heavy CI I/O -- qcow2 overlays and the gitlab-runner
-    # checkout/cache/build tree -- lands on local NVMe, not the EBS root. The
-    # root therefore only holds the OS and the baked toolchain and stays small,
-    # on the gp3 free baseline (3000 IOPS / 125 MiB/s).
-    root_volume_size       = 40
-    root_volume_iops       = 3000
-    root_volume_throughput = 125
-  }
-  # Dedicated single-host pool for the _site_test cell -- the full-site converge
-  # is the pipeline's critical path (~25m) and was spending ~70% of its run
-  # contending for CPU against the role-cell burst on the shared pool. An 8 vCPU
-  # c8id.2xlarge (16 GiB) hosts the widened box guest (6 vCPU / 12 GiB — see
-  # machine.py's _site_test override) with 2 host cores of headroom for qemu's
-  # iothreads + nested-virt servicing + the instance OS, which a 1:1 4-on-4
-  # c8id.xlarge starved. Decouples the cost too: the role-cell pool drains as
-  # soon as the cells finish instead of lingering for site_test's long tail.
-  # Reuses aws_launch_template.ci_qemu_host (same AMI / SG / instance profile /
-  # key); only the ASG differs, overriding instance_type. Kept tagged
-  # role=ci-qemu-host so the worker boot service, homelab_ci_ready, and the
-  # fleet describes treat it identically to the role-cell hosts.
-  ci_qemu_site_pool = {
-    name          = "homelab-ci-qemu-site"
-    instance_type = "c8id.2xlarge"
-    max_size      = 1
+  ci_qemu_pools = {
+    role = {
+      # Instance-type-agnostic name: aws_autoscaling_group.name and
+      # aws_launch_template.name are ForceNew, so encoding the type in the name
+      # would churn the runner default and IAM groupName condition on a resize.
+      name = "homelab-ci-qemu-host"
+      # 16 vCPU / 32 GiB / 950 GB NVMe, at 13 cells each. Five hosts plus the
+      # separate 8-vCPU site host fit inside the 96-vCPU Spot quota:
+      # floor((96 - 8) / 16) = 5. max_size must match
+      # gitlab_runner_aws_qemu_max_instances in host_vars/fox.yml.
+      instance_type          = "c8id.4xlarge"
+      instance_type_override = null
+      max_size               = 5
+      # Heavy CI I/O lands on the "d" family's local NVMe. The EBS root holds
+      # only the OS and baked toolchain on the gp3 free baseline.
+      root_volume_size       = 40
+      root_volume_iops       = 3000
+      root_volume_throughput = 125
+    }
+    # Dedicated single-host pool for _site_test. Its 8-vCPU c8id.2xlarge hosts
+    # the 6-vCPU / 12-GiB guest without contending with the role-cell burst.
+    # It reuses the role pool's launch template and overrides only instance type.
+    site = {
+      name                   = "homelab-ci-qemu-site"
+      instance_type_override = "c8id.2xlarge"
+      max_size               = 1
+    }
   }
   ci_qemu_image_read_statements = [
     {
@@ -675,10 +659,7 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
           "autoscaling:SetInstanceProtection",
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
-        Resource = [
-          aws_autoscaling_group.ci_qemu_host.arn,
-          aws_autoscaling_group.ci_qemu_site.arn,
-        ]
+        Resource = [for pool in aws_autoscaling_group.ci_qemu : pool.arn]
       },
       {
         Sid    = "DescribeQemuHostFleet"
@@ -699,10 +680,7 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
         Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
         Condition = {
           StringEquals = {
-            "ec2:ResourceTag/aws:autoscaling:groupName" = [
-              local.ci_qemu_host_pool.name,
-              local.ci_qemu_site_pool.name,
-            ]
+            "ec2:ResourceTag/aws:autoscaling:groupName" = [for pool in local.ci_qemu_pools : pool.name]
           }
         }
       },
@@ -893,12 +871,12 @@ resource "aws_key_pair" "ci_operator" {
 # (ci_qemu_host_ami_parameter), so a host bake promotion never touches
 # terraform.
 resource "aws_launch_template" "ci_qemu_host" {
-  name                   = local.ci_qemu_host_pool.name
+  name                   = local.ci_qemu_pools.role.name
   description            = "homelab CI nested-qemu host"
   update_default_version = true
 
   image_id      = "resolve:ssm:${local.ci_qemu_host_ami_parameter}"
-  instance_type = local.ci_qemu_host_pool.instance_type
+  instance_type = local.ci_qemu_pools.role.instance_type
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -921,10 +899,10 @@ resource "aws_launch_template" "ci_qemu_host" {
     device_name = "/dev/sda1"
 
     ebs {
-      volume_size           = local.ci_qemu_host_pool.root_volume_size
+      volume_size           = local.ci_qemu_pools.role.root_volume_size
       volume_type           = "gp3"
-      iops                  = local.ci_qemu_host_pool.root_volume_iops
-      throughput            = local.ci_qemu_host_pool.root_volume_throughput
+      iops                  = local.ci_qemu_pools.role.root_volume_iops
+      throughput            = local.ci_qemu_pools.role.root_volume_throughput
       encrypted             = true
       delete_on_termination = true
     }
@@ -944,72 +922,24 @@ resource "aws_launch_template" "ci_qemu_host" {
       resource_type = tag_spec.value
       tags = {
         role = "ci-qemu-host"
-        pool = local.ci_qemu_host_pool.name
+        pool = local.ci_qemu_pools.role.name
       }
     }
   }
 
   tags = {
-    Name = local.ci_qemu_host_pool.name
+    Name = local.ci_qemu_pools.role.name
     role = "ci"
-    pool = local.ci_qemu_host_pool.name
+    pool = local.ci_qemu_pools.role.name
   }
 }
 
-resource "aws_autoscaling_group" "ci_qemu_host" {
-  name                  = local.ci_qemu_host_pool.name
+resource "aws_autoscaling_group" "ci_qemu" {
+  for_each = local.ci_qemu_pools
+
+  name                  = each.value.name
   min_size              = 0
-  max_size              = local.ci_qemu_host_pool.max_size
-  desired_capacity      = 0
-  protect_from_scale_in = true
-  health_check_type     = "EC2"
-  suspended_processes   = ["AZRebalance"]
-  vpc_zone_identifier   = [for subnet in aws_subnet.ci : subnet.id]
-
-  mixed_instances_policy {
-    instances_distribution {
-      on_demand_base_capacity                  = 0
-      on_demand_percentage_above_base_capacity = 0
-      spot_allocation_strategy                 = "price-capacity-optimized"
-    }
-
-    launch_template {
-      launch_template_specification {
-        launch_template_id = aws_launch_template.ci_qemu_host.id
-        version            = "$Latest"
-      }
-    }
-  }
-
-  dynamic "tag" {
-    for_each = {
-      Name = local.ci_qemu_host_pool.name
-      role = "ci-qemu-host"
-      pool = local.ci_qemu_host_pool.name
-    }
-    iterator = asg_tag
-
-    content {
-      key                 = asg_tag.key
-      value               = asg_tag.value
-      propagate_at_launch = true
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [desired_capacity]
-  }
-}
-
-# Dedicated _site_test pool (see local.ci_qemu_site_pool). Reuses the role-cell
-# launch template -- same AMI, SG, instance profile, key, NVMe boot service --
-# and only overrides the instance type to c8id.2xlarge. max_size = 1:
-# the site runner block pins capacity_per_instance = max_instances = 1, so this
-# ASG never holds more than the single site_test host.
-resource "aws_autoscaling_group" "ci_qemu_site" {
-  name                  = local.ci_qemu_site_pool.name
-  min_size              = 0
-  max_size              = local.ci_qemu_site_pool.max_size
+  max_size              = each.value.max_size
   desired_capacity      = 0
   protect_from_scale_in = true
   health_check_type     = "EC2"
@@ -1029,20 +959,22 @@ resource "aws_autoscaling_group" "ci_qemu_site" {
         version            = "$Latest"
       }
 
-      # Only divergence from the role-cell pool: a smaller host for the lone
-      # site_test guest. The launch template's own instance_type is the
-      # role-cell default; this override wins for this ASG.
-      override {
-        instance_type = local.ci_qemu_site_pool.instance_type
+      # The site pool overrides the role pool's launch-template instance type.
+      dynamic "override" {
+        for_each = each.value.instance_type_override == null ? [] : [each.value.instance_type_override]
+
+        content {
+          instance_type = override.value
+        }
       }
     }
   }
 
   dynamic "tag" {
     for_each = {
-      Name = local.ci_qemu_site_pool.name
+      Name = each.value.name
       role = "ci-qemu-host"
-      pool = local.ci_qemu_site_pool.name
+      pool = each.value.name
     }
     iterator = asg_tag
 
@@ -1056,6 +988,16 @@ resource "aws_autoscaling_group" "ci_qemu_site" {
   lifecycle {
     ignore_changes = [desired_capacity]
   }
+}
+
+moved {
+  from = aws_autoscaling_group.ci_qemu_host
+  to   = aws_autoscaling_group.ci_qemu["role"]
+}
+
+moved {
+  from = aws_autoscaling_group.ci_qemu_site
+  to   = aws_autoscaling_group.ci_qemu["site"]
 }
 
 # ─── SSM parameter: nested-qemu host AMI ─────────────────────────────────────

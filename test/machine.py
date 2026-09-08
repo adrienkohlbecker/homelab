@@ -490,7 +490,7 @@ class Machine:
         # dozens of services are running concurrently — far past the 4 vCPU /
         # 4 GiB the per-role box default is sized for. Unlike a per-role cell it
         # gets a dedicated AWS host with no co-tenants (terraform
-        # ci_qemu_site_pool — c8id.2xlarge, 8 vCPU / 16 GiB), so widen the guest
+        # ci_qemu_pools.site — c8id.2xlarge, 8 vCPU / 16 GiB), so widen the guest
         # to actually use it: 6 vCPU leaves the host 2 cores for qemu's
         # iothreads + nested-virt servicing + the instance OS, and 12 GiB keeps
         # the running services off the zvol-backed swap (whose I/O is doubly
