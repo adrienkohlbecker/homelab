@@ -665,11 +665,8 @@ def build_role_deps_map() -> dict[str, list[str]]:
     inv: dict[str, set[str]] = defaultdict(set)
     for task_file in sorted(Path("roles").glob("*/tasks/*.yml")):
         role = task_file.parts[-3]
-        try:
-            with task_file.open() as fh:
-                tasks = yaml.safe_load(fh)
-        except Exception:
-            continue
+        with task_file.open() as fh:
+            tasks = yaml.safe_load(fh)
         _walk_tasks(tasks, role, inv)
     return {k: sorted(v) for k, v in inv.items()}
 

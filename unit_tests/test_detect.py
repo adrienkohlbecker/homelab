@@ -1000,13 +1000,13 @@ class TestBuildRoleDepsMap:
         (tmp_path / "roles").mkdir()
         assert detect.build_role_deps_map() == {}
 
-    def test_handles_parse_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_rejects_parse_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         bad_dir = tmp_path / "roles" / "broken" / "tasks"
         bad_dir.mkdir(parents=True)
         (bad_dir / "main.yml").write_text(": : :\n  - [\n")
-        result = detect.build_role_deps_map()
-        assert result == {}
+        with pytest.raises(detect.yaml.YAMLError):
+            detect.build_role_deps_map()
 
 
 class TestListTestableRoles:
