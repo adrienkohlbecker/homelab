@@ -185,10 +185,8 @@ def collect_artifact_files(root: Path) -> tuple[list[Path], Path]:
 def build_manifest(
     *,
     args: argparse.Namespace,
-    root: Path,
     disks: list[Path],
     efivars: Path,
-    s3_prefix: str,
 ) -> dict[str, Any]:
     full_sha = git_output(["rev-parse", "HEAD"])
     dirty = bool(git_output(["status", "--short"], default=""))
@@ -203,10 +201,6 @@ def build_manifest(
         "source_git_sha": full_sha,
         "source_git_dirty": dirty,
         "created_at": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "artifact_dir": str(root),
-        "s3_bucket": args.bucket,
-        "s3_prefix": s3_prefix,
-        "pointer_key": f"{args.ubuntu}/{args.machine}/{POINTER_NAME}",
         "disks": [disk_entry(path) for path in disks],
         "support_files": [{"name": efivars.name, "size_bytes": efivars.stat().st_size, "sha256": sha256(efivars)}],
         "tar_members": [path.name for path in [*disks, efivars]],
@@ -307,7 +301,7 @@ def main() -> int:
 
     print(f"artifact: {root}")
     print(f"target:   s3://{args.bucket}/{s3_prefix}/")
-    manifest = build_manifest(args=args, root=root, disks=disks, efivars=efivars, s3_prefix=s3_prefix)
+    manifest = build_manifest(args=args, disks=disks, efivars=efivars)
 
     if args.dry_run:
         print(json.dumps(manifest, indent=2, sort_keys=True))

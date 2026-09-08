@@ -56,6 +56,32 @@ class TestPointerBody:
         assert hydrate.POINTER_NAME == "promoted.json"
 
 
+class TestManifest:
+    def test_round_trip_omits_redundant_location_fields(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        disk = tmp_path / "packer-ubuntu-1.raw"
+        efivars = tmp_path / "efivars.fd"
+        disk.write_bytes(b"disk")
+        efivars.write_bytes(b"efi")
+        monkeypatch.setattr(
+            upload,
+            "disk_entry",
+            lambda path: {"name": path.name, "format": "raw", "sha256": "disk-sha"},
+        )
+        monkeypatch.setattr(upload, "sha256", lambda path: "efi-sha")
+
+        args = _args()
+        manifest = upload.build_manifest(args=args, disks=[disk], efivars=efivars)
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        assert {"artifact_dir", "s3_bucket", "s3_prefix", "pointer_key"}.isdisjoint(manifest)
+        assert hydrate.read_manifest(manifest_path, args, args.build_id) == manifest
+
+
 class TestResolveBuildId:
     def _resolve(self, monkeypatch: pytest.MonkeyPatch, body: str, **arg_overrides: object) -> str:
         monkeypatch.setattr(hydrate, "output", lambda argv, **kw: body)
