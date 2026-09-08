@@ -7,8 +7,8 @@ set -euo pipefail
 : "${SOURCE_NAME:?}"
 # Disk suffix to apply to shipped images: raw or qcow2.
 : "${IMAGE_FORMAT:?}"
-# Shipped image target: qemu images are harness-verified.
-: "${IMAGE_TARGET:?}"
+# Installation target: qemu images are harness-verified.
+: "${INSTALL_TARGET:?}"
 # Ubuntu release name passed through to the harness.
 : "${UBUNTU_NAME:?}"
 # Whether finalized artifacts should be published.
@@ -34,7 +34,7 @@ for disk in "${disks[@]}"; do
   mv "$disk" "$disk.$IMAGE_FORMAT"
 done
 
-if [ "$IMAGE_TARGET" = "qemu" ]; then
+if [ "$INSTALL_TARGET" = "qemu" ]; then
   "$script_dir/../../test/launch.py" \
     --machine "$SOURCE_NAME" \
     --ubuntu "$UBUNTU_NAME" \

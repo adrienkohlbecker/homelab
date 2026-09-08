@@ -21,8 +21,8 @@ trap 'exit 130' INT TERM
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
 #   SSH_KEY_PUB, ZBM_VERSION.
-# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_ROLE_FILES, IMAGE_TARGET,
-#   QEMU_TEST_IMAGE, PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN,
+# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_ROLE_FILES, INSTALL_TARGET,
+#   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN,
 #   HOSTNAME, USERNAME.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
 #   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
@@ -236,9 +236,8 @@ fi
 # arch-specific. $CONSOLE_CMDLINE is used both here and in the rEFInd menuentries
 # directly — no readback from ZFS needed.
 #
-# QEMU_TEST_IMAGE is true only for the box/lab/pug sources in qemu.pkr.hcl;
-# it is false for the hetzner image and unset for any bare-metal copy-paste run
-# of this script, so neither picks up the test-only tuning below.
+# INSTALL_TARGET=qemu only for the box/lab/pug sources in qemu.pkr.hcl, so
+# neither Hetzner nor a bare-metal run picks up the test-only tuning below.
 #
 # mitigations=off: these are throwaway nested-KVM CI cells whose entire life is
 # one converge + verify. Speculative-execution mitigations buy nothing on a
@@ -255,11 +254,11 @@ fi
 # which carries the same console=tty0 base.
 COMMANDLINE="console=tty0"
 
-if [ "$QEMU_TEST_IMAGE" = "true" ]; then
+if [ "$INSTALL_TARGET" = "qemu" ]; then
   COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE mitigations=off"
   mkdir -p /etc/zfsbootmenu
   echo "mitigations=off" >/etc/zfsbootmenu/mitigations
-elif [ "$IMAGE_TARGET" = "hetzner" ]; then
+elif [ "$INSTALL_TARGET" = "hetzner" ]; then
   # Hetzner Cloud exposes a serial console, so keep the serial args.
   COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE"
 fi
@@ -580,10 +579,8 @@ apt-get install --yes openssh-server
 # qemu-guest-agent is a KVM guest<->host channel (graceful shutdown, IP
 # reporting) that binds the virtio-serial port /dev/virtio-ports/org.qemu.
 # guest_agent.0; on bare metal that port never appears and the service sits
-# inert. Install it only on the virtualized targets -- the qemu test fixtures
-# (QEMU_TEST_IMAGE) and the Hetzner cloud image (IMAGE_TARGET=hetzner). A
-# bare-metal copy-paste run sets neither flag and skips it.
-if [ "$QEMU_TEST_IMAGE" = "true" ] || [ "$IMAGE_TARGET" = "hetzner" ]; then
+# inert. Install it only on the virtualized qemu and Hetzner targets.
+if [ "$INSTALL_TARGET" != bare_metal ]; then
   apt-get install --yes qemu-guest-agent
 fi
 
@@ -598,7 +595,7 @@ echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-hardening.conf
 # snapshot would ship a known key on the one internet-facing host); instead it
 # installs cloud-init so terraform's user_data creates `ak` + injects the SSH
 # key on first boot, exactly as the stock hcloud image does.
-if [ "$IMAGE_TARGET" = "hetzner" ]; then
+if [ "$INSTALL_TARGET" = "hetzner" ]; then
   bash /var/tmp/hetzner/install.sh
   rm -rf /var/tmp/hetzner
 
@@ -648,10 +645,8 @@ EOF
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
-# Mask ambient background units in the *test image only* (QEMU_TEST_IMAGE=true,
-# set by the box/lab/pug sources). On a throwaway CI cell these steal the dpkg
-# lock and burn CPU during converge, inflating the ~28s setup phase for no
-# benefit on a guest that lives for one test.
+# Mask ambient background units in the qemu test image only. On a throwaway CI
+# cell these steal the dpkg lock and burn CPU during converge for no benefit.
 #
 # Masked here, re-established by the owning role from this clean base — the same
 # spirit as the mirror prelude: the image suppresses interference, the role that
@@ -673,7 +668,7 @@ fi
 # Each unit is masked only if systemd already knows a real unit file for it
 # (list-unit-files lists it as anything other than not-found); masking an absent
 # unit would leave a dangling /dev/null symlink.
-if [ "$QEMU_TEST_IMAGE" = "true" ]; then
+if [ "$INSTALL_TARGET" = "qemu" ]; then
   for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service \
     multipathd.service multipathd.socket; do
     if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then

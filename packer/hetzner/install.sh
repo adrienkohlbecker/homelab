@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hetzner image setup, run by chroot.sh inside the target root (IMAGE_TARGET
+# Hetzner image setup, run by chroot.sh inside the target root (INSTALL_TARGET
 # = hetzner). Consumes $UBUNTU_NAME (exported by packer's shell provisioner)
 # and the staged /var/tmp/hetzner tree from provision.sh.
 set -euxo pipefail

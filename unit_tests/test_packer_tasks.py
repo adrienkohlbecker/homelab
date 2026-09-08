@@ -16,6 +16,7 @@ QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
+QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
 UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
 UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
@@ -90,6 +91,16 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     uploaded_role_files = {match.group(1) for match in re.finditer(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)}
     assert uploaded_role_files == expected
     assert "homelab-source.tar" not in template
+
+
+def test_qemu_build_uses_one_install_target() -> None:
+    template = QEMU_TEMPLATE.read_text()
+    provision = QEMU_PROVISION_SH.read_text()
+
+    assert re.search(r'"INSTALL_TARGET"\s+=\s+source\.name == "hetzner" \? "hetzner" : "qemu"', template)
+    assert 'export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"' in provision
+    assert "IMAGE_TARGET" not in template
+    assert "QEMU_TEST_IMAGE" not in template
 
 
 def test_qemu_host_uses_canonical_mise_upstream() -> None:

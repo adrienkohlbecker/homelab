@@ -122,39 +122,36 @@ locals {
   # in device order; the space-delimited disks prefix becomes rpool and
   # extra_disks supplies the remaining devices to extra_pools in order.
   # Supported layouts are "" and mirror; extra_pools accepts apoc, dozer, zee,
-  # and tank_mouse. image_target controls post-build verification and derives
-  # QEMU_TEST_IMAGE. Empty optional fields disable their feature; zfs_arc_max=0
-  # disables the cap.
+  # and tank_mouse. Empty optional fields disable their feature; zfs_arc_max=0
+  # disables the cap. The source name selects qemu versus Hetzner installation.
   variant_config = {
     # pug: single-disk rpool + a dedicated podman partition + apoc mirror.
     # The small fixture partition proves the prod backend without carrying the
     # full service-image footprint.
     pug = {
-      disks        = "/dev/vdb"
-      extra_disks  = "/dev/vdc /dev/vdd"
-      disk_sizes   = ["40G", "1G", "1G"]
-      layout       = ""
-      swap_size    = "8G"
-      podman_size  = "4G"
-      meta_size    = ""
-      extra_pools  = "apoc"
-      image_target = "qemu"
-      zfs_arc_max  = 0
+      disks       = "/dev/vdb"
+      extra_disks = "/dev/vdc /dev/vdd"
+      disk_sizes  = ["40G", "1G", "1G"]
+      layout      = ""
+      swap_size   = "8G"
+      podman_size = "4G"
+      meta_size   = ""
+      extra_pools = "apoc"
+      zfs_arc_max = 0
     }
     # lab: mdadm EFI/swap/podman, 3-disk mirror rpool, dozer mirror, tank raidz2
     # + special mirror, and mouse mirror. Fixture sizes only prove the storage
     # topology; prod sizing lives in notes/unified_disk_layout.md.
     lab = {
-      disks        = "/dev/vdb /dev/vdc /dev/vdd"
-      extra_disks  = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes   = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
-      layout       = "mirror"
-      swap_size    = "8G"
-      podman_size  = "5G"
-      meta_size    = "2G"
-      extra_pools  = "dozer tank_mouse"
-      image_target = "qemu"
-      zfs_arc_max  = 0
+      disks       = "/dev/vdb /dev/vdc /dev/vdd"
+      extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
+      disk_sizes  = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      layout      = "mirror"
+      swap_size   = "8G"
+      podman_size = "5G"
+      meta_size   = "2G"
+      extra_pools = "dozer tank_mouse"
+      zfs_arc_max = 0
     }
     # box: single-disk rpool + a 1G flat `zee` pool. The default push-CI
     # ZFS-on-root fixture. The second pool turns box from rpool-only into a
@@ -178,32 +175,30 @@ locals {
     # flat on it here). vdb is sized for swap(4G) + podman(50G) + a ~40G rpool;
     # the disk_sizes total stays 96G.
     box = {
-      disks        = "/dev/vdb"
-      extra_disks  = "/dev/vdc"
-      disk_sizes   = ["96G", "1G"]
-      layout       = ""
-      swap_size    = "4G"
-      podman_size  = "50G"
-      meta_size    = ""
-      extra_pools  = "zee"
-      image_target = "qemu"
-      zfs_arc_max  = 0
+      disks       = "/dev/vdb"
+      extra_disks = "/dev/vdc"
+      disk_sizes  = ["96G", "1G"]
+      layout      = ""
+      swap_size   = "4G"
+      podman_size = "50G"
+      meta_size   = ""
+      extra_pools = "zee"
+      zfs_arc_max = 0
     }
     # hetzner: ZFS-root image for Hetzner Cloud. The 40G Podman partition must
     # be present in the image because p5 follows it and ZFS cannot be shrunk or
     # moved on first boot. chroot.sh's hetzner_growpart.service grows p5 into
     # the cpx22's remaining ~16G on first boot.
     hetzner = {
-      disks        = "/dev/vdb"
-      extra_disks  = ""
-      disk_sizes   = ["60G"]
-      layout       = ""
-      swap_size    = "4G"
-      podman_size  = "40G"
-      meta_size    = ""
-      extra_pools  = ""
-      image_target = "hetzner"
-      zfs_arc_max  = 536870912
+      disks       = "/dev/vdb"
+      extra_disks = ""
+      disk_sizes  = ["60G"]
+      layout      = ""
+      swap_size   = "4G"
+      podman_size = "40G"
+      meta_size   = ""
+      extra_pools = ""
+      zfs_arc_max = 536870912
     }
   }
 
@@ -389,14 +384,9 @@ build {
       "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
-      "IMAGE_TARGET"                    = local.variant_config[source.name].image_target
+      "INSTALL_TARGET"                  = source.name == "hetzner" ? "hetzner" : "qemu"
       "ZBM_VERSION"                     = local.arch_cfg.zbm_version
       "ZFS_ARC_MAX"                     = "${local.variant_config[source.name].zfs_arc_max}"
-      # true only for the qemu test fixtures (box/lab/pug); false for hetzner.
-      # Gates the test-only kernel tuning + ambient-unit masking in chroot.sh.
-      # A bare-metal copy-paste run of chroot.sh leaves it unset, so prod never
-      # picks up either.
-      "QEMU_TEST_IMAGE" = "${local.variant_config[source.name].image_target == "qemu"}"
     }
   }
 
@@ -410,7 +400,7 @@ build {
         "BUILD_DIRECTORY=${var.build_directory}",
         "SOURCE_NAME=${source.name}",
         "IMAGE_FORMAT=${local.arch_cfg.image_format}",
-        "IMAGE_TARGET=${local.variant_config[source.name].image_target}",
+        "INSTALL_TARGET=${source.name == "hetzner" ? "hetzner" : "qemu"}",
         "UBUNTU_NAME=${local.ubuntu_name}",
         "PUBLISH=${var.publish}",
         "OUTPUT_DIRECTORY=${var.output_directory}",

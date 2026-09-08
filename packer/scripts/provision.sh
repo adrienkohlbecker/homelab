@@ -30,7 +30,7 @@
 set -euxo pipefail
 
 # DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, PODMAN_SIZE, META_SIZE, EXTRA_POOLS,
-# IMAGE_TARGET, QEMU_TEST_IMAGE, UBUNTU_NAME, and UBUNTU_MIRROR
+# INSTALL_TARGET, UBUNTU_NAME, and UBUNTU_MIRROR
 # come from packer's shell-provisioner env block. Bare-metal callers export
 # them by hand.
 # This script consumes the disk/pool vars and passes the exported install vars
@@ -73,13 +73,8 @@ preflight() {
     return 1
     ;;
   esac
-  case $IMAGE_TARGET in qemu | hetzner) ;; *)
-    echo "provision.sh: IMAGE_TARGET must be qemu or hetzner (got '$IMAGE_TARGET')" >&2
-    return 1
-    ;;
-  esac
-  case $QEMU_TEST_IMAGE in true | false) ;; *)
-    echo "provision.sh: QEMU_TEST_IMAGE must be true or false (got '$QEMU_TEST_IMAGE')" >&2
+  case $INSTALL_TARGET in bare_metal | qemu | hetzner) ;; *)
+    echo "provision.sh: INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')" >&2
     return 1
     ;;
   esac
@@ -97,7 +92,7 @@ preflight() {
     return 1
   fi
 
-  if [ "$IMAGE_TARGET" != hetzner ]; then
+  if [ "$INSTALL_TARGET" != hetzner ]; then
     if ! [[ -v SSH_KEY_PUB ]] || ! [[ $SSH_KEY_PUB =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]]; then
       echo "provision.sh: SSH_KEY_PUB must contain a supported public key" >&2
       return 1
@@ -124,11 +119,8 @@ preflight() {
   done
 }
 
-# Normalize the two packer flags once so every downstream site (this script
-# and chroot.sh) reads plain variables. Packer always sets both; bare-metal
-# callers get the qemu/not-a-test defaults.
-export IMAGE_TARGET="${IMAGE_TARGET:-qemu}"
-export QEMU_TEST_IMAGE="${QEMU_TEST_IMAGE:-false}"
+# Packer selects qemu or hetzner; direct callers get the bare-metal path.
+export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
 
 preflight
 
@@ -571,16 +563,6 @@ debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" || {
 
 cp /etc/hostid /mnt/etc
 
-# A disposable image build (qemu test fixture or the Hetzner snapshot) is
-# either re-baked on failure or grown + verified on first boot; a bare-metal
-# copy-paste run installs onto the real host. Every packer source sets one of
-# the two flags below, so "neither" is exactly the bare-metal path. Gates the
-# build-only speed hacks that trade durability for wall-clock.
-building_image=false
-if [ "$QEMU_TEST_IMAGE" = "true" ] || [ "$IMAGE_TARGET" = "hetzner" ]; then
-  building_image=true
-fi
-
 # Build-time dpkg I/O mode: dpkg fsyncs every unpacked file by default, which
 # dominates the chroot install's wall-clock on network-backed disks (EBS on the
 # AWS bake) and still costs plenty locally. A disposable build that crashes
@@ -589,7 +571,7 @@ fi
 # bare-metal install: an interrupted provision is costlier to redo, the
 # local-SSD speed win is small, and fsync durability is worth keeping. Removed
 # before the image is sealed.
-if [ "$building_image" = "true" ]; then
+if [ "$INSTALL_TARGET" != bare_metal ]; then
   echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 fi
 
@@ -611,8 +593,8 @@ export CHROOT_ROLE_FILES
 # datasource pin, first-boot growpart unit) so chroot.sh can run it inside
 # the target root. Under /var/tmp, not /tmp: arch-chroot shadows the
 # chroot's /tmp with a private tmpfs, hiding files pre-staged there. Skipped
-# on the qemu fixtures and the bare-metal path (IMAGE_TARGET != hetzner).
-if [ "$IMAGE_TARGET" = "hetzner" ]; then
+# on the qemu fixtures and the bare-metal path.
+if [ "$INSTALL_TARGET" = "hetzner" ]; then
   cp -a "$SCRIPTS_DIR/hetzner" /mnt/var/tmp/hetzner
 fi
 
@@ -640,7 +622,7 @@ unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroo
 cleanup_chroot_role_files
 trap - EXIT
 
-if [ "$building_image" = "true" ]; then
+if [ "$INSTALL_TARGET" != bare_metal ]; then
   rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 fi
 
