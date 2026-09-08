@@ -57,29 +57,64 @@ class TestPointerBody:
 
 
 class TestManifest:
-    def test_round_trip_omits_redundant_location_fields(
+    def test_round_trip_contains_only_identity_and_verified_files(
         self,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         disk = tmp_path / "packer-ubuntu-1.raw"
         efivars = tmp_path / "efivars.fd"
         disk.write_bytes(b"disk")
         efivars.write_bytes(b"efi")
-        monkeypatch.setattr(
-            upload,
-            "disk_entry",
-            lambda path: {"name": path.name, "format": "raw", "sha256": "disk-sha"},
-        )
-        monkeypatch.setattr(upload, "sha256", lambda path: "efi-sha")
 
         args = _args()
         manifest = upload.build_manifest(args=args, disks=[disk], efivars=efivars)
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert {"artifact_dir", "s3_bucket", "s3_prefix", "pointer_key"}.isdisjoint(manifest)
+        assert set(manifest) == {"build_id", "bundle_name", "files", "machine", "ubuntu"}
+        assert manifest["files"] == [
+            {"name": disk.name, "sha256": upload.sha256(disk)},
+            {"name": efivars.name, "sha256": upload.sha256(efivars)},
+        ]
         assert hydrate.read_manifest(manifest_path, args, args.build_id) == manifest
+
+    def test_legacy_manifest_is_accepted(self, tmp_path: Path) -> None:
+        manifest = {
+            "machine": "box",
+            "ubuntu": "noble",
+            "build_id": "ci-42-gdeadbeef0000",
+            "disks": [{"name": "disk.raw", "sha256": "a" * 64, "size_bytes": 1}],
+            "support_files": [{"name": "efivars.fd", "sha256": "b" * 64}],
+            "tar_members": ["disk.raw", "efivars.fd"],
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        assert hydrate.read_manifest(manifest_path, _args(), manifest["build_id"]) == manifest
+        assert hydrate.manifest_files(manifest) == [
+            {"name": "disk.raw", "sha256": "a" * 64},
+            {"name": "efivars.fd", "sha256": "b" * 64},
+        ]
+
+    def test_missing_hash_is_rejected(self, tmp_path: Path) -> None:
+        manifest = {
+            "machine": "box",
+            "ubuntu": "noble",
+            "build_id": "ci-42-gdeadbeef0000",
+            "files": [{"name": "disk.raw"}],
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        with pytest.raises(SystemExit, match="sha256 is invalid"):
+            hydrate.read_manifest(manifest_path, _args(), manifest["build_id"])
+
+    def test_extracted_hash_mismatch_is_rejected(self, tmp_path: Path) -> None:
+        disk = tmp_path / "disk.raw"
+        disk.write_bytes(b"corrupt")
+
+        with pytest.raises(SystemExit, match="sha256 mismatch"):
+            hydrate.verify_files(tmp_path, [{"name": disk.name, "sha256": "0" * 64}])
 
 
 class TestResolveBuildId:

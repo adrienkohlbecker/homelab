@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import hashlib
 import json
 import os
 import shutil
@@ -145,6 +146,45 @@ def download_s3(key: str, dest: Path) -> None:
     )
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def manifest_files(manifest: dict[str, Any]) -> list[dict[str, str]]:
+    files = manifest.get("files")
+    if files is None:
+        # Published v1 bundles split disks and support files into two lists.
+        disks = manifest.get("disks", [])
+        support_files = manifest.get("support_files", [])
+        if not isinstance(disks, list) or not isinstance(support_files, list):
+            raise ValueError("legacy manifest file groups must be lists")
+        files = [*disks, *support_files]
+    if not isinstance(files, list) or not files:
+        raise ValueError("manifest files must be a non-empty list")
+
+    normalized: list[dict[str, str]] = []
+    for entry in files:
+        if not isinstance(entry, dict):
+            raise ValueError("manifest file entries must be objects")
+        name = entry.get("name")
+        digest = entry.get("sha256")
+        if not isinstance(name, str) or not name:
+            raise ValueError("manifest file name must be a non-empty string")
+        if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            raise ValueError(f"manifest file sha256 is invalid for {name!r}")
+        validate_member_name(name)
+        normalized.append({"name": name, "sha256": digest})
+
+    names = [entry["name"] for entry in normalized]
+    if len(names) != len(set(names)):
+        raise ValueError("manifest file names must be unique")
+    return normalized
+
+
 def read_manifest(path: Path, args: argparse.Namespace, build_id: str) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text())
@@ -153,11 +193,10 @@ def read_manifest(path: Path, args: argparse.Namespace, build_id: str) -> dict[s
     for key, expected in (("machine", args.machine), ("ubuntu", args.ubuntu), ("build_id", build_id)):
         if manifest.get(key) != expected:
             sys.exit(f"manifest {key} mismatch: expected {expected!r}, got {manifest.get(key)!r}")
-    members = manifest.get("tar_members")
-    if not isinstance(members, list) or not all(isinstance(member, str) and member for member in members):
-        sys.exit("manifest tar_members must be a non-empty string list")
-    for member in members:
-        validate_member_name(member)
+    try:
+        manifest_files(manifest)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     return manifest
 
 
@@ -186,6 +225,16 @@ def validate_archive_members(tar: str, bundle: Path, expected_members: list[str]
         sys.exit(f"archive members do not match manifest; missing: {missing}; extra: {extra}")
 
 
+def verify_files(root: Path, files: list[dict[str, str]]) -> None:
+    for entry in files:
+        path = root / entry["name"]
+        if not path.is_file():
+            sys.exit(f"bundle did not extract expected member: {entry['name']}")
+        actual = sha256(path)
+        if actual != entry["sha256"]:
+            sys.exit(f"bundle sha256 mismatch for {entry['name']}: expected {entry['sha256']}, got {actual}")
+
+
 def local_cache_complete(target: Path, build_id: str) -> bool:
     marker = target / MARKER_NAME
     manifest_path = target / LOCAL_MANIFEST_NAME
@@ -195,9 +244,10 @@ def local_cache_complete(target: Path, build_id: str) -> bool:
         return False
     try:
         manifest = json.loads(manifest_path.read_text())
-    except json.JSONDecodeError:
+        files = manifest_files(manifest)
+    except json.JSONDecodeError, ValueError, SystemExit:
         return False
-    return all((target / member).is_file() for member in manifest.get("tar_members", []))
+    return all((target / entry["name"]).is_file() for entry in files)
 
 
 def remove_path(path: Path) -> None:
@@ -254,17 +304,17 @@ def main() -> int:
 
             download_s3(f"{prefix}/{MANIFEST_NAME}", manifest_path)
             manifest = read_manifest(manifest_path, args, build_id)
+            files = manifest_files(manifest)
+            members = [entry["name"] for entry in files]
             bundle_name = manifest.get("bundle_name", BUNDLE_NAME)
             if not isinstance(bundle_name, str) or not bundle_name:
                 sys.exit("manifest bundle_name must be a non-empty string")
             download_s3(f"{prefix}/{bundle_name}", bundle_path)
 
             print(f"==> extracting {bundle_name}")
-            validate_archive_members(tar, bundle_path, manifest["tar_members"])
+            validate_archive_members(tar, bundle_path, members)
             run([tar, "--sparse", "--zstd", "--no-same-owner", "-xf", str(bundle_path), "-C", str(staged)])
-            for member in manifest["tar_members"]:
-                if not (staged / member).is_file():
-                    sys.exit(f"bundle did not extract expected member: {member}")
+            verify_files(staged, files)
 
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             (staged / MARKER_NAME).write_text(f"{build_id}\n")

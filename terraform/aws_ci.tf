@@ -480,10 +480,10 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
 # branch pipelines run role tests too; tag pipelines don't, so they get
 # nothing). Read-only by design: qemu cells run the harness locally on the
 # shell runner and assume this role solely to hydrate the promoted qemu base
-# images from S3 (mise run ci:hydrate-qemu-images — two s3 GetObject calls, the
-# promoted.json pointer plus the bundle). It grants nothing that launches
-# instances, writes images, or promotes artifacts; the same minimal read set as
-# the ci_qemu_host instance role.
+# images from S3 (mise run ci:hydrate-qemu-images — three s3 GetObject calls
+# for the promoted.json pointer, manifest, and bundle). It grants nothing that
+# launches instances, writes images, or promotes artifacts; the same minimal
+# read set as the ci_qemu_host instance role.
 
 resource "aws_iam_role" "ci_cell" {
   name = "homelab-ci-cell"

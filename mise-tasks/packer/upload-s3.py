@@ -20,8 +20,8 @@ images for the aws_qemu target:
 
 The tarball contains the packer-ubuntu-N.{raw,qcow2} disks plus efivars.fd,
 because the qemu harness copies efivars.fd from the same artifact directory
-before booting ZFS-root variants. The manifest records the actual disk format
-so Linux-built raw images and macOS-built qcow2 images remain explicit.
+before booting ZFS-root variants. The manifest records a SHA-256 for every
+member so hydration can reject corrupted artifacts before making them live.
 
 The live build for each machine/release pair is selected by a pointer object
 (not SSM) stored inside the bucket itself:
@@ -138,29 +138,6 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def qemu_info(path: Path) -> dict[str, Any]:
-    try:
-        raw = output(["qemu-img", "info", "--output=json", str(path)])
-    except subprocess.CalledProcessError, FileNotFoundError:
-        return {}
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def disk_entry(path: Path) -> dict[str, Any]:
-    info = qemu_info(path)
-    return {
-        "name": path.name,
-        "format": info.get("format") or path.suffix.removeprefix("."),
-        "size_bytes": path.stat().st_size,
-        "virtual_size_bytes": info.get("virtual-size") or path.stat().st_size,
-        "sha256": sha256(path),
-    }
-
-
 def artifact_dir(args: argparse.Namespace) -> Path:
     if args.artifact_dir:
         return Path(args.artifact_dir).expanduser().resolve()
@@ -188,22 +165,13 @@ def build_manifest(
     disks: list[Path],
     efivars: Path,
 ) -> dict[str, Any]:
-    full_sha = git_output(["rev-parse", "HEAD"])
-    dirty = bool(git_output(["status", "--short"], default=""))
+    files = [*disks, efivars]
     return {
-        "bundle_format_version": 1,
         "bundle_name": BUNDLE_NAME,
-        "bundle_format": "tar+zstd",
-        "s3_checksum_algorithm": S3_CHECKSUM_ALGORITHM,
         "machine": args.machine,
         "ubuntu": args.ubuntu,
         "build_id": args.build_id,
-        "source_git_sha": full_sha,
-        "source_git_dirty": dirty,
-        "created_at": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "disks": [disk_entry(path) for path in disks],
-        "support_files": [{"name": efivars.name, "size_bytes": efivars.stat().st_size, "sha256": sha256(efivars)}],
-        "tar_members": [path.name for path in [*disks, efivars]],
+        "files": [{"name": path.name, "sha256": sha256(path)} for path in files],
     }
 
 
@@ -322,7 +290,7 @@ def main() -> int:
         bundle = tmpdir / BUNDLE_NAME
         manifest_path = tmpdir / MANIFEST_NAME
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-        create_bundle(tar, root, manifest["tar_members"], bundle)
+        create_bundle(tar, root, [entry["name"] for entry in manifest["files"]], bundle)
 
         upload_file(args.bucket, bundle, bundle_key, args.region, "application/zstd")
         upload_file(args.bucket, manifest_path, manifest_key, args.region, "application/json")
