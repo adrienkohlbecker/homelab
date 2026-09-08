@@ -5,8 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import machine
 import matrix
 import pytest
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPOSITORY_META_ROLES = [path.parent.parent.name for path in sorted((_REPO_ROOT / "roles").glob("*/meta/test.yml"))]
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +67,11 @@ class TestListTestableRoles:
 
 
 class TestRoleMeta:
+    @pytest.mark.parametrize("role", _REPOSITORY_META_ROLES)
+    def test_repository_metadata_is_valid(self, role: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(_REPO_ROOT)
+        matrix.load_role_test_config(role, tuple(sorted(machine.MACHINE_CHOICES)))
+
     def test_default_machine_falls_back_to_box(self) -> None:
         _make_role("plain")
         assert matrix.default_machine_for("plain") == "box"
@@ -78,6 +87,11 @@ class TestRoleMeta:
     def test_base_prerequisites_reads_false(self) -> None:
         _make_role("foundation", {"base_prerequisites": False})
         assert matrix.base_prerequisites_for("foundation") is False
+
+    def test_base_prerequisites_must_be_boolean(self) -> None:
+        _make_role("foundation", {"base_prerequisites": "pristine"})
+        with pytest.raises(matrix.RoleTestConfigError, match="base_prerequisites must be a boolean"):
+            matrix.load_role_test_config("foundation")
 
 
 # ---------------------------------------------------------------------------
@@ -160,11 +174,17 @@ class TestSkip:
         assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_bare_machine_skip_drops_only_that_machines_base_cell(self) -> None:
-        # The bare form is the only correct spelling for the default cell;
-        # lint/test-meta.py rejects the `minimal:noble` spelling that reads as
-        # an escalation skip but lands here identically.
+        # The bare form is the only correct spelling for the default cell.
         _make_role("svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
         assert matrix.build_role_cells("svc") == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
+
+    def test_explicit_default_release_skip_is_rejected(self) -> None:
+        _make_role(
+            "svc",
+            {"machines": {"box": None, "minimal": None}, "skip": {"minimal:noble": "flaky"}},
+        )
+        with pytest.raises(matrix.RoleTestConfigError, match="cancels the base cell"):
+            matrix.load_role_test_config("svc")
 
     def test_listing_the_default_release_is_rejected(self) -> None:
         _make_role("svc", {"machines": {"box": None}, "ubuntu": [matrix.DEFAULT_UBUNTU]})

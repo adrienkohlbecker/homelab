@@ -119,7 +119,6 @@ depends = [
   "lint:shell",
   "lint:shfmt",
   "lint:lua",
-  "lint:test-meta",
   "lint:podman-service-templates",
   "lint:shell-strict",
   "lint:topology",

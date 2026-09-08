@@ -1,7 +1,5 @@
 """Unit tests for custom ansible-lint rules."""
 
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -204,74 +202,3 @@ class TestRequireValidate:
 
     def test_non_config_destination_is_allowed(self) -> None:
         assert RequireValidate().matchtask(_task("copy", {"dest": "/mnt/services/foo/data.txt"})) is False
-
-
-class TestTestMetaValidation:
-    def test_all_meta_files_valid(self) -> None:
-        """Run test-meta.py against the real repo — catches typos in machine/ubuntu."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(_ROOT / "mise-tasks" / "lint" / "test-meta.py"),
-            ],
-            capture_output=True,
-            text=True,
-            cwd=str(_ROOT),
-            timeout=30,
-        )
-        assert result.returncode == 0, f"test-meta.py failed:\n{result.stderr}"
-        assert "Validated" in result.stdout
-
-    def _run_against(self, tmp_path: Path, meta: str) -> subprocess.CompletedProcess[str]:
-        meta_dir = tmp_path / "roles" / "svc" / "meta"
-        meta_dir.mkdir(parents=True)
-        (meta_dir / "test.yml").write_text(meta)
-        return subprocess.run(
-            [sys.executable, str(_ROOT / "mise-tasks" / "lint" / "test-meta.py")],
-            capture_output=True,
-            text=True,
-            cwd=str(tmp_path),
-            timeout=30,
-        )
-
-    @pytest.mark.parametrize(
-        ("meta", "expected_rc", "expected_error"),
-        [
-            pytest.param(
-                "ubuntu:\n  - noble\n",
-                1,
-                "the default release",
-                id="reject-default-release",
-            ),
-            pytest.param(
-                'machines:\n  box:\n  minimal:\nskip:\n  "minimal:noble": flaky\n',
-                1,
-                "cancels the base cell",
-                id="reject-default-release-skip",
-            ),
-            pytest.param(
-                'machines:\n  box:\nubuntu:\n  - resolute\nskip:\n  "box:resolute": flaky\n',
-                0,
-                None,
-                id="accept-non-default-release-skip",
-            ),
-            pytest.param(
-                "base_prerequisites: pristine\n",
-                1,
-                "base_prerequisites must be a boolean",
-                id="reject-non-boolean-prerequisites",
-            ),
-        ],
-    )
-    def test_synthetic_metadata(
-        self,
-        tmp_path: Path,
-        meta: str,
-        expected_rc: int,
-        expected_error: str | None,
-    ) -> None:
-        result = self._run_against(tmp_path, meta)
-
-        assert result.returncode == expected_rc, result.stderr
-        if expected_error:
-            assert expected_error in result.stderr
