@@ -80,13 +80,9 @@ MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
 _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]
 
 
-PACKER_PATH_PATTERNS: list[str] = [
-    r"packer/",
-    r"mise-tasks/packer/",
-]
+PACKER_PATH_PREFIXES = ("packer/", "mise-tasks/packer/")
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
-PACKER_PATHS_RE = re.compile(r"^(" + "|".join(PACKER_PATH_PATTERNS) + r")")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 
 
@@ -114,7 +110,7 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
             continue
         if FULL_UNIVERSE_RE.match(path):
             full_universe.append(path)
-        if PACKER_PATHS_RE.match(path):
+        if path.startswith(PACKER_PATH_PREFIXES):
             packer_changed = True
         for pat, machine in _MACHINE_UNIVERSE_COMPILED:
             if pat.match(path):

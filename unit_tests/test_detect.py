@@ -1048,10 +1048,10 @@ class TestGitlabChangeMatrix:
         monkeypatch.setenv("CI_COMMIT_BRANCH", branch)
         monkeypatch.setenv("CI_DEFAULT_BRANCH", "master")
         monkeypatch.setenv("CI_COMMIT_BEFORE_SHA", "red_previous_tip")
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: "full")
+        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["full"])
         monkeypatch.setattr(detect, "git_diff_files", lambda base: pytest.fail("red tip must not be used"))
         logs = []
-        assert detect._gitlab_change_matrix(None, logs.append) == ("full", True)
+        assert detect._gitlab_change_matrix(None, logs.append) == (["full"], True)
         assert any("no green base" in line for line in logs)
 
     def test_explicit_base_still_wins_on_default_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1060,7 +1060,7 @@ class TestGitlabChangeMatrix:
         monkeypatch.setenv("CI_DEFAULT_BRANCH", "master")
         monkeypatch.setenv("CI_COMMIT_BEFORE_SHA", "red_previous_tip")
         seen = self._empty_diff(monkeypatch)
-        assert detect._gitlab_change_matrix(None, lambda _: None) == ("[]", False)
+        assert detect._gitlab_change_matrix(None, lambda _: None) == ([], False)
         assert seen == ["explicit"]
 
 
@@ -1228,7 +1228,7 @@ class TestRenderChildPipeline:
 class TestEmitGitlab:
     def test_writes_child_with_cells(self, tmp_path: Path) -> None:
         child = tmp_path / "child.yml"
-        rc = detect._emit_gitlab(json.dumps(["nginx:box"]), False, str(child), {}, lambda *_: None)
+        rc = detect._emit_gitlab(["nginx:box"], False, str(child), {}, lambda *_: None)
         assert rc == 0
         loaded = detect.yaml.safe_load(child.read_text())
         assert "nginx:box" in loaded
@@ -1239,7 +1239,7 @@ class TestEmitGitlab:
         # the rest longest-first. The child YAML preserves that job order.
         child = tmp_path / "child.yml"
         runtimes = {"a:box": 100.0, "b:box": 300.0}
-        detect._emit_gitlab(json.dumps(["a:box", "b:box", "c:box"]), False, str(child), runtimes, lambda *_: None)
+        detect._emit_gitlab(["a:box", "b:box", "c:box"], False, str(child), runtimes, lambda *_: None)
         text = child.read_text()
         order = [text.index(f'"{name}":') for name in ("c:box", "b:box", "a:box")]
         assert order == sorted(order)
