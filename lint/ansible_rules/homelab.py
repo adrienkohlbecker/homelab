@@ -84,14 +84,6 @@ def _is_test_file(file: Lintable | None) -> bool:
     return role < len(parts) and parts[role] in _TEST_FIXTURE_ROLES
 
 
-def _stringify(value: object) -> str:
-    if isinstance(value, list):
-        return "\n".join(_stringify(item) for item in value)
-    if isinstance(value, dict):
-        return "\n".join(f"{key}: {_stringify(item)}" for key, item in value.items())
-    return "" if value is None else str(value)
-
-
 class RequireBackup(AnsibleLintRule):
     """File-writing tasks must set `backup: true`."""
 
@@ -215,7 +207,7 @@ class NoInventoryHostnameWhen(AnsibleLintRule):
         if task["__ansible_action_type__"] != "task" or _is_test_file(file):
             return False
 
-        when = _stringify(task.raw_task.get("when"))
+        when = str(task.raw_task.get("when") or "")
         if "inventory_hostname" in when:
             return "task `when:` branches must use host vars instead of inventory_hostname"
         return False
@@ -241,7 +233,7 @@ class PreferImport(AnsibleLintRule):
             return False
 
         action = task["action"]
-        include_target = _stringify(action.get("_raw_params") or action.get("file") or action.get("name"))
+        include_target = str(action.get("_raw_params") or action.get("file") or action.get("name") or "")
         if "{{" in include_target or "}}" in include_target:
             return False
 
@@ -268,7 +260,7 @@ class RequireValidate(AnsibleLintRule):
         if "validate" in action:
             return False
 
-        destination = _stringify(action.get("dest") or action.get("path"))
+        destination = str(action.get("dest") or action.get("path") or "")
         if destination and _CONFIG_DEST_RE.search(destination):
             return f"{module} task writes config-like content without `validate:`"
         return False
