@@ -362,21 +362,23 @@ def do_push(dry_run: bool = False) -> None:
     if not changed:
         print("push: HEAD matches host, nothing to do")
         return
+    files = [change.file for change in changed]
+    relpaths = [file.rel for file in files]
     show_push_diff(changed)
-    validate_syntax([change.file.rel for change in changed])
+    validate_syntax(relpaths)
     if dry_run:
         services, restart_required = reload_plan(changed)
         if restart_required:
             reload_desc = "homeassistant.restart (a changed file has no hot reload)"
         else:
             reload_desc = ", ".join(services) or "none"
-        print(f"\n\033[1;33mdry-run\033[0m: would upload {[change.file.rel for change in changed]}")
+        print(f"\n\033[1;33mdry-run\033[0m: would upload {relpaths}")
         print(f"\033[1;33mdry-run\033[0m: would advance {SYNCED_TAG} and trigger: {reload_desc}")
         print("\033[1;33mdry-run\033[0m: nothing written to host, no git refs moved, HA not reloaded.")
         return
-    upload_to_host([change.file for change in changed])
+    upload_to_host(files)
     advance_synced_tag()
-    print(f"push: uploaded {[change.file.rel for change in changed]}")
+    print(f"push: uploaded {relpaths}")
     services, restart_required = reload_plan(changed)
     if restart_required:
         print("at least one changed file requires a restart -- restarting homeassistant")
