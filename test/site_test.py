@@ -30,10 +30,10 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
+from machine_session import machine_session
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import (
     CommandFailedException,
-    cancel_on_signal,
     print_line,
     tee_output,
 )
@@ -92,114 +92,83 @@ def parse_args() -> argparse.Namespace:
 
 
 async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
-    task = asyncio.current_task()
-    assert task is not None
+    async with machine_session(m, timeout):
+        await m.ensure_booted()
+        print_line("Booted")
 
-    # When --keep is set and the deadline fires, absorb the cancel so the
-    # VM stays up for debugging. Re-surface TimeoutError after the wait.
-    timer_absorbed = False
+        await m.ensure_ssh()
+        print_line("SSH up")
 
-    with cancel_on_signal(task):
-        async with asyncio.timeout(timeout) as timeout_cm:
-            async with m:
-                try:
-                    try:
-                        await m.ensure_booted()
-                        print_line("Booted")
+        await m.ensure_system_running()
 
-                        await m.ensure_ssh()
-                        print_line("SSH up")
+        print_line("Preparing test environment")
+        await m.ansible_command(str(m.workdir_path / "_environment.yml"))
 
-                        await m.ensure_system_running()
+        staged = m.workdir_path / "site.yml"
+        shutil.copy(Path("site.yml"), staged)
 
-                        print_line("Preparing test environment")
-                        await m.ansible_command(str(m.workdir_path / "_environment.yml"))
+        label = "check" if check_mode else "converge"
+        print_line(f"Running site.yml {label}")
+        try:
+            extra = ["--check"] if check_mode else []
+            await m.ansible_command(str(staged), *extra)
+        except CommandFailedException:
+            print_line(f"Site {label} failed")
+            with contextlib.suppress(Exception):
+                await m.collect_failure_artifacts()
+            raise
 
-                        staged = m.workdir_path / "site.yml"
-                        shutil.copy(Path("site.yml"), staged)
+        print_line(f"Site {label} passed")
+        # Check mode makes no changes: nothing was installed, no
+        # kernel upgrade set reboot-required, no container is
+        # mid-bootstrap -- so the settle gate and poweroff dance
+        # below (all about draining a live converge cleanly) don't
+        # apply. Fall through and let the context manager tear the
+        # guest down.
+        if not check_mode and not m.keep_vm:
+            # The converge's final [Reboot check] play reboots when a
+            # kernel upgrade set /var/run/reboot-required, so the fleet is
+            # mid-restart here: ansible returns once SSH is back, but the
+            # container units (Type=notify, --sdnotify=healthy) are still
+            # activating. Powering off now SIGTERMs apps mid-bootstrap, and
+            # a .NET/Java host that gets SIGTERM before it finishes starting
+            # never drains -- it rides to its --stop-timeout and is SIGKILLed,
+            # wedging the whole poweroff. Wait for systemd to finish starting
+            # (every unit active-or-failed, none left activating) so the
+            # poweroff drains cleanly, mirroring the boot-time gate above.
+            # Don't hard-fail on a non-running state: some services are
+            # legitimately degraded under the test harness (e.g. z2m has no
+            # live adapter) and waiting longer won't change that -- the point
+            # is only that nothing is still mid-bootstrap.
+            settle = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
+            settle_state = "\n".join(settle.stdout).strip()
+            if settle_state == "running":
+                print_line(f"Fleet settled: {settle_state}")
+            else:
+                failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
+                failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
+                print_line(f"Fleet settled as {settle_state!r}; failed units:\n{failed_units}")
 
-                        label = "check" if check_mode else "converge"
-                        print_line(f"Running site.yml {label}")
-                        try:
-                            extra = ["--check"] if check_mode else []
-                            await m.ansible_command(str(staged), *extra)
-                        except CommandFailedException:
-                            print_line(f"Site {label} failed")
-                            with contextlib.suppress(Exception):
-                                await m.collect_failure_artifacts()
-                            raise
-
-                        print_line(f"Site {label} passed")
-                        # Check mode makes no changes: nothing was installed, no
-                        # kernel upgrade set reboot-required, no container is
-                        # mid-bootstrap -- so the settle gate and poweroff dance
-                        # below (all about draining a live converge cleanly) don't
-                        # apply. Fall through and let the context manager tear the
-                        # guest down.
-                        if not check_mode and not m.keep_vm:
-                            # The converge's final [Reboot check] play reboots when a
-                            # kernel upgrade set /var/run/reboot-required, so the fleet is
-                            # mid-restart here: ansible returns once SSH is back, but the
-                            # container units (Type=notify, --sdnotify=healthy) are still
-                            # activating. Powering off now SIGTERMs apps mid-bootstrap, and
-                            # a .NET/Java host that gets SIGTERM before it finishes starting
-                            # never drains -- it rides to its --stop-timeout and is SIGKILLed,
-                            # wedging the whole poweroff. Wait for systemd to finish starting
-                            # (every unit active-or-failed, none left activating) so the
-                            # poweroff drains cleanly, mirroring the boot-time gate above.
-                            # Don't hard-fail on a non-running state: some services are
-                            # legitimately degraded under the test harness (e.g. z2m has no
-                            # live adapter) and waiting longer won't change that -- the point
-                            # is only that nothing is still mid-bootstrap.
-                            settle = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
-                            settle_state = "\n".join(settle.stdout).strip()
-                            if settle_state == "running":
-                                print_line(f"Fleet settled: {settle_state}")
-                            else:
-                                failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
-                                failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                                print_line(f"Fleet settled as {settle_state!r}; failed units:\n{failed_units}")
-
-                            await m.ssh_command("sudo", "systemctl", "poweroff", check=False)
-                            # Bound the shutdown wait separately from the converge
-                            # budget: a wedged stop job must surface as a failure,
-                            # not eat the remaining --timeout. collect_failure_
-                            # artifacts is best-effort (SSH is usually gone by now);
-                            # the serial console is captured regardless.
-                            try:
-                                await asyncio.wait_for(m.wait(), timeout=POWEROFF_TIMEOUT)
-                            except TimeoutError:
-                                print_line(
-                                    f"Guest did not power off within {POWEROFF_TIMEOUT}s after a passed converge",
-                                    error=True,
-                                )
-                                with contextlib.suppress(Exception):
-                                    await m.collect_failure_artifacts()
-                                raise PoweroffTimeoutError(
-                                    f"poweroff did not complete within {POWEROFF_TIMEOUT}s "
-                                    "(a stop job wedged on its TimeoutStopSec -- see the "
-                                    "serial console for which units)"
-                                ) from None
-
-                    except asyncio.CancelledError:
-                        if m.keep_vm and timeout_cm.expired() and task.cancelling():
-                            task.uncancel()
-                            timer_absorbed = True
-                            print_line(
-                                f"Timed out after {timeout}s; --keep set, dropping to SSH for debug",
-                            )
-                        else:
-                            raise
-
-                finally:
-                    if m.keep_vm and not task.cancelling():
-                        with contextlib.suppress(RuntimeError):
-                            timeout_cm.reschedule(None)
-                        m.print_ssh_instructions()
-                        await m.wait()
-
-    if timer_absorbed:
-        raise TimeoutError(f"site_test timed out after {timeout}s")
+            await m.ssh_command("sudo", "systemctl", "poweroff", check=False)
+            # Bound the shutdown wait separately from the converge
+            # budget: a wedged stop job must surface as a failure,
+            # not eat the remaining --timeout. collect_failure_
+            # artifacts is best-effort (SSH is usually gone by now);
+            # the serial console is captured regardless.
+            try:
+                await asyncio.wait_for(m.wait(), timeout=POWEROFF_TIMEOUT)
+            except TimeoutError:
+                print_line(
+                    f"Guest did not power off within {POWEROFF_TIMEOUT}s after a passed converge",
+                    error=True,
+                )
+                with contextlib.suppress(Exception):
+                    await m.collect_failure_artifacts()
+                raise PoweroffTimeoutError(
+                    f"poweroff did not complete within {POWEROFF_TIMEOUT}s "
+                    "(a stop job wedged on its TimeoutStopSec -- see the "
+                    "serial console for which units)"
+                ) from None
 
 
 def main() -> int:

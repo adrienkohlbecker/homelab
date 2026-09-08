@@ -43,7 +43,7 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(site_test, "cancel_on_signal", lambda _task: contextlib.nullcontext())
+    monkeypatch.setattr("machine_session.cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = CheckModeMachine(tmp_path)
 
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10, check_mode=True))

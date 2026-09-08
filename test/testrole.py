@@ -23,6 +23,7 @@ from machine import (
     imagedir_for_host,
     sweep_stale_workdirs,
 )
+from machine_session import machine_session
 from matrix import (
     DEFAULT_UBUNTU,
     UBUNTU_RELEASES,
@@ -32,7 +33,6 @@ from matrix import (
 from utils import (
     CommandFailedException,
     IdempotenceFailedException,
-    cancel_on_signal,
     print_line,
     tee_output,
 )
@@ -181,130 +181,70 @@ async def run_test(
 ) -> None:
     """Provision a machine, run the role under test, and stream output."""
 
-    task = asyncio.current_task()
-    assert task is not None
+    async with machine_session(m, timeout):
+        try:
+            async with _phase("boot"):
+                await m.ensure_booted()
+            print_line("Booted")
 
-    # When --keep is set and the deadline fires, we absorb the resulting
-    # cancel so async with m doesn't tear down the VM and the user can
-    # still SSH in to debug. We re-surface TimeoutError after the wait so
-    # main() reports rc=124 regardless.
-    timer_absorbed = False
+            async with _phase("ssh wait"):
+                await m.ensure_ssh()
+            print_line("SSH up")
 
-    with cancel_on_signal(task):
-        # Bound the whole test (prepare, boot, body) with a deadline so a
-        # stuck qemu-img / apt / ansible task can't run forever. The keep_vm
-        # wait below disables the deadline via reschedule(None) once the
-        # body finishes -- the SSH session is interactive, not work.
-        async with asyncio.timeout(timeout) as timeout_cm:
-            async with m:
-                try:
-                    try:
-                        async with _phase("boot"):
-                            await m.ensure_booted()
-                        print_line("Booted")
+            # The vanilla cloud image runs cloud-init's config/final stages
+            # after sshd comes up, so settle it before changing packages.
+            if m.machine == "minimal":
+                async with _phase("cloud-init wait"):
+                    await m.ensure_cloud_init()
 
-                        async with _phase("ssh wait"):
-                            await m.ensure_ssh()
-                        print_line("SSH up")
+            # Keep the role-owned parts of the base image pristine when testing
+            # those roles themselves.
+            test_base_prerequisites = base_prerequisites_for(m.role)
+            if not test_base_prerequisites:
+                print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
 
-                        # The vanilla cloud image runs cloud-init's config/final
-                        # stages (apt sources, manage_etc_hosts, package installs)
-                        # after sshd comes up, so the prerequisite playbook + snapd
-                        # purge below would race them. Settle cloud-init first.
-                        # Only `minimal` carries a live cloud-init datasource; the
-                        # packer images pin NoCloud and would stall the wait.
-                        if m.machine == "minimal":
-                            async with _phase("cloud-init wait"):
-                                await m.ensure_cloud_init()
+            async with _phase("test preparation"):
+                await m.ansible_command(
+                    str(m.workdir_path / "_environment.yml"),
+                    "-e",
+                    f"test_base_prerequisites={str(test_base_prerequisites).lower()}",
+                )
 
-                        # Keep the role-owned parts of the base image pristine
-                        # when testing those roles themselves.
-                        test_base_prerequisites = base_prerequisites_for(m.role)
-                        if not test_base_prerequisites:
-                            print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
+            if m.machine == "minimal" and m.role != "cleanup":
+                # Avoid validating the cloud image's newer snapd unit against
+                # the older systemd shipped by the fixture.
+                await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
-                        async with _phase("test preparation"):
-                            await m.ansible_command(
-                                str(m.workdir_path / "_environment.yml"),
-                                "-e",
-                                f"test_base_prerequisites={str(test_base_prerequisites).lower()}",
-                            )
+            site_yml = str(m.workdir_path / "site.yml")
 
-                        if m.machine == "minimal" and m.role != "cleanup":
-                            # Fixes systemd-analyze validation error:
-                            # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
-                            await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
+            # Invoke the setup entrypoint only when the role ships it.
+            if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
+                async with _phase("hook _setup.yml"):
+                    await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
 
-                        site_yml = str(m.workdir_path / "site.yml")
+            async with _phase("checkmode --check"):
+                await m.ansible_command(site_yml, "--check", *pass_args)
 
-                        # Invoke the setup entrypoint only when the role ships it.
-                        if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
-                            async with _phase("hook _setup.yml"):
-                                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
+            async with _phase("main apply"):
+                await m.ansible_command(site_yml, *pass_args)
 
-                        async with _phase("checkmode --check"):
-                            await m.ansible_command(site_yml, "--check", *pass_args)
+            await _verify_idempotence(site_yml, m, pass_args)
 
-                        async with _phase("main apply"):
-                            await m.ansible_command(site_yml, *pass_args)
-
-                        await _verify_idempotence(site_yml, m, pass_args)
-
-                        # Post-role assertions, if the role declares any.
-                        if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
-                            async with _phase("verify.yml"):
-                                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
-
-                    except CommandFailedException:
-                        print_line("Command failed")
-                        # Best-effort: a diagnostics-collection failure must
-                        # not shadow the underlying CommandFailedException.
-                        # Artifacts (journal, dmesg, failed-units) ship as
-                        # separate files for CI artifact upload.
-                        with contextlib.suppress(Exception):
-                            await m.collect_failure_artifacts()
-                        raise
-                    except IdempotenceFailedException:
-                        print_line("Idempotence check failed")
-                        raise
-                    except asyncio.CancelledError:
-                        # The deadline fired (asyncio.timeout cancels the task
-                        # to surface TimeoutError). With --keep we want the VM
-                        # to stay up for debugging, so absorb the cancel and
-                        # fall through to the keep_vm wait below.
-                        if m.keep_vm and timeout_cm.expired() and task.cancelling():
-                            task.uncancel()
-                            timer_absorbed = True
-                            print_line(
-                                f"Timed out after {timeout}s; --keep set, dropping to SSH for debug",
-                            )
-                        else:
-                            raise
-
-                finally:
-                    # keep_vm waits for the user on success, CommandFailedException,
-                    # IdempotenceFailedException, and (after absorbing the timer
-                    # above) on TimeoutError. It does NOT run on user-driven
-                    # cancellation -- Ctrl+C means out, not an SSH prompt.
-                    # reschedule(None) makes the wait unbounded; on a fired
-                    # timer the cm rejects reschedule, but the timer is already
-                    # spent so the wait remains effectively unbounded anyway.
-                    if m.keep_vm and not task.cancelling():
-                        with contextlib.suppress(RuntimeError):
-                            timeout_cm.reschedule(None)
-                        m.print_ssh_instructions()
-                        await m.wait()
-
-    if timer_absorbed:
-        # Re-surface the timeout we silenced so main() reports rc=124. This is
-        # the outer deadline, not a phase cause, so raise it message-less:
-        # main()'s handler then prints only the generic per-test timeout line,
-        # not a duplicate "Test timed out" cause (the "--keep set, dropping to
-        # SSH" notice above already explained why). If a user Ctrl+C broke the
-        # wait above, asyncio.timeout's __aexit__ has already converted that
-        # cancel into TimeoutError before reaching this line, so the manual
-        # raise only covers natural exits.
-        raise TimeoutError()
+            # Post-role assertions, if the role declares any.
+            if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
+                async with _phase("verify.yml"):
+                    await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
+        except CommandFailedException:
+            print_line("Command failed")
+            # Best-effort: a diagnostics-collection failure must not shadow the
+            # underlying CommandFailedException. Artifacts ship as separate
+            # files for CI artifact upload.
+            with contextlib.suppress(Exception):
+                await m.collect_failure_artifacts()
+            raise
+        except IdempotenceFailedException:
+            print_line("Idempotence check failed")
+            raise
 
 
 def main() -> int:
