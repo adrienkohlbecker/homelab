@@ -93,7 +93,12 @@ class TestSingleDisk:
             monkeypatch,
             capsys,
             LOADERS,
-            _efibootmgr_v([("0005", "UEFI OS", _hd("fff", "\\EFI\\BOOT\\BOOTX64.EFI"))]),
+            _efibootmgr_v(
+                [
+                    ("0005", "UEFI OS", _hd("fff", "\\EFI\\BOOT\\BOOTX64.EFI")),
+                    ("0006", "PXE Network", "PciRoot(0x0)/Pci(0x1,0x0)"),
+                ]
+            ),
             **_SINGLE,
         )
         assert out["changed"]
@@ -102,12 +107,12 @@ class TestSingleDisk:
         # Single disk → no per-disk suffix.
         assert not any("(disk" in a for a in out["actions"])
         # The removable-media fallback is never pruned.
-        assert not any("UEFI OS" in a for a in out["actions"])
+        assert not any(label in action for action in out["actions"] for label in ("UEFI OS", "PXE Network"))
 
     def test_converged_is_idempotent(self, monkeypatch, capsys):
         converged = _efibootmgr_v(
             [
-                ("0000", "rEFInd", _hd("AAA-0", "\\EFI\\refind\\refind_x64.efi")),
+                ("0000", "rEFInd", _hd("AAA-0", "/EFI/REFIND/REFIND_X64.EFI")),
                 ("0001", "ZFSBootMenu", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ.EFI")),
                 ("0002", "ZFSBootMenu (Backup)", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI")),
             ],
@@ -194,6 +199,7 @@ class TestStaleRemoval:
                 ("0002", "ZFSBootMenu (Backup)", _hd("AAA-0", "\\EFI\\ZBM\\VMLINUZ-BACKUP.EFI")),
                 ("0007", "rEFInd Boot Manager", _hd("AAA-0", "\\EFI\\refind\\refind_x64.efi")),  # firmware dup
                 ("0008", "UEFI OS", _hd("AAA-0", "\\EFI\\BOOT\\BOOTX64.EFI")),  # removable fallback
+                ("0009", "UEFI OS", _hd("AAA-0", "/EFI/BOOT/BOOTAA64.EFI")),
             ],
         )
         out = run_check(monkeypatch, capsys, LOADERS, existing, **_SINGLE)
@@ -230,20 +236,6 @@ class TestValidation:
         ]
         with pytest.raises(ValueError, match="duplicate EFI entry labels"):
             run_check(monkeypatch, capsys, dupe, _efibootmgr_v([]), **_SINGLE)
-
-
-# --- Pure helpers ---------------------------------------------------------
-
-
-class TestHelpers:
-    def test_loader_eq_normalizes_slashes_and_case(self):
-        assert efi.loader_eq("/EFI/refind/REFIND_X64.EFI", "\\EFI\\refind\\refind_x64.efi")
-        assert not efi.loader_eq("", "\\EFI\\x.efi")
-
-    def test_removable_fallback_detection(self):
-        assert efi._is_removable_fallback("\\EFI\\BOOT\\BOOTX64.EFI")
-        assert efi._is_removable_fallback("\\EFI\\BOOT\\BOOTAA64.EFI")
-        assert not efi._is_removable_fallback("\\EFI\\refind\\refind_x64.efi")
 
 
 class TestParseEfibootmgr:
