@@ -44,12 +44,6 @@ class SyncFile:
     pull: bool
 
 
-@dataclass(frozen=True)
-class PendingChange:
-    file: SyncFile
-    host_bytes: bytes | None
-
-
 # Spec tuple: (glob, reload_service, pull).
 # An explicit homeassistant.restart covers every changed file; otherwise the
 # touched domains reload individually. None means no service call: YAML-mode
@@ -102,8 +96,8 @@ def host_file(rel: str) -> bytes | None:
     return r.stdout if r.returncode == 0 else None
 
 
-def reload_plan(changes: list[PendingChange]) -> list[str]:
-    reloads = {change.file.reload_service for change in changes}
+def reload_plan(changes: dict[SyncFile, bytes | None]) -> list[str]:
+    reloads = {file.reload_service for file in changes}
     if "homeassistant.restart" in reloads:
         return ["homeassistant.restart"]
     return sorted(reload for reload in reloads if reload)
@@ -255,19 +249,19 @@ def _print_diff_header(label: str) -> None:
     print(f"\n\033[1;34m=== {label} ===\033[0m", flush=True)
 
 
-def show_push_diff(changed: list[PendingChange]) -> None:
+def show_push_diff(changed: dict[SyncFile, bytes | None]) -> None:
     """For each file about to be pushed, print a colored diff host->HEAD."""
     import tempfile
 
-    for change in changed:
-        with tempfile.NamedTemporaryFile(suffix=f"_{Path(change.file.rel).name}") as host_tmp:
-            host_tmp.write(change.host_bytes or b"")
+    for file, host_bytes in changed.items():
+        with tempfile.NamedTemporaryFile(suffix=f"_{Path(file.rel).name}") as host_tmp:
+            host_tmp.write(host_bytes or b"")
             host_tmp.flush()
-            status = "new on host" if change.host_bytes is None else "modified on host"
-            _print_diff_header(f"push: {change.file.rel} ({status})")
+            status = "new on host" if host_bytes is None else "modified on host"
+            _print_diff_header(f"push: {file.rel} ({status})")
             # --no-index exits 1 when files differ; ignore.
             subprocess.run(
-                ["git", "diff", "--color=always", "--no-index", "--", host_tmp.name, str(CLONE / change.file.rel)],
+                ["git", "diff", "--color=always", "--no-index", "--", host_tmp.name, str(CLONE / file.rel)],
                 check=False,
             )
 
@@ -315,7 +309,7 @@ def do_push(dry_run: bool = False) -> None:
     #              (would clobber on push without a pull first)
     # changed    = host content differs from HEAD (missing-on-host counts)
     diverged: list[str] = []
-    changed: list[PendingChange] = []
+    changed: dict[SyncFile, bytes | None] = {}
     for file in enumerate_files():
         # dry-run compares the working tree (uncommitted edits included); a real
         # push has already folded those into HEAD via commit_and_push.
@@ -332,7 +326,7 @@ def do_push(dry_run: bool = False) -> None:
             diverged.append(file.rel)
             continue
         if host_bytes != head_bytes:
-            changed.append(PendingChange(file, host_bytes))
+            changed[file] = host_bytes
     if diverged:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
@@ -341,7 +335,7 @@ def do_push(dry_run: bool = False) -> None:
     if not changed:
         print("push: HEAD matches host, nothing to do")
         return
-    files = [change.file for change in changed]
+    files = list(changed)
     relpaths = [file.rel for file in files]
     show_push_diff(changed)
     validate_syntax(relpaths)
@@ -362,7 +356,7 @@ def do_push(dry_run: bool = False) -> None:
         _ha_post(service)
     # YAML-mode dashboards need no service call; nudge the operator that the
     # change is live but only visible after a browser refresh.
-    if any(change.file.reload_service is None for change in changed):
+    if any(file.reload_service is None for file in changed):
         print("note: dashboard change is live -- refresh the browser to see it")
 
 
