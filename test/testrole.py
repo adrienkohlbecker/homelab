@@ -168,12 +168,8 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     return args, pass_args
 
 
-# Strip CSI escape sequences before matching. Ansible's colorized PLAY
-# RECAP wraps each `changed=N` in `\x1b[0;33m...\x1b[0m`; the trailing
-# `m` of the prefix is a word char, so `\b` doesn't fire between `m`
-# and `c` of `changed`, and the unstripped regex silently matched zero
-# every time -- masking every idempotence false positive across the
-# fleet until 2026-05.
+# Strip color sequences before matching because their trailing letters can
+# prevent the word boundary before `changed=N` from matching.
 _ANSI_CSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
 

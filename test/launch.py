@@ -1,10 +1,9 @@
 #!/usr/bin/env -S uv run
-"""Launch a QEMU machine via the test harness driver, no role/ansible.
+"""Launch a QEMU machine via the test harness driver, without Ansible.
 
-Wraps machine.Machine for interactive use: pick a variant, the harness
-does image overlays + (on aarch64 ZFS) reads the packer-shipped
-kernel/initrd next to the qcow2 + qemu launch. After boot it prints the
-SSH command, leaves the VM up, and blocks until Ctrl-C. Pass
+Pick a variant and the harness prepares its image overlays and launches QEMU.
+After boot it prints the SSH command, leaves the VM up, and blocks until
+Ctrl-C. Pass
 --kernel/--initrd/--append to direct-boot a custom kernel against the
 variant's qcow2:
 
@@ -87,8 +86,8 @@ def parse_args() -> argparse.Namespace:
         help="Attach EDK2/OVMF UEFI pflash for either arch using auto-detected "
         "code (Homebrew / Linux distro paths) and an empty vars file sized "
         "to the code. Needed for kernels that expect EFI runtime services; "
-        "the harness's default direct -kernel boot (aarch64 ZFS) and BIOS "
-        "boot (x86_64 minimal) skip firmware. No-op when pflash is already "
+        "direct --kernel boots and the default x86_64 minimal BIOS boot skip "
+        "UEFI firmware. No-op when pflash is already "
         "attached (x86_64 ZFS, aarch64 minimal).",
     )
     parser.add_argument(

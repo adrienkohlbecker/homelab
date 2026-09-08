@@ -1,9 +1,9 @@
 """Tests for the construction-time preflight checks.
 
-Each Machine subclass now validates its required binaries via shutil.which
-at the end of __post_init__. Failures raise RuntimeError with installation
-guidance. Machine on Linux additionally rejects a missing /mnt/scratch/homelab_ci
-so the caller gets a clearer message than tempfile's FileNotFoundError.
+Machine validates its required binaries during construction. Failures raise
+RuntimeError with installation guidance. Linux image-root discovery also
+rejects a missing /mnt/scratch/homelab_ci so the caller gets a clearer message
+than tempfile's FileNotFoundError.
 """
 
 from collections.abc import Callable
@@ -62,7 +62,7 @@ def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pyte
 
     The Mac branch mkdirs packer/artifacts on the fly; the Linux branch
     hardcodes /mnt/scratch/homelab_ci and assumes the volume is mounted. Surface a
-    clear error before tempfile blows up further down __post_init__.
+    clear error before tempfile fails later during Machine construction.
     """
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
     monkeypatch.setattr(machine.platform, "system", lambda: "Linux")

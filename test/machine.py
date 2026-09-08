@@ -254,7 +254,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # box_deps: same disks/inventory as box (incl. the second `zee`
         # disk), but the test harness pre-bakes podman, nginx + snakeoil cert,
         # and fluent-bit via test/playbooks/build_box_deps.yml. Roles opt in
-        # via roles/<role>/meta/test.yml's `machine: box_deps`. Reuses
+        # via roles/<role>/meta/test.yml's `machines: {box_deps:}`. Reuses
         # host_vars/box.yml because inventory_host stays box.
         # 5 GiB: box_deps roles pull large container images and run them
         # during converge (HA alone is 2.4 GB on disk, ~1 GB RSS at
@@ -1064,10 +1064,9 @@ class Machine:
           - <variant>.<role>.dmesg.ansi -- guest kernel ring buffer
           - <variant>.<role>.systemctl-failed.ansi -- list of failed units
 
-        Each runs as a best-effort capture: a failure of one doesn't shadow
-        the others. The caller (testrole.py) then tails just the journal
-        for in-terminal context; the rest are downloaded as CI artifacts
-        when needed.
+        Each runs as a best-effort capture so a failure of one doesn't shadow
+        the others. The files remain available for local inspection and CI
+        artifact collection.
         """
 
         captures = (
@@ -1167,7 +1166,7 @@ class Machine:
     def _release_publish_lock(self) -> None:
         """Drop the shared publish-lock fd if held; no-op otherwise.
 
-        Idempotent so callers (boot's happy path + stop's finally) can both
+        Idempotent so callers (ensure_booted's happy path + stop's finally) can both
         invoke it without coordinating. The kernel would release the flock
         on close() anyway; explicit close keeps the ordering legible.
         """

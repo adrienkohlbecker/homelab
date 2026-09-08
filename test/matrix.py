@@ -187,8 +187,8 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
 def machines_for(role: str) -> dict:
     """Test machines from meta/test.yml (falls back to {'box': None}).
 
-    Returns the machines: dict.  First key is the primary machine (used
-    for release cells); additional keys get only a base cell.
+    Every configured machine participates in both its base cell and any
+    additional Ubuntu release cells.
     """
     return dict(load_role_test_config(role).machines)
 
