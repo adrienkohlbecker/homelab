@@ -9,12 +9,10 @@ set -euo pipefail
 # this task renders one on demand and streams it to QR/stdout without writing it.
 device="${usage_device:?usage: mise run wg:show <device> [--conf]}"
 
-err="$(mktemp)"
-trap 'rm -f "$err"' EXIT
-
 json="$(
-  ANSIBLE_VERBOSITY=0 ANSIBLE_STDOUT_CALLBACK=ansible.posix.json \
-    ansible-playbook wireguard.yml -e "wg_show_peer=${device}" 2>"$err"
+  ANSIBLE_DEPRECATION_WARNINGS=False ANSIBLE_VERBOSITY=0 \
+    ANSIBLE_STDOUT_CALLBACK=ansible.posix.json \
+    ansible-playbook wireguard.yml -e "wg_show_peer=${device}"
 )" || true
 
 config="$(jq -r '.plays[].tasks[]? | select(.task.name == "Render the client config") | .hosts[].msg // empty' <<<"$json" 2>/dev/null || true)"
@@ -24,7 +22,6 @@ if [ -z "$config" ]; then
     echo "wg:show: could not render a config for '${device}'."
     echo "It must be a roaming peer in the network topology, and the vault must be unlocked."
     jq -r '.. | objects | select(.failed? == true) | .msg? // empty' <<<"$json" 2>/dev/null || true
-    cat "$err"
   } >&2
   exit 1
 fi
