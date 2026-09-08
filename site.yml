@@ -294,11 +294,13 @@
 
     # The single-host integration fixture has no DNS peer, so the AdGuard guard
     # deliberately holds its inhibitor forever. Its role test covers that lock;
-    # release it here so the integration test can exercise the reboot itself.
-    - name: Stop DNS reboot guard in QEMU
+    # disable it here so the integration test can exercise both the reboot and
+    # its final poweroff without the guard returning after boot.
+    - name: Disable DNS reboot guard in QEMU
       systemd:
         name: adguard_reboot_guard.service
         state: stopped
+        enabled: false
       when:
         - reboot_required.stat.exists
         - qemu_test
