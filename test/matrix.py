@@ -58,7 +58,7 @@ class RoleTestConfig:
     base_prerequisites: bool
     machines: Mapping[str, dict | None]
     ubuntu: tuple[str, ...]
-    skip: Mapping[object, object]
+    skip: frozenset[tuple[str, str]]
 
 
 class RoleTestConfigError(ValueError):
@@ -89,7 +89,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     """Parse one absolute metadata path once per process."""
 
     if not meta_path.exists():
-        return RoleTestConfig(True, dict(DEFAULT_MACHINES), (), {})
+        return RoleTestConfig(True, dict(DEFAULT_MACHINES), (), frozenset())
     try:
         data = yaml.safe_load(meta_path.read_text()) or {}
     except yaml.YAMLError as e:
@@ -154,13 +154,10 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 ubuntu.append(codename)
 
     raw_skip = data.get("skip")
-    if raw_skip is None:
-        skip = {}
-    elif not isinstance(raw_skip, dict):
+    skip: set[tuple[str, str]] = set()
+    if raw_skip is not None and not isinstance(raw_skip, dict):
         errors.append(f"skip must be a mapping of cell-spec -> reason, got {type(raw_skip).__name__}")
-        skip = {}
-    else:
-        skip = raw_skip
+    elif isinstance(raw_skip, dict):
         for spec, reason in raw_skip.items():
             parts = str(spec).split(":")
             if len(parts) > 2:
@@ -179,11 +176,12 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 errors.append(f"skip {spec!r}: ubuntu {codename!r} not in {sorted(UBUNTU_RELEASES)}")
             if not reason or not str(reason).strip():
                 errors.append(f"skip {spec!r}: needs a non-empty reason")
+            skip.add((machine, codename))
 
     if errors:
         raise RoleTestConfigError(meta_path, errors)
 
-    return RoleTestConfig(base_prerequisites, machines, tuple(ubuntu), skip)
+    return RoleTestConfig(base_prerequisites, machines, tuple(ubuntu), frozenset(skip))
 
 
 def machines_for(role: str) -> dict:
@@ -208,27 +206,6 @@ def release_ubuntu_for(role: str) -> list[str]:
 def base_prerequisites_for(role: str) -> bool:
     """Whether hostname and Apt prerequisites should run before this role."""
     return load_role_test_config(role).base_prerequisites
-
-
-def skip_for(role: str) -> set[tuple[str, str]]:
-    """(machine, ubuntu) cells this role declares as skipped in CI.
-
-    meta/test.yml `skip:` is a mapping of cell-spec -> reason, where a
-    cell-spec is `machine` (the noble cell) or `machine:codename` (a
-    release cell). Skipped cells are dropped from every generated matrix
-    (CI detect and testall), so they can't gate a green run. They are NOT
-    a substitute for a fix -- `testrole.py <role> --machine <m>` still
-    runs a skipped cell directly (it bypasses this matrix), which is how
-    you iterate on the fix that lets the skip be removed.
-    """
-    skip = load_role_test_config(role).skip
-    out: set[tuple[str, str]] = set()
-    for spec in skip:
-        parts = str(spec).split(":")
-        machine = parts[0]
-        ubuntu = parts[1] if len(parts) > 1 else DEFAULT_UBUNTU
-        out.add((machine, ubuntu))
-    return out
 
 
 def drop_on_demand_cells(specs: list[str]) -> tuple[list[str], list[str]]:
@@ -259,12 +236,13 @@ def build_role_cells(role: str) -> list[TestCell]:
 
     Cells listed under skip: are excluded.
     """
-    machines = machines_for(role)
-    skip = skip_for(role)
+    config = load_role_test_config(role)
+    machines = config.machines
+    skip = config.skip
     cells = [TestCell(m, DEFAULT_UBUNTU, role) for m in machines if (m, DEFAULT_UBUNTU) not in skip]
-    for codename in release_ubuntu_for(role):
+    for codename in config.ubuntu:
         # Already emitted as a base cell above; load_role_test_config rejects
-        # the entry outright, this just keeps the expansion duplicate-free.
+        # entry outright, this just keeps the expansion duplicate-free.
         if codename == DEFAULT_UBUNTU:
             continue
         cells.extend(TestCell(m, codename, role) for m in machines if (m, codename) not in skip)
@@ -286,7 +264,7 @@ def build_test_matrix(
     if extra_cells:
         # Honour skip: for propagated cells too (a consumer's release cell
         # pushed in via CI's helper-fan-out must still drop if skipped).
-        cells.update(c for c in extra_cells if (c.machine, c.ubuntu) not in skip_for(c.role))
+        cells.update(c for c in extra_cells if (c.machine, c.ubuntu) not in load_role_test_config(c.role).skip)
     return sorted(cells)
 
 

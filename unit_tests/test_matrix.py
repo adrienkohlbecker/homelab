@@ -157,13 +157,16 @@ class TestBuildTestMatrix:
 
 
 class TestSkip:
-    def test_skip_for_parses_machine_and_release(self) -> None:
+    def test_config_normalizes_machine_and_release_skips(self) -> None:
         _make_role("svc", {"skip": {"minimal": "why", "box_deps:resolute": "why"}})
-        assert matrix.skip_for("svc") == {("minimal", matrix.DEFAULT_UBUNTU), ("box_deps", "resolute")}
+        assert matrix.load_role_test_config("svc").skip == {
+            ("minimal", matrix.DEFAULT_UBUNTU),
+            ("box_deps", "resolute"),
+        }
 
-    def test_skip_for_empty_when_absent(self) -> None:
+    def test_config_skip_empty_when_absent(self) -> None:
         _make_role("svc")
-        assert matrix.skip_for("svc") == set()
+        assert matrix.load_role_test_config("svc").skip == frozenset()
 
     def test_build_role_cells_drops_skipped_release_cell_only(self) -> None:
         _make_role(
