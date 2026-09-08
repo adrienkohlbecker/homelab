@@ -538,8 +538,6 @@ cp /boot/efi/EFI/refind/refind.conf /boot/efi/EFI/BOOT/refind.conf
 # aarch64, the Linux EFI-stub boot path is the manual rEFInd menuentry above;
 # its kernel command line lives in refind.conf `options`.
 
-apt-get install --yes efibootmgr
-
 # On the multi-disk mdadm-EFI mirror, register one boot entry per disk
 # so the system survives losing any single disk — firmware only follows
 # paths it knows about, and an entry is per-disk regardless of whether
