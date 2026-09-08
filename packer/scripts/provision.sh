@@ -544,10 +544,6 @@ zfs mount "rpool/ROOT/$UBUNTU_NAME"
 # Wait for udev to wire the new device nodes before arch-chroot runs.
 udevadm settle
 
-# Verify that everything is mounted correctly
-
-mount | grep mnt
-
 # Install Ubuntu. If a fetch fails, --verbose surfaces each retrieve/validate
 # step live and the handler dumps debootstrap's own log -- which otherwise dies
 # with the build VM -- so the next occurrence stays diagnosable.
