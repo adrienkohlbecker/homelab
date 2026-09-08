@@ -5,17 +5,12 @@
 # rule does it), so the override check only flags the unavoidable.
 # pyright: reportIncompatibleVariableOverride=false
 
-from __future__ import annotations
-
 import re
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
+from ansiblelint.file_utils import Lintable
 from ansiblelint.rules import AnsibleLintRule
-from ansiblelint.utils import get_cmd_args
-
-if TYPE_CHECKING:
-    from ansiblelint.file_utils import Lintable
-    from ansiblelint.utils import Task
+from ansiblelint.utils import Task, get_cmd_args
 
 _FILE_WRITE_MODULES = {
     "copy",
