@@ -679,9 +679,9 @@ def build_role_deps_map() -> dict[str, list[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _full_universe_matrix() -> str:
-    """JSON array of all testable role specs."""
-    return json.dumps(cells_to_ci_specs(build_test_matrix(list_testable_roles())))
+def _full_universe_specs() -> list[str]:
+    """All testable role specifications."""
+    return cells_to_ci_specs(build_test_matrix(list_testable_roles()))
 
 
 # ---------------------------------------------------------------------------
@@ -827,7 +827,7 @@ def render_child_pipeline(
 
 
 def _emit_gitlab(
-    matrix: str,
+    specs: list[str],
     site_test: bool,
     child_path: str,
     runtimes: dict[str, float],
@@ -846,7 +846,6 @@ def _emit_gitlab(
     if target not in TARGETS:
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
-    specs = json.loads(matrix)
     # lab/pug fixtures only run on demand -- neither qemu CI target can hydrate
     # their images -- so they never enter a generated pipeline.
     specs, on_demand = drop_on_demand_cells(specs)
@@ -874,18 +873,18 @@ def _emit_gitlab(
     return 0
 
 
-def _gitlab_change_matrix(green: dict | None, log) -> tuple[str, bool]:
+def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     """GitLab change-detection: resolve a diff base and compute the cell matrix.
 
     ``green`` is the pre-resolved newest green pipeline ancestor (or None); its
-    ``sha`` is the preferred diff base. Returns ``(matrix_json, site_test)``. A
+    ``sha`` is the preferred diff base. Returns ``(specs, site_test)``. A
     full-universe trigger (a cross-cutting path changed, or no usable diff base)
     returns the whole universe with site_test enabled.
     """
 
     def full_universe(reason):
         log(f"{reason} -> testing the FULL universe")
-        return _full_universe_matrix(), True
+        return _full_universe_specs(), True
 
     # Diff base, in priority order:
     #   1. CI_BASE_REF                  -- explicit override (local/preview).
@@ -966,8 +965,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[str, bool]:
         log("no role-relevant changes; matrix will be empty")
 
     extra = [ci_spec_to_cell(s) for s in release_cells] if release_cells else None
-    matrix = json.dumps(cells_to_ci_specs(build_test_matrix(roles_sorted, extra)))
-    return matrix, False
+    return cells_to_ci_specs(build_test_matrix(roles_sorted, extra)), False
 
 
 def _cmd_gitlab(args: list[str]) -> int:
@@ -1017,7 +1015,7 @@ def _cmd_gitlab(args: list[str]) -> int:
 
     if opts.all:
         log("mode: --all (full universe)")
-        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
+        return _emit_gitlab(_full_universe_specs(), True, opts.child_path, runtimes, log, target=opts.target)
 
     event = os.environ.get("CI_PIPELINE_SOURCE", "")
     roles_input = os.environ.get("ROLES", "")
@@ -1028,19 +1026,17 @@ def _cmd_gitlab(args: list[str]) -> int:
         log(f"mode: dispatch ROLES='{roles_input}'")
         if roles_input == "ALL":
             log("ROLES=ALL -> full universe")
-            return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
+            return _emit_gitlab(_full_universe_specs(), True, opts.child_path, runtimes, log, target=opts.target)
         cells = _build_dispatch_matrix(roles_input)
-        return _emit_gitlab(
-            json.dumps(cells_to_ci_specs(cells)), False, opts.child_path, runtimes, log, target=opts.target
-        )
+        return _emit_gitlab(cells_to_ci_specs(cells), False, opts.child_path, runtimes, log, target=opts.target)
 
     if event == "schedule":
         log("mode: schedule (nightly full build)")
-        return _emit_gitlab(_full_universe_matrix(), True, opts.child_path, runtimes, log, target=opts.target)
+        return _emit_gitlab(_full_universe_specs(), True, opts.child_path, runtimes, log, target=opts.target)
 
     log(f"mode: change detection (source={event or 'local'})")
-    matrix, site_test = _gitlab_change_matrix(green, log)
-    return _emit_gitlab(matrix, site_test, opts.child_path, runtimes, log, target=opts.target)
+    specs, site_test = _gitlab_change_matrix(green, log)
+    return _emit_gitlab(specs, site_test, opts.child_path, runtimes, log, target=opts.target)
 
 
 def main() -> int:

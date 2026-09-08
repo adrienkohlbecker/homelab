@@ -18,7 +18,6 @@ Fails closed: partial, optional-manual, running, canceled, or unresolvable child
 pipelines cannot make the guard green.
 """
 
-import json
 import os
 import sys
 import urllib.parse
@@ -30,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from detect import (
     GREEN_BASE_SOURCES,
-    _full_universe_matrix,
+    _full_universe_specs,
     _gitlab_api_creds,
     _gl_api_get,
     _gl_api_get_all,
@@ -48,7 +47,7 @@ FULL_UNIVERSE_SITE_JOBS = {"_site_test:box", "_site_check:box"}
 @cache
 def _full_universe_job_names() -> set[str]:
     """Job names emitted by a full-universe CI child pipeline."""
-    specs = json.loads(_full_universe_matrix())
+    specs = _full_universe_specs()
     specs, _ = drop_on_demand_cells(specs)
     return set(specs) | FULL_UNIVERSE_SITE_JOBS
 

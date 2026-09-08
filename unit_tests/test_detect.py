@@ -1264,7 +1264,7 @@ class TestCmdGitlab:
         # Keep these tests offline: a real CI environment exports the GitLab API
         # vars, which would otherwise drive a live green-pipeline lookup.
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
-        monkeypatch.setattr(detect, "_full_universe_matrix", lambda: json.dumps(["nginx:box"]))
+        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["nginx:box"])
 
     @pytest.mark.parametrize(
         ("args", "pipeline_source", "roles"),
