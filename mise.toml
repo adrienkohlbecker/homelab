@@ -6,7 +6,7 @@ NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"
 # minio-api.lab.fahm.fr) are NOT set here: they flow through [profile minio]
 # (minio-credential-process) referenced by the backend block in main.tf. Keeping
 # them off AWS_* leaves the default credential chain free for the real
-# `provider "aws"` (account 000390721279) -- see terraform/aws.tf.
+# `provider "aws"` (account 000390721279) -- see terraform/aws_ci.tf.
 # Tofu client-side state encryption: feeds var.state_passphrase in main.tf
 # via the standard TF_VAR_<name> env mechanism. op run substitutes the
 # op:// reference at exec time, so the passphrase only ever materializes
@@ -28,12 +28,8 @@ TF_VAR_google_idp_client_secret = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/password"
 # mhaf.fr / adrienkohlbecker.com. The old Gandi API key was retired
 # in 2024 so PAT is the only auth path.
 TF_VAR_gandi_pat = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
-# Mailgun Private API key -- minted in the Mailgun UI under Send >
-# Sending > Domain settings > API Keys (account-scoped, not per-domain).
-# Used by the mailgun provider for domain + per-key management; never
-# exposed to CI (the CI sending key is minted as a separate mailgun_api_key
-# resource, see terraform/mailgun.tf). Create the 1P item once
-# (item: "Mailgun API", field "password") then update the item-id below.
+# Mailgun Private API key used by the provider for domain configuration.
+# SMTP sending credentials stay in Ansible Vault and are not managed by tofu.
 TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # Hetzner Cloud API token, for terraform only: the hcloud provider reads
 # HCLOUD_TOKEN from the env and does not load the CLI context. Named _OP so the

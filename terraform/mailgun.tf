@@ -1,26 +1,14 @@
-# Mailgun powers transactional / notification email for the homelab: four
-# service SMTP credentials (postfix/sabnzbd/gitea/overseerr@
-# noreply.fahm.fr) relay through smtp.eu.mailgun.org. The DNS surface lives in
-# dns_fahm_fr.tf; this file owns the Mailgun-side domain configuration those
-# records point at.
+# Mailgun relays transactional email for homelab services through
+# smtp.eu.mailgun.org. This file owns the Mailgun-side noreply.fahm.fr domain;
+# dns_fahm_fr.tf owns its DNS records.
 #
 # Auth uses an account-scoped Mailgun Private API key (settings ->
 # "API security" in the Mailgun UI). Stored in 1Password and surfaced
 # via TF_VAR_mailgun_api_key in mise.toml [env].
 #
-# Surfaces intentionally NOT under tofu:
-#
-# - mailgun_domain_credential (the 4 SMTP creds). Passwords live in
-#   group_vars/prod.yml as ansible-vault entries and are consumed
-#   directly by service roles. Bringing them under tofu would require
-#   a terraform-output -> ansible-vault sync mechanism (vault is
-#   already the canonical store on the ansible side). Revisit if
-#   we ever centralize secret storage; until then, vault is fine.
-#
-# - mailgun_route. Inbound mail uses Cloudflare Email Routing (see
-#   email.tf), not Mailgun. No routes configured.
-#
-# - mailgun_webhook. No event consumers wired up today.
+# SMTP credential passwords live in group_vars/prod.yml as Ansible Vault
+# entries and are consumed directly by service roles. No inbound routes or
+# event webhooks are managed here.
 
 variable "mailgun_api_key" {
   type      = string
@@ -43,10 +31,8 @@ provider "mailgun" {
 # use_automatic_sender_security stays on so tofu doesn't fight the UI).
 #
 # smtp_password is the postmaster credential issued at domain creation;
-# Mailgun doesn't return it on subsequent reads, so leaving it unset in
-# HCL is the right shape. Per-service SMTP creds are separate
-# mailgun_domain_credential objects (see header for why those aren't
-# managed here).
+# Mailgun doesn't return it on subsequent reads, so leaving it unset in HCL is
+# the right shape. Service-specific SMTP credentials remain Ansible-owned.
 resource "mailgun_domain" "noreply_fahm_fr" {
   name                          = "noreply.fahm.fr"
   region                        = "eu"
