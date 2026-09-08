@@ -188,14 +188,12 @@ resource "nexus_repository_raw_proxy" "this" {
 # not the scratch-backed "default". OSS Nexus locks a repo's blob store after
 # creation (the online "Change Repository Blob Store" task is Pro-only), so
 # migrating an existing repo is a delete+recreate that starts it empty:
-#   tofu apply -replace='nexus_repository_docker_hosted.this["homelab"]'
+#   tofu apply -replace=nexus_repository_docker_hosted.homelab
 # then re-push: dispatch the ci-image workflow (rebuilds homelab/ci).
 # Orphaned blobs left in "default" are reclaimed by the blob store compact
 # task. A plain `tofu apply` cannot repoint a live repo -- it needs -replace.
-resource "nexus_repository_docker_hosted" "this" {
-  for_each = toset(["homelab"])
-
-  name   = each.key
+resource "nexus_repository_docker_hosted" "homelab" {
+  name   = "homelab"
   online = true
 
   docker {
@@ -218,32 +216,23 @@ resource "nexus_repository_docker_hosted" "this" {
 # privilege is reconciled by `tofu apply`, and the push role below binds to a
 # graph resource instead of a magic string the provider can't see. Full action
 # set (browse/read/edit/add/delete) matches what the wildcard granted.
-resource "nexus_privilege_repository_view" "docker_hosted" {
-  for_each = nexus_repository_docker_hosted.this
-
-  name        = "${each.key}-docker-all"
-  description = "Full view of the ${each.key} docker repo (browse/read/edit/add/delete)"
-  repository  = each.value.name
+resource "nexus_privilege_repository_view" "homelab" {
+  name        = "homelab-docker-all"
+  description = "Full view of the homelab docker repo (browse/read/edit/add/delete)"
+  repository  = nexus_repository_docker_hosted.homelab.name
   format      = "docker"
   actions     = ["BROWSE", "READ", "EDIT", "ADD", "DELETE"]
 }
 
-# Least-privileged role + user pair per docker hosted repo. The role grants the
-# explicit per-repo view privilege above and nothing else: no admin / config
-# rights, no scope outside the named repo. One user per repo so a leaked
-# credential is scoped to a single repo's images. for_each is keyed off the
-# docker_hosted resource so adding a hosted repo above automatically provisions
-# its privilege, push role + user.
-resource "nexus_security_role" "push" {
-  for_each = nexus_repository_docker_hosted.this
-
-  roleid      = "${each.key}-push"
-  name        = "${each.key}-push"
-  description = "Push images to the ${each.key} docker hosted repo"
-  privileges = [
-    nexus_privilege_repository_view.docker_hosted[each.key].name,
-  ]
-  roles = []
+# Least-privileged role + user pair for the hosted repo. The role grants the
+# explicit repository privilege above and nothing else: no admin/config rights
+# and no scope outside homelab, so a leaked credential reaches only its images.
+resource "nexus_security_role" "homelab_push" {
+  roleid      = "homelab-push"
+  name        = "homelab-push"
+  description = "Push images to the homelab docker hosted repo"
+  privileges  = [nexus_privilege_repository_view.homelab.name]
+  roles       = []
 }
 
 # Single role granting content access to *every* repository, any format, so the
@@ -267,32 +256,52 @@ resource "nexus_security_role" "push_all" {
   roles       = []
 }
 
-# Generated once and pinned in encrypted state; rotate by tainting the
-# random_password resource (`tofu apply -replace='random_password.
-# nexus_push["<name>"]'`). 32 chars, alphanumeric only -- some HTTP
-# basic auth shells (and the docker `--password-stdin` round-trip)
-# misbehave on punctuation.
+# Generated once and pinned in encrypted state; rotate with `tofu apply
+# -replace=random_password.nexus_push`. 32 chars, alphanumeric only -- some
+# HTTP basic-auth shells (and the docker `--password-stdin` round-trip) mishandle
+# punctuation.
 resource "random_password" "nexus_push" {
-  for_each = nexus_repository_docker_hosted.this
-
   length  = 32
   special = false
 }
 
-resource "nexus_security_user" "push" {
-  for_each = nexus_repository_docker_hosted.this
-
-  userid    = "${each.key}-push"
-  firstname = each.key
+resource "nexus_security_user" "homelab_push" {
+  userid    = "homelab-push"
+  firstname = "homelab"
   lastname  = "push"
-  email     = "${each.key}-push@noreply.invalid"
-  password  = random_password.nexus_push[each.key].result
-  roles     = [nexus_security_role.push[each.key].roleid]
+  email     = "homelab-push@noreply.invalid"
+  password  = random_password.nexus_push.result
+  roles     = [nexus_security_role.homelab_push.roleid]
   status    = "active"
 
   lifecycle {
-    replace_triggered_by = [random_password.nexus_push[each.key]]
+    replace_triggered_by = [random_password.nexus_push]
   }
+}
+
+moved {
+  from = nexus_repository_docker_hosted.this["homelab"]
+  to   = nexus_repository_docker_hosted.homelab
+}
+
+moved {
+  from = nexus_privilege_repository_view.docker_hosted["homelab"]
+  to   = nexus_privilege_repository_view.homelab
+}
+
+moved {
+  from = nexus_security_role.push["homelab"]
+  to   = nexus_security_role.homelab_push
+}
+
+moved {
+  from = random_password.nexus_push["homelab"]
+  to   = random_password.nexus_push
+}
+
+moved {
+  from = nexus_security_user.push["homelab"]
+  to   = nexus_security_user.homelab_push
 }
 
 # Operator's local/manual docker push identity (you `podman login` as this from
