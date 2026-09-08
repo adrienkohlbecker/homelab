@@ -19,7 +19,6 @@ would change, but do not write to the host or move git refs.
 import os
 import subprocess
 import sys
-import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -292,11 +291,9 @@ def do_pull() -> None:
         return
     _print_diff_header("pull: host-side changes about to be committed")
     subprocess.run(["git", "diff", "--color=always", "HEAD"], cwd=CLONE, check=False)
-    commit_and_push(f"pull: capture GUI edits from lab ({time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())})")
+    commit_and_push("pull: capture GUI edits from lab")
     advance_synced_tag()
-    print(
-        f"pull: committed GUI edits + pushed (tag now at {sh(['git', 'rev-parse', '--short', 'HEAD'], cwd=CLONE).stdout.strip()})"
-    )
+    print("pull: committed GUI edits + pushed; tag advanced to HEAD")
 
 
 def do_push(dry_run: bool = False) -> None:
@@ -306,7 +303,7 @@ def do_push(dry_run: bool = False) -> None:
         sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
         # Auto-commit any working-tree edits so `ha:sync push` works straight
         # from a direct file edit in the clone without a manual git commit.
-        if commit_and_push(f"push: local edits ({time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())})"):
+        if commit_and_push("push: local edits"):
             print("push: committed local edits")
     if resolve_ref(f"refs/tags/{SYNCED_TAG}") is None:
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
