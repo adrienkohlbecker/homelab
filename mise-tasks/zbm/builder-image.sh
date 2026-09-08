@@ -74,9 +74,9 @@ img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 # non-fatal warning. --cache-to type=registry,mode=max pushes cache manifests
 # for EVERY intermediate layer to the registry during the build (not just the
 # final image's layers as inline would). This makes cache hits granular at
-# the xbps-install layer level even across version bumps, and removes the
-# ordering constraint between the push and the perlfix docker commit below
-# (inline cache was stripped by the commit, so inline had to push first).
+# the xbps-install layer level even across version bumps. Keep cache export on
+# the build because the metadata-only docker commit below strips BuildKit cache
+# metadata from the local image.
 # Default empty so local workstation builds stay self-contained; the
 # .gitlab-ci.yml zbm_build job sets ZBM_BUILDER_CACHE_REF explicitly.
 : "${ZBM_BUILDER_CACHE_REF:=}"
@@ -102,14 +102,13 @@ docker buildx build \
   -f "$src_dir/releng/docker/Dockerfile" \
   "$src_dir/releng/docker"
 
-# Work around rootless BuildKit occasionally omitting perl's Pod::Usage.pm.
-# Re-extracting perl inside the built image restores it before build.sh runs
-# generate-zbm. Run this after cache export because docker commit strips
-# BuildKit cache metadata from the local image.
-ctr="zbm_perlfix_$$"
+# Upstream's exec-form ENTRYPOINT does not expand its ZBM_BUILDER argument.
+# Commit the resolved entrypoint and local dracut setting after cache export,
+# because docker commit strips BuildKit cache metadata from the local image.
+ctr="zbm_metadata_$$"
 docker rm -f "$ctr" >/dev/null 2>&1 || true
 trap 'docker rm -f "$ctr" >/dev/null 2>&1 || true' EXIT
-docker run --name "$ctr" --entrypoint /usr/bin/xbps-install "$img" -fy perl
+docker create --name "$ctr" "$img" >/dev/null
 docker commit \
   --change 'ENTRYPOINT ["/build-init.sh"]' \
   --change 'ENV DRACUT_NO_XATTR=1' \
