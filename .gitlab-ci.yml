@@ -341,9 +341,6 @@ zbm_build:
   artifacts:
     expire_in: 30 days
     paths:
-      - zbm-build/**/*-bootmenu
-      - zbm-build/**/*-bootmenu.img
-      - zbm-build/**/zfsbootmenu.EFI
       - zbm-build/**/*.tar.gz
       - zbm-build/**/*.sha256sum
   script:

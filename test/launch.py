@@ -9,8 +9,8 @@ SSH command, leaves the VM up, and blocks until Ctrl-C. Pass
 variant's qcow2:
 
   test/launch.py --machine box \\
-      --kernel zbm-build/aarch64/.../vmlinux-bootmenu \\
-      --initrd zbm-build/aarch64/.../initramfs-bootmenu.img \\
+      --kernel /tmp/zbm/vmlinux-bootmenu \\
+      --initrd /tmp/zbm/initramfs-bootmenu.img \\
       --append 'earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200 zbm.show' \\
       --no-ssh-wait --foreground
 """

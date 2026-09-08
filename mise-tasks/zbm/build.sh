@@ -16,12 +16,7 @@ out_dir="${repo_root}/zbm-build/${arch}"
 builder_tag="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 
 mkdir -p "$out_dir"
-rm -f \
-  "$out_dir"/*-bootmenu \
-  "$out_dir"/*-bootmenu.img \
-  "$out_dir"/zfsbootmenu-v*-"${arch}".tar.gz \
-  "$out_dir"/zfsbootmenu-v*-"${arch}".tar.gz.sha256sum \
-  "$out_dir"/*.EFI
+rm -f "$out_dir"/*
 
 if [ ! -d "$src_dir/.git" ]; then
   echo "ZBM source not found at $src_dir — run 'mise run zbm:builder-image' first" >&2
@@ -36,6 +31,7 @@ if [ "$builder_entrypoint" != '["/build-init.sh"]' ]; then
 fi
 workdir="$(mktemp -d "${repo_root}/zbm-build/make-binary.${arch}.XXXXXX")"
 trap 'rm -rf "$workdir"' EXIT INT TERM
+package_dir="${workdir}/package"
 
 wrapper_dir="${workdir}/bin"
 mkdir -p "$wrapper_dir"
@@ -93,14 +89,15 @@ if [ "${#kernel_images[@]}" -ne 1 ]; then
   exit 1
 fi
 
-cp "${kernel_images[0]}" "$out_dir/"
-cp "${component_dir}/initramfs-bootmenu.img" "$out_dir/initramfs-bootmenu.img"
-cp "$upstream_efi" "$out_dir/zfsbootmenu.EFI"
+mkdir -p "$package_dir"
+cp "${kernel_images[0]}" "$package_dir/"
+cp "${component_dir}/initramfs-bootmenu.img" "$package_dir/initramfs-bootmenu.img"
+cp "$upstream_efi" "$package_dir/zfsbootmenu.EFI"
 
-yq -er '.Kernel.CommandLine' "${work_src}/etc/zfsbootmenu/recovery.yaml" >"$out_dir/cmdline"
+yq -er '.Kernel.CommandLine' "${work_src}/etc/zfsbootmenu/recovery.yaml" >"$package_dir/cmdline"
 
 initramfs_listing="${workdir}/initramfs.lsinitrd"
-zbm_lsinitrd "$builder_tag" "$out_dir/initramfs-bootmenu.img" >"$initramfs_listing"
+zbm_lsinitrd "$builder_tag" "$package_dir/initramfs-bootmenu.img" >"$initramfs_listing"
 
 zbm_assert_core_listing "$initramfs_listing" "ZBM initramfs"
 
@@ -110,5 +107,5 @@ if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" "$initramfs_lis
 fi
 
 tarball="zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}-${arch}.tar.gz"
-(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI cmdline | gzip -n >"$tarball")
+(cd "$package_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI cmdline | gzip -n >"${out_dir}/${tarball}")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")
