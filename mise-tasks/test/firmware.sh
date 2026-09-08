@@ -13,13 +13,12 @@ set -euo pipefail
 # Pinned by hash to snapshot.debian.org so the URL never rots when sid bumps
 # the version (the live pool URL would be
 # http://deb.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2025.11-5_all.deb).
-# Bump all three together: query
+# Bump the version, URL, and firmware hash together: query
 #   https://snapshot.debian.org/mr/binary/qemu-efi-aarch64/<ver>/binfiles
-# for the new sha1, download to re-derive the sha256s, and update arch.py's
+# for the new sha1, download to derive the firmware sha256, and update arch.py's
 # firmware filename to match.
 DEB_VERSION="2025.11-5" # edk2-stable202511
 DEB_URL="https://snapshot.debian.org/file/137d1a34bd9ec2e10b1d81331e92d163824579c4"
-DEB_SHA256="95388b7606e821dd8af1dd852767094d569ff78cb2e8f1dc218b60959a52ee81"
 FW_SHA256="4003fc28e677193432558b717b74221fae671c92aeef174b84ecc2c3242fd013"
 
 root="$(git rev-parse --show-toplevel)"
@@ -45,11 +44,6 @@ trap 'rm -rf "${tmp}"' EXIT
 
 echo "==> Fetching edk2 ${DEB_VERSION} firmware (${DEB_URL})"
 curl -fsSL -o "${tmp}/edk2.deb" "${DEB_URL}"
-got="$(sha256 "${tmp}/edk2.deb")"
-if [ "${got}" != "${DEB_SHA256}" ]; then
-  echo "ERROR: .deb sha256 mismatch: expected ${DEB_SHA256}, got ${got}" >&2
-  exit 1
-fi
 
 # A .deb is an ar archive; the firmware lives in its data tarball. BSD ar
 # (macOS) and GNU ar both extract it; tar auto-detects the xz compression.
