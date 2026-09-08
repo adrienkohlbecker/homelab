@@ -75,17 +75,11 @@ class TestPositiveInt:
 
 
 # ---------------------------------------------------------------------------
-# parse_args — removed harness toggles
+# parse_args
 # ---------------------------------------------------------------------------
 
 
 class TestParseArgs:
-    def test_removed_flow_flags_are_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("sys.argv", ["testrole.py", "nginx", "--no-idempotence"])
-        with pytest.raises(SystemExit) as exc:
-            testrole.parse_args()
-        assert exc.value.code == 2
-
     def test_ansible_args_still_forward(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["testrole.py", "nginx", "--tags", "homepage"])
         args, pass_args = testrole.parse_args()

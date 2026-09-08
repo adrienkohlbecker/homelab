@@ -42,17 +42,6 @@ from utils import (
 _BENCHMARK = False
 _PHASE_TIMINGS: list[tuple[str, float]] = []
 
-_REMOVED_FLOW_FLAGS = frozenset(
-    {
-        "--checkmode",
-        "--no-checkmode",
-        "--idempotence",
-        "--no-idempotence",
-        "--keep-logs",
-        "--no-keep-logs",
-    }
-)
-
 
 @contextlib.asynccontextmanager
 async def _phase(label: str):
@@ -149,13 +138,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     # before forwarding to ansible.
     while pass_args and pass_args[0] == "--":
         pass_args = pass_args[1:]
-
-    removed_flags = sorted(arg for arg in pass_args if arg.partition("=")[0] in _REMOVED_FLOW_FLAGS)
-    if removed_flags:
-        parser.error(
-            "these flow-control flags were removed; testrole always runs check mode, "
-            f"apply, idempotence, and drops clean-pass logs: {removed_flags}"
-        )
 
     # --machine defaults to the role's primary machines: entry. An explicit
     # CLI value still wins, and argparse's choices validate that path before

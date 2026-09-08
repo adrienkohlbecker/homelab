@@ -44,12 +44,6 @@ TESTROLE_UNFORWARDED_FLAGS = frozenset(
     {
         "--machine",
         "--ubuntu",
-        "--checkmode",
-        "--no-checkmode",
-        "--idempotence",
-        "--no-idempotence",
-        "--keep-logs",
-        "--no-keep-logs",
         "--keep",
     }
 )
