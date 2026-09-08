@@ -13,10 +13,8 @@ exclude_paths:
   # HA GUI private clone: home-assistant YAML, not ansible content. ansible-lint
   # can't load the blueprints (load-failure) and mis-lints the automation files.
   - roles/homeassistant/files/ha_gui_config/
-  # Harness driver playbooks reference `_role_under_test`, injected at runtime,
-  # so they don't syntax-check standalone. Static fixture playbooks are linted.
-  - test/playbooks/_setup.yml
-  - test/playbooks/_verify.yml
+  # The role dispatcher references `_role_under_test`, injected at runtime, so
+  # it doesn't syntax-check standalone. Static fixture playbooks are linted.
   - test/playbooks/site.yml
 
 # Loop vars must be `__`-prefixed or `{role}_`-prefixed.

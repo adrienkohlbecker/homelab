@@ -255,15 +255,13 @@ async def run_test(
                             # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
                             await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
-                        # Pre-role fixture playbook. The hook playbook is
-                        # static at test/playbooks/_setup.yml; we invoke it
-                        # only when the role under test ships
-                        # roles/<role>/tasks/_setup.yml for it to import.
+                        site_yml = str(m.workdir_path / "site.yml")
+
+                        # Invoke the setup entrypoint only when the role ships it.
                         if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
                             async with _phase("hook _setup.yml"):
-                                await m.ansible_command(str(m.workdir_path / "_setup.yml"))
+                                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
 
-                        site_yml = str(m.workdir_path / "site.yml")
                         async with _phase("checkmode --check"):
                             await m.ansible_command(site_yml, "--check", *pass_args)
 
@@ -275,7 +273,7 @@ async def run_test(
                         # Post-role assertions, if the role declares any.
                         if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
                             async with _phase("verify.yml"):
-                                await m.ansible_command(str(m.workdir_path / "_verify.yml"))
+                                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
 
                     except CommandFailedException:
                         print_line("Command failed")

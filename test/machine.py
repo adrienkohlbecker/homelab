@@ -798,9 +798,8 @@ class Machine:
             # the inventory host we actually provisioned.
             "--limit",
             self.inventory_host,
-            # Static playbooks reference `_role_under_test` for `import_role`
-            # so site.yml / _setup.yml / _verify.yml are all role-agnostic
-            # on disk.
+            # The static role dispatcher references `_role_under_test` so it
+            # stays role-agnostic on disk.
             "-e",
             f"_role_under_test={self.role}",
             # Cloud-environment discriminator (see in_aws): true whenever the

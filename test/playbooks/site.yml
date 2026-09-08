@@ -2,3 +2,4 @@
   tasks:
     - import_role:
         name: "{{ _role_under_test }}"
+        tasks_from: "{{ _role_tasks_from | default('main') }}"
