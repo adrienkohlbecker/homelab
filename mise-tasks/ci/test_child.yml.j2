@@ -3,7 +3,8 @@
 default:
   interruptible: true
 
-# Two stages bypass GitLab's 100-job display limit; needs:[] keeps one DAG.
+# GitLab renders stages as columns and truncates large single-stage job lists in
+# the pipeline UI. Split cells across two columns; needs:[] keeps one DAG.
 stages:
 {% for stage in stages %}
   - {{ stage }}
