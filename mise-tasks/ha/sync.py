@@ -39,12 +39,6 @@ HA_URL = "https://homeassistant.lab.fahm.fr"
 SYNCED_TAG = "last_synced_to_host"
 
 
-# reload_service sentinel: the file lands on disk and HA picks it up with no
-# service call — YAML-mode Lovelace dashboards are re-read (mtime-cached) on the
-# next dashboard load, so a browser refresh shows the change.
-NO_RELOAD = "__no_reload__"
-
-
 @dataclass(frozen=True)
 class SyncFile:
     rel: str
@@ -59,9 +53,9 @@ class PendingChange:
 
 
 # Spec tuple: (glob, reload_service, pull).
-# `None` reload means a changed file needs homeassistant.restart; one restart
-# covers every changed file, otherwise the touched domains reload individually.
-# NO_RELOAD means the file just needs to be on disk (no service call).
+# An explicit homeassistant.restart covers every changed file; otherwise the
+# touched domains reload individually. None means no service call: YAML-mode
+# Lovelace dashboards are re-read on the next dashboard load.
 # `pull=False` makes a file push-only (repo -> host, never captured back): used
 # for repo-owned artifacts the HA UI can't edit, so a pull must not clobber the
 # clone copy with the host's stub.
@@ -75,19 +69,19 @@ SYNC_SPEC = [
     ("timers.yaml", "timer.reload", True),
     # The `counter` integration registers no reload service (only increment/
     # decrement/reset/set_value), so a new or changed counter only loads on
-    # restart — None triggers homeassistant.restart for the whole file.
-    ("counters.yaml", None, True),
+    # restart — homeassistant.restart covers the whole file.
+    ("counters.yaml", "homeassistant.restart", True),
     # `statistics` sensors have no hot reload, so restart for the whole file.
-    ("sensors.yaml", None, True),
+    ("sensors.yaml", "homeassistant.restart", True),
     # climate_template is a legacy `climate:` platform — no hot reload, restart.
-    ("climate.yaml", None, True),
+    ("climate.yaml", "homeassistant.restart", True),
     # HA returns a clear API warning if this reload service is unavailable.
     ("custom_templates/*", "homeassistant.reload_custom_templates", True),
     # Reload automations so blueprint consumers re-read changed sources.
     ("blueprints/automation/*", "automation.reload", True),
     # YAML-mode Lovelace dashboards: repo-owned (read-only in the HA UI), so
     # push-only; HA re-reads them on the next load, so no reload service.
-    ("dashboards/*", NO_RELOAD, False),
+    ("dashboards/*", None, False),
 ]
 
 
@@ -114,11 +108,11 @@ def host_file(rel: str) -> bytes | None:
     return r.stdout if r.returncode == 0 else None
 
 
-def reload_plan(changes: list[PendingChange]) -> tuple[list[str], bool]:
+def reload_plan(changes: list[PendingChange]) -> list[str]:
     reloads = {change.file.reload_service for change in changes}
-    if None in reloads:
-        return ["homeassistant.restart"], True
-    return sorted(reload for reload in reloads if reload and reload != NO_RELOAD), False
+    if "homeassistant.restart" in reloads:
+        return ["homeassistant.restart"]
+    return sorted(reload for reload in reloads if reload)
 
 
 def validate_syntax(relpaths: list[str]) -> None:
@@ -361,11 +355,8 @@ def do_push(dry_run: bool = False) -> None:
     show_push_diff(changed)
     validate_syntax(relpaths)
     if dry_run:
-        services, restart_required = reload_plan(changed)
-        if restart_required:
-            reload_desc = "homeassistant.restart (a changed file has no hot reload)"
-        else:
-            reload_desc = ", ".join(services) or "none"
+        services = reload_plan(changed)
+        reload_desc = ", ".join(services) or "none"
         print(f"\n\033[1;33mdry-run\033[0m: would upload {relpaths}")
         print(f"\033[1;33mdry-run\033[0m: would advance {SYNCED_TAG} and trigger: {reload_desc}")
         print("\033[1;33mdry-run\033[0m: nothing written to host, no git refs moved, HA not reloaded.")
@@ -373,14 +364,14 @@ def do_push(dry_run: bool = False) -> None:
     upload_to_host(files)
     advance_synced_tag()
     print(f"push: uploaded {relpaths}")
-    services, restart_required = reload_plan(changed)
-    if restart_required:
+    services = reload_plan(changed)
+    if services == ["homeassistant.restart"]:
         print("at least one changed file requires a restart -- restarting homeassistant")
     for service in services:
         _ha_post(service)
     # YAML-mode dashboards need no service call; nudge the operator that the
     # change is live but only visible after a browser refresh.
-    if any(change.file.reload_service == NO_RELOAD for change in changed):
+    if any(change.file.reload_service is None for change in changed):
         print("note: dashboard change is live -- refresh the browser to see it")
 
 
