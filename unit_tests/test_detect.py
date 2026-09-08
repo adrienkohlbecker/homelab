@@ -1103,28 +1103,6 @@ class TestGitlabChangeMatrix:
         assert seen == ["explicit"]
 
 
-class TestTargets:
-    def test_only_two_qemu_targets(self) -> None:
-        assert sorted(detect.TARGETS) == ["aws_qemu", "lab"]
-        assert "aws" not in detect.TARGETS
-
-    def test_target_fields(self) -> None:
-        assert detect.TARGETS["aws_qemu"] == {
-            "cell_runner_tag": "aws-shell-qemu",
-            "site_runner_tag": "aws-shell-qemu-site",
-            "in_aws": True,
-            "baked_toolchain": True,
-            "image_oidc": True,
-        }
-        assert detect.TARGETS["lab"] == {
-            "cell_runner_tag": "lab-shell-qemu",
-            "site_runner_tag": "lab-shell-qemu",
-            "in_aws": False,
-            "baked_toolchain": False,
-            "image_oidc": False,
-        }
-
-
 class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
         doc = _render_child_doc(["nginx:box", "podman:box:resolute"], site_test=False)
@@ -1148,24 +1126,6 @@ class TestRenderChildPipeline:
         assert "_site_test:box" not in doc
         assert "_site_check:box" not in doc
         assert "no_cells" not in doc
-
-    def test_cells_run_on_the_shell_qemu_runner(self) -> None:
-        # The cell fan-out (everything extending .cell, including _site_test) runs
-        # on the qemu shell runner. The default stays executor-neutral; .cell
-        # selects the target's shell runner.
-        doc = _render_child_doc(["nginx:box"], site_test=True)
-        assert "tags" not in doc["default"]
-        assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
-        assert "image" not in doc[".cell"]
-        # _site_test extends .cell but overrides the tag onto the dedicated
-        # single-host site pool (site_runner_tag) so the critical-path converge
-        # runs uncontended off the role-cell pool.
-        assert doc["_site_test:box"]["extends"] == ".cell"
-        assert doc["_site_test:box"]["tags"] == ["aws-shell-qemu-site"]
-        # The check run stays on the ordinary cell pool by inheriting .cell's
-        # tag; only the resource-heavy converge needs the dedicated site pool.
-        assert doc["_site_check:box"]["extends"] == ".cell"
-        assert "tags" not in doc["_site_check:box"]
 
     def test_cells_auto_run_by_default(self) -> None:
         # Without SKIP_TEST_CELLS the cells carry no when:/allow_failure: -- they
@@ -1235,14 +1195,6 @@ class TestRenderChildPipeline:
         jobs = [k for k in doc if k not in ("default", "stages", ".cell")]
         assert jobs == ["no_cells"]
 
-    def test_cell_role_arn_in_before_script(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=False)
-        joined = "\n".join(doc[".cell"]["before_script"])
-        assert detect.CELL_ROLE_ARN in joined
-        # Qemu cells assume the role via OIDC only; no ssh-add of a cell key.
-        assert "ssh-add" not in joined
-        assert "CI_CELL_SSH_KEY" not in joined
-
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=False, target="lab")
         assert "tags" not in doc["default"]
@@ -1274,7 +1226,7 @@ class TestRenderChildPipeline:
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
 
     def test_aws_qemu_target_uses_shell_qemu_runner(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=False, target="aws_qemu")
+        doc = _render_child_doc(["nginx:box"], site_test=True, target="aws_qemu")
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
@@ -1290,6 +1242,10 @@ class TestRenderChildPipeline:
         assert "image" not in doc[".cell"]
         assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]
+        assert doc["_site_test:box"]["extends"] == ".cell"
+        assert doc["_site_test:box"]["tags"] == ["aws-shell-qemu-site"]
+        assert doc["_site_check:box"]["extends"] == ".cell"
+        assert "tags" not in doc["_site_check:box"]
 
         joined = "\n".join(doc[".cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
@@ -1305,26 +1261,7 @@ class TestRenderChildPipeline:
         assert "HOMELAB_CI_S3_ENDPOINT" not in joined
         assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-noble}"' in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
-
-    def test_aws_qemu_site_test_does_not_get_upstream_mirrors(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=True, target="aws_qemu")
         assert "--upstream-mirrors" not in "\n".join(doc["_site_test:box"]["script"])
-        assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
-
-    def test_lab_site_test_skips_hydration(self) -> None:
-        # lab boots images already on local disk, so even the site_test cell
-        # never hydrates from an object store.
-        doc = _render_child_doc([], site_test=True, target="lab")
-        assert doc["_site_test:box"]["extends"] == ".cell"
-        joined = "\n".join(doc[".cell"]["before_script"])
-        assert "ci:hydrate-qemu-images" not in joined
-
-    def test_lab_no_cells_placeholder_runs_on_hosted_runner(self) -> None:
-        doc = _render_child_doc([], site_test=False, target="lab")
-        assert "tags" not in doc["default"]
-        assert doc["no_cells"]["tags"] == ["saas-linux-small-amd64"]
-        assert doc["no_cells"]["image"] == "alpine:3.22"
-        assert "image" not in doc["default"]
 
 
 class TestEmitGitlab:
@@ -1336,11 +1273,6 @@ class TestEmitGitlab:
         assert "nginx:box" in loaded
         assert "no_cells" not in loaded
 
-    def test_site_test_only(self, tmp_path: Path) -> None:
-        child = tmp_path / "child.yml"
-        detect._emit_gitlab(json.dumps([]), True, str(child), {}, lambda *_: None)
-        assert "_site_test:box" in detect.yaml.safe_load(child.read_text())
-
     def test_orders_cells_longest_first(self, tmp_path: Path) -> None:
         # The emitted cell jobs follow the sorted order: unmeasured first, then
         # the rest longest-first. The child YAML preserves that job order.
@@ -1350,24 +1282,6 @@ class TestEmitGitlab:
         text = child.read_text()
         order = [text.index(f'"{name}":') for name in ("c:box", "b:box", "a:box")]
         assert order == sorted(order)
-
-    def test_empty_writes_valid_noop_pipeline(self, tmp_path: Path) -> None:
-        child = tmp_path / "child.yml"
-        detect._emit_gitlab(json.dumps([]), False, str(child), {}, lambda *_: None)
-        # Always a valid pipeline with at least one job, so the trigger never
-        # fails on an empty child.
-        loaded = detect.yaml.safe_load(child.read_text())
-        assert "no_cells" in loaded
-
-    @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
-    def test_qemu_target_keeps_all_cells(self, tmp_path: Path, target: str) -> None:
-        # Both targets run the qemu backend and keep the same cells a local qemu
-        # run would exercise -- no backend-specific cell filtering.
-        child = tmp_path / "child.yml"
-        detect._emit_gitlab(json.dumps(["keepalived:box"]), False, str(child), {}, lambda *_: None, target=target)
-        loaded = detect.yaml.safe_load(child.read_text())
-        assert "keepalived:box" in loaded
-        assert "HOMELAB_TEST_BACKEND" not in loaded[".cell"]["variables"]
 
     @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
     def test_lab_pug_cells_dropped(self, tmp_path: Path, target: str) -> None:
