@@ -153,19 +153,6 @@
   tags:
     - lm_sensors
 
-# Remove the split files only after the replacement has passed validation.
-- name: Remove legacy libsensors configuration files
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/sensors.d/zz_netdata_ignore.conf
-    - /etc/sensors.d/zz_homelab_limits.conf
-  register: lm_sensors_legacy_config_removed
-  become: true
-  tags:
-    - lm_sensors
-
 # Set directives need `sensors -s` now and lm-sensors.service at boot.
 - name: Check whether lm-sensors.service exists  # noqa: command-instead-of-module
   when: lm_sensors_has_set
@@ -229,7 +216,6 @@
     - >-
       (lm_sensors_config_file.changed | default(false))
       or (lm_sensors_config_removed.changed | default(false))
-      or (lm_sensors_legacy_config_removed.changed | default(false))
     - lm_sensors_netdata_active.rc == 0
   systemd:
     name: netdata
