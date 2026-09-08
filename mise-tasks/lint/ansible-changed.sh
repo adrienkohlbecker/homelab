@@ -17,7 +17,7 @@ base="${LINT_BASE:-origin/master}"
 files=$(
   {
     if git rev-parse --verify --quiet "$base" >/dev/null; then
-      git diff --name-only --diff-filter=ACMR "$(git merge-base "$base" HEAD)"...HEAD -- '*.yml' '*.yaml'
+      git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.yml' '*.yaml'
     else
       echo "lint:ansible-changed: '$base' not found; scoping to uncommitted changes only" >&2
     fi
