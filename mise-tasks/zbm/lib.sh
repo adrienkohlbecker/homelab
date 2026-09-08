@@ -13,14 +13,16 @@ zbm_repo_root() {
   (cd "$repo_root" && pwd -P)
 }
 
-zbm_latest_tarball() {
-  local out_dir=$1 arch=$2 tarballs
+zbm_local_tarball() {
+  local out_dir=$1 arch=$2
+  local -a tarballs
 
-  # ls -t keeps the newest artifact by mtime; keep it behind one helper so
-  # callers can handle the no-match case without pipefail swallowing the error.
-  # shellcheck disable=SC2012
-  tarballs=$(ls -t "${out_dir}"/zfsbootmenu-v*-"${arch}".tar.gz 2>/dev/null) || return 1
-  printf '%s\n' "${tarballs%%$'\n'*}"
+  mapfile -t tarballs < <(compgen -G "${out_dir}/zfsbootmenu-v*-${arch}.tar.gz")
+  if [ "${#tarballs[@]}" -ne 1 ]; then
+    echo "expected exactly one ${arch} tarball in ${out_dir}, found ${#tarballs[@]} — run 'mise run zbm:build' to refresh it" >&2
+    return 1
+  fi
+  printf '%s\n' "${tarballs[0]}"
 }
 
 zbm_lsinitrd() {

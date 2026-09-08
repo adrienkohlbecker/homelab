@@ -6,7 +6,7 @@
 # environment through the serial console, and assert the guest kexecs all the
 # way to its login prompt.
 #
-#   mise run zbm:smoke                    # newest local zbm-build/<arch> tarball
+#   mise run zbm:smoke                    # local zbm-build/<arch> tarball
 #   mise run zbm:smoke <package-version>  # fetch that version from the GitLab
 #                                         # package registry first (its arch
 #                                         # suffix must match this host)
@@ -60,10 +60,7 @@ if [ -n "$version" ]; then
   (cd "$workdir" && sha256sum -c "zfsbootmenu-${version}.tar.gz.sha256sum")
   tarball="${workdir}/zfsbootmenu-${version}.tar.gz"
 else
-  if ! tarball="$(zbm_latest_tarball "$out_dir" "$arch")"; then
-    echo "no ${arch} tarball — run 'mise run zbm:build' first" >&2
-    exit 1
-  fi
+  tarball="$(zbm_local_tarball "$out_dir" "$arch")" || exit 1
 fi
 echo "Smoke-testing ${tarball}"
 

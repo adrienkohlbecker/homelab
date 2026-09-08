@@ -25,10 +25,7 @@ set -euo pipefail
 arch="$(zbm_host_arch)"
 repo_root="$(zbm_repo_root)"
 out_dir="${repo_root}/zbm-build/${arch}"
-if ! tarball="$(zbm_latest_tarball "$out_dir" "$arch")"; then
-  echo "no tarball in ${out_dir} — run 'mise run zbm:build' first" >&2
-  exit 1
-fi
+tarball="$(zbm_local_tarball "$out_dir" "$arch")" || exit 1
 tarball="$(basename "$tarball")"
 sha256sum_file="${tarball}.sha256sum"
 
