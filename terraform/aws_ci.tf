@@ -19,7 +19,7 @@ locals {
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
   ci_gitlab_project          = "akohlbecker/homelab"
-  ci_account_id              = data.aws_caller_identity.current.account_id
+  ci_account_id              = "000390721279"
   ci_qemu_image_bucket_name  = "homelab-ci-images"
   ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
   ci_qemu_pools = {
@@ -97,8 +97,6 @@ locals {
     if try(registry.secret_name, null) != null
   }
 }
-
-data "aws_caller_identity" "current" {}
 
 variable "ci_ecr_docker_hub_access_token" {
   type        = string
