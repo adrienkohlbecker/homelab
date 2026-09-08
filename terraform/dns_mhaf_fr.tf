@@ -8,10 +8,10 @@
 # doesn't need to respond.
 
 locals {
-  mhaf_fr_static_records = {
-    # A — host records derive from data/network_topology.yml via
-    # `local.mhaf_fr_host_records` below (using `local.test_network`
-    # for the 10.123 → 10.234 gsub).
+  mhaf_fr_records = {
+    # A — test hosts derive from the 10.234.x view of the shared topology.
+    a_box          = { type = "A", name = "box.mhaf.fr", content = local.test_network.hosts.box.physical }
+    a_wildcard_lab = { type = "A", name = "*.lab.mhaf.fr", content = local.test_network.hosts.lab.physical }
 
     # CNAME
     cname_wildcard_box  = { type = "CNAME", name = "*.box.mhaf.fr", content = "box.mhaf.fr" }
@@ -30,16 +30,6 @@ locals {
     mx_wildcard_in1 = { type = "MX", name = "*.mhaf.fr", content = "in1-smtp.messagingengine.com", priority = 10, comment = "fastmail" }
     mx_wildcard_in2 = { type = "MX", name = "*.mhaf.fr", content = "in2-smtp.messagingengine.com", priority = 20, comment = "fastmail" }
   }
-
-  # Host A records for mhaf.fr (the test zone) — derive from
-  # `local.test_network` (the gsub'd 10.234.x view of the topology).
-  # Names resolve to the host's physical IP in the test environment,
-  # matching what group_vars/test.yml builds for external_ips.
-  mhaf_fr_host_records = {
-    a_box          = { type = "A", name = "box.mhaf.fr", content = local.test_network.hosts.box.physical }
-    a_wildcard_lab = { type = "A", name = "*.lab.mhaf.fr", content = local.test_network.hosts.lab.physical }
-  }
-  mhaf_fr_records = merge(local.mhaf_fr_static_records, local.mhaf_fr_host_records)
 }
 
 resource "cloudflare_dns_record" "mhaf_fr" {

@@ -22,12 +22,23 @@
 # and mailgun+ondmarc (noreply.fahm.fr).
 
 locals {
-  fahm_fr_static_records = {
-    # A — host records (box/bunk/lab/pug) derive from
-    # data/network_topology.yml in `local.fahm_fr_host_records` below.
-    # This map holds only the static records that reference neither the
-    # topology nor a variable (the Fastmail relay).
+  fahm_fr_records = {
+    # A — mail is Fastmail's relay. Host records derive from
+    # data/network_topology.yml: lab/pug/bunk resolve to their Tailscale CGNAT
+    # IPs so tailnet clients reach them peer-to-peer. AdGuard split-horizon
+    # overrides these at home; non-tailnet clients fail closed on unroutable
+    # CGNAT addresses. box has no stable Tailscale IP, so it stays physical.
     a_mail = { type = "A", name = "mail.fahm.fr", content = "103.168.172.65", comment = "fastmail" }
+    a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.physical }
+    a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.tailscale }
+    a_fox  = { type = "A", name = "fox.fahm.fr", content = local.network.hosts.fox.tailscale }
+    a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.tailscale }
+    a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.tailscale }
+
+    # Public Headscale control-plane and DERP relay addresses are the exception
+    # to the fail-closed CGNAT posture so unenrolled clients can join.
+    a_headscale    = { type = "A", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
+    aaaa_headscale = { type = "AAAA", name = "headscale.fahm.fr", content = cidrhost(hcloud_primary_ip.fox_v6.ip_network, 1) }
 
     # CNAME
     cname_auth                   = { type = "CNAME", name = "auth.fahm.fr", content = "lab.fahm.fr" }
@@ -57,41 +68,6 @@ locals {
     mx_noreply_mxa  = { type = "MX", name = "noreply.fahm.fr", content = "mxa.eu.mailgun.org", priority = 10, comment = "mailgun" }
     mx_noreply_mxb  = { type = "MX", name = "noreply.fahm.fr", content = "mxb.eu.mailgun.org", priority = 10, comment = "mailgun" }
   }
-  # Host A records — derived from data/network_topology.yml. lab/pug/bunk resolve
-  # to their Tailscale CGNAT IPs (100.64.0.x) so that tailnet clients reach them
-  # peer-to-peer without needing "Use Tailscale subnets" / --accept-routes. The
-  # AdGuard split-horizon (roles/adguard) overrides these for clients on the home
-  # estate, which reach the host over a more direct path. Non-tailnet internet
-  # traffic to *.fahm.fr always gets an unroutable CGNAT address — the intended
-  # fail-closed posture. box has no stable Tailscale IP (test fixture,
-  # infrequently enrolled) so it keeps its physical address.
-  #
-  # fox is here too (Tailscale IP, A-only) with no AdGuard override: it is
-  # off-home (Hetzner), so the estate reaches it over the mesh rather than a
-  # LAN/wg path, same as a roaming client. fox's public IPs now serve only the
-  # headscale.fahm.fr control plane (fahm_fr_headscale_records below).
-  fahm_fr_host_records = {
-    a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.physical }
-    a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.tailscale }
-    a_fox  = { type = "A", name = "fox.fahm.fr", content = local.network.hosts.fox.tailscale }
-    a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.tailscale }
-    a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.tailscale }
-  }
-
-  # headscale.fahm.fr is fox's control-plane + DERP-relay FQDN, pinned to the
-  # reserved Hetzner primary IPs -- the one intentional exception to the
-  # fail-closed CGNAT posture (reachable from the internet so an un-enrolled
-  # client can reach the control plane to join). It is decoupled from fox.fahm.fr
-  # (now the Tailscale CGNAT IP, in fahm_fr_host_records) so the *.fox.fahm.fr
-  # CNAME chasing fox.fahm.fr can't drag the control plane onto that
-  # unreachable address. Dual-stack: the AAAA lets IPv6-only clients reach the
-  # relay without NAT64 (nginx [::]:443 on fox, DERP STUN on [::]:3478).
-  fahm_fr_headscale_records = {
-    a_headscale    = { type = "A", name = "headscale.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
-    aaaa_headscale = { type = "AAAA", name = "headscale.fahm.fr", content = cidrhost(hcloud_primary_ip.fox_v6.ip_network, 1) }
-  }
-
-  fahm_fr_records = merge(local.fahm_fr_static_records, local.fahm_fr_host_records, local.fahm_fr_headscale_records)
 }
 
 resource "cloudflare_dns_record" "fahm_fr" {
