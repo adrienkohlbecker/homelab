@@ -217,16 +217,6 @@ def passt_address_fields(machine: str) -> dict[str, str] | None:
     }
 
 
-# git only tracks the executable bit; a fresh checkout (notably CI's
-# `actions/checkout@v4`) lands the vagrant key at 0644 and ssh refuses
-# to use it ("UNPROTECTED PRIVATE KEY FILE"). chmod once at import
-# time -- idempotent, invisible to git, and ensures every harness
-# entrypoint is covered without sprinkling the fix at each call site.
-_ssh_key_path = Path(SSH_KEY)
-if _ssh_key_path.exists():
-    _ssh_key_path.chmod(0o600)
-
-
 class QemuMachineSpec(NamedTuple):
     ssh_user: str
     inventory_host: str
@@ -581,13 +571,17 @@ class Machine:
         self._passt_proc = None
 
     def _preflight(self) -> None:
-        """Verify the qemu binary, GNU timeout, and lsof are reachable.
+        """Normalize the SSH key mode and verify required binaries.
 
         Called once at the end of __init__, after self.workdir exists, so the
         failure surface (binary checks, image cache lookups, etc.) is bounded
         to "things the harness will need before the next subprocess spawn".
         Failures raise RuntimeError with installation guidance.
         """
+        ssh_key_path = Path(SSH_KEY)
+        if ssh_key_path.exists():
+            ssh_key_path.chmod(0o600)
+
         self._require_binary(
             self.arch.qemu_binary,
             f"Install via `brew install qemu` (macOS) or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",

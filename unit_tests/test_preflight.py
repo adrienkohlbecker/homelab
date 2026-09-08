@@ -42,6 +42,21 @@ def test_qemu_preflight_raises_when_timeout_missing(
         machine_factory()
 
 
+def test_qemu_preflight_normalizes_ssh_key_mode(
+    tmp_path: Path,
+    machine_factory: Callable[..., machine.Machine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ssh_key = tmp_path / "vagrant.key"
+    ssh_key.write_text("test key")
+    ssh_key.chmod(0o644)
+    monkeypatch.setattr(machine, "SSH_KEY", str(ssh_key))
+
+    machine_factory()
+
+    assert ssh_key.stat().st_mode & 0o777 == 0o600
+
+
 def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Machine on Linux fails fast when /mnt/scratch/homelab_ci isn't mounted.
 
