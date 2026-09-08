@@ -279,31 +279,6 @@ resource "nexus_security_user" "homelab_push" {
   }
 }
 
-moved {
-  from = nexus_repository_docker_hosted.this["homelab"]
-  to   = nexus_repository_docker_hosted.homelab
-}
-
-moved {
-  from = nexus_privilege_repository_view.docker_hosted["homelab"]
-  to   = nexus_privilege_repository_view.homelab
-}
-
-moved {
-  from = nexus_security_role.push["homelab"]
-  to   = nexus_security_role.homelab_push
-}
-
-moved {
-  from = random_password.nexus_push["homelab"]
-  to   = random_password.nexus_push
-}
-
-moved {
-  from = nexus_security_user.push["homelab"]
-  to   = nexus_security_user.homelab_push
-}
-
 # Operator's local/manual docker push identity (you `podman login` as this from
 # your workstation and lab hosts), carrying the push-all role so it can push to
 # every repository without a per-repo edit here. Its password is left unmanaged:

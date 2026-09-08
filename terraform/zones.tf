@@ -93,18 +93,3 @@ locals {
 # right primitive here because it can read another resource's post-refresh
 # attribute (the cloudflare_zone_dnssec status), unlike `self` in a
 # precondition which only sees configured values.
-
-moved {
-  from = cloudflare_zone.adrienkohlbecker_com
-  to   = cloudflare_zone.this["adrienkohlbecker.com"]
-}
-
-moved {
-  from = cloudflare_zone.fahm_fr
-  to   = cloudflare_zone.this["fahm.fr"]
-}
-
-moved {
-  from = cloudflare_zone.mhaf_fr
-  to   = cloudflare_zone.this["mhaf.fr"]
-}

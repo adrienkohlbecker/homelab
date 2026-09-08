@@ -990,16 +990,6 @@ resource "aws_autoscaling_group" "ci_qemu" {
   }
 }
 
-moved {
-  from = aws_autoscaling_group.ci_qemu_host
-  to   = aws_autoscaling_group.ci_qemu["role"]
-}
-
-moved {
-  from = aws_autoscaling_group.ci_qemu_site
-  to   = aws_autoscaling_group.ci_qemu["site"]
-}
-
 # ─── SSM parameter: nested-qemu host AMI ─────────────────────────────────────
 # The nested-qemu host AMI promotion path needs a real parameter before the ASG
 # launch template can reference it. Terraform owns the parameter shell, seeding

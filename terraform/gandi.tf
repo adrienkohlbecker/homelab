@@ -118,33 +118,3 @@ check "ns_delegation" {
     ])}. Lookups against these zones will fail."
   }
 }
-
-moved {
-  from = gandi_nameservers.adrienkohlbecker_com
-  to   = gandi_nameservers.this["adrienkohlbecker.com"]
-}
-
-moved {
-  from = gandi_nameservers.fahm_fr
-  to   = gandi_nameservers.this["fahm.fr"]
-}
-
-moved {
-  from = gandi_nameservers.mhaf_fr
-  to   = gandi_nameservers.this["mhaf.fr"]
-}
-
-moved {
-  from = gandi_dnssec_key.adrienkohlbecker_com
-  to   = gandi_dnssec_key.this["adrienkohlbecker.com"]
-}
-
-moved {
-  from = gandi_dnssec_key.fahm_fr
-  to   = gandi_dnssec_key.this["fahm.fr"]
-}
-
-moved {
-  from = gandi_dnssec_key.mhaf_fr
-  to   = gandi_dnssec_key.this["mhaf.fr"]
-}
