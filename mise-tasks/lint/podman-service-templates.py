@@ -5,21 +5,21 @@
 import sys
 from pathlib import Path
 
-REQUIRED_SNIPPETS = {
-    "ExecStartPre=/bin/rm -f %t/%n.ctr-id": "unit must clear stale cidfiles before start",
-    "SyslogIdentifier=%N": "journald entries must carry the systemd unit name",
-    "Type=notify": "systemd unit must wait for podman's sdnotify state",
-    "NotifyAccess=all": "systemd must accept podman's child-process notifications",
-    "--cidfile=%t/%n.ctr-id": "podman unit must write a cidfile for ExecStop/ExecStopPost",
-    "--cgroups=split": "podman cgroups must compose with systemd unit accounting",
-    "--detach": "podman must detach so systemd tracks readiness through sdnotify",
-    "--replace": "podman must replace stale containers after interrupted starts",
-    "--rm": "podman must remove stopped containers instead of accumulating state",
-    "--log-driver journald": "container logs must flow through journald",
-    "--sdnotify=healthy": "podman must gate readiness on the container healthcheck",
-    "--health-cmd": "container must carry an in-container steady-state healthcheck",
-    "--health-startup-cmd": "container must carry a startup healthcheck",
-}
+REQUIRED_SNIPPETS = (
+    "ExecStartPre=/bin/rm -f %t/%n.ctr-id",
+    "SyslogIdentifier=%N",
+    "Type=notify",
+    "NotifyAccess=all",
+    "--cidfile=%t/%n.ctr-id",
+    "--cgroups=split",
+    "--detach",
+    "--replace",
+    "--rm",
+    "--log-driver journald",
+    "--sdnotify=healthy",
+    "--health-cmd",
+    "--health-startup-cmd",
+)
 
 
 def main() -> int:
@@ -29,9 +29,7 @@ def main() -> int:
         if "podman run" not in text:
             continue
 
-        for snippet, reason in REQUIRED_SNIPPETS.items():
-            if snippet not in text:
-                errors.append(f"{path}: missing {snippet!r}: {reason}")
+        errors.extend(f"{path}: missing {snippet!r}" for snippet in REQUIRED_SNIPPETS if snippet not in text)
 
     if errors:
         for error in errors:
