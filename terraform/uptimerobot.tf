@@ -5,8 +5,8 @@
 # that must page when home is down belongs here.
 #
 # Auth uses an account-scoped UptimeRobot API key (UI -> Integrations & API ->
-# API keys). Stored in 1Password and surfaced via TF_VAR_uptimerobot_api_key,
-# scoped to the `tf` task in mise.toml so it is only resolved under `op run --`.
+# API keys). The `tf` task exposes it through the provider's native
+# UPTIMEROBOT_API_KEY variable only inside `op run --`.
 #
 # Surfaces intentionally NOT under tofu:
 #
@@ -16,21 +16,6 @@
 #
 # - Public status pages (PSPs) and maintenance windows. None configured; the
 #   estate has no external audience for a status page.
-
-variable "uptimerobot_api_key" {
-  type      = string
-  sensitive = true
-  ephemeral = true
-
-  validation {
-    condition     = length(var.uptimerobot_api_key) > 0
-    error_message = "uptimerobot_api_key must be non-empty (resolved via TF_VAR_uptimerobot_api_key from 1Password through `op run`)."
-  }
-}
-
-provider "uptimerobot" {
-  api_key = var.uptimerobot_api_key
-}
 
 data "uptimerobot_alert_contacts" "active" {
   status = "active"
