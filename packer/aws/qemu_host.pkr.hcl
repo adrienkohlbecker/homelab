@@ -97,28 +97,14 @@ build {
   sources = ["source.amazon-ebs.qemu_host"]
 
   provisioner "file" {
-    source      = "${path.cwd}/mise.toml"
-    destination = "/tmp/mise.toml"
-  }
-
-  provisioner "file" {
-    source      = "${path.cwd}/pyproject.toml"
-    destination = "/tmp/pyproject.toml"
-  }
-
-  provisioner "file" {
-    source      = "${path.cwd}/uv.lock"
-    destination = "/tmp/uv.lock"
-  }
-
-  provisioner "file" {
-    source      = "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py"
-    destination = "/tmp/homelab_ci_hydrate_images"
-  }
-
-  provisioner "file" {
-    source      = "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh"
-    destination = "/tmp/homelab_ci_prepare_scratch"
+    sources = [
+      "${path.cwd}/mise.toml",
+      "${path.cwd}/pyproject.toml",
+      "${path.cwd}/uv.lock",
+      "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py",
+      "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh",
+    ]
+    destination = "/tmp/"
   }
 
   provisioner "shell" {

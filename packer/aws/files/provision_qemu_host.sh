@@ -47,8 +47,8 @@ curl -fsSL -o /tmp/gitlab-runner "$GITLAB_RUNNER_URL"
 echo "${GITLAB_RUNNER_SHA256}  /tmp/gitlab-runner" | sha256sum -c -
 sudo install -m 0755 -o root -g root /tmp/gitlab-runner /usr/local/bin/gitlab-runner
 sudo ln -sf /usr/local/bin/gitlab-runner /usr/bin/gitlab-runner
-sudo install -m 0755 -o root -g root /tmp/homelab_ci_hydrate_images /usr/local/bin/homelab_ci_hydrate_images
-sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch /usr/local/bin/homelab_ci_prepare_scratch
+sudo install -m 0755 -o root -g root /tmp/hydrate-qemu-images.py /usr/local/bin/homelab_ci_hydrate_images
+sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch.sh /usr/local/bin/homelab_ci_prepare_scratch
 sudo usermod -aG kvm ubuntu
 
 sudo install -dm 0755 /opt/mise /opt/uv-cache /opt/venv /etc/mise /tmp/homelab-ci-build
@@ -108,5 +108,6 @@ sudo apt-get clean
 sudo rm -rf \
   /var/lib/apt/lists/* \
   /tmp/gitlab-runner \
-  /tmp/homelab_ci_prepare_scratch \
+  /tmp/hydrate-qemu-images.py \
+  /tmp/homelab_ci_prepare_scratch.sh \
   /tmp/homelab-ci-build
