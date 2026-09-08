@@ -203,7 +203,7 @@ apt-get install --yes linux-generic
 
 # Install required packages
 
-apt-get install --yes dosfstools zfs-initramfs zfsutils-linux
+apt-get install --yes curl dosfstools zfs-initramfs zfsutils-linux
 
 # Enable systemd ZFS services
 
@@ -401,7 +401,6 @@ ZBM_URL="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmen
 
 tmp=$(mktemp -d)
 
-apt-get install --yes curl
 curl -fL --retry 3 --retry-connrefused -o "$tmp/zbm.tar.gz" "$ZBM_URL"
 EXPECTED_SUM="$(curl -fsSL --retry 3 --retry-connrefused "$ZBM_URL.sha256sum" | awk '{print $1}')"
 echo "$EXPECTED_SUM  $tmp/zbm.tar.gz" | sha256sum -c -
