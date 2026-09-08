@@ -31,57 +31,88 @@ detect = _load()
 
 
 # ---------------------------------------------------------------------------
-# FULL_UNIVERSE_RE
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# ROLE_PATH_RE
-# ---------------------------------------------------------------------------
-
-
-class TestRolePathRe:
-    def test_extracts_role_name(self) -> None:
-        m = detect.ROLE_PATH_RE.match("roles/nginx/tasks/main.yml")
-        assert m is not None
-        assert m.group(1) == "nginx"
-
-    def test_nested_path(self) -> None:
-        m = detect.ROLE_PATH_RE.match("roles/podman/templates/foo.j2")
-        assert m is not None
-        assert m.group(1) == "podman"
-
-    def test_non_role_excluded(self) -> None:
-        assert not detect.ROLE_PATH_RE.match("test/machine.py")
-
-    def test_bare_roles_dir_excluded(self) -> None:
-        assert not detect.ROLE_PATH_RE.match("roles/")
-
-
-# ---------------------------------------------------------------------------
 # classify_changed_files
 # ---------------------------------------------------------------------------
 
 
 class TestClassifyChangedFiles:
-    def test_role_detection(self) -> None:
-        result = detect.classify_changed_files(
-            [
-                "roles/nginx/tasks/main.yml",
-                "roles/podman/templates/foo.j2",
-            ]
-        )
-        assert result.direct_roles == ["nginx", "podman"]
-        assert not result.packer_changed
-        assert result.full_universe_paths == []
+    @pytest.mark.parametrize(
+        ("path", "expected_roles"),
+        [
+            ("roles/nginx/tasks/main.yml", ["nginx"]),
+            ("roles/podman/templates/foo.j2", ["podman"]),
+            ("test/machine.py", []),
+            ("roles/", []),
+        ],
+    )
+    def test_role_paths(self, path: str, expected_roles: list[str]) -> None:
+        assert detect.classify_changed_files([path]).direct_roles == expected_roles
 
-    def test_full_universe_trigger(self) -> None:
-        result = detect.classify_changed_files(["group_vars/all/main.yml"])
-        assert result.full_universe_paths == ["group_vars/all/main.yml"]
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            ("group_vars/all/main.yml", True),
+            ("group_vars/all/service_ports.yaml", True),
+            ("group_vars/test.yml", True),
+            ("test/machine.py", True),
+            ("test/testall.py", True),
+            ("test/matrix.py", True),
+            ("test/inventory.ini", True),
+            ("test/playbooks/site.yml", True),
+            ("ansible.cfg", True),
+            ("vault-client.sh", True),
+            ("mise.toml", True),
+            ("pyproject.toml", True),
+            ("uv.lock", True),
+            ("data/network_topology.yml", True),
+            ("data/network_topology.schema.json", True),
+            ("mise-tasks/ci/detect.py", True),
+            ("host_vars/lab.yml", False),
+            ("host_vars/pug.yml", False),
+            ("host_vars/box.yml", False),
+            ("host_vars/minimal.yml", False),
+            ("host_vars/lab-qemu.yml", False),
+            ("test/minimal/cloud-init.yml", False),
+            ("site.yml", False),
+            ("group_vars/all/sub/deep.yml", False),
+            ("unit_tests/test_matrix.py", False),
+            ("roles/nginx/tasks/main.yml", False),
+            ("roles/podman/templates/foo.j2", False),
+            ("README.md", False),
+            ("Dockerfile", False),
+        ],
+    )
+    def test_full_universe_paths(self, path: str, expected: bool) -> None:
+        result = detect.classify_changed_files([path])
+        assert bool(result.full_universe_paths) is expected
 
-    def test_packer_changed(self) -> None:
-        result = detect.classify_changed_files(["packer/qemu.pkr.hcl"])
-        assert result.packer_changed
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            ("packer/qemu.pkr.hcl", True),
+            ("packer/scripts/chroot.sh", True),
+            ("mise-tasks/packer/build", True),
+            ("roles/packer/tasks/main.yml", False),
+            ("test/machine.py", False),
+        ],
+    )
+    def test_packer_paths(self, path: str, expected: bool) -> None:
+        assert detect.classify_changed_files([path]).packer_changed is expected
+
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            ("host_vars/box.yml", {"box"}),
+            ("host_vars/minimal.yml", {"minimal"}),
+            ("test/minimal/cloud-init.yml", {"minimal"}),
+            ("host_vars/lab.yml", set()),
+            ("host_vars/lab-qemu.yml", set()),
+            ("host_vars/pug.yml", set()),
+            ("host_vars/pug-qemu.yml", set()),
+        ],
+    )
+    def test_machine_universe_paths(self, path: str, expected: set[str]) -> None:
+        assert detect.classify_changed_files([path]).machine_universe == expected
 
     def test_mixed_paths(self) -> None:
         paths = [
@@ -95,13 +126,9 @@ class TestClassifyChangedFiles:
         assert result.packer_changed
         assert result.full_universe_paths == ["group_vars/all/main.yml"]
 
-    def test_empty_paths(self) -> None:
-        result = detect.classify_changed_files([])
-        assert result == detect.ChangeClassification([], [], False, set())
-
-    def test_blank_lines_ignored(self) -> None:
-        result = detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""])
-        assert result.direct_roles == ["nginx"]
+    def test_empty_paths_and_blank_lines(self) -> None:
+        assert detect.classify_changed_files([]) == detect.ChangeClassification([], [], False, set())
+        assert detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""]).direct_roles == ["nginx"]
 
     def test_deduplicates_roles(self) -> None:
         result = detect.classify_changed_files(
@@ -112,61 +139,20 @@ class TestClassifyChangedFiles:
         )
         assert result.direct_roles == ["nginx"]
 
-    def test_multiple_full_universe_paths(self) -> None:
+    def test_aggregates_categories(self) -> None:
         result = detect.classify_changed_files(
             [
                 "mise.toml",
                 "pyproject.toml",
-                "uv.lock",
-            ]
-        )
-        assert result.full_universe_paths == ["mise.toml", "pyproject.toml", "uv.lock"]
-
-    def test_packer_and_role_simultaneous(self) -> None:
-        result = detect.classify_changed_files(
-            [
                 "packer/scripts/chroot.sh",
                 "roles/zfs/tasks/main.yml",
+                "host_vars/box.yml",
+                "host_vars/minimal.yml",
             ]
         )
-        assert result.packer_changed
         assert result.direct_roles == ["zfs"]
-
-    def test_machine_universe_box(self) -> None:
-        result = detect.classify_changed_files(["host_vars/box.yml"])
-        assert result.machine_universe == {"box"}
-        assert not result.full_universe_paths
-
-    def test_machine_universe_minimal(self) -> None:
-        result = detect.classify_changed_files(["host_vars/minimal.yml"])
-        assert result.machine_universe == {"minimal"}
-        assert not result.full_universe_paths
-
-    # host_vars/lab.yml and host_vars/pug.yml are intentionally not
-    # machine-universe triggers: a change must not fan out to every role that
-    # tests on those heavyweight fixtures. Those roles still get a cell when
-    # their own code changes.
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "host_vars/lab.yml",
-            "host_vars/lab-qemu.yml",
-            "host_vars/pug.yml",
-            "host_vars/pug-qemu.yml",
-        ],
-    )
-    def test_machine_universe_lab_pug_not_triggers(self, path: str) -> None:
-        result = detect.classify_changed_files([path])
-        assert result.machine_universe == set()
-        assert not result.full_universe_paths
-
-    def test_machine_universe_minimal_fixture(self) -> None:
-        result = detect.classify_changed_files(["test/minimal/cloud-init.yml"])
-        assert result.machine_universe == {"minimal"}
-        assert not result.full_universe_paths
-
-    def test_machine_universe_multiple(self) -> None:
-        result = detect.classify_changed_files(["host_vars/box.yml", "host_vars/minimal.yml"])
+        assert result.full_universe_paths == ["mise.toml", "pyproject.toml"]
+        assert result.packer_changed
         assert result.machine_universe == {"box", "minimal"}
 
 
@@ -288,81 +274,6 @@ class TestPropagateReleaseCells:
             universe=set(),
         )
         assert result == []
-
-
-# ---------------------------------------------------------------------------
-# Path classification regexes
-# ---------------------------------------------------------------------------
-
-
-class TestPathClassificationRegexes:
-    """Parametrized match/reject checks for the path classification regexes."""
-
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "group_vars/all/main.yml",
-            "group_vars/all/service_ports.yaml",
-            "group_vars/test.yml",
-            "test/machine.py",
-            "test/testall.py",
-            "test/matrix.py",
-            "test/inventory.ini",
-            "test/playbooks/site.yml",
-            "ansible.cfg",
-            "vault-client.sh",
-            "mise.toml",
-            "pyproject.toml",
-            "uv.lock",
-            "data/network_topology.yml",
-            "data/network_topology.schema.json",
-            "mise-tasks/ci/detect.py",
-        ],
-    )
-    def test_full_universe_match(self, path: str) -> None:
-        assert detect.FULL_UNIVERSE_RE.match(path), f"should match: {path}"
-
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "host_vars/lab.yml",
-            "host_vars/pug.yml",
-            "host_vars/box.yml",
-            "host_vars/minimal.yml",
-            "host_vars/lab-qemu.yml",
-            "test/minimal/cloud-init.yml",
-            "site.yml",
-            "group_vars/all/sub/deep.yml",
-            "unit_tests/test_matrix.py",
-            "roles/nginx/tasks/main.yml",
-            "roles/podman/templates/foo.j2",
-            "README.md",
-            "Dockerfile",
-        ],
-    )
-    def test_full_universe_reject(self, path: str) -> None:
-        assert not detect.FULL_UNIVERSE_RE.match(path), f"should not match: {path}"
-
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "packer/qemu.pkr.hcl",
-            "packer/scripts/chroot.sh",
-            "mise-tasks/packer/build",
-        ],
-    )
-    def test_packer_match(self, path: str) -> None:
-        assert detect.PACKER_PATHS_RE.match(path), f"should match: {path}"
-
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "roles/packer/tasks/main.yml",
-            "test/machine.py",
-        ],
-    )
-    def test_packer_reject(self, path: str) -> None:
-        assert not detect.PACKER_PATHS_RE.match(path), f"should not match: {path}"
 
 
 # Git helpers
