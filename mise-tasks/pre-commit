@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="Pre-commit hook"
-#MISE hide=true
-set -euo pipefail
-
-# notes/ is a gitignored private clone with its own lint and commit flow.
-exit 0

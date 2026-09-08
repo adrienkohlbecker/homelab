@@ -93,9 +93,6 @@ markdownlint-cli2 = { version = "0.22.1", depends = ["node"] }
 taplo = "0.10.0"
 glab = "1.102.0"
 
-[hooks]
-enter = "test -x \"$(git rev-parse --git-path hooks/pre-commit)\" || mise generate git-pre-commit --write 2>/dev/null"
-
 [settings]
 python.uv_venv_auto = "create|source"
 
