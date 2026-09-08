@@ -130,15 +130,34 @@
 # DEVICESCAN may be followed by any desired Directives.
 # -n standby : do not wake up devices
 # -W 0,45,50 log above 40°, critical above 50°
-# -s (L/../(0[1-7])/7/04:024|S/../../6/01) short test Saturdays at 1am. long tests the first Sunday of the month at 4am staggered by 24h
+# -s short test Saturdays at 1am. long tests the first Sunday of the month at 4am staggered by 24h
+#    Long tests are scheduled per-device, not in DEFAULT: rotational disks get short tests only.
 # -I 194 : Do not log Temperature_Celsius changes
 # -I 190 : Do not log Airflow_Temperature_Cel changes
 # -I 231 : Do not log Temperature changes
 # -I 9 : Do not log Power_On_Hours changes
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
 
-DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M diminishing -o on -S on -s (L/../(0[1-7])/7/04:024|S/../../6/01) -I 194 -I 190 -I 231 -I 9
+DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools/smartd-runner -M diminishing -o on -S on -I 194 -I 190 -I 231 -I 9
 
+{# Test schedules, applied per device rather than in DEFAULT.
+
+    A short test takes ~2 minutes and always completes. An extended test
+    scans the whole surface: ~17 hours on a 10 TB drive. hd-idle spins
+    rotational disks down after 20 minutes without I/O, and a running
+    self-test does not count as I/O, so the spindown aborts the test --
+    every extended test ever started on a spinning disk in this fleet is
+    logged "Aborted by host" with 90% remaining, on both lab and pug. The
+    SSDs, which hd-idle never touches, complete theirs normally.
+
+    So rotational disks are scheduled for short tests only. That is not a
+    loss of the coverage we actually had, only of coverage we never got;
+    surface verification for those disks comes from the monthly ZFS scrub,
+    which reads every allocated block and is not disturbed by spindown
+    because it generates the I/O itself. Raising hd-idle's timeout past
+    17 hours would defeat the point of running it at all. -#}
+{% set smart_test_schedule = '(L/../(0[1-7])/7/04:024|S/../../6/01)' %}
+{% set smart_test_schedule_no_long = '(S/../../6/01)' %}
 {# Monitor stable ATA/NVMe IDs only; skip virtual and removable devices. #}
 {% set monitored_disks_by_id = ansible_devices
   | dict2items
@@ -154,7 +173,7 @@ DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools
 {% if not dev | regex_search('^[a-zA-Z0-9_.:-]+$') %}
 {{ _unsafe_device_id | mandatory('device id contains unsafe characters: ' ~ dev) }}
 {% elif dev.startswith('nvme-') %}
-/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80
+/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -s {{ smart_test_schedule }} -W 0,60,80
 {% elif dev.startswith('ata-') %}
 {# Let smartd select SAT on Linux; forcing legacy ATA blocks 48-bit log commands. #}
 {#- Crucial MX500 firmware spuriously flaps Current_Pending_Sector (197)
@@ -162,6 +181,6 @@ DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools
     defect (Reallocated_Sector_Ct stays 0) -- a well-documented firmware
     bug. -C 0 -U 0 disables those two reports for MX500 drives only;
     DEFAULT's -H, selftest, and reallocated-count tracking still apply. #}
-/dev/disk/by-id/{{ dev }} -e security-freeze -W 0,50,55 -l error -l selftest -l xerror -l scterc,70,70{{ ' -C 0 -U 0' if dev | regex_search('CT\\d+MX500SSD') else '' }}
+/dev/disk/by-id/{{ dev }} -s {{ smart_test_schedule_no_long if dev in rotational_disks_by_id else smart_test_schedule }} -e security-freeze -W 0,50,55 -l error -l selftest -l xerror -l scterc,70,70{{ ' -C 0 -U 0' if dev | regex_search('CT\\d+MX500SSD') else '' }}
 {% endif %}
 {% endfor %}
