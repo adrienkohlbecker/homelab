@@ -13,20 +13,17 @@ err="$(mktemp)"
 trap 'rm -f "$err"' EXIT
 
 json="$(
-  ANSIBLE_STDOUT_CALLBACK=ansible.posix.json \
+  ANSIBLE_VERBOSITY=0 ANSIBLE_STDOUT_CALLBACK=ansible.posix.json \
     ansible-playbook wireguard.yml -e "wg_show_peer=${device}" 2>"$err"
 )" || true
 
-# ansible prints a "Using ... ansible.cfg" banner on stdout ahead of the JSON, so
-# drop everything before the first bare `{`.
-payload="$(sed -n '/^{/,$p' <<<"$json")"
-config="$(jq -r '.plays[].tasks[]? | select(.task.name == "Render the client config") | .hosts[].msg // empty' <<<"$payload" 2>/dev/null || true)"
+config="$(jq -r '.plays[].tasks[]? | select(.task.name == "Render the client config") | .hosts[].msg // empty' <<<"$json" 2>/dev/null || true)"
 
 if [ -z "$config" ]; then
   {
     echo "wg:show: could not render a config for '${device}'."
     echo "It must be a roaming peer in the network topology, and the vault must be unlocked."
-    jq -r '.. | objects | select(.failed? == true) | .msg? // empty' <<<"$payload" 2>/dev/null || true
+    jq -r '.. | objects | select(.failed? == true) | .msg? // empty' <<<"$json" 2>/dev/null || true
     cat "$err"
   } >&2
   exit 1
