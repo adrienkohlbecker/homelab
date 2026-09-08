@@ -208,9 +208,9 @@ def commit_and_push(message: str) -> bool:
     return True
 
 
-def has_tag(name: str) -> bool:
-    r = sh(["git", "tag", "-l", name], cwd=CLONE, check=False)
-    return name in r.stdout.split()
+def resolve_ref(ref: str) -> str | None:
+    r = sh(["git", "rev-parse", "--verify", "--quiet", ref], cwd=CLONE, check=False)
+    return r.stdout.strip() or None
 
 
 def advance_synced_tag() -> None:
@@ -295,11 +295,7 @@ def do_pull() -> None:
         with target.open("wb") as out:
             subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{file.rel}"], stdout=out, check=True)
     if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
-        if (
-            not has_tag(SYNCED_TAG)
-            or sh(["git", "rev-parse", SYNCED_TAG], cwd=CLONE).stdout.strip()
-            != sh(["git", "rev-parse", "HEAD"], cwd=CLONE).stdout.strip()
-        ):
+        if resolve_ref(f"refs/tags/{SYNCED_TAG}") != resolve_ref("HEAD"):
             advance_synced_tag()
             print("pull: no host changes; advanced tag to HEAD")
         else:
@@ -323,7 +319,7 @@ def do_push(dry_run: bool = False) -> None:
         # from a direct file edit in the clone without a manual git commit.
         if commit_and_push(f"push: local edits ({time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())})"):
             print("push: committed local edits")
-    if not has_tag(SYNCED_TAG):
+    if resolve_ref(f"refs/tags/{SYNCED_TAG}") is None:
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
     # Per-file state model:
     #   tag_blob  -- sha at last_synced_to_host, or None if file is new to sync
