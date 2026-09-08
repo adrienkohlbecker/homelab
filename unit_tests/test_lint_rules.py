@@ -89,6 +89,7 @@ class TestRequireBackup:
             "roles/x/tasks/_setup.yml",
             "roles/packer/tasks/main.yml",
             "test/playbooks/tasks/environment.yml",
+            "/repo/test/playbooks/tasks/environment.yml",
         ],
     )
     def test_test_files_are_exempt(self, path: str) -> None:

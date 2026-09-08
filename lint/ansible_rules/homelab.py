@@ -46,10 +46,7 @@ def _is_test_hook(file: Lintable | None) -> bool:
 
 
 def _is_test_playbook(file: Lintable | None) -> bool:
-    if file is None:
-        return False
-    parts = file.path.parts
-    return any(parts[index : index + 2] == ("test", "playbooks") for index in range(len(parts) - 1))
+    return file is not None and file.path.full_match("**/test/playbooks/**")
 
 
 def _role_fixture_has_named_entrypoints(file: Lintable | None, role_name: object) -> bool:
