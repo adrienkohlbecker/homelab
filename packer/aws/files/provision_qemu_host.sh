@@ -51,7 +51,7 @@ sudo install -m 0755 -o root -g root /tmp/hydrate-qemu-images.py /usr/local/bin/
 sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch.sh /usr/local/bin/homelab_ci_prepare_scratch
 sudo usermod -aG kvm ubuntu
 
-sudo install -dm 0755 /opt/mise /opt/uv-cache /opt/venv /etc/mise /tmp/homelab-ci-build
+sudo install -dm 0755 /opt/mise /opt/uv-cache /etc/mise /tmp/homelab-ci-build
 sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
 (
   cd /tmp/homelab-ci-build
@@ -59,19 +59,19 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
     mise trust /tmp/homelab-ci-build/mise.toml
   sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
     mise install
+  # Warm the persistent uv cache through a project-local environment. The
+  # environment is build output and is removed with homelab-ci-build below;
+  # concurrent jobs create their own environments from the shared cache.
   sudo env \
     MISE_DATA_DIR=/opt/mise \
     UV_CACHE_DIR=/opt/uv-cache \
-    UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/opt/venv \
     MISE_PYTHON_UV_VENV_AUTO=false \
-    PATH=/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
-    UV_COMPILE_BYTECODE=1 \
+    PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
     mise exec -- uv sync --frozen --link-mode hardlink
 )
 sudo awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/homelab-ci-build/mise.toml |
   sudo tee /etc/mise/config.toml >/dev/null
-sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache /opt/venv
+sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache
 
 sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'
 #!/usr/bin/env bash

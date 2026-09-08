@@ -111,6 +111,15 @@ def test_qemu_host_uses_canonical_mise_upstream() -> None:
     assert "mise.jdx.dev" not in provision
 
 
+def test_qemu_host_retains_caches_without_a_shared_virtualenv() -> None:
+    provision = QEMU_HOST_PROVISION_SH.read_text()
+
+    assert "MISE_DATA_DIR=/opt/mise" in provision
+    assert "UV_CACHE_DIR=/opt/uv-cache" in provision
+    assert "mise exec -- uv sync --frozen --link-mode hardlink" in provision
+    assert "/opt/venv" not in provision
+
+
 def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
     template = QEMU_HOST_TEMPLATE.read_text()
 
