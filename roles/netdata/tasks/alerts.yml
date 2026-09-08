@@ -103,164 +103,26 @@
   tags:
     - netdata
 
-# Un-silence the two predictive disk-fill alarms shipped in upstream
-# /usr/lib/netdata/conf.d/health.d/disks.conf. Upstream sets
-# `to: silent` on out_of_disk_space_time and out_of_disk_inodes_time
-# because the 1h linear extrapolation can be noisy on bursty cloud
-# workloads. On lab/pug the workload is stable enough that the
-# prediction is a useful early warning -- the static disk_space_usage
-# alarm only escalates to CRITICAL at 98% used + <5GB free, which
-# leaves no room to react when /var/lib/containers fills rapidly.
-#
-# Patching disks.conf rather than re-declaring the templates because
-# the upstream calc depends on $disk_fill_rate (a sibling template);
-# re-declaring would require maintaining that whole chain in-tree and
-# is brittle across netdata upgrades. The `replace` regex is anchored
-# to each template's name so the other `to: silent` entries in the
-# file (10min_disk_utilization, 10min_disk_backlog -- legitimately
-# silent) are preserved.
-- name: Stage upstream disks.conf into /etc/netdata/health.d
-  command: cp /usr/lib/netdata/conf.d/health.d/disks.conf /etc/netdata/health.d/disks.conf
-  args:
-    creates: /etc/netdata/health.d/disks.conf
-  register: netdata_disks_staged
-  become: true
-  tags:
-    - netdata
-
-- name: Un-silence predictive disk-fill alarms
-  when: not (ansible_check_mode and netdata_disks_staged.changed)
-  replace:
+# Netdata ships its predictive out-of-space and out-of-inodes templates with
+# `to: silent`. Keep that upstream policy: short-term fill-rate extrapolation
+# is too noisy on filesystems with bursty container and scratch workloads.
+- name: Remove predictive disk-fill alert override
+  file:
     path: /etc/netdata/health.d/disks.conf
-    # (?ms): dotall so . spans newlines + multiline so ^ matches line
-    # starts. The `(?:(?!^\s*template:).)*?` body consumes any char that
-    # is NOT the start of a new `template:` line, so the match is
-    # confined to the SAME stanza as the header. Without the lookahead,
-    # after the first apply the non-greedy `.*?` walks past this
-    # template's now-`sysadmin` and matches the next `to: silent`
-    # downstream (10min_disk_utilization), reporting a phantom change
-    # on every rerun.
-    regexp: '(?ms)(^\s*template:\s*{{ item }}\b(?:(?!^\s*template:).)*?^\s*to:\s*)silent'
-    replace: '\1sysadmin'
-    backup: true
-  loop:
-    - out_of_disk_space_time
-    - out_of_disk_inodes_time
-  register: netdata_disks_unsilenced
+    state: absent
+  register: netdata_disks_override_absent
   become: true
   tags:
     - netdata
 
-# Damp the predictive disk-fill flap. out_of_disk_*_time estimates
-# hours-to-full as $avail / $disk_fill_rate, and disk_fill_rate is
-# ($baseline_avail - $current_avail) / hours where baseline is the `min`
-# avail in a 10m window. Upstream samples that baseline at -50m; on a
-# churny filesystem (container prune, minio/scratch write-then-delete)
-# current avail routinely bounces back above the 50-min-ago min, flipping
-# the rate negative -> calc yields inf -> CLEAR, then a fresh write drops
-# it again -> WARNING, cycling several times an hour. Each crossing is a
-# telegram. Two dampers:
-#   (a) deepen the baseline sample to -3h. On a steadily-filling disk the
-#       free space 3h ago sits well above current avail, so a transient
-#       deletion no longer lifts current past the baseline and the rate
-#       stays positive -- far fewer spurious CLEARs. The estimate just
-#       averages the fill over ~3h instead of ~55m, which is if anything
-#       a steadier early-warning signal.
-#   (b) lengthen the predictive alarms' down-delay so a raised alarm rides
-#       through residual blips before it's allowed to clear.
-# Raising is left untouched (warn/crit every 10s, no up-delay), so a
-# genuine fast fill still fires immediately -- the 2026-05-15 lead-time
-# requirement that motivated the un-silence above is preserved.
-- name: Deepen the disk-fill rate baseline window
-  when: not (ansible_check_mode and netdata_disks_staged.changed)
-  replace:
-    path: /etc/netdata/health.d/disks.conf
-    # [ \t] (not \s) so the line-anchored match can't span into the next
-    # line. The `min -10m`/`unaligned of avail` literals fence the edit to
-    # the disk_fill_rate + disk_inode_rate lookups -- the only two stanzas
-    # carrying `at -50m` (verified against upstream v2.10.3).
-    regexp: '^([ \t]*lookup:[ \t]*min -10m )at -50m( unaligned of avail)[ \t]*$'
-    replace: '\1at -3h\2'
-    backup: true
-  register: netdata_disks_rate_window
-  become: true
-  tags:
-    - netdata
-
-- name: Lengthen predictive disk-fill down-delays
-  when: not (ansible_check_mode and netdata_disks_staged.changed)
-  replace:
-    path: /etc/netdata/health.d/disks.conf
-    # Stanza-anchored (same shape as the un-silence above): the bare
-    # `delay: down 15m multiplier 1.2 max 1h` string is shared with the
-    # legitimately-silent 10min_disk_utilization/backlog templates, so a
-    # global replace would clobber theirs.
-    regexp: '(?ms)(^\s*template:\s*{{ item }}\b(?:(?!^\s*template:).)*?^\s*delay:\s*)down 15m multiplier 1.2 max 1h'
-    replace: '\1down 1h multiplier 1.5 max 6h'
-    backup: true
-  loop:
-    - out_of_disk_space_time
-    - out_of_disk_inodes_time
-  register: netdata_disks_delay
-  become: true
-  tags:
-    - netdata
-
-- name: Reload netdata health after disks.conf edits
-  when: >-
-    netdata_disks_staged.changed or netdata_disks_unsilenced.changed
-    or netdata_disks_rate_window.changed or netdata_disks_delay.changed
+- name: Reload netdata health after disk-fill alert override removal
+  when: netdata_disks_override_absent.changed
   import_tasks: reload_health.yml
   tags:
     - netdata
 
-# Fail-closed: the un-silence `replace` reports changed=false both when it
-# already ran AND when it matched nothing (upstream renamed/restructured the
-# template), so a silent no-op would otherwise leave the predictive disk-fill
-# alarm at `to: silent` with no signal. Assert the end state instead. Skipped
-# in check mode, where the staging+replace above is gated off on a fresh host.
-- name: Slurp the un-silenced disks.conf
-  when: not ansible_check_mode
-  slurp:
-    src: /etc/netdata/health.d/disks.conf
-  register: netdata_disks_unsilenced_check
-  become: true
-  tags:
-    - netdata
-
-- name: Assert the disk-fill predictive alarms route to sysadmin
-  when: not ansible_check_mode
-  vars:
-    _disks: "{{ netdata_disks_unsilenced_check.content | b64decode }}"
-  assert:
-    that:
-      # Same stanza-anchored shape and whitespace classes as the replace
-      # regexes above (\s* around `template:`/`to:`), so a no-space upstream
-      # variant the replace flips can't then false-fail this assert. The one
-      # deliberate divergence: `\s` after the name instead of \b -- \b in a
-      # `that:` conditional is re-escaped to a backspace by ansible 2.20, so
-      # we consume the trailing newline instead. Zero matches means the
-      # un-silence missed -- fail here, not during an actual disk-fill.
-      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
-      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
-      # Flap-damping landed: deepened baseline on both rate templates + the
-      # lengthened down-delay on both predictive templates. Same fail-closed
-      # rationale -- an upstream restructure that defeats a replace must fail
-      # here, not silently leave the alarm flapping in production.
-      - _disks | regex_findall('(?m)^\s*lookup:\s*min -10m at -3h unaligned of avail') | length >= 2
-      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*delay:\s*down 1h multiplier 1.5 max 6h') | length >= 1
-      - _disks | regex_findall('(?ms)^\s*template:\s*out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*delay:\s*down 1h multiplier 1.5 max 6h') | length >= 1
-    fail_msg: >-
-      disks.conf out_of_disk_space_time / out_of_disk_inodes_time no longer
-      resolve to a `to: sysadmin` stanza with the deepened (-3h) fill-rate
-      baseline and lengthened (down 1h) predictive delay -- upstream likely
-      renamed or restructured them, leaving the predictive disk-fill alarm
-      silenced or flapping. Re-check the un-silence/damping regexes in this role.
-  tags:
-    - netdata
-
-# Same staging+replace pattern as disks.conf above, for timex.conf's
-# system_clock_sync_state alarm. The kernel's ntp_adjtime() exposes a
+# Stage and patch timex.conf for its system_clock_sync_state alarm. The
+# kernel's ntp_adjtime() exposes a
 # clock-synchronized bit; that bit going to 0 means the local clock has
 # drifted out of sync with whatever ntp daemon is configured (chrony on
 # lab/pug). Upstream defaults `to: silent` because clock-sync is "boring"

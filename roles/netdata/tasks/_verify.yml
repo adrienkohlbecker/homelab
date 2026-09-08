@@ -373,6 +373,30 @@
     and _collector_failure_alerts | length > 0
     and _runner_alerts | length == 4
 
+- name: _verify | Predictive disk-fill alarms remain silent
+  vars:
+    _predictive_disk_alerts: >-
+      {{
+        _netdata_alarms.json.alarms.values()
+        | selectattr('name', 'in', [
+            'out_of_disk_space_time',
+            'out_of_disk_inodes_time'
+          ])
+        | list
+      }}
+  assert:
+    that:
+      - >-
+        _predictive_disk_alerts
+        | map(attribute='name')
+        | unique
+        | sort
+        == ['out_of_disk_inodes_time', 'out_of_disk_space_time']
+      - _predictive_disk_alerts | rejectattr('recipient', 'equalto', 'silent') | list | length == 0
+    fail_msg: >-
+      Expected the stock out_of_disk_space_time and out_of_disk_inodes_time
+      alarms to retain their silent recipient. Got: {{ _predictive_disk_alerts }}
+
 - name: _verify | Keepalived alarm uses sustained VIP absence
   vars:
     _alarm: >-
