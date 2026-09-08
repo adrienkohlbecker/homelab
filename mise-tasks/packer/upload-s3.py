@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import hashlib
 import json
 import os
 import shutil
@@ -49,24 +48,20 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BUNDLE_NAME = "disks.tar.zst"
-MANIFEST_NAME = "manifest.json"
-POINTER_NAME = "promoted.json"
 S3_CHECKSUM_ALGORITHM = "SHA256"
-# Import the release constants from the test harness so the source of truth
-# stays single. test/ isn't a package, so prepend it to sys.path.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
+sys.path.insert(0, str(REPO_ROOT / "mise-tasks" / "ci"))
+sys.path.insert(0, str(REPO_ROOT / "test"))
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
-
-VALID_MACHINES = {"box", "box_deps"}
-
-
-def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, check=True, text=True, **kwargs)
-
-
-def output(argv: list[str], **kwargs: Any) -> str:
-    return run(argv, stdout=subprocess.PIPE, **kwargs).stdout.strip()
+from qemu_image_store import (  # noqa: E402
+    BUNDLE_NAME,
+    MANIFEST_NAME,
+    POINTER_NAME,
+    VALID_MACHINES,
+    find_tar,
+    output,
+    run,
+    sha256,
+)
 
 
 def git_output(args: list[str], default: str = "unknown") -> str:
@@ -111,31 +106,6 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("usage_dry_run") == "true",
     )
     return parser.parse_args()
-
-
-def find_tar() -> str:
-    for candidate in ("tar", "gtar"):
-        path = shutil.which(candidate)
-        if not path:
-            continue
-        probe = subprocess.run(
-            [path, "--help"],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        if "--zstd" in probe.stdout and "--sparse" in probe.stdout:
-            return path
-    sys.exit("required tar support missing: need GNU tar/bsdtar with --zstd and --sparse")
-
-
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def artifact_dir(args: argparse.Namespace) -> Path:

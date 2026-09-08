@@ -25,37 +25,34 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
-import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
-BUNDLE_NAME = "disks.tar.zst"
-MANIFEST_NAME = "manifest.json"
-POINTER_NAME = "promoted.json"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
+from qemu_image_store import (
+    BUNDLE_NAME,
+    MANIFEST_NAME,
+    POINTER_NAME,
+    VALID_MACHINES,
+    find_tar,
+    manifest_files,
+    output,
+    run,
+    sha256,
+    validate_member_name,
+)
+
 MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
 S3_BUCKET = "homelab-ci-images"
 AWS_REGION = "eu-central-1"
-# Import the release constants from the test harness so the source of truth
-# stays single. test/ isn't a package, so prepend it to sys.path.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
-from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
-
-VALID_MACHINES = {"box", "box_deps"}
-
-
-def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, check=True, text=True, **kwargs)
-
-
-def output(argv: list[str], **kwargs: Any) -> str:
-    return run(argv, stdout=subprocess.PIPE, **kwargs).stdout.strip()
 
 
 def parse_args() -> argparse.Namespace:
@@ -86,23 +83,6 @@ def aws_base() -> list[str]:
         "--cli-read-timeout",
         "300",
     ]
-
-
-def find_tar() -> str:
-    for candidate in ("tar", "gtar"):
-        path = shutil.which(candidate)
-        if not path:
-            continue
-        probe = subprocess.run(
-            [path, "--help"],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        if "--zstd" in probe.stdout and "--sparse" in probe.stdout:
-            return path
-    sys.exit("required tar support missing: need GNU tar/bsdtar with --zstd and --sparse")
 
 
 def dest_root() -> Path:
@@ -146,45 +126,6 @@ def download_s3(key: str, dest: Path) -> None:
     )
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def manifest_files(manifest: dict[str, Any]) -> list[dict[str, str]]:
-    files = manifest.get("files")
-    if files is None:
-        # Published v1 bundles split disks and support files into two lists.
-        disks = manifest.get("disks", [])
-        support_files = manifest.get("support_files", [])
-        if not isinstance(disks, list) or not isinstance(support_files, list):
-            raise ValueError("legacy manifest file groups must be lists")
-        files = [*disks, *support_files]
-    if not isinstance(files, list) or not files:
-        raise ValueError("manifest files must be a non-empty list")
-
-    normalized: list[dict[str, str]] = []
-    for entry in files:
-        if not isinstance(entry, dict):
-            raise ValueError("manifest file entries must be objects")
-        name = entry.get("name")
-        digest = entry.get("sha256")
-        if not isinstance(name, str) or not name:
-            raise ValueError("manifest file name must be a non-empty string")
-        if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-            raise ValueError(f"manifest file sha256 is invalid for {name!r}")
-        validate_member_name(name)
-        normalized.append({"name": name, "sha256": digest})
-
-    names = [entry["name"] for entry in normalized]
-    if len(names) != len(set(names)):
-        raise ValueError("manifest file names must be unique")
-    return normalized
-
-
 def read_manifest(path: Path, args: argparse.Namespace, build_id: str) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text())
@@ -198,12 +139,6 @@ def read_manifest(path: Path, args: argparse.Namespace, build_id: str) -> dict[s
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     return manifest
-
-
-def validate_member_name(member: str) -> None:
-    path = PurePosixPath(member)
-    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
-        sys.exit(f"unsafe archive member path in manifest: {member!r}")
 
 
 def validate_archive_members(tar: str, bundle: Path, expected_members: list[str]) -> None:
