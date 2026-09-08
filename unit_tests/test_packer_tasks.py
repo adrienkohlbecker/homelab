@@ -50,7 +50,6 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
     ubuntus = ("noble", "resolute")
     fake_bin = tmp_path / "bin"
     log = tmp_path / "packer.log"
-    archive_log = tmp_path / "archive.log"
     cache_log = tmp_path / "cache.log"
     _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'Linux\\n'\n")
     _executable(
@@ -58,16 +57,11 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
         "#!/bin/sh\n"
         "set -eu\n"
         'printf "%s\\n" "$*" >>"$PACKER_TEST_LOG"\n'
-        'printf "%s\\n" "$PACKER_CACHE_DIR" >>"$PACKER_CACHE_LOG"\n'
-        'for arg in "$@"; do\n'
-        '  case "$arg" in build_directory=*) build_directory=${arg#*=} ;; esac\n'
-        "done\n"
-        'tar -tf "$build_directory/homelab-source.tar" >"$PACKER_ARCHIVE_LOG"\n',
+        'printf "%s\\n" "$PACKER_CACHE_DIR" >>"$PACKER_CACHE_LOG"\n',
     )
     env = _environment(tmp_path, " ".join(ubuntus))
     env.update(
         PATH=f"{fake_bin}:{env['PATH']}",
-        PACKER_ARCHIVE_LOG=str(archive_log),
         PACKER_CACHE_LOG=str(cache_log),
         PACKER_TEST_LOG=str(log),
     )
@@ -83,18 +77,19 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
         assert "-only=qemu.box" in call
     assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus)
 
-    archive_entries = archive_log.read_text().splitlines()
-    assert "roles/refind/files/zz-stage-efi-stub" in archive_entries
-    assert "roles/console/files/console-setup" in archive_entries
-    assert "roles/console/files/keyboard" in archive_entries
-    assert "roles/boot/files/modules_most" in archive_entries
-    assert not any(entry == ".git" or entry.startswith(".git/") for entry in archive_entries)
-    assert not any(entry == "notes" or entry.startswith("notes/") for entry in archive_entries)
-    assert not any(
-        entry == "roles/homeassistant/files/ha_gui_config"
-        or entry.startswith("roles/homeassistant/files/ha_gui_config/")
-        for entry in archive_entries
-    )
+
+def test_qemu_build_uploads_only_required_role_files() -> None:
+    template = QEMU_TEMPLATE.read_text()
+
+    expected = {
+        "roles/boot/files/modules_most",
+        "roles/console/files/console-setup",
+        "roles/console/files/keyboard",
+        "roles/refind/files/zz-stage-efi-stub",
+    }
+    uploaded_role_files = {match.group(1) for match in re.finditer(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)}
+    assert uploaded_role_files == expected
+    assert "homelab-source.tar" not in template
 
 
 def test_qemu_host_uses_canonical_mise_upstream() -> None:

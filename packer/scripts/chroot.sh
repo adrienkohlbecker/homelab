@@ -21,7 +21,7 @@ trap 'exit 130' INT TERM
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
 #   SSH_KEY_PUB, ZBM_VERSION.
-# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_REPO, IMAGE_TARGET,
+# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_ROLE_FILES, IMAGE_TARGET,
 #   QEMU_TEST_IMAGE, PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN,
 #   HOSTNAME, USERNAME.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
@@ -165,10 +165,10 @@ ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime
 # Install the same console policy the console role owns. These files are static,
 # so the chroot can consume them directly without a template renderer.
 install -m 0644 \
-  "${CHROOT_REPO}/roles/console/files/console-setup" \
+  "${CHROOT_ROLE_FILES}/console-setup" \
   /etc/default/console-setup
 install -m 0644 \
-  "${CHROOT_REPO}/roles/console/files/keyboard" \
+  "${CHROOT_ROLE_FILES}/keyboard" \
   /etc/default/keyboard
 
 # Update the repository cache
@@ -365,7 +365,7 @@ echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 # controllers/NICs the builder didn't have. Install the boot role's canonical
 # conf.d file before the one-and-only build below.
 install -m 0644 \
-  "${CHROOT_REPO}/roles/boot/files/modules_most" \
+  "${CHROOT_ROLE_FILES}/modules_most" \
   /etc/initramfs-tools/conf.d/modules-most
 
 # Restore the real update-initramfs and generate the initramfs once, now
@@ -464,7 +464,7 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
   # (.new + mv) prevents a power loss mid-write from leaving a
   # half-written kernel image on the ESP.
   install -m 0755 \
-    "${CHROOT_REPO}/roles/refind/files/zz-stage-efi-stub" \
+    "${CHROOT_ROLE_FILES}/zz-stage-efi-stub" \
     /etc/kernel/postinst.d/zz-stage-efi-stub
 
   mkdir -p /etc/kernel/postrm.d /etc/initramfs/post-update.d

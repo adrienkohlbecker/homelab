@@ -349,13 +349,16 @@ build {
     destination = "/home/vagrant/"
   }
 
-  # Git-visible repository snapshot assembled by packer:build. provision.sh
-  # extracts it temporarily into the target root so chroot.sh can consume the
-  # exact same role-owned files as Ansible without installing Ansible there.
+  # Bootstrap files shared with their owning Ansible roles. Upload the exact
+  # working-tree bytes rather than packaging the repository around them.
   provisioner "file" {
-    source      = "${var.build_directory}/homelab-source.tar"
-    destination = "/home/vagrant/homelab-source.tar"
-    generated   = true
+    sources = [
+      "${path.cwd}/roles/boot/files/modules_most",
+      "${path.cwd}/roles/console/files/console-setup",
+      "${path.cwd}/roles/console/files/keyboard",
+      "${path.cwd}/roles/refind/files/zz-stage-efi-stub",
+    ]
+    destination = "/home/vagrant/"
   }
 
   provisioner "shell" {
