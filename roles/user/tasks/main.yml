@@ -11,10 +11,10 @@
   apt:
     pkg:
       - attr
+      - bind9-dnsutils
       - btop
       - ccze
       - curl
-      - dnsutils
       - edac-utils
       - fatrace
       - fdupes
