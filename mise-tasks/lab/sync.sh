@@ -43,7 +43,7 @@ fi
 #  --exclude /out.log /vault.sh  -> local-only files .gitignore does not cover.
 #  --delete                      -> the remote is a throwaway mirror; prune stale.
 rsync_args=(
-  -vah --progress --delete
+  -ah --delete --info=stats2
   --exclude="/out.log" --exclude="/vault.sh"
   --filter="dir-merge,- .gitignore"
 )
