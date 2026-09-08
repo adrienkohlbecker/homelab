@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-#MISE description="Mirror the working tree and the test Ansible vault password to a remote builder (default lab) for on-host packer/ansible runs -- e.g. the fox image bake, which is qemu/KVM and can't run on the Mac. Honours every .gitignore, so the notes/ private clone, .venv, and build artifacts never ship."
+#MISE description="Mirror the main working tree and test Ansible vault password to a remote builder (default lab) for on-host packer/ansible runs. Honours every .gitignore, so private clones, environments, and build artifacts never ship."
 #USAGE flag "--host <host>" help="ssh destination to mirror onto" default="lab"
 #USAGE flag "--dest <dest>" help="Path on the remote; relative paths are under the remote home" default="homelab"
 #USAGE flag "--dry-run" help="Preview the transfer without writing anything on the remote"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# Anchor at the repo root regardless of where mise was invoked, so the rsync
-# source (.) and the per-directory .gitignore merge are correct. In a worktree
-# this is the worktree root -- you sync the tree you are working in.
-cd "$(git rev-parse --show-toplevel)"
+# The remote Packer task uses the mirrored Git index to select source files. A
+# linked worktree's .git file points into a local-only path, so only the main
+# checkout can produce a usable remote repository.
+repo_root=$(git rev-parse --show-toplevel)
+if [ "$(git -C "$repo_root" rev-parse --git-dir)" != ".git" ]; then
+  echo "lab:sync: linked worktrees are unsupported; run from the main checkout" >&2
+  exit 1
+fi
+cd "$repo_root"
 
 host="${usage_host}"
 dest="${usage_dest}"
