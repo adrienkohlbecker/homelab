@@ -128,7 +128,10 @@ def build_stats(s3, machine: str, ubuntu: str, build_id: str) -> Build:
     )
 
 
-def mark_keep_reasons(builds: list[Build], promoted: str | None, keep_newest: int, keep_days: int) -> None:
+def mark_keep_reasons(builds: list[Build], promoted: str | None, *, retired: bool) -> None:
+    if retired:
+        return
+
     now = dt.datetime.now(dt.UTC)
     if promoted:
         for build in builds:
@@ -140,15 +143,15 @@ def mark_keep_reasons(builds: list[Build], promoted: str | None, keep_newest: in
     for build in builds:
         if build.build_id == promoted:
             continue
-        if extras < keep_newest:
+        if extras < KEEP_NEWEST:
             build.keep_reasons.append(f"newest-extra-{extras + 1}")
             extras += 1
 
-    grace = dt.timedelta(days=keep_days)
+    grace = dt.timedelta(days=KEEP_DAYS)
     for build in builds:
         age = now - build.last_modified
         if age <= grace:
-            build.keep_reasons.append(f"younger-than-{keep_days}d")
+            build.keep_reasons.append(f"younger-than-{KEEP_DAYS}d")
 
 
 def list_release_prefixes(s3) -> list[str]:
@@ -222,7 +225,7 @@ def main() -> int:
             promoted = None if retired else promoted_build(s3, machine, ubuntu)
             builds = [build_stats(s3, machine, ubuntu, build_id) for build_id in list_build_ids(s3, machine, ubuntu)]
             builds.sort(key=lambda build: build.last_modified, reverse=True)
-            mark_keep_reasons(builds, promoted, 0 if retired else KEEP_NEWEST, 0 if retired else KEEP_DAYS)
+            mark_keep_reasons(builds, promoted, retired=retired)
             if promoted and all(build.build_id != promoted for build in builds):
                 print(f"WARN: {ubuntu}/{machine} promotes missing build {promoted}", file=sys.stderr)
             if not builds:
