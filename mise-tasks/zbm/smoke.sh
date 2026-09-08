@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
-#MISE description="Headless ZBM smoke test: boot a tarball against the box image and assert menu, dropbear, and BE handoff"
+#MISE description="ZBM smoke test: drive the serial menu and assert boot-environment handoff"
 # Exercises the ZBM recovery loop end-to-end with no terminal:
 # direct-boot the ZBM kernel + initrd against the box variant's packer image,
-# wait for the menu on the captured serial log, check dropbear answers with
-# the tarball's own host key, then select the default boot environment
-# through a recovery SSH `zbm` session and assert the guest kexecs all the
+# wait for the menu on the captured serial log, select the default boot
+# environment through the serial console, and assert the guest kexecs all the
 # way to its login prompt.
 #
 #   mise run zbm:smoke                    # newest local zbm-build/<arch> tarball
 #   mise run zbm:smoke <package-version>  # fetch that version from the GitLab
 #                                         # package registry first (its arch
 #                                         # suffix must match this host)
-#
-# Requires the operator's SSH agent: the recovery image bakes
-# zbm/dropbear/authorized_keys, and selecting the BE happens over that SSH
-# session because the serial console owns the on-screen menu (QMP sendkey
-# would feed the unused VGA keyboard instead).
 set -euo pipefail
 
 # shellcheck source=mise-tasks/zbm/lib.sh
@@ -31,6 +25,10 @@ out_dir="${repo_root}/zbm-build/${arch}"
 workdir="$(mktemp -d)"
 launcher_pid=""
 qmp_sock="${workdir}/qmp.sock"
+serial_fifo="${workdir}/serial.in"
+boot_log="${workdir}/serial.log"
+mkfifo "$serial_fifo"
+exec 3<>"$serial_fifo"
 
 cleanup() {
   if [ -S "$qmp_sock" ]; then
@@ -57,6 +55,7 @@ PY
     kill "$launcher_pid" 2>/dev/null || true
     wait "$launcher_pid" 2>/dev/null || true
   fi
+  exec 3>&-
   rm -rf "$workdir"
 }
 trap cleanup EXIT INT TERM
@@ -84,7 +83,7 @@ fi
 echo "Smoke-testing ${tarball}"
 
 tar -xzf "$tarball" -C "$workdir" --no-same-owner
-for member in cmdline ssh_host_ed25519_key.pub initramfs-bootmenu.img; do
+for member in cmdline initramfs-bootmenu.img; do
   if [ ! -f "${workdir}/${member}" ]; then
     echo "tarball is missing ${member}" >&2
     exit 1
@@ -92,32 +91,20 @@ for member in cmdline ssh_host_ed25519_key.pub initramfs-bootmenu.img; do
 done
 base_cmdline=$(cat "${workdir}/cmdline")
 
-# Read launch.py's --ubuntu default straight from test/matrix.py rather than
-# restating it; passed explicitly below so the serial log path is correct by
-# construction.
-ubuntu=$(python3 -c "import sys; sys.path.insert(0, 'test'); import matrix; print(matrix.DEFAULT_UBUNTU)")
-boot_log="test/out/box.${ubuntu}._launch.boot.ansi"
-rm -f "$boot_log"
-ports_file="${workdir}/hostfwds"
-
-"${repo_root}/test/launch.py" \
+HOMELAB_NET_BACKEND=slirp "${repo_root}/test/launch.py" \
   --machine box \
-  --ubuntu "$ubuntu" \
   --kernel "$workdir"/vmlin*-bootmenu \
   --initrd "${workdir}/initramfs-bootmenu.img" \
   --append "$base_cmdline loglevel=7 zbm.show" \
   --mem 2048 \
   --with-pflash \
   --qmp "$qmp_sock" \
-  --extra-hostfwd 222 \
-  --write-hostfwds "$ports_file" \
-  --no-ssh-wait >"${workdir}/launch.log" 2>&1 &
+  --no-ssh-wait \
+  --foreground <"$serial_fifo" >"$boot_log" 2>&1 &
 launcher_pid=$!
 
 fail() {
   echo "$1" >&2
-  echo "--- launch.log tail:" >&2
-  tail -n 15 "${workdir}/launch.log" >&2 || true
   echo "--- serial tail:" >&2
   tail -c 2000 "$boot_log" 2>/dev/null | LC_ALL=C sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g' -e $'s/\r//g' >&2 || true
   exit 1
@@ -139,38 +126,10 @@ menu_up() { LC_ALL=C grep -aq "Boot Environments" "$boot_log"; }
 wait_for 180 "the ZFSBootMenu menu on the serial console" menu_up
 echo "PASS: ZBM menu rendered and imported the box rpool"
 
-wait_for 60 "the dropbear hostfwd allocation" test -s "$ports_file"
-ssh_port=$(awk '$2 == 222 {print $1}' "$ports_file")
-
-# macOS ssh-keyscan emits its `# host banner` comment on stdout, so match
-# the key line by type instead of taking the output wholesale.
-scan_hostkey() {
-  ssh-keyscan -T 5 -p "$ssh_port" -t ed25519 127.0.0.1 2>/dev/null |
-    awk '$2 == "ssh-ed25519" {print $2, $3}' >"${workdir}/scanned.pub"
-  test -s "${workdir}/scanned.pub"
-}
-wait_for 60 "a dropbear host key on port ${ssh_port}" scan_hostkey
-if ! diff <(awk '{print $1, $2}' "${workdir}/ssh_host_ed25519_key.pub") "${workdir}/scanned.pub"; then
-  fail "dropbear host key does not match the tarball ssh_host_ed25519_key.pub"
-fi
-echo "PASS: dropbear answers with the tarball host key"
-
-# The SSH-side zbm waits for the console menu instance to yield, then the
-# carriage return boots the highlighted default BE; kexec drops the
-# connection, which ends this pipeline. `|| true`: a dropped connection is
-# the success path.
-{
-  sleep 8
-  printf '\r'
-  sleep 45
-} | ssh -tt -p "$ssh_port" \
-  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-  -o ConnectTimeout=10 \
-  root@127.0.0.1 zbm >"${workdir}/zbm-session.log" 2>&1 || true
-if ! LC_ALL=C grep -aq "Booting " "${workdir}/zbm-session.log"; then
-  fail "the recovery SSH zbm session never reported booting a BE"
-fi
-echo "PASS: recovery SSH session accepted the agent key and selected the default BE"
+printf '\r' >&3
+boot_started() { LC_ALL=C grep -aq "Booting " "$boot_log"; }
+wait_for 60 "ZFSBootMenu to start the selected boot environment" boot_started
+echo "PASS: serial input selected the default boot environment"
 
 # On aarch64 EDK2 the kexec handoff itself is a known upstream bug: the BE
 # kernel starts and immediately panics with a misalignment complaint

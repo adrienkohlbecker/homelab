@@ -34,12 +34,6 @@ if [ "$builder_entrypoint" != '["/build-init.sh"]' ]; then
   echo "run 'mise run zbm:builder-image' to rebuild the upstream-compatible local builder image" >&2
   exit 1
 fi
-if ! docker run --rm --entrypoint /usr/bin/bash "$builder_tag" -lc 'command -v dropbear >/dev/null && test -f /usr/lib/dracut/modules.d/60crypt-ssh/module-setup.sh'; then
-  echo "ZBM builder image ${builder_tag} is missing dropbear or the crypt-ssh dracut module" >&2
-  echo "run 'mise run zbm:builder-image' to rebuild the recovery-capable local builder image" >&2
-  exit 1
-fi
-
 workdir="$(mktemp -d "${repo_root}/zbm-build/make-binary.${arch}.XXXXXX")"
 trap 'rm -rf "$workdir"' EXIT INT TERM
 
@@ -53,15 +47,9 @@ git clone --no-hardlinks --branch "v${ZBM_VERSION}" "$src_dir" "$work_src" >/dev
 git -C "$work_src" apply "$repo_root/zbm/recovery-overlay.patch"
 
 homelab_root="${work_src}/homelab"
-mkdir -p "${homelab_root}/dropbear"
+mkdir -p "$homelab_root"
 cp -a "${repo_root}/zbm/hooks" "${homelab_root}/"
-cp "${repo_root}/zbm/dropbear/authorized_keys" "${homelab_root}/dropbear/"
 cp "${repo_root}/zbm/dracut.conf.d/recovery.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-recovery.conf"
-
-ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "${homelab_root}/dropbear/ssh_host_ed25519_key"
-cp "${homelab_root}/dropbear/ssh_host_ed25519_key.pub" "$out_dir/ssh_host_ed25519_key.pub"
-echo "Recovery SSH host key fingerprint:"
-ssh-keygen -E sha256 -lf "$out_dir/ssh_host_ed25519_key.pub"
 
 # Upstream stages its config and output trees under a bare mktemp -d and
 # bind-mounts them into the build container. Bind-mount sources resolve on
@@ -113,15 +101,6 @@ yq -er '.Kernel.CommandLine' "${work_src}/etc/zfsbootmenu/recovery.yaml" >"$out_
 initramfs_listing="${workdir}/initramfs.lsinitrd"
 zbm_lsinitrd "$builder_tag" "$out_dir/initramfs-bootmenu.img" >"$initramfs_listing"
 
-for required in dropbear authorized_keys; do
-  if ! grep -qF "$required" "$initramfs_listing"; then
-    echo "Included dracut modules:" >&2
-    awk '/^dracut modules:$/ { show=1; next } show && NF == 1 { print "  " $1; next } show && NF != 1 { exit }' "$initramfs_listing" >&2
-    echo "ZBM initramfs is missing required recovery SSH item: ${required}" >&2
-    exit 1
-  fi
-done
-
 zbm_assert_core_listing "$initramfs_listing" "ZBM initramfs"
 
 if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" "$initramfs_listing"; then
@@ -130,5 +109,5 @@ if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" "$initramfs_lis
 fi
 
 tarball="zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}-${arch}.tar.gz"
-(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub cmdline | gzip -n >"$tarball")
+(cd "$out_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI cmdline | gzip -n >"$tarball")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")

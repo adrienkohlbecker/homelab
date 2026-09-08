@@ -52,8 +52,7 @@ stages:
     HOMELAB_TEST_IN_AWS: "{{ "true" if in_aws else "false" }}"
     # Pin the legacy slirp guest NIC. passt intermittently fails to answer the
     # guest's first-boot DHCP, so the guest never gets a NIC and the cell stalls
-    # to the ssh-wait deadline (harness exit 124). The race is not limited to the
-    # ZFSBootMenu initramfs (rd.neednet=1, absent from the box test images):
+    # to the ssh-wait deadline (harness exit 124):
     # under the synchronized cell-launch burst the qemu hosts now run, passt
     # drops the plain systemd-networkd first-boot DHCP too -- a full-matrix
     # re-enable went ~84/138 cells red on the ssh-wait timeout. passt only

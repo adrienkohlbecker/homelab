@@ -344,7 +344,6 @@ zbm_build:
       - zbm-build/**/*-bootmenu
       - zbm-build/**/*-bootmenu.img
       - zbm-build/**/zfsbootmenu.EFI
-      - zbm-build/**/ssh_host_ed25519_key.pub
       - zbm-build/**/*.tar.gz
       - zbm-build/**/*.sha256sum
   script:

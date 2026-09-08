@@ -1,4 +1,0 @@
-mkinitcpio.conf.d/
-
-# Recovery SSH host private key — generated fresh per build, removed on exit.
-dropbear/ssh_host_ed25519_key

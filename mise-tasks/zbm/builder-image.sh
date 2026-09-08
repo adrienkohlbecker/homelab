@@ -62,9 +62,8 @@ git -C "$src_dir" reset --hard "v${ZBM_VERSION}" >/dev/null
 git -C "$src_dir" clean -fdx >/dev/null
 
 # PACKAGES are extra Void packages layered onto upstream's base image to satisfy
-# recovery.conf's install_items: mdadm + nvme-cli (disk tooling), dracut-crypt-ssh
-# + dropbear (recovery SSH), and dhclient for ip=single-dhcp (the base ships no
-# DHCP client).
+# recovery.conf's install_items need mdadm + nvme-cli for operator recovery.
+# Keep dhclient available for manual networking; the base ships no DHCP client.
 img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 
 # Registry-backed layer cache in the homelab GitLab project's container
@@ -95,7 +94,7 @@ docker buildx build \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
   --build-arg "KERNELS=linux${ZBM_KERNEL_VERSION}" \
-  --build-arg "PACKAGES=mdadm nvme-cli dracut-crypt-ssh dropbear dhclient" \
+  --build-arg "PACKAGES=mdadm nvme-cli dhclient" \
   ${cache_args[@]+"${cache_args[@]}"} \
   --load \
   --tag "$img" \
@@ -118,7 +117,5 @@ trap - EXIT
 
 docker run --rm --entrypoint /usr/bin/bash "$img" -lc '
   set -euo pipefail
-  command -v dropbear >/dev/null
-  test -f /usr/lib/dracut/modules.d/60crypt-ssh/module-setup.sh
   test -f /usr/share/perl5/core_perl/Pod/Usage.pm
 '
