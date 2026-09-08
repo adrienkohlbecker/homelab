@@ -25,7 +25,6 @@ from pathlib import Path
 
 from machine import (
     MACHINE_CHOICES,
-    OUT_DIR,
     PEAK_KB_SENTINEL_PREFIX,
     UBUNTU_RELEASES,
     imagedir_for_host,
@@ -139,22 +138,6 @@ def parse_args() -> argparse.Namespace:
     )
 
     return parser.parse_args()
-
-
-def setup_output_dir(cells: list[TestCell]) -> None:
-    """Create the output directory and clear stale .ansi logs for the current plan.
-
-    Only wipes files for triples about to be rerun -- prior failure logs for
-    triples outside the plan stay on disk so a partial rerun (--retry-failed,
-    --only-role, --except-role) doesn't destroy logs the operator may still
-    want to inspect.
-    """
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    # Mirrors the prefix Machine.__post_init__ builds in test/machine.py.
-    for cell in cells:
-        prefix = f"{cell.machine}.{cell.ubuntu}.{cell.role}"
-        for suffix in ("output", "journal", "boot", "dmesg", "systemctl-failed"):
-            (OUT_DIR / f"{prefix}.{suffix}.ansi").unlink(missing_ok=True)
 
 
 def _read_joblog() -> list[JobResult]:
@@ -470,7 +453,6 @@ def main() -> int:
     # constructed (and thus before any worker subprocess is spawned).
     sweep_stale_workdirs(imagedir_for_host())
 
-    setup_output_dir(cells)
     # Only partial reruns merge with the prior log; an unfiltered run replaces
     # out.tsv outright so stale triples (deleted roles, old machine/ubuntu
     # scopes) don't linger forever.

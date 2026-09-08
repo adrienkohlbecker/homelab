@@ -234,6 +234,30 @@ class TestMachineUbuntuValidation:
             machine_factory(launch=machine.LaunchOptions(write_image=True))
 
 
+class TestMachineArtifactOwnership:
+    def test_clears_and_cleans_every_per_run_artifact(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        tmp_path: Path,
+    ) -> None:
+        out = tmp_path / "out"
+        out.mkdir()
+        artifacts = [
+            out / f"box.noble.testrole.{suffix}.ansi"
+            for suffix in ("output", "journal", "boot", "dmesg", "systemctl-failed", "passt")
+        ]
+        for artifact in artifacts:
+            artifact.write_text("stale")
+
+        instance = machine_factory()
+        assert all(not artifact.exists() for artifact in artifacts)
+
+        for artifact in artifacts:
+            artifact.write_text("current")
+        instance.cleanup_logs()
+        assert all(not artifact.exists() for artifact in artifacts)
+
+
 class TestAnsibleControllerStaging:
     def test_stages_once_on_first_ansible_command(
         self,

@@ -71,27 +71,3 @@ class TestJoblogRoundTrip:
     def test_read_missing_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(testall, "LOG_FILE", tmp_path / "nonexistent.tsv")
         assert testall._read_joblog() == []
-
-
-# ---------------------------------------------------------------------------
-# setup_output_dir
-# ---------------------------------------------------------------------------
-
-
-class TestSetupOutputDir:
-    def test_clears_stale_ansi_for_plan(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        out = tmp_path / "out"
-        monkeypatch.setattr(testall, "OUT_DIR", out)
-        out.mkdir()
-        stale_files = [
-            out / f"box.noble.nginx.{suffix}.ansi"
-            for suffix in ("output", "journal", "boot", "dmesg", "systemctl-failed")
-        ]
-        for stale in stale_files:
-            stale.write_text("old")
-        other = out / "lab.noble.podman.output.ansi"
-        other.write_text("keep")
-        plan = [testall.TestCell("box", "noble", "nginx")]
-        testall.setup_output_dir(plan)
-        assert all(not stale.exists() for stale in stale_files)
-        assert other.exists()

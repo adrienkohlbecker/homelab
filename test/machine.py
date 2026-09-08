@@ -35,9 +35,6 @@ from utils import (
 )
 
 OUT_DIR = Path("test/out")
-# Created once at import so every later writer (per-run logs, etc.) can
-# open files inside without repeating the mkdir.
-OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SSH_KEY = "packer/vagrant.key"
 # Default loopback endpoint for qemu hostfwd binds, VNC displays, SSH, and
@@ -399,6 +396,7 @@ class Machine:
     boot_file: Path
     dmesg_file: Path
     systemctl_failed_file: Path
+    passt_file: Path
     workdir: tempfile.TemporaryDirectory[str]
     workdir_path: Path
     # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
@@ -539,17 +537,22 @@ class Machine:
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
         self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
         self.boot_file = OUT_DIR / f"{prefix}.boot.ansi"
         self.dmesg_file = OUT_DIR / f"{prefix}.dmesg.ansi"
         self.systemctl_failed_file = OUT_DIR / f"{prefix}.systemctl-failed.ansi"
-        # output/boot get truncated by their respective open("w") at write
-        # time, so they don't need pre-cleanup. The failure-only artifacts
-        # (journal/dmesg/systemctl-failed) are only ever created on a
-        # failed run, so stale ones from a prior run would otherwise
-        # survive into a healthy run -- drop them explicitly.
-        for stale in (self.journal_file, self.dmesg_file, self.systemctl_failed_file):
+        self.passt_file = OUT_DIR / f"{prefix}.passt.ansi"
+        self._artifact_files = (
+            self.output_file,
+            self.journal_file,
+            self.boot_file,
+            self.dmesg_file,
+            self.systemctl_failed_file,
+            self.passt_file,
+        )
+        for stale in self._artifact_files:
             stale.unlink(missing_ok=True)
         # The workdir lands alongside the packer qcow2s by default. An explicit
         # workdir_parent (CI flag) overrides so the imagedir can be ro-mounted.
@@ -1079,13 +1082,7 @@ class Machine:
 
     def cleanup_logs(self) -> None:
         """Remove all per-run log artifacts."""
-        for path in (
-            self.output_file,
-            self.boot_file,
-            self.journal_file,
-            self.dmesg_file,
-            self.systemctl_failed_file,
-        ):
+        for path in self._artifact_files:
             path.unlink(missing_ok=True)
 
     async def wait(self) -> None:
@@ -1627,8 +1624,7 @@ class Machine:
         assert self._passt_socket is not None
         cmd = self._passt_command()
         print_cmd_line(cmd)
-        passt_log = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.passt.ansi"
-        with passt_log.open("wb") as handle:
+        with self.passt_file.open("wb") as handle:
             self._passt_proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.DEVNULL,
@@ -1639,7 +1635,7 @@ class Machine:
         deadline = time.monotonic() + 10
         while not self._passt_socket.exists():
             if self._passt_proc.returncode is not None:
-                raise RuntimeError(f"passt exited before creating its socket; see {passt_log}")
+                raise RuntimeError(f"passt exited before creating its socket; see {self.passt_file}")
             if time.monotonic() > deadline:
                 raise TimeoutError(f"passt socket {self._passt_socket} not created within 10s")
             await sleep_tick()
