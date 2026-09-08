@@ -290,16 +290,6 @@
   tags:
     - homeassistant
 
-# The bridge network's route metric now orders HA's two defaults, so the
-# host-side pin helper that used to do it from ExecStartPost is gone.
-- name: Remove retired homeassistant route helper
-  file:
-    path: /opt/homeassistant
-    state: absent
-  become: true
-  tags:
-    - homeassistant
-
 - name: Pull homeassistant image
   import_role:
     name: podman
