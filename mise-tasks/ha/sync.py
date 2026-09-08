@@ -18,7 +18,6 @@ would change, but do not write to the host or move git refs.
 
 import hashlib
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -29,10 +28,8 @@ from pathlib import Path
 
 # Resolve mise's op:// HA_API_TOKEN before calling the HA API.
 if os.environ.get("HA_API_TOKEN", "").startswith("op://") and not os.environ.get("_HA_SYNC_OP_RESOLVED"):
-    _op = shutil.which("op")
-    if _op:
-        _env = {**os.environ, "_HA_SYNC_OP_RESOLVED": "1"}
-        sys.exit(subprocess.run([_op, "run", "--", sys.executable, __file__, *sys.argv[1:]], env=_env).returncode)
+    os.environ["_HA_SYNC_OP_RESOLVED"] = "1"
+    os.execvp("op", ["op", "run", "--", sys.executable, __file__, *sys.argv[1:]])
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLONE = REPO_ROOT / "roles/homeassistant/files/ha_gui_config"
