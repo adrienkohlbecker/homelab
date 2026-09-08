@@ -165,45 +165,28 @@ class TestPropagateReleaseCells:
             "podman:box_deps:resolute",
         ]
 
-    def test_no_releases_for_role(self) -> None:
-        result = detect.propagate_release_cells(
-            direct_roles=["nginx"],
-            consumers={"nginx": ["homepage"]},
-            role_machines={"homepage": ["box"]},
-            role_releases={},
-            universe={"homepage"},
-        )
-        assert result == []
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"role_releases": {}},
+            {"role_releases": {"apt_source": []}},
+            {"consumers": {}},
+            {"universe": set()},
+            {"direct_roles": []},
+        ],
+        ids=["missing-releases", "empty-releases", "no-consumers", "outside-universe", "no-direct-roles"],
+    )
+    def test_missing_relationships_return_no_cells(self, overrides) -> None:
+        arguments = {
+            "direct_roles": ["apt_source"],
+            "consumers": {"apt_source": ["nginx"]},
+            "role_machines": {"nginx": ["box"]},
+            "role_releases": {"apt_source": ["noble"]},
+            "universe": {"nginx"},
+        }
+        arguments.update(overrides)
 
-    def test_empty_releases_list(self) -> None:
-        result = detect.propagate_release_cells(
-            direct_roles=["nginx"],
-            consumers={"nginx": ["homepage"]},
-            role_machines={"homepage": ["box"]},
-            role_releases={"nginx": []},
-            universe={"homepage"},
-        )
-        assert result == []
-
-    def test_no_consumers(self) -> None:
-        result = detect.propagate_release_cells(
-            direct_roles=["apt_source"],
-            consumers={},
-            role_machines={},
-            role_releases={"apt_source": ["noble"]},
-            universe=set(),
-        )
-        assert result == []
-
-    def test_consumer_not_in_universe(self) -> None:
-        result = detect.propagate_release_cells(
-            direct_roles=["apt_source"],
-            consumers={"apt_source": ["helper_only"]},
-            role_machines={"helper_only": ["box"]},
-            role_releases={"apt_source": ["noble"]},
-            universe=set(),
-        )
-        assert result == []
+        assert detect.propagate_release_cells(**arguments) == []
 
     def test_default_machine_fallback(self) -> None:
         result = detect.propagate_release_cells(
@@ -252,16 +235,6 @@ class TestPropagateReleaseCells:
             "cleanup:box:noble",
             "cleanup:minimal:noble",
         ]
-
-    def test_empty_inputs(self) -> None:
-        result = detect.propagate_release_cells(
-            direct_roles=[],
-            consumers={},
-            role_machines={},
-            role_releases={},
-            universe=set(),
-        )
-        assert result == []
 
 
 # Git helpers
