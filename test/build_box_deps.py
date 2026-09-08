@@ -54,13 +54,7 @@ async def seed_image(image_dir: Path, ubuntu: str) -> None:
             await machine.ensure_ssh()
             print_line("SSH up")
 
-            result = await machine.ssh_command("systemctl", "is-system-running", "--wait", check=False)
-            state = "\n".join(result.stdout).strip()
-            if result.exitcode != 0 or state != "running":
-                failed = await machine.ssh_command("systemctl", "--failed", "--no-legend", check=False)
-                failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                raise RuntimeError(f"System reached state {state!r}; failed units:\n{failed_units}")
-            print_line(f"System fully booted: {state}")
+            await machine.ensure_system_running()
 
             playbook = machine.workdir_path / "build_box_deps.yml"
             print_line("Seeding image via test/playbooks/build_box_deps.yml")

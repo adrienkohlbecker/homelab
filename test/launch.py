@@ -258,19 +258,7 @@ async def _run_async(m: Machine, *, wait_for_ssh: bool, exit_after_ready: bool, 
                     if exit_after_ready:
                         raise
             if exit_after_ready:
-                # SSH up != systemd "boot complete" — sshd can answer before
-                # all units settle. Block on the system reaching a final
-                # state; "running" is success, anything else (degraded,
-                # maintenance) is a fail and worth surfacing.
-                result = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
-                state = "\n".join(result.stdout).strip()
-                if result.exitcode == 0 and state == "running":
-                    print_line(f"System fully booted: {state}")
-                else:
-                    failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
-                    failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                    print_line(f"System reached state {state!r} (rc={result.exitcode}); failed units:\n{failed_units}")
-                    raise RuntimeError(f"systemd is-system-running returned {state!r}")
+                await m.ensure_system_running()
             if not exit_after_ready:
                 await m.wait()
 

@@ -7,7 +7,6 @@ from typing import cast
 
 import pytest
 import site_test
-from utils import CommandResult
 
 
 class CheckModeMachine:
@@ -16,6 +15,7 @@ class CheckModeMachine:
         self.keep_vm = False
         self.ansible_calls: list[tuple[str, ...]] = []
         self.ssh_calls: list[tuple[str, ...]] = []
+        self.system_running_calls = 0
 
     async def __aenter__(self) -> CheckModeMachine:
         return self
@@ -29,12 +29,14 @@ class CheckModeMachine:
     async def ensure_ssh(self) -> None:
         return None
 
+    async def ensure_system_running(self) -> None:
+        self.system_running_calls += 1
+
     async def ansible_command(self, *args: str) -> None:
         self.ansible_calls.append(args)
 
-    async def ssh_command(self, *args: str, check: bool = True) -> CommandResult:
+    async def ssh_command(self, *args: str, check: bool = True) -> None:
         self.ssh_calls.append(args)
-        return CommandResult(0, ["running"], [])
 
 
 def test_check_mode_forwards_flag_and_skips_poweroff(
@@ -50,4 +52,5 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
         (str(tmp_path / "_environment.yml"),),
         (str(tmp_path / "site.yml"), "--check"),
     ]
-    assert machine.ssh_calls == [("systemctl", "is-system-running", "--wait")]
+    assert machine.system_running_calls == 1
+    assert machine.ssh_calls == []

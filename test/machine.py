@@ -928,6 +928,18 @@ class Machine:
 
         await self._open_ssh_master()
 
+    async def ensure_system_running(self) -> None:
+        """Require systemd to finish booting in a healthy running state."""
+        result = await self.ssh_command("systemctl", "is-system-running", "--wait", check=False)
+        state = "\n".join(result.stdout).strip()
+        if result.exitcode == 0 and state == "running":
+            print_line(f"System fully booted: {state}")
+            return
+
+        failed = await self.ssh_command("systemctl", "--failed", "--no-legend", check=False)
+        failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
+        raise RuntimeError(f"System reached state {state!r} (rc={result.exitcode}); failed units:\n{failed_units}")
+
     async def _open_ssh_master(self) -> None:
         """Background a persistent `ssh -M -N` master on the cell-stable ControlPath.
 

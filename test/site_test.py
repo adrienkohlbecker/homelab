@@ -110,14 +110,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                         await m.ensure_ssh()
                         print_line("SSH up")
 
-                        result = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
-                        state = "\n".join(result.stdout).strip()
-                        if result.exitcode != 0 or state != "running":
-                            failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
-                            failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                            print_line(f"System state {state!r}; failed units:\n{failed_units}")
-                            raise RuntimeError(f"systemd is-system-running returned {state!r}")
-                        print_line(f"System ready: {state}")
+                        await m.ensure_system_running()
 
                         print_line("Preparing test environment")
                         await m.ansible_command(str(m.workdir_path / "_environment.yml"))

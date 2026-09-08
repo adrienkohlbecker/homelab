@@ -258,6 +258,44 @@ class TestMachineArtifactOwnership:
         assert all(not artifact.exists() for artifact in artifacts)
 
 
+class TestSystemReadiness:
+    def test_accepts_running_state(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        instance = machine_factory()
+
+        async def ssh_command(*args: str, check: bool = True) -> SimpleNamespace:
+            assert args == ("systemctl", "is-system-running", "--wait")
+            assert check is False
+            return SimpleNamespace(exitcode=0, stdout=["running"])
+
+        monkeypatch.setattr(instance, "ssh_command", ssh_command)
+        asyncio.run(instance.ensure_system_running())
+
+    def test_reports_failed_units(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        instance = machine_factory()
+        responses = iter(
+            (
+                SimpleNamespace(exitcode=1, stdout=["degraded"]),
+                SimpleNamespace(exitcode=0, stdout=["broken.service loaded failed failed"]),
+            )
+        )
+
+        async def ssh_command(*args: str, check: bool = True) -> SimpleNamespace:
+            assert check is False
+            return next(responses)
+
+        monkeypatch.setattr(instance, "ssh_command", ssh_command)
+        with pytest.raises(RuntimeError, match=r"(?s)degraded.*broken\.service"):
+            asyncio.run(instance.ensure_system_running())
+
+
 class TestAnsibleControllerStaging:
     def test_stages_once_on_first_ansible_command(
         self,

@@ -86,10 +86,11 @@ def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pyt
         async def ensure_ssh(self) -> None:
             calls.append("ssh")
 
+        async def ensure_system_running(self) -> None:
+            calls.append("system_running")
+
         async def ssh_command(self, *args: str, check: bool = True) -> SimpleNamespace:
             calls.append((args, check))
-            if args[:2] == ("systemctl", "is-system-running"):
-                return SimpleNamespace(exitcode=0, stdout=["running"])
             return SimpleNamespace(exitcode=0, stdout=[])
 
         async def ansible_command(self, playbook: str) -> None:
@@ -112,5 +113,6 @@ def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pyt
     assert launch.image_dir == tmp_path
     assert launch.headless is True
     assert launch.write_image is True
+    assert "system_running" in calls
     assert ("ansible", str(tmp_path / "build_box_deps.yml")) in calls
     assert "wait" in calls

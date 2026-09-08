@@ -6,12 +6,12 @@ from typing import cast
 
 import launch
 import pytest
-from utils import CommandResult
 
 
 class LaunchMachine:
     def __init__(self) -> None:
         self.printed_ssh_instructions = False
+        self.system_running_checked = False
 
     async def __aenter__(self) -> LaunchMachine:
         return self
@@ -25,11 +25,11 @@ class LaunchMachine:
     async def ensure_ssh(self) -> None:
         return None
 
+    async def ensure_system_running(self) -> None:
+        self.system_running_checked = True
+
     def print_ssh_instructions(self) -> None:
         self.printed_ssh_instructions = True
-
-    async def ssh_command(self, *args: str, check: bool = True) -> CommandResult:
-        return CommandResult(0, ["running"], [])
 
 
 def test_exit_after_ready_skips_interactive_ssh_instructions(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -46,3 +46,4 @@ def test_exit_after_ready_skips_interactive_ssh_instructions(monkeypatch: pytest
     )
 
     assert machine.printed_ssh_instructions is False
+    assert machine.system_running_checked is True
