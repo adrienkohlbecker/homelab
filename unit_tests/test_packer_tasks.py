@@ -13,6 +13,15 @@ HETZNER_RESCUE_SH = REPO_ROOT / "mise-tasks" / "packer" / "_hetzner_rescue.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
+UBUNTU_COMPLETION_TASKS = (
+    BUILD_SH,
+    REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh",
+    QEMU_HOST_AMI_SH,
+    REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh",
+    REPO_ROOT / "mise-tasks" / "test" / "build_box_deps.sh",
+    REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
+    REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
+)
 
 
 def _executable(path: Path, content: str) -> None:
@@ -94,13 +103,21 @@ def test_qemu_host_uses_canonical_mise_upstream() -> None:
 
 def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
     template = QEMU_HOST_TEMPLATE.read_text()
-    wrapper = QEMU_HOST_AMI_SH.read_text()
 
     assert 'ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))' in template
     assert "ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name]" in template
     assert "ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-amd64-server-*" in template
-    assert "printf 'noble\\nresolute\\n'" in wrapper
-    assert "noble | resolute)" in wrapper
+
+
+def test_ubuntu_completions_use_release_catalog() -> None:
+    completion = "yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
+
+    for task in UBUNTU_COMPLETION_TASKS:
+        content = task.read_text()
+        assert completion in content
+        assert "printf 'noble\\nresolute\\n'" not in content
+
+    assert "noble | resolute)" not in QEMU_HOST_AMI_SH.read_text()
 
 
 def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None:

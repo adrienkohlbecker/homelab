@@ -2,7 +2,7 @@
 #MISE description="Bake the AWS nested-qemu runner-host AMI and optionally promote it"
 #MISE interactive=true
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
-#USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
+#USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--promote" help="After a successful bake, write the AMI id to /homelab-ci/ami/qemu-host/<ubuntu>"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
@@ -153,14 +153,6 @@ prune_old_amis() {
     "$repo_root/mise-tasks/packer/deregister-ami.sh" "$image_id" "$region"
   done <<<"$stale"
 }
-
-case "$ubuntu" in
-noble | resolute) ;;
-*)
-  echo "Error: unsupported qemu-host Ubuntu release '$ubuntu'" >&2
-  exit 1
-  ;;
-esac
 
 echo "==> qemu-host target architecture: x86_64"
 

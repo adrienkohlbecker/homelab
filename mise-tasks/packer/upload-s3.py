@@ -3,7 +3,7 @@
 # USAGE arg "<machine>" help="Packer source/artifact name: box or box_deps"
 # USAGE complete "machine" run="printf 'box\nbox_deps\n'"
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
-# USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
+# USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 # USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
 # USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
 # USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"

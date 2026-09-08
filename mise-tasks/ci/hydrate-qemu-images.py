@@ -3,7 +3,7 @@
 # USAGE arg "<machine>" help="Promoted qemu image bundle: box or box_deps"
 # USAGE complete "machine" run="printf 'box\nbox_deps\n'"
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
-# USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
+# USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 # USAGE flag "--force" help="Re-download even when the local marker already matches"
 """Hydrate the local qemu harness image cache from S3.
 
