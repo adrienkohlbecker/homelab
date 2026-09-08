@@ -381,7 +381,6 @@ build {
     # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image
     # never points at Nexus.
     env = {
-      "SOURCE_NAME"                     = "${source.name}"
       "DISKS"                           = local.variant_config[source.name].disks
       "EXTRA_DISKS"                     = local.variant_config[source.name].extra_disks
       "LAYOUT"                          = local.variant_config[source.name].layout
