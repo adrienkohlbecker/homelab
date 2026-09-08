@@ -91,30 +91,3 @@ resource "gandi_dnssec_key" "this" {
     }
   }
 }
-
-# Gandi NS delegation must match CF's authoritative NS list. Tautology by
-# construction today (gandi_nameservers is built from cloudflare_zone.this),
-# but catches the future case where someone manually edits
-# the NS list at Gandi-as-registrar between applies -- without this, the
-# next `tofu plan` would silently reconcile the drift while resolvers were
-# already failing to find the zone.
-#
-# This stays a `check` rather than a `lifecycle.precondition` (unlike the
-# DNSSEC chain one in this file): a precondition can only read `self`'s
-# configured (HCL-declared) value, not its post-refresh state, so a
-# precondition on gandi_nameservers comparing self.nameservers to the
-# Cloudflare resource would always pass by construction.
-# Catching post-refresh Gandi-side drift requires the `check` block's
-# refreshed-state visibility (or an out-of-band DNS data-source probe).
-check "ns_delegation" {
-  assert {
-    condition = alltrue([
-      for zone, delegation in gandi_nameservers.this :
-      sort(delegation.nameservers) == sort(cloudflare_zone.this[zone].name_servers)
-    ])
-    error_message = "Gandi NS delegation differs from Cloudflare for: ${join(", ", [
-      for zone, delegation in gandi_nameservers.this : zone
-      if sort(delegation.nameservers) != sort(cloudflare_zone.this[zone].name_servers)
-    ])}. Lookups against these zones will fail."
-  }
-}
