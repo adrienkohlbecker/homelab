@@ -58,7 +58,7 @@
     # Fail closed if a source-owning entrypoint missed any active apt source.
     # Ansible backups retain the old URLs by design and fall outside these
     # patterns.
-    - name: Re-scan for apt sources still pointing at Nexus
+    - name: Verify the shipped fixture has no Nexus apt sources
       find:
         paths: /etc/apt
         file_type: file
@@ -70,11 +70,6 @@
         contains: "{{ nexus_url | regex_escape }}"
         read_whole_file: true
       register: box_deps_apt_sources_leftover
-
-    - name: Assert the shipped fixture is Nexus-free
-      assert:
-        that:
-          - box_deps_apt_sources_leftover.files | length == 0
-        fail_msg: >-
-          Baked apt sources still reference {{ nexus_url }}:
-          {{ box_deps_apt_sources_leftover.files | map(attribute='path') | join(', ') }}
+      failed_when: >-
+        (box_deps_apt_sources_leftover.failed | default(false)) or
+        (box_deps_apt_sources_leftover.matched | default(1) != 0)
