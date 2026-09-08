@@ -118,3 +118,19 @@
   loop: "{{ _refind_verify_linux_stub.results }}"
   loop_control:
     label: "{{ item.item }}"
+
+- name: _verify | Stat the QEMU-incompatible AZERTY keymap driver
+  stat:
+    path: "/boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_file }}"
+  register: _refind_verify_keymap_driver
+  become: true
+
+- name: _verify | QEMU-incompatible AZERTY keymap driver is absent
+  assert:
+    that: not _refind_verify_keymap_driver.stat.exists
+    fail_msg: "QEMU-incompatible AZERTY keymap driver would block unattended boot"
+
+- name: _verify | Reboot through the installed rEFInd path
+  import_role:
+    name: reboot
+    tasks_from: reboot

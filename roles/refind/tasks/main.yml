@@ -80,9 +80,13 @@
 
 # No backup: true — /boot/efi is vfat, and backup_local's ownership-preserving
 # chown fails on FAT. rEFInd automatically scans drivers_<arch> in its own
-# directory before presenting the menu.
+# directory before presenting the menu. The QEMU firmware rejects the custom
+# HII driver and stops at an interactive rEFInd error, so fixtures omit it and
+# exercise the otherwise-identical boot path.
 - name: Install rEFInd AZERTY keymap driver on the ESP  # noqa: require-backup
-  when: not (ansible_check_mode and refind_esp_dirs.changed)
+  when:
+    - not qemu_test
+    - not (ansible_check_mode and refind_esp_dirs.changed)
   copy:
     src: "{{ refind_azerty_keymap_file }}"
     dest: "/boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_file }}"
@@ -91,6 +95,16 @@
     mode: "{{ boot_esp_mode }}"
   become: true
   register: refind_azerty_keymap_driver
+  tags:
+    - refind
+
+- name: Omit unsupported rEFInd AZERTY keymap driver in QEMU
+  when: qemu_test
+  file:
+    path: "/boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_file }}"
+    state: absent
+  become: true
+  register: refind_azerty_keymap_driver_absent
   tags:
     - refind
 
@@ -303,7 +317,10 @@
 # theme.conf fresh from the ESP at every boot, so a theme change takes effect
 # at the next natural boot without forcing one.
 - name: Ask to reboot
-  when: refind_conf.changed or refind_azerty_keymap_driver.changed
+  when: >-
+    refind_conf.changed
+    or refind_azerty_keymap_driver.changed
+    or refind_azerty_keymap_driver_absent.changed
   file:
     path: /var/run/reboot-required
     state: touch
