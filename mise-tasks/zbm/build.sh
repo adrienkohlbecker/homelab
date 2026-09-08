@@ -57,7 +57,6 @@ mkdir -p "${homelab_root}/dropbear"
 cp -a "${repo_root}/zbm/hooks" "${homelab_root}/"
 cp "${repo_root}/zbm/dropbear/authorized_keys" "${homelab_root}/dropbear/"
 cp "${repo_root}/zbm/dracut.conf.d/recovery.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-recovery.conf"
-cp "${repo_root}/zbm/dracut.conf.d/user_hooks.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-user-hooks.conf"
 
 ssh-keygen -q -t ed25519 -N '' -C zbm-recovery -f "${homelab_root}/dropbear/ssh_host_ed25519_key"
 cp "${homelab_root}/dropbear/ssh_host_ed25519_key.pub" "$out_dir/ssh_host_ed25519_key.pub"
