@@ -1567,34 +1567,18 @@ class Machine:
         netdev = f"user,id=user.0,{','.join(hostfwds)}{qemu_user_net_args(self.inventory_host)}"
         return netdev, "virtio-net,netdev=user.0"
 
-    def _passt_port_specs(self) -> tuple[str, str | None]:
-        """The self.ssh_host-bound passt port-forward specs.
-
-        Includes the SSH hop plus every wan_forward_ports entry, as passt
-        `addr/host:guest[,host:guest...]` strings.
-
-        Returns (tcp, udp); udp is None when no UDP forwards are configured.
-        The single `addr/` prefix binds the whole comma-list -- repeating it
-        (addr/a,addr/b) is an "Invalid port specifier" to passt, so the address
-        appears once. Matches slirp's hostfwd set so the harness keeps
-        connecting at self.ssh_host:<port> under any backend.
-        """
+    def _passt_command(self) -> list[str]:
+        """Build the passt sidecar argv for this machine's forwarded ports."""
         tcp_forwards = [
             f"{self.ssh_port}:22",
             *(f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["tcp"].items()),
         ]
         udp_forwards = [f"{host_port}:{guest_port}" for guest_port, host_port in self.wan_forward_ports["udp"].items()]
+        # One address prefix binds the entire comma-list; repeating it makes
+        # passt reject the value as an invalid port specifier.
         tcp_spec = f"{self.ssh_host}/{','.join(tcp_forwards)}"
         udp_spec = f"{self.ssh_host}/{','.join(udp_forwards)}" if udp_forwards else None
-        return tcp_spec, udp_spec
-
-    def _passt_command(self) -> list[str]:
-        """passt sidecar argv. NATs guest egress and forwards controller-side
-        ports back to the guest as slirp's hostfwd does, but with passt's
-        robust UDP datapath instead of libslirp.
-        """
         assert self._passt_socket is not None
-        tcp_spec, udp_spec = self._passt_port_specs()
         cmd = [
             "passt",
             # Foreground: a managed child (torn down in stop()) that logs to
