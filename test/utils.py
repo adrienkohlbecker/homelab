@@ -1,5 +1,3 @@
-#!/usr/bin/env -S uv run
-
 import asyncio
 import atexit
 import contextlib
