@@ -11,7 +11,9 @@ side-effect-free: both modules do their work under ``if __name__ == "__main__"``
 """
 
 import argparse
+import json
 import re
+from pathlib import Path
 
 import pytest
 from conftest import load_repo_module
@@ -46,10 +48,13 @@ class TestDefaultBuildId:
 
 class TestPointerBody:
     def test_format_is_sorted_indented_trailing_newline(self) -> None:
-        body = upload.pointer_body(_args())
+        body = upload.pointer_body(_args(), ["ci-42-gdeadbeef0000", "previous"])
         assert body.endswith("\n")
         # sort_keys=True, indent=2
-        assert body == ('{\n  "build_id": "ci-42-gdeadbeef0000",\n  "machine": "box",\n  "ubuntu": "noble"\n}\n')
+        assert body == (
+            '{\n  "build_id": "ci-42-gdeadbeef0000",\n  "machine": "box",\n'
+            '  "rollback_build_ids": [\n    "previous"\n  ],\n  "ubuntu": "noble"\n}\n'
+        )
 
     def test_pointer_name_constant_matches(self) -> None:
         assert upload.POINTER_NAME == "promoted.json"
@@ -117,6 +122,50 @@ class TestManifest:
             hydrate.verify_files(tmp_path, [{"name": disk.name, "sha256": "0" * 64}])
 
 
+class TestRetention:
+    def test_lists_build_objects_and_ignores_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            upload,
+            "output",
+            lambda _argv: json.dumps(
+                {
+                    "Contents": [
+                        {"Key": "noble/box/promoted.json", "LastModified": "2026-01-03T00:00:00Z"},
+                        {"Key": "noble/box/b1/manifest.json", "LastModified": "2026-01-01T00:00:00Z"},
+                        {"Key": "noble/box/b1/disks.tar.zst", "LastModified": "2026-01-02T00:00:00Z"},
+                    ]
+                }
+            ),
+        )
+
+        assert upload.list_build_objects("bucket", "box", "noble", "region") == {
+            "b1": {
+                "last_modified": "2026-01-02T00:00:00Z",
+                "keys": ["noble/box/b1/manifest.json", "noble/box/b1/disks.tar.zst"],
+            }
+        }
+
+    def test_selects_promoted_and_three_newest_rollbacks(self) -> None:
+        builds = {f"b{index}": {"last_modified": f"2026-01-0{index}T00:00:00Z", "keys": []} for index in range(1, 7)}
+
+        assert upload.select_retained_builds(builds, "b4") == ["b4", "b6", "b5", "b3"]
+
+    def test_tags_every_object_in_selected_builds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = []
+        monkeypatch.setattr(upload, "tag_object", lambda *args: calls.append(args))
+        builds = {
+            "b2": {"last_modified": "2026-01-02T00:00:00Z", "keys": ["b2/manifest", "b2/bundle"]},
+            "b1": {"last_modified": "2026-01-01T00:00:00Z", "keys": ["b1/manifest", "b1/bundle"]},
+        }
+
+        upload.tag_builds("bucket", builds, ["b2"], "region", state=upload.RETAINED_STATE)
+
+        assert calls == [
+            ("bucket", "b2/manifest", "retained", "region"),
+            ("bucket", "b2/bundle", "retained", "region"),
+        ]
+
+
 class TestResolveBuildId:
     def _resolve(self, monkeypatch: pytest.MonkeyPatch, body: str, **arg_overrides: object) -> str:
         monkeypatch.setattr(hydrate, "output", lambda argv, **kw: body)
@@ -126,12 +175,12 @@ class TestResolveBuildId:
         return hydrate.resolve_build_id(args)
 
     def test_reads_build_id_from_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="noble"))
+        body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="noble"), ["ci-7-gabc"])
         assert self._resolve(monkeypatch, body) == "ci-7-gabc"
 
     @pytest.mark.parametrize(("field", "value"), [("machine", "box_deps"), ("ubuntu", "resolute")])
     def test_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch, field: str, value: str) -> None:
-        body = upload.pointer_body(_args(**{field: value}))
+        body = upload.pointer_body(_args(**{field: value}), ["ci-42-gdeadbeef0000"])
         with pytest.raises(SystemExit, match=f"{field} mismatch"):
             self._resolve(monkeypatch, body)
 

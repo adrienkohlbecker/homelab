@@ -15,7 +15,7 @@ dependencies = [
   "dnspython>=2.8.0",         # dig
   "pytest>=8.0",
   "check-jsonschema>=0.37.2", # lint:topology (a dep, not uvx, so it's CI-cached)
-  "boto3>=1.40.0",            # mise-tasks/ci/{reap-qemu-images,audit-aws}.py (in-process S3/EC2 calls)
+  "boto3>=1.40.0",            # mise-tasks/ci/audit-aws.py (in-process S3/EC2 calls)
 ]
 
 [tool.ruff]
@@ -38,7 +38,7 @@ venvPath = "."
 venv = ".venv"
 # Mirrors pytest's pythonpath: unit_tests import test-harness modules
 # (machine, testrole, ...) as top-level names.
-extraPaths = ["test"]
+extraPaths = ["test", "mise-tasks/ci"]
 # First three are pyright's defaults (setting exclude replaces them); notes/
 # and zbm-build/ are gitignored in-place clones with their own tooling.
 exclude = ["**/node_modules", "**/__pycache__", "**/.*", "notes", "zbm-build"]

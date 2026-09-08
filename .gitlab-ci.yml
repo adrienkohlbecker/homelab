@@ -245,47 +245,6 @@ qemu_host_ami:
           - UBUNTU: [ '$[[ matrix.UBUNTU ]]' ]
       artifacts: false
 
-# Reaper-only schedules would otherwise overwrite the branch badge. Mirror the
-# last complete full-universe verdict; this must remain required and queries only
-# GitLab with CI_JOB_TOKEN.
-schedule_status_guard:
-  stage: prepare
-  extends: .hosted
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
-  tags:
-    - saas-linux-small-amd64
-  timeout: 10m
-  script:
-    - mise run ci:schedule-guard
-
-# Delete stale immutable S3 image prefixes without touching promoted.json targets.
-# Protected schedules apply; manual runs default to dry-run.
-qemu_image_reaper:
-  stage: prepare
-  extends: .hosted
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_REF_PROTECTED == "true"
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      allow_failure: true
-  tags:
-    - saas-linux-small-amd64
-  id_tokens:
-    GITLAB_OIDC_TOKEN:
-      aud: sts.amazonaws.com
-  resource_group: qemu-image-reaper
-  interruptible: false
-  timeout: 15m
-  script:
-    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-reaper-$CI_JOB_ID"
-    - |
-      if [ "$CI_PIPELINE_SOURCE" = "schedule" ] || [ "${QEMU_IMAGE_REAPER_APPLY:-}" = "true" ]; then
-        mise run ci:reap-qemu-images --apply
-      else
-        mise run ci:reap-qemu-images
-      fi
-
 # Build fox's ZFS-root disk on lab, stream it through a temporary Hetzner rescue
 # server, and retain the two newest snapshots. The published project-global
 # snapshot becomes Terraform's most_recent fox image. This protected manual job

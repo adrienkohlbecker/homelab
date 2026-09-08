@@ -18,9 +18,12 @@ locals {
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
-  ci_gitlab_project          = "akohlbecker/homelab"
-  ci_account_id              = "000390721279"
-  ci_qemu_image_bucket_name  = "homelab-ci-images"
+  ci_gitlab_project         = "akohlbecker/homelab"
+  ci_account_id             = "000390721279"
+  ci_qemu_image_bucket_name = "homelab-ci-images"
+  # Removing a release from test/matrix.py does not enumerate its S3 prefix.
+  # Add its codename here so lifecycle explicitly retires every remaining object.
+  ci_qemu_retired_releases   = toset([])
   ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
   ci_qemu_pools = {
     role = {
@@ -180,6 +183,55 @@ resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_images" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 1
+    }
+  }
+
+  rule {
+    id     = "expire-abandoned-qemu-builds"
+    status = "Enabled"
+
+    filter {
+      tag {
+        key   = "qemu_image_state"
+        value = "candidate"
+      }
+    }
+
+    expiration {
+      days = 7
+    }
+  }
+
+  rule {
+    id     = "expire-superseded-qemu-builds"
+    status = "Enabled"
+
+    filter {
+      tag {
+        key   = "qemu_image_state"
+        value = "expirable"
+      }
+    }
+
+    expiration {
+      days = 7
+    }
+  }
+
+  dynamic "rule" {
+    for_each = local.ci_qemu_retired_releases
+
+    content {
+      id     = "expire-retired-${rule.value}"
+      status = "Enabled"
+
+      filter {
+        prefix = "${rule.value}/"
+      }
+
+      expiration {
+        days = 1
+      }
     }
   }
 
@@ -728,20 +780,18 @@ resource "aws_iam_role_policy" "ci_bake" {
         Effect = "Allow"
         Action = [
           "s3:GetBucketLocation", "s3:ListBucket",
-          "s3:ListBucketMultipartUploads", "s3:ListBucketVersions",
+          "s3:ListBucketMultipartUploads",
         ]
         Resource = aws_s3_bucket.ci_qemu_images.arn
       },
-      # Writes the immutable build bundle and, on promotion, the
-      # <ubuntu>/<machine>/promoted.json pointer object — both plain PutObject,
-      # so promotion needs no separate grant.
+      # Writes and tags immutable builds, then updates the promoted pointer.
+      # S3 lifecycle expires candidate and superseded objects by tag.
       {
         Sid    = "WriteQemuImages"
         Effect = "Allow"
         Action = [
-          "s3:GetObject", "s3:PutObject",
+          "s3:GetObject", "s3:PutObject", "s3:PutObjectTagging",
           "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
-          "s3:DeleteObject", "s3:DeleteObjectVersion",
         ]
         Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
       },

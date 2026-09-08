@@ -31,7 +31,10 @@ The live build for each machine/release pair is selected by a pointer object
 The lab target does not read S3: lab bakes write the artifacts into lab's local
 /mnt/scratch/homelab_ci and its cells boot them in place, so only the aws_qemu
 cells hydrate from these objects. The lab bake still uploads here so S3 stays
-the canonical promoted store.
+the canonical promoted store. Uploaded objects start as candidates. Promotion
+tags the current build and three rollback builds as retained, marks older builds
+expirable, and records the rollback ids in the pointer. S3 lifecycle performs
+the eventual deletion after the seven-day recovery window.
 """
 
 from __future__ import annotations
@@ -49,6 +52,11 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 S3_CHECKSUM_ALGORITHM = "SHA256"
+IMAGE_STATE_TAG = "qemu_image_state"
+CANDIDATE_STATE = "candidate"
+RETAINED_STATE = "retained"
+EXPIRABLE_STATE = "expirable"
+RETAINED_BUILD_COUNT = 4
 sys.path.insert(0, str(REPO_ROOT / "mise-tasks" / "ci"))
 sys.path.insert(0, str(REPO_ROOT / "test"))
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
@@ -182,6 +190,76 @@ def upload_file(bucket: str, path: Path, key: str, region: str, content_type: st
     run(aws_argv(region, *args))
 
 
+def tag_object(bucket: str, key: str, state: str, region: str) -> None:
+    print(f"==> tagging s3://{bucket}/{key} {IMAGE_STATE_TAG}={state}")
+    run(
+        aws_argv(
+            region,
+            "s3api",
+            "put-object-tagging",
+            "--bucket",
+            bucket,
+            "--key",
+            key,
+            "--tagging",
+            json.dumps({"TagSet": [{"Key": IMAGE_STATE_TAG, "Value": state}]}),
+        )
+    )
+
+
+def list_build_objects(bucket: str, machine: str, ubuntu: str, region: str) -> dict[str, dict[str, Any]]:
+    """Return objects grouped by immutable build id under one image prefix."""
+    prefix = f"{ubuntu}/{machine}/"
+    response = json.loads(
+        output(
+            aws_argv(
+                region,
+                "s3api",
+                "list-objects-v2",
+                "--bucket",
+                bucket,
+                "--prefix",
+                prefix,
+                "--output",
+                "json",
+            )
+        )
+    )
+    builds: dict[str, dict[str, Any]] = {}
+    for item in response.get("Contents", []):
+        relative = item["Key"].removeprefix(prefix)
+        build_id, separator, _name = relative.partition("/")
+        if not separator or not build_id:
+            continue
+        build = builds.setdefault(build_id, {"last_modified": "", "keys": []})
+        build["last_modified"] = max(build["last_modified"], item["LastModified"])
+        build["keys"].append(item["Key"])
+    return builds
+
+
+def select_retained_builds(builds: dict[str, dict[str, Any]], promoted_build_id: str) -> list[str]:
+    """Select the promoted build and its newest available rollback builds."""
+    if promoted_build_id not in builds:
+        raise RuntimeError(f"uploaded build is missing from S3 listing: {promoted_build_id}")
+    newest = sorted(builds, key=lambda build_id: builds[build_id]["last_modified"], reverse=True)
+    return [promoted_build_id, *(build_id for build_id in newest if build_id != promoted_build_id)][
+        :RETAINED_BUILD_COUNT
+    ]
+
+
+def tag_builds(
+    bucket: str,
+    builds: dict[str, dict[str, Any]],
+    build_ids: list[str],
+    region: str,
+    *,
+    state: str,
+) -> None:
+    for build_id in build_ids:
+        for key in builds[build_id]["keys"]:
+            tag_object(bucket, key, state, region)
+
+
 def read_pointer(bucket: str, key: str, region: str) -> str | None:
     """Return the raw current pointer body, or None when absent/empty."""
     result = subprocess.run(
@@ -217,10 +295,15 @@ def write_pointer(bucket: str, key: str, body: str, region: str) -> None:
     )
 
 
-def pointer_body(args: argparse.Namespace) -> str:
+def pointer_body(args: argparse.Namespace, retained_build_ids: list[str]) -> str:
     return (
         json.dumps(
-            {"build_id": args.build_id, "machine": args.machine, "ubuntu": args.ubuntu},
+            {
+                "build_id": args.build_id,
+                "machine": args.machine,
+                "rollback_build_ids": retained_build_ids[1:],
+                "ubuntu": args.ubuntu,
+            },
             indent=2,
             sort_keys=True,
         )
@@ -263,11 +346,30 @@ def main() -> int:
         create_bundle(tar, root, [entry["name"] for entry in manifest["files"]], bundle)
 
         upload_file(args.bucket, bundle, bundle_key, args.region, "application/zstd")
+        tag_object(args.bucket, bundle_key, CANDIDATE_STATE, args.region)
         upload_file(args.bucket, manifest_path, manifest_key, args.region, "application/json")
+        tag_object(args.bucket, manifest_key, CANDIDATE_STATE, args.region)
 
     if args.promote:
         prev = read_pointer(args.bucket, pointer_key, args.region)
-        write_pointer(args.bucket, pointer_key, pointer_body(args), args.region)
+        builds = list_build_objects(args.bucket, args.machine, args.ubuntu, args.region)
+        retained = select_retained_builds(builds, args.build_id)
+        tag_builds(
+            args.bucket,
+            builds,
+            retained,
+            args.region,
+            state=RETAINED_STATE,
+        )
+        write_pointer(args.bucket, pointer_key, pointer_body(args, retained), args.region)
+        expirable = [build_id for build_id in builds if build_id not in retained]
+        tag_builds(
+            args.bucket,
+            builds,
+            expirable,
+            args.region,
+            state=EXPIRABLE_STATE,
+        )
         if prev is not None:
             print(f"==> previous pointer: {prev.strip()}")
     else:
