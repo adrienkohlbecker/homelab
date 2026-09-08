@@ -80,6 +80,11 @@ class TestRoleMeta:
         _make_role("fancy", {"machines": {"box_deps": None}})
         assert next(iter(matrix.load_role_test_config("fancy").machines)) == "box_deps"
 
+    def test_machine_payload_is_rejected(self) -> None:
+        _make_role("configured", {"machines": {"box": {"memory_mb": 8192}}})
+        with pytest.raises(matrix.RoleTestConfigError, match=r"machines\.box must be empty"):
+            matrix.load_role_test_config("configured")
+
     def test_base_prerequisites_defaults_to_true(self) -> None:
         _make_role("plain")
         assert matrix.load_role_test_config("plain").base_prerequisites is True

@@ -19,7 +19,6 @@ import argparse
 import functools
 import json
 import sys
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
@@ -32,7 +31,7 @@ UBUNTU_RELEASES: dict[str, str] = {
     codename: release["version"] for codename, release in _UBUNTU_CATALOG["releases"].items()
 }
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
-DEFAULT_MACHINES = {"box": None}
+DEFAULT_MACHINES = ("box",)
 
 # Machines that only run on demand (`testrole.py --machine`) and the nightly
 # on-lab packer regression -- never in a CI-generated matrix. Their multi-disk
@@ -56,7 +55,7 @@ class RoleTestConfig:
     """Validated role-test metadata consumed by local and CI matrix builders."""
 
     base_prerequisites: bool
-    machines: Mapping[str, dict | None]
+    machines: tuple[str, ...]
     ubuntu: tuple[str, ...]
     skip: frozenset[tuple[str, str]]
 
@@ -89,7 +88,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     """Parse one absolute metadata path once per process."""
 
     if not meta_path.exists():
-        return RoleTestConfig(True, dict(DEFAULT_MACHINES), (), frozenset())
+        return RoleTestConfig(True, DEFAULT_MACHINES, (), frozenset())
     try:
         data = yaml.safe_load(meta_path.read_text()) or {}
     except yaml.YAMLError as e:
@@ -114,7 +113,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
         base_prerequisites = True
 
     raw_machines = data.get("machines")
-    machines: dict[str, dict | None] = {}
+    machines: list[str] = []
     if raw_machines is None:
         pass
     elif not isinstance(raw_machines, dict):
@@ -126,12 +125,12 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 continue
             if machine_names and name not in machine_names:
                 errors.append(f"machines key {name!r} not in {list(machine_names)}")
-            if machine_config is not None and not isinstance(machine_config, dict):
-                errors.append(f"machines.{name} must be empty or a mapping, got {type(machine_config).__name__}")
+            if machine_config not in (None, {}):
+                errors.append(f"machines.{name} must be empty")
                 continue
-            machines[name] = machine_config
+            machines.append(name)
     if not machines:
-        machines = dict(DEFAULT_MACHINES)
+        machines = list(DEFAULT_MACHINES)
 
     raw_ubuntu = data.get("ubuntu")
     ubuntu: list[str] = []
@@ -181,7 +180,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     if errors:
         raise RoleTestConfigError(meta_path, errors)
 
-    return RoleTestConfig(base_prerequisites, machines, tuple(ubuntu), frozenset(skip))
+    return RoleTestConfig(base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip))
 
 
 def drop_on_demand_cells(specs: list[str]) -> tuple[list[str], list[str]]:
