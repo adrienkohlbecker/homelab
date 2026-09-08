@@ -15,16 +15,10 @@ set -euo pipefail
 : "${CI_DEFAULT_BRANCH:?CI_DEFAULT_BRANCH is required}"
 : "${DOCKER_HOST:?DOCKER_HOST is required}"
 : "${DOCKER_CERT_PATH:?DOCKER_CERT_PATH is required}"
+: "${ZBM_VERSION:?ZBM_VERSION is required}"
+: "${ZBM_KERNEL_VERSION:?ZBM_KERNEL_VERSION is required}"
 
 arch="$(zbm_host_arch)"
-
-# Resolve through mise, not by parsing mise.toml: these vars are tera
-# conditionals whose embedded quoted literals defeat naive text extraction.
-eval "$(mise env)"
-if [ -z "${ZBM_VERSION:-}" ] || [ -z "${ZBM_KERNEL_VERSION:-}" ]; then
-  echo "ZBM_VERSION/ZBM_KERNEL_VERSION not set in mise env" >&2
-  exit 1
-fi
 
 timeout 60 bash -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
 docker context create dind --docker "host=${DOCKER_HOST},ca=${DOCKER_CERT_PATH}/ca.pem,cert=${DOCKER_CERT_PATH}/cert.pem,key=${DOCKER_CERT_PATH}/key.pem"
