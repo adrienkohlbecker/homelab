@@ -49,14 +49,6 @@
         nexus_url: "" # noqa: var-naming[no-role-prefix] -- shared mirror selector under test
         test_in_aws: false # noqa: var-naming[no-role-prefix] -- shared environment selector under test
 
-    - name: Configure podman to use upstream mirrors
-      import_role:
-        name: podman
-        tasks_from: install
-      vars:
-        nexus_url: "" # noqa: var-naming[no-role-prefix] -- shared mirror selector under test
-        test_in_aws: false # noqa: var-naming[no-role-prefix] -- shared environment selector under test
-
     - name: Configure fluent-bit to use upstream mirrors
       import_role:
         name: fluentbit
