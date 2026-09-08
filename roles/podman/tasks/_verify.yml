@@ -14,16 +14,12 @@
   set_fact:
     podman_probe_image: docker.io/library/busybox
 
-- name: _verify | Operator prune units are absent outside Lab
+- name: _verify | Operator linger is disabled outside Lab
   when: not podman_operator_prune_enabled
   stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/systemd/user/podman_prune.service
-    - /etc/systemd/user/podman_prune.timer
-    - /var/lib/systemd/linger/{{ ansible_user_id }}
-  register: podman_operator_prune_state
-  failed_when: podman_operator_prune_state.stat.exists
+    path: /var/lib/systemd/linger/{{ ansible_user_id }}
+  register: podman_operator_linger_state
+  failed_when: podman_operator_linger_state.stat.exists
   become: true
 
 - name: _verify | Read podman's effective runtime config

@@ -66,29 +66,6 @@
   tags:
     - podman
 
-- name: Check for operator linger outside Lab
-  when: not podman_operator_prune_enabled
-  stat:
-    path: /var/lib/systemd/linger/{{ ansible_user_id }}
-  register: podman_operator_linger
-  become: true
-  tags:
-    - podman
-
-- name: Remove the operator prune timer outside Lab
-  when:
-    - not podman_operator_prune_enabled
-    - podman_operator_linger.stat.exists
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: podman_prune
-      user: "{{ ansible_user_id }}"
-  tags:
-    - podman
-
 - name: Disable operator linger outside Lab
   when: not podman_operator_prune_enabled
   import_role:
