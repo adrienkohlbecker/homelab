@@ -55,3 +55,12 @@
   changed_when: false
   failed_when: "'192.0.2.99' in netplan_verify_restored_addrs.stdout"
   become: true
+
+- name: _verify rejection | Resolve a public name after rollback
+  command: resolvectl query --cache=no wikipedia.org
+  register: netplan_verify_restored_dns
+  retries: 3
+  delay: 2
+  until: netplan_verify_restored_dns.rc == 0
+  changed_when: false
+  become: true
