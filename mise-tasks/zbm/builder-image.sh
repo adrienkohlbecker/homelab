@@ -60,7 +60,6 @@ else
 fi
 git -C "$src_dir" reset --hard "v${ZBM_VERSION}" >/dev/null
 git -C "$src_dir" clean -fdx >/dev/null
-git -C "$src_dir" apply "$repo_root/zbm/recovery-overlay.patch"
 
 # PACKAGES are extra Void packages layered onto upstream's base image to satisfy
 # recovery.conf's install_items need mdadm + nvme-cli for operator recovery.
