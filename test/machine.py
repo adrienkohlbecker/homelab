@@ -12,6 +12,7 @@ import platform
 import re
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
@@ -34,6 +35,7 @@ from utils import (
     run_command,
     sleep_tick,
     terminate_pid,
+    terminate_subprocess,
 )
 
 OUT_DIR = Path("test/out")
@@ -1795,15 +1797,7 @@ class Machine:
         """
         proc = self._passt_proc
         if proc is not None and proc.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                proc.terminate()
-            try:
-                async with asyncio.timeout(5):
-                    await proc.wait()
-            except TimeoutError:
-                with contextlib.suppress(ProcessLookupError):
-                    proc.kill()
-                await proc.wait()
+            await terminate_subprocess(proc, grace_seconds=5, initial_signal=signal.SIGTERM)
         # Drop the socket's private tmpdir once passt is gone (it unlinks the
         # socket itself on exit; this clears the parent). Runs whether or not
         # passt had already self-exited via --one-off.
