@@ -33,7 +33,9 @@ variable "qemu_host_manifest_path" {
 }
 
 locals {
-  versions = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
+  versions       = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
+  ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))
+  ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name]
 
   qemu_host_common_tags = {
     role     = "ci-ami"
@@ -57,7 +59,7 @@ source "amazon-ebs" "qemu_host" {
   }
   source_ami_filter {
     filters = {
-      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
+      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-amd64-server-*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }

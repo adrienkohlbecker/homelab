@@ -10,6 +10,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
 HETZNER_RESCUE_SH = REPO_ROOT / "mise-tasks" / "packer" / "_hetzner_rescue.sh"
+QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
+QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
 
 
@@ -88,6 +90,17 @@ def test_qemu_host_uses_canonical_mise_upstream() -> None:
     assert "https://mise.en.dev/gpg-key.pub" in provision
     assert "https://mise.en.dev/deb stable main" in provision
     assert "mise.jdx.dev" not in provision
+
+
+def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
+    template = QEMU_HOST_TEMPLATE.read_text()
+    wrapper = QEMU_HOST_AMI_SH.read_text()
+
+    assert 'ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))' in template
+    assert "ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name]" in template
+    assert "ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-amd64-server-*" in template
+    assert "printf 'noble\\nresolute\\n'" in wrapper
+    assert "noble | resolute)" in wrapper
 
 
 def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None:

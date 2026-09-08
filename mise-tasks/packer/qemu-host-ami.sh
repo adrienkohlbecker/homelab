@@ -2,7 +2,7 @@
 #MISE description="Bake the AWS nested-qemu runner-host AMI and optionally promote it"
 #MISE interactive=true
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
-#USAGE complete "ubuntu" run="printf 'noble\n'"
+#USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 #USAGE flag "--promote" help="After a successful bake, write the AMI id to /homelab-ci/ami/qemu-host/<ubuntu>"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
@@ -155,9 +155,9 @@ prune_old_amis() {
 }
 
 case "$ubuntu" in
-noble) ;;
+noble | resolute) ;;
 *)
-  echo "Error: qemu-host AMI currently supports only noble (got '$ubuntu')" >&2
+  echo "Error: unsupported qemu-host Ubuntu release '$ubuntu'" >&2
   exit 1
   ;;
 esac
