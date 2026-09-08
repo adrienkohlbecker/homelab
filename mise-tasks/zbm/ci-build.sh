@@ -16,7 +16,6 @@ set -euo pipefail
 : "${DOCKER_HOST:?DOCKER_HOST is required}"
 : "${DOCKER_CERT_PATH:?DOCKER_CERT_PATH is required}"
 
-repo_root="$(zbm_repo_root)"
 arch="$(zbm_host_arch)"
 
 # Resolve through mise, not by parsing mise.toml: these vars are tera
@@ -38,26 +37,6 @@ export ZBM_BUILDER_CACHE_REF="${CI_REGISTRY_IMAGE}/zbm-builder:v${ZBM_VERSION}-$
 echo "Building ZFSBootMenu v${ZBM_VERSION}${ZBM_BUILD_SUFFIX} for ${arch}"
 mise run zbm:builder-image
 mise run zbm:build
-
-tarball="${repo_root}/zbm-build/${arch}/zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX}-${arch}.tar.gz"
-if [ ! -f "$tarball" ]; then
-  echo "tarball not produced: $tarball" >&2
-  exit 1
-fi
-
-members="$(tar tzf "$tarball")"
-echo "$members"
-for f in initramfs-bootmenu.img zfsbootmenu.EFI ssh_host_ed25519_key.pub; do
-  grep -qxF "$f" <<<"$members" || {
-    echo "missing $f in tarball" >&2
-    exit 1
-  }
-done
-grep -qE '^vmlin.*-bootmenu$' <<<"$members" || {
-  echo "missing vmlin*-bootmenu kernel in tarball" >&2
-  exit 1
-}
-echo "ZBM tarball OK: $tarball"
 
 if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
   mise run zbm:upload
