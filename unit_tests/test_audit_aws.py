@@ -3,6 +3,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from botocore.exceptions import EndpointConnectionError
 
 _MODULE_PATH = Path(__file__).parents[1] / "mise-tasks" / "ci" / "audit-aws.py"
@@ -25,6 +26,7 @@ def image(image_id, *, tags, snapshot_id):
     }
 
 
+@pytest.fixture(autouse=True)
 def reset_output():
     audit_aws.anomalies.clear()
     audit_aws.deletes.clear()
@@ -33,7 +35,6 @@ def reset_output():
 
 
 def test_unknown_ami_is_reported_without_cleanup(monkeypatch):
-    reset_output()
     unknown = image(
         "ami-unknown",
         tags={"Name": "unrecognized"},
@@ -56,8 +57,6 @@ def test_unknown_ami_is_reported_without_cleanup(monkeypatch):
 
 
 def test_incomplete_inventory_emits_no_classification():
-    reset_output()
-
     audit_aws.audit_ami_inventory("eu-central-1", [], None)
 
     assert audit_aws.anomalies == []
@@ -76,8 +75,6 @@ def test_paginated_collects_every_page():
             assert operation == "describe_images"
             return Paginator()
 
-    reset_output()
-
     result = audit_aws.paginated(
         "images",
         Service(),
@@ -91,8 +88,6 @@ def test_paginated_collects_every_page():
 
 
 def test_safe_records_transport_errors():
-    reset_output()
-
     result = audit_aws.safe(
         "snapshots",
         lambda: (_ for _ in ()).throw(EndpointConnectionError(endpoint_url="https://ec2.invalid")),
