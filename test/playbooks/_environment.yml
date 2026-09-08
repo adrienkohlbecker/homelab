@@ -108,11 +108,6 @@
 
     # Assert the running resolver state, not merely the drop-in written above.
     # Scope it to the Global block controlled by resolved.conf.d.
-    - name: Read resolvectl status
-      command: resolvectl status
-      register: test_resolvectl
-      changed_when: false
-
     - name: Verify DNS-over-TLS is enforced at the configured resolver
       vars:
         # Per-link DHCP resolvers must not satisfy the global drop-in contract.
@@ -121,16 +116,13 @@
         _test_resolvectl_global_protocols: >-
           {{ _test_resolvectl_global.splitlines()
              | select('search', 'Protocols:') | list | first | default('') }}
-      assert:
-        that:
-          - "'+DNSOverTLS' in _test_resolvectl_global_protocols"
-          - >-
-            (test_dot_servers | select('in', _test_resolvectl_global) | list | length)
-            == (test_dot_servers | length)
-        fail_msg: >-
-          systemd-resolved isn't enforcing DNS-over-TLS via {{ test_dot_servers | join(', ') }};
-          the 10-test-dns-over-tls.conf drop-in didn't take effect, so queries can
-          fall back to UDP. Global Protocols line: {{ _test_resolvectl_global_protocols }}
+      command: resolvectl status
+      register: test_resolvectl
+      changed_when: false
+      failed_when: >-
+        '+DNSOverTLS' not in _test_resolvectl_global_protocols or
+        (test_dot_servers | select('in', _test_resolvectl_global) | list | length)
+        != (test_dot_servers | length)
 
     # Prove public resolution end-to-end; retry boundedly for a cold DoT handshake.
     - name: Verify public resolution over the enforced resolver
