@@ -21,5 +21,5 @@ resource "cloudflare_dns_record" "adrienkohlbecker_com" {
   proxied  = try(each.value.proxied, false)
   ttl      = 1
   comment  = try(each.value.comment, null)
-  tags     = try(each.value.tags, [])
+  tags     = []
 }
