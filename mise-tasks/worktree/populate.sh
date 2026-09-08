@@ -14,36 +14,36 @@ wt=$(cd "$wt" && pwd)
 repo=$(git -C "$wt" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
 
 symlink_missing() {
-  local src=$1 dst=$2
+  local path=$1
 
-  if [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
-    ln -s "$src" "$dst"
+  if [ ! -e "$wt/$path" ] && [ ! -L "$wt/$path" ]; then
+    ln -s "$repo/$path" "$wt/$path"
   fi
 }
 
 symlink_existing_dir() {
-  local src=$1 dst=$2
+  local path=$1
 
-  if [ -d "$src" ]; then
-    symlink_missing "$src" "$dst"
+  if [ -d "$repo/$path" ]; then
+    symlink_missing "$path"
   fi
 }
 
-symlink_missing "$repo/packer/artifacts" "$wt/packer/artifacts"
-symlink_missing "$repo/terraform/.terraform" "$wt/terraform/.terraform"
-symlink_missing "$repo/.claude/settings.local.json" "$wt/.claude/settings.local.json"
+symlink_missing packer/artifacts
+symlink_missing terraform/.terraform
+symlink_missing .claude/settings.local.json
 
 # test/firmware/ holds the fetched aarch64 edk2 blob (gitignored; see test/arch.py).
 # Share the main checkout's so one `mise run test:firmware` covers every worktree.
 # Guarded on the source existing so we never leave a dangling symlink that arch.py
 # would misread -- a worktree created before the first fetch just fetches its own.
-symlink_existing_dir "$repo/test/firmware" "$wt/test/firmware"
+symlink_existing_dir test/firmware
 
 # remember-plugin memory store: the plugin hardcodes $CLAUDE_PROJECT_DIR/.remember,
 # so a per-worktree store dies with `git worktree remove`. Share the main checkout's
 # (ignored via the common git dir's info/exclude). Guard on the source existing — a
 # dangling symlink would break the plugin's own `mkdir -p .remember/tmp`.
-symlink_existing_dir "$repo/.remember" "$wt/.remember"
+symlink_existing_dir .remember
 
 for copied_path in .ansible-mitogen-strategy mise.local.toml; do
   src="$repo/$copied_path"
@@ -72,5 +72,5 @@ fi
 # the packer/artifacts and .remember symlinks above. Skipped when the main checkout
 # has no notes clone (fresh setup, or a CI checkout that never populated it).
 if [ -d "$repo/notes/.git" ]; then
-  symlink_missing "$repo/notes" "$wt/notes"
+  symlink_missing notes
 fi
