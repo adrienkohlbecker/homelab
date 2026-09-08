@@ -93,9 +93,6 @@ class RequireBackup(_HomelabRule):
     severity = "MEDIUM"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if task["__ansible_action_type__"] != "task":
-            return False
-
         module = _module_name(task)
         if module not in _FILE_WRITE_MODULES:
             return False
@@ -118,7 +115,7 @@ class RequireNamedRoleEntrypoint(_HomelabRule):
     severity = "HIGH"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if task["__ansible_action_type__"] != "task" or _module_name(task) != "import_role":
+        if _module_name(task) != "import_role":
             return False
 
         if task["action"].get("tasks_from"):
@@ -138,7 +135,7 @@ class ShellStrictMode(_HomelabRule):
     tags: ClassVar[list[str]] = ["command-shell", "idiom"]
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if task["__ansible_action_type__"] != "task" or _module_name(task) != "shell" or _is_test_hook(file):
+        if _module_name(task) != "shell" or _is_test_hook(file):
             return False
 
         cmd = self.unjinja(get_cmd_args(task))
@@ -176,7 +173,7 @@ class NoNoLog(_HomelabRule):
     severity = "MEDIUM"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if task["__ansible_action_type__"] != "task" or _is_test_file(file):
+        if _is_test_file(file):
             return False
 
         no_log = task.raw_task.get("no_log")
@@ -192,7 +189,7 @@ class NoInventoryHostnameWhen(_HomelabRule):
     severity = "MEDIUM"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if task["__ansible_action_type__"] != "task" or _is_test_file(file):
+        if _is_test_file(file):
             return False
 
         when = str(task.raw_task.get("when") or "")
@@ -208,7 +205,7 @@ class PreferImport(_HomelabRule):
     severity = "LOW"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if task["__ansible_action_type__"] != "task" or _is_test_file(file):
+        if _is_test_file(file):
             return False
 
         module = _module_name(task)
@@ -233,7 +230,7 @@ class RequireValidate(_HomelabRule):
     severity = "LOW"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
-        if task["__ansible_action_type__"] != "task" or _is_test_file(file):
+        if _is_test_file(file):
             return False
 
         module = _module_name(task)
