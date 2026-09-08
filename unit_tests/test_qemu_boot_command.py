@@ -1,9 +1,8 @@
 """Tests for Machine._boot_command across the arch/keep_vm/direct-boot matrix.
 
-prepare() does the IO-heavy work of populating drives / _direct_boot,
-which isn't safe to run in a unit test (qemu-img, file IO against packer
-artifacts). Each test sets those attrs manually and asserts on the shape
-of the assembled command line.
+prepare() does the IO-heavy work of populating drives, which isn't safe to run
+in a unit test (qemu-img, file IO against Packer artifacts). Each test supplies
+the remaining state directly and asserts on the assembled command line.
 """
 
 from collections.abc import Callable
@@ -23,7 +22,6 @@ def test_wan_probe_ports_manifest_loads_shared_surface() -> None:
 def _setup(m: machine.Machine, drives: list[str] | None = None) -> None:
     """Bypass prepare(): give the instance the attributes _boot_command reads."""
     m.drives = list(drives or [])
-    m._direct_boot = None
     # prepare() picks vnc_display when keep_vm; bypass tests pin it so the
     # cmdline has a deterministic value.
     m.vnc_display = 0
@@ -161,13 +159,16 @@ def test_keep_vm_aarch64_adds_full_input_stack(
 def test_direct_boot_aarch64_appends_console_when_missing(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = machine_factory(host_arch="aarch64", keep_vm=False)
-    _setup(m)
-    m._direct_boot = (
-        Path("/cache/kernel"),
-        Path("/cache/initrd"),
-        "root=zfs:rpool/ROOT/ubuntu_xyz",
+    m = machine_factory(
+        host_arch="aarch64",
+        keep_vm=False,
+        launch=machine.LaunchOptions(
+            kernel=Path("/cache/kernel"),
+            initrd=Path("/cache/initrd"),
+            append="root=zfs:rpool/ROOT/ubuntu_xyz",
+        ),
     )
+    _setup(m)
     cmd = m._boot_command()
 
     assert cmd[cmd.index("-kernel") + 1] == "/cache/kernel"
@@ -185,13 +186,16 @@ def test_direct_boot_aarch64_appends_console_when_missing(
 def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = machine_factory(host_arch="aarch64", keep_vm=False)
-    _setup(m)
-    m._direct_boot = (
-        Path("/cache/kernel"),
-        Path("/cache/initrd"),
-        "root=zfs:rpool/ROOT/ubuntu_xyz console=ttyAMA0 quiet",
+    m = machine_factory(
+        host_arch="aarch64",
+        keep_vm=False,
+        launch=machine.LaunchOptions(
+            kernel=Path("/cache/kernel"),
+            initrd=Path("/cache/initrd"),
+            append="root=zfs:rpool/ROOT/ubuntu_xyz console=ttyAMA0 quiet",
+        ),
     )
+    _setup(m)
     append = m._boot_command()[m._boot_command().index("-append") + 1]
     # Only one console=ttyAMA in the final cmdline -- the user-provided one.
     assert append.count("console=ttyAMA") == 1
@@ -200,13 +204,16 @@ def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
 def test_direct_boot_x86_64_appends_ttyS(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = machine_factory(host_arch="x86_64", keep_vm=False)
-    _setup(m)
-    m._direct_boot = (
-        Path("/cache/kernel"),
-        Path("/cache/initrd"),
-        "root=zfs:rpool/ROOT/ubuntu_xyz",
+    m = machine_factory(
+        host_arch="x86_64",
+        keep_vm=False,
+        launch=machine.LaunchOptions(
+            kernel=Path("/cache/kernel"),
+            initrd=Path("/cache/initrd"),
+            append="root=zfs:rpool/ROOT/ubuntu_xyz",
+        ),
     )
+    _setup(m)
     append = m._boot_command()[m._boot_command().index("-append") + 1]
     assert "console=ttyS0,115200" in append
     assert "earlycon=uart8250,io,0x3f8" in append
@@ -215,13 +222,16 @@ def test_direct_boot_x86_64_appends_ttyS(
 def test_direct_boot_keep_vm_inserts_tty0_first(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = machine_factory(host_arch="aarch64", keep_vm=True)
-    _setup(m)
-    m._direct_boot = (
-        Path("/cache/kernel"),
-        Path("/cache/initrd"),
-        "root=zfs:rpool/ROOT/ubuntu_xyz",
+    m = machine_factory(
+        host_arch="aarch64",
+        keep_vm=True,
+        launch=machine.LaunchOptions(
+            kernel=Path("/cache/kernel"),
+            initrd=Path("/cache/initrd"),
+            append="root=zfs:rpool/ROOT/ubuntu_xyz",
+        ),
     )
+    _setup(m)
     append = m._boot_command()[m._boot_command().index("-append") + 1]
     # tty0 must appear before the serial console=, because Linux makes the
     # LAST console= the primary /dev/console (we want serial primary).

@@ -326,7 +326,7 @@ def discover_packer_disks(image_dir: Path) -> tuple[list[Path], str]:
 
 @dataclass(frozen=True)
 class LaunchOptions:
-    """Ad-hoc qemu boot options used by launch.py, not by role tests."""
+    """QEMU boot options used by launch.py and derived-image builders."""
 
     image_dir: Path | None = None
     kernel: Path | None = None
@@ -342,6 +342,7 @@ class LaunchOptions:
     headless: bool = False
     qmp_socket: Path | None = None
     extra_hostfwds: tuple[int, ...] = ()
+    write_image: bool = False
 
 
 def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
@@ -435,11 +436,6 @@ class Machine:
     # consumed by _boot_command for the `-display vnc=` argument. Bound on
     # 5900+display so qemu won't try to walk the band itself.
     vnc_display: int
-    # Set only when launch.py passes --kernel/--initrd/--append (ad-hoc custom
-    # kernel without rebuilding the image). _boot_command() emits
-    # -kernel/-initrd/-append and the firmware boot chain is bypassed.
-    # None in normal harness operation on all arches and variants.
-    _direct_boot: tuple[Path, Path, str] | None
     # Extra guest ports to forward in addition to the configured probe ports.
     # Set by LaunchOptions.extra_hostfwds; populated in
     # prepare() as {guest_port: host_port}.
@@ -468,7 +464,6 @@ class Machine:
         workdir_parent: Path | None = None,
         launch: LaunchOptions | None = None,
         loopback_host: str | None = None,
-        write_image: bool = False,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
@@ -480,7 +475,7 @@ class Machine:
         cells don't collide. launch.py passes 127.0.0.1 to keep its
         --write-hostfwds contract (consumers assume the default loopback).
         """
-        launch = launch or LaunchOptions()
+        self.launch = launch or LaunchOptions()
         try:
             spec = QEMU_MACHINE_SPECS[machine]
         except KeyError:
@@ -503,34 +498,15 @@ class Machine:
         self.imagedir: Path = imagedir_for_host()
 
         self._spec = spec
-        if launch.image_dir is not None and spec.cloud_image:
+        if self.launch.image_dir is not None and spec.cloud_image:
             raise ValueError(f"image_dir override requires an artifact-backed variant, got {machine!r}")
-        if (launch.kernel is None) != (launch.initrd is None):
+        if (self.launch.kernel is None) != (self.launch.initrd is None):
             raise ValueError("launch kernel and initrd must be provided together")
-        self._image_dir_override = launch.image_dir.resolve() if launch.image_dir is not None else None
-        # launch.py-only knobs; defaults are no-ops (every gate below the
-        # post-init setup short-circuits when each is None/False/[]).
-        if launch.kernel is not None:
-            assert launch.initrd is not None
-            self._direct_boot_override = (launch.kernel.resolve(), launch.initrd.resolve(), launch.append)
-        else:
-            self._direct_boot_override = None
-        self._mem = launch.mem
-        self._with_pflash = launch.with_pflash
-        self._efi_code = launch.efi_code.resolve() if launch.efi_code is not None else None
-        self._efi_vars = launch.efi_vars.resolve() if launch.efi_vars is not None else None
-        self._virtfs = list(launch.virtfs)
-        self._foreground = launch.foreground
-        self._display_window = launch.display_window
-        self._headless = launch.headless
         # Derived-image builders may mount a caller-staged artifact tree
         # directly so guest writes persist. Requiring an explicit image_dir
         # prevents mutation of a published machine directory.
-        if write_image and launch.image_dir is None:
+        if self.launch.write_image and self.launch.image_dir is None:
             raise ValueError("write_image=True requires an explicit image_dir")
-        self._write_image = write_image
-        self._qmp_socket = launch.qmp_socket
-        self._extra_guest_ports: list[int] = list(launch.extra_hostfwds)
         self.extra_hostfwd_ports: dict[int, int] = {}
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
@@ -1202,7 +1178,7 @@ class Machine:
         print_line("Keeping VM around, ssh using:")
         print_line(f"> {ssh_cmd}")
         print_line("Then Ctrl+C to stop the machine")
-        if self._display_window:
+        if self.launch.display_window:
             print_line("Display: QEMU window")
         else:
             # vnc_display is only set when keep_vm=True and local GUI display
@@ -1238,8 +1214,6 @@ class Machine:
         # launches to drop, then publishes, then we re-acquire. Released at
         # the end of boot() once qemu has pinned the inodes via open fds.
         self._acquire_publish_lock_shared()
-
-        self._direct_boot = None
 
         # Reserve every hostfwd port up front by binding an ephemeral socket on
         # self.ssh_host and reading back the assigned port. Avoids an lsof-poll
@@ -1278,7 +1252,7 @@ class Machine:
                     if key in self.wan_forward_ports[proto]:
                         continue
                     self.wan_forward_ports[proto][key] = _reserve(sock_type)
-            for guest_port in self._extra_guest_ports:
+            for guest_port in self.launch.extra_hostfwds:
                 key = str(guest_port)
                 if key in self.wan_forward_ports["tcp"]:
                     self.extra_hostfwd_ports[guest_port] = self.wan_forward_ports["tcp"][key]
@@ -1302,7 +1276,7 @@ class Machine:
             self._passt_socket_dir = tempfile.TemporaryDirectory(prefix="homelab-passt-", ignore_cleanup_errors=True)
             self._passt_socket = Path(self._passt_socket_dir.name) / "passt.sock"
 
-        if self.keep_vm and not self._display_window and not self._headless:
+        if self.keep_vm and not self.launch.display_window and not self.launch.headless:
             # qemu's vnc= syntax interprets the number as a display
             # (port = 5900+display); pick it up front so we can print it.
             self.vnc_display = self._pick_vnc_display()
@@ -1340,14 +1314,14 @@ class Machine:
                 self.drives += await self._uefi_drives()
         else:
             # Artifact-backed variants overlay every disk Packer published.
-            if self._image_dir_override is not None:
-                image_dir = self._image_dir_override
+            if self.launch.image_dir is not None:
+                image_dir = self.launch.image_dir.resolve()
             else:
                 image_dir = self.imagedir / self.ubuntu_name / self.machine
             os_src_paths, artifact_format = discover_packer_disks(image_dir)
 
             os_disk_paths: list[str] = []
-            if self._write_image:
+            if self.launch.write_image:
                 # No overlay: pass the source files straight to qemu in
                 # their on-disk format. Writes persist in image_dir so
                 # the derived-image builder can publish it afterwards.
@@ -1364,18 +1338,12 @@ class Machine:
             shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
             self.drives += await self._uefi_drives()
 
-        # launch.py --kernel/--initrd/--append: bypass the firmware boot
-        # chain entirely and qemu-direct-boot a user-supplied kernel.
-        # Useful for trying a custom kernel without rebuilding the image.
-        if self._direct_boot_override is not None:
-            self._direct_boot = self._direct_boot_override
-
         # Attach pflash on variants that don't already have it (x86_64
         # minimal BIOS) when launch.py asked for it via --with-pflash or an
         # explicit --efi-code/--efi-vars. Idempotent: skip when an earlier
         # branch already attached pflash (every ZFS variant + aarch64
         # minimal); the override flowed through there already.
-        want_pflash = self._with_pflash or self._efi_code is not None or self._efi_vars is not None
+        want_pflash = self.launch.with_pflash or self.launch.efi_code is not None or self.launch.efi_vars is not None
         if want_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
 
@@ -1521,9 +1489,11 @@ class Machine:
           the same size, and EDK2 builds aren't uniform: aarch64 EDK2 ships
           at 64 MiB, x86_64 OVMF typically at 4 MiB.
         """
-        code_path = self._efi_code if self._efi_code is not None else uefi_code_path_for(self.arch)
-        if self._efi_vars is not None:
-            vars_path = self._efi_vars
+        code_path = (
+            self.launch.efi_code.resolve() if self.launch.efi_code is not None else uefi_code_path_for(self.arch)
+        )
+        if self.launch.efi_vars is not None:
+            vars_path = self.launch.efi_vars.resolve()
         else:
             packer_vars = self.workdir_path / "efivars.fd"
             if packer_vars.exists():
@@ -1684,7 +1654,7 @@ class Machine:
         """
         accel = "hvf" if platform.system() == "Darwin" else "kvm"
 
-        if self._headless:
+        if self.launch.headless:
             display_args = ["-display", "none"]
         elif self.keep_vm:
             # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
@@ -1698,7 +1668,7 @@ class Machine:
                 "-display",
                 (
                     display_backend
-                    if self._display_window
+                    if self.launch.display_window
                     # Display number pre-picked in prepare(); bind VNC to this
                     # cell's loopback (self.ssh_host) -- a bare `vnc=:N` binds the
                     # wildcard host, so the reservation in _pick_vnc_display (which
@@ -1715,10 +1685,17 @@ class Machine:
             display_args = ["-display", "none"]
 
         direct_boot: list[str] = []
-        if self._direct_boot is not None:
-            kernel, initrd, cmdline = self._direct_boot
-            cmdline = self._augment_kernel_cmdline(cmdline)
-            direct_boot = ["-kernel", str(kernel), "-initrd", str(initrd), "-append", cmdline]
+        if self.launch.kernel is not None:
+            assert self.launch.initrd is not None
+            cmdline = self._augment_kernel_cmdline(self.launch.append)
+            direct_boot = [
+                "-kernel",
+                str(self.launch.kernel.resolve()),
+                "-initrd",
+                str(self.launch.initrd.resolve()),
+                "-append",
+                cmdline,
+            ]
 
         netdev_arg, net_device_arg = self._netdev_args()
 
@@ -1765,10 +1742,10 @@ class Machine:
         # launch.py-only post-process. Each branch is a no-op when the
         # corresponding kwarg is at its default, so testrole.py / production
         # callers see the cmdline above verbatim.
-        if self._mem is not None:
-            cmd[cmd.index("-m") + 1] = self._mem
+        if self.launch.mem is not None:
+            cmd[cmd.index("-m") + 1] = self.launch.mem
 
-        if self._foreground:
+        if self.launch.foreground:
             # Strip the `timeout --kill-after=10s 0 ...` wrapper. GNU timeout,
             # when not invoked directly from a shell prompt, detaches the
             # child from the controlling tty (it has a `--foreground` flag
@@ -1786,9 +1763,9 @@ class Machine:
             # again to return; Ctrl-A,x to quit qemu.
             cmd[cmd.index("-serial") + 1] = "mon:stdio"
 
-        if self._qmp_socket is not None:
-            cmd += ["-qmp", f"unix:{self._qmp_socket},server,nowait"]
-        for path, tag in self._virtfs:
+        if self.launch.qmp_socket is not None:
+            cmd += ["-qmp", f"unix:{self.launch.qmp_socket},server,nowait"]
+        for path, tag in self.launch.virtfs:
             cmd += [
                 "-virtfs",
                 f"local,id={tag},path={path},mount_tag={tag},security_model=mapped-xattr",

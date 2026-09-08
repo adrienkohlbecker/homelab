@@ -42,9 +42,8 @@ async def seed_image(image_dir: Path, ubuntu: str) -> None:
         keep_vm=False,
         ubuntu_name=ubuntu,
         machine_timeout=BUILD_TIMEOUT,
-        launch=LaunchOptions(image_dir=image_dir, headless=True),
+        launch=LaunchOptions(image_dir=image_dir, headless=True, write_image=True),
         loopback_host=SSH_HOST,
-        write_image=True,
     )
     task = asyncio.current_task()
     assert task is not None

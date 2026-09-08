@@ -107,10 +107,10 @@ def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pyt
 
     asyncio.run(builder.seed_image(tmp_path, "noble"))
 
-    assert constructor["write_image"] is True
     assert constructor["loopback_host"] == builder.SSH_HOST
     launch = cast(LaunchOptions, constructor["launch"])
     assert launch.image_dir == tmp_path
     assert launch.headless is True
+    assert launch.write_image is True
     assert ("ansible", str(tmp_path / "build_box_deps.yml")) in calls
     assert "wait" in calls

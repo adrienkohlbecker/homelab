@@ -231,7 +231,7 @@ class TestMachineUbuntuValidation:
         self, machine_factory: Callable[..., machine.Machine]
     ) -> None:
         with pytest.raises(ValueError, match="write_image=True requires an explicit image_dir"):
-            machine_factory(write_image=True)
+            machine_factory(launch=machine.LaunchOptions(write_image=True))
 
 
 class TestAnsibleControllerStaging:
