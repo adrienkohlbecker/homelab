@@ -4,26 +4,11 @@
 #
 # Auth uses an account-scoped Mailgun Private API key (settings ->
 # "API security" in the Mailgun UI). Stored in 1Password and surfaced
-# via TF_VAR_mailgun_api_key in mise.toml [env].
+# through MAILGUN_API_KEY in mise.toml [env].
 #
 # SMTP credential passwords live in group_vars/prod.yml as Ansible Vault
 # entries and are consumed directly by service roles. No inbound routes or
 # event webhooks are managed here.
-
-variable "mailgun_api_key" {
-  type      = string
-  sensitive = true
-  ephemeral = true
-
-  validation {
-    condition     = length(var.mailgun_api_key) > 0
-    error_message = "mailgun_api_key must be non-empty (resolved via TF_VAR_mailgun_api_key from 1Password through `op run`)."
-  }
-}
-
-provider "mailgun" {
-  api_key = var.mailgun_api_key
-}
 
 # EU region: domain hosted on eu.mailgun.org (matched by the pdk1/pdk2
 # DKIM CNAMEs in dns_fahm_fr.tf and the .dkim2.eu.mgsend.org. targets,

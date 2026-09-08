@@ -24,7 +24,7 @@ TF_VAR_google_idp_client_secret = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/password"
 GANDI_PERSONAL_ACCESS_TOKEN = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
 # Mailgun Private API key used by the provider for domain configuration.
 # SMTP sending credentials stay in Ansible Vault and are not managed by tofu.
-TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
+MAILGUN_API_KEY = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # Hetzner Cloud API token, for terraform only: the hcloud provider reads
 # HCLOUD_TOKEN from the env and does not load the CLI context. Named _OP so the
 # literal op:// ref never lands in $HCLOUD_TOKEN -- that would break every direct
