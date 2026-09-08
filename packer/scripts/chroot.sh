@@ -220,38 +220,11 @@ if [ "${ZFS_ARC_MAX:-0}" != "0" ]; then
   echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
 fi
 
-# Set ZFSBootMenu properties on datasets. The kernel cmdline carries a serial
-# console so the boot log reaches qemu's -serial stdio: the harness's
-# verify-boot post-processor captures it (a boot that never reaches SSH is
-# otherwise a black box), and it gives headless hosts a serial getty. The
-# serial console is last so it's the primary /dev/console -- kernel printk and
-# the login prompt both land on serial; tty0 keeps VGA output for physical
-# consoles; earlycon emits before the real driver registers its console.
-#
-# Source of truth for the *test-image* console args is $CONSOLE_CMDLINE, set
-# in the arch case block above. Prod hosts derive theirs from boot_serial_console
-# in host_vars (the boot role's "Set the base console command line" task
-# overwrites this property at converge). The serial hardware differs per arch
-# (8250 COM1 at io 0x3f8 vs pl011 at mmio 0x9000000), so the value is
-# arch-specific. $CONSOLE_CMDLINE is used both here and in the rEFInd menuentries
-# directly — no readback from ZFS needed.
-#
-# INSTALL_TARGET=qemu only for the box/lab/pug sources in qemu.pkr.hcl, so
-# neither Hetzner nor a bare-metal run picks up the test-only tuning below.
-#
-# mitigations=off: these are throwaway nested-KVM CI cells whose entire life is
-# one converge + verify. Speculative-execution mitigations buy nothing on a
-# disposable guest and cost a real syscall-heavy tax (apt, mitogen, fact-gather),
-# worse under nested virt. We also drop the arg as a /etc/zfsbootmenu fragment so
-# the boot role's converge-time cmdline reassembly (which rebuilds the property
-# from /etc/zfsbootmenu/*) keeps it across an in-test reboot. The fragment only
-# exists in the test image; prod is stock Ubuntu via ansible and has no such
-# file, so mitigations=off can never reach a prod host.
-#
-# Bare-metal physical hosts (lab/pug) have no 16550 UART, so the serial console
-# args are inert; use the VGA console only. This is only the pre-converge value
-# -- the boot role reconverges it from _console_cmdline (group_vars/all/main.yml),
-# which carries the same console=tty0 base.
+# Keep VGA output on every target. QEMU adds the architecture-specific serial
+# console consumed by verify-boot and disables mitigations only in disposable
+# nested-KVM cells. The fragment preserves that tuning when the boot role
+# rebuilds the command line during a test. Hetzner exposes a serial console;
+# bare-metal lab and pug do not. The boot role owns the final prod command line.
 COMMANDLINE="console=tty0"
 
 if [ "$INSTALL_TARGET" = "qemu" ]; then
@@ -282,55 +255,27 @@ else
   # mount is still ro. Remount rw for the duration of the chroot.
   mount -o remount,rw /sys
 
-  # This configuration exploits the fact that, with version 1.0, mdraid metadata will be written to the end of each partition.
-  # Newer metadata versions would be written to the beginning of each partition, and the system firmware would fail to
-  # recognize each component as a valid EFI system partition.
-  # Some OEM firmwares (Asus consumer, certain Supermicro X11/X12) scan
-  # ESPs more aggressively and may refuse a member partition; the
-  # per-disk efibootmgr entries below are the survival mechanism if
-  # one disk's path stops working. Validate on your firmware before
-  # committing to this layout for new bare-metal hosts.
-  # --bitmap=none: mdadm 4.4+ prompts for write-intent bitmap on raid1
-  # creation; bitmap data is incompatible with metadata=1.0 ESPs (the
-  # firmware would refuse the partition), so suppress the prompt with an
-  # explicit no.
+  # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
+  # Some firmware may still reject a member; per-disk NVRAM entries below retain
+  # alternate boot paths. Validate this layout on each new bare-metal platform.
   # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
   mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
   udevadm settle --timeout=10
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
-  # Swap raid1 across the per-disk swap partitions ($PARTITIONS_SWAP). metadata
-  # 1.2 in its default (start-of-device) location -- not a boot device, so none
-  # of the metadata=1.0 ESP constraints apply. --bitmap=none (like efi/podman):
-  # the redundant mirror replaces what the old rpool/swap zvol got from the pool,
-  # without the zvol's under-pressure deadlock exposure (paging out to a zvol
-  # needs ZFS to allocate memory to complete the write). The mdadm.conf line
-  # auto-assembles it at boot (and from the initramfs once update-initramfs runs
-  # below) so swapon finds it.
+  # Disk-backed RAID1 swap avoids the memory-pressure deadlock risk of a ZFS
+  # zvol. mdadm.conf makes it available to the initramfs and swapon at boot.
   # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
   mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
   udevadm settle --timeout=10
   mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
   SWAP_DEVICE=/dev/md/swap
 
-  # Assemble the podman store raid5 across the per-disk podman partitions
-  # ($PARTITIONS_PODMAN, present when PODMAN_SIZE is set). One disk of
-  # redundancy at (N-1)/N usable -- the operator accepts a single-disk failure
-  # for the reconstructible container store. metadata=1.2 in its default
-  # (start-of-device) location -- none of the metadata=1.0 ESP constraints apply
-  # since this is not a boot device. --force makes every supplied member active
-  # from creation instead of constructing a degraded array with a transient
-  # spare. Let mdadm run the initial parity resync (no --assume-clean): it
-  # backgrounds while mkfs proceeds, costs seconds on a fresh array, and leaves
-  # parity consistent so a later `mdadm --action=check` scrub finds no spurious
-  # mismatches. --bitmap=none (like the EFI array): the store
-  # is optimized for write throughput -- bypassing ZFS amplification is the whole
-  # point -- so we skip the write-intent bitmap's per-stripe logging and accept a
-  # full resync on disk replacement (the data is reconstructible regardless). The
-  # mdadm.conf line makes it auto-assemble at boot (and from the initramfs once
-  # update-initramfs runs below). The podman role then formats + mounts
-  # /dev/md/podman.
+  # The reconstructible Podman store uses RAID5 without a write-intent bitmap:
+  # accept a full replacement resync in exchange for lower write amplification.
+  # Run the initial parity resync, and record the array for boot-time assembly;
+  # the Podman role formats and mounts /dev/md/podman.
   if [ -n "$PARTITIONS_PODMAN" ]; then
     # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
     mdadm --create /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
@@ -433,35 +378,11 @@ rm /boot/refind_linux.conf
 mkdir -p /boot/efi/EFI/BOOT
 cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
 
-# aarch64-only: stage the on-pool Linux EFI-stub kernel + initrd onto the ESP.
-# The default aarch64 rEFInd entry below boots the installed Ubuntu kernel
-# directly via its EFI stub, with the kernel command line carried by the
-# stanza's `options` directive. The ZBM components entry remains available for
-# recovery/menu access; the rEFInd -> ZBM -> kexec chain is not the default on
-# this arch because it panics on EDK2/aarch64
-# (notes/archive/zbm-aarch64-kexec-bug-report.md).
-#
-# Wire the staging up as a kernel + initramfs hook so apt-driven kernel
-# upgrades (and zfs-initramfs / similar initrd-only rebuilds) refresh
-# /EFI/Linux/. The hook is the single source of truth for "pick the latest
-# /boot kernel and copy it to the ESP" -- we install it first, then invoke it
-# to do the initial staging. The rEFInd menuentry points at the same
-# /EFI/Linux/{vmlinuz.efi,initrd} paths the hook rewrites on every kernel
-# update.
+# aarch64 boots the kernel EFI stub directly because ZBM kexec panics under
+# EDK2 (notes/archive/zbm-aarch64-kexec-bug-report.md). Install the shared hook
+# for kernel removal, installation, and initrd-only rebuilds, then use that same
+# path for initial staging. ZBM remains available as a recovery menu entry.
 if [ "$ZBM_ARCH" = "aarch64" ]; then
-  # Hook script. Installed under /etc/kernel/postinst.d (fires on
-  # linux-image install/upgrade) and /etc/kernel/postrm.d (fires on
-  # autoremove of an old kernel — re-pick the latest remaining one).
-  # Also symlinked into /etc/initramfs/post-update.d to catch
-  # initrd-only rebuilds (e.g. dpkg-reconfigure zfs-initramfs) that
-  # don't bump the kernel package. The script ignores its arguments
-  # and always restages the highest-versioned kernel + initrd from
-  # /boot, matching the selection rule used during the build.
-  #
-  # `zz-` prefix puts us after initramfs-tools' own postinst.d hook
-  # so the new initrd is on disk before we copy it. Atomic rename
-  # (.new + mv) prevents a power loss mid-write from leaving a
-  # half-written kernel image on the ESP.
   install -m 0755 \
     "${CHROOT_ROLE_FILES}/zz-stage-efi-stub" \
     /etc/kernel/postinst.d/zz-stage-efi-stub
@@ -471,8 +392,6 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
   ln -sf /etc/kernel/postinst.d/zz-stage-efi-stub \
     /etc/initramfs/post-update.d/zz-stage-efi-stub
 
-  # Initial staging — same code path as every subsequent kernel
-  # upgrade will take.
   /etc/kernel/postinst.d/zz-stage-efi-stub
 
   refind_default_selection="Ubuntu (Linux EFI Stub)"
@@ -645,29 +564,9 @@ EOF
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
-# Mask ambient background units in the qemu test image only. On a throwaway CI
-# cell these steal the dpkg lock and burn CPU during converge for no benefit.
-#
-# Masked here, re-established by the owning role from this clean base — the same
-# spirit as the mirror prelude: the image suppresses interference, the role that
-# owns a unit unmasks + exercises it (so its _verify still proves it drives the
-# unit from a masked start):
-#   - apt-daily.timer / apt-daily-upgrade.timer: roles/unattended_upgrades
-#     unmasks + enables + starts both timers, and its _verify asserts both
-#     active so the download and upgrade halves are exercised end to end.
-#   - unattended-upgrades.service: not in the debootstrap base (the role apt-
-#     installs it), so the present-gate below skips it here; listed for the day
-#     a derived image bakes it in, in which case the role re-installs it fresh
-#     (an apt install lands the unit unmasked).
-#   - multipathd.service / .socket: roles/boot masks these itself on zfs_root
-#     hosts, so a pre-mask here is aligned, not in conflict.
-# snapd is deliberately NOT masked: the debootstrap base never ships it, and the
-# cleanup role purges it on the cloud-image (minimal) variant with a _verify that
-# asserts no snapd unit files remain — a mask symlink would trip that assertion.
-#
-# Each unit is masked only if systemd already knows a real unit file for it
-# (list-unit-files lists it as anything other than not-found); masking an absent
-# unit would leave a dangling /dev/null symlink.
+# Prevent background apt work from taking the dpkg lock in QEMU cells. The
+# unattended_upgrades role unmasks its timers; the boot role owns the multipath
+# masks. Only mask installed units so the image carries no dangling symlinks.
 if [ "$INSTALL_TARGET" = "qemu" ]; then
   for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service \
     multipathd.service multipathd.socket; do

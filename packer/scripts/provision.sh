@@ -391,19 +391,9 @@ export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_META PARTITIO
 
 export DEBIAN_FRONTEND=noninteractive
 
-# apt already retries transient fetch failures (Nexus restart, packet loss)
-# three times with backoff by default -- Acquire::Retries "3", Retries::Delay
-# "true", Retries::Delay::Maximum "30" are apt's own compiled-in values on
-# every release we build, so no drop-in is needed for the per-file case. The
-# coarse absorb (a Nexus restart outlasting those retries) is apt_update below.
-
-# apt-get update exits 0 even when one component's Packages index fails to
-# download (a Nexus restart, a dropped packet on the build NIC): the partial
-# index then makes the install below fail with a baffling "Unable to locate
-# package" for whatever the missed component held (e.g. universe). Error-Mode
-# =any turns a failed fetch into a non-zero exit; the loop retries with
-# backoff so a brief blip is absorbed instead of poisoning the install. Fail
-# loudly only once the attempts are spent.
+# Apt retries individual downloads itself. Error-Mode=any additionally rejects
+# a partial index update, and this outer backoff absorbs a longer mirror outage
+# before the package install encounters misleading missing-package failures.
 apt_update() {
   local attempt
   for attempt in 1 2 3 4 5; do

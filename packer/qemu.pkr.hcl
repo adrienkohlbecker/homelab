@@ -124,6 +124,7 @@ locals {
   # Supported layouts are "" and mirror; extra_pools accepts apoc, dozer, zee,
   # and tank_mouse. Empty optional fields disable their feature; zfs_arc_max=0
   # disables the cap. The source name selects qemu versus Hetzner installation.
+  # Keep pug and lab explicit here to document the physical hosts in the rack.
   variant_config = {
     # pug: single-disk rpool + a dedicated podman partition + apoc mirror.
     # The small fixture partition proves the prod backend without carrying the
@@ -153,27 +154,13 @@ locals {
       extra_pools = "dozer tank_mouse"
       zfs_arc_max = 0
     }
-    # box: single-disk rpool + a 1G flat `zee` pool. The default push-CI
-    # ZFS-on-root fixture. The second pool turns box from rpool-only into a
-    # multi-pool host so the zfs role's trim-timer + mount-cache loops (and
-    # consumers that gate on >1 pool) run on the default cell -- folding in
-    # the coverage the lab/pug AMIs used to carry (their prod-faithful
-    # mirror/raidz geometry, never asserted by any role, stays on qemu only).
-    # Prod producer datasets (data/media/scratch/minio/services) still land
-    # flat on rpool here -- zfs_{dozer,tank}_filesystem keep their rpool
-    # default, so zee activates no named consumers.
+    # box: the default push-CI fixture. Its 1G `zee` pool exercises multi-pool
+    # loops without activating named dataset consumers; those stay on rpool.
     # See notes/archive/ci_box_multidisk_drop_lab_pug_amis.md.
     # box_deps is derived from box by `mise run test:build_box_deps`, which
-    # boots a writable staged clone, applies test/playbooks/build_box_deps.yml,
-    # and publishes the result. It is not a packer source.
-    # box keeps the container store on a dedicated 50G ext4 partition (p4).
-    # box is the only fixture the _site_test cell
-    # converges the *whole* fleet onto, and that store must hold every service
-    # image plus a storage-chown-by-maps duplicate for each fake-root service
-    # (homeassistant, jellyfin, authelia, ...), hence 50G. rpool carries the OS
-    # plus the prod producer datasets (data/media/scratch/minio/services land
-    # flat on it here). vdb is sized for swap(4G) + podman(50G) + a ~40G rpool;
-    # the disk_sizes total stays 96G.
+    # applies test/playbooks/build_box_deps.yml; it is not a Packer source.
+    # The 50G Podman partition holds the whole-fleet site's image set and
+    # fake-root storage copies; 96G leaves roughly 40G for rpool after swap.
     box = {
       disks       = "/dev/vdb"
       extra_disks = "/dev/vdc"
