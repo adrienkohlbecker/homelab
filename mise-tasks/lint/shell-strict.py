@@ -8,24 +8,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-ALLOWLIST = {
-    "mise-tasks/packer/_hetzner_rescue.sh": "sourced rescue helper library",
-    "mise-tasks/worktree/lib.sh": "sourced helper library",
-    "mise-tasks/zbm/lib.sh": "sourced helper library",
-}
-ALLOWLIST_PATTERNS = [
+ALLOWLIST_PATTERNS = (
+    "mise-tasks/packer/_hetzner_rescue.sh",
+    "mise-tasks/worktree/lib.sh",
+    "mise-tasks/zbm/lib.sh",
     "roles/netdata/files/*.chart.sh",
     "roles/hdparm/files/*.chart.sh",
     "roles/systemd_timer/files/*.chart.sh",
     "roles/zfs/files/*.chart.sh",
-]
+)
 
 SHEBANG_RE = re.compile(r"^#!.*\b(?:ba|z|k)?sh\b")
-SET_TOKEN_RE = r"(?<![\w-])set(?![\w-])"
-SET_E_RE = re.compile(rf"{SET_TOKEN_RE}[^\n;]*-[A-Za-z]*e", re.MULTILINE)
-SET_U_RE = re.compile(rf"{SET_TOKEN_RE}[^\n;]*-[A-Za-z]*u", re.MULTILINE)
-PIPEFAIL_RE = re.compile(rf"{SET_TOKEN_RE}[^\n]*pipefail", re.MULTILINE)
-STRICT_SOURCE_RE = re.compile(r"^\s*(?:source|\.)\s+/usr/local/lib/functions\.sh\b", re.MULTILINE)
+STRICT_MODE_RE = re.compile(r"^[ \t]*set -[A-Za-z]*e[A-Za-z]*u[A-Za-z]*o[A-Za-z]* pipefail[ \t]*$", re.MULTILINE)
 
 
 def git_files() -> list[Path]:
@@ -41,14 +35,12 @@ def is_shell_file(path: Path, text: str) -> bool:
 
 def is_allowlisted(path: Path) -> bool:
     path_text = path.as_posix()
-    return path_text in ALLOWLIST or any(fnmatch.fnmatch(path_text, pattern) for pattern in ALLOWLIST_PATTERNS)
+    return any(fnmatch.fnmatch(path_text, pattern) for pattern in ALLOWLIST_PATTERNS)
 
 
 def has_strict_mode(text: str) -> bool:
     preamble = "\n".join(text.splitlines()[:40])
-    if STRICT_SOURCE_RE.search(preamble):
-        return True
-    return bool(SET_E_RE.search(preamble) and SET_U_RE.search(preamble) and PIPEFAIL_RE.search(preamble))
+    return bool(STRICT_MODE_RE.search(preamble))
 
 
 def main() -> int:
