@@ -682,13 +682,9 @@ def _full_universe_specs() -> list[str]:
 # ---------------------------------------------------------------------------
 #
 # The `detect` job emits a *generated child pipeline*: one qemu test cell per
-# job. Both targets (`aws_qemu`, `lab`) run on a qemu shell runner — they render
-# the same matrix and hydrate the promoted qemu image bundle before calling the
-# qemu harness directly. aws_qemu reads the bundles from AWS S3 (assuming the
-# cell role via GitLab OIDC); lab reads them from the on-LAN MinIO mirror with
-# static creds. They differ only in which shell runner claims the cells, whether
-# the guest egresses through AWS, whether the host ships a packer-baked
-# toolchain, and how the cell authenticates to the image store.
+# job. Both targets (`aws_qemu`, `lab`) render the same matrix on qemu shell
+# runners. AWS cells hydrate promoted bundles from S3; lab cells boot the
+# co-located artifacts directly.
 #
 # The parent `detect` job (.gitlab-ci.yml) runs the `ci:detect` mise task, which
 # writes the child YAML (one job per cell, all extending a shared `.cell` scaffold);
@@ -702,13 +698,8 @@ CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 
 # Both targets run the qemu backend; they differ only in the fields below.
 #   cell_runner_tag — which shell runner claims the cells.
-#   site_runner_tag — which runner claims the _site_test critical-path cell. On
-#                     aws_qemu this becomes "aws-shell-qemu-site" (a dedicated
-#                     single-host 4-vCPU pool) once that runner + ASG are live;
-#                     until then it equals cell_runner_tag so site_test rides the
-#                     role-cell pool and merging this can never strand the job on
-#                     an unregistered runner. lab has one shell runner, so it
-#                     always equals cell_runner_tag there.
+#   site_runner_tag — the dedicated _site_test pool on AWS; the normal lab
+#                     runner for lab-target pipelines.
 #   in_aws          — true when the guest egresses through AWS, so roles pick
 #                     the in-region EC2 mirrors + public DNS over the LAN Nexus
 #                     / AdGuard VIP (surfaced as HOMELAB_TEST_IN_AWS).

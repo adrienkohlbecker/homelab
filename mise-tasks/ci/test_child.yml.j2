@@ -109,8 +109,7 @@ stages:
   extends: .cell
   stage: site
   # Route the critical-path converge to its own runner (a dedicated single-host
-  # 4-vCPU pool on aws_qemu) so it runs uncontended and the role-cell pool can
-  # drain without waiting on it. Equals the cell tag until that pool is live.
+  # 4-vCPU pool on aws_qemu) so it runs uncontended; lab uses its normal runner.
   tags:
     - {{ site_runner_tag }}
   timeout: 60m
@@ -180,8 +179,7 @@ stages:
 
 no_cells:
   stage: test1
-  # The trigger is gated off (HAVE_CELLS=false) so this never runs; it only
-  # keeps the artifact a syntactically valid pipeline.
+  # Keep an empty generated child pipeline valid on a hosted runner.
   image: alpine:3.22
   tags:
     - saas-linux-small-amd64
