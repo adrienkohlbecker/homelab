@@ -1,4 +1,5 @@
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -21,13 +22,20 @@ def test_preflight_returns_authenticated_server_query(monkeypatch) -> None:
     assert calls == ["server"]
 
 
+def test_hcloud_list_fails_with_resource_context(monkeypatch) -> None:
+    error = subprocess.CalledProcessError(1, ["hcloud"], stderr="permission denied\n")
+    monkeypatch.setattr(audit_hetzner.subprocess, "run", lambda *a, **kw: (_ for _ in ()).throw(error))
+
+    with pytest.raises(RuntimeError, match="hcloud volume list failed: permission denied"):
+        audit_hetzner.hcloud_list("volume")
+
+
 def test_anomaly_without_cleanup_has_no_cleanup_section(monkeypatch, capsys) -> None:
     monkeypatch.setattr(audit_hetzner, "anomalies", ["server leak"])
     monkeypatch.setattr(audit_hetzner, "deletes", [])
     monkeypatch.setattr(audit_hetzner, "expected", [])
-    monkeypatch.setattr(audit_hetzner, "errors", [])
     monkeypatch.setattr(audit_hetzner, "preflight", list)
-    monkeypatch.setattr(audit_hetzner, "safe", lambda label, fn: [])
+    monkeypatch.setattr(audit_hetzner, "hcloud_list", lambda *args: [])
 
     with pytest.raises(SystemExit, match="1"):
         audit_hetzner.main()

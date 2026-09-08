@@ -42,19 +42,24 @@ import sys
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
 expected: list[str] = []  # legitimate standing infra, reported for context
-# per-call failures, so a denied/throttled query is never mistaken for empty
-errors: list[str] = []
 
 
 def hcloud_list(resource: str, *flags: str) -> list:
     """Return the complete JSON list for one hcloud resource."""
-    out = subprocess.run(
-        ["hcloud", resource, "list", *flags, "-o", "json"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return json.loads(out.stdout)
+    try:
+        out = subprocess.run(
+            ["hcloud", resource, "list", *flags, "-o", "json"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as error:
+        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) and error.stderr else error
+        raise RuntimeError(f"hcloud {resource} list failed: {detail}") from error
+    try:
+        return json.loads(out.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"hcloud {resource} list returned invalid JSON") from error
 
 
 def preflight() -> list:
@@ -67,23 +72,11 @@ def preflight() -> list:
         sys.exit("hcloud CLI not found -- it is pinned in mise.toml [tools]; run `mise install`.")
     try:
         return hcloud_list("server")
-    except (subprocess.CalledProcessError, OSError, ValueError) as error:
-        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) and error.stderr else error
+    except RuntimeError as error:
         sys.exit(
             "hcloud cannot authenticate -- set HCLOUD_TOKEN or configure a "
-            f"context (`hcloud context create`).\n  {detail}"
+            f"context (`hcloud context create`).\n  {error}"
         )
-
-
-def safe(label, fn):
-    """Run a query, recording (not raising) any failure so the sweep finishes
-    and the operator sees which queries could not be trusted."""
-    try:
-        return fn()
-    except (subprocess.CalledProcessError, OSError, ValueError) as e:
-        detail = e.stderr.strip() if isinstance(e, subprocess.CalledProcessError) and e.stderr else e
-        errors.append(f"{label}: {detail}")
-        return []
 
 
 def gb(image) -> str:
@@ -113,21 +106,21 @@ def main():
     # ── Block storage / standalone networking: none expected, all billable ──
     anomalies.extend(
         f"volume {v['name']} ({v['size']}GB, {v.get('status')}) -- billable, none expected"
-        for v in safe("volumes", lambda: hcloud_list("volume"))
+        for v in hcloud_list("volume")
     )
 
     anomalies.extend(
         f"floating IP {f['name']} {f.get('ip')} ({f['type']}) -- billable, none expected"
-        for f in safe("floating_ips", lambda: hcloud_list("floating-ip"))
+        for f in hcloud_list("floating-ip")
     )
 
     anomalies.extend(
         f"load balancer {lb['name']} ({lb['load_balancer_type']['name']}) -- billable, none expected"
-        for lb in safe("load_balancers", lambda: hcloud_list("load-balancer"))
+        for lb in hcloud_list("load-balancer")
     )
 
     # ── Primary IPs: fox + fox_v6, both assigned. An UNASSIGNED IPv4 still bills ──
-    for p in safe("primary_ips", lambda: hcloud_list("primary-ip")):
+    for p in hcloud_list("primary-ip"):
         if p.get("assignee_id"):
             expected.append(f"primary IP {p['name']} {p['ip']} ({p['type']}, assigned)")
         elif p["type"] == "ipv4":
@@ -137,7 +130,7 @@ def main():
 
     # ── Snapshots: keep newest-2 of the ubuntu-zfs family + any in-use image; ──
     # everything else is a billable stray the prune normally clears.
-    snaps = safe("snapshots", lambda: hcloud_list("image", "--type", "snapshot"))
+    snaps = hcloud_list("image", "--type", "snapshot")
     family = sorted(
         (i for i in snaps if i.get("labels", {}).get("os") == "ubuntu-zfs"),
         key=lambda i: i.get("created", ""),
@@ -158,7 +151,7 @@ def main():
         deletes.append(f"hcloud image delete {i['id']}")
 
     # ── Server backups (type=backup images): billable, none expected ──
-    for b in safe("backups", lambda: hcloud_list("image", "--type", "backup")):
+    for b in hcloud_list("image", "--type", "backup"):
         src = (b.get("created_from") or {}).get("name", "?")
         anomalies.append(f"server backup {b['id']} ({gb(b)}, of {src}) -- backups billable, none expected")
 
@@ -168,14 +161,10 @@ def main():
         ("firewall", "firewall"),
         ("SSH key", "ssh-key"),
     ):
-        expected.extend(f"{label} {item['name']} (free)" for item in safe(label, lambda r=resource: hcloud_list(r)))
+        expected.extend(f"{label} {item['name']} (free)" for item in hcloud_list(resource))
 
     print("── Expected standing infra ──")
     print("\n".join(f"  {line}" for line in expected) or "  (none)")
-
-    if errors:
-        print("\n── Query errors (results below may be incomplete) ──")
-        print("\n".join(f"  {e}" for e in errors))
 
     print("\n── Anomalies (billable / unexpected) ──")
     if anomalies:
@@ -188,9 +177,7 @@ def main():
 
     verdict = len(anomalies)
     print(f"\nVerdict: {verdict} anomal{'y' if verdict == 1 else 'ies'}")
-    # Query errors also fail the run: an audit that could not see everything
-    # must not report a clean bill of health.
-    sys.exit(1 if anomalies or errors else 0)
+    sys.exit(1 if anomalies else 0)
 
 
 if __name__ == "__main__":
