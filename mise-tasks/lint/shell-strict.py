@@ -22,20 +22,10 @@ SHEBANG_RE = re.compile(r"^#!.*\b(?:ba|z|k)?sh\b")
 STRICT_MODE_RE = re.compile(r"^[ \t]*set -[A-Za-z]*e[A-Za-z]*u[A-Za-z]*o[A-Za-z]* pipefail[ \t]*$", re.MULTILINE)
 
 
-def git_files() -> list[Path]:
-    result = subprocess.run(["git", "ls-files", "-z"], check=True, capture_output=True)
-    return [Path(path) for path in result.stdout.decode().split("\0") if path]
-
-
 def is_shell_file(path: Path, text: str) -> bool:
     if path.name.endswith((".sh", ".sh.j2")):
         return True
     return bool(SHEBANG_RE.match(text))
-
-
-def is_allowlisted(path: Path) -> bool:
-    path_text = path.as_posix()
-    return any(fnmatch.fnmatch(path_text, pattern) for pattern in ALLOWLIST_PATTERNS)
 
 
 def has_strict_mode(text: str) -> bool:
@@ -45,11 +35,14 @@ def has_strict_mode(text: str) -> bool:
 
 def main() -> int:
     errors: list[str] = []
-    for path in git_files():
+    tracked = (Path(path) for path in subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0") if path)
+    for path in tracked:
         if not path.is_file():
             continue
         text = path.read_text(errors="ignore")
-        if not is_shell_file(path, text) or is_allowlisted(path):
+        if not is_shell_file(path, text) or any(
+            fnmatch.fnmatch(path.as_posix(), pattern) for pattern in ALLOWLIST_PATTERNS
+        ):
             continue
         if not has_strict_mode(text):
             errors.append(f"{path}: shell entrypoint must start with set -euo pipefail")
