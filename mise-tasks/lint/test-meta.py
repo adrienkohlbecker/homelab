@@ -2,8 +2,6 @@
 # [MISE] description="Validate roles/*/meta/test.yml against the harness's MACHINE_CHOICES"
 """Validate role test metadata before CI renders the qemu matrix."""
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

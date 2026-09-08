@@ -2,8 +2,6 @@
 # [MISE] description="Validate checked-in shell scripts use strict mode"
 """Require strict mode in checked-in shell entrypoints."""
 
-from __future__ import annotations
-
 import fnmatch
 import re
 import subprocess

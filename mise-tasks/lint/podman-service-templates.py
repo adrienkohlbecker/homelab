@@ -2,8 +2,6 @@
 # [MISE] description="Validate Podman systemd unit healthcheck conventions"
 """Validate Podman systemd unit templates against repo healthcheck conventions."""
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

@@ -16,8 +16,6 @@ push --dry-run: compare the host to the working tree, validate and print what
 would change, but do not write to the host or move git refs.
 """
 
-from __future__ import annotations
-
 import hashlib
 import os
 import shutil
