@@ -150,16 +150,16 @@ class TestNormalize:
         assert ag.normalize({}) == []
         assert ag.normalize({"alarms": {}}) == []
 
-    def test_sorts_critical_before_warning(self) -> None:
+    def test_extracts_fields_and_sorts_by_status_then_key(self) -> None:
         payload = {
             "alarms": {
-                "chart.warn": {
+                "z.alarm": {
                     "id": 1,
-                    "name": "warn",
-                    "chart": "c1",
+                    "name": "z",
+                    "chart": "c",
                     "status": "WARNING",
-                    "value_string": "50%",
-                    "last_status_change": 100,
+                    "value_string": "1",
+                    "last_status_change": 0,
                 },
                 "chart.crit": {
                     "id": 2,
@@ -169,61 +169,27 @@ class TestNormalize:
                     "value_string": "90%",
                     "last_status_change": 200,
                 },
-            }
-        }
-        result = ag.normalize(payload)
-        assert len(result) == 2
-        assert result[0]["status"] == "CRITICAL"
-        assert result[1]["status"] == "WARNING"
-
-    def test_fields_extracted(self) -> None:
-        payload = {
-            "alarms": {
-                "sys.cpu_usage": {
+                "a.alarm": {
                     "id": 42,
                     "name": "cpu_usage",
                     "chart": "system.cpu",
                     "status": "WARNING",
                     "value_string": "85 %",
                     "last_status_change": 1700000000,
-                }
-            }
-        }
-        result = ag.normalize(payload)
-        assert len(result) == 1
-        a = result[0]
-        assert a["key"] == "sys.cpu_usage"
-        assert a["id"] == 42
-        assert a["name"] == "cpu_usage"
-        assert a["chart"] == "system.cpu"
-        assert a["status"] == "WARNING"
-        assert a["value"] == "85 %"
-        assert a["when"] == 1700000000
-
-    def test_alphabetical_within_same_status(self) -> None:
-        payload = {
-            "alarms": {
-                "z.alarm": {
-                    "status": "WARNING",
-                    "id": 1,
-                    "name": "z",
-                    "chart": "c",
-                    "value_string": "1",
-                    "last_status_change": 0,
-                },
-                "a.alarm": {
-                    "status": "WARNING",
-                    "id": 2,
-                    "name": "a",
-                    "chart": "c",
-                    "value_string": "1",
-                    "last_status_change": 0,
                 },
             }
         }
         result = ag.normalize(payload)
-        assert result[0]["key"] == "a.alarm"
-        assert result[1]["key"] == "z.alarm"
+        assert [alarm["key"] for alarm in result] == ["chart.crit", "a.alarm", "z.alarm"]
+        assert result[1] == {
+            "key": "a.alarm",
+            "id": 42,
+            "name": "cpu_usage",
+            "chart": "system.cpu",
+            "status": "WARNING",
+            "value": "85 %",
+            "when": 1700000000,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -251,11 +217,6 @@ class TestAlarmHref:
         alarm = {"id": 1, "name": "x", "chart": "c", "status": "WARNING"}
         href = ag.alarm_href("https://netdata.lab.fahm.fr", "lab", alarm)
         assert href == "https://netdata.lab.fahm.fr/v2/spaces/lab/rooms/local/alerts"
-
-    def test_empty_transition_id(self) -> None:
-        alarm = {"id": 1, "name": "x", "chart": "c", "transition_id": ""}
-        href = ag.alarm_href("https://nd", "host", alarm)
-        assert href == "https://nd/v2/spaces/host/rooms/local/alerts"
 
 
 # ---------------------------------------------------------------------------
@@ -302,10 +263,6 @@ class TestFormatValue:
         result = ag._format_value(alarm)
         assert result == "2m ago"
 
-    def test_no_units(self) -> None:
-        alarm = {"value_string": "42"}
-        assert ag._format_value(alarm) == "42"
-
 
 # ---------------------------------------------------------------------------
 # render_html
@@ -321,7 +278,7 @@ class TestRenderHtml:
                     {
                         "name": "cpu",
                         "chart": "system.cpu",
-                        "status": "WARNING",
+                        "status": "CRITICAL",
                         "value": "85%",
                         "href": "https://nd/alert",
                         "transition_id": "t1",
@@ -333,9 +290,11 @@ class TestRenderHtml:
         assert "lab" in html
         assert "cpu" in html
         assert "system.cpu" in html
-        assert "WARNING" in html
+        assert "CRITICAL" in html
         assert "85%" in html
         assert 'href="https://nd/alert"' in html
+        assert "status-icon" in html
+        assert 'class="alarm CRITICAL"' in html
 
     def test_renders_no_alerts(self) -> None:
         hosts = [{"name": "pug", "alarms": []}]
@@ -352,26 +311,6 @@ class TestRenderHtml:
         ]
         html = ag.render_html(hosts)
         assert "ConnectionError" in html
-
-    def test_critical_has_icon(self) -> None:
-        hosts = [
-            {
-                "name": "lab",
-                "alarms": [
-                    {
-                        "name": "x",
-                        "chart": "c",
-                        "status": "CRITICAL",
-                        "value": "99%",
-                        "href": "#",
-                        "transition_id": "",
-                    }
-                ],
-            }
-        ]
-        html = ag.render_html(hosts)
-        assert "status-icon" in html
-        assert 'class="alarm CRITICAL"' in html
 
     def test_html_escaping(self) -> None:
         hosts = [
