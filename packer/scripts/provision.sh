@@ -257,6 +257,8 @@ pop_extra_disks() {
   done
 }
 
+# Keep the apoc and dozer builders separate: each documents the storage
+# layout of a physical rack host, including its intentional autotrim policy.
 create_extra_apoc() {
   pop_extra_disks 2 apoc
   local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
