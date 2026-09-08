@@ -4,9 +4,9 @@ import runpy
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
+from ansiblelint.file_utils import Lintable
 from ansiblelint.utils import Task
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -21,17 +21,8 @@ RequireValidate = _RULES["RequireValidate"]
 ShellStrictMode = _RULES["ShellStrictMode"]
 
 
-def _task(module: str, *, kind: str = "tasks", **action) -> Task:
-    task_fields = action.pop("__raw_task__", {})
-    raw_params = action.pop("_raw_params", None)
-    module_args = raw_params if raw_params is not None else action
-    if raw_params is not None and action:
-        task_fields["args"] = action
-    return Task({module: module_args, **task_fields}, kind=kind)
-
-
-def _lintable(path: str):
-    return SimpleNamespace(path=Path(path))
+def _task(module: str, module_args=None, *, kind: str = "tasks", **task_fields) -> Task:
+    return Task({module: {} if module_args is None else module_args, **task_fields}, kind=kind)
 
 
 class TestShellStrictMode:
@@ -46,20 +37,18 @@ class TestShellStrictMode:
         ],
     )
     def test_strict_mode_requirements(self, cmd: str, missing: list[str]) -> None:
-        result = ShellStrictMode().matchtask(_task("shell", _raw_params=cmd, executable="/bin/bash"))
+        result = ShellStrictMode().matchtask(_task("shell", cmd, args={"executable": "/bin/bash"}))
         expected = False if not missing else f"shell task missing {', '.join(missing)}"
         assert result == expected
 
     def test_requires_bash(self) -> None:
         result = ShellStrictMode().matchtask(
-            _task("shell", _raw_params="set -euo pipefail\necho hello", executable="/bin/sh")
+            _task("shell", "set -euo pipefail\necho hello", args={"executable": "/bin/sh"})
         )
         assert result == "shell task missing executable: /bin/bash"
 
     def test_test_hooks_are_exempt(self) -> None:
-        result = ShellStrictMode().matchtask(
-            _task("shell", _raw_params="echo hello"), _lintable("roles/x/tasks/_verify.yml")
-        )
+        result = ShellStrictMode().matchtask(_task("shell", "echo hello"), Lintable("roles/x/tasks/_verify.yml"))
         assert result is False
 
 
@@ -72,11 +61,11 @@ class TestRequireBackup:
         assert RequireBackup().matchtask(_task(module)) == f"{module} task is missing `backup: true`"
 
     def test_accepts_fqcn_and_templated_backup(self) -> None:
-        assert RequireBackup().matchtask(_task("community.general.ini_file", backup="{{ keep_backup }}")) is False
+        assert RequireBackup().matchtask(_task("community.general.ini_file", {"backup": "{{ keep_backup }}"})) is False
 
     def test_flags_backup_false(self) -> None:
         assert (
-            RequireBackup().matchtask(_task("copy", backup=False))
+            RequireBackup().matchtask(_task("copy", {"backup": False}))
             == "copy task sets `backup: false`; config writes must keep backups"
         )
 
@@ -93,21 +82,21 @@ class TestRequireBackup:
         ],
     )
     def test_test_files_are_exempt(self, path: str) -> None:
-        assert RequireBackup().matchtask(_task("copy"), _lintable(path)) is False
+        assert RequireBackup().matchtask(_task("copy"), Lintable(path)) is False
 
 
 class TestRequireNamedRoleEntrypoint:
     def test_static_fixture_requires_tasks_from(self) -> None:
         result = RequireNamedRoleEntrypoint().matchtask(
-            _task("import_role", name="apt"),
-            _lintable("test/playbooks/build_box_deps.yml"),
+            _task("import_role", {"name": "apt"}),
+            Lintable("test/playbooks/build_box_deps.yml"),
         )
         assert result == "static test fixture role imports must set `tasks_from:`"
 
     def test_named_entrypoint_is_allowed(self) -> None:
         result = RequireNamedRoleEntrypoint().matchtask(
-            _task("ansible.builtin.import_role", name="apt", tasks_from="configure"),
-            _lintable("/repo/test/playbooks/_bootstrap.yml"),
+            _task("ansible.builtin.import_role", {"name": "apt", "tasks_from": "configure"}),
+            Lintable("/repo/test/playbooks/_bootstrap.yml"),
         )
         assert result is False
 
@@ -119,8 +108,8 @@ class TestRequireNamedRoleEntrypoint:
         fixture = tmp_path / "roles" / "consumer" / "tasks" / "_setup.yml"
 
         result = RequireNamedRoleEntrypoint().matchtask(
-            _task("import_role", name="dependency"),
-            _lintable(str(fixture)),
+            _task("import_role", {"name": "dependency"}),
+            Lintable(fixture),
         )
 
         assert result == "static test fixture role imports must set `tasks_from:`"
@@ -132,8 +121,8 @@ class TestRequireNamedRoleEntrypoint:
         fixture = tmp_path / "roles" / "consumer" / "tasks" / "_verify.yml"
 
         result = RequireNamedRoleEntrypoint().matchtask(
-            _task("import_role", name="dependency"),
-            _lintable(str(fixture)),
+            _task("import_role", {"name": "dependency"}),
+            Lintable(fixture),
         )
 
         assert result is False
@@ -143,13 +132,13 @@ class TestRequireNamedRoleEntrypoint:
         ["test/playbooks/site.yml", "roles/example/tasks/main.yml"],
     )
     def test_normal_role_entrypoints_are_allowed(self, path: str) -> None:
-        result = RequireNamedRoleEntrypoint().matchtask(_task("import_role", name="example"), _lintable(path))
+        result = RequireNamedRoleEntrypoint().matchtask(_task("import_role", {"name": "example"}), Lintable(path))
         assert result is False
 
 
 class TestNoHandlers:
     def test_notify_is_banned(self) -> None:
-        result = NoHandlers().matchtask(_task("template", __raw_task__={"notify": "Restart service"}))
+        result = NoHandlers().matchtask(_task("template", notify="Restart service"))
         assert result == "handlers are banned; drive restarts inline from *_result.changed"
 
     def test_handler_task_is_banned(self) -> None:
@@ -159,7 +148,7 @@ class TestNoHandlers:
 
     def test_test_files_are_exempt(self) -> None:
         result = NoHandlers().matchtask(
-            _task("template", __raw_task__={"notify": "Restart service"}), _lintable("roles/x/tasks/_verify.yml")
+            _task("template", notify="Restart service"), Lintable("roles/x/tasks/_verify.yml")
         )
         assert result is False
 
@@ -167,58 +156,54 @@ class TestNoHandlers:
 class TestNoNoLog:
     @pytest.mark.parametrize("no_log", [True, "true", "True"])
     def test_no_log_true_is_banned(self, no_log) -> None:
-        result = NoNoLog().matchtask(_task("command", __raw_task__={"no_log": no_log}))
+        result = NoNoLog().matchtask(_task("command", no_log=no_log))
         assert result == "`no_log: true` is banned in this repo; keep failures inspectable"
 
     def test_no_log_false_is_allowed(self) -> None:
-        assert NoNoLog().matchtask(_task("command", __raw_task__={"no_log": False})) is False
+        assert NoNoLog().matchtask(_task("command", no_log=False)) is False
 
 
 class TestNoInventoryHostnameWhen:
     def test_inventory_hostname_in_when_is_banned(self) -> None:
-        result = NoInventoryHostnameWhen().matchtask(
-            _task("debug", __raw_task__={"when": "inventory_hostname in ['lab', 'pug']"})
-        )
+        result = NoInventoryHostnameWhen().matchtask(_task("debug", when="inventory_hostname in ['lab', 'pug']"))
         assert result == "task `when:` branches must use host vars instead of inventory_hostname"
 
     def test_host_var_when_is_allowed(self) -> None:
-        result = NoInventoryHostnameWhen().matchtask(
-            _task("debug", __raw_task__={"when": "foo_enabled | default(false)"})
-        )
+        result = NoInventoryHostnameWhen().matchtask(_task("debug", when="foo_enabled | default(false)"))
         assert result is False
 
 
 class TestPreferImport:
     def test_static_include_tasks_warns(self) -> None:
-        result = PreferImport().matchtask(_task("include_tasks", _raw_params="service.yml"))
+        result = PreferImport().matchtask(_task("include_tasks", "service.yml"))
         assert result == "use import_tasks unless this include needs runtime evaluation"
 
     def test_reset_connection_include_tasks_warns(self) -> None:
-        result = PreferImport().matchtask(_task("include_tasks", _raw_params="reset_connection.yml"))
+        result = PreferImport().matchtask(_task("include_tasks", "reset_connection.yml"))
         assert result == "use import_tasks unless this include needs runtime evaluation"
 
     def test_loop_include_tasks_is_allowed(self) -> None:
-        result = PreferImport().matchtask(
-            _task("include_tasks", _raw_params="service.yml", __raw_task__={"loop": [1, 2]})
-        )
+        result = PreferImport().matchtask(_task("include_tasks", "service.yml", loop=[1, 2]))
         assert result is False
 
     def test_templated_include_role_is_allowed(self) -> None:
-        result = PreferImport().matchtask(_task("include_role", name="{{ role_name }}"))
+        result = PreferImport().matchtask(_task("include_role", {"name": "{{ role_name }}"}))
         assert result is False
 
 
 class TestRequireValidate:
     def test_config_template_without_validate_warns(self) -> None:
-        result = RequireValidate().matchtask(_task("template", dest="/etc/example.conf"))
+        result = RequireValidate().matchtask(_task("template", {"dest": "/etc/example.conf"}))
         assert result == "template task writes config-like content without `validate:`"
 
     def test_validate_is_allowed(self) -> None:
-        result = RequireValidate().matchtask(_task("template", dest="/etc/example.conf", validate="nginx -t -c %s"))
+        result = RequireValidate().matchtask(
+            _task("template", {"dest": "/etc/example.conf", "validate": "nginx -t -c %s"})
+        )
         assert result is False
 
     def test_non_config_destination_is_allowed(self) -> None:
-        assert RequireValidate().matchtask(_task("copy", dest="/mnt/services/foo/data.txt")) is False
+        assert RequireValidate().matchtask(_task("copy", {"dest": "/mnt/services/foo/data.txt"})) is False
 
 
 class TestTestMetaValidation:
