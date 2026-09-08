@@ -72,9 +72,13 @@ mv "${efi_images[0]}" "$package_dir/zfsbootmenu.EFI"
 printf '%s\n' "$command_line" >"$package_dir/cmdline"
 
 initramfs_listing="${workdir}/initramfs.lsinitrd"
-zbm_lsinitrd "$builder_tag" "$package_dir/initramfs-bootmenu.img" >"$initramfs_listing"
+docker run --rm \
+  --entrypoint /usr/bin/lsinitrd \
+  -v "${package_dir}:/work:ro" \
+  "$builder_tag" \
+  /work/initramfs-bootmenu.img >"$initramfs_listing"
 
-zbm_assert_core_listing "$initramfs_listing" "ZBM initramfs"
+zbm_assert_core_listing "$initramfs_listing"
 
 if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" "$initramfs_listing"; then
   echo "ZBM initramfs is missing required EFI variable filesystem module: efivarfs.ko" >&2

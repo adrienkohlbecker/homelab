@@ -25,19 +25,8 @@ zbm_local_tarball() {
   printf '%s\n' "${tarballs[0]}"
 }
 
-zbm_lsinitrd() {
-  local builder_tag=$1 image=$2 mount_root
-
-  mount_root="$(dirname "$image")"
-  docker run --rm \
-    --entrypoint /usr/bin/lsinitrd \
-    -v "${mount_root}:/work:ro" \
-    "$builder_tag" \
-    "/work/$(basename "$image")"
-}
-
 zbm_assert_core_listing() {
-  local listing=$1 label=$2 required
+  local listing=$1 required
 
   for required in \
     "usr/bin/reboot" \
@@ -45,16 +34,16 @@ zbm_assert_core_listing() {
     "usr/bin/shutdown -> reboot" \
     "usr/bin/firmware-setup -> reboot"; do
     if ! grep -qF "$required" "$listing"; then
-      echo "Power command paths in ${label}:" >&2
+      echo "Power command paths in ZBM initramfs:" >&2
       awk 'NF >= 9 && $9 ~ /(^|\/)(reboot|poweroff|shutdown|firmware-setup)$/ { print "  " $9, $10, $11 }' "$listing" >&2
-      echo "${label}: missing required ZFSBootMenu recovery command /${required%% *}" >&2
+      echo "ZBM initramfs: missing required recovery command /${required%% *}" >&2
       return 1
     fi
   done
 
   for required in zfs spl; do
     if ! grep -Eq "/${required}[.]ko([.]|$)" "$listing"; then
-      echo "${label}: missing required ZFS kernel module ${required}.ko" >&2
+      echo "ZBM initramfs: missing required ZFS kernel module ${required}.ko" >&2
       return 1
     fi
   done
