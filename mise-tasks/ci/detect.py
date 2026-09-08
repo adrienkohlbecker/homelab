@@ -37,8 +37,7 @@ from matrix import (
     ci_spec_to_cell,
     drop_on_demand_cells,
     list_testable_roles,
-    machines_for,
-    release_ubuntu_for,
+    load_role_test_config,
 )
 
 # Changes that cannot be attributed to individual roles test the full universe.
@@ -685,7 +684,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
             match_keys = {machine}
             if machine == "box":
                 match_keys.add("box_deps")
-            machine_roles = [r for r in universe if match_keys & set(machines_for(r))]
+            machine_roles = [r for r in universe if match_keys & set(load_role_test_config(r).machines)]
             log(f"machine-universe changed -> all {machine} roles: {' '.join(machine_roles)}")
             roles.update(machine_roles)
 
@@ -701,9 +700,9 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
             if consumer in universe:
                 roles.add(consumer)
 
-    role_releases = {r: release_ubuntu_for(r) for r in classification.direct_roles}
+    role_releases = {r: list(load_role_test_config(r).ubuntu) for r in classification.direct_roles}
     all_consumers = {c for r in classification.direct_roles for c in deps_map.get(r, []) if c in universe}
-    role_machines_map = {c: list(machines_for(c)) for c in all_consumers}
+    role_machines_map = {c: list(load_role_test_config(c).machines) for c in all_consumers}
     release_cells = propagate_release_cells(
         classification.direct_roles, deps_map, role_machines_map, role_releases, universe
     )

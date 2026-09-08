@@ -27,8 +27,8 @@ from machine_session import machine_session
 from matrix import (
     DEFAULT_UBUNTU,
     UBUNTU_RELEASES,
-    base_prerequisites_for,
-    default_machine_for,
+    RoleTestConfig,
+    load_role_test_config,
 )
 from utils import (
     CommandFailedException,
@@ -80,7 +80,7 @@ def _positive_int(value: str) -> int:
     return n
 
 
-def parse_args() -> tuple[argparse.Namespace, list[str]]:
+def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
     """Parse CLI arguments; unknown args are forwarded to Ansible."""
     parser = argparse.ArgumentParser(
         description="Run a single role test",
@@ -142,12 +142,13 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     # --machine defaults to the role's primary machines: entry. An explicit
     # CLI value still wins, and argparse's choices validate that path before
     # this branch runs.
+    role_config = load_role_test_config(args.role)
     if args.machine is None:
-        args.machine = default_machine_for(args.role)
+        args.machine = next(iter(role_config.machines))
         if args.machine not in MACHINE_CHOICES:
             parser.error(f"roles/{args.role}/meta/test.yml: machine {args.machine!r} not in {sorted(MACHINE_CHOICES)}")
 
-    return args, pass_args
+    return args, pass_args, role_config
 
 
 # Strip color sequences before matching because their trailing letters can
@@ -177,6 +178,7 @@ async def run_test(
     m: Machine,
     pass_args: list[str],
     *,
+    base_prerequisites: bool,
     timeout: int,
 ) -> None:
     """Provision a machine, run the role under test, and stream output."""
@@ -197,17 +199,14 @@ async def run_test(
                 async with _phase("cloud-init wait"):
                     await m.ensure_cloud_init()
 
-            # Keep the role-owned parts of the base image pristine when testing
-            # those roles themselves.
-            test_base_prerequisites = base_prerequisites_for(m.role)
-            if not test_base_prerequisites:
+            if not base_prerequisites:
                 print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
 
             async with _phase("test preparation"):
                 await m.ansible_command(
                     str(m.workdir_path / "_environment.yml"),
                     "-e",
-                    f"test_base_prerequisites={str(test_base_prerequisites).lower()}",
+                    f"test_base_prerequisites={str(base_prerequisites).lower()}",
                 )
 
             if m.machine == "minimal" and m.role != "cleanup":
@@ -246,7 +245,7 @@ async def run_test(
 def main() -> int:
     """CLI entry point for running a single role test."""
 
-    parsed_args, pass_args = parse_args()
+    parsed_args, pass_args, role_config = parse_args()
 
     if parsed_args.benchmark:
         global _BENCHMARK
@@ -291,6 +290,7 @@ def main() -> int:
                 run_test(
                     m,
                     pass_args,
+                    base_prerequisites=role_config.base_prerequisites,
                     timeout=parsed_args.timeout,
                 )
             )

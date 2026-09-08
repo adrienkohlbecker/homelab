@@ -62,7 +62,7 @@ class TestListTestableRoles:
 
 
 # ---------------------------------------------------------------------------
-# default_machine_for / base_prerequisites_for
+# RoleTestConfig access
 # ---------------------------------------------------------------------------
 
 
@@ -74,19 +74,19 @@ class TestRoleMeta:
 
     def test_default_machine_falls_back_to_box(self) -> None:
         _make_role("plain")
-        assert matrix.default_machine_for("plain") == "box"
+        assert next(iter(matrix.load_role_test_config("plain").machines)) == "box"
 
     def test_default_machine_reads_meta(self) -> None:
         _make_role("fancy", {"machines": {"box_deps": None}})
-        assert matrix.default_machine_for("fancy") == "box_deps"
+        assert next(iter(matrix.load_role_test_config("fancy").machines)) == "box_deps"
 
     def test_base_prerequisites_defaults_to_true(self) -> None:
         _make_role("plain")
-        assert matrix.base_prerequisites_for("plain") is True
+        assert matrix.load_role_test_config("plain").base_prerequisites is True
 
     def test_base_prerequisites_reads_false(self) -> None:
         _make_role("foundation", {"base_prerequisites": False})
-        assert matrix.base_prerequisites_for("foundation") is False
+        assert matrix.load_role_test_config("foundation").base_prerequisites is False
 
     def test_base_prerequisites_must_be_boolean(self) -> None:
         _make_role("foundation", {"base_prerequisites": "pristine"})

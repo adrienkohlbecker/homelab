@@ -82,6 +82,6 @@ class TestPositiveInt:
 class TestParseArgs:
     def test_ansible_args_still_forward(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["testrole.py", "nginx", "--tags", "homepage"])
-        args, pass_args = testrole.parse_args()
+        args, pass_args, _role_config = testrole.parse_args()
         assert args.role == "nginx"
         assert pass_args == ["--tags", "homepage"]

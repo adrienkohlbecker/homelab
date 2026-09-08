@@ -184,30 +184,6 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     return RoleTestConfig(base_prerequisites, machines, tuple(ubuntu), frozenset(skip))
 
 
-def machines_for(role: str) -> dict:
-    """Test machines from meta/test.yml (falls back to {'box': None}).
-
-    Every configured machine participates in both its base cell and any
-    additional Ubuntu release cells.
-    """
-    return dict(load_role_test_config(role).machines)
-
-
-def default_machine_for(role: str) -> str:
-    """Primary test machine — first key in machines: (falls back to 'box')."""
-    return next(iter(machines_for(role)))
-
-
-def release_ubuntu_for(role: str) -> list[str]:
-    """Extra Ubuntu releases from meta/test.yml (empty when none)."""
-    return list(load_role_test_config(role).ubuntu)
-
-
-def base_prerequisites_for(role: str) -> bool:
-    """Whether hostname and Apt prerequisites should run before this role."""
-    return load_role_test_config(role).base_prerequisites
-
-
 def drop_on_demand_cells(specs: list[str]) -> tuple[list[str], list[str]]:
     """Partition CI specs into (kept, dropped) by ON_DEMAND_MACHINES.
 
