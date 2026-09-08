@@ -222,8 +222,8 @@ class TestTestMetaValidation:
         assert result.returncode == 0, f"test-meta.py failed:\n{result.stderr}"
         assert "Validated" in result.stdout
 
-    def _run_against(self, tmp_path: Path, role: str, meta: str) -> subprocess.CompletedProcess[str]:
-        meta_dir = tmp_path / "roles" / role / "meta"
+    def _run_against(self, tmp_path: Path, meta: str) -> subprocess.CompletedProcess[str]:
+        meta_dir = tmp_path / "roles" / "svc" / "meta"
         meta_dir.mkdir(parents=True)
         (meta_dir / "test.yml").write_text(meta)
         return subprocess.run(
@@ -234,33 +234,44 @@ class TestTestMetaValidation:
             timeout=30,
         )
 
-    def test_ubuntu_listing_the_default_release_is_rejected(self, tmp_path: Path) -> None:
-        # It expands to no cell, so the entry's rationale silently outlives the
-        # cell it describes.
-        result = self._run_against(tmp_path, "svc", "ubuntu:\n  - noble\n")
-        assert result.returncode == 1
-        assert "the default release" in result.stderr
+    @pytest.mark.parametrize(
+        ("meta", "expected_rc", "expected_error"),
+        [
+            pytest.param(
+                "ubuntu:\n  - noble\n",
+                1,
+                "the default release",
+                id="reject-default-release",
+            ),
+            pytest.param(
+                'machines:\n  box:\n  minimal:\nskip:\n  "minimal:noble": flaky\n',
+                1,
+                "cancels the base cell",
+                id="reject-default-release-skip",
+            ),
+            pytest.param(
+                'machines:\n  box:\nubuntu:\n  - resolute\nskip:\n  "box:resolute": flaky\n',
+                0,
+                None,
+                id="accept-non-default-release-skip",
+            ),
+            pytest.param(
+                "base_prerequisites: pristine\n",
+                1,
+                "base_prerequisites must be a boolean",
+                id="reject-non-boolean-prerequisites",
+            ),
+        ],
+    )
+    def test_synthetic_metadata(
+        self,
+        tmp_path: Path,
+        meta: str,
+        expected_rc: int,
+        expected_error: str | None,
+    ) -> None:
+        result = self._run_against(tmp_path, meta)
 
-    def test_skip_spelling_out_the_default_release_is_rejected(self, tmp_path: Path) -> None:
-        # `minimal:noble` reads as "skip the escalation" but cancels the base
-        # cell -- this is what silently dropped roles/boot's minimal coverage.
-        result = self._run_against(
-            tmp_path,
-            "svc",
-            'machines:\n  box:\n  minimal:\nskip:\n  "minimal:noble": flaky\n',
-        )
-        assert result.returncode == 1
-        assert "cancels the base cell" in result.stderr
-
-    def test_skip_of_a_non_default_release_is_accepted(self, tmp_path: Path) -> None:
-        result = self._run_against(
-            tmp_path,
-            "svc",
-            'machines:\n  box:\nubuntu:\n  - resolute\nskip:\n  "box:resolute": flaky\n',
-        )
-        assert result.returncode == 0, result.stderr
-
-    def test_base_prerequisites_must_be_boolean(self, tmp_path: Path) -> None:
-        result = self._run_against(tmp_path, "svc", "base_prerequisites: pristine\n")
-        assert result.returncode == 1
-        assert "base_prerequisites must be a boolean" in result.stderr
+        assert result.returncode == expected_rc, result.stderr
+        if expected_error:
+            assert expected_error in result.stderr
