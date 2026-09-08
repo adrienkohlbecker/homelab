@@ -209,7 +209,7 @@ partition_disk() {
   # Dedicated podman store partition (p4). Single-disk hosts carry a plain
   # ext4 here; mirror hosts mdadm the per-disk p4s into a raid5 (chroot.sh).
   # 8300 = Linux filesystem.
-  if [ -n "${PODMAN_SIZE:-}" ]; then
+  if [ -n "$PODMAN_SIZE" ]; then
     sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
   fi
 
@@ -217,7 +217,7 @@ partition_disk() {
   # rpool so rpool stays number 5. mdadm-free -- ZFS mirrors the per-disk p6s
   # into tank's special vdev (create_extra_tank_mouse). BF01 = Solaris /usr &
   # Mac ZFS.
-  if [ -n "${META_SIZE:-}" ]; then
+  if [ -n "$META_SIZE" ]; then
     sgdisk "-n6:0:+$META_SIZE" -t6:BF01 -c6:meta "$disk"
   fi
 
@@ -308,7 +308,7 @@ create_extra_tank_mouse() {
     # vdev loses the pool). Empty on single-disk hosts (no meta partition), so
     # tank then has no special vdev. See notes/archive/special-vdev-sizing.md.
     local special_args=()
-    if [ -n "${PARTITIONS_META:-}" ]; then
+    if [ -n "$PARTITIONS_META" ]; then
       # shellcheck disable=SC2206  # word-split PARTITIONS_META into vdev members
       special_args=(special mirror $PARTITIONS_META)
     fi
@@ -323,11 +323,11 @@ create_extra_tank_mouse() {
 }
 
 create_extra_pools() {
-  if [ -z "${EXTRA_POOLS:-}" ]; then
+  if [ -z "$EXTRA_POOLS" ]; then
     return 0
   fi
 
-  read -r -a EXTRA_DISK_QUEUE <<<"${EXTRA_DISKS:-}"
+  read -r -a EXTRA_DISK_QUEUE <<<"$EXTRA_DISKS"
   for pool in $EXTRA_POOLS; do
     case "$pool" in
     apoc) create_extra_apoc ;;
@@ -378,10 +378,10 @@ PARTITIONS_RPOOL=""
 for d in $DISKS; do
   PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
   PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
-  if [ -n "${PODMAN_SIZE:-}" ]; then
+  if [ -n "$PODMAN_SIZE" ]; then
     PARTITIONS_PODMAN+="${PARTITIONS_PODMAN:+ }$(partdev "$d" 4)"
   fi
-  if [ -n "${META_SIZE:-}" ]; then
+  if [ -n "$META_SIZE" ]; then
     PARTITIONS_META+="${PARTITIONS_META:+ }$(partdev "$d" 6)"
   fi
   PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 5)"

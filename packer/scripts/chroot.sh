@@ -332,7 +332,7 @@ else
   # mdadm.conf line makes it auto-assemble at boot (and from the initramfs once
   # update-initramfs runs below). The podman role then formats + mounts
   # /dev/md/podman.
-  if [ -n "${PARTITIONS_PODMAN:-}" ]; then
+  if [ -n "$PARTITIONS_PODMAN" ]; then
     # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
     mdadm --create /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
     udevadm settle --timeout=10
