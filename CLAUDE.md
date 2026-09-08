@@ -152,6 +152,8 @@ Prefer these over re-implementing boilerplate. All take inputs through a single 
 
 Helper roles expose named task files and keep `tasks/main.yml` operationally empty (comments only), so the test harness can target the role without invoking an argument-requiring entry point. Call them with `tasks_from`; do not add a default dispatcher to `main.yml`.
 
+Every helper entry point that installs a reversible artifact must have a matching removal entry point. Keep removal entry points even when they have no current callers so future retirements can reuse them. Persistent-data removal must remain explicit and preserve data by default.
+
 Helpers that publish a caller-facing result must implement a `condition` input
 themselves and publish a no-change result when it is false. Pass the condition
 inside the helper's `*_args`; do not put `when:` on `import_role`, because a
