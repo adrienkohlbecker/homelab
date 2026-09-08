@@ -41,15 +41,11 @@ workflow:
 
 .manual_job:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     - when: manual
       allow_failure: true
 
 .protected_manual_job:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: true
@@ -65,8 +61,6 @@ detect:
   tags:
     - $DETECT_RUNNER_TAG
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     # The lab rule must precede source rules because lab uses host tools rather
     # than /opt caches.
     - if: $HOMELAB_CI_TARGET == "lab"
@@ -217,8 +211,6 @@ qemu_host_ami:
   extends: .qemu_image
   # A failed box must block box_deps rather than seed from an older publication.
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: false
@@ -231,8 +223,6 @@ qemu_host_ami:
 "qemu_image:box_deps":
   extends: .qemu_image
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
