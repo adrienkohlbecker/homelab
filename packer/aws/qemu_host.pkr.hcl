@@ -35,7 +35,7 @@ variable "qemu_host_manifest_path" {
 locals {
   versions       = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
   ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))
-  ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name]
+  ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name].version
 
   qemu_host_common_tags = {
     role     = "ci-ami"

@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
 
+import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
 HETZNER_RESCUE_SH = REPO_ROOT / "mise-tasks" / "packer" / "_hetzner_rescue.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
+QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
+UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
 UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
     REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh",
@@ -105,8 +109,19 @@ def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
     template = QEMU_HOST_TEMPLATE.read_text()
 
     assert 'ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))' in template
-    assert "ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name]" in template
+    assert "ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name].version" in template
     assert "ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-amd64-server-*" in template
+
+
+def test_qemu_cloud_images_use_immutable_release_builds() -> None:
+    catalog = yaml.safe_load(UBUNTU_CATALOG.read_text())
+    template = QEMU_TEMPLATE.read_text()
+
+    for release in catalog["releases"].values():
+        assert set(release) == {"version", "image_release"}
+        assert re.fullmatch(r"\d{8}(?:\.\d+)?", release["image_release"])
+    assert "release-${local.ubuntu_release.image_release}" in template
+    assert 'releases/${local.ubuntu_name}/release"' not in template
 
 
 def test_ubuntu_completions_use_release_catalog() -> None:

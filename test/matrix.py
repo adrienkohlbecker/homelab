@@ -28,7 +28,9 @@ import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _UBUNTU_CATALOG = yaml.safe_load((_REPO_ROOT / "data" / "ubuntu_releases.yml").read_text())
-UBUNTU_RELEASES: dict[str, str] = _UBUNTU_CATALOG["releases"]
+UBUNTU_RELEASES: dict[str, str] = {
+    codename: release["version"] for codename, release in _UBUNTU_CATALOG["releases"].items()
+}
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
 DEFAULT_MACHINES = {"box": None}
 

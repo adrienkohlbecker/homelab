@@ -55,11 +55,11 @@ locals {
   arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
   versions = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
 
-  # Codename -> Ubuntu version, for the cloud image filename. No snapshot date:
-  # see upstream_cloud_base below for why the build tracks the release symlink.
+  # Codename -> Ubuntu version and immutable released-image serial.
   ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))
   ubuntu_name    = coalesce(var.ubuntu_name, local.ubuntu_catalog.default)
-  ubuntu_version = local.ubuntu_catalog.releases[local.ubuntu_name]
+  ubuntu_release = local.ubuntu_catalog.releases[local.ubuntu_name]
+  ubuntu_version = local.ubuntu_release.version
 
   # Arch-keyed configuration table. Centralizes everything that varies
   # between the supported builds. In this stack arch is a 1:1 proxy for
@@ -214,20 +214,12 @@ locals {
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key",
   ]
 
-  # Cloud image base URLs. Defaults to the Nexus proxy
-  # (`terraform/nexus.tf` raw_proxies "ubuntu-cloud-images"); set
-  # `-var upstream_mirrors=true` to bypass it.
-  # The `releases/<codename>/release/` symlink, not a dated directory. The daily
-  # stream (cloud-images.ubuntu.com/<codename>/<date>/) keeps only ~6 snapshots,
-  # so a dated pin there 404s within months and the build breaks without anyone
-  # touching it. This tracks whatever Canonical currently publishes as the
-  # release image; integrity still comes from the SHA256SUMS fetched beside it,
-  # and test/machine.py's minimal image already resolves the same way.
-  #
-  # For a reproducible bake, point these at `releases/<codename>/release-<date>/`
-  # instead -- that tree is archival and goes back to each release's GA.
-  upstream_cloud_base = "https://cloud-images.ubuntu.com/releases/${local.ubuntu_name}/release"
-  nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/releases/${local.ubuntu_name}/release"
+  # Canonical retains dated release builds, unlike the short-lived daily image
+  # stream. Pinning that immutable directory keeps the image and SHA256SUMS
+  # coherent even when Nexus caches their raw paths at different times.
+  cloud_release_path  = "releases/${local.ubuntu_name}/release-${local.ubuntu_release.image_release}"
+  upstream_cloud_base = "https://cloud-images.ubuntu.com/${local.cloud_release_path}"
+  nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/${local.cloud_release_path}"
   cloud_base          = var.upstream_mirrors ? local.upstream_cloud_base : local.nexus_cloud_base
   cloud_checksum      = "file:${local.cloud_base}/SHA256SUMS"
   cloud_url           = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.arch_cfg.cloud_image_suffix}.img"

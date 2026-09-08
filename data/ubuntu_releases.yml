@@ -1,4 +1,8 @@
 default: noble
 releases:
-  noble: "24.04"
-  resolute: "26.04"
+  noble:
+    version: "24.04"
+    image_release: "20260826"
+  resolute:
+    version: "26.04"
+    image_release: "20260823"
