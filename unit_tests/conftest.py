@@ -30,22 +30,6 @@ def load_repo_module(relative_path: str, *, name: str | None = None) -> ModuleTy
     return module
 
 
-_CONSTRUCTOR_PARAMS = frozenset(
-    {
-        "machine",
-        "role",
-        "keep_vm",
-        "ubuntu_name",
-        "machine_timeout",
-        "upstream_mirrors",
-        "workdir_parent",
-        "launch",
-        "loopback_host",
-        "write_image",
-    }
-)
-
-
 @pytest.fixture
 def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., machine.Machine]]:
     """Build Machine instances with imagedir + arch under our control.
@@ -69,7 +53,14 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
     monkeypatch.chdir(tmp_path)
     instances: list[machine.Machine] = []
 
-    def make(*, host_arch: str = "x86_64", **overrides: Any) -> machine.Machine:
+    def make(
+        *,
+        host_arch: str = "x86_64",
+        ansible_args: list[str] | None = None,
+        ssh_port: int | None = None,
+        ssh_user: str | None = None,
+        **overrides: Any,
+    ) -> machine.Machine:
         # detect_host_arch() runs once inside Machine.__init__ and the
         # ArchProfile gets cached on the instance, so the patch must be in
         # place before make() constructs the machine below.
@@ -81,17 +72,14 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
             ubuntu_name="noble",
             machine_timeout=300,
         )
-        # Constructor params go to __init__; anything else is a synthetic
-        # field value injected post-construction via setattr.
-        post_init: dict[str, Any] = {}
-        for key, value in overrides.items():
-            if key in _CONSTRUCTOR_PARAMS:
-                kwargs[key] = value
-            else:
-                post_init[key] = value
+        kwargs.update(overrides)
         m = machine.Machine(**kwargs)
-        for key, value in post_init.items():
-            setattr(m, key, value)
+        if ansible_args is not None:
+            m.ansible_args = ansible_args
+        if ssh_port is not None:
+            m.ssh_port = ssh_port
+        if ssh_user is not None:
+            m.ssh_user = ssh_user
         instances.append(m)
         return m
 
