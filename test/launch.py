@@ -120,6 +120,7 @@ def parse_args() -> argparse.Namespace:
         help="Mount PATH on the host as a 9p share with mount_tag=TAG inside "
         "the guest (`mount -t 9p TAG /mnt`). Repeatable.",
     )
+    # Operator-only interactive mode; automated callers use the default async path.
     parser.add_argument(
         "--foreground",
         action="store_true",
