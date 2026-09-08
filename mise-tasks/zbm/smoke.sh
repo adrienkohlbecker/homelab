@@ -28,29 +28,6 @@ cd "$repo_root"
 registry_url="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu"
 out_dir="${repo_root}/zbm-build/${arch}"
 
-version="${1:-}"
-if [ -n "$version" ]; then
-  case "$version" in
-  *"-${arch}") ;;
-  *)
-    echo "package version ${version} does not end in -${arch}; its image cannot boot on this host" >&2
-    exit 1
-    ;;
-  esac
-  mkdir -p "$out_dir"
-  for name in "zfsbootmenu-${version}.tar.gz" "zfsbootmenu-${version}.tar.gz.sha256sum"; do
-    curl -fsSL -o "${out_dir}/${name}" "${registry_url}/${version}/${name}"
-  done
-  (cd "$out_dir" && sha256sum -c "zfsbootmenu-${version}.tar.gz.sha256sum")
-  tarball="${out_dir}/zfsbootmenu-${version}.tar.gz"
-else
-  if ! tarball="$(zbm_latest_tarball "$out_dir" "$arch")"; then
-    echo "no ${arch} tarball — run 'mise run zbm:build' first" >&2
-    exit 1
-  fi
-fi
-echo "Smoke-testing ${tarball}"
-
 workdir="$(mktemp -d)"
 launcher_pid=""
 qmp_sock="${workdir}/qmp.sock"
@@ -83,6 +60,28 @@ PY
   rm -rf "$workdir"
 }
 trap cleanup EXIT INT TERM
+
+version="${1:-}"
+if [ -n "$version" ]; then
+  case "$version" in
+  *"-${arch}") ;;
+  *)
+    echo "package version ${version} does not end in -${arch}; its image cannot boot on this host" >&2
+    exit 1
+    ;;
+  esac
+  for name in "zfsbootmenu-${version}.tar.gz" "zfsbootmenu-${version}.tar.gz.sha256sum"; do
+    curl -fsSL -o "${workdir}/${name}" "${registry_url}/${version}/${name}"
+  done
+  (cd "$workdir" && sha256sum -c "zfsbootmenu-${version}.tar.gz.sha256sum")
+  tarball="${workdir}/zfsbootmenu-${version}.tar.gz"
+else
+  if ! tarball="$(zbm_latest_tarball "$out_dir" "$arch")"; then
+    echo "no ${arch} tarball — run 'mise run zbm:build' first" >&2
+    exit 1
+  fi
+fi
+echo "Smoke-testing ${tarball}"
 
 tar -xzf "$tarball" -C "$workdir" --no-same-owner
 for member in cmdline ssh_host_ed25519_key.pub initramfs-bootmenu.img; do
