@@ -107,17 +107,19 @@ promoted_ami() {
 prune_old_amis() {
   local name_tag="homelab-ci-qemu-host-${ubuntu}" promoted stale image_id current matches
   local -a retention_args=()
+  local -a image_filters=(
+    "Name=tag:Name,Values=${name_tag}"
+    "Name=tag:role,Values=ci-ami"
+    "Name=tag:machine,Values=qemu_host"
+    "Name=tag:ubuntu,Values=${ubuntu}"
+  )
   promoted=$(promoted_ami)
   if [ -n "$promoted" ]; then
     retention_args+=(--protected "$promoted")
   fi
 
   stale=$(aws --region "$region" ec2 describe-images --owners self \
-    --filters \
-    "Name=tag:Name,Values=${name_tag}" \
-    "Name=tag:role,Values=ci-ami" \
-    "Name=tag:machine,Values=qemu_host" \
-    "Name=tag:ubuntu,Values=${ubuntu}" \
+    --filters "${image_filters[@]}" \
     --query Images --output json |
     python3 "$repo_root/mise-tasks/ci/ami_retention.py" "${retention_args[@]}")
 
@@ -138,11 +140,7 @@ prune_old_amis() {
     fi
     matches=$(aws --region "$region" ec2 describe-images --owners self \
       --image-ids "$image_id" \
-      --filters \
-      "Name=tag:Name,Values=${name_tag}" \
-      "Name=tag:role,Values=ci-ami" \
-      "Name=tag:machine,Values=qemu_host" \
-      "Name=tag:ubuntu,Values=${ubuntu}" \
+      --filters "${image_filters[@]}" \
       --query 'length(Images)' --output text)
     if [ "$matches" != 1 ]; then
       echo "Prune: refusing ${image_id}; provenance tags changed after selection" >&2
