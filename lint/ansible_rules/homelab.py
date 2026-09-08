@@ -164,10 +164,7 @@ class NoHandlers(_HomelabRule):
         if _is_test_file(file):
             return False
 
-        if task.is_handler():
-            return "handlers are banned; drive restarts inline from *_result.changed"
-
-        if "notify" in task.raw_task:
+        if task.is_handler() or "notify" in task.raw_task:
             return "handlers are banned; drive restarts inline from *_result.changed"
         return False
 
