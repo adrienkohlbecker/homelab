@@ -46,10 +46,6 @@ def _module_name(task: Task) -> str:
     return task["action"]["__ansible_module__"].rsplit(".", 1)[-1]
 
 
-def _raw_task(task: Task) -> dict:
-    return task.get("__raw_task__", task)  # type: ignore[return-value]
-
-
 def _is_test_hook(file: Lintable | None) -> bool:
     return file is not None and file.path.name.startswith(_TEST_HOOK_PREFIXES)
 
@@ -189,14 +185,10 @@ class NoHandlers(AnsibleLintRule):
         if _is_test_file(file):
             return False
 
-        action_type = task["__ansible_action_type__"]
-        if action_type == "handler" or (file is not None and "handlers" in file.path.parts):
+        if task.is_handler():
             return "handlers are banned; drive restarts inline from *_result.changed"
-        if action_type != "task":
-            return False
 
-        raw_task = _raw_task(task)
-        if "notify" in raw_task:
+        if "notify" in task.raw_task:
             return "handlers are banned; drive restarts inline from *_result.changed"
         return False
 
@@ -213,7 +205,7 @@ class NoNoLog(AnsibleLintRule):
         if task["__ansible_action_type__"] != "task" or _is_test_file(file):
             return False
 
-        no_log = _raw_task(task).get("no_log")
+        no_log = task.raw_task.get("no_log")
         if no_log is True or (isinstance(no_log, str) and no_log.lower() == "true"):
             return "`no_log: true` is banned in this repo; keep failures inspectable"
         return False
@@ -231,7 +223,7 @@ class NoInventoryHostnameWhen(AnsibleLintRule):
         if task["__ansible_action_type__"] != "task" or _is_test_file(file):
             return False
 
-        when = _stringify(_raw_task(task).get("when"))
+        when = _stringify(task.raw_task.get("when"))
         if "inventory_hostname" in when:
             return "task `when:` branches must use host vars instead of inventory_hostname"
         return False
@@ -253,8 +245,7 @@ class PreferImport(AnsibleLintRule):
         if module not in _INCLUDE_MODULES:
             return False
 
-        raw_task = _raw_task(task)
-        if "loop" in raw_task or any(str(key).startswith("with_") for key in raw_task):
+        if "loop" in task.raw_task or any(str(key).startswith("with_") for key in task.raw_task):
             return False
 
         action = task["action"]

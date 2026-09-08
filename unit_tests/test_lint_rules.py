@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from ansiblelint.utils import Task
 
 _ROOT = Path(__file__).resolve().parent.parent
 _RULES = runpy.run_path(str(_ROOT / "lint" / "ansible_rules" / "homelab.py"))
@@ -20,12 +21,13 @@ RequireValidate = _RULES["RequireValidate"]
 ShellStrictMode = _RULES["ShellStrictMode"]
 
 
-def _task(module: str, **action):
-    raw_task = action.pop("__raw_task__", None)
-    task = {"__ansible_action_type__": "task", "action": {"__ansible_module__": module, **action}}
-    if raw_task is not None:
-        task["__raw_task__"] = raw_task
-    return task
+def _task(module: str, *, kind: str = "tasks", **action) -> Task:
+    task_fields = action.pop("__raw_task__", {})
+    raw_params = action.pop("_raw_params", None)
+    module_args = raw_params if raw_params is not None else action
+    if raw_params is not None and action:
+        task_fields["args"] = action
+    return Task({module: module_args, **task_fields}, kind=kind)
 
 
 def _lintable(path: str):
@@ -154,10 +156,7 @@ class TestNoHandlers:
         assert result == "handlers are banned; drive restarts inline from *_result.changed"
 
     def test_handler_task_is_banned(self) -> None:
-        task = _task("systemd")
-        task["__ansible_action_type__"] = "handler"
-
-        result = NoHandlers().matchtask(task)
+        result = NoHandlers().matchtask(_task("systemd", kind="handlers"))
 
         assert result == "handlers are banned; drive restarts inline from *_result.changed"
 
