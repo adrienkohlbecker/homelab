@@ -302,36 +302,6 @@ resource "aws_s3_bucket_policy" "ci_qemu_images" {
   })
 }
 
-moved {
-  from = aws_secretsmanager_secret.ci_ecr_docker_hub
-  to   = aws_secretsmanager_secret.ci_ecr["docker-hub"]
-}
-
-moved {
-  from = aws_secretsmanager_secret.ci_ecr_github
-  to   = aws_secretsmanager_secret.ci_ecr["github"]
-}
-
-moved {
-  from = aws_secretsmanager_secret.ci_ecr_gitlab
-  to   = aws_secretsmanager_secret.ci_ecr["gitlab"]
-}
-
-moved {
-  from = aws_secretsmanager_secret_version.ci_ecr_docker_hub
-  to   = aws_secretsmanager_secret_version.ci_ecr["docker-hub"]
-}
-
-moved {
-  from = aws_secretsmanager_secret_version.ci_ecr_github
-  to   = aws_secretsmanager_secret_version.ci_ecr["github"]
-}
-
-moved {
-  from = aws_secretsmanager_secret_version.ci_ecr_gitlab
-  to   = aws_secretsmanager_secret_version.ci_ecr["gitlab"]
-}
-
 # ─── ECR pull-through cache ──────────────────────────────────────────────────
 # AWS cells cannot reach the lab Nexus Docker proxies. These regional ECR rules
 # cache the public registries that roles pull from, so the qemu hosts fetch
