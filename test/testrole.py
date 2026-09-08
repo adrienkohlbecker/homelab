@@ -236,11 +236,7 @@ async def run_test(
                     await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
         except CommandFailedException:
             print_line("Command failed")
-            # Best-effort: a diagnostics-collection failure must not shadow the
-            # underlying CommandFailedException. Artifacts ship as separate
-            # files for CI artifact upload.
-            with contextlib.suppress(Exception):
-                await m.collect_failure_artifacts()
+            await m.collect_failure_artifacts()
             raise
         except IdempotenceFailedException:
             print_line("Idempotence check failed")

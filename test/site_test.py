@@ -19,7 +19,6 @@ Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
 
 import argparse
 import asyncio
-import contextlib
 import shutil
 import sys
 import traceback
@@ -120,8 +119,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             await m.ansible_command(str(staged), *extra)
         except CommandFailedException:
             print_line(f"Site {label} failed")
-            with contextlib.suppress(Exception):
-                await m.collect_failure_artifacts()
+            await m.collect_failure_artifacts()
             raise
 
         print_line(f"Site {label} passed")
@@ -168,8 +166,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                     f"Guest did not power off within {POWEROFF_TIMEOUT}s after a passed converge",
                     error=True,
                 )
-                with contextlib.suppress(Exception):
-                    await m.collect_failure_artifacts()
+                await m.collect_failure_artifacts()
                 raise PoweroffTimeoutError(
                     f"poweroff did not complete within {POWEROFF_TIMEOUT}s "
                     "(a stop job wedged on its TimeoutStopSec -- see the "

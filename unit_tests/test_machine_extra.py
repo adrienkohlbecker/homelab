@@ -157,6 +157,26 @@ class TestReadVmHwm:
             assert result == 0
 
 
+def test_failure_artifact_collection_continues_after_capture_error(
+    machine_factory: Callable[..., machine.Machine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instance = machine_factory()
+    labels: list[str] = []
+
+    async def collect(label: str, _dest: Path, *_command: str) -> bool:
+        labels.append(label)
+        if label == "Systemd journal":
+            raise OSError("guest disappeared")
+        return True
+
+    monkeypatch.setattr(instance, "_collect_remote_to_file", collect)
+
+    asyncio.run(instance.collect_failure_artifacts())
+
+    assert labels == ["Systemd journal", "Kernel ring buffer", "Failed units"]
+
+
 # ---------------------------------------------------------------------------
 # UBUNTU_RELEASES / QemuMachineSpec constants
 # ---------------------------------------------------------------------------

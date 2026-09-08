@@ -1085,7 +1085,12 @@ class Machine:
             ),
         )
         for label, dest, remote_cmd in captures:
-            await self._collect_remote_to_file(label, dest, *remote_cmd)
+            try:
+                await self._collect_remote_to_file(label, dest, *remote_cmd)
+            except Exception as exc:
+                # Diagnostics are best-effort and must not mask the original
+                # test failure or prevent the remaining captures.
+                print_line(f"Failed to collect {label}: {exc}")
 
     def cleanup_logs(self) -> None:
         """Remove all per-run log artifacts."""
