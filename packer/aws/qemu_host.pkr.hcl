@@ -85,6 +85,8 @@ source "amazon-ebs" "qemu_host" {
   ami_virtualization_type = "hvm"
   ena_support             = true
 
+  # Keep machine explicit in each map so every artifact documents its
+  # qemu_host value in place; the Hetzner image is a separate target.
   tags            = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "homelab-ci-qemu-host-${var.ubuntu_name}" })
   snapshot_tags   = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
   run_tags        = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "packer-homelab-ci-qemu-host" })
