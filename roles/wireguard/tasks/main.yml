@@ -68,14 +68,6 @@
   tags:
     - wireguard
 
-- name: Remove WireGuard forwarding drop-in
-  file:
-    path: /etc/sysctl.d/30-wireguard.conf
-    state: absent
-  become: true
-  tags:
-    - wireguard
-
 - name: Configure wireguard interface
   template:
     src: wg.conf.j2
