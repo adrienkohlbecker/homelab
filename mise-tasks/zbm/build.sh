@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-#MISE description="Build a ZFSBootMenu recovery tarball through upstream make-binary.sh"
+#MISE description="Build a ZFSBootMenu recovery tarball through upstream zbm-builder.sh"
 set -euo pipefail
 
 # shellcheck source=mise-tasks/zbm/lib.sh
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 arch="$(zbm_host_arch)"
-upstream_arch="$(zbm_upstream_arch)"
 if [ -z "${ZBM_BUILD_SUFFIX:-}" ] && [ -z "${CI:-}" ]; then
   ZBM_BUILD_SUFFIX="-local.$(date "+%Y%m%d%H%M%S")"
 fi
@@ -14,6 +13,7 @@ repo_root="$(zbm_repo_root)"
 src_dir="${repo_root}/zbm-build/src"
 out_dir="${repo_root}/zbm-build/${arch}"
 builder_tag="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
+command_line="ro loglevel=0 nomodeset"
 
 mkdir -p "$out_dir"
 rm -f "$out_dir"/*
@@ -29,72 +29,47 @@ if [ "$builder_entrypoint" != '["/build-init.sh"]' ]; then
   echo "run 'mise run zbm:builder-image' to rebuild the upstream-compatible local builder image" >&2
   exit 1
 fi
-workdir="$(mktemp -d "${repo_root}/zbm-build/make-binary.${arch}.XXXXXX")"
+workdir="$(mktemp -d "${repo_root}/zbm-build/zbm-builder.${arch}.XXXXXX")"
 trap 'rm -rf "$workdir"' EXIT INT TERM
-package_dir="${workdir}/package"
-
-wrapper_dir="${workdir}/bin"
-mkdir -p "$wrapper_dir"
-ln -s "$(command -v docker)" "${wrapper_dir}/podman"
-export PATH="${wrapper_dir}:${PATH}"
 
 work_src="${workdir}/src"
 git clone --no-hardlinks --branch "v${ZBM_VERSION}" "$src_dir" "$work_src" >/dev/null
 
 git -C "$work_src" apply "$repo_root/zbm/recovery-overlay.patch"
 
-homelab_root="${work_src}/homelab"
-mkdir -p "$homelab_root"
-cp -a "${repo_root}/zbm/hooks" "${homelab_root}/"
-cp "${repo_root}/zbm/dracut.conf.d/recovery.conf" "${work_src}/etc/zfsbootmenu/recovery.conf.d/zz-homelab-recovery.conf"
+build_root="${workdir}/build-root"
+mkdir -p "$build_root/dracut.conf.d"
+cp -L "$work_src/etc/zfsbootmenu/recovery.yaml" "$build_root/config.yaml"
+cp "$work_src"/etc/zfsbootmenu/recovery.conf.d/*.conf "$build_root/dracut.conf.d/"
+cp "$repo_root/zbm/dracut.conf.d/recovery.conf" "$build_root/dracut.conf.d/zz-homelab-recovery.conf"
+cp -a "$repo_root/zbm/hooks" "$build_root/"
 
-# Upstream stages its config and output trees under a bare mktemp -d and
-# bind-mounts them into the build container. Bind-mount sources resolve on
-# the docker daemon's filesystem, and under GitLab dind only the job
-# checkout is shared with the daemon — a /tmp source reads back empty. Keep
-# the temp tree inside the workdir so both sides see the same files.
-mkdir -p "${workdir}/tmp"
 (
   cd "$work_src"
-  TMPDIR="${workdir}/tmp" ./releng/make-binary.sh "$ZBM_VERSION" "$builder_tag"
+  bash ./zbm-builder.sh \
+    -d \
+    -b "$build_root" \
+    -i "$builder_tag" \
+    -l "$work_src" \
+    -H \
+    -- -e ".Kernel.CommandLine = \"${command_line}\""
 )
 
-asset_base="zfsbootmenu-recovery-${upstream_arch}-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}"
-asset_dir="${work_src}/releng/assets/${ZBM_VERSION}"
-upstream_tar="${asset_dir}/${asset_base}.tar.gz"
-upstream_efi="${asset_dir}/${asset_base}.EFI"
-extract_dir="${workdir}/extract"
+package_dir="${build_root}/build"
 
-if [ ! -s "$upstream_tar" ]; then
-  echo "upstream make-binary.sh did not produce expected tarball: $upstream_tar" >&2
-  exit 1
-fi
-if [ ! -s "$upstream_efi" ]; then
-  echo "upstream make-binary.sh did not produce expected EFI image: $upstream_efi" >&2
-  echo "upstream make-binary.sh only enables EFI output on x86_64; run this task on the lab-class architecture" >&2
-  exit 1
-fi
-
-mkdir -p "$extract_dir"
-tar -xzf "$upstream_tar" -C "$extract_dir"
-component_dir="${extract_dir}/zfsbootmenu-recovery-${upstream_arch}-v${ZBM_VERSION}"
-if [ ! -d "$component_dir" ]; then
-  echo "upstream tarball missing expected component directory: ${component_dir##*/}" >&2
-  exit 1
-fi
-
-mapfile -t kernel_images < <(find "$component_dir" -maxdepth 1 -type f -name 'vmlin*-bootmenu')
+mapfile -t kernel_images < <(find "$package_dir" -maxdepth 1 -type f -name 'vmlin*-bootmenu')
 if [ "${#kernel_images[@]}" -ne 1 ]; then
-  echo "expected exactly one vmlin*-bootmenu in $component_dir, found ${#kernel_images[@]}" >&2
+  echo "expected exactly one vmlin*-bootmenu in $package_dir, found ${#kernel_images[@]}" >&2
   exit 1
 fi
+mapfile -t efi_images < <(find "$package_dir" -maxdepth 1 -type f -name 'vmlin*.EFI')
+if [ "${#efi_images[@]}" -ne 1 ]; then
+  echo "expected exactly one vmlin*.EFI in $package_dir, found ${#efi_images[@]}" >&2
+  exit 1
+fi
+mv "${efi_images[0]}" "$package_dir/zfsbootmenu.EFI"
 
-mkdir -p "$package_dir"
-cp "${kernel_images[0]}" "$package_dir/"
-cp "${component_dir}/initramfs-bootmenu.img" "$package_dir/initramfs-bootmenu.img"
-cp "$upstream_efi" "$package_dir/zfsbootmenu.EFI"
-
-yq -er '.Kernel.CommandLine' "${work_src}/etc/zfsbootmenu/recovery.yaml" >"$package_dir/cmdline"
+printf '%s\n' "$command_line" >"$package_dir/cmdline"
 
 initramfs_listing="${workdir}/initramfs.lsinitrd"
 zbm_lsinitrd "$builder_tag" "$package_dir/initramfs-bootmenu.img" >"$initramfs_listing"

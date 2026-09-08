@@ -4,10 +4,6 @@ zbm_host_arch() {
   uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/
 }
 
-zbm_upstream_arch() {
-  uname -m | sed -e s/amd64/x86_64/
-}
-
 zbm_repo_root() {
   local repo_root="${MISE_CONFIG_ROOT:-}"
 
