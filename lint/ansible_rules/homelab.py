@@ -1,12 +1,6 @@
 """Homelab-specific ansible-lint rules."""
 
-# ansible-lint's BaseRule declares `tags` as an instance variable, but shadowing
-# it with a class-level list is the upstream rule-authoring idiom (every bundled
-# rule does it), so the override check only flags the unavoidable.
-# pyright: reportIncompatibleVariableOverride=false
-
 import re
-from typing import ClassVar
 
 from ansiblelint.file_utils import Lintable
 from ansiblelint.rules import AnsibleLintRule
@@ -66,7 +60,6 @@ def _is_test_file(file: Lintable | None) -> bool:
 
 
 class _HomelabRule(AnsibleLintRule):
-    tags: ClassVar[list[str]] = ["idiom"]
     version_changed = "1.0.0"
 
 
@@ -74,7 +67,6 @@ class RequireBackup(_HomelabRule):
     """File-writing tasks must set `backup: true`."""
 
     id = "require-backup"
-    severity = "MEDIUM"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         module = _module_name(task)
@@ -96,7 +88,6 @@ class RequireNamedRoleEntrypoint(_HomelabRule):
     """Static test fixtures must select the role task file they depend on."""
 
     id = "require-named-role-entrypoint"
-    severity = "HIGH"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _module_name(task) != "import_role":
@@ -115,8 +106,6 @@ class ShellStrictMode(_HomelabRule):
     """Shell tasks must start with `set -euo pipefail` under /bin/bash."""
 
     id = "shell-strict-mode"
-    severity = "MEDIUM"
-    tags: ClassVar[list[str]] = ["command-shell", "idiom"]
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _module_name(task) != "shell" or _is_test_hook(file):
@@ -139,7 +128,6 @@ class NoHandlers(_HomelabRule):
     """Service restarts must be driven inline instead of through handlers."""
 
     id = "no-handlers"
-    severity = "HIGH"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _is_test_file(file):
@@ -154,7 +142,6 @@ class NoNoLog(_HomelabRule):
     """Tasks must not hide diffs or failure output with `no_log: true`."""
 
     id = "no-no-log"
-    severity = "MEDIUM"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _is_test_file(file):
@@ -170,7 +157,6 @@ class NoInventoryHostnameWhen(_HomelabRule):
     """Task branching must use host vars, not hard-coded inventory names."""
 
     id = "no-inventory-hostname-when"
-    severity = "MEDIUM"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _is_test_file(file):
@@ -186,7 +172,6 @@ class PreferImport(_HomelabRule):
     """Prefer static imports unless the include is genuinely dynamic."""
 
     id = "prefer-import"
-    severity = "LOW"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _is_test_file(file):
@@ -211,7 +196,6 @@ class RequireValidate(_HomelabRule):
     """Config-writing copy/template tasks should parse-test rendered content."""
 
     id = "require-validate"
-    severity = "LOW"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if _is_test_file(file):
