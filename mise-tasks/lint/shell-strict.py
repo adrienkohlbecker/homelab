@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 ALLOWLIST_PATTERNS = (
-    "mise-tasks/packer/_hetzner_rescue.sh",
     "mise-tasks/worktree/lib.sh",
     "mise-tasks/zbm/lib.sh",
     "zbm/dracut-modules/89zbm-power-commands/module-setup.sh",

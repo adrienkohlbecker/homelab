@@ -12,7 +12,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
-HETZNER_RESCUE_SH = REPO_ROOT / "mise-tasks" / "packer" / "_hetzner_rescue.sh"
+HETZNER_SH = REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
@@ -162,7 +162,7 @@ def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None
     env.update(PATH=f"{fake_bin}:{env['PATH']}", SSH_TEST_LOG=str(log))
     script = f"""
 set -euo pipefail
-source {shlex.quote(str(HETZNER_RESCUE_SH))}
+source {shlex.quote(str(HETZNER_SH))}
 KEY=/tmp/test_key
 KNOWN=/tmp/test_known_hosts
 RESCUE_IP=192.0.2.1
@@ -191,7 +191,7 @@ def test_hetzner_rescue_ssh_wait_is_bounded(
     expected_attempts: int,
 ) -> None:
     script = (
-        f"source {shlex.quote(str(HETZNER_RESCUE_SH))}\n"
+        f"source {shlex.quote(str(HETZNER_SH))}\n"
         + """
 sleep() { :; }
 attempts=0
