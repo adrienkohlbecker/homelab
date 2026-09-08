@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# [MISE] description="Validate checked-in shell scripts use strict mode"
 """Require strict mode in checked-in shell entrypoints."""
 
 from __future__ import annotations

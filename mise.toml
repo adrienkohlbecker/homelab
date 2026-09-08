@@ -192,14 +192,6 @@ run = [
   "lint/git_ls_existing.sh '*.lua' | xargs -0 selene --config lint/selene.toml",
 ]
 
-[tasks."lint:podman-service-templates"]
-description = "Validate Podman systemd unit healthcheck conventions"
-run = "uv run python mise-tasks/lint/podman-service-templates.py"
-
-[tasks."lint:shell-strict"]
-description = "Validate checked-in shell scripts use strict mode"
-run = "uv run python mise-tasks/lint/shell-strict.py"
-
 [tasks."lint:topology"]
 description = "Validate data/network_topology.yml against its JSON Schema"
 # check-jsonschema is a project dep (not `uvx`-fetched) so `uv sync`

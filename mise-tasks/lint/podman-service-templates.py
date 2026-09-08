@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# [MISE] description="Validate Podman systemd unit healthcheck conventions"
 """Validate Podman systemd unit templates against repo healthcheck conventions."""
 
 from __future__ import annotations
