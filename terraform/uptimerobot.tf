@@ -68,26 +68,22 @@ locals {
   uptimerobot_monitors = {
     headscale_ipv4 = {
       name       = "Headscale IPV4"
-      type       = "HTTP"
       url        = "https://headscale.fahm.fr/health"
       ip_version = "ipv4Only"
     }
     headscale_ipv6 = {
       name       = "Headscale IPV6"
-      type       = "HTTP"
       url        = "https://headscale.fahm.fr/health"
       ip_version = "ipv6Only"
     }
     derp_ipv4 = {
       name                    = "Headscale DERP latency IPV4"
-      type                    = "HTTP"
       url                     = "https://headscale.fahm.fr/derp/latency-check"
       ip_version              = "ipv4Only"
       response_time_threshold = 1000
     }
     derp_ipv6 = {
       name                    = "Headscale DERP latency IPV6"
-      type                    = "HTTP"
       url                     = "https://headscale.fahm.fr/derp/latency-check"
       ip_version              = "ipv6Only"
       response_time_threshold = 1000
@@ -99,7 +95,7 @@ resource "uptimerobot_monitor" "headscale" {
   for_each = local.uptimerobot_monitors
 
   name     = each.value.name
-  type     = each.value.type
+  type     = "HTTP"
   url      = each.value.url
   interval = 300
   timeout  = 30
