@@ -259,10 +259,8 @@ def _ha_post(service: str) -> None:
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             print(f"{service}: HTTP {resp.status}")
-    except urllib.error.HTTPError as e:
-        print(f"WARN: {service} failed: HTTP {e.code} {e.reason}", file=sys.stderr)
     except urllib.error.URLError as e:
-        print(f"WARN: {service} failed: {e.reason}", file=sys.stderr)
+        print(f"WARN: {service} failed: {e}", file=sys.stderr)
 
 
 def _print_diff_header(label: str) -> None:
