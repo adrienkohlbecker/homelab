@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #MISE description="Run nft --optimize against /etc/nftables.conf on a host and print suggestions"
-#MISE alias="firewall:optimize"
 #USAGE arg "<host>" help="inventory host (e.g. lab, pug, box)"
 #USAGE complete "host" run="awk '/^\\[/{next} /^$/{next} {print $1}' hosts.ini | sort -u"
 # shellcheck disable=SC2154  # usage_host injected by mise from the #USAGE spec
