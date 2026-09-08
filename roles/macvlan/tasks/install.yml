@@ -48,9 +48,10 @@
       # Macvlan provides direct LAN presence, not an ordinary egress path.
       # Inert on noble's netavark 1.4.0, which predates the option (>= 1.7):
       # podman stores it, netavark installs the default route anyway. Kept so
-      # the intent is declared where it belongs; consumers that must not egress
-      # over their macvlan enforce it host-side until netavark catches up (see
-      # homeassistant's ExecStartPost pin).
+      # the intent is declared where it belongs; until netavark catches up, a
+      # consumer that must not egress over its macvlan down-ranks the macvlan
+      # by giving its bridge network a lower route metric (see
+      # roles/homeassistant/tasks/main.yml).
       no_default_route: "1"
   become: true
   tags:

@@ -23,6 +23,11 @@
     name: homeassistant
     # Explicit so consumers can resolve `*.dns.podman` via aardvark-dns.
     disable_dns: false
+    # Match the metric the homeassistant role sets; whichever role converges
+    # first creates the network, and HA's egress ordering depends on it (see
+    # roles/homeassistant/tasks/main.yml).
+    opt:
+      metric: "50"
     state: present
   become: true
   tags:

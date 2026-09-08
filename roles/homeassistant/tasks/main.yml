@@ -15,11 +15,22 @@
 # Shared backend network for HA, mosquitto, z2m, and influxdb. Keeping HA's
 # backend dependencies in one aardvark-dns view avoids multi-network resolver
 # ordering: one network DNS server knows every backend name HA needs.
+#
+# metric 50 (below netavark's default 100) makes this bridge's default route
+# strictly outrank the one mac_iot installs, so HA egresses over the bridge
+# from the instant its netns exists. Without it both defaults sit at 100 and
+# the winner is FIB insertion order -- when the macvlan wins, HA leaves on the
+# IoT VLAN and the inter-VLAN policy drops everything bound for the home VLAN.
+# netavark 1.4.0 (noble) rejects `metric` on a macvlan and ignores
+# `no_default_route`, so down-ranking the bridge is the one lever it honours.
+# Inert for the single-homed members; only HA holds two defaults.
 - name: Create homeassistant podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
     name: homeassistant
     disable_dns: false
+    opt:
+      metric: "50"
     state: present
   become: true
   tags:
@@ -279,29 +290,12 @@
   tags:
     - homeassistant
 
-# Reproducible-from-repo helper code, not service state -> /opt, not
-# /mnt/services (see CLAUDE.md service-vs-code split). Invoked by the
-# unit's ExecStartPost to pin HA's default route off the mac_iot macvlan.
-- name: Create /opt/homeassistant for helper scripts
+# The bridge network's route metric now orders HA's two defaults, so the
+# host-side pin helper that used to do it from ExecStartPost is gone.
+- name: Remove retired homeassistant route helper
   file:
     path: /opt/homeassistant
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - homeassistant
-
-- name: Deploy homeassistant default-route pin script
-  copy:
-    src: pin_default_route.sh
-    dest: /opt/homeassistant/pin_default_route.sh
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-  register: homeassistant_route_script
+    state: absent
   become: true
   tags:
     - homeassistant
@@ -401,7 +395,7 @@
     systemd_unit_args:
       src: homeassistant.service.j2
       condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
-      restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed or homeassistant_route_script.changed }}"
+      restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed }}"
   tags:
     - homeassistant
 

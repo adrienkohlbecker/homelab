@@ -18,6 +18,11 @@
   containers.podman.podman_network:
     name: homeassistant
     disable_dns: false
+    # Match the metric the homeassistant role sets; whichever role converges
+    # first creates the network, and HA's egress ordering depends on it (see
+    # roles/homeassistant/tasks/main.yml).
+    opt:
+      metric: "50"
     state: present
   become: true
   tags:
