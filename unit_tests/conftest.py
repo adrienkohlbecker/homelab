@@ -13,17 +13,15 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def load_role_module(relative_path: str) -> ModuleType:
-    """Import a standalone program shipped by a role, by repo-relative path.
+def load_repo_module(relative_path: str, *, name: str | None = None) -> ModuleType:
+    """Import a standalone program by repo-relative path.
 
-    Role programs live under ``roles/<r>/files/`` and are deployed as bare
-    executables, so they are not importable as package members. Registering the
-    module in ``sys.modules`` before executing it lets dataclasses and other
-    consumers of postponed annotations resolve them through the module registry.
+    Registering the module before executing it lets dataclasses and other
+    consumers of postponed annotations resolve it through the module registry.
     """
 
     module_path = _REPO_ROOT / relative_path
-    spec = importlib.util.spec_from_file_location(module_path.stem, module_path)
+    spec = importlib.util.spec_from_file_location(name or module_path.stem, module_path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)

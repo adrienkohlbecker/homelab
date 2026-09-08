@@ -1,14 +1,8 @@
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
+from conftest import load_repo_module
 
-_MODULE_PATH = Path(__file__).parents[1] / "mise-tasks" / "ci" / "ami_retention.py"
-_SPEC = importlib.util.spec_from_file_location("ami_retention", _MODULE_PATH)
-assert _SPEC
-assert _SPEC.loader
-ami_retention = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(ami_retention)
+ami_retention = load_repo_module("mise-tasks/ci/ami_retention.py")
 
 
 def image(image_id: str, created: str, *, name: str = "qemu-host") -> dict:

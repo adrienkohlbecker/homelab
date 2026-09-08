@@ -1,25 +1,13 @@
 """Unit tests for packer/publish.py — atomic artifact publishing."""
 
-import importlib.util
 import os
 import stat
 from pathlib import Path
 
 import pytest
+from conftest import load_repo_module
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "packer" / "publish.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("publish", _MODULE_PATH)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-pub = _load()
+pub = load_repo_module("packer/publish.py")
 
 
 class TestAcquireExclusive:

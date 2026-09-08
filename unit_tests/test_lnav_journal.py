@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from conftest import load_role_module
+from conftest import load_repo_module
 
-lnav_journal = load_role_module("roles/lnav/files/lnav_journal.py")
+lnav_journal = load_repo_module("roles/lnav/files/lnav_journal.py")
 
 
 def write_record(path: Path, timestamp: str, *, compressed: bool = False) -> None:

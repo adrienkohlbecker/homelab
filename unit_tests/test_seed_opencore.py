@@ -6,9 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import load_role_module
+from conftest import load_repo_module
 
-seed = load_role_module("roles/macos_vm/files/seed_opencore.py")
+seed = load_repo_module("roles/macos_vm/files/seed_opencore.py")
 
 
 @pytest.mark.parametrize("fmt", [plistlib.FMT_XML, plistlib.FMT_BINARY])

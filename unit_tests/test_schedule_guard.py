@@ -1,23 +1,9 @@
 """Unit tests for the scheduled pipeline full-universe status guard."""
 
-import importlib.util
-from pathlib import Path
-
 import pytest
+from conftest import load_repo_module
 
-_MODULE_PATH = Path(__file__).resolve().parent.parent / "mise-tasks" / "ci" / "schedule-guard.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("schedule_guard", _MODULE_PATH)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-schedule_guard = _load()
+schedule_guard = load_repo_module("mise-tasks/ci/schedule-guard.py", name="schedule_guard")
 
 
 def _mock_child_api(*, child_status="success", jobs=None):

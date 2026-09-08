@@ -10,9 +10,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from conftest import load_role_module
+from conftest import load_repo_module
 
-sce = load_role_module("roles/homeassistant/files/smtp_config_entry.py")
+sce = load_repo_module("roles/homeassistant/files/smtp_config_entry.py")
 
 
 def _args(**overrides: Any) -> SimpleNamespace:

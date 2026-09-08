@@ -11,9 +11,9 @@ import sys
 from typing import Any
 
 import pytest
-from conftest import load_role_module
+from conftest import load_repo_module
 
-efi = load_role_module("roles/boot/files/efi_entries.py")
+efi = load_repo_module("roles/boot/files/efi_entries.py")
 
 
 # --- Desired entry lists (mirror roles/boot/defaults/main.yml) ------------

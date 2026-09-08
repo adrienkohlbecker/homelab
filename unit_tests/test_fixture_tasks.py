@@ -4,33 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import importlib.util
 import os
 import shutil
-import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from typing import cast
 
+import build_box_deps as builder
 import pytest
 from machine import LaunchOptions
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-BUILD_BOX_DEPS = REPO_ROOT / "test" / "build_box_deps.py"
-
-
-def _load_builder() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("build_box_deps", BUILD_BOX_DEPS)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
 
 def test_clone_artifacts_copies_the_fixture_tree(tmp_path: Path) -> None:
-    builder = _load_builder()
     source = tmp_path / "source"
     destination = tmp_path / "destination"
     source.mkdir()
@@ -42,7 +27,6 @@ def test_clone_artifacts_copies_the_fixture_tree(tmp_path: Path) -> None:
 
 
 def test_build_one_clones_seeds_and_publishes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    builder = _load_builder()
     root = tmp_path / "homelab_ci"
     source = root / "noble" / "box"
     source.mkdir(parents=True)
@@ -72,7 +56,6 @@ def test_build_one_clones_seeds_and_publishes(tmp_path: Path, monkeypatch: pytes
 
 
 def test_main_builds_each_requested_release(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    builder = _load_builder()
     calls: list[tuple[Path, str]] = []
     monkeypatch.setenv("HOMELAB_CI_DIR", str(tmp_path))
     monkeypatch.setenv("usage_ubuntu", "noble resolute")
@@ -83,7 +66,6 @@ def test_main_builds_each_requested_release(tmp_path: Path, monkeypatch: pytest.
 
 
 def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    builder = _load_builder()
     calls: list[object] = []
     constructor: dict[str, object] = {}
 

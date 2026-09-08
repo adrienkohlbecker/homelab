@@ -1,20 +1,16 @@
-import importlib.util
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from botocore.exceptions import EndpointConnectionError
+from conftest import load_repo_module
 
 _MODULE_PATH = Path(__file__).parents[1] / "mise-tasks" / "ci" / "audit-aws.py"
 _MODULE_DIR = str(_MODULE_PATH.parent)
 if _MODULE_DIR not in sys.path:
     sys.path.insert(0, _MODULE_DIR)
-_SPEC = importlib.util.spec_from_file_location("audit_aws", _MODULE_PATH)
-assert _SPEC is not None
-assert _SPEC.loader is not None
-audit_aws = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(audit_aws)
+audit_aws = load_repo_module("mise-tasks/ci/audit-aws.py", name="audit_aws")
 
 
 def image(image_id, *, tags, snapshot_id):

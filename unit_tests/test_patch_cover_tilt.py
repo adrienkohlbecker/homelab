@@ -3,9 +3,9 @@
 import sys
 
 import yaml
-from conftest import load_role_module
+from conftest import load_repo_module
 
-pct = load_role_module("roles/z2m/files/patch_cover_tilt.py")
+pct = load_repo_module("roles/z2m/files/patch_cover_tilt.py")
 
 
 class TestPatch:

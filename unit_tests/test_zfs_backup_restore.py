@@ -3,9 +3,9 @@
 import subprocess
 
 import pytest
-from conftest import load_role_module
+from conftest import load_repo_module
 
-restore = load_role_module("roles/zfs_autobackup/files/zfs_backup_restore.py")
+restore = load_repo_module("roles/zfs_autobackup/files/zfs_backup_restore.py")
 
 _SNAPSHOTS = ["bak-20260801000000", "bak-20260802000000", "bak-20260803000000"]
 

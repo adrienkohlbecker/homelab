@@ -5,9 +5,9 @@ netdata instance.
 """
 
 import pytest
-from conftest import load_role_module
+from conftest import load_repo_module
 
-ag = load_role_module("roles/homepage/files/alerts_generate.py")
+ag = load_repo_module("roles/homepage/files/alerts_generate.py")
 
 
 # ---------------------------------------------------------------------------

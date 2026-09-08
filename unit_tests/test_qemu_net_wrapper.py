@@ -6,18 +6,9 @@ id + host-forwards out of packer's generated `-netdev user,...` and rebuilding
 them as passt port specs -- is pure string work and gets pinned here.
 """
 
-import importlib.util
-from pathlib import Path
-
 import pytest
 
-_WRAPPER = Path(__file__).parents[1] / "packer" / "qemu_net_wrapper.py"
-_spec = importlib.util.spec_from_file_location("qemu_net_wrapper", _WRAPPER)
-assert _spec is not None
-assert _spec.loader is not None
-wrapper = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(wrapper)
-
+import packer.qemu_net_wrapper as wrapper
 
 # A representative argv slice as packer's qemu plugin emits it: the user-netdev
 # with the SSH host-forward, plus the device that references it by id.

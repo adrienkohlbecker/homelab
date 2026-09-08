@@ -11,33 +11,13 @@ side-effect-free: both modules do their work under ``if __name__ == "__main__"``
 """
 
 import argparse
-import importlib.util
 import re
-import sys
-from pathlib import Path
-from types import ModuleType
 
 import pytest
+from conftest import load_repo_module
 
-_TASKS = Path(__file__).resolve().parent.parent / "mise-tasks"
-_UPLOAD_PATH = _TASKS / "packer" / "upload-s3.py"
-_HYDRATE_PATH = _TASKS / "ci" / "hydrate-qemu-images.py"
-
-
-def _load(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    # Register before exec so dataclasses can resolve string annotations
-    # (the modules use `from __future__ import annotations`).
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-upload = _load("upload_s3", _UPLOAD_PATH)
-hydrate = _load("hydrate_qemu_images", _HYDRATE_PATH)
+upload = load_repo_module("mise-tasks/packer/upload-s3.py", name="upload_s3")
+hydrate = load_repo_module("mise-tasks/ci/hydrate-qemu-images.py", name="hydrate_qemu_images")
 
 
 def _args(**overrides: object) -> argparse.Namespace:
