@@ -1,5 +1,12 @@
 # Resolve includes, secrets, and integration schemas through Home Assistant's
 # own checker before HTTP probes obscure configuration failures.
+#
+# This is also the only coverage the `homeassistant:` core config block gets.
+# HA overlays it onto .storage/core.config in memory and writes nothing back,
+# every endpoint reporting the running config needs an API token, and the log
+# timestamps that look like a tell are really the units --tz. check_config does
+# run the block through CORE_CONFIG_SCHEMA, so a bad key, a bad coordinate, or
+# a vault reference that rendered empty all fail here.
 - name: _verify | Homeassistant configuration is valid
   command:
     argv:

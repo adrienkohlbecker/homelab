@@ -124,6 +124,21 @@
   tags:
     - homeassistant
 
+# The house location renders into configuration.yaml's `homeassistant:` block.
+# Vaulted, so a missing vault-id would otherwise render an empty latitude and
+# put HA on the null island rather than failing.
+- name: Assert homeassistant location inputs are set
+  assert:
+    that:
+      - homeassistant_latitude | default('') | string is match('^-?[0-9.]+$')
+      - homeassistant_longitude | default('') | string is match('^-?[0-9.]+$')
+      - homeassistant_elevation | default('') | string is match('^-?[0-9]+$')
+    fail_msg: >-
+      homeassistant_latitude/longitude/elevation must be set (group_vars) --
+      they render HA core location config in configuration.yaml.
+  tags:
+    - homeassistant
+
 # HA-flavoured YAML uses custom tags (!include, !include_dir_merge_named,
 # !secret, ...). yaml.safe_load chokes on those, so register a stub
 # constructor that returns None for any !-prefixed tag before parsing.

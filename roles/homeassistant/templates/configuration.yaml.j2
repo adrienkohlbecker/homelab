@@ -2,6 +2,37 @@
 # Loads default set of integrations. Do not remove.
 default_config:
 
+# Core location and locale. These default to HA's GUI-owned .storage/core.config,
+# but this block still overrides it outright -- so they are declared here rather
+# than living only in the UI, where a from-nothing rebuild would lose them.
+#
+# All-or-nothing on purpose. Setting any key here flips config_source to `yaml`,
+# and the frontend gates Settings -> System -> General and the URL page on
+# config_source being storage/default -- so the page goes read-only whether or
+# not a given key is listed. Naming only some of them would lock the page over
+# values still owned solely by .storage, which is worse than either extreme.
+# That is also why `name` and `radius` appear despite matching HA's defaults.
+#
+# Consequence to know before editing in the UI: those fields are now read-only
+# there. Changing the house location means editing the vault and re-converging.
+homeassistant:
+  name: Home
+  # Vaulted -- the coordinates identify the house and this repo is public.
+  latitude: {{ homeassistant_latitude }}
+  longitude: {{ homeassistant_longitude }}
+  elevation: {{ homeassistant_elevation }}
+  # Radius of the `zone.home` geofence, in metres.
+  radius: 100
+  unit_system: metric
+  time_zone: {{ system_timezone }}
+  currency: EUR
+  country: FR
+  language: en
+  # Same vhost the nginx_site call below the role builds. HA hands this to the
+  # companion apps and to any integration that renders an absolute link.
+  external_url: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/
+
+
 # Load frontend themes from the themes folder
 frontend:
   themes: !include_dir_merge_named themes
