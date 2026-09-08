@@ -198,26 +198,49 @@
   changed_when: false
   become: true
 
-- name: _verify | Homeassistant uses its bridge for ordinary egress
+# Asserting only which iface wins `route get` is not enough: with the macvlan
+# and the bridge both holding a default at the same metric, the winner is
+# decided by FIB insertion order, so the check can pass on a fixture while prod
+# egresses out the IoT VLAN (where the inter-VLAN policy drops home-VLAN
+# traffic). Assert the stronger invariant instead -- the bridge default must
+# *strictly* outrank every other default. That holds whether the macvlan
+# default is down-ranked or absent entirely, and fails on a tie.
+#
+# Parsing /proc/net/route rather than `ip` keeps this independent of which
+# iproute2 flavour the image ships (busybox `ip` has no --json).
+- name: _verify | Homeassistant bridge default strictly outranks the macvlan default
   command:
     argv:
       - podman
       - exec
       - homeassistant
-      - ip
-      - -4
-      - route
-      - get
-      - 1.1.1.1
-  register: _homeassistant_default_route
+      - python3
+      - -c
+      - |
+        import sys
+
+        bridge = sys.argv[1]
+        defaults = []
+        with open("/proc/net/route") as fh:
+            next(fh)
+            for line in fh:
+                cols = line.split()
+                # destination and genmask both 0.0.0.0 == default route
+                if cols[1] == "00000000" and cols[7] == "00000000":
+                    defaults.append((int(cols[6]), cols[0]))
+
+        if not defaults:
+            sys.exit("no default route in the container")
+
+        defaults.sort()
+        best = [d for d in defaults if d[0] == defaults[0][0]]
+        if len(best) > 1:
+            sys.exit(f"defaults tie at metric {defaults[0][0]}, winner is insertion-order luck: {defaults}")
+        if best[0][1] != bridge:
+            sys.exit(f"lowest-metric default is on {best[0][1]}, expected {bridge}: {defaults}")
+        print(f"ok: {defaults}")
+      - "{{ homeassistant_networks | selectattr('name', 'equalto', 'homeassistant') | map(attribute='interface_name') | first }}"
   changed_when: false
-  failed_when: >-
-    ' dev ' ~ (
-      homeassistant_networks
-      | selectattr('name', 'equalto', 'homeassistant')
-      | map(attribute='interface_name')
-      | first
-    ) ~ ' ' not in _homeassistant_default_route.stdout
   become: true
 
 - name: _verify | Homeassistant mac_iot adapter has its declared identity
