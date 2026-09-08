@@ -41,11 +41,3 @@
   become: true
   tags:
     - docker_client
-
-- name: Remove shell-specific Docker host shim
-  file:
-    path: /etc/profile.d/docker_client.sh
-    state: absent
-  become: true
-  tags:
-    - docker_client
