@@ -79,6 +79,14 @@ ExecStart=/usr/bin/podman run \
     --health-start-period "100s" \
     --stop-timeout 120 \
     {{ homeassistant_image }}
+{# Prefer bridge NAT for off-IoT egress while retaining mac_iot as a fallback. #}
+{# netavark 1.4.0 (noble) ignores the network-level no_default_route option,   #}
+{# so the macvlan still installs a default at the same metric as the bridge    #}
+{# and wins egress by FIB insertion order -- which the UDM then drops as       #}
+{# IoT->home traffic. The host-side script discovers the running container's   #}
+{# PID and gateway and down-ranks that default. Retire it once netavark is     #}
+{# new enough to honour the option (>= 1.7).                                   #}
+ExecStartPost=/opt/homeassistant/pin_default_route.sh
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

@@ -46,6 +46,11 @@
       # so containers and the host iface interoperate on the shared parent.
       mode: bridge
       # Macvlan provides direct LAN presence, not an ordinary egress path.
+      # Inert on noble's netavark 1.4.0, which predates the option (>= 1.7):
+      # podman stores it, netavark installs the default route anyway. Kept so
+      # the intent is declared where it belongs; consumers that must not egress
+      # over their macvlan enforce it host-side until netavark catches up (see
+      # homeassistant's ExecStartPost pin).
       no_default_route: "1"
   become: true
   tags:
