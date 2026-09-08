@@ -48,10 +48,7 @@ zbm_install_make_binary_wrappers "$wrapper_dir"
 export PATH="${wrapper_dir}:${PATH}"
 
 work_src="${workdir}/src"
-git clone --no-hardlinks "$src_dir" "$work_src" >/dev/null
-git -c advice.detachedHead=false -C "$work_src" checkout -q "v${ZBM_VERSION}"
-git -C "$work_src" reset --hard "v${ZBM_VERSION}" >/dev/null
-git -C "$work_src" clean -fdx >/dev/null
+git clone --no-hardlinks --branch "v${ZBM_VERSION}" "$src_dir" "$work_src" >/dev/null
 
 git -C "$work_src" apply "$repo_root/zbm/recovery-overlay.patch"
 
