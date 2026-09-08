@@ -7,4 +7,4 @@
 #USAGE complete "ubuntu" run="printf 'noble\nresolute\n'"
 set -euo pipefail
 
-exec uv run python test/build_box_deps.py
+exec test/build_box_deps.py
