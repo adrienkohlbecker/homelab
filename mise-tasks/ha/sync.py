@@ -16,7 +16,6 @@ push --dry-run: compare the host to the working tree, validate and print what
 would change, but do not write to the host or move git refs.
 """
 
-import hashlib
 import os
 import subprocess
 import sys
@@ -95,10 +94,6 @@ def enumerate_files(for_pull: bool = False) -> list[SyncFile]:
     ]
 
 
-def sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def host_file(rel: str) -> bytes | None:
     r = subprocess.run(
         ["ssh", HOST, f"sudo cat {HOST_DIR}/{rel} 2>/dev/null"],
@@ -153,8 +148,8 @@ def sh(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subproces
     return subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
 
 
-def blob_sha_at(ref: str, filename: str) -> str | None:
-    """sha256 of file's blob at git ref; None if the file doesn't exist at that ref."""
+def blob_at(ref: str, filename: str) -> bytes | None:
+    """File content at a Git ref, or None if the file does not exist there."""
     r = subprocess.run(
         ["git", "show", f"{ref}:{filename}"],
         cwd=CLONE,
@@ -163,17 +158,17 @@ def blob_sha_at(ref: str, filename: str) -> str | None:
     )
     if r.returncode != 0:
         return None
-    return sha256(r.stdout)
+    return r.stdout
 
 
-def worktree_sha(filename: str) -> str | None:
-    """sha256 of the file as it sits in the clone working tree; None if absent.
+def worktree_file(filename: str) -> bytes | None:
+    """File content from the clone working tree, or None if absent.
 
     Used by `push --dry-run`, which doesn't auto-commit, so the comparison point
     is the working tree (uncommitted edits included) rather than the HEAD blob.
     """
     try:
-        return sha256((CLONE / filename).read_bytes())
+        return (CLONE / filename).read_bytes()
     except OSError:
         return None
 
@@ -316,9 +311,9 @@ def do_push(dry_run: bool = False) -> None:
     if resolve_ref(f"refs/tags/{SYNCED_TAG}") is None:
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
     # Per-file state model:
-    #   tag_blob  -- sha at last_synced_to_host, or None if file is new to sync
-    #   head_blob -- sha at clone HEAD (always exists; file is in HEAD by definition)
-    #   host_blob -- sha on lab, or None if file isn't deployed yet
+    #   tag_bytes  -- content at last_synced_to_host, or None if new to sync
+    #   head_bytes -- content at clone HEAD (always exists by definition)
+    #   host_bytes -- content on lab, or None if not deployed yet
     # diverged   = host has stale-but-present content edited away from tag
     #              (would clobber on push without a pull first)
     # changed    = host content differs from HEAD (missing-on-host counts)
@@ -327,20 +322,19 @@ def do_push(dry_run: bool = False) -> None:
     for file in enumerate_files():
         # dry-run compares the working tree (uncommitted edits included); a real
         # push has already folded those into HEAD via commit_and_push.
-        head_blob = worktree_sha(file.rel) if dry_run else blob_sha_at("HEAD", file.rel)
-        tag_blob = blob_sha_at(SYNCED_TAG, file.rel)
+        head_bytes = worktree_file(file.rel) if dry_run else blob_at("HEAD", file.rel)
+        tag_bytes = blob_at(SYNCED_TAG, file.rel)
         host_bytes = host_file(file.rel)
-        host_blob = sha256(host_bytes) if host_bytes is not None else None
         # Push-only files (pull=False) are repo-authoritative: the host copy is
         # never captured back (do_pull skips them), so a host/tag mismatch must
         # not block the push -- a pull can't resolve it (it would deadlock: the
         # role seeds a dashboards/ placeholder that differs from the repo). Only
         # guard divergence for round-tripped files, where a stale host/GUI edit
         # would otherwise be clobbered.
-        if file.pull and tag_blob is not None and host_blob is not None and host_blob != tag_blob:
+        if file.pull and tag_bytes is not None and host_bytes is not None and host_bytes != tag_bytes:
             diverged.append(file.rel)
             continue
-        if host_blob != head_blob:
+        if host_bytes != head_bytes:
             changed.append(PendingChange(file, host_bytes))
     if diverged:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
