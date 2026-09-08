@@ -114,18 +114,6 @@
   tags:
     - authelia
 
-- name: Remove retired authelia secrets
-  when: not ansible_check_mode or authelia_podman_available
-  containers.podman.podman_secret:
-    name: "{{ item }}"
-    state: absent
-  loop:
-    - authelia_jwt_secret
-    - authelia_session_secret
-  become: true
-  tags:
-    - authelia
-
 - name: Configure nginx
   import_role:
     name: nginx
