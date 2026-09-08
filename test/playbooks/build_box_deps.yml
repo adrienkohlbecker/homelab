@@ -55,7 +55,6 @@
         tasks_from: configure
       vars:
         nexus_url: "" # noqa: var-naming[no-role-prefix] -- shared mirror selector under test
-        test_in_aws: false # noqa: var-naming[no-role-prefix] -- shared environment selector under test
 
     # Fail closed if a source-owning entrypoint missed any active apt source.
     # Ansible backups retain the old URLs by design and fall outside these
