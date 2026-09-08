@@ -1,8 +1,7 @@
 # DNS records for fahm.fr.
 #
-# Records (A/CNAME/TXT/MX) live in a single map; one cloudflare_dns_record
-# resource iterates it. SRV records sit in their own map + resource because
-# they carry a nested data {} block rather than a flat content string.
+# Records live in a single map and cloudflare_dns_record resource. SRV inputs
+# use a compact source map that is expanded into the common record shape.
 #
 # Map entries are keyed by an opaque slug (e.g. a_box, mx_fahm_fr_in1)
 # and carry type/name/content explicitly in the value, so the resource
@@ -22,7 +21,7 @@
 # and mailgun+ondmarc (noreply.fahm.fr).
 
 locals {
-  fahm_fr_records = {
+  fahm_fr_records = merge({
     # A — mail is Fastmail's relay. Host records derive from
     # data/network_topology.yml: lab/pug/bunk resolve to their Tailscale CGNAT
     # IPs so tailnet clients reach them peer-to-peer. AdGuard split-horizon
@@ -67,7 +66,15 @@ locals {
     mx_wildcard_in2 = { type = "MX", name = "*.fahm.fr", content = "in2-smtp.messagingengine.com", priority = 20, comment = "fastmail" }
     mx_noreply_mxa  = { type = "MX", name = "noreply.fahm.fr", content = "mxa.eu.mailgun.org", priority = 10, comment = "mailgun" }
     mx_noreply_mxb  = { type = "MX", name = "noreply.fahm.fr", content = "mxb.eu.mailgun.org", priority = 10, comment = "mailgun" }
-  }
+    }, {
+    for name, data in local.fahm_fr_srv_records : name => {
+      type     = "SRV"
+      name     = name
+      priority = data.priority
+      comment  = "fastmail"
+      data     = data
+    }
+  })
 }
 
 resource "cloudflare_dns_record" "fahm_fr" {
@@ -76,18 +83,17 @@ resource "cloudflare_dns_record" "fahm_fr" {
   zone_id  = local.zones["fahm.fr"]
   type     = each.value.type
   name     = each.value.name
-  content  = each.value.content
+  content  = try(each.value.content, null)
   priority = try(each.value.priority, null)
   proxied  = try(each.value.proxied, false)
   ttl      = 1
   comment  = try(each.value.comment, null)
   tags     = []
+
+  data = try(each.value.data, null)
 }
 
-# ---- SRV records (Fastmail service discovery) ----
-# Separate from the flat record map because SRV carries a nested data {}
-# block. All SRV records in this zone are Fastmail; comment is hardcoded
-# resource-wide.
+# ---- SRV record inputs (Fastmail service discovery) ----
 
 locals {
   fahm_fr_srv_records = {
@@ -106,22 +112,62 @@ locals {
   }
 }
 
-resource "cloudflare_dns_record" "fahm_fr_srv" {
-  for_each = local.fahm_fr_srv_records
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_autodiscover._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_autodiscover._tcp.fahm.fr"]
+}
 
-  zone_id  = local.zones["fahm.fr"]
-  type     = "SRV"
-  name     = each.key
-  priority = each.value.priority
-  proxied  = false
-  ttl      = 1
-  comment  = "fastmail"
-  tags     = []
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_caldav._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_caldav._tcp.fahm.fr"]
+}
 
-  data = {
-    port     = each.value.port
-    priority = each.value.priority
-    target   = each.value.target
-    weight   = each.value.weight
-  }
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_caldavs._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_caldavs._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_carddav._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_carddav._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_carddavs._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_carddavs._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_imap._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_imap._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_imaps._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_imaps._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_jmap._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_jmap._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_pop3._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_pop3._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_pop3s._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_pop3s._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_submission._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_submission._tcp.fahm.fr"]
+}
+
+moved {
+  from = cloudflare_dns_record.fahm_fr_srv["_submissions._tcp.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["_submissions._tcp.fahm.fr"]
 }
