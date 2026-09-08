@@ -84,6 +84,30 @@
       - _zfs_verify_zed.status.ActiveState == 'active'
       - _zfs_verify_zed.status.UnitFileState == 'enabled'
 
+- name: _verify | Exercise the package-change restart path
+  when: zfs_root
+  import_tasks: zed_service.yml
+  vars:
+    zfs_apt:
+      changed: true
+    zfs_zedrc:
+      changed: false
+
+- name: _verify | Read the restarted zed process
+  when: zfs_root
+  systemd:
+    name: zfs-zed
+  register: _zfs_verify_zed_after_restart
+  become: true
+
+- name: _verify | Package changes restart zed
+  when: zfs_root
+  assert:
+    that:
+      - _zfs_verify_zed.status.MainPID | int > 0
+      - _zfs_verify_zed_after_restart.status.MainPID | int > 0
+      - _zfs_verify_zed_after_restart.status.MainPID != _zfs_verify_zed.status.MainPID
+
 - name: _verify | Read zed.rc notification config
   when: zfs_root
   command: grep -E '^ZED_EMAIL_ADDR=' /etc/zfs/zed.d/zed.rc
