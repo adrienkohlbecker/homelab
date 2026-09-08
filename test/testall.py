@@ -25,7 +25,6 @@ from pathlib import Path
 
 from machine import (
     MACHINE_CHOICES,
-    PEAK_KB_SENTINEL_PREFIX,
     UBUNTU_RELEASES,
     imagedir_for_host,
     sweep_stale_workdirs,
@@ -35,7 +34,7 @@ from tabulate import tabulate
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
-JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "PeakKB", "Started"]
+JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "Started"]
 LIVENESS_TICK_SECONDS = 300.0  # 5 minutes
 
 # Flags that describe harness control flow rather than Ansible behavior.
@@ -57,10 +56,6 @@ class JobResult:
     runtime: float
     exitval: int
     started_at: str
-    # Peak resident memory captured by testrole.py (kernel VmHWM for qemu).
-    # 0 means we have no measurement -- the child died before stop(), or the
-    # host can't read the source (e.g. macOS).
-    peak_kb: int = 0
 
 
 def _comma_separated(
@@ -171,7 +166,6 @@ def _read_joblog() -> list[JobResult]:
                     runtime=float(row["Runtime"]),
                     exitval=int(row["Exitval"]),
                     started_at=row["Started"],
-                    peak_kb=int(row["PeakKB"]),
                 )
             )
     return results
@@ -210,20 +204,15 @@ async def _run_role(
         started_at = datetime.fromtimestamp(start_time, tz=UTC).isoformat(timespec="seconds")
         print(f"[{seq}] {cell.machine}:{cell.ubuntu}:{cell.role} starting")
 
-        # stdout=PIPE so we can scan for testrole's PEAK_KB sentinel; testrole
-        # already tees its full transcript into a per-run ANSI log via
-        # tee_output, so dropping stdout on the floor here doesn't lose
-        # information. stderr stays DEVNULL -- testrole routes everything
-        # through stdout.
+        # testrole tees its full transcript into a per-run ANSI log, so its
+        # output can stay detached here. It routes stderr through stdout.
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
-        assert proc.stdout is not None
         liveness = asyncio.create_task(_emit_liveness(seq, cell, start_time))
-        peak_reader = asyncio.create_task(_capture_peak_kb(proc.stdout))
 
         try:
             try:
@@ -240,10 +229,6 @@ async def _run_role(
             liveness.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await liveness
-
-        # Reader naturally returns when testrole's stdout closes on exit;
-        # await it so we see the final PEAK_KB line even on slow flushes.
-        peak_kb = await peak_reader
 
         runtime = time.time() - start_time
         # proc.returncode is always set after a successful proc.wait(); a
@@ -262,28 +247,7 @@ async def _run_role(
         runtime=runtime,
         exitval=exitval,
         started_at=started_at,
-        peak_kb=peak_kb,
     )
-
-
-async def _capture_peak_kb(stream: asyncio.StreamReader) -> int:
-    """Drain a child's stdout and return the last PEAK_KB= sentinel value.
-
-    testrole.py emits at most one PEAK_KB= line at end-of-run, but we keep
-    'last wins' semantics so a future caller that emits more than one (e.g.
-    a per-phase tracker) still gets the final value. Returns 0 when the
-    sentinel was never emitted -- matches Machine.peak_rss_kb's
-    'no measurement' default.
-    """
-    peak = 0
-    while True:
-        line_bytes = await stream.readline()
-        if not line_bytes:
-            return peak
-        line = line_bytes.decode("utf-8", errors="replace").rstrip("\r\n")
-        if line.startswith(PEAK_KB_SENTINEL_PREFIX):
-            with contextlib.suppress(ValueError):
-                peak = int(line[len(PEAK_KB_SENTINEL_PREFIX) :])
 
 
 async def run_all(
@@ -357,7 +321,7 @@ def _print_failure_table(failures: list[JobResult]) -> None:
 
 
 def _write_joblog(results: list[JobResult]) -> None:
-    """Write a compact job log with role, ubuntu, machine, runtime, exit code, peak RSS, and start time."""
+    """Write a compact job log with role, ubuntu, machine, runtime, exit code, and start time."""
     with LOG_FILE.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=JOBLOG_FIELDS, delimiter="\t")
         writer.writeheader()
@@ -369,7 +333,6 @@ def _write_joblog(results: list[JobResult]) -> None:
                     "Machine": result.cell.machine,
                     "Runtime": f"{result.runtime:.3f}",
                     "Exitval": result.exitval,
-                    "PeakKB": result.peak_kb,
                     "Started": result.started_at,
                 }
             )

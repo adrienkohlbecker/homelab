@@ -18,7 +18,6 @@ from pathlib import Path
 
 from machine import (
     MACHINE_CHOICES,
-    PEAK_KB_SENTINEL_PREFIX,
     Machine,
     imagedir_for_host,
     sweep_stale_workdirs,
@@ -330,14 +329,6 @@ def main() -> int:
             print_line(f"{parsed_args.role}.{parsed_args.machine} crashed", error=True)
             rc = 1
         finally:
-            # Emit peak RSS even on failure -- a timed-out run is often the
-            # most interesting reading. peak_rss_kb stays 0 when the read
-            # failed (cgroup v1 host, qemu died before stop, etc.), in which
-            # case we have nothing useful to publish. The sentinel goes
-            # through print_line so it lands in both the per-run ANSI log
-            # (eyeballable) and the stdout pipe testall.py reads from.
-            if m.peak_rss_kb > 0:
-                print_line(f"{PEAK_KB_SENTINEL_PREFIX}{m.peak_rss_kb}")
             _print_phase_summary()
 
     # Clean passes keep the joblog summary and drop noisy per-run artifacts;

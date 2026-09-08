@@ -373,12 +373,6 @@ PUBLISH_LOCK_TIMEOUT = 300
 # surfaces rather than hanging every concurrent minimal cell.
 CLOUDIMG_LOCK_TIMEOUT = 600
 
-# Sentinel printed by testrole.py at end-of-run so testall.py can capture
-# the per-machine peak RSS via stdout. Kept simple on purpose: a single
-# `key=int` line is trivial to parse and unlikely to collide with the
-# free-form output ansible/qemu emit upstream.
-PEAK_KB_SENTINEL_PREFIX = "PEAK_KB="
-
 
 class Machine:
     """Start disposable QEMU guests for role-level integration tests."""
@@ -523,7 +517,6 @@ class Machine:
         self._live_lock_fd = -1
         self._publish_lock_fd = -1
         self._ansible_staged = False
-        self.peak_rss_kb = 0
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
 
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -1129,13 +1122,6 @@ class Machine:
         if pid_path.exists():
             with contextlib.suppress(ValueError):
                 pid = int(pid_path.read_text().strip())
-
-        if pid is not None:
-            # Snapshot kernel-tracked peak RSS before we kill qemu. VmHWM is
-            # monotonic so a single read is exact; doing it here also covers
-            # the --keep case where the user's interactive session can have
-            # added to the high-water mark after the test body finished.
-            self.peak_rss_kb = _read_vm_hwm(pid)
 
         try:
             if pid is not None:
@@ -1902,19 +1888,3 @@ def _workdir_is_orphan(workdir: Path) -> bool:
         return True
     finally:
         os.close(fd)
-
-
-def _read_vm_hwm(pid: int) -> int:
-    """Return the kernel-tracked peak RSS in kB for *pid*, or 0 if unreadable.
-
-    VmHWM ("high-water mark") in /proc/<pid>/status is monotonic and maintained
-    by the kernel, so a single read at process exit gives the exact peak —
-    no sampling loop required.
-    """
-    try:
-        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
-            if line.startswith("VmHWM:"):
-                return int(line.split()[1])
-    except FileNotFoundError, ProcessLookupError, ValueError:
-        pass
-    return 0

@@ -149,24 +149,6 @@ class TestSweepStaleWorkdirs:
         assert workdir.exists()
 
 
-# ---------------------------------------------------------------------------
-# _read_vm_hwm
-# ---------------------------------------------------------------------------
-
-
-class TestReadVmHwm:
-    def test_returns_zero_for_nonexistent_pid(self) -> None:
-        assert machine._read_vm_hwm(999999999) == 0
-
-    def test_returns_positive_for_self(self) -> None:
-        pid = os.getpid()
-        result = machine._read_vm_hwm(pid)
-        if Path(f"/proc/{pid}/status").exists():
-            assert result > 0
-        else:
-            assert result == 0
-
-
 def test_failure_artifact_collection_continues_after_capture_error(
     machine_factory: Callable[..., machine.Machine],
     monkeypatch: pytest.MonkeyPatch,
