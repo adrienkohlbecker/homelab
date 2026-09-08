@@ -21,7 +21,6 @@ sudo apt-get update -qq
     unzip \
     gpg \
     gpg-agent \
-    apt-transport-https \
     qemu-system-x86 \
     qemu-utils \
     ovmf \
@@ -32,7 +31,6 @@ sudo apt-get update -qq
     python3-yaml \
     build-essential \
     zstd \
-    tar \
     mdadm \
     ec2-instance-connect
 )
