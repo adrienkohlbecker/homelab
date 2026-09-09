@@ -16,11 +16,13 @@
   tags:
     - apt
 
-# Resolute's Rust coreutils selector differs from GNU timeout's signal/exit
-# contract used by the QEMU watchdog. Keep the complete GNU implementation
-# rather than carrying per-command compatibility workarounds.
-- name: Read GNU coreutils selection on Resolute
-  when: ansible_distribution_release == 'resolute'
+# Ubuntu ships the Rust coreutils selector by default from 25.10 onward, and
+# its timeout differs from GNU timeout in the signal/exit contract the QEMU
+# watchdog relies on. Keep the complete GNU implementation rather than carrying
+# per-command compatibility workarounds. Blacklisting Noble rather than naming
+# each successor keeps future releases covered by default.
+- name: Read the GNU coreutils selection
+  when: ansible_distribution_release != 'noble'
   command:
     argv:
       - dpkg-query
@@ -36,9 +38,9 @@
 
 # Solver3 will not infer removal of the conflicting uutils provider. Express
 # both sides in one apt transaction so dry-run and converge have the same plan.
-- name: Select GNU coreutils on Resolute  # noqa: command-instead-of-module
+- name: Select GNU coreutils  # noqa: command-instead-of-module
   when:
-    - ansible_distribution_release == 'resolute'
+    - ansible_distribution_release != 'noble'
     - apt_coreutils_from_gnu.rc != 0 or 'install ok installed' not in apt_coreutils_from_gnu.stdout
   command: >-
     apt-get -y --allow-remove-essential -o DPkg::Lock::Timeout=300
