@@ -56,8 +56,10 @@
   failed_when: "'192.0.2.99' in netplan_verify_restored_addrs.stdout"
   become: true
 
+# example.com is IANA-reserved and permanently delegated, so the probe measures
+# resolved recovering its upstreams rather than a third party's availability.
 - name: _verify rejection | Resolve a public name after rollback
-  command: resolvectl query --cache=no wikipedia.org
+  command: resolvectl query --cache=no example.com
   register: netplan_verify_restored_dns
   retries: 3
   delay: 2
