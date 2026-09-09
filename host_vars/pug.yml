@@ -113,9 +113,6 @@ netdata_zfspool_thresholds:
   apoc: [ 85, 90, 95 ]
 netdata_diskspace_blocklist:
   - /
-  - /boot
-  - /mnt/old_bionic
-  - /mnt/old_services
   - /mnt/services
 
 # Home exit/subnet router paired with lab. The advertised physical partition is
