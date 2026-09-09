@@ -303,9 +303,7 @@
 # theme.conf fresh from the ESP at every boot, so a theme change takes effect
 # at the next natural boot without forcing one.
 - name: Ask to reboot
-  when: >-
-    refind_conf.changed
-    or refind_azerty_keymap_driver.changed
+  when: refind_conf.changed or refind_azerty_keymap_driver.changed
   file:
     path: /var/run/reboot-required
     state: touch
