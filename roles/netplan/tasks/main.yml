@@ -1,11 +1,3 @@
-# The base play invokes this role unconditionally; leave networking untouched
-# on hosts without an Ansible-owned netplan configuration.
-- name: End the netplan role on hosts without managed configuration
-  when: netplan is undefined
-  meta: end_role
-  tags:
-    - netplan
-
 - name: Configure host networking via netplan
   tags:
     - netplan
