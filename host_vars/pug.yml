@@ -60,6 +60,7 @@ fan2go_enabled: true
 certbot_extra_sans:
   - dns.{{ domain }}
 
+netdata_intelgpu_enabled: true
 netdata_contexts:
   - netfilter.conntrack_sockets
   - cgroup.cpu_limit

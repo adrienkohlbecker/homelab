@@ -132,7 +132,9 @@
     - netdata
 
 - name: Install intel-gpu-tools
-  when: ansible_architecture == "x86_64"
+  when:
+    - netdata_intelgpu_enabled
+    - ansible_architecture == "x86_64"
   apt:
     pkg: intel-gpu-tools
     cache_valid_time: 3600
@@ -146,8 +148,21 @@
     netdata_args:
       src: intelgpu.conf
       dest: go.d/intelgpu.conf
-      condition: '{{ ansible_architecture == "x86_64" and not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}'
+      condition: >-
+        {{ netdata_intelgpu_enabled
+           and ansible_architecture == 'x86_64'
+           and not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  tags:
+    - netdata
+
+- name: Remove stale intel gpu metrics config
+  when: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
+  file:
+    path: /etc/netdata/go.d/intelgpu.conf
+    state: absent
+  register: netdata_intelgpu_absent
+  become: true
   tags:
     - netdata
 
@@ -215,6 +230,7 @@
          if netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed
             or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed
             or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed
+            or netdata_intelgpu_absent.changed
          else 'started' }}
   become: true
   tags:

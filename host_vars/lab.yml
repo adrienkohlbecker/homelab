@@ -159,6 +159,7 @@ minio_buckets:
   - arq-game
   - terraform
   - test
+netdata_intelgpu_enabled: true
 netdata_contexts:
   - pci.rootport_aer_correctable
   - netfilter.conntrack_sockets

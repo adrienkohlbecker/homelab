@@ -88,6 +88,7 @@ dns_keepalived_priority: 5
 
 minio_buckets:
   - test
+netdata_intelgpu_enabled: true
 netdata_contexts:
   - system.cpu              # always-live chart, baseline
   - foo.does_not_exist      # never-existed chart, probes the "missing-chart" gap
