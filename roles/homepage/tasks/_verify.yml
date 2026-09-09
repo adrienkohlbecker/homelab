@@ -41,22 +41,20 @@
     fail_msg: "Host {{ item }} missing from rendered HTML"
   loop: "{{ homepage_netdata_hosts }}"
 
-# Functional check on the per-host error path (A3-lite). The box fixture sets
-# homepage_netdata_hosts = [box] and the test VM has no real netdata on
-# :19999, so _fetch_one's bare-except is guaranteed to fire and render_html
-# should emit `<div class="err">`. A regression that silently drops the
-# error rendering (e.g. _fetch_one swallowing the entry, or render_html
-# stripping the err branch) would pass the "host name in content" check
-# above (because the <h2> still renders) but fail this one. Box-only — on
-# lab-qemu/pug-qemu the netdata targets may be reachable from the test VM.
-- name: _verify | Per-host error path renders on test box
-  when: inventory_hostname == 'box'
+# The designated fixture points homepage_netdata_hosts at an unreachable
+# Netdata endpoint, so _fetch_one's bare-except is guaranteed to fire and
+# render_html should emit `<div class="err">`. A regression that silently
+# drops the error rendering (e.g. _fetch_one swallowing the entry, or
+# render_html stripping the err branch) would pass the "host name in content"
+# check above (because the <h2> still renders) but fail this one.
+- name: _verify | Per-host error path renders on designated fixture
+  when: homepage_verify_netdata_error
   assert:
     that:
       - '"<div class=\"err\">" in _homepage_alerts_html.content'
     fail_msg: >-
-      Expected a per-host <div class="err"> rendered on box (no real netdata
-      reachable from the test fixture). HTML content was:
+      Expected a per-host <div class="err"> rendered with no reachable Netdata
+      endpoint. HTML content was:
       {{ _homepage_alerts_html.content }}
 
 - name: _verify | Set unique Homepage log-normalization marker
