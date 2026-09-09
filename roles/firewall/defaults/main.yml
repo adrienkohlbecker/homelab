@@ -1,0 +1,1 @@
+firewall_vrrp_enabled: "{{ (dns_keepalived_priority | default(0) | int) > 0 }}"

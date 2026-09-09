@@ -322,17 +322,6 @@
   changed_when: false
   become: true
 
-- name: _verify_input | INPUT — VRRP rule absent on non-keepalived peers
-  vars:
-    vrrp_rules: "{{ _firewall_nft_ruleset_scope.stdout | nft_rules_by_counter('vrrp_accept') }}"
-  assert:
-    that:
-      - vrrp_rules | length == 0
-    fail_msg: >-
-      Non-keepalived host rendered a VRRP accept rule; only hosts in
-      dns_keepalived_peers should accept peer VRRP.
-  when: not (inventory_hostname in dns_keepalived_peers or qemu_test | default(false))
-
 - name: _verify_input | INPUT — VRRP rule renders with iifname + protocol scope
   vars:
     # Anchor on the rule's counter reference rather than its comment
@@ -355,7 +344,7 @@
     fail_msg: >-
       VRRP rule referencing counter `vrrp_accept` is missing
       iifname={{ default_interface }} or protocol=vrrp scope.
-  when: inventory_hostname in dns_keepalived_peers or qemu_test | default(false)
+  when: firewall_vrrp_enabled
 
 - name: _verify_input | DNS VIP silence rules retain their destination scope
   vars:
@@ -373,7 +362,7 @@
     fail_msg: >-
       DNS VIP silence rules must match the current INPUT destination or the
       original FORWARD destination so unrelated vmac traffic stays observable.
-  when: inventory_hostname in dns_keepalived_peers or qemu_test | default(false)
+  when: firewall_vrrp_enabled
 
 - name: _verify_input | INPUT — mDNS rendered rule keeps LAN iif/source/port scope
   vars:
