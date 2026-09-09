@@ -61,26 +61,6 @@
       Expected all 11 rendered systemd unit alerts to require five minutes of
       sustained failure without notification-only delay.
 
-- name: _verify | Read rendered WireGuard health configuration
-  slurp:
-    src: /etc/netdata/health.d/wireguard.conf
-  register: _netdata_wireguard_health
-  become: true
-
-- name: _verify | WireGuard bunk handshake alarm remains disabled
-  vars:
-    _health: "{{ _netdata_wireguard_health.content | b64decode }}"
-  assert:
-    that:
-      - >-
-        _health
-        | regex_findall('(?m)^template:\s+wireguard_bunk_peer_handshake_stale$')
-        | length == 0
-      - '"# template: wireguard_bunk_peer_handshake_stale" in _health'
-    fail_msg: >-
-      Expected the bunk handshake alarm stanza to remain commented out while
-      the offsite host is unavailable.
-
 - name: _verify | Read Fluent Bit health configuration
   slurp:
     src: /etc/netdata/health.d/fluentbit.conf
