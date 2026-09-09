@@ -36,21 +36,53 @@
   tags:
     - apt
 
-# Solver3 will not infer removal of the conflicting uutils provider. Express
-# both sides in one apt transaction so dry-run and converge have the same plan.
-- name: Select GNU coreutils  # noqa: command-instead-of-module
+# Solver3 will not infer removal of the conflicting uutils provider, so both
+# sides ride one apt transaction. --allow-remove-essential is a blanket waiver,
+# so plan the transaction first and refuse it if apt wants to take out anything
+# beyond the provider being replaced.
+- name: Select GNU coreutils
   when:
     - ansible_distribution_release != 'noble'
     - apt_coreutils_from_gnu.rc != 0 or 'install ok installed' not in apt_coreutils_from_gnu.stdout
-  command: >-
-    apt-get -y --allow-remove-essential -o DPkg::Lock::Timeout=300
-    {{ "--simulate" if ansible_check_mode else "" }}
-    install coreutils-from-gnu coreutils-from-uutils-
-  changed_when: true
-  check_mode: false
-  become: true
   tags:
     - apt
+  block:
+    - name: Plan the GNU coreutils selection  # noqa: command-instead-of-module
+      command:
+        argv:
+          - apt-get
+          - --simulate
+          - --allow-remove-essential
+          - install
+          - coreutils-from-gnu
+          - coreutils-from-uutils-
+      register: apt_coreutils_plan
+      changed_when: false
+      check_mode: false
+      become: true
+
+    - name: Selecting GNU coreutils removes only the uutils provider
+      vars:
+        apt_coreutils_removals: >-
+          {{ apt_coreutils_plan.stdout_lines
+             | select('match', '^Remv ')
+             | map('regex_replace', '^Remv ([^ ]+).*$', '\1')
+             | list }}
+      assert:
+        that: apt_coreutils_removals == ['coreutils-from-uutils']
+        fail_msg: >-
+          Selecting coreutils-from-gnu plans removals beyond the uutils provider
+          it replaces: {{ apt_coreutils_removals }}. Refusing to run apt-get
+          with --allow-remove-essential against that plan.
+
+    - name: Apply the GNU coreutils selection  # noqa: command-instead-of-module
+      command: >-
+        apt-get -y --allow-remove-essential -o DPkg::Lock::Timeout=300
+        {{ "--simulate" if ansible_check_mode else "" }}
+        install coreutils-from-gnu coreutils-from-uutils-
+      changed_when: true
+      check_mode: false
+      become: true
 
 - name: Configure package-manager log compression
   import_role:
