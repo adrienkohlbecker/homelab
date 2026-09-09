@@ -88,14 +88,18 @@
           - _apt_verify_installed_dir.stat.gr_name == 'root'
           - _apt_verify_installed_dir.stat.mode == '0750'
 
+    # No shell wrapper: timeout SIGKILLs its own process group, so the -9 below
+    # is only observable while timeout is the process ansible waited on. Going
+    # through `bash -c` would leave that to bash's exec optimisation.
     - name: _verify | Exercise timeout TERM-to-KILL escalation
       command:
         argv:
-          - /bin/bash
+          - timeout
+          - --kill-after=1s
+          - 1s
+          - /usr/bin/python3
           - -c
-          - >-
-            timeout --kill-after=1s 1s /usr/bin/python3 -c
-            "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(10)"
+          - "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(10)"
       register: _apt_verify_timeout
       failed_when: false
       changed_when: false
