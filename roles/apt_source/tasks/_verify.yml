@@ -2,7 +2,6 @@
 # apt_source:box cell runs this file directly; main.yml is a stub, so the block
 # below stands in for a consumer by configuring Docker's repository.
 - name: _verify | Standalone — configure a representative source under test
-  when: _role_under_test | default('') == 'apt_source'
   block:
     - name: _verify | Standalone — fixture args (docker, a real mirrored repo)
       set_fact:
