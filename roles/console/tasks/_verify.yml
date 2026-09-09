@@ -24,7 +24,7 @@
   import_role:
     name: reboot
     tasks_from: reboot
-  when: grub_bootloader or ansible_architecture != 'aarch64'
+  when: qemu_boot_changes_reachable
 
 # dumpkeys reads the kernel VT's current keymap via KDGKBENT on /dev/tty0, so it
 # doesn't depend on a controlling terminal and works from ansible's ssh session.
@@ -83,7 +83,7 @@
 # Non-GRUB aarch64 cannot exercise the post-reboot probe below, so retain its
 # ZBM property check as the handoff consumed by the later rEFInd role.
 - name: _verify | ZBM commandline includes consoleblank=0
-  when: not grub_bootloader and ansible_architecture == 'aarch64'
+  when: not qemu_boot_changes_reachable
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: _console_zbm_cmdline
   changed_when: false
@@ -119,7 +119,7 @@
 # the argument. Non-GRUB aarch64 skips the reboot because its running kernel
 # still reflects the EFI-stub entry baked into the image.
 - name: _verify | Running kernel applied consoleblank=0
-  when: grub_bootloader or ansible_architecture != 'aarch64'
+  when: qemu_boot_changes_reachable
   command: grep -qxF 0 /sys/module/kernel/parameters/consoleblank
   changed_when: false
   become: true

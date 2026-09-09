@@ -1,6 +1,6 @@
-# Verify the bootloader integration and post-reboot capture state. The aarch64
-# fixture uses a staged EFI-stub command line, so it exercises only the written
-# next-boot source rather than rebooting into it.
+# Verify the bootloader integration and post-reboot capture state. The non-GRUB
+# aarch64 fixture uses a staged EFI-stub command line, so it exercises only the
+# written next-boot source rather than rebooting into it.
 
 - name: _verify | ZBM commandline includes crashkernel
   when: zfs_root and not grub_bootloader
@@ -20,10 +20,10 @@
   become: true
 
 - name: _verify | Exercise post-reboot kdump state
-  when: ansible_architecture != 'aarch64'
+  when: qemu_boot_changes_reachable
   block:
-    # The aarch64 fixture uses a staged rEFInd EFI-stub command line, so the
-    # ZBM crashkernel write cannot reach the running kernel after reboot.
+    # The excluded non-GRUB aarch64 fixture uses a staged rEFInd EFI-stub
+    # command line, so its ZBM write cannot reach the running kernel here.
     - name: _verify | Reboot to exercise crashkernel reservation
       import_role:
         name: reboot

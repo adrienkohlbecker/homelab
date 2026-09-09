@@ -2,10 +2,10 @@
 # cleanly; these assert the end-state they're responsible for.
 #
 # Reboot first so /proc/cmdline reflects the role's writes. Same pattern as
-# console/_verify.yml. Skipped on aarch64 — EDK2 aarch64 has a known reboot
-# bug on this image and the test box bypasses ZBM entirely.
+# console/_verify.yml. The non-GRUB aarch64 box bypasses ZBM, so the command
+# line staged outside this role cannot reflect its writes yet.
 - name: _verify | Reboot to apply boot-chain changes
-  when: not grub_bootloader and ansible_architecture != 'aarch64'
+  when: not grub_bootloader and qemu_boot_changes_reachable
   import_role:
     name: reboot
     tasks_from: reboot
@@ -87,16 +87,17 @@
 
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
-# not just that the ZFS property was set. Skipped on aarch64 (no reboot above).
+# not just that the ZFS property was set. The non-GRUB aarch64 fixture cannot
+# exercise that handoff because its EFI-stub command line is staged elsewhere.
 - name: _verify | Read the running kernel's cmdline
-  when: not grub_bootloader and ansible_architecture != 'aarch64'
+  when: not grub_bootloader and qemu_boot_changes_reachable
   slurp:
     src: /proc/cmdline
   register: _boot_verify_proc_cmdline
   become: true
 
 - name: _verify | Running kernel booted with console=tty0
-  when: not grub_bootloader and ansible_architecture != 'aarch64'
+  when: not grub_bootloader and qemu_boot_changes_reachable
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:
@@ -107,7 +108,7 @@
       ZBM property may not have propagated: {{ _cmdline }}
 
 - name: _verify | Running kernel booted with earlycon (when configured)
-  when: not grub_bootloader and ansible_architecture != 'aarch64' and qemu_test
+  when: not grub_bootloader and qemu_boot_changes_reachable
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:
@@ -156,14 +157,14 @@
   failed_when: _boot_verify_tmp_enabled.stdout not in ['enabled', 'enabled-runtime', 'static']
 
 - name: _verify | Read /tmp filesystem type
-  when: not grub_bootloader and ansible_architecture != 'aarch64'
+  when: not grub_bootloader and qemu_boot_changes_reachable
   command: findmnt -no FSTYPE -T /tmp
   changed_when: false
   become: true
   register: _boot_verify_tmp_fstype
 
 - name: _verify | /tmp is mounted as tmpfs
-  when: not grub_bootloader and ansible_architecture != 'aarch64'
+  when: not grub_bootloader and qemu_boot_changes_reachable
   assert:
     that: _boot_verify_tmp_fstype.stdout | trim == 'tmpfs'
     fail_msg: >-
