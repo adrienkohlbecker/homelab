@@ -122,8 +122,8 @@
     - netdata
 
 # Stage and patch timex.conf for its system_clock_sync_state alarm. The
-# kernel's ntp_adjtime() exposes a
-# clock-synchronized bit; that bit going to 0 means the local clock has
+# kernel's ntp_adjtime() exposes a clock-synchronized bit; that bit going
+# to 0 means the local clock has
 # drifted out of sync with whatever ntp daemon is configured (chrony on
 # lab/pug). Upstream defaults `to: silent` because clock-sync is "boring"
 # on most cloud hosts -- but on lab/pug an out-of-sync clock breaks
@@ -143,10 +143,10 @@
   replace:
     path: /etc/netdata/health.d/timex.conf
     # `alarm:` (not `template:`) since this binds to a single named chart
-    # rather than fanning out across a context. Same stanza-anchored shape
-    # as disks.conf's regex above -- today timex.conf only ships one
-    # alarm so drift is impossible, but defensive in case upstream adds
-    # a second one in a future release.
+    # rather than fanning out across a context. The lookahead confines the
+    # match to this stanza -- today timex.conf only ships one alarm so drift
+    # is impossible, but defensive in case upstream adds a second one in a
+    # future release.
     regexp: '(?ms)(^\s*alarm:\s*system_clock_sync_state\b(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s*)silent'
     replace: '\1sysadmin'
     backup: true
@@ -161,7 +161,11 @@
   tags:
     - netdata
 
-# Fail-closed, same rationale as the disks.conf assert above.
+# Fail-closed: the replace above reports changed=false both when it already ran
+# AND when it matched nothing (upstream renamed or restructured the alarm), so a
+# silent no-op would otherwise leave clock-sync at `to: silent` with no signal.
+# Assert the end state instead. Skipped in check mode, where the staging and
+# replace above are gated off on a fresh host.
 - name: Slurp the un-silenced timex.conf
   when: not ansible_check_mode
   slurp:

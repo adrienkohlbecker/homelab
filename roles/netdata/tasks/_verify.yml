@@ -336,9 +336,10 @@
 # instantiation the assertions below consume: the presence/liveness fan-outs
 # against the fresh charts, and the stock systemdunits alarm the sustained-state
 # asserts read (its whole family registers in the same health pass), plus the
-# un-silenced stock disk and collector alarms, and the Keepalived lost-master
-# alarm. The four GitLab Runner instances cover every actionable failure reason
-# in Runner 19; the three ordinary job outcomes are asserted absent below.
+# stock predictive disk alarms and the un-silenced collector alarms, and the
+# Keepalived lost-master alarm. The four GitLab Runner instances cover every
+# actionable failure reason in Runner 19; the three ordinary job outcomes are
+# asserted absent below.
 - name: _verify | Fetch alarms
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
