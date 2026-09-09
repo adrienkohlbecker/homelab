@@ -370,6 +370,7 @@
     and _keys | select('search', 'liveness_system_cpu') | list | length > 0
     and _keys | select('search', 'systemd_service_unit_failed_state') | list | length > 0
     and _keys | select('search', 'out_of_disk_space_time') | list | length > 0
+    and _keys | select('search', 'out_of_disk_inodes_time') | list | length > 0
     and 'keepalived_vrrp.state.keepalived_lost_master' in _keys
     and _collector_failure_alerts | length > 0
     and _runner_alerts | length == 4
