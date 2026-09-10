@@ -209,9 +209,9 @@
 
 # Signal site.yml's tail reboot block when the module boot pin or its deferred
 # sysctl changed while nf_conntrack is not loaded. After the resulting reboot,
-# modules-load.d loads conntrack and
-# systemd-sysctl writes the desired value at boot. Subsequent runs
-# (module persistent) reapply without needing another reboot.
+# modules-load.d loads conntrack and systemd-sysctl writes the desired value at
+# boot. Subsequent runs (module persistent) reapply without needing another
+# reboot.
 - name: Signal reboot required (conntrack sysctl deferred to boot)
   when:
     - firewall_conntrack_module.changed or firewall_conntrack_pinned.changed
