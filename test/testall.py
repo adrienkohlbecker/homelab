@@ -345,6 +345,18 @@ def _condition_coverage_reports(roles: Collection[str]) -> list[Path]:
     return sorted(path for role in roles for path in CONDITION_COVERAGE_DIR.glob(f"*.{role}.jsonl"))
 
 
+def _clear_condition_coverage_reports(roles: Collection[str]) -> None:
+    """Drop prior reports for the roles this run is about to exercise.
+
+    Each Machine only unlinks its own ``<machine>.<ubuntu>.<role>.jsonl``, but the
+    gate globs by role. A report left behind by a machine since dropped from a
+    role's meta/test.yml would merge in as though this run had produced it, so a
+    branch that is no longer exercised anywhere would still read as covered.
+    """
+    for stale in _condition_coverage_reports(roles):
+        stale.unlink()
+
+
 def main() -> int:
     """Entry point for running tests."""
     args = parse_args()
@@ -413,6 +425,12 @@ def main() -> int:
     # constructed (and thus before any worker subprocess is spawned).
     sweep_stale_workdirs(imagedir_for_host())
 
+    # Clearing is scoped to the gate's own precondition: a partial rerun keeps
+    # the prior run's reports, since it does not gate on them either.
+    complete_matrix = not args.retry_failed and args.machines is None and args.ubuntu is None
+    if complete_matrix:
+        _clear_condition_coverage_reports({cell.role for cell in cells})
+
     # Only partial reruns merge with the prior log; an unfiltered run replaces
     # out.tsv outright so stale triples (deleted roles, old machine/ubuntu
     # scopes) don't linger forever.
@@ -459,7 +477,6 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    complete_matrix = not args.retry_failed and args.machines is None and args.ubuntu is None
     if complete_matrix:
         selected_roles = {cell.role for cell in cells}
         try:
