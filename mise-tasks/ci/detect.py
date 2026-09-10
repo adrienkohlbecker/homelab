@@ -50,6 +50,7 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"group_vars/storage_lab\.yml",
     r"test/[^/]+\.py",
     r"test/host_vars/lab\.yml",
+    r"test/condition_coverage\.yml",
     r"test/inventory\.ini",
     r"test/playbooks/.+",
     r"ansible\.cfg",
