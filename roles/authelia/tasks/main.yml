@@ -9,6 +9,7 @@
     - authelia
 
 - name: Configure authelia
+  when: not ansible_check_mode or authelia_user.uid is defined
   template:
     src: configuration.yml.j2
     dest: /mnt/services/authelia/configuration.yml
@@ -28,6 +29,7 @@
     - authelia
 
 - name: Configure authelia user database
+  when: not ansible_check_mode or authelia_user.uid is defined
   template:
     src: users.yml.j2
     dest: /mnt/services/authelia/users.yml
