@@ -69,11 +69,14 @@
     - /etc/fan2go
     - /etc/fan2go-tui
   become: true
+  register: fan2go_config_directories
   tags:
     - fan2go
 
 - name: Install /etc/fan2go/fan2go.yaml (per-host)
-  when: fan2go_enabled
+  when:
+    - fan2go_enabled
+    - not (ansible_check_mode and fan2go_config_directories.changed)
   template:
     src: "{{ inventory_hostname }}.yaml.j2"
     dest: /etc/fan2go/fan2go.yaml
@@ -89,7 +92,9 @@
     - fan2go
 
 - name: Install /etc/fan2go-tui/fan2go-tui.yaml
-  when: fan2go_enabled
+  when:
+    - fan2go_enabled
+    - not (ansible_check_mode and fan2go_config_directories.changed)
   template:
     src: fan2go-tui.yaml.j2
     dest: /etc/fan2go-tui/fan2go-tui.yaml
