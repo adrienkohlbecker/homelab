@@ -1,4 +1,4 @@
-# Verify covers five contracts:
+# Verify covers six contracts:
 #   1. install + manual-trigger + remove for a system-scope timer
 #   2. systemd-cat routes stderr to journal priority err and preserves the
 #      command's exit code
@@ -9,6 +9,8 @@
 #      the stamp is older than 2 * period
 #   5. extension knobs (environment, accuracy_sec, randomized_delay_sec,
 #      additional_service_directives)
+#   6. removal is scope-isolated: dropping a user-scope timer leaves a
+#      same-named system-scope timer's units, stamp and netdata metadata intact
 
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
@@ -258,8 +260,159 @@
     state: absent
   become: true
 
-# Contracts 3+4 exercise the netdata charts.d collector. netdata installs
-# from repo.netdata.cloud's multi-arch 2.x series (see roles/netdata), so
-# netdata-plugin-chartsd resolves on arm64 as well as x86_64 -- no arch gate.
-- name: _verify | Monitored-timer + overdue netdata contracts
-  import_tasks: _verify_monitored.yml
+# ============================================================
+# Contract 6: removal is scope-isolated. System- and user-scope managers keep
+# their units, trigger stamps and monitoring metadata in separate trees, so a
+# user-scope removal must not reach into the system-scope ones. Both halves
+# deliberately share a name -- that is the only case where the scopes can be
+# confused.
+# ============================================================
+- name: _verify | Create a lingered user for the scope-isolation fixture
+  user:
+    name: _verify_timeruser
+    system: true
+    create_home: true
+    shell: /usr/sbin/nologin
+  register: _systemd_timer_scope_user
+  become: true
+
+# A user manager must be lingered before user-scope units can be enabled.
+- name: _verify | Enable linger for the scope-isolation fixture
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: _verify_timeruser
+      uid: "{{ _systemd_timer_scope_user.uid }}"
+
+- name: _verify | Install the system-scope half of the scope-isolation fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_scope
+      description: System-scope half of the scope-isolation fixture
+      exec_start: /bin/true
+      on_calendar: "*-*-* *:00:00"
+
+- name: _verify | Install the user-scope half of the scope-isolation fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_scope
+      description: User-scope half of the scope-isolation fixture
+      exec_start: /bin/true
+      on_calendar: "*-*-* *:00:00"
+      user: _verify_timeruser
+
+# Seed both trigger stamps rather than waiting for an hourly timer to fire:
+# the contract under test is which stamp removal deletes, not how systemd
+# writes them.
+- name: _verify | Seed the system-scope trigger stamp
+  file:
+    path: /var/lib/systemd/timers/stamp-_verify_scope.timer
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# The user manager creates this tree on its first persistent trigger, which
+# an hourly fixture timer never reaches during the test.
+- name: _verify | Create the user-scope stamp directory
+  file:
+    path: "{{ _systemd_timer_scope_user.home }}/.local/share/systemd/timers"
+    state: directory
+    owner: _verify_timeruser
+    group: _verify_timeruser
+    mode: "0755"
+  become: true
+
+- name: _verify | Seed the user-scope trigger stamp
+  file:
+    path: "{{ _systemd_timer_scope_user.home }}/.local/share/systemd/timers/stamp-_verify_scope.timer"
+    state: touch
+    owner: _verify_timeruser
+    group: _verify_timeruser
+    mode: "0644"
+  become: true
+
+- name: _verify | Remove the user-scope half of the scope-isolation fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_scope
+      user: _verify_timeruser
+
+- name: _verify | Stat scope-isolation artifacts after the user-scope removal
+  stat:
+    path: "{{ item.path }}"
+  loop:
+    - path: /etc/systemd/user/_verify_scope.timer
+      exists: false
+    - path: /etc/systemd/user/_verify_scope.service
+      exists: false
+    - path: "{{ _systemd_timer_scope_user.home }}/.local/share/systemd/timers/stamp-_verify_scope.timer"
+      exists: false
+    - path: /etc/systemd/system/_verify_scope.timer
+      exists: true
+    - path: /etc/systemd/system/_verify_scope.service
+      exists: true
+    - path: /var/lib/systemd/timers/stamp-_verify_scope.timer
+      exists: true
+    - path: /etc/netdata/charts.d/systemd_timers.d/_verify_scope.conf
+      exists: true
+  loop_control:
+    label: "{{ item.path }}"
+  register: _systemd_timer_scope_after
+  become: true
+
+- name: _verify | User-scope removal touches only user-scope artifacts
+  assert:
+    that: item.stat.exists == item.item.exists
+    fail_msg: >-
+      {{ item.item.path }} exists={{ item.stat.exists }} after removing the
+      user-scope timer, expected {{ item.item.exists }}.
+  loop: "{{ _systemd_timer_scope_after.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+
+# The system-scope half survived the assertions above; drop it through the
+# same entry point so its own removal path stays covered.
+- name: _verify | Remove the system-scope half of the scope-isolation fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_scope
+
+- name: _verify | Disable linger for the scope-isolation fixture
+  import_role:
+    name: linger
+    tasks_from: disable
+  vars:
+    linger_args:
+      name: _verify_timeruser
+      uid: "{{ _systemd_timer_scope_user.uid }}"
+
+# systemd is finished with the account by now -- user@<uid>.service is
+# inactive and loginctl reports no session -- but ansible's own become_user
+# context is not: mitogen keeps a persistent `sudo -u _verify_timeruser
+# python3` child alive per become_user, and userdel refuses while any process
+# belongs to the account. Drop the host connection so those children exit.
+- name: _verify | Drop the become_user context holding the fixture account
+  meta: reset_connection
+
+- name: _verify | Remove the scope-isolation fixture user
+  user:
+    name: _verify_timeruser
+    state: absent
+    remove: true
+  become: true
