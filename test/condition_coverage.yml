@@ -1,0 +1,202 @@
+---
+# Conditions whose opposite branch requires a platform that the local QEMU
+# matrix cannot safely provide. Each case evaluates the exact current Ansible
+# expression; stale selectors or incorrect expected outcomes fail the gate.
+scenarios:
+  # Ubuntu release variants
+  - path: roles/apt/tasks/configure.yml
+    expression: ansible_distribution_version is version('25.10', '>=')
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_distribution_version: "24.04"
+      - outcome: true
+        variables:
+          ansible_distribution_version: "25.10"
+
+  - path: roles/apt/tasks/configure.yml
+    expression: apt_coreutils_from_gnu.rc != 0 or 'install ok installed' not in apt_coreutils_from_gnu.stdout
+    cases:
+      - outcome: false
+        variables:
+          apt_coreutils_from_gnu:
+            rc: 0
+            stdout: install ok installed
+      - outcome: true
+        variables:
+          apt_coreutils_from_gnu:
+            rc: 1
+            stdout: ""
+
+  # Architecture variants
+  - path: roles/jellyfin/tasks/main.yml
+    expression: jellyfin_transcoding_backend == 'intel_qsv'
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          jellyfin_transcoding_backend: software
+      - outcome: true
+        variables:
+          jellyfin_transcoding_backend: intel_qsv
+
+  - path: roles/kdump/tasks/main.yml
+    expression: ansible_architecture == 'x86_64'
+    cases:
+      - outcome: false
+        variables:
+          ansible_architecture: aarch64
+      - outcome: true
+        variables:
+          ansible_architecture: x86_64
+
+  - path: roles/netdata/tasks/configure.yml
+    expression: netdata_intelgpu_enabled
+    cases:
+      - outcome: false
+        variables:
+          netdata_intelgpu_enabled: false
+      - outcome: true
+        variables:
+          netdata_intelgpu_enabled: true
+
+  - path: roles/netdata/tasks/configure.yml
+    expression: ansible_architecture == "x86_64"
+    cases:
+      - outcome: false
+        variables:
+          ansible_architecture: aarch64
+      - outcome: true
+        variables:
+          ansible_architecture: x86_64
+
+  - path: roles/netdata/tasks/configure.yml
+    expression: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          netdata_intelgpu_enabled: true
+          ansible_architecture: x86_64
+      - outcome: true
+        variables:
+          netdata_intelgpu_enabled: false
+          ansible_architecture: aarch64
+
+  - path: roles/refind/tasks/main.yml
+    expression: ansible_architecture == "aarch64"
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_architecture: x86_64
+      - outcome: true
+        variables:
+          ansible_architecture: aarch64
+
+  - path: roles/user/tasks/main.yml
+    expression: ansible_architecture == "x86_64"
+    cases:
+      - outcome: false
+        variables:
+          ansible_architecture: aarch64
+      - outcome: true
+        variables:
+          ansible_architecture: x86_64
+
+  - path: roles/zfsbootmenu/tasks/main.yml
+    expression: ansible_architecture == "aarch64"
+    cases:
+      - outcome: false
+        variables:
+          ansible_architecture: x86_64
+      - outcome: true
+        variables:
+          ansible_architecture: aarch64
+
+  # Production versus QEMU variants
+  - path: roles/gitea/tasks/main.yml
+    expression: not qemu_test
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: true
+      - outcome: true
+        variables:
+          qemu_test: false
+
+  - path: roles/jellyfin/tasks/main.yml
+    expression: not qemu_test
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: true
+      - outcome: true
+        variables:
+          qemu_test: false
+
+  - path: roles/jellyfin/tasks/main.yml
+    expression: not (qemu_test | default(false))
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: true
+      - outcome: true
+        variables:
+          qemu_test: false
+
+  - path: roles/macos_vm/tasks/main.yml
+    expression: qemu_test | bool
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: false
+      - outcome: true
+        variables:
+          qemu_test: true
+
+  - path: roles/media/tasks/main.yml
+    expression: qemu_test
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: false
+      - outcome: true
+        variables:
+          qemu_test: true
+
+  - path: roles/nut/tasks/server.yml
+    expression: qemu_test | bool
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: false
+      - outcome: true
+        variables:
+          qemu_test: true
+
+  - path: roles/zfs_autobackup/tasks/dest.yml
+    expression: not qemu_test
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: true
+      - outcome: true
+        variables:
+          qemu_test: false
+
+  - path: roles/zfs_autobackup/tasks/dest.yml
+    expression: not qemu_test and zfs_autobackup_keyscan_result.stdout | default('') | length > 0
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: true
+          zfs_autobackup_keyscan_result: {}
+      - outcome: true
+        variables:
+          qemu_test: false
+          zfs_autobackup_keyscan_result:
+            stdout: ssh-ed25519 test-key
