@@ -1,7 +1,8 @@
 ---
-# Conditions whose opposite branch requires a platform that the local QEMU
-# matrix cannot safely provide. Each case evaluates the exact current Ansible
-# expression; stale selectors or incorrect expected outcomes fail the gate.
+# Conditions whose opposite branch requires a platform or external state that
+# the local QEMU matrix cannot safely provide. Each case evaluates the exact
+# current Ansible expression; stale selectors or incorrect expected outcomes
+# fail the gate.
 scenarios:
   # Ubuntu release variants
   - path: roles/apt/tasks/configure.yml
@@ -200,3 +201,258 @@ scenarios:
           qemu_test: false
           zfs_autobackup_keyscan_result:
             stdout: ssh-ed25519 test-key
+
+  # Hardware-dependent feature variants
+  - path: roles/fan2go/tasks/main.yml
+    expression: fan2go_enabled
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          fan2go_enabled: false
+      - outcome: true
+        variables:
+          fan2go_enabled: true
+
+  - path: roles/fan2go/tasks/main.yml
+    expression: not fan2go_enabled
+    cases:
+      - outcome: false
+        variables:
+          fan2go_enabled: true
+      - outcome: true
+        variables:
+          fan2go_enabled: false
+
+  - path: roles/fan2go/tasks/main.yml
+    expression: not (ansible_check_mode and (fan2go_binary_download.changed | default(false)))
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          fan2go_binary_download:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          fan2go_binary_download: {}
+
+  - path: roles/fan2go/tasks/main.yml
+    expression: not (ansible_check_mode and (fan2go_tui_binary_download.changed | default(false)))
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          fan2go_tui_binary_download:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          fan2go_tui_binary_download: {}
+
+  - path: roles/fan2go/tasks/main.yml
+    expression: not (ansible_check_mode and fan2go_config_directories.changed)
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          fan2go_config_directories:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          fan2go_config_directories:
+            changed: true
+
+  - path: roles/fan2go/tasks/main.yml
+    expression: not ansible_check_mode
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+
+  - path: roles/headscale/tasks/main.yml
+    expression: headscale_derp_ipv4 is defined and headscale_derp_ipv6 is defined
+    cases:
+      - outcome: false
+        variables: {}
+      - outcome: true
+        variables:
+          headscale_derp_ipv4: 192.0.2.1
+          headscale_derp_ipv6: 2001:db8::1
+
+  - path: roles/lm_sensors/tasks/main.yml
+    expression: lm_sensors_dropped_loaded.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length > 0
+    cases:
+      - outcome: false
+        variables:
+          lm_sensors_dropped_loaded:
+            results: []
+      - outcome: true
+        variables:
+          lm_sensors_dropped_loaded:
+            results:
+              - rc: 0
+
+  - path: roles/lm_sensors/tasks/main.yml
+    expression: lm_sensors_hwmon.matched | int > 0
+    cases:
+      - outcome: false
+        variables:
+          lm_sensors_hwmon:
+            matched: 0
+      - outcome: true
+        variables:
+          lm_sensors_hwmon:
+            matched: 1
+
+  # macOS installer mode requires external recovery artifacts and VM firmware.
+  - path: roles/macos_vm/tasks/artifacts.yml
+    expression: macos_vm_install_mode
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          macos_vm_install_mode: false
+      - outcome: true
+        variables:
+          macos_vm_install_mode: true
+
+  - path: roles/macos_vm/tasks/artifacts.yml
+    expression: not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          macos_vm_artifacts_dir_result:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          macos_vm_artifacts_dir_result:
+            changed: true
+
+  - path: roles/macos_vm/tasks/artifacts.yml
+    expression: not (ansible_check_mode and (macos_vm_artifacts_dir_result.changed or macos_vm_workdir_result.changed))
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          macos_vm_artifacts_dir_result:
+            changed: true
+          macos_vm_workdir_result:
+            changed: false
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          macos_vm_artifacts_dir_result:
+            changed: true
+          macos_vm_workdir_result:
+            changed: true
+
+  - path: roles/macos_vm/tasks/artifacts.yml
+    expression: not (ansible_check_mode and (macos_vm_workdir_result.changed or macos_vm_basesystem_result.changed | default(false)))
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          macos_vm_workdir_result:
+            changed: true
+          macos_vm_basesystem_result: {}
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          macos_vm_workdir_result:
+            changed: false
+          macos_vm_basesystem_result: {}
+
+  - path: roles/macos_vm/tasks/artifacts.yml
+    expression: not (ansible_check_mode and macos_vm_workdir_result.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          macos_vm_workdir_result:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          macos_vm_workdir_result:
+            changed: true
+
+  - path: roles/macos_vm/tasks/artifacts.yml
+    expression: not (ansible_check_mode and (macos_vm_basesystem_result.changed | default(false)))
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          macos_vm_basesystem_result:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          macos_vm_basesystem_result: {}
+
+  - path: roles/macos_vm/tasks/artifacts.yml
+    expression: not (ansible_check_mode and (macos_vm_basesystem_convert_result.changed | default(false)))
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          macos_vm_basesystem_convert_result:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          macos_vm_basesystem_convert_result: {}
+
+  # OIDC drift and migration states are unsafe to synthesize against live apps.
+  - path: roles/gitea/tasks/main.yml
+    expression: gitea_oidc_desired_fp != gitea_oidc_current_fp
+    cases:
+      - outcome: false
+        variables:
+          gitea_oidc_desired_fp: same
+          gitea_oidc_current_fp: same
+      - outcome: true
+        variables:
+          gitea_oidc_desired_fp: desired
+          gitea_oidc_current_fp: current
+
+  - path: roles/gitea/tasks/main.yml
+    expression: gitea_authelia_source_id | length == 0
+    cases:
+      - outcome: false
+        variables:
+          gitea_authelia_source_id: "1"
+      - outcome: true
+        variables:
+          gitea_authelia_source_id: ""
+
+  - path: roles/gitea/tasks/main.yml
+    expression: gitea_authelia_source_id | length > 0
+    cases:
+      - outcome: false
+        variables:
+          gitea_authelia_source_id: ""
+      - outcome: true
+        variables:
+          gitea_authelia_source_id: "1"
+
+  - path: roles/jellyfin/tasks/main.yml
+    expression: jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          jellyfin_oidc_desired_fp: same
+          jellyfin_oidc_current_fp: same
+      - outcome: true
+        variables:
+          jellyfin_oidc_desired_fp: desired
+          jellyfin_oidc_current_fp: current
