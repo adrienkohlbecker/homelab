@@ -21,9 +21,7 @@
     - hdparm
 
 - name: Restart netdata to pick up disk-group membership
-  when:
-    - hdparm_netdata_disk_group.changed
-    - hdparm_netdata_condition | default(true)
+  when: hdparm_netdata_disk_group.changed
   systemd:
     name: netdata
     state: restarted
