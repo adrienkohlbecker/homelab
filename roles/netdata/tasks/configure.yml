@@ -190,8 +190,8 @@
   when: not (ansible_check_mode and netdata_health_alarm_notify_template.changed)
   lineinfile:
     path: /etc/netdata/health_alarm_notify.conf
-    regexp: "{{ item.line }}"
-    line: "{{ item.value }}"
+    regexp: "^{{ netdata_health_setting.name }}="
+    line: '{{ netdata_health_setting.name }}="{{ netdata_health_value }}"'
     validate: bash -n %s
     # Pin mode/owner explicitly: this file carries the telegram bot token
     # and is otherwise seeded by `cp` inheriting the package default.
@@ -200,16 +200,24 @@
     mode: "0640"
     backup: true
   loop:
-    - line: ^SEND_EMAIL=
-      value: SEND_EMAIL="NO"
-    - line: ^SEND_TELEGRAM=
-      value: SEND_TELEGRAM="YES"
-    - line: ^TELEGRAM_BOT_TOKEN=
-      value: TELEGRAM_BOT_TOKEN="{{ telegram_netdata_bot_token }}"
-    - line: ^DEFAULT_RECIPIENT_TELEGRAM=
-      value: DEFAULT_RECIPIENT_TELEGRAM="{{ telegram_personal_chat_id }}"
+    - name: SEND_EMAIL
+      value: "NO"
+    - name: SEND_TELEGRAM
+      value: "YES"
+    - name: TELEGRAM_BOT_TOKEN
+      value_var: telegram_netdata_bot_token
+    - name: DEFAULT_RECIPIENT_TELEGRAM
+      value_var: telegram_personal_chat_id
+  loop_control:
+    loop_var: netdata_health_setting
+    label: "{{ netdata_health_setting.name }}"
   register: netdata_health_alarm_notify
   become: true
+  vars:
+    netdata_health_value: >-
+      {{ lookup('vars', netdata_health_setting.value_var)
+         if netdata_health_setting.value_var is defined
+         else netdata_health_setting.value }}
   tags:
     - netdata
 
