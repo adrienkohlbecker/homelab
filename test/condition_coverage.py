@@ -174,9 +174,7 @@ def load_synthetic_outcomes(path: Path) -> dict[ConditionKey, set[bool]]:
             )
         if len(matches) > 1 and not all_matches:
             lines = ", ".join(str(condition.line) for condition in sorted(matches))
-            raise ValueError(
-                f"{path}: scenario {index} matches lines {lines}; select one with line or set all: true"
-            )
+            raise ValueError(f"{path}: scenario {index} matches lines {lines}; select one with line or set all: true")
 
         cases = scenario.get("cases", [])
         if not isinstance(cases, list) or not cases:
