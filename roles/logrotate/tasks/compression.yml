@@ -6,8 +6,11 @@
     that:
       - logrotate_args.configs is defined
       - logrotate_args.configs | length > 0
+      - logrotate_args.condition is not defined or logrotate_args.condition is boolean
       - zfs_root is defined
-    fail_msg: logrotate_args.configs and zfs_root are required
+    fail_msg: >-
+      logrotate_args.configs and zfs_root are required; condition, when set,
+      must be a boolean.
 
 - name: compression | Inspect package configs
   when: logrotate_args.condition | default(true)

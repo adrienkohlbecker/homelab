@@ -10,10 +10,13 @@
     that:
       - logrotate_args.src is defined
       - logrotate_args.dest is defined
+      - logrotate_args.condition is not defined or logrotate_args.condition is boolean
       # constrain the root-owned write to the include dir — no traversal,
       # no arbitrary-path clobber via a typo'd or hostile dest.
       - logrotate_args.dest is match('/etc/logrotate[.]d/[A-Za-z0-9_.-]+$')
-    fail_msg: logrotate_args needs src and a dest under /etc/logrotate.d/
+    fail_msg: >-
+      logrotate_args needs src and a dest under /etc/logrotate.d/; condition,
+      when set, must be a boolean.
 
 # logrotate is a timer-fired oneshot, not a daemon — a new drop-in is picked
 # up on the next timer run, so there is nothing to restart/reload here.
