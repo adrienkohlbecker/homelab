@@ -260,6 +260,12 @@
     state: absent
   become: true
 
+# Contracts 3+4 exercise the netdata charts.d collector. netdata installs
+# from repo.netdata.cloud's multi-arch 2.x series (see roles/netdata), so
+# netdata-plugin-chartsd resolves on arm64 as well as x86_64 -- no arch gate.
+- name: _verify | Monitored-timer + overdue netdata contracts
+  import_tasks: _verify_monitored.yml
+
 # ============================================================
 # Contract 6: removal is scope-isolated. System- and user-scope managers keep
 # their units, trigger stamps and monitoring metadata in separate trees, so a
