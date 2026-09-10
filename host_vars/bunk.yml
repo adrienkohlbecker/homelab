@@ -15,7 +15,15 @@ ansible_become_pass: !vault |
 
 # The nightly zfs_autobackup offsite step on each source host pushes its
 # bak-tagged datasets here as root over wg0. bunk.yml derives both the restricted
-# backup roots and forced-command authorized keys from this catalog.
+# backup roots and forced-command authorized keys from this catalog: each key gets
+# command= running ~ak/bin/rrsync with -wo and /volume1/Backup/<name>, so a source
+# can only WRITE into its own root -- it cannot read another host's backups,
+# escape the dir, or open a shell.
+#
+# name must match the source's offsite target in
+# roles/zfs_autobackup/files/zfs_backup_offsite.sh, and public_key the source
+# host's actual root key. Neither coupling is checked anywhere: a mismatch
+# surfaces as a nightly rrsync refusal, not a converge failure.
 bunk_offsite_backup_sources:
   - name: lab
     public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
