@@ -730,6 +730,10 @@ menuentry "Ubuntu (ZBM)" {
     }
 }
 
+{# Arch, not boot_via_efi_stub: this entry boots the separate kernel+initramfs
+   pair that roles/zfsbootmenu stages only on aarch64 (the release bundle ships
+   no unified EFI there). The gate has to match what was actually staged, so it
+   stays keyed on the architecture even on a host that boots ZBM directly. #}
 {% if ansible_architecture == "aarch64" %}
 menuentry "Ubuntu (ZBM, Components)" {
     loader /EFI/ZBM/vmlinux-bootmenu
