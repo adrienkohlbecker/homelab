@@ -31,7 +31,6 @@
     - boot
 
 - name: Hold grub packages
-  when: not grub_bootloader
   dpkg_selections:
     name: "{{ item }}"
     selection: hold

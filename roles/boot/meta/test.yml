@@ -2,3 +2,5 @@
 machines:
   box:
   minimal:
+ubuntu:
+  - resolute
