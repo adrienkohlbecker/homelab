@@ -3,6 +3,7 @@
 - name: _setup | Configure the services datasets
   import_role:
     name: services
+    tasks_from: main
 
 # Match the state left by a Noble openssh-server upgrade. The harness keeps its
 # existing ControlMaster session alive, so ssh.socket does not restart sshd.
