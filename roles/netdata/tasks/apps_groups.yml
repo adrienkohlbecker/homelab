@@ -11,14 +11,18 @@
 # the homelab block — re-synced from stock every converge, so a netdata upgrade
 # that ships new default groups still propagates.
 - name: Read the stock apps_groups.conf
-  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
+  when:
+    - netdata_packer_process_group_enabled
+    - not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
   slurp:
     src: /usr/lib/netdata/conf.d/apps_groups.conf
   register: netdata_apps_groups_stock
   become: true
 
 - name: Install apps_groups.conf with homelab process groups  # noqa: require-validate
-  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
+  when:
+    - netdata_packer_process_group_enabled
+    - not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
   copy:
     dest: /etc/netdata/apps_groups.conf
     content: |-
@@ -38,11 +42,21 @@
   register: netdata_apps_groups
   become: true
 
+- name: Remove custom apps_groups.conf when disabled
+  when: not netdata_packer_process_group_enabled
+  file:
+    path: /etc/netdata/apps_groups.conf
+    state: absent
+  register: netdata_apps_groups_removed
+  become: true
+
 # apps.plugin reads apps_groups.conf only at startup, so a change needs a
 # netdata restart to take effect (the override.conf ExecStartPost gates the
 # restart on the HTTP API answering -- see configure.yml).
 - name: Restart netdata after an apps_groups change
-  when: netdata_apps_groups.changed
+  when: >-
+    netdata_apps_groups.changed | default(false)
+    or netdata_apps_groups_removed.changed | default(false)
   systemd:
     name: netdata
     state: restarted

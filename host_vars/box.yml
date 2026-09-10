@@ -131,6 +131,7 @@ samba_shares:
 # the ansible-side machinery and container's view of /dev get covered.
 has_transcoding_acceleration: true
 jellyfin_transcoding_backend: intel_qsv
+netdata_packer_process_group_enabled: true
 user_i7z_enabled: true
 # Exercise the AWS qemu instance-executor block: runner/plugin download,
 # manager-side AWS profile render, config.toml render, unit install, and the
