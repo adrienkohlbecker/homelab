@@ -228,9 +228,7 @@
     - boot
 
 - name: Reload systemd for the staged tmp.mount
-  when:
-    - boot_tmp_mount_staged.changed | default(false)
-    - not (ansible_check_mode and boot_tmp_mount_staged.changed | default(false))
+  when: boot_tmp_mount_staged.changed and not ansible_check_mode
   systemd:
     daemon_reload: true
   become: true
