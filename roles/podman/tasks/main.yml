@@ -1,6 +1,10 @@
-- name: Check whether podman.service is active before package changes
-  service_facts:
-  register: podman_service_facts_before_install
+# Status-only read: with no state/enabled requested the module just returns
+# `systemctl show podman.service`, which succeeds (LoadState=not-found) before
+# the package exists. Cheaper than service_facts, which enumerates every unit.
+- name: Read podman.service state before package changes
+  systemd:
+    name: podman.service
+  register: podman_service_before_install
   become: true
   tags:
     - podman
@@ -43,9 +47,7 @@
 - name: Restart an existing podman.service after runtime changes
   when:
     - not ansible_check_mode
-    - >-
-      podman_service_facts_before_install.ansible_facts.services.get(
-      'podman.service', {}).get('state') == 'running'
+    - podman_service_before_install.status.ActiveState | default('inactive') == 'active'
     - >-
       podman_apt.changed
       or podman_service_d_override_conf_result.changed | default(false)
