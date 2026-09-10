@@ -9,3 +9,15 @@
     linger_args:
       name: "{{ ansible_user_id }}"
       uid: "{{ ansible_user_uid }}"
+
+# Start the package-owned API service before the role writes its drop-in. The
+# converge must restart this already-running process when the runtime
+# configuration changes; a fresh install alone only covers the inactive path.
+- name: _setup | Install the podman runtime before the restart exercise
+  import_tasks: install.yml
+
+- name: _setup | Start podman.service before its drop-in is installed
+  systemd:
+    name: podman.service
+    state: started
+  become: true
