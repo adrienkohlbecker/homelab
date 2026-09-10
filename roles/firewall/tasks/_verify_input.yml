@@ -217,14 +217,18 @@
     - { label: nut, port: "{{ service_ports.nut }}" }
   loop_control:
     label: "{{ item.label }}"
-  when: item.enabled | default(true) | bool
+  when:
+    - _firewall_verify_mac_mgmt_enabled
+    - item.enabled | default(true) | bool
   register: _firewall_mac_admin_tcp
   changed_when: false
   failed_when: _firewall_mac_admin_tcp.rc != 0 or 'firewall-verify-ok' not in _firewall_mac_admin_tcp.stdout
   become: true
 
 - name: _verify_input | INPUT — tailscale direct endpoint reachable through mac_mgmt
-  when: tailscale_wan_direct | default(false)
+  when:
+    - _firewall_verify_mac_mgmt_enabled
+    - tailscale_wan_direct | default(false)
   command:
     argv:
       - ip
