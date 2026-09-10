@@ -1028,3 +1028,167 @@ scenarios:
       - outcome: false
         variables:
           zfs_root: false
+
+  # Site orchestration variants that a single-host QEMU converge cannot safely
+  # induce: physical disks, DNS peer failure, non-QEMU cleanup, and fleet order.
+  - path: site.yml
+    expression: rotational_disks_by_id | length > 0
+    cases:
+      - outcome: false
+        variables:
+          rotational_disks_by_id: []
+      - outcome: true
+        variables:
+          rotational_disks_by_id:
+            - ata-condition-coverage
+
+  - path: site.yml
+    expression: reboot_required.stat.exists
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          reboot_required:
+            stat:
+              exists: false
+      - outcome: true
+        variables:
+          reboot_required:
+            stat:
+              exists: true
+
+  - path: site.yml
+    expression: dns_reboot_guard_enabled | default(false)
+    all: true
+    cases:
+      - outcome: false
+        variables: {}
+      - outcome: true
+        variables:
+          dns_reboot_guard_enabled: true
+
+  - path: site.yml
+    expression: _reboot_dns_probe.results is not any_successful_stdout
+    cases:
+      - outcome: false
+        variables:
+          _reboot_dns_probe:
+            results:
+              - rc: 0
+                stdout: 192.0.2.1
+      - outcome: true
+        variables:
+          _reboot_dns_probe:
+            results:
+              - rc: 1
+                stdout: ""
+
+  - path: site.yml
+    expression: _reboot_is_lowest_priority | bool
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          _reboot_is_lowest_priority: false
+      - outcome: true
+        variables:
+          _reboot_is_lowest_priority: true
+
+  - path: site.yml
+    expression: _reboot_dns_reprobe.results is not any_successful_stdout
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          _reboot_dns_reprobe:
+            results:
+              - rc: 0
+                stdout: 192.0.2.1
+      - outcome: true
+        variables:
+          _reboot_dns_reprobe:
+            results:
+              - rc: 1
+                stdout: ""
+
+  - path: site.yml
+    expression: (_reboot_dns_wait.results | default([])) is not any_successful_stdout
+    cases:
+      - outcome: false
+        variables:
+          _reboot_dns_wait:
+            results:
+              - rc: 0
+                stdout: 192.0.2.1
+      - outcome: true
+        variables: {}
+
+  - path: site.yml
+    expression: >-
+      (_reboot_vip_check.rc | default(1) != 0) or
+      (_reboot_vip_check.stdout | default('') | length == 0)
+    cases:
+      - outcome: false
+        variables:
+          _reboot_vip_check:
+            rc: 0
+            stdout: 192.0.2.1
+      - outcome: true
+        variables:
+          _reboot_vip_check:
+            rc: 1
+            stdout: ""
+
+  - path: site.yml
+    expression: qemu_test
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          qemu_test: false
+      - outcome: true
+        variables:
+          qemu_test: true
+
+  - path: site.yml
+    expression: qemu_dns_reboot_guard_unit.stat.exists | default(false)
+    cases:
+      - outcome: false
+        variables:
+          qemu_dns_reboot_guard_unit:
+            stat:
+              exists: false
+      - outcome: true
+        variables:
+          qemu_dns_reboot_guard_unit:
+            stat:
+              exists: true
+
+  - path: site.yml
+    expression: ansible_play_hosts_all | length > 1
+    cases:
+      - outcome: false
+        variables:
+          ansible_play_hosts_all:
+            - box
+      - outcome: true
+        variables:
+          ansible_play_hosts_all:
+            - lab
+            - pug
+
+  - path: site.yml
+    expression: inventory_hostname != ansible_play_hosts_all[-1]
+    cases:
+      - outcome: false
+        variables:
+          ansible_play_hosts_all:
+            - lab
+            - pug
+          inventory_hostname: pug
+      - outcome: true
+        variables:
+          ansible_play_hosts_all:
+            - lab
+            - pug
+          inventory_hostname: lab
