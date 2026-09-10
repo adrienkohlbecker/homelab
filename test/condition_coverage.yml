@@ -85,15 +85,15 @@ scenarios:
           ansible_architecture: aarch64
 
   - path: roles/refind/tasks/main.yml
-    expression: ansible_architecture == "aarch64"
+    expression: boot_via_efi_stub
     all: true
     cases:
       - outcome: false
         variables:
-          ansible_architecture: x86_64
+          boot_via_efi_stub: false
       - outcome: true
         variables:
-          ansible_architecture: aarch64
+          boot_via_efi_stub: true
 
   - path: roles/user/tasks/main.yml
     expression: ansible_architecture == "x86_64"
