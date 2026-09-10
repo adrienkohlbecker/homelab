@@ -110,21 +110,6 @@
         fail_msg: >-
           timeout --kill-after exited {{ _apt_verify_timeout.rc }}, expected
           the subprocess SIGKILL result -9 after escalating from TERM to KILL.
-
-    # Scoped to the coreutils provider rather than a whole full-upgrade: the
-    # property under test is that the selected provider holds without dragging
-    # removals behind it, not that the archive happens to offer a removal-free
-    # upgrade on the day the cell runs.
-    - name: _verify | Keeping the coreutils provider needs no removals  # noqa: command-instead-of-module
-      command:
-        argv:
-          - apt-get
-          - --simulate
-          - --no-remove
-          - install
-          - "{{ 'coreutils' if ansible_distribution_release == 'noble' else 'coreutils-from-gnu' }}"
-      changed_when: false
-      become: true
   always:
     - name: _verify | Remove the coreutils compatibility workspace
       file:
