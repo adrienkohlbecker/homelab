@@ -61,6 +61,7 @@
     group: root
     mode: "0644"
     backup: true
+  register: firewall_conntrack_module
   become: true
   tags:
     - firewall
@@ -206,15 +207,14 @@
   tags:
     - firewall
 
-# Signal site.yml's tail reboot block when any sysctl changed and
-# nf_conntrack isn't loaded yet -- that's the only case where a key
-# in the file (conntrack_tcp_loose) can't take effect live. After
-# the resulting reboot, modules-load.d loads conntrack and
+# Signal site.yml's tail reboot block when the module boot pin or its deferred
+# sysctl changed while nf_conntrack is not loaded. After the resulting reboot,
+# modules-load.d loads conntrack and
 # systemd-sysctl writes the desired value at boot. Subsequent runs
 # (module persistent) reapply without needing another reboot.
 - name: Signal reboot required (conntrack sysctl deferred to boot)
   when:
-    - firewall_sysctl.changed or firewall_conntrack_pinned.changed
+    - firewall_conntrack_module.changed or firewall_conntrack_pinned.changed
     - not firewall_nf_conntrack_loaded.stat.exists
   file:
     path: /var/run/reboot-required
