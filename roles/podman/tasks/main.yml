@@ -1,3 +1,10 @@
+- name: Check whether podman.service is active before package changes
+  service_facts:
+  register: podman_service_facts_before_install
+  become: true
+  tags:
+    - podman
+
 - name: Install podman package
   import_tasks: install.yml
   tags:
@@ -30,14 +37,18 @@
 # socket restart above never recycles it. Restart the daemon directly when
 # its drop-in changed or apt swapped the binary under it: apt under
 # policy_rc_d=101 leaves the running daemon on disk, so the new /run/podman
-# socket would otherwise still be served by the stale process. Skipped on a
-# fresh install (podman_apt.changed): the socket task above brings the daemon
-# up with the correct env + binary already in place, nothing stale to recycle.
-- name: Restart podman.service to pick up drop-in changes
+# socket would otherwise still be served by the stale process. A fresh install
+# has no active daemon to recycle; the socket task above starts it with the new
+# binary and environment.
+- name: Restart an existing podman.service after runtime changes
   when:
     - not ansible_check_mode
-    - not podman_apt.changed
-    - podman_service_d_override_conf_result.changed | default(false)
+    - >-
+      podman_service_facts_before_install.ansible_facts.services.get(
+      'podman.service', {}).get('state') == 'running'
+    - >-
+      podman_apt.changed
+      or podman_service_d_override_conf_result.changed | default(false)
   systemd:
     name: podman.service
     state: restarted
