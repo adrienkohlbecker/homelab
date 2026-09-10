@@ -27,6 +27,10 @@ component: File system
   no chart, which silently leaves the stock alarm in force. Overriding by
   `alarm:` + chart id -- rather than upstream's `template:` on context
   disk.space -- scopes each override to one filesystem.
+
+  The box fixture blocklists `/`, which is the load-bearing case: netdata
+  reporting that chart as disk_space./ is what proves the slash survives
+  unsanitized, so prod's multi-segment mounts follow from the same pass.
 #}
 {% for mount in netdata_diskspace_blocklist %}
     alarm: disk_space_usage
