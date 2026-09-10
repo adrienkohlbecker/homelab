@@ -29,6 +29,7 @@
   loop:
     - /etc/netdata/
     - /etc/netdata/health.d/
+  register: netdata_health_directories
   become: true
 
 - name: health | Assert required inputs are set
@@ -51,7 +52,9 @@
       (got {{ netdata_args.dest }})
 
 - name: health | Setup alert config ({{ _module }})
-  when: netdata_args.condition | default(true)
+  when:
+    - netdata_args.condition | default(true)
+    - not (ansible_check_mode and netdata_health_directories.changed)
   vars:
     _module: "{{ 'template' if (netdata_args.src | default('')).endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
