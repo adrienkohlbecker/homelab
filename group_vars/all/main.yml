@@ -28,6 +28,13 @@ zfs_has_data_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_minio_mount: "{{ not (qemu_test | bool) }}"
 zfs_root: true
 grub_bootloader: false
+# aarch64 has no ZBM EFI executable, so rEFInd boots a Linux EFI-stub menuentry
+# staged on the ESP and makes it the default; x86 boots ZBM itself. One name for
+# an image property with several consumers: the refind role's staging tasks and
+# refind.conf, the refind/packer _verify expectations, and whether a role's
+# kernel-cmdline write can reach the running kernel at all
+# (qemu_boot_changes_reachable in group_vars/test.yml).
+boot_via_efi_stub: "{{ not grub_bootloader and ansible_architecture == 'aarch64' }}"
 zfs_dozer_filesystem: rpool
 zfs_tank_filesystem: rpool
 zfs_trim_pools:

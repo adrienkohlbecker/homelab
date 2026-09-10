@@ -103,7 +103,7 @@
     - refind
 
 - name: Install aarch64 Linux EFI-stub staging hook
-  when: ansible_architecture == "aarch64"
+  when: boot_via_efi_stub
   copy:
     src: zz-stage-efi-stub
     dest: /etc/kernel/postinst.d/zz-stage-efi-stub
@@ -118,7 +118,7 @@
     - refind
 
 - name: Create aarch64 Linux EFI-stub hook directories
-  when: ansible_architecture == "aarch64"
+  when: boot_via_efi_stub
   file:
     path: "{{ item }}"
     state: directory
@@ -133,7 +133,7 @@
     - refind
 
 - name: Link aarch64 Linux EFI-stub hook into kernel lifecycle
-  when: ansible_architecture == "aarch64"
+  when: boot_via_efi_stub
   file:
     src: "{{ item.src }}"
     dest: "{{ item.dest }}"
@@ -154,7 +154,7 @@
 
 - name: Stage aarch64 Linux EFI-stub kernel and initrd
   when:
-    - ansible_architecture == "aarch64"
+    - boot_via_efi_stub
     - not ansible_check_mode
   command: /etc/kernel/postinst.d/zz-stage-efi-stub
   changed_when: refind_efi_stub_hook is changed
@@ -246,7 +246,7 @@
     - refind
 
 - name: Read pool cmdline for aarch64 Linux EFI-stub entry
-  when: ansible_architecture == "aarch64"
+  when: boot_via_efi_stub
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   changed_when: false
   register: refind_pool_cmdline

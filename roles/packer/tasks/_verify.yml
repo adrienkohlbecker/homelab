@@ -36,16 +36,12 @@
 - name: _verify | Recovery scan policy in refind.conf
   vars:
     _conf: "{{ packer_verify_refind_conf.content | b64decode }}"
-    _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if ansible_architecture == 'aarch64' else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
+    _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if boot_via_efi_stub else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
   assert:
     that:
       - _expected_dont_scan_dirs in _conf
-      - >-
-        ansible_architecture != 'aarch64'
-        or 'menuentry "Ubuntu (ZBM)"' in _conf
-      - >-
-        ansible_architecture != 'aarch64'
-        or 'loader /EFI/ZBM/VMLINUZ.EFI' in _conf
+      - not boot_via_efi_stub or 'menuentry "Ubuntu (ZBM)"' in _conf
+      - not boot_via_efi_stub or 'loader /EFI/ZBM/VMLINUZ.EFI' in _conf
     fail_msg: "refind.conf missing the recovery scan policy"
 
 # --- NVRAM Boot entries (rEFInd) ---
