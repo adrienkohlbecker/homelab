@@ -181,8 +181,7 @@ def test_synthetic_scenario_requires_explicit_duplicate_scope(
     tasks = tmp_path / "roles" / "example" / "tasks"
     tasks.mkdir(parents=True)
     (tasks / "main.yml").write_text(
-        "- debug: {msg: first}\n  when: feature_enabled\n"
-        "- debug: {msg: second}\n  when: feature_enabled\n"
+        "- debug: {msg: first}\n  when: feature_enabled\n- debug: {msg: second}\n  when: feature_enabled\n"
     )
     scenarios = tmp_path / "scenarios.yml"
     scenarios.write_text(
@@ -209,8 +208,7 @@ def test_synthetic_scenario_can_select_duplicate_by_line(
     tasks = tmp_path / "roles" / "example" / "tasks"
     tasks.mkdir(parents=True)
     (tasks / "main.yml").write_text(
-        "- debug: {msg: first}\n  when: feature_enabled\n"
-        "- debug: {msg: second}\n  when: feature_enabled\n"
+        "- debug: {msg: first}\n  when: feature_enabled\n- debug: {msg: second}\n  when: feature_enabled\n"
     )
     scenarios = tmp_path / "scenarios.yml"
     scenarios.write_text(
