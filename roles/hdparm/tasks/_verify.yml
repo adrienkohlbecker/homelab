@@ -8,7 +8,15 @@
     state: started
   become: true
 
+- name: _verify | Exercise the disabled hdparm netdata integration
+  import_tasks: netdata.yml
+  vars:
+    hdparm_netdata_condition: false
+
 - name: _verify | Install hdparm netdata collector
+  import_tasks: netdata.yml
+
+- name: _verify | Reinstall hdparm netdata collector idempotently
   import_tasks: netdata.yml
 
 # The active-drive alert references this chart so long ZFS scans suppress it.
