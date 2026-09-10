@@ -8,6 +8,42 @@
   until: _fluentbit_uptime.status == 200
   become: true
 
+# Exercise the reversible helper with an installed artifact and then in its
+# already-absent state. The first call validates and reloads the rebuilt live
+# configuration; the second proves the no-change branch.
+- name: _verify | Seed a retired service extension
+  copy:
+    dest: /etc/fluent-bit/services/condition_coverage_fixture.yaml
+    content: |
+      pipeline:
+        filters:
+          - name: modify
+            match: condition_coverage_fixture.*
+            add:
+              - condition_coverage_fixture true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Remove the retired service extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension_remove
+  vars:
+    fluentbit_extension_remove_args:
+      names:
+        - condition_coverage_fixture
+
+- name: _verify | Re-remove the retired service extension idempotently
+  import_role:
+    name: fluentbit
+    tasks_from: extension_remove
+  vars:
+    fluentbit_extension_remove_args:
+      names:
+        - condition_coverage_fixture
+
 # The shared core filters run against the deployed parsers/filters-pre/
 # filters-post files themselves, so this fixture cannot drift from what the
 # daemon actually executes.
