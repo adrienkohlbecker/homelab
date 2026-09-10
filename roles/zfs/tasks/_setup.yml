@@ -4,3 +4,24 @@
     state: present
   become: true
   loop: '{{ zfs_mount_cache_datasets }}'
+
+- name: _setup | Clear stale reboot-required state before the settled-version check
+  file:
+    path: /var/run/reboot-required
+    state: absent
+  become: true
+
+# Deliberately drift the safe boolean pool property used by the fixtures. The
+# production task must detect and restore the declared value; its idempotence
+# pass then exercises the already-correct direction.
+- name: _setup | Drift the fixture autotrim property
+  when:
+    - zfs_root
+    - item.name == 'autotrim'
+    - item.value == 'on'
+  command: zpool set autotrim=off {{ item.pool }}
+  loop: "{{ zfs_pool_properties }}"
+  loop_control:
+    label: "{{ item.pool }} autotrim=off"
+  changed_when: true
+  become: true
