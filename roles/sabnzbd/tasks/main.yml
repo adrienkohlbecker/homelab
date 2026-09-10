@@ -113,6 +113,7 @@
 # malformed rendering before SABnzbd silently rewrites the file from defaults.
 # The [__top__] prepend hosts __encoding__ and __version__ above any section.
 - name: Configure sabnzbd.ini
+  when: not ansible_check_mode or sabnzbd_user.uid is defined
   template:
     src: sabnzbd.ini.j2
     dest: /mnt/services/sabnzbd/sabnzbd.ini
