@@ -10,6 +10,7 @@
 # start, so the netdata restart below is load-bearing for a freshly
 # added group to take effect.
 - name: Add netdata user to disk group
+  when: hdparm_netdata_condition | default(true)
   user:
     name: netdata
     groups: disk
@@ -51,5 +52,6 @@
     netdata_args:
       src: hdparm_alerts.conf
       dest: hdparm.conf
+      condition: "{{ hdparm_netdata_condition | default(true) }}"
   tags:
     - hdparm
