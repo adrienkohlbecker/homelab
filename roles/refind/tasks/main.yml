@@ -203,7 +203,9 @@
 # whatever the upstream tree adds under icons/ or fonts/. --wildcards-match-slash
 # lets the globs reach the nested size dirs (icons/128-48/, ...).
 - name: Unpack refind theme
-  when: not (ansible_check_mode and refind_theme_dir.changed)
+  when: >-
+    not (ansible_check_mode and
+         (refind_theme_dir.changed or refind_theme_download.changed))
   unarchive:
     src: /var/cache/refind-theme.tar.gz
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular
