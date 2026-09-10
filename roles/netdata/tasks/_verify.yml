@@ -316,10 +316,10 @@
 # instantiation the assertions below consume: the presence/liveness fan-outs
 # against the fresh charts, and the stock systemdunits alarm the sustained-state
 # asserts read (its whole family registers in the same health pass), plus the
-# stock predictive disk alarms and the un-silenced collector alarms, and the
-# Keepalived lost-master alarm. The four GitLab Runner instances cover every
-# actionable failure reason in Runner 19; the three ordinary job outcomes are
-# asserted absent below.
+# stock predictive disk alarms, the blocklist's muted disk-space override and
+# the un-silenced collector alarms, and the Keepalived lost-master alarm. The
+# four GitLab Runner instances cover every actionable failure reason in Runner
+# 19; the three ordinary job outcomes are asserted absent below.
 - name: _verify | Fetch alarms
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
@@ -342,6 +342,13 @@
         | rejectattr('recipient', 'equalto', 'silent')
         | list
       }}
+    _silenced_disk_alerts: >-
+      {{
+        _alarms.values()
+        | selectattr('name', 'equalto', 'disk_space_usage')
+        | selectattr('recipient', 'equalto', 'silent')
+        | list
+      }}
   until: >-
     _netdata_alarms.status == 200
     and _keys | select('search', 'netdata_presence.context_system_cpu.netdata_context_missing') | list | length > 0
@@ -354,6 +361,7 @@
     and _keys | select('search', 'out_of_disk_inodes_time') | list | length > 0
     and 'keepalived_vrrp.state.keepalived_lost_master' in _keys
     and _collector_failure_alerts | length > 0
+    and _silenced_disk_alerts | length == netdata_diskspace_blocklist | length
     and _runner_alerts | length == 4
 
 - name: _verify | Predictive disk-fill alarms remain silent
@@ -379,6 +387,29 @@
     fail_msg: >-
       Expected the stock out_of_disk_space_time and out_of_disk_inodes_time
       alarms to retain their silent recipient. Got: {{ _predictive_disk_alerts }}
+
+# The blocklist overrides upstream's alarm by chart id, which is easy to render
+# wrong: an id matching no chart attaches nothing and leaves the stock alarm in
+# force with no error anywhere. Assert both directions -- every blocklisted
+# filesystem muted, and no others.
+- name: _verify | Blocklisted filesystems run the muted disk-space alarm
+  vars:
+    _silenced_disk_mounts: >-
+      {{
+        _netdata_alarms.json.alarms.values()
+        | selectattr('name', 'equalto', 'disk_space_usage')
+        | selectattr('recipient', 'equalto', 'silent')
+        | map(attribute='chart')
+        | map('regex_replace', '^disk_space[.]', '')
+        | list
+      }}
+  assert:
+    that: _silenced_disk_mounts | sort == netdata_diskspace_blocklist | sort
+    fail_msg: >-
+      Expected the disk-space blocklist to mute exactly
+      {{ netdata_diskspace_blocklist | sort }}; netdata reports
+      {{ _silenced_disk_mounts | sort }}. A chart id that matches no chart
+      leaves the stock alarm in force.
 
 - name: _verify | Keepalived alarm uses sustained VIP absence
   vars:

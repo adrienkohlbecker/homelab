@@ -106,6 +106,11 @@ netdata_collectors:
 netdata_expected_charts:
   system_cpu_chart: system.cpu
   missing_fixture_chart: fixture.does_not_exist
+# Mute the stock disk-space alarm on the root filesystem so _verify can prove
+# the per-mount override attaches by chart id. Prod hosts blocklist the
+# filesystems whose fill is already covered by the ZFS pool alarms.
+netdata_diskspace_blocklist:
+  - /
 
 # Consumed by roles/homepage. Box is unreachable to the (uninstalled)
 # netdata so the sidecar populates a per-host error entry -- _verify

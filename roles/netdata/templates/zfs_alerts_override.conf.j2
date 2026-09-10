@@ -16,22 +16,32 @@ component: File system
 
 {% endfor %}
 
+{% if netdata_diskspace_blocklist %}
+# Mute notifications for filesystems whose fill is already covered by the ZFS
+# pool alarms above. Upstream's calc and thresholds are kept verbatim, so the
+# alarm still evaluates and shows its real state -- only `to: silent` differs.
+{% endif %}
+{#
+  The mount interpolates verbatim: netdata's diskspace chart id keeps the raw
+  path (disk_space./mnt/data), so sanitizing the slashes yields an id matching
+  no chart, which silently leaves the stock alarm in force. Overriding by
+  `alarm:` + chart id -- rather than upstream's `template:` on context
+  disk.space -- scopes each override to one filesystem.
+#}
 {% for mount in netdata_diskspace_blocklist %}
     alarm: disk_space_usage
-          on: disk_space.{{ mount.replace('/', '_') }}
-       class: Utilization
-        type: System
-   component: Disk
- host labels: _os=linux freebsd
-chart labels: mount_point=!/dev !/dev/* !/run !/run/* *
-         calc: 1
-        units: %
-        every: 1m
-         warn: $this > (($status >= $WARNING ) ? (80) : (90))
-         crit: ($this > (($status == $CRITICAL) ? (90) : (98))) && $avail < 5
-        delay: up 1m down 15m multiplier 1.5 max 1h
-      summary: Disk ${label:mount_point} space usage
-         info: Total space utilization of disk ${label:mount_point}
-           to: sysadmin
+       on: disk_space.{{ mount }}
+    class: Utilization
+     type: System
+component: Disk
+     calc: $used * 100 / ($avail + $used)
+    units: %
+    every: 1m
+     warn: $this > (($status >= $WARNING ) ? (80) : (90))
+     crit: ($this > (($status == $CRITICAL) ? (90) : (98))) && $avail < 5
+    delay: up 1m down 15m multiplier 1.5 max 1h
+  summary: Disk ${label:mount_point} space usage
+     info: Total space utilization of disk ${label:mount_point}
+       to: silent
 
 {% endfor %}
