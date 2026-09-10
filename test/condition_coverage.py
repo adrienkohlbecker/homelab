@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -84,11 +86,11 @@ def _walk_when_values(value: object) -> Iterator[object]:
 
 def production_condition_paths(roles: Iterable[str] | None = None, *, include_site: bool = False) -> list[Path]:
     """Return production task files in the requested coverage scope."""
-    selected_roles = set(roles or ())
+    selected_roles = None if roles is None else set(roles)
     paths = [
         path
         for path in Path("roles").glob("*/tasks/*.yml")
-        if not path.name.startswith("_") and (not selected_roles or path.parts[1] in selected_roles)
+        if not path.name.startswith("_") and (selected_roles is None or path.parts[1] in selected_roles)
     ]
     if include_site:
         paths.append(Path("site.yml"))
@@ -128,3 +130,74 @@ def load_outcomes(paths: Iterable[Path]) -> dict[ConditionKey, set[bool]]:
                 key = ConditionKey(**data["condition"])
                 merged.setdefault(key, set()).add(bool(data["outcome"]))
     return merged
+
+
+def missing_outcomes(
+    expected: Iterable[ConditionKey],
+    observed: dict[ConditionKey, set[bool]],
+) -> dict[ConditionKey, set[bool]]:
+    """Return the Boolean results not observed for each expected condition."""
+    both = {False, True}
+    return {
+        condition: both.difference(observed.get(condition, set()))
+        for condition in expected
+        if observed.get(condition, set()) != both
+    }
+
+
+def format_missing_outcomes(missing: dict[ConditionKey, set[bool]]) -> str:
+    """Render uncovered condition outcomes as source-oriented diagnostics."""
+    lines = [f"{len(missing)} Ansible condition(s) lack Boolean branch coverage:"]
+    for condition, outcomes in sorted(missing.items()):
+        labels = ", ".join(str(outcome).lower() for outcome in sorted(outcomes))
+        expression = " ".join(condition.expression.split())
+        lines.append(f"  {condition.path}:{condition.line}:{condition.column}: missing {labels}: {expression}")
+    return "\n".join(lines)
+
+
+def check_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> dict[ConditionKey, set[bool]]:
+    """Compare production conditions with outcomes merged from test reports."""
+    expected = inventory_conditions(production_condition_paths(roles, include_site=include_site))
+    observed = load_outcomes(reports)
+    return missing_outcomes(expected, observed)
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--roles",
+        required=True,
+        type=lambda value: [role for role in value.split(",") if role],
+        help="Comma-separated production roles whose conditions must be covered",
+    )
+    parser.add_argument(
+        "--include-site",
+        action="store_true",
+        help="Also require both outcomes for conditions declared directly in site.yml",
+    )
+    parser.add_argument("reports", nargs="+", type=Path, help="Callback JSONL report files to merge")
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Check condition coverage from the command line."""
+    args = _parse_args()
+    try:
+        missing = check_coverage(args.roles, args.reports, include_site=args.include_site)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Condition coverage report error: {exc}", file=sys.stderr)
+        return 1
+    if missing:
+        print(format_missing_outcomes(missing), file=sys.stderr)
+        return 1
+    print("Every selected Ansible condition evaluated both true and false.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -389,6 +389,7 @@ class Machine:
     dmesg_file: Path
     systemctl_failed_file: Path
     passt_file: Path
+    condition_coverage_file: Path
     workdir: tempfile.TemporaryDirectory[str]
     workdir_path: Path
     # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
@@ -528,6 +529,7 @@ class Machine:
         self.dmesg_file = OUT_DIR / f"{prefix}.dmesg.ansi"
         self.systemctl_failed_file = OUT_DIR / f"{prefix}.systemctl-failed.ansi"
         self.passt_file = OUT_DIR / f"{prefix}.passt.ansi"
+        self.condition_coverage_file = OUT_DIR / "condition_coverage" / f"{prefix}.jsonl"
         self._artifact_files = (
             self.output_file,
             self.journal_file,
@@ -538,6 +540,7 @@ class Machine:
         )
         for stale in self._artifact_files:
             stale.unlink(missing_ok=True)
+        self.condition_coverage_file.unlink(missing_ok=True)
         # The workdir lands alongside the packer qcow2s by default. An explicit
         # workdir_parent (CI flag) overrides so the imagedir can be ro-mounted.
         # Auto-create the parent so --workdir-parent /some/new/path just works
@@ -809,11 +812,29 @@ class Machine:
 
         return await run_command(self.format_ssh_cmd(*cmd), check=check)
 
-    async def ansible_command(self, *cmd: str, check: bool = True) -> CommandResult:
+    async def ansible_command(
+        self,
+        *cmd: str,
+        check: bool = True,
+        coverage_phase: str | None = None,
+    ) -> CommandResult:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
         self._stage_ansible_controller()
-        return await run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
+        env = self.ansible_env()
+        if coverage_phase is not None:
+            callbacks = {
+                name.strip() for name in os.environ.get("ANSIBLE_CALLBACKS_ENABLED", "").split(",") if name.strip()
+            }
+            callbacks.add("condition_coverage")
+            env.update(
+                {
+                    "ANSIBLE_CALLBACKS_ENABLED": ",".join(sorted(callbacks)),
+                    "ANSIBLE_CONDITION_COVERAGE_FILE": str(self.condition_coverage_file),
+                    "ANSIBLE_CONDITION_COVERAGE_PHASE": coverage_phase,
+                }
+            )
+        return await run_command(self.format_ansible_cmd(*cmd), check=check, env=env)
 
     def _stage_ansible_controller(self) -> None:
         """Populate controller inputs on demand before the first Ansible run."""

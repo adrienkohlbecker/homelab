@@ -580,6 +580,7 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_
     stages = (["site"] if site_test else []) + cell_stages or ["test1"]
     return template.render(
         cells=cells,
+        roles=sorted({cell["role"] for cell in cells}),
         cell_groups=cell_groups,
         stages=stages,
         site_test=site_test,

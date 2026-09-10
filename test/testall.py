@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from condition_coverage import check_coverage, format_missing_outcomes
 from machine import (
     MACHINE_CHOICES,
     UBUNTU_RELEASES,
@@ -34,6 +35,7 @@ from tabulate import tabulate
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
+CONDITION_COVERAGE_DIR = Path("test/out/condition_coverage")
 JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "Started"]
 LIVENESS_TICK_SECONDS = 300.0  # 5 minutes
 
@@ -338,6 +340,11 @@ def _write_joblog(results: list[JobResult]) -> None:
             )
 
 
+def _condition_coverage_reports(roles: Collection[str]) -> list[Path]:
+    """Return cell reports belonging to the selected role matrix."""
+    return sorted(path for role in roles for path in CONDITION_COVERAGE_DIR.glob(f"*.{role}.jsonl"))
+
+
 def main() -> int:
     """Entry point for running tests."""
     args = parse_args()
@@ -449,6 +456,27 @@ def main() -> int:
             f"\n{len(results)} role(s) passed in {wall_clock:.0f}s wall clock "
             f"(parallelism={args.jobs}, longest: {longest.cell.role} on "
             f"{longest.cell.machine}:{longest.cell.ubuntu} at {longest.runtime:.0f}s)",
+            file=sys.stderr,
+        )
+
+    complete_matrix = not args.retry_failed and args.machines is None and args.ubuntu is None
+    if complete_matrix:
+        selected_roles = {cell.role for cell in cells}
+        try:
+            missing = check_coverage(selected_roles, _condition_coverage_reports(selected_roles))
+        except (OSError, ValueError) as exc:
+            print(f"Condition coverage report error: {exc}", file=sys.stderr)
+            return 1
+        if missing:
+            print(format_missing_outcomes(missing), file=sys.stderr)
+            return 1
+        print(
+            f"Every condition in {len(selected_roles)} selected role(s) evaluated both true and false.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "Condition coverage gate skipped for a partial machine/release or retry matrix.",
             file=sys.stderr,
         )
 
