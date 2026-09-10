@@ -3,3 +3,5 @@
 machines:
   box:
   lab:
+  # Minimal boots from ext4 and exercises the supported non-root-ZFS path.
+  minimal:
