@@ -5,7 +5,7 @@
 #   gate        return 401 plus the portal redirect target
 #   authed      admit and return a fixed Remote-User header
 #   basic       admit only the fixed nginxverify:secret credential
-- name: test_authelia_stub | Assert mode is a known value
+- name: Test authelia stub | Assert mode is a known value
   assert:
     that:
       - (nginx_test_authelia_stub_args | default({})).mode | default('gate') in ['gate', 'authed', 'basic']
@@ -14,12 +14,12 @@
       gate/authed/basic; got
       '{{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}'.
 
-- name: test_authelia_stub | Resolve caller defaults
+- name: Test authelia stub | Resolve caller defaults
   set_fact:
     _nginx_test_authelia_stub_mode: >-
       {{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}
 
-- name: test_authelia_stub | Install fixture for /api/authz/auth-request  # noqa: require-validate
+- name: Test authelia stub | Install fixture for /api/authz/auth-request  # noqa: require-validate
   copy:
     dest: /etc/nginx/conf.d/test_authelia_stub.conf
     owner: root
@@ -55,7 +55,7 @@
   register: nginx_test_authelia_stub_conf
   become: true
 
-- name: test_authelia_stub | Validate nginx config
+- name: Test authelia stub | Validate nginx config
   when:
     - not ansible_check_mode
     - nginx_test_authelia_stub_conf.changed
@@ -63,7 +63,7 @@
   changed_when: false
   become: true
 
-- name: test_authelia_stub | Reload nginx
+- name: Test authelia stub | Reload nginx
   when:
     - not ansible_check_mode
     - nginx_test_authelia_stub_conf.changed
@@ -72,7 +72,7 @@
     state: reloaded
   become: true
 
-- name: test_authelia_stub | Wait for the fixture to answer
+- name: Test authelia stub | Wait for the fixture to answer
   when: not ansible_check_mode
   uri:
     url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"

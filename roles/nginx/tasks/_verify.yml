@@ -136,7 +136,7 @@
 # Re-point the Authelia stub to gate mode (401) so the negative auth path
 # exercises the error_page 401 -> 302 redirect.
 - name: _verify | Install Authelia stub in gate mode
-  import_tasks: test_authelia_stub.yml
+  import_tasks: _test_authelia_stub.yml
 
 # Exercises the nginx_site helper end-to-end (assert, template, symlink, the
 # new nginx -t validate-rollback, reload) on top of being the probe target.
@@ -270,7 +270,7 @@
 # and location_conf re-emit paths run with auth SUCCEEDING, which the gate-mode
 # tests above can't reach.
 - name: _verify | Switch the Authelia stub to authed mode
-  import_tasks: test_authelia_stub.yml
+  import_tasks: _test_authelia_stub.yml
   vars:
     nginx_test_authelia_stub_args:
       mode: authed
@@ -301,7 +301,7 @@
 # credential. The helper keeps forwarding opt-in so ordinary Token/Bearer apps
 # retain the cookie-only behavior exercised above.
 - name: _verify | Switch the Authelia stub to Basic mode
-  import_tasks: test_authelia_stub.yml
+  import_tasks: _test_authelia_stub.yml
   vars:
     nginx_test_authelia_stub_args:
       mode: basic
@@ -338,7 +338,7 @@
   delay: 1
 
 - name: _verify | Restore the Authelia stub to authed mode
-  import_tasks: test_authelia_stub.yml
+  import_tasks: _test_authelia_stub.yml
   vars:
     nginx_test_authelia_stub_args:
       mode: authed
@@ -579,6 +579,68 @@
       file:
         path: /etc/nginx/sites-available/nginxverifydisabled
         state: absent
+      become: true
+
+# Make the enable step fail after an idempotent template write. The helper's
+# rescue must leave an unchanged config alone and must not try to remove a
+# symlink it did not create.
+- name: _verify | Exercise rollback after an unchanged site write
+  vars:
+    _nginx_verify_enable_failure_args:
+      subdomain: nginxverifyenablefailure
+      proxy_pass: http://127.0.0.1:18080/
+  block:
+    - name: _verify | Configure the enable-failure fixture
+      import_tasks: site.yml
+      vars:
+        nginx_site_args: "{{ _nginx_verify_enable_failure_args }}"
+
+    - name: _verify | Remove the fixture symlink before creating a conflict
+      file:
+        path: /etc/nginx/sites-enabled/nginxverifyenablefailure
+        state: absent
+      become: true
+
+    - name: _verify | Create a directory where the helper expects a symlink
+      file:
+        path: /etc/nginx/sites-enabled/nginxverifyenablefailure
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    - name: _verify | Unchanged site with an invalid enable path must fail
+      block:
+        - name: _verify | Reconfigure the enable-failure fixture
+          import_tasks: site.yml
+          vars:
+            nginx_site_args: "{{ _nginx_verify_enable_failure_args }}"
+
+        - name: _verify | Sentinel fail if the conflicting path was accepted
+          fail:
+            msg: The helper unexpectedly replaced a directory with a symlink.
+      rescue:
+        - name: _verify | Confirm the conflicting directory survived rollback
+          stat:
+            path: /etc/nginx/sites-enabled/nginxverifyenablefailure
+          register: _nginx_verify_enable_failure_path
+          failed_when: not _nginx_verify_enable_failure_path.stat.isdir
+          become: true
+  always:
+    - name: _verify | Remove the enable-failure fixture
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/nginx/sites-enabled/nginxverifyenablefailure
+        - /etc/nginx/sites-available/nginxverifyenablefailure
+      become: true
+
+    - name: _verify | Reload nginx after enable-failure fixture cleanup
+      systemd:
+        name: nginx
+        state: reloaded
       become: true
 
 # Feed the helper a syntactically broken server_conf and confirm the config and

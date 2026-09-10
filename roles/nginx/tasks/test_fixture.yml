@@ -15,7 +15,7 @@
 
 - name: test_fixture | Install Authelia stub
   when: (nginx_test_fixture_args | default({})).authelia_mode is defined
-  import_tasks: test_authelia_stub.yml
+  import_tasks: _test_authelia_stub.yml
   vars:
     nginx_test_authelia_stub_args:
       mode: >-
