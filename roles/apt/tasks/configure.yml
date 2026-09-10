@@ -19,10 +19,11 @@
 # Ubuntu ships the Rust coreutils selector by default from 25.10 onward, and
 # its timeout differs from GNU timeout in the signal/exit contract the QEMU
 # watchdog relies on. Keep the complete GNU implementation rather than carrying
-# per-command compatibility workarounds. Blacklisting Noble rather than naming
-# each successor keeps future releases covered by default.
+# per-command compatibility workarounds. Gate on the release version, not a
+# name list: every successor is covered, and the providers this reads and
+# writes do not exist before 25.10 to be queried or installed.
 - name: Read the GNU coreutils selection
-  when: ansible_distribution_release != 'noble'
+  when: ansible_distribution_version is version('25.10', '>=')
   command:
     argv:
       - dpkg-query
@@ -42,7 +43,7 @@
 # beyond the provider being replaced.
 - name: Select GNU coreutils
   when:
-    - ansible_distribution_release != 'noble'
+    - ansible_distribution_version is version('25.10', '>=')
     - apt_coreutils_from_gnu.rc != 0 or 'install ok installed' not in apt_coreutils_from_gnu.stdout
   tags:
     - apt
