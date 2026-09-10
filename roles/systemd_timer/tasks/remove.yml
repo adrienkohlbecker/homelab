@@ -41,10 +41,10 @@
       dest: "{{ systemd_timer_args.name }}.service"
       user: "{{ _systemd_timer_user }}"
 
-# Mirror install.yml's metadata write so a removed timer also stops
-# being polled by the netdata systemd_timers collector. For user-scope timers
-# install.yml never writes the file, so state: absent is a harmless no-op.
+# Mirror install.yml's system-scope-only metadata write so removing a user
+# timer with the same name cannot erase a system timer's monitoring state.
 - name: remove | Drop systemd_timers metadata for {{ systemd_timer_args.name }}
+  when: _systemd_timer_user == 'root'
   file:
     path: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
     state: absent
@@ -54,11 +54,26 @@
 # /var/lib/systemd/timers/stamp-<name>.timer; its mtime is the last-fire
 # time. Removing the units orphans that stamp, and a later timer reusing
 # the name inherits it so Persistent=true fires an unwanted catch-up on
-# first enable. Drop it. System scope only: user-scope stamps live under
-# the owning user's ~/.local/share/systemd/timers.
-- name: remove | Drop persistent trigger stamp for {{ systemd_timer_args.name }}
+# first enable. System- and user-scope managers store it separately.
+- name: remove | Drop system persistent trigger stamp for {{ systemd_timer_args.name }}
   when: _systemd_timer_user == 'root'
   file:
     path: /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
+    state: absent
+  become: true
+
+- name: remove | Resolve user home for {{ systemd_timer_args.name }}
+  when: _systemd_timer_user != 'root'
+  getent:
+    database: passwd
+    key: "{{ _systemd_timer_user }}"
+  register: _systemd_timer_user_passwd
+
+- name: remove | Drop user persistent trigger stamp for {{ systemd_timer_args.name }}
+  when: _systemd_timer_user != 'root'
+  file:
+    path: >-
+      {{ _systemd_timer_user_passwd.ansible_facts.getent_passwd[_systemd_timer_user][4]
+         }}/.local/share/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
     state: absent
   become: true
