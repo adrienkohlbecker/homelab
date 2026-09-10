@@ -143,6 +143,11 @@
   register: boot_cmdline_slurped
   become: true
 
+# No zfs_root gate: ZFSBootMenu boots from rpool by definition, so every
+# `not grub_bootloader` host has rpool/ROOT. The invariant holds in the fixtures
+# too -- `minimal` is the only zfs_root: false machine and it is also the only
+# grub_bootloader: true one. A future non-GRUB ext4 host would break it and this
+# would set a property on a pool that does not exist.
 - name: cmdline | Assemble commandline
   when:
     - not grub_bootloader
