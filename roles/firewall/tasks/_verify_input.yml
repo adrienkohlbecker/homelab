@@ -211,10 +211,13 @@
     --connect-timeout 3 --max-time 5 -sf
     http://{{ _firewall_probe_home_mac_host }}:{{ item.port }}/
   loop:
-    - { label: Samba, port: "445" }
+    - label: Samba
+      port: "445"
+      enabled: "{{ _firewall_verify_samba_enabled }}"
     - { label: nut, port: "{{ service_ports.nut }}" }
   loop_control:
     label: "{{ item.label }}"
+  when: item.enabled | default(true) | bool
   register: _firewall_mac_admin_tcp
   changed_when: false
   failed_when: _firewall_mac_admin_tcp.rc != 0 or 'firewall-verify-ok' not in _firewall_mac_admin_tcp.stdout
