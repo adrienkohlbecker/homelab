@@ -155,14 +155,27 @@ def load_synthetic_outcomes(path: Path) -> dict[ConditionKey, set[bool]]:
             raise ValueError(f"{path}: scenario {index} must be a mapping")
         source_path = str(scenario.get("path", ""))
         expression = _normalized_expression(str(scenario.get("expression", "")))
+        source_line = scenario.get("line")
+        if source_line is not None and not isinstance(source_line, int):
+            raise ValueError(f"{path}: scenario {index} line must be an integer")
+        all_matches = scenario.get("all", False)
+        if not isinstance(all_matches, bool):
+            raise ValueError(f"{path}: scenario {index} all must be a Boolean")
         matches = {
             condition
             for condition in conditions
-            if condition.path == source_path and _normalized_expression(condition.expression) == expression
+            if condition.path == source_path
+            and _normalized_expression(condition.expression) == expression
+            and (source_line is None or condition.line == source_line)
         }
         if not matches:
             raise ValueError(
                 f"{path}: scenario {index} does not match a current condition: {source_path}: {expression}"
+            )
+        if len(matches) > 1 and not all_matches:
+            lines = ", ".join(str(condition.line) for condition in sorted(matches))
+            raise ValueError(
+                f"{path}: scenario {index} matches lines {lines}; select one with line or set all: true"
             )
 
         cases = scenario.get("cases", [])
