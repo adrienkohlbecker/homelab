@@ -27,6 +27,25 @@
     mode: "0755"
   become: true
 
+# The standalone role fixture normally omits the snapshot target. Install a
+# real target so converge also exercises the cross-role PartOf/Wants binding
+# used on production ZFS hosts.
+- name: _setup | Install a snapshot target fixture
+  copy:
+    dest: /etc/systemd/system/zfs_autosnapshot.target
+    content: |
+      [Unit]
+      Description=Tailscale snapshot binding fixture
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Reload systemd after installing the target fixture
+  systemd:
+    daemon_reload: true
+  become: true
+
 # Bring up the headscale control plane. server_url points at the plain-http
 # loopback listener (not the https vhost) so the client below can register
 # without trusting the box's snakeoil cert.
