@@ -10,16 +10,19 @@
 # A wrong rewrite makes the resolved dataset lookup fail; the same check also
 # asserts its configured mountpoint and live mount-table entry.
 - name: _verify | Check regular dataset mount passes
+  when: zfs_root
   command: /usr/local/bin/zfs_check_mount {{ zfs_tank_filesystem }}/_verify_probe /mnt/_verify_probe
   register: _zfs_dataset_verify_probe_mount
   changed_when: false
   become: true
 
 - name: _verify | Successful regular dataset mount check is silent
+  when: zfs_root
   assert:
     that: _zfs_dataset_verify_probe_mount.stdout == ''
 
 - name: _verify | Check invalid mount states fail
+  when: zfs_root
   command:
     argv: "{{ ['/usr/local/bin/zfs_check_mount'] + zfs_dataset_verify_mount_case.args }}"
   register: _zfs_dataset_verify_mount_negative
@@ -35,6 +38,7 @@
   become: true
 
 - name: _verify | Remove probe mount unit
+  when: zfs_root
   import_role:
     name: systemd_unit
     tasks_from: remove
@@ -43,9 +47,31 @@
       dest: zfs_mount_mnt__verify_probe.service
 
 - name: _verify | Destroy probe dataset
+  when: zfs_root
   command: zfs destroy -r {{ zfs_tank_filesystem }}/_verify_probe
   changed_when: true
   become: true
+
+- name: _verify | Exercise the plain-directory fallback as the operator
+  when: not zfs_root
+  command:
+    argv:
+      - python3
+      - -c
+      - |-
+        from pathlib import Path
+        probe = Path("/mnt/_verify_probe/operator-write")
+        probe.write_text("fallback works\n")
+        print(probe.read_text(), end="")
+  register: _zfs_dataset_verify_fallback
+  changed_when: true
+  failed_when: _zfs_dataset_verify_fallback.stdout != 'fallback works'
+
+- name: _verify | Remove the plain-directory write probe
+  when: not zfs_root
+  file:
+    path: /mnt/_verify_probe/operator-write
+    state: absent
 
 - name: _verify | Remove probe mountpoint
   file:
