@@ -17,6 +17,14 @@
   tags:
     - fluentbit
 
+- name: Record fluent-bit package readiness
+  set_fact:
+    fluentbit_package_ready: >-
+      {{ not (ansible_check_mode and
+              (apt_source_fluentbit_changed or fluentbit_apt.changed)) }}
+  tags:
+    - fluentbit
+
 # fluent-bit's filesystem backlog under /var/lib/fluent-bit/storage/
 # queues records while local outputs are backpressured. The package
 # leaves /var/lib/fluent-bit/ at 0755 and fluent-bit creates storage/
@@ -34,7 +42,7 @@
     - /var/lib/fluent-bit
     - /var/lib/fluent-bit/storage
   become: true
-  when: not (ansible_check_mode and fluentbit_apt.changed)
+  when: fluentbit_package_ready
   tags:
     - fluentbit
 
@@ -55,11 +63,12 @@
     - filters-pre.yaml
   become: true
   register: fluentbit_assets
-  when: not (ansible_check_mode and fluentbit_apt.changed)
+  when: fluentbit_package_ready
   tags:
     - fluentbit
 
 - name: Create fluent-bit service extension directory
+  when: fluentbit_package_ready
   file:
     path: /etc/fluent-bit/services
     state: directory
@@ -72,6 +81,7 @@
     - fluentbit
 
 - name: Initialize fluent-bit service manifest  # noqa: require-validate
+  when: fluentbit_package_ready
   copy:
     content: "includes: []\n"
     dest: /etc/fluent-bit/services.yaml
@@ -86,6 +96,7 @@
     - fluentbit
 
 - name: Install fluent-bit post-service filters  # noqa: require-validate
+  when: fluentbit_package_ready
   template:
     src: filters-post.yaml.j2
     dest: /etc/fluent-bit/filters-post.yaml
@@ -99,6 +110,7 @@
     - fluentbit
 
 - name: Create Fluent Bit lnav log directory
+  when: fluentbit_package_ready
   file:
     path: /var/log/fluent-bit
     state: directory
@@ -110,6 +122,7 @@
     - fluentbit
 
 - name: Create Fluent Bit lnav JSONL store
+  when: fluentbit_package_ready
   file:
     path: /var/log/fluent-bit/lnav.jsonl
     state: touch
@@ -130,6 +143,7 @@
     logrotate_args:
       src: logrotate.j2
       dest: /etc/logrotate.d/fluent-bit-lnav
+      condition: "{{ fluentbit_package_ready }}"
   tags:
     - fluentbit
 
@@ -145,10 +159,10 @@
   become: true
   register: fluentbit_conf
   when: >-
-    not (ansible_check_mode and
-         (fluentbit_apt.changed or fluentbit_assets.changed or
-          fluentbit_extension_dir.changed or fluentbit_service_manifest.changed or
-          fluentbit_filters_post.changed))
+    fluentbit_package_ready
+    and not (ansible_check_mode and
+             (fluentbit_assets.changed or fluentbit_extension_dir.changed
+              or fluentbit_service_manifest.changed or fluentbit_filters_post.changed))
   tags:
     - fluentbit
 
@@ -160,7 +174,7 @@
     systemd_unit_args:
       src: override.conf.j2
       for: fluent-bit.service
-      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed)) }}"
+      condition: "{{ fluentbit_package_ready }}"
   tags:
     - fluentbit
 
@@ -169,7 +183,7 @@
 # in-memory backlog. Mutually exclusive (`and not restart`) matches the
 # avahi pattern.
 - name: Enable fluent-bit service
-  when: not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed))
+  when: fluentbit_package_ready
   systemd:
     name: fluent-bit.service
     enabled: true
