@@ -8,6 +8,7 @@ macvlan_blocks:
     podman_network: true
 
 has_transcoding_acceleration: false
+jellyfin_transcoding_backend: none
 
 # Override Lab's physical-NIC profile at extra-vars precedence.
 netplan: "{{ qemu_netplan }}"

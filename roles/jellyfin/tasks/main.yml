@@ -5,12 +5,27 @@
   tags:
     - jellyfin
 
+- name: Validate the jellyfin transcoding backend
+  assert:
+    that:
+      - jellyfin_transcoding_backend in ['none', 'intel_qsv']
+      - >-
+        jellyfin_transcoding_backend != 'intel_qsv'
+        or ansible_architecture == 'x86_64'
+        or qemu_test | default(false)
+    fail_msg: >-
+      jellyfin_transcoding_backend must be none or intel_qsv; intel_qsv requires
+      x86_64 outside the QEMU wiring fixture (got
+      {{ jellyfin_transcoding_backend }} on {{ ansible_architecture }}).
+  tags:
+    - jellyfin
+
 # Use the package-owned render GID so --group-add matches the GPU device.
 - name: Lookup render group gid (HW transcoding hosts only)
   getent:
     database: group
     key: render
-  when: has_transcoding_acceleration
+  when: jellyfin_transcoding_backend == 'intel_qsv'
   become: true
   tags:
     - jellyfin
@@ -424,7 +439,7 @@
 # gate, and in check mode by command's own default.
 - name: Confirm hardware transcoding works
   when:
-    - has_transcoding_acceleration
+    - jellyfin_transcoding_backend == 'intel_qsv'
     - not (qemu_test | default(false))
   command: >-
     podman exec jellyfin /usr/lib/jellyfin-ffmpeg/ffmpeg

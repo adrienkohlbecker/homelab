@@ -64,14 +64,14 @@
 # getent_group fact set in main.yml's converge phase isn't in scope
 # here — re-lookup before asserting.
 - name: _verify | Re-lookup render gid for assertions
-  when: has_transcoding_acceleration
+  when: jellyfin_transcoding_backend == 'intel_qsv'
   become: true
   getent:
     database: group
     key: render
 
 - name: _verify | Confirm /dev/dri/renderD128 inside container
-  when: has_transcoding_acceleration
+  when: jellyfin_transcoding_backend == 'intel_qsv'
   command: podman exec jellyfin stat -c %n /dev/dri/renderD128
   register: _jellyfin_dri_in_container
   changed_when: false
@@ -79,7 +79,7 @@
   become: true
 
 - name: _verify | Confirm render gid in container supplementary groups
-  when: has_transcoding_acceleration
+  when: jellyfin_transcoding_backend == 'intel_qsv'
   command: podman exec jellyfin id -G
   register: _jellyfin_container_groups
   changed_when: false

@@ -256,6 +256,7 @@ samba_shares:
     valid users: ak
 
 has_transcoding_acceleration: true
+jellyfin_transcoding_backend: intel_qsv
 
 # Apex names are outside the per-host wildcard, so the Authelia portal and the
 # shared DoT name must be explicit SANs. SAN drift triggers certificate renewal.
