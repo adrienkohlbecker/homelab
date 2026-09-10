@@ -329,11 +329,17 @@
     # we take another host out of the fleet. Skip when we didn't reboot,
     # and skip for a single-host run (e.g. --limit foo) — there's no
     # next host to settle ahead of, so the pause would just stall.
-    - name: Settle before cycling the next host
+    #
+    # noqa no-inventory-hostname-when: the rule targets hardcoded host lists a
+    # new host silently misses. This names no host -- it compares against the
+    # play's own tail -- and inventory_hostname is the identity that matches
+    # what ansible_play_hosts_all holds, which is inventory names rather than
+    # each host's discovered hostname.
+    - name: Settle before cycling the next host  # noqa: no-inventory-hostname-when
       pause:
         minutes: 2
         prompt: "Waiting 2 min for services to resettle before cycling the next host (Ctrl+C then C to skip)"
       when:
         - reboot_required.stat.exists
         - ansible_play_hosts_all | length > 1
-        - ansible_hostname != ansible_play_hosts_all[-1]
+        - inventory_hostname != ansible_play_hosts_all[-1]
