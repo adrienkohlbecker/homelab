@@ -1,4 +1,29 @@
 ---
+- name: _verify | Save the configured Nexus encryption key
+  set_fact:
+    _nexus_verify_original_encryption_key: "{{ nexus_encryption_key }}"
+
+- name: _verify | Refuse an in-place Nexus encryption-key change
+  block:
+    - name: _verify | Re-run Nexus with changed encryption material
+      import_role:
+        name: nexus
+        tasks_from: main
+      vars:
+        nexus_encryption_key: "{{ _nexus_verify_original_encryption_key }}-changed"
+
+    - name: _verify | Sentinel fail if encryption-key drift was accepted
+      fail:
+        msg: Nexus accepted an in-place encryption-key change.
+  rescue:
+    - name: _verify | Confirm the encryption guard caused the failure
+      assert:
+        that:
+          - ansible_failed_task.name == 'Fail if the nexus encryption material would change in place'
+        fail_msg: >-
+          Expected the Nexus encryption guard to fail, got
+          {{ ansible_failed_task.name | default('<unknown>') }}.
+
 - name: _verify | Exercise nexus fluent-bit record contracts
   import_role:
     name: fluentbit
