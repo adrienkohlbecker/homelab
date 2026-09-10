@@ -7,7 +7,9 @@
 - name: _verify | Installed version matches pinned version
   assert:
     that:
-      - zfs_autobackup_version in zfs_autobackup_verify_version.stdout
+      - >-
+        ('v' ~ zfs_autobackup_version)
+        in zfs_autobackup_verify_version.stdout.split()
     fail_msg: >-
       installed={{ zfs_autobackup_verify_version.stdout | trim }},
       expected={{ zfs_autobackup_version }}

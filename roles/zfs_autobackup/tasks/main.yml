@@ -61,7 +61,8 @@
 - name: Install zfs-autobackup via pipx
   when: >-
     not (ansible_check_mode and _zfs_autobackup_apt.changed)
-    and zfs_autobackup_version not in (_zfs_autobackup_version_check.stdout | default(''))
+    and ('v' ~ zfs_autobackup_version)
+        not in (_zfs_autobackup_version_check.stdout | default('')).split()
   command: pipx install --force "zfs-autobackup=={{ zfs_autobackup_version }}"
   changed_when: true
   environment:
