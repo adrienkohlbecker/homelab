@@ -16,13 +16,15 @@
       # parent allows a `.` for VLAN subifs (e.g. eth0.4 / iot).
       - macvlan_args.parent is string and macvlan_args.parent is match('^[a-z][a-z0-9_.]*$')
       - macvlan_args.vlan is string and macvlan_args.vlan is match('^[a-z][a-z0-9_]*$')
+      - macvlan_args.podman_network is not defined or macvlan_args.podman_network is boolean
       - network.hosts[inventory_hostname].site is defined
       - network.hosts[inventory_hostname].slot is defined
       - network.sites[network.hosts[inventory_hostname].site].vlans[macvlan_args.vlan].cidr is defined
     fail_msg: >-
       macvlan_args invalid for '{{ macvlan_args.name | default('<no name>') }}':
       name must be a kernel-legal iface name (^[a-z][a-z0-9_]*$, <=15 chars),
-      parent an iface name, and vlan a topology VLAN for this host's site.
+      parent an iface name, vlan a topology VLAN for this host's site, and
+      podman_network a boolean when set.
   loop: "{{ macvlan_blocks }}"
   loop_control:
     loop_var: macvlan_args
