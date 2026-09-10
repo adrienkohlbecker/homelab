@@ -20,11 +20,7 @@
     path: /srv/filebrowser/{{ item.name }}
     src: "{{ item.src if item.enabled | bool else omit }}"
     state: "{{ 'link' if item.enabled | bool else 'absent' }}"
-  loop:
-    - { name: home, src: "{{ ansible_user_dir }}", enabled: true }
-    - { name: data, src: /mnt/data, enabled: "{{ zfs_has_data_mount }}" }
-    - { name: media, src: /mnt/media, enabled: "{{ zfs_has_media_mount }}" }
-    - { name: services, src: /mnt/services, enabled: "{{ zfs_has_services_mount }}" }
+  loop: "{{ filebrowser_trees }}"
   loop_control:
     label: "{{ item.name }}"
   become: true
