@@ -89,13 +89,20 @@ def _walk_when_values(value: object) -> Iterator[object]:
 
 
 def production_condition_paths(roles: Iterable[str] | None = None, *, include_site: bool = False) -> list[Path]:
-    """Return production task files in the requested coverage scope."""
+    """Return production task files in the requested coverage scope.
+
+    Raises when a requested role contributes no task file. An empty scope would
+    otherwise expect nothing and report full coverage, so a renamed or misspelled
+    role silently retires its own gate -- exactly when the gate should shout.
+    """
     selected_roles = None if roles is None else set(roles)
     paths = [
         path
         for path in Path("roles").glob("*/tasks/*.yml")
         if not path.name.startswith("_") and (selected_roles is None or path.parts[1] in selected_roles)
     ]
+    if selected_roles is not None and (unknown := selected_roles.difference(path.parts[1] for path in paths)):
+        raise ValueError(f"no roles/<role>/tasks/*.yml for requested role(s): {', '.join(sorted(unknown))}")
     if include_site and Path("site.yml").exists():
         paths.append(Path("site.yml"))
     return sorted(paths)
