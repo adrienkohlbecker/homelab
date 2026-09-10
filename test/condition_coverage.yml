@@ -706,3 +706,325 @@ scenarios:
         variables:
           zfsbootmenu_common_artifact_install:
             changed: true
+
+  # Fresh-install and check-mode prerequisite states
+  - path: roles/adguard/tasks/main.yml
+    expression: adguard_network_info.networks | default([]) | length > 0
+    cases:
+      - outcome: false
+        variables:
+          adguard_network_info: {}
+
+  - path: roles/boot/tasks/cmdline.yml
+    expression: not (ansible_check_mode and boot_cmdline_grub_directory.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          boot_cmdline_grub_directory:
+            changed: true
+
+  - path: roles/boot/tasks/cmdline.yml
+    expression: not (ansible_check_mode and boot_cmdline_zbm_directory.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          boot_cmdline_zbm_directory:
+            changed: true
+
+  - path: roles/firewall/tasks/main.yml
+    line: 200
+    expression: not (ansible_check_mode and firewall_sysctl.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          firewall_sysctl:
+            changed: true
+
+  - path: roles/firewall/tasks/main.yml
+    expression: not (ansible_check_mode and firewall_apt_nftables.changed)
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          firewall_apt_nftables:
+            changed: true
+
+  - path: roles/fluentbit/tasks/extension_remove.yml
+    expression: not ansible_check_mode
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+
+  - path: roles/netdata/tasks/config.yml
+    expression: not (ansible_check_mode and netdata_config_dir.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          netdata_config_dir:
+            changed: true
+
+  - path: roles/netdata/tasks/health.yml
+    expression: not (ansible_check_mode and netdata_health_directories.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          netdata_health_directories:
+            changed: true
+
+  - path: roles/netdata/tasks/install.yml
+    expression: not (ansible_check_mode and netdata_apt.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          netdata_apt:
+            changed: true
+
+  - path: roles/podman/tasks/image.yml
+    expression: not ansible_check_mode or _podman_image_binary.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          _podman_image_binary:
+            stat:
+              exists: false
+
+  - path: roles/refind/tasks/main.yml
+    expression: not (ansible_check_mode and refind_apt.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          refind_apt:
+            changed: true
+
+  - path: roles/ssh/tasks/main.yml
+    expression: not (ansible_check_mode and ssh_apt.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          ssh_apt:
+            changed: true
+
+  - path: roles/zfs/tasks/main.yml
+    line: 280
+    expression: not (ansible_check_mode and zfs_apt.changed)
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          zfs_apt:
+            changed: true
+
+  # Bootloader, firmware, and installed-unit states unavailable in one fixture
+  - path: roles/boot/tasks/cmdline.yml
+    line: 138
+    expression: not grub_bootloader
+    cases:
+      - outcome: false
+        variables:
+          grub_bootloader: true
+
+  - path: roles/boot/tasks/cmdline.yml
+    line: 139
+    expression: boot_cmdline_zbm_fragments_ready
+    cases:
+      - outcome: false
+        variables:
+          boot_cmdline_zbm_fragments_ready: false
+
+  - path: roles/boot/tasks/efi_entries.yml
+    expression: (_boot_efi_result.stdout | from_json).warnings | default([]) | length > 0
+    cases:
+      - outcome: true
+        variables:
+          _boot_efi_result:
+            stdout: '{"warnings":["duplicate firmware entry"]}'
+
+  - path: roles/boot/tasks/main.yml
+    expression: item.rc == 0
+    cases:
+      - outcome: true
+        variables:
+          item:
+            rc: 0
+
+  - path: roles/boot/tasks/main.yml
+    expression: >-
+      item.stdout_lines | select('match', '^' ~ (item.item | regex_escape) ~ '\s') | list | length > 0
+    cases:
+      - outcome: false
+        variables:
+          item:
+            item: lvm2-monitor.service
+            stdout_lines:
+              - other.service disabled
+      - outcome: true
+        variables:
+          item:
+            item: lvm2-monitor.service
+            stdout_lines:
+              - lvm2-monitor.service enabled
+
+  - path: roles/firewall/tasks/main.yml
+    expression: not firewall_nf_conntrack_loaded.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          firewall_nf_conntrack_loaded:
+            stat:
+              exists: true
+
+  - path: roles/firewall/tasks/main.yml
+    expression: firewall_ufw_unit.stat.exists
+    cases:
+      - outcome: true
+        variables:
+          firewall_ufw_unit:
+            stat:
+              exists: true
+
+  - path: roles/firewall/tasks/main.yml
+    expression: firewall_pre_reload_snapshot.stat.exists
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          firewall_pre_reload_snapshot:
+            stat:
+              exists: false
+
+  - path: roles/firewall/tasks/main.yml
+    expression: firewall_post_reload_stats.results[0].stat.exists
+    cases:
+      - outcome: false
+        variables:
+          firewall_post_reload_stats:
+            results:
+              - stat:
+                  exists: false
+
+  - path: roles/netdata/tasks/metrics.yml
+    expression: rotational_disks_by_id | length > 0
+    cases:
+      - outcome: true
+        variables:
+          rotational_disks_by_id:
+            - ata-condition-coverage
+
+  - path: roles/ssh/tasks/main.yml
+    expression: ssh_host_live_identity.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          ssh_host_live_identity:
+            stat:
+              exists: false
+
+  # Host-policy and non-Linux platform variants
+  - path: roles/netplan/tasks/main.yml
+    expression: not cloud_init_managed
+    cases:
+      - outcome: false
+        variables:
+          cloud_init_managed: true
+
+  # meta: end_role does not emit runner callbacks, so evaluate its exact guard
+  # directly for both transaction decisions.
+  - path: roles/netplan/tasks/main.yml
+    expression: not netplan_config_changed or ansible_check_mode
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: false
+          netplan_config_changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: true
+          netplan_config_changed: true
+
+  - path: roles/tailscale/tasks/dsm.yml
+    expression: tailscale_dsm_configure.changed or tailscale_dsm_port.changed
+    cases:
+      - outcome: false
+        variables:
+          tailscale_dsm_configure:
+            changed: false
+          tailscale_dsm_port:
+            changed: false
+      - outcome: true
+        variables:
+          tailscale_dsm_configure:
+            changed: true
+          tailscale_dsm_port:
+            changed: false
+
+  - path: roles/tailscale/tasks/main.yml
+    expression: tailscale_snapshot_target.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          tailscale_snapshot_target:
+            stat:
+              exists: false
+
+  # Defensive cleanup and operator-owned filesystem states
+  - path: roles/systemd_unit/tasks/install.yml
+    expression: _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
+    cases:
+      - outcome: false
+        variables:
+          _systemd_unit_mask:
+            stat:
+              lnk_target: /etc/systemd/system/example.service
+
+  - path: roles/systemd_unit/tasks/remove.yml
+    expression: _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
+    cases:
+      - outcome: false
+        variables:
+          _systemd_unit_mask:
+            stat:
+              lnk_target: /etc/systemd/system/example.service
+
+  - path: roles/tailscale/tasks/register.yml
+    expression: tailscale_authkey_temp.path is defined
+    cases:
+      - outcome: false
+        variables:
+          tailscale_authkey_temp: {}
+
+  # Loop conditions whose false host variant produces no loop item/callback
+  - path: roles/zfs/tasks/main.yml
+    line: 302
+    expression: zfs_root
+    cases:
+      - outcome: false
+        variables:
+          zfs_root: false
+
+  - path: roles/zfs/tasks/main.yml
+    line: 316
+    expression: zfs_root
+    cases:
+      - outcome: false
+        variables:
+          zfs_root: false
+
+  - path: roles/zfs_dataset/tasks/dataset.yml
+    line: 90
+    expression: zfs_root
+    cases:
+      - outcome: false
+        variables:
+          zfs_root: false
