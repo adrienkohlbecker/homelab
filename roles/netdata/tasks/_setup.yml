@@ -6,6 +6,13 @@
     nginx_test_fixture_args:
       authelia_mode: gate
 
+# Mirror the production layer immediately before netdata. The role installs a
+# Fluent Bit service extension and validates it with the real binary.
+- name: _setup | Install Fluent Bit
+  import_role:
+    name: fluentbit
+    tasks_from: main
+
 - name: _setup | Install Postfix collector fixture
   apt:
     pkg: postfix
