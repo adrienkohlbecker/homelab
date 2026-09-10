@@ -48,13 +48,10 @@
       register: _influxdb_bucket_user_query
       changed_when: false
       check_mode: false
-      failed_when: false
       become: true
 
     - name: bucket | Create user {{ influxdb_bucket_args.user }}  # noqa: no-changed-when -- when: gates execution, like creates: did
-      when: >-
-        _influxdb_bucket_user_query.rc != 0
-        or (_influxdb_bucket_user_query.stdout | from_json | length) == 0
+      when: (_influxdb_bucket_user_query.stdout | from_json | length) == 0
       command:
         argv:
           - podman
@@ -86,13 +83,10 @@
       register: _influxdb_bucket_bucket_query
       changed_when: false
       check_mode: false
-      failed_when: false
       become: true
 
     - name: bucket | Create bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
-      when: >-
-        _influxdb_bucket_bucket_query.rc != 0
-        or (_influxdb_bucket_bucket_query.stdout | from_json | length) == 0
+      when: (_influxdb_bucket_bucket_query.stdout | from_json | length) == 0
       command:
         argv:
           - podman
@@ -149,14 +143,13 @@
       register: _influxdb_bucket_auth_query
       changed_when: false
       check_mode: false
-      failed_when: false
       become: true
 
     # Match the CLI's exact write permission string on both org and bucket IDs.
     # `auth create --json` prints the token only when this task first runs.
     - name: bucket | Create write-auth for bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
       when: >-
-        ((_influxdb_bucket_auth_query.stdout | default('[]') | from_json)
+        ((_influxdb_bucket_auth_query.stdout | from_json)
          | selectattr('permissions', 'defined')
          | selectattr('permissions', 'contains',
              'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
