@@ -3,3 +3,5 @@
 # on every test run.
 machines:
   box_deps:
+  # Minimal has no render-device acceleration and exercises the fallback path.
+  minimal:
