@@ -147,14 +147,23 @@ def _normalized_expression(expression: str) -> str:
     return " ".join(expression.split())
 
 
-def load_synthetic_outcomes(path: Path) -> dict[ConditionKey, set[bool]]:
-    """Evaluate declared synthetic cases against current source expressions."""
+def load_synthetic_outcomes(
+    path: Path,
+    conditions: set[ConditionKey] | None = None,
+) -> dict[ConditionKey, set[bool]]:
+    """Evaluate declared synthetic cases against current source expressions.
+
+    Scenarios are matched against the whole repository, not the caller's
+    coverage scope, so a stale selector fails the gate from any cell. Callers
+    that already hold that inventory pass it in; the parse is ~160 files.
+    """
     document = yaml.safe_load(path.read_text()) or {}
     scenarios = document.get("scenarios", [])
     if not isinstance(scenarios, list):
         raise ValueError(f"{path}: scenarios must be a list")
 
-    conditions = inventory_conditions(production_condition_paths(include_site=True))
+    if conditions is None:
+        conditions = inventory_conditions(production_condition_paths(include_site=True))
     outcomes: dict[ConditionKey, set[bool]] = {}
     loader = DataLoader()
     for index, scenario in enumerate(scenarios, 1):
@@ -244,8 +253,17 @@ def check_coverage(
     scenario_path: Path | None = SYNTHETIC_SCENARIOS_PATH,
 ) -> dict[ConditionKey, set[bool]]:
     """Compare production conditions with outcomes merged from test reports."""
-    expected = inventory_conditions(production_condition_paths(roles, include_site=include_site))
-    synthetic = load_synthetic_outcomes(scenario_path) if scenario_path is not None and scenario_path.exists() else {}
+    # Scope first so an unknown role raises before the repository-wide parse.
+    # Conditions carry repository-relative paths, so the scope is a path filter
+    # over one inventory pass rather than a second load of the same files.
+    scope = {path.as_posix() for path in production_condition_paths(roles, include_site=include_site)}
+    conditions = inventory_conditions(production_condition_paths(include_site=True))
+    expected = {condition for condition in conditions if condition.path in scope}
+    synthetic = (
+        load_synthetic_outcomes(scenario_path, conditions)
+        if scenario_path is not None and scenario_path.exists()
+        else {}
+    )
     observed = merge_outcomes(load_outcomes(reports), synthetic)
     return missing_outcomes(expected, observed)
 

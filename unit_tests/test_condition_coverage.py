@@ -12,6 +12,7 @@ from condition_coverage import (
     evaluated_outcomes,
     format_missing_outcomes,
     inventory_conditions,
+    check_coverage,
     load_synthetic_outcomes,
     missing_outcomes,
     normalize_source_path,
@@ -104,6 +105,39 @@ def test_role_with_only_underscore_task_files_is_rejected(
 
     with pytest.raises(ValueError, match="scaffold"):
         production_condition_paths(["scaffold"])
+
+
+def test_scope_filters_conditions_while_scenarios_stay_repository_wide(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    for role, expression in (("scoped", "scoped_enabled"), ("other", "other_enabled")):
+        tasks = tmp_path / "roles" / role / "tasks"
+        tasks.mkdir(parents=True)
+        (tasks / "main.yml").write_text(f"- debug: {{msg: {role}}}\n  when: {expression}\n")
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - path: roles/other/tasks/main.yml
+    expression: other_enabled
+    cases:
+      - outcome: true
+        variables:
+          other_enabled: true
+"""
+    )
+
+    missing = check_coverage(["scoped"], [], scenario_path=scenarios)
+
+    # Only the scoped role is expected, but the out-of-scope scenario was still
+    # matched against live source -- a stale selector there fails from any cell.
+    assert {condition.expression for condition in missing} == {"scoped_enabled"}
+
+    scenarios.write_text(scenarios.read_text().replace("other_enabled", "renamed_away"))
+    with pytest.raises(ValueError, match="does not match a current condition"):
+        check_coverage(["scoped"], [], scenario_path=scenarios)
 
 
 def test_missing_outcomes_requires_true_and_false() -> None:
