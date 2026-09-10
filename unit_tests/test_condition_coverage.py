@@ -9,10 +9,10 @@ from ansible._internal._datatag._tags import Origin
 from condition_coverage import (
     ConditionKey,
     ConditionOutcome,
+    check_coverage,
     evaluated_outcomes,
     format_missing_outcomes,
     inventory_conditions,
-    check_coverage,
     load_synthetic_outcomes,
     missing_outcomes,
     normalize_source_path,
@@ -90,7 +90,7 @@ def test_unknown_role_is_rejected_rather_than_scoping_to_nothing(
 
     assert production_condition_paths(["example"]) == [Path("roles/example/tasks/main.yml")]
 
-    with pytest.raises(ValueError, match="no roles/<role>/tasks/.*: example_renamed"):
+    with pytest.raises(ValueError, match=r"no roles/<role>/tasks/.*: example_renamed"):
         production_condition_paths(["example", "example_renamed"])
 
 
