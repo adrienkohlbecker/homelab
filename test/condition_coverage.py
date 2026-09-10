@@ -10,8 +10,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from ansible._internal._datatag._tags import Origin
+import yaml
+from ansible._internal._datatag._tags import Origin, TrustedAsTemplate
+from ansible._internal._templating._engine import TemplateEngine
 from ansible.parsing.dataloader import DataLoader
+
+SYNTHETIC_SCENARIOS_PATH = Path("test/condition_coverage.yml")
 
 
 @dataclass(frozen=True, order=True)
@@ -92,7 +96,7 @@ def production_condition_paths(roles: Iterable[str] | None = None, *, include_si
         for path in Path("roles").glob("*/tasks/*.yml")
         if not path.name.startswith("_") and (selected_roles is None or path.parts[1] in selected_roles)
     ]
-    if include_site:
+    if include_site and Path("site.yml").exists():
         paths.append(Path("site.yml"))
     return sorted(paths)
 
@@ -132,6 +136,65 @@ def load_outcomes(paths: Iterable[Path]) -> dict[ConditionKey, set[bool]]:
     return merged
 
 
+def _normalized_expression(expression: str) -> str:
+    return " ".join(expression.split())
+
+
+def load_synthetic_outcomes(path: Path) -> dict[ConditionKey, set[bool]]:
+    """Evaluate declared synthetic cases against current source expressions."""
+    document = yaml.safe_load(path.read_text()) or {}
+    scenarios = document.get("scenarios", [])
+    if not isinstance(scenarios, list):
+        raise ValueError(f"{path}: scenarios must be a list")
+
+    conditions = inventory_conditions(production_condition_paths(include_site=True))
+    outcomes: dict[ConditionKey, set[bool]] = {}
+    loader = DataLoader()
+    for index, scenario in enumerate(scenarios, 1):
+        if not isinstance(scenario, dict):
+            raise ValueError(f"{path}: scenario {index} must be a mapping")
+        source_path = str(scenario.get("path", ""))
+        expression = _normalized_expression(str(scenario.get("expression", "")))
+        matches = {
+            condition
+            for condition in conditions
+            if condition.path == source_path and _normalized_expression(condition.expression) == expression
+        }
+        if not matches:
+            raise ValueError(
+                f"{path}: scenario {index} does not match a current condition: {source_path}: {expression}"
+            )
+
+        cases = scenario.get("cases", [])
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"{path}: scenario {index} cases must be a non-empty list")
+        source_expression = next(iter(matches)).expression
+        trusted_expression = TrustedAsTemplate().tag(source_expression)
+        for case_index, case in enumerate(cases, 1):
+            if not isinstance(case, dict) or not isinstance(case.get("outcome"), bool):
+                raise ValueError(f"{path}: scenario {index} case {case_index} requires a Boolean outcome")
+            variables = case.get("variables", {})
+            if not isinstance(variables, dict):
+                raise ValueError(f"{path}: scenario {index} case {case_index} variables must be a mapping")
+            actual = TemplateEngine(loader, variables=variables).evaluate_conditional(trusted_expression)
+            if actual is not case["outcome"]:
+                raise ValueError(
+                    f"{path}: scenario {index} case {case_index} expected {case['outcome']} but evaluated {actual}"
+                )
+            for condition in matches:
+                outcomes.setdefault(condition, set()).add(actual)
+    return outcomes
+
+
+def merge_outcomes(*sources: dict[ConditionKey, set[bool]]) -> dict[ConditionKey, set[bool]]:
+    """Union outcomes from runtime and synthetic test sources."""
+    merged: dict[ConditionKey, set[bool]] = {}
+    for source in sources:
+        for condition, outcomes in source.items():
+            merged.setdefault(condition, set()).update(outcomes)
+    return merged
+
+
 def missing_outcomes(
     expected: Iterable[ConditionKey],
     observed: dict[ConditionKey, set[bool]],
@@ -160,10 +223,12 @@ def check_coverage(
     reports: Iterable[Path],
     *,
     include_site: bool = False,
+    scenario_path: Path | None = SYNTHETIC_SCENARIOS_PATH,
 ) -> dict[ConditionKey, set[bool]]:
     """Compare production conditions with outcomes merged from test reports."""
     expected = inventory_conditions(production_condition_paths(roles, include_site=include_site))
-    observed = load_outcomes(reports)
+    synthetic = load_synthetic_outcomes(scenario_path) if scenario_path is not None and scenario_path.exists() else {}
+    observed = merge_outcomes(load_outcomes(reports), synthetic)
     return missing_outcomes(expected, observed)
 
 

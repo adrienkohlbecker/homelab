@@ -12,6 +12,7 @@ from condition_coverage import (
     evaluated_outcomes,
     format_missing_outcomes,
     inventory_conditions,
+    load_synthetic_outcomes,
     missing_outcomes,
     normalize_source_path,
 )
@@ -90,3 +91,83 @@ def test_missing_outcomes_requires_true_and_false() -> None:
     rendered = format_missing_outcomes(missing)
     assert "main.yml:20:9: missing false: true_only" in rendered
     assert "main.yml:30:9: missing false, true: unseen" in rendered
+
+
+def test_synthetic_scenarios_evaluate_current_source_expression(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- name: Example\n  debug:\n    msg: example\n  when: feature_enabled | default(false)\n"
+    )
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - path: roles/example/tasks/main.yml
+    expression: feature_enabled | default(false)
+    cases:
+      - outcome: false
+        variables: {}
+      - outcome: true
+        variables:
+          feature_enabled: true
+"""
+    )
+
+    outcomes = load_synthetic_outcomes(scenarios)
+
+    assert list(outcomes.values()) == [{False, True}]
+
+
+def test_synthetic_scenario_rejects_stale_expression(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text("- debug: {msg: example}\n  when: current_expression\n")
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - path: roles/example/tasks/main.yml
+    expression: old_expression
+    cases:
+      - outcome: true
+        variables:
+          old_expression: true
+"""
+    )
+
+    with pytest.raises(ValueError, match="does not match a current condition"):
+        load_synthetic_outcomes(scenarios)
+
+
+def test_synthetic_scenario_rejects_wrong_expected_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text("- debug: {msg: example}\n  when: feature_enabled\n")
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - path: roles/example/tasks/main.yml
+    expression: feature_enabled
+    cases:
+      - outcome: false
+        variables:
+          feature_enabled: true
+"""
+    )
+
+    with pytest.raises(ValueError, match="expected False but evaluated True"):
+        load_synthetic_outcomes(scenarios)
