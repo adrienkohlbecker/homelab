@@ -139,11 +139,14 @@
     ip netns exec extns curl --interface {{ _firewall_probe_wg }}
     --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ item.port }}/
   loop:
-    - { label: Samba, port: "445" }
+    - label: Samba
+      port: "445"
+      enabled: "{{ _firewall_verify_samba_enabled }}"
     - { label: nut, port: "{{ service_ports.nut }}" }
     - { label: Authelia, port: "{{ service_ports.authelia }}" }
   loop_control:
     label: "{{ item.label }}"
+  when: item.enabled | default(true) | bool
   register: _firewall_wg_admin_tcp
   changed_when: false
   failed_when: _firewall_wg_admin_tcp.rc != 0 or 'firewall-verify-ok' not in _firewall_wg_admin_tcp.stdout
@@ -190,10 +193,13 @@
     ip netns exec extns curl --interface {{ _firewall_probe_home }}
     --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:{{ item.port }}/
   loop:
-    - { label: Samba, port: "445" }
+    - label: Samba
+      port: "445"
+      enabled: "{{ _firewall_verify_samba_enabled }}"
     - { label: nut, port: "{{ service_ports.nut }}" }
   loop_control:
     label: "{{ item.label }}"
+  when: item.enabled | default(true) | bool
   register: _firewall_home_tcp_mismatch
   changed_when: false
   failed_when: _firewall_home_tcp_mismatch.rc == 0

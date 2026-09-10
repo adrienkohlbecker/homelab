@@ -10,6 +10,7 @@
       - curl
       - iputils-ping
       - hping3       # crafted TCP-ACK probes for `! --syn` rules
+      - netcat-openbsd
     cache_valid_time: 3600
   become: true
 
