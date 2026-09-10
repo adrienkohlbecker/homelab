@@ -90,3 +90,37 @@ class TestJoblogRoundTrip:
     def test_read_missing_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(testall, "LOG_FILE", tmp_path / "nonexistent.tsv")
         assert testall._read_joblog() == []
+
+
+class TestConditionCoverageReports:
+    def test_clear_drops_only_the_selected_roles(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        reports = tmp_path / "condition_coverage"
+        reports.mkdir()
+        monkeypatch.setattr(testall, "CONDITION_COVERAGE_DIR", reports)
+        for name in (
+            "box.noble.netdata.jsonl",
+            "lab.noble.netdata.jsonl",  # machine since dropped from meta/test.yml
+            "box.noble.zfs.jsonl",
+        ):
+            (reports / name).write_text("stale\n")
+
+        testall._clear_condition_coverage_reports({"netdata"})
+
+        assert sorted(path.name for path in reports.iterdir()) == ["box.noble.zfs.jsonl"]
+
+    def test_reports_glob_does_not_match_a_role_name_prefix(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        reports = tmp_path / "condition_coverage"
+        reports.mkdir()
+        monkeypatch.setattr(testall, "CONDITION_COVERAGE_DIR", reports)
+        (reports / "box.noble.zfs.jsonl").write_text("zfs\n")
+        (reports / "box.noble.zfs_autobackup.jsonl").write_text("autobackup\n")
+
+        assert [path.name for path in testall._condition_coverage_reports({"zfs"})] == ["box.noble.zfs.jsonl"]
