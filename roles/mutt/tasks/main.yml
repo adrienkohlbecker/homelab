@@ -132,7 +132,6 @@
     creates: /mnt/services/mutt/notmuch/xapian
   become: true
   become_user: "{{ ansible_user_id }}"
-  when: not ansible_check_mode
   tags:
     - mutt
 
