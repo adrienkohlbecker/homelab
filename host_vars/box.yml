@@ -128,13 +128,12 @@ samba_shares:
     "fruit:time machine": "yes"
     "fruit:time machine max size": 1T
 
-# Flipped to true so jellyfin tests exercise the HW-transcoding
-# code path (device passthrough, --group-add wiring, getent lookup) via
-# the fake render group + phantom /dev/dri/renderD128 created by
-# roles/media/tasks/fake_render_device.yml. No real GPU in QEMU — the
-# runtime VAAPI probe inside the container falls back to software, but
-# the ansible-side machinery and container's view of /dev get covered.
-has_transcoding_acceleration: true
+# Set so jellyfin tests exercise the HW-transcoding code path (device
+# passthrough, --group-add wiring, getent lookup) via the fake render group +
+# phantom /dev/dri/renderD128 created by roles/media/tasks/fake_render_device.yml.
+# No real GPU in QEMU — the runtime VAAPI probe inside the container falls back
+# to software, but the ansible-side machinery and container's view of /dev get
+# covered.
 jellyfin_transcoding_backend: intel_qsv
 netdata_packer_process_group_enabled: true
 user_i7z_enabled: true

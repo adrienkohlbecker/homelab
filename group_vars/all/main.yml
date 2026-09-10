@@ -53,7 +53,6 @@ etc_hosts_entries:
   # Pin auth.fahm.fr to lab's physical IP: this avoids Go DNS timeouts under
   # VIP load and lets fox resolve Headscale OIDC over wg0 before its tailnet exists.
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
-has_transcoding_acceleration: false
 jellyfin_transcoding_backend: none
 netdata_packer_process_group_enabled: false
 podman_storage_raid: false

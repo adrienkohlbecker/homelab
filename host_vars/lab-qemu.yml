@@ -7,7 +7,6 @@ macvlan_blocks:
     vlan: iot
     podman_network: true
 
-has_transcoding_acceleration: false
 jellyfin_transcoding_backend: none
 
 # Override Lab's physical-NIC profile at extra-vars precedence.

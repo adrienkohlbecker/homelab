@@ -258,7 +258,6 @@ samba_shares:
     path: /mnt/eckwersheim
     valid users: ak
 
-has_transcoding_acceleration: true
 jellyfin_transcoding_backend: intel_qsv
 netdata_packer_process_group_enabled: true
 user_i7z_enabled: true
