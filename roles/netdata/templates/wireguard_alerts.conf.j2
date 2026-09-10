@@ -1,5 +1,7 @@
-# The bunk handshake alarm is disabled while bunk is unavailable. Uncomment
-# the stanza when the offsite host is back online.
+# The bunk handshake alarm is disabled while bunk is unavailable -- `wg show wg0
+# latest-handshakes` reports 0 for the bun peer while it is down. Uncomment the
+# stanza when the offsite host is back online, restoring the interpolation noted
+# on its `chart labels:` line.
 #
 # WireGuard peer handshake-age alarm, scoped to the bunk offsite-backup
 # peer. The wireguard go.d collector emits one chart per (device, peer)
@@ -25,7 +27,7 @@
 
 # template: wireguard_bunk_peer_handshake_stale
 #       on: wireguard.peer_latest_handshake_ago
-# chart labels: public_key={{ wireguard_keys.bunk.public_key | replace('=', ':') }}
+# chart labels: public_key=<{{ '{{' }} wireguard_keys.bunk.public_key | replace('=', ':') {{ '}}' }}>
 #    class: Errors
 #     type: System
 # component: Network
