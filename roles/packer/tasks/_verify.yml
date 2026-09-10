@@ -424,15 +424,32 @@
   register: packer_verify_swap_abi
   changed_when: false
 
-- name: _verify | Kernel-swap exercise skipped (no alternative ABI in archive)
+- name: _verify | Kernel-swap availability matches the release contract
+  when: ansible_architecture == "aarch64"
+  assert:
+    that:
+      - >-
+        packer_kernel_swap_expected_by_release.get(
+        ansible_distribution_release, none) is not none
+      - >-
+        not packer_kernel_swap_expected_by_release.get(
+        ansible_distribution_release, false)
+        or packer_verify_swap_abi.stdout | default('') | length > 0
+    fail_msg: >-
+      No alternative kernel ABI is available for {{ ansible_distribution_release }},
+      but that release declares the kernel-swap exercise mandatory. Update the
+      archive or explicitly declare the release waiver.
+
+- name: _verify | Kernel-swap exercise waived for this release
   when:
     - ansible_architecture == "aarch64"
+    - not packer_kernel_swap_expected_by_release.get(ansible_distribution_release, false)
     - packer_verify_swap_abi.stdout | default('') | length == 0
   debug:
     msg: >-
-      Only one kernel ABI is available in the archive — skipping the
-      kernel-update + reboot exercise. This is expected when the archive
-      has not yet published a second ABI for this release.
+      Only one kernel ABI is available in the archive; the declared
+      {{ ansible_distribution_release }} release waiver skips the
+      kernel-update and reboot exercise.
 
 - name: _verify | Kernel-update + reboot exercise
   when:
