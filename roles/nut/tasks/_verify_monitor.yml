@@ -201,28 +201,31 @@
 
 # ---- Wake leg -------------------------------------------------------------
 # Exercise the boot leg and its real three-round wakeonlan dispatch.
-- name: _verify | Run the boot-time peer wake unit
-  systemd:
-    name: nut_wake_peers.service
-    state: started
-  become: true
+- name: _verify | Exercise boot-time peer wake
+  when: nut_wake_peers | length > 0
+  block:
+    - name: _verify | Run the boot-time peer wake unit
+      systemd:
+        name: nut_wake_peers.service
+        state: started
+      become: true
 
-- name: _verify | The wake run sent its magic packets
-  shell: |
-    set -euo pipefail
-    journalctl -u nut_wake_peers.service --no-pager | grep -F "Sending magic packet"
-  args:
-    executable: /bin/bash
-  changed_when: false
-  become: true
+    - name: _verify | The wake run sent its magic packets
+      shell: |
+        set -euo pipefail
+        journalctl -u nut_wake_peers.service --no-pager | grep -F "Sending magic packet"
+      args:
+        executable: /bin/bash
+      changed_when: false
+      become: true
 
-# RemainAfterExit must hold the unit active after the run -- converge
-# idempotence rides on a later `started` being a no-op, not a re-broadcast.
-# `changed` here means the unit went back to inactive and re-fired.
-- name: _verify | A repeat start is a no-op on the still-active unit
-  systemd:
-    name: nut_wake_peers.service
-    state: started
-  register: nut_wake_restart
-  failed_when: nut_wake_restart.changed
-  become: true
+    # RemainAfterExit must hold the unit active after the run -- converge
+    # idempotence rides on a later `started` being a no-op, not a re-broadcast.
+    # `changed` here means the unit went back to inactive and re-fired.
+    - name: _verify | A repeat start is a no-op on the still-active unit
+      systemd:
+        name: nut_wake_peers.service
+        state: started
+      register: nut_wake_restart
+      failed_when: nut_wake_restart.changed
+      become: true
