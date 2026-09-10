@@ -171,3 +171,63 @@ scenarios:
 
     with pytest.raises(ValueError, match="expected False but evaluated True"):
         load_synthetic_outcomes(scenarios)
+
+
+def test_synthetic_scenario_requires_explicit_duplicate_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- debug: {msg: first}\n  when: feature_enabled\n"
+        "- debug: {msg: second}\n  when: feature_enabled\n"
+    )
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - path: roles/example/tasks/main.yml
+    expression: feature_enabled
+    cases:
+      - outcome: true
+        variables:
+          feature_enabled: true
+"""
+    )
+
+    with pytest.raises(ValueError, match="select one with line or set all: true"):
+        load_synthetic_outcomes(scenarios)
+
+
+def test_synthetic_scenario_can_select_duplicate_by_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- debug: {msg: first}\n  when: feature_enabled\n"
+        "- debug: {msg: second}\n  when: feature_enabled\n"
+    )
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - path: roles/example/tasks/main.yml
+    line: 4
+    expression: feature_enabled
+    cases:
+      - outcome: false
+        variables:
+          feature_enabled: false
+"""
+    )
+
+    outcomes = load_synthetic_outcomes(scenarios)
+
+    assert len(outcomes) == 1
+    assert next(iter(outcomes)).line == 4
+    assert list(outcomes.values()) == [{False}]
