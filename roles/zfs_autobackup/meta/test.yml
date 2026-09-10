@@ -1,5 +1,0 @@
----
-machines:
-  box:
-  # Minimal exercises identity and cleanup behavior without a root ZFS pool.
-  minimal:
