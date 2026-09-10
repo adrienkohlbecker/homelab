@@ -1,11 +1,11 @@
 ---
 # CI_JOB_ID keeps concurrent cells apart; outside CI the harness-injected
-# connection facts do the same for parallel local runs. Both components carry
-# their own default so a hand-run converge against a fixture that inherits its
-# address from ssh_config falls back to a stable empty seed instead of raising.
+# connection facts do the same for parallel local runs. A hand-run converge
+# against a fixture that inherits its address from ssh_config has neither, so
+# fall back to inventory_hostname: always defined, and still distinct per host.
 certbot_test_domain_seed: >-
   {{ lookup('env', 'CI_JOB_ID')
-     | default(ansible_ssh_host | default('', true) ~ ':'
+     | default(ansible_ssh_host | default(inventory_hostname, true) ~ ':'
                ~ ansible_ssh_port | default('', true), true) }}
 certbot_test_domain_label: >-
   {{ 'qemu-' + ((certbot_test_domain_seed | hash('sha256'))[:16])
