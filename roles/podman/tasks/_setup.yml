@@ -16,6 +16,32 @@
 - name: _setup | Install the podman runtime before the restart exercise
   import_tasks: install.yml
 
+- name: _setup | Create the podman service drop-in directory
+  file:
+    path: /etc/systemd/system/podman.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Disable the API service idle timeout for the restart exercise
+  copy:
+    dest: /etc/systemd/system/podman.service.d/condition_coverage.conf
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=/usr/bin/podman system service --time=0
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Reload systemd after installing the test drop-in
+  systemd:
+    daemon_reload: true
+  become: true
+
 - name: _setup | Start podman.service before its drop-in is installed
   systemd:
     name: podman.service
