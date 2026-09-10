@@ -71,7 +71,9 @@
     - netdata
 
 - name: Reload netdata health after stale keepalived alert removal
-  when: netdata_keepalived_lost_master_alert_absent.changed
+  when:
+    - not ansible_check_mode
+    - netdata_keepalived_lost_master_alert_absent.changed
   import_tasks: reload_health.yml
   tags:
     - netdata
@@ -116,7 +118,9 @@
     - netdata
 
 - name: Reload netdata health after disk-fill alert override removal
-  when: netdata_disks_override_absent.changed
+  when:
+    - not ansible_check_mode
+    - netdata_disks_override_absent.changed
   import_tasks: reload_health.yml
   tags:
     - netdata

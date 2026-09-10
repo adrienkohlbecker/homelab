@@ -95,7 +95,9 @@
     - netdata
 
 - name: Restart netdata after stale keepalived VRRP collector removal
-  when: netdata_keepalived_vrrp_absent.changed
+  when:
+    - not ansible_check_mode
+    - netdata_keepalived_vrrp_absent.changed
   systemd:
     name: netdata
     state: restarted
