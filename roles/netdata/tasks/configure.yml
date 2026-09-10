@@ -166,6 +166,17 @@
   tags:
     - netdata
 
+# Reverse the install above rather than leaving the tool behind: the collector
+# is the only consumer, and a host that never had it (or is not x86) no-ops.
+- name: Remove stale intel-gpu-tools
+  when: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
+  apt:
+    pkg: intel-gpu-tools
+    state: absent
+  become: true
+  tags:
+    - netdata
+
 - name: Copy health_alarm_notify template
   command: cp /usr/lib/netdata/conf.d/health_alarm_notify.conf /etc/netdata/health_alarm_notify.conf
   args:
