@@ -5,6 +5,17 @@
     name: podman
     tasks_from: install
 
+# Force a valid ruleset drift so converge exercises the live reload,
+# auto-revert scheduling, cancellation, and snapshot promotion path. A comment
+# keeps the currently loaded firewall semantics unchanged until converge.
+- name: _setup | Drift the persisted nftables ruleset
+  lineinfile:
+    path: /etc/nftables.conf
+    line: '# condition coverage drift fixture'
+    insertafter: EOF
+    create: false
+  become: true
+
 # Create wg0 before converge so wg0_flowtable.service does not
 # condition-skip and appear inactive to Ansible. Match the veth shape
 # consumed by _verify_rig.
