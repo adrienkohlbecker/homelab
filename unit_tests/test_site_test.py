@@ -54,6 +54,7 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
 
     assert machine.ansible_calls == [
         (str(tmp_path / "_environment.yml"),),
+        (str(tmp_path / "_site_check_prerequisites.yml"),),
         (str(tmp_path / "site.yml"), "--check"),
     ]
     assert machine.system_running_calls == 1
