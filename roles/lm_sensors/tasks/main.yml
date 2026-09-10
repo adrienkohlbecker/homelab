@@ -49,7 +49,6 @@
 
 # Load before persisting so unavailable modules never enter the boot list.
 - name: Load sensor modules now
-  when: lm_sensors_effective_modules | length > 0
   modprobe:
     name: "{{ item }}"
     state: present
@@ -83,7 +82,6 @@
 # modprobe refuses to unload in-use modules; leave them loaded and flag a
 # reboot below. A single owned boot list lets us identify dropped modules.
 - name: Unload dropped sensor modules (best effort)
-  when: lm_sensors_dropped | length > 0
   modprobe:
     name: "{{ item }}"
     state: absent
@@ -96,7 +94,6 @@
 # Flag a reboot only for modules still loaded after the attempt.
 # modprobe maps hyphens to underscores in /proc/modules.
 - name: Check whether dropped modules are still loaded
-  when: lm_sensors_dropped | length > 0
   command: grep -qw {{ item | replace('-', '_') }} /proc/modules
   loop: "{{ lm_sensors_dropped }}"
   register: lm_sensors_dropped_loaded
