@@ -41,6 +41,13 @@ COVERAGE_FLAGS = [
         "roles/netdata/tasks/configure.yml",
         "the intelgpu collector config render and removal paths",
     ),
+    (
+        "box",
+        "netdata_packer_process_group_enabled",
+        lambda value: value is True,
+        "roles/netdata/tasks/apps_groups.yml",
+        "the apps_groups.conf stock-merge and removal paths",
+    ),
 ]
 
 IDS = [f"{host}:{var}" for host, var, _, _, _ in COVERAGE_FLAGS]
