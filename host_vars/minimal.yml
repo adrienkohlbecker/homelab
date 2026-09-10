@@ -9,6 +9,10 @@ zfs_root: false
 zfs_trim_pools: []
 zfs_pool_properties: []
 zfs_mount_cache_datasets: []
+# Match the bounded ARC policy used by the real non-root-ZFS host. A positive
+# maximum also keeps the rendered modprobe configuration meaningful.
+zfs_arc_min: 0
+zfs_arc_max: 536870912
 # Volatile: VM is ephemeral; persistent journals on the ext4 root would
 # stick around across throwaway test runs for no benefit.
 journald_storage: volatile
