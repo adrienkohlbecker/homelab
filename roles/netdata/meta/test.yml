@@ -6,3 +6,5 @@
 # the fluentbit consumer of the same _setup pattern.
 machines:
   box_deps:
+  # Minimal exercises non-ZFS and disabled optional collector/group branches.
+  minimal:
