@@ -8,6 +8,22 @@
 # Force a valid ruleset drift so converge exercises the live reload,
 # auto-revert scheduling, cancellation, and snapshot promotion path. A comment
 # keeps the currently loaded firewall semantics unchanged until converge.
+- name: _setup | Seed the confirmed pre-reload snapshot
+  copy:
+    src: /etc/nftables.conf
+    dest: /etc/nftables.conf.pre-reload
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Start nftables before the reload exercise
+  systemd:
+    name: nftables.service
+    state: started
+  become: true
+
 - name: _setup | Drift the persisted nftables ruleset
   lineinfile:
     path: /etc/nftables.conf
