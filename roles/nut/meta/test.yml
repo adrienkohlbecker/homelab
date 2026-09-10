@@ -1,5 +1,9 @@
 # upsmon.conf.j2's NOTIFYFLAG block and one-shot mode ride the default noble
 # cell. resolute adds no distinct template branch; it covers the role against
 # the newer nut runtime the next prod release will carry.
+machines:
+  box:
+  # Minimal has no wake peers and exercises the empty peer-list path.
+  minimal:
 ubuntu:
   - resolute
