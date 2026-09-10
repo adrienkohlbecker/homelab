@@ -22,13 +22,18 @@ class CallbackModule(CallbackBase):
     CALLBACK_NAME = "condition_coverage"
     CALLBACK_NEEDS_ENABLED = True
 
-    def _record(self, result, *, skipped: bool = False) -> None:
+    def _record(self, result, *, skipped: bool = False, for_item: bool = False) -> None:
         output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
         if not output:
             return
 
         task = result.task
-        if task.loop or task.loop_with:
+        # A looped task evaluates its `when` once per item, so the per-item
+        # callbacks carry the outcomes and the aggregate would double-count
+        # them. The cost is that an empty loop emits no item callback at all and
+        # records nothing -- which fails closed, since a condition with no
+        # observed outcome is reported as missing both.
+        if not for_item and (task.loop or task.loop_with):
             return
         conditions = list(task.when)
         if not conditions:
@@ -50,18 +55,6 @@ class CallbackModule(CallbackBase):
                 handle.write(json.dumps({"error": str(exc)}, sort_keys=True, separators=(",", ":")))
                 handle.write("\n")
 
-    def _record_item(self, result, *, skipped: bool = False) -> None:
-        task = result.task
-        loop = task.loop
-        loop_with = task.loop_with
-        task.loop = None
-        task.loop_with = None
-        try:
-            self._record(result, skipped=skipped)
-        finally:
-            task.loop = loop
-            task.loop_with = loop_with
-
     def v2_runner_on_ok(self, result) -> None:
         self._record(result)
 
@@ -75,10 +68,10 @@ class CallbackModule(CallbackBase):
         self._record(result, skipped=True)
 
     def v2_runner_item_on_ok(self, result) -> None:
-        self._record_item(result)
+        self._record(result, for_item=True)
 
     def v2_runner_item_on_failed(self, result) -> None:
-        self._record_item(result)
+        self._record(result, for_item=True)
 
     def v2_runner_item_on_skipped(self, result) -> None:
-        self._record_item(result, skipped=True)
+        self._record(result, skipped=True, for_item=True)
