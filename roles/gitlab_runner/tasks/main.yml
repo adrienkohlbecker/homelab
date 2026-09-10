@@ -111,6 +111,16 @@
               aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key }}
           become: true
 
+    - name: Remove AWS qemu runner artifacts when disabled
+      when: not gitlab_runner_aws_qemu_enabled
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/fleeting-plugin-aws
+        - /mnt/services/gitlab_runner/.aws
+      become: true
+
     # Parse TOML locally; `gitlab-runner verify` is an online registration check,
     # not a configuration linter.
     - name: Render gitlab-runner config.toml
