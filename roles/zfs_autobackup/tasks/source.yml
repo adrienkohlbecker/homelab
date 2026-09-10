@@ -27,13 +27,12 @@
     - zfs_autobackup
 
 - name: source | Configure backup dataset permissions
-  when: not qemu_test_minimal
+  when: zfs_root
   become: true
   tags:
     - zfs_autobackup
   block:
-    # The permission machinery runs everywhere ZFS exists; only the minimal
-    # ext4 fixture is excluded.
+    # The permission machinery runs everywhere the root pool exists.
     - name: source | Get backed-up datasets
       shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
       args:
