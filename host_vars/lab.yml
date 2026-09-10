@@ -13,9 +13,11 @@ zfs_trim_pools:
   - dozer
   - tank
 # autotrim=on on rpool/dozer/tank mirrors the live pool state on lab (rpool +
-# dozer from creation, tank set on the host after the fact). mouse stays at the
-# autotrim=off default and is left unmanaged. tank also gets scheduled trim via
-# the zfs_trim timer above; the two are independent.
+# dozer from creation, tank set on the host after the fact). mouse is absent
+# here and from zfs_trim_pools because every one of its leaves reports `trim
+# unsupported` -- it is an all-HDD mirror, unlike tank, which qualifies on its
+# NVMe special vdev alone. tank also gets scheduled trim via the zfs_trim timer
+# above; the two are independent.
 zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
   - { pool: dozer, name: autotrim, value: "on" }
@@ -217,10 +219,8 @@ netdata_zfspool_thresholds:
   # bump can close the gap before the operator reacts. 75% is ~4.5
   # TiB free, gives a week+ of lead time.
   tank:  [ 75, 85, 95 ]
+  mouse: [ 85, 90, 95 ]
   dozer: [ 85, 90, 95 ]
-  # No mouse: it stays exported and unmanaged (see zfs_pool_properties above),
-  # so the zfspool collector never charts it and an alarm here attaches to
-  # nothing.
 netdata_diskspace_blocklist:
   - /
   - /mnt/brumath
