@@ -31,11 +31,11 @@
     - boot
 
 - name: Hold grub packages
-  when: not grub_bootloader and boot_grub_packages.stdout_lines | default([]) | length > 0
+  when: not grub_bootloader
   dpkg_selections:
     name: "{{ item }}"
     selection: hold
-  loop: "{{ boot_grub_packages.stdout_lines }}"
+  loop: "{{ boot_grub_packages.stdout_lines | default([]) }}"
   become: true
   tags:
     - boot
