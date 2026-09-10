@@ -57,13 +57,15 @@
   assert:
     quiet: true
     that:
-      - item is match('^[A-Za-z_][A-Za-z0-9_]*$')
+      - systemd_timer_environment_key is match('^[A-Za-z_][A-Za-z0-9_]*$')
     fail_msg: >-
-      systemd_timer {{ systemd_timer_args.name }}: environment key '{{ item }}'
+      systemd_timer {{ systemd_timer_args.name }}: environment key
+      '{{ systemd_timer_environment_key }}'
       is not a valid POSIX variable name ([A-Za-z_][A-Za-z0-9_]*).
   loop: "{{ systemd_timer_args.environment.keys() | list }}"
   loop_control:
-    label: "{{ item }}"
+    loop_var: systemd_timer_environment_key
+    label: "{{ systemd_timer_environment_key }}"
 
 # Nested import_role task names stay static. The role is called both
 # from import_role sites (where systemd_timer_args is in scope at
