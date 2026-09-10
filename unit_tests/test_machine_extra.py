@@ -267,6 +267,17 @@ class TestMachineArtifactOwnership:
         instance.cleanup_logs()
         assert all(not artifact.exists() for artifact in artifacts)
 
+    def test_preserves_condition_coverage_after_log_cleanup(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+    ) -> None:
+        instance = machine_factory()
+        instance.condition_coverage_file.parent.mkdir(parents=True)
+        instance.condition_coverage_file.write_text("coverage\n")
+
+        instance.cleanup_logs()
+
+        assert instance.condition_coverage_file.read_text() == "coverage\n"
 
 class TestSystemReadiness:
     def test_accepts_running_state(
@@ -347,6 +358,32 @@ class TestAnsibleControllerStaging:
         assert (m.workdir_path / "roles").is_dir()
         assert (m.workdir_path / "_environment.yml").read_text() == "environment\n"
         assert (m.workdir_path / "site.yml").read_text() == "production site\n"
+
+    def test_condition_coverage_is_enabled_for_named_phase(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        for directory in ("group_vars", "host_vars", "roles", "data", "test/playbooks"):
+            (tmp_path / directory).mkdir(parents=True)
+        (tmp_path / "test/playbooks/site.yml").write_text("fixture site\n")
+        monkeypatch.setattr(machine, "ensure_mitogen_symlink", lambda: None)
+        monkeypatch.setenv("ANSIBLE_CALLBACKS_ENABLED", "profile_tasks")
+        seen_env: dict[str, str] = {}
+
+        async def run_command(*args: object, **kwargs: object) -> SimpleNamespace:
+            seen_env.update(cast(dict[str, str], kwargs["env"]))
+            return SimpleNamespace(exitcode=0, stdout=[])
+
+        monkeypatch.setattr(machine, "run_command", run_command)
+        instance = machine_factory()
+
+        asyncio.run(instance.ansible_command("site.yml", coverage_phase="converge"))
+
+        assert seen_env["ANSIBLE_CALLBACKS_ENABLED"] == "condition_coverage,profile_tasks"
+        assert seen_env["ANSIBLE_CONDITION_COVERAGE_FILE"] == str(instance.condition_coverage_file)
+        assert seen_env["ANSIBLE_CONDITION_COVERAGE_PHASE"] == "converge"
 
 
 def test_ensure_booted_reports_early_qemu_exit(

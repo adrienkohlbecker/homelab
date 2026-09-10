@@ -1061,7 +1061,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab", "podman:lab:resolute"], site_test=False)
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
-        assert doc["stages"] == ["test1", "test2"]
+        assert doc["stages"] == ["test1", "test2", "coverage"]
         # All cells run the qemu backend; the harness defaults to it, so there is
         # no HOMELAB_TEST_BACKEND variable.
         assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
@@ -1083,6 +1083,8 @@ class TestRenderChildPipeline:
         assert "_site_test:lab" not in doc
         assert "_site_check:lab" not in doc
         assert "no_cells" not in doc
+        assert doc["condition_coverage"]["stage"] == "coverage"
+        assert "--roles nginx,podman" in doc["condition_coverage"]["script"][0]
 
     def test_cells_auto_run_by_default(self) -> None:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
@@ -1115,7 +1117,7 @@ class TestRenderChildPipeline:
         # it first. needs:[] (from .cell) keeps it parallel, so the leading
         # stage never gates the cells.
         doc = _render_child_doc(["nginx:lab", "podman:lab:noble"], site_test=True)
-        assert doc["stages"] == ["site", "test1", "test2"]
+        assert doc["stages"] == ["site", "test1", "test2", "coverage"]
         assert doc["_site_test:lab"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
         for job in ("_site_test:lab", "_site_check:lab"):
@@ -1125,10 +1127,11 @@ class TestRenderChildPipeline:
     def test_site_test_only_stage(self) -> None:
         # site_test with no cells still seeds a single leading `site` stage.
         doc = _render_child_doc([], site_test=True)
-        assert doc["stages"] == ["site"]
+        assert doc["stages"] == ["site", "coverage"]
         assert doc["_site_test:lab"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
         assert "no_cells" not in doc
+        assert "--include-site" in doc["condition_coverage"]["script"][0]
 
     def test_empty_gets_noop_placeholder(self) -> None:
         doc = _render_child_doc([], site_test=False)
@@ -1164,7 +1167,7 @@ class TestRenderChildPipeline:
         assert "boot:minimal:aarch64" not in doc
         assert "fan2go:lab:aarch64" not in doc
         assert "nginx:lab:aarch64" not in doc
-        assert doc["stages"][-1] == "arm"
+        assert doc["stages"][-2:] == ["arm", "coverage"]
         assert "when" not in doc["apt:lab:aarch64"]
         assert "allow_failure" not in doc["apt:lab:aarch64"]
 

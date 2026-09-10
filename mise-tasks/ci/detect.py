@@ -607,6 +607,7 @@ def render_child_pipeline(
     return template.render(
         cells=cells,
         arm_cells=arm_cells,
+        roles=sorted({cell["role"] for cell in cells}),
         cell_groups=cell_groups,
         stages=stages,
         site_test=site_test,

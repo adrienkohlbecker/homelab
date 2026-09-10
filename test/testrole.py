@@ -128,7 +128,7 @@ def _count_changed_tasks(stdout: list[str]) -> int:
 async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Re-run the role and fail if any task reports changed."""
     print_line("Verifying idempotence (re-running the role)...")
-    result = await m.ansible_command(site_yml, *pass_args)
+    result = await m.ansible_command(site_yml, *pass_args, coverage_phase="idempotence")
     changed = _count_changed_tasks(result.stdout)
     if changed > 0:
         raise IdempotenceFailedException(
@@ -165,6 +165,7 @@ async def run_test(
                 str(m.workdir_path / "_environment.yml"),
                 "-e",
                 f"test_base_prerequisites={str(base_prerequisites).lower()}",
+                coverage_phase="environment",
             )
 
             if m.machine == "minimal" and m.role != "cleanup":
@@ -176,17 +177,27 @@ async def run_test(
 
             # Invoke the setup entrypoint only when the role ships it.
             if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
-                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
+                await m.ansible_command(
+                    site_yml,
+                    "-e",
+                    "_role_tasks_from=_setup",
+                    coverage_phase="setup",
+                )
 
-            await m.ansible_command(site_yml, "--check", *pass_args)
+            await m.ansible_command(site_yml, "--check", *pass_args, coverage_phase="check")
 
-            await m.ansible_command(site_yml, *pass_args)
+            await m.ansible_command(site_yml, *pass_args, coverage_phase="converge")
 
             await _verify_idempotence(site_yml, m, pass_args)
 
             # Post-role assertions, if the role declares any.
             if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
-                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
+                await m.ansible_command(
+                    site_yml,
+                    "-e",
+                    "_role_tasks_from=_verify",
+                    coverage_phase="verify",
+                )
         except CommandFailedException:
             print_line("Command failed")
             await m.collect_failure_artifacts()

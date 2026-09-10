@@ -9,6 +9,9 @@ stages:
 {% for stage in stages %}
   - {{ stage }}
 {% endfor %}
+{% if cells or site_test %}
+  - coverage
+{% endif %}
 
 .cell:
   stage: test1
@@ -49,7 +52,7 @@ stages:
     - if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU"; fi
 {% endif %}
   artifacts:
-    when: on_failure
+    when: always
     expire_in: 30 days
     paths:
       - test/out/
@@ -163,6 +166,30 @@ stages:
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}
+{% if cells or site_test %}
+
+condition_coverage:
+  stage: coverage
+  tags:
+    - {{ cell_runner_tag }}
+  timeout: 10m
+{% if baked_toolchain %}
+  variables:
+    MISE_DATA_DIR: /opt/mise
+    UV_CACHE_DIR: /opt/uv-cache
+    UV_LINK_MODE: copy
+{% endif %}
+  before_script:
+    - mise run ci:bootstrap
+  script:
+    - >-
+      mise exec -- test/condition_coverage.py
+      --roles {{ roles | join(',') }}
+{% if site_test %}
+      --include-site
+{% endif %}
+      test/out/condition_coverage/*.jsonl
+{% endif %}
 {% if not cells and not arm_cells and not site_test %}
 
 no_cells:
