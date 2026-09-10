@@ -71,21 +71,18 @@
 # --- Zed service ---
 
 - name: _verify | Query zed unit state
-  when: zfs_root
   systemd:
     name: zfs-zed
   register: _zfs_verify_zed
   become: true
 
 - name: _verify | Zed is active and enabled
-  when: zfs_root
   assert:
     that:
       - _zfs_verify_zed.status.ActiveState == 'active'
       - _zfs_verify_zed.status.UnitFileState == 'enabled'
 
 - name: _verify | Exercise the package-change restart path
-  when: zfs_root
   import_tasks: zed_service.yml
   vars:
     zfs_apt:
@@ -94,14 +91,12 @@
       changed: false
 
 - name: _verify | Read the restarted zed process
-  when: zfs_root
   systemd:
     name: zfs-zed
   register: _zfs_verify_zed_after_restart
   become: true
 
 - name: _verify | Package changes restart zed
-  when: zfs_root
   assert:
     that:
       - _zfs_verify_zed.status.MainPID | int > 0
@@ -109,7 +104,6 @@
       - _zfs_verify_zed_after_restart.status.MainPID != _zfs_verify_zed.status.MainPID
 
 - name: _verify | Read zed.rc notification config
-  when: zfs_root
   command: grep -E '^ZED_EMAIL_ADDR=' /etc/zfs/zed.d/zed.rc
   register: _zfs_verify_zedrc
   changed_when: false
@@ -117,7 +111,6 @@
   become: true
 
 - name: _verify | Zed email notifications point at root
-  when: zfs_root
   assert:
     that: _zfs_verify_zedrc.stdout == 'ZED_EMAIL_ADDR="root"'
     fail_msg: >-
@@ -259,19 +252,13 @@
 # (provision.sh wires it; notes/unified_disk_layout.md). It is the performance
 # contract behind special_small_blocks on tank/brumath + media -- a regression
 # that dropped the special vdev would silently push that metadata + small blocks
-# back onto the slow raidz2 HDDs. Only real-tank hosts (lab) carry it; box/pug
-# route tank/ -> rpool and have no `tank` pool, so gate on the pool existing.
+# back onto the slow raidz2 HDDs. Only hosts declaring `tank` as their tank
+# filesystem carry it; a missing declared pool is a fixture or provisioning
+# failure, not a reason to skip the contract.
 # 'mirror' appears in `zpool status tank` only for the special mirror -- the
 # data vdev is raidz2 and the HDD device names carry no such token.
-- name: _verify | Check for a real tank pool
-  command: zpool list -H -o name tank
-  register: _zfs_verify_tank_pool
-  changed_when: false
-  failed_when: false
-  become: true
-
 - name: _verify | Tank carries its NVMe special-vdev mirror
-  when: _zfs_verify_tank_pool.rc == 0
+  when: zfs_tank_filesystem == 'tank'
   block:
     - name: _verify | Read tank vdev topology
       command: zpool status tank
