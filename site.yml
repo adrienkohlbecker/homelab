@@ -336,3 +336,4 @@
       when:
         - reboot_required.stat.exists
         - ansible_play_hosts_all | length > 1
+        - ansible_hostname != ansible_play_hosts_all[-1]
