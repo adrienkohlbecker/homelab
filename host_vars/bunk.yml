@@ -13,19 +13,16 @@ ansible_become_pass: !vault |
           6536346630343466330a613962646132343064616666353961373064366238306637633265653431
           39373839306164653938393333326531336134333430623131363937306232383132
 
-# Backup-rsync keys layered on top of the fleet login key (ssh_public_keys) by
-# the authorized_keys task in bunk.yml. The nightly zfs_autobackup offsite step
-# on each source host pushes its bak-tagged datasets here as root over wg0. Each
-# key carries a forced command= running ~ak/bin/rrsync (the Python rrsync, which
-# bunk.yml installs) with -wo and a per-host restricted root, so a source can
-# only WRITE into its own /volume1/Backup/<host> -- it can't read another host's
-# backups, escape the dir, or open a shell. Keep each entry in sync with that
-# host's actual root public key material; comments are informational. The
-# restricted root must match the source's offsite target in zfs_backup_offsite.sh.
-ssh_public_keys_additional: |
-  command="/var/services/homes/ak/bin/rrsync -wo /volume1/Backup/lab",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
-  command="/var/services/homes/ak/bin/rrsync -wo /volume1/Backup/pug",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV4m+yJxWvdWwreul2M21yyDEhvIAh8hxS18zkAhVKz root@pug
-  command="/var/services/homes/ak/bin/rrsync -wo /volume1/Backup/fox",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDyYBrn9Im8oTbstBQZseVT+KhO4hLU6QbcJhcPiQ2ug root@fox
+# The nightly zfs_autobackup offsite step on each source host pushes its
+# bak-tagged datasets here as root over wg0. bunk.yml derives both the restricted
+# backup roots and forced-command authorized keys from this catalog.
+bunk_offsite_backup_sources:
+  - name: lab
+    public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
+  - name: pug
+    public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV4m+yJxWvdWwreul2M21yyDEhvIAh8hxS18zkAhVKz root@pug
+  - name: fox
+    public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDyYBrn9Im8oTbstBQZseVT+KhO4hLU6QbcJhcPiQ2ug root@fox
 
 # Tailscale mesh: bunk is the Bonniers subnet router + exit node, enrolled into
 # headscale by the standalone bunk.yml playbook (`mise run ansible:bunk --tags

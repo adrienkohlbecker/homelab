@@ -25,24 +25,27 @@
         # rrsync refuses to run if its restricted root is missing.
         - name: Create the per-source offsite backup roots
           file:
-            path: "/volume1/Backup/{{ item }}"
+            path: "/volume1/Backup/{{ item.name }}"
             state: directory
             mode: "0755"
-          loop:
-            - lab
-            - pug
-            - fox
+          loop: "{{ bunk_offsite_backup_sources }}"
+          loop_control:
+            label: "{{ item.name }}"
 
     # bunk is DSM, so roles/user (which manages this fleet-wide) doesn't run
     # here. Mirror its authorized_keys task: the fleet login key (ssh_public_keys)
-    # plus bunk's backup-rsync keys (ssh_public_keys_additional in host_vars).
+    # plus bunk's backup-rsync keys (bunk_offsite_backup_sources in host_vars).
     # exclusive so a key removed from the vars is actually revoked -- this is the
     # single source of truth for who can log in as ak. Runs as ak (no become):
     # it manages ak's own ~/.ssh/authorized_keys.
     - name: Manage ak's authorized keys
       authorized_key:
         user: "{{ ansible_user_id }}"
-        key: "{{ (ssh_public_keys + '\n' + (ssh_public_keys_additional | default(''))) | trim }}"
+        key: |
+          {{ ssh_public_keys | trim }}
+          {% for source in bunk_offsite_backup_sources %}
+          command="/var/services/homes/ak/bin/rrsync -wo /volume1/Backup/{{ source.name }}",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding {{ source.public_key }}
+          {% endfor %}
         exclusive: true
       tags:
         - authorized_keys
