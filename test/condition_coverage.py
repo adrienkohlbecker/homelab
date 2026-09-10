@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+# Private ansible internals, deliberately: nothing public exposes a loaded
+# value's YAML origin (file/line/column), which is the only stable identity a
+# `when` expression has, nor a conditional evaluator the synthetic scenarios can
+# drive offline. Both moved under ansible._internal in core 2.19 and carry no
+# compatibility promise -- an ansible bump that breaks the gate starts here.
 from ansible._internal._datatag._tags import Origin, TrustedAsTemplate
 from ansible._internal._templating._engine import TemplateEngine
 from ansible.parsing.dataloader import DataLoader
