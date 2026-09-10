@@ -222,7 +222,6 @@
 # --- Mount generator ---
 
 - name: _verify | Read mount cache content for each pool
-  when: zfs_mount_cache_datasets | length > 0
   command: cat /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }}
   loop: "{{ zfs_mount_cache_datasets }}"
   register: _zfs_verify_cache_files
@@ -230,7 +229,6 @@
   become: true
 
 - name: _verify | Mount cache lists its configured dataset
-  when: zfs_mount_cache_datasets | length > 0
   assert:
     that: item.item in item.stdout
     fail_msg: >-
