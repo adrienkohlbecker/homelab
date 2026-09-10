@@ -15,6 +15,7 @@ from condition_coverage import (
     load_synthetic_outcomes,
     missing_outcomes,
     normalize_source_path,
+    production_condition_paths,
 )
 
 
@@ -75,6 +76,34 @@ def test_inventory_reads_scalar_and_list_conditions(tmp_path: Path) -> None:
     conditions = inventory_conditions([source])
 
     assert {condition.expression for condition in conditions} == {"scalar_enabled", "first_enabled", "second_enabled"}
+
+
+def test_unknown_role_is_rejected_rather_than_scoping_to_nothing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text("- debug: {msg: example}\n  when: feature_enabled\n")
+
+    assert production_condition_paths(["example"]) == [Path("roles/example/tasks/main.yml")]
+
+    with pytest.raises(ValueError, match="no roles/<role>/tasks/.*: example_renamed"):
+        production_condition_paths(["example", "example_renamed"])
+
+
+def test_role_with_only_underscore_task_files_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "scaffold" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "_verify.yml").write_text("- debug: {msg: verify}\n")
+
+    with pytest.raises(ValueError, match="scaffold"):
+        production_condition_paths(["scaffold"])
 
 
 def test_missing_outcomes_requires_true_and_false() -> None:
