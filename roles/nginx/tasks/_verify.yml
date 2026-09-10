@@ -526,6 +526,61 @@
     state: reloaded
   become: true
 
+# A disabled site already has an available file but no enabled symlink. If its
+# replacement fails validation, rollback must restore that file and remove only
+# the symlink introduced by the failed helper call.
+- name: _verify | Seed an existing disabled site
+  copy:
+    dest: /etc/nginx/sites-available/nginxverifydisabled
+    content: "# nginx verify disabled sentinel\n"
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: _verify | Broken disabled-site update restores the disabled state
+  block:
+    - name: _verify | Configure a broken replacement for the disabled site
+      import_tasks: site.yml
+      vars:
+        nginx_site_args:
+          subdomain: nginxverifydisabled
+          proxy_pass: http://127.0.0.1:18080/
+          server_conf: |
+            nginx_verify_broken_site_directive on;
+
+    - name: _verify | Broken disabled-site replacement must fail validation
+      fail:
+        msg: The broken disabled-site replacement unexpectedly passed validation.
+
+  rescue:
+    - name: _verify | Read the restored disabled site
+      slurp:
+        src: /etc/nginx/sites-available/nginxverifydisabled
+      register: nginx_verify_disabled_site_restored
+      become: true
+
+    - name: _verify | Stat the failed disabled-site symlink
+      stat:
+        path: /etc/nginx/sites-enabled/nginxverifydisabled
+      register: nginx_verify_disabled_site_enabled
+      become: true
+
+    - name: _verify | Disabled site content and state were restored
+      assert:
+        that:
+          - >-
+            nginx_verify_disabled_site_restored.content | b64decode
+            == '# nginx verify disabled sentinel\n'
+          - not nginx_verify_disabled_site_enabled.stat.exists
+
+  always:
+    - name: _verify | Remove the disabled-site fixture
+      file:
+        path: /etc/nginx/sites-available/nginxverifydisabled
+        state: absent
+      become: true
+
 # Feed the helper a syntactically broken server_conf and confirm the config and
 # its sites-enabled symlink are both removed while nginx stays valid.
 - name: _verify | Broken site config is validated and rolled back

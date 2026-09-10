@@ -156,16 +156,19 @@
         path: "{{ nginx_static_conf.backup_file }}"
         state: absent
 
-    - name: site | Remove newly added site files
+    - name: site | Remove a newly enabled site symlink
+      when: nginx_static_conf_enable.changed | default(false)
+      file:
+        path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+        state: absent
+
+    - name: site | Remove a newly added site config
       when:
         - nginx_static_conf.changed | default(false)
         - "'backup_file' not in (nginx_static_conf | default({}))"
       file:
-        path: "{{ item }}"
+        path: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
         state: absent
-      loop:
-        - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-        - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
 
     - name: site | Fail after rolling back the site write
       fail:
