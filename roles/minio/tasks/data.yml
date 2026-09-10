@@ -6,10 +6,18 @@
 - name: data | Create users
   command: mcli admin user add default
   args:
-    stdin: "{{ item.access_key }}\n{{ item.secret_key }}"
+    stdin: "{{ minio_access_key }}\n{{ minio_user_secret }}"
   changed_when: false
-  loop: "{{ minio_users }}"
+  loop: "{{ minio_users | map(attribute='access_key') | list }}"
+  loop_control:
+    loop_var: minio_access_key
+    label: "{{ minio_access_key }}"
   become: true
+  vars:
+    minio_user_secret: >-
+      {{ minio_users
+         | selectattr('access_key', 'equalto', minio_access_key)
+         | map(attribute='secret_key') | first }}
   tags:
     - minio
 
@@ -42,9 +50,12 @@
     - minio
 
 - name: data | Attach useronly policy
-  command: mcli admin policy set default useronly user={{ item.access_key }}
+  command: mcli admin policy set default useronly user={{ minio_access_key }}
   changed_when: false
-  loop: "{{ minio_users }}"
+  loop: "{{ minio_users | map(attribute='access_key') | list }}"
+  loop_control:
+    loop_var: minio_access_key
+    label: "{{ minio_access_key }}"
   become: true
   tags:
     - minio

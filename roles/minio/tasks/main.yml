@@ -22,15 +22,16 @@
 # every operation -- catch that here rather than as a runtime ARQ/restic 403.
 - name: Assert each minio user has a matching bucket
   assert:
-    that: item.access_key in minio_buckets
+    that: minio_access_key in minio_buckets
     fail_msg: >-
-      minio user '{{ item.access_key }}' has no bucket of the same name in
-      minio_buckets. Add '{{ item.access_key }}' to minio_buckets or rename
+      minio user '{{ minio_access_key }}' has no bucket of the same name in
+      minio_buckets. Add '{{ minio_access_key }}' to minio_buckets or rename
       the user.
     quiet: true
-  loop: "{{ minio_users }}"
+  loop: "{{ minio_users | map(attribute='access_key') | list }}"
   loop_control:
-    label: "{{ item.access_key }}"
+    loop_var: minio_access_key
+    label: "{{ minio_access_key }}"
   tags:
     - minio
 
