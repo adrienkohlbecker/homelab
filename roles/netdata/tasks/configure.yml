@@ -168,6 +168,11 @@
 
 # Reverse the install above rather than leaving the tool behind: the collector
 # is the only consumer, and a host that never had it (or is not x86) no-ops.
+# Not a no-op everywhere today: fox carries a manually-installed
+# intel-gpu-tools with no reverse dependencies, so its next netdata converge
+# drops that one package. Sibling opt-in flags elsewhere (user_i7z_enabled) do
+# not reverse themselves; this one does because the collector config above is
+# removed under the same condition, and leaving the binary is pure cruft.
 - name: Remove stale intel-gpu-tools
   when: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
   apt:
