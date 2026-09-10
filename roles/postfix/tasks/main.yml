@@ -47,6 +47,7 @@
 # temporary files. The self-contained SASL map can still be validated before
 # installation; _verify.yml parses and exercises the installed configuration.
 - name: Install Postfix configuration
+  when: not (ansible_check_mode and postfix_apt.changed)
   template:
     src: "{{ item.name }}.j2"
     dest: "/etc/postfix/{{ item.name }}"
