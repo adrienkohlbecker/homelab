@@ -272,12 +272,18 @@
     mode: "0644"
     owner: root
     group: root
+  register: homeassistant_hacs_download
   become: true
   tags:
     - homeassistant
 
 - name: Unpack HACS
-  when: not ansible_check_mode or homeassistant_user.uid is defined
+  when:
+    - not ansible_check_mode or homeassistant_user.uid is defined
+    - >-
+      not (ansible_check_mode and
+           (homeassistant_hacs_dir.changed
+            or homeassistant_hacs_download.changed | default(false)))
   unarchive:
     src: /var/cache/homeassistant/hacs.zip
     remote_src: true
