@@ -108,30 +108,25 @@
   become: true
   block:
 
+    # Aliases are named after the access key rather than the loop index, so the
+    # single-user drift checks below name the user they are about to break.
     - name: _verify | Import an alias scoped to each provisioned user
-      command: mcli alias import scoped_{{ minio_user_index }} /dev/stdin
+      command: mcli alias import scoped_{{ minio_user.access_key }} /dev/stdin
       args:
-        stdin: "{{ {'url': 'https://minio-api.' ~ inventory_hostname ~ '.' ~ domain, 'accessKey': minio_access_key, 'secretKey': minio_user_secret, 'api': 'S3v4', 'path': 'auto'} | to_json }}"
-      loop: "{{ minio_users | map(attribute='access_key') | list }}"
+        stdin: "{{ {'url': 'https://minio-api.' ~ inventory_hostname ~ '.' ~ domain, 'accessKey': minio_user.access_key, 'secretKey': minio_user.secret_key, 'api': 'S3v4', 'path': 'auto'} | to_json }}"
+      loop: "{{ minio_users }}"
       loop_control:
-        loop_var: minio_access_key
-        index_var: minio_user_index
-        label: "{{ minio_access_key }}"
+        loop_var: minio_user
+        label: "{{ minio_user.access_key }}"
       changed_when: false
-      vars:
-        minio_user_secret: >-
-          {{ minio_users
-             | selectattr('access_key', 'equalto', minio_access_key)
-             | map(attribute='secret_key') | first }}
 
     # A signed bucket listing proves readiness of nginx, S3 and IAM together.
     - name: _verify | Every user has authenticated bucket access through HTTPS
-      command: timeout 10s mcli --insecure ls scoped_{{ minio_user_index }}/{{ minio_access_key }}
-      loop: "{{ minio_users | map(attribute='access_key') | list }}"
+      command: timeout 10s mcli --insecure ls scoped_{{ minio_user.access_key }}/{{ minio_user.access_key }}
+      loop: "{{ minio_users }}"
       loop_control:
-        loop_var: minio_access_key
-        index_var: minio_user_index
-        label: "{{ minio_access_key }}"
+        loop_var: minio_user
+        label: "{{ minio_user.access_key }}"
       register: minio_verify_api
       changed_when: false
       retries: 30
@@ -155,7 +150,7 @@
           changed_when: true
 
         - name: _verify | Drift denies access to the own bucket
-          command: mcli --insecure ls scoped_0/{{ minio_users[0].access_key }}
+          command: mcli --insecure ls scoped_{{ minio_users[0].access_key }}/{{ minio_users[0].access_key }}
           register: minio_verify_denied
           changed_when: false
           failed_when: minio_verify_denied.rc == 0 or 'access denied' not in minio_verify_denied.stderr | lower
@@ -164,11 +159,11 @@
           import_tasks: data.yml
 
     - name: _verify | Repaired user can list its own bucket
-      command: mcli --insecure ls scoped_0/{{ minio_users[0].access_key }}
+      command: mcli --insecure ls scoped_{{ minio_users[0].access_key }}/{{ minio_users[0].access_key }}
       changed_when: false
 
     - name: _verify | Repaired user does not retain admin access
-      command: mcli --insecure admin user list scoped_0
+      command: mcli --insecure admin user list scoped_{{ minio_users[0].access_key }}
       register: minio_verify_admin_denied
       changed_when: false
       failed_when: minio_verify_admin_denied.rc == 0 or 'access denied' not in minio_verify_admin_denied.stderr | lower
