@@ -61,6 +61,7 @@
     - /mnt/services/mosquitto/data
 
 - name: Configure mosquitto passwords
+  when: not ansible_check_mode or mosquitto_user.uid is defined
   template:
     src: pwfile.j2
     dest: /mnt/services/mosquitto/config/pwfile
@@ -78,6 +79,7 @@
 # there is no host-side parser. A startup parse failure is caught by the unit's
 # Type=notify/--sdnotify=healthy gate instead.
 - name: Configure mosquitto  # noqa: require-validate
+  when: not ansible_check_mode or mosquitto_user.uid is defined
   copy:
     src: mosquitto.conf
     dest: /mnt/services/mosquitto/config/mosquitto.conf
