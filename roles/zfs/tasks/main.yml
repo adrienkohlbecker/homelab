@@ -175,7 +175,8 @@
         - zfs
   loop: "{{ zfs_trim_pools }}"
   loop_control:
-    label: "{{ item }}"
+    loop_var: zfs_trim_pool
+    label: "{{ zfs_trim_pool }}"
   tags:
     - zfs
 

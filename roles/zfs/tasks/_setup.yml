@@ -3,4 +3,4 @@
     name: '{{ item }}'
     state: present
   become: true
-  with_items: '{{ zfs_mount_cache_datasets }}'
+  loop: '{{ zfs_mount_cache_datasets }}'

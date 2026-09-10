@@ -1,14 +1,14 @@
 # Use a wrapper so every loop iteration binds a fresh systemd_timer_args dict.
 # The nested systemd_timer imports keep static task names because templated
 # names resolve before item is bound.
-- name: _trim_timer | Install zfs_trim timer for {{ item }}
+- name: _trim_timer | Install zfs_trim timer for {{ zfs_trim_pool }}
   import_role:
     name: systemd_timer
     tasks_from: install
   vars:
     systemd_timer_args:
-      name: "zfs_trim_{{ item }}"
-      description: "Weekly ZFS trim for {{ item }}"
+      name: "zfs_trim_{{ zfs_trim_pool }}"
+      description: "Weekly ZFS trim for {{ zfs_trim_pool }}"
       on_calendar: "Thu *-*-* 00:05:00"
       # Spread the per-pool trims across the fleet (and across pools on a
       # multi-pool host) instead of all kicking off at 00:05.
@@ -17,4 +17,4 @@
       # the actual outcome -- a mid-run failure surfaces as a failed unit rather
       # than being lost because bare `zpool trim` returns as soon as it starts
       # the operation. Bounded by the helper's default TimeoutStartSec=1h.
-      exec_start: "/sbin/zpool trim -w {{ item }}"
+      exec_start: "/sbin/zpool trim -w {{ zfs_trim_pool }}"
