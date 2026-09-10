@@ -45,6 +45,7 @@ class TestClassifyChangedFiles:
             ("test/machine.py", True),
             ("test/testall.py", True),
             ("test/matrix.py", True),
+            ("test/condition_coverage.yml", True),
             ("test/inventory.ini", True),
             ("test/playbooks/site.yml", True),
             ("ansible.cfg", True),
