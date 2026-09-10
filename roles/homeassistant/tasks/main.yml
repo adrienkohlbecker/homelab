@@ -195,7 +195,7 @@
     modification_time: preserve
     access_time: preserve
   become: true
-  with_items:
+  loop:
     - automations.yaml
     - scripts.yaml
     - scenes.yaml
