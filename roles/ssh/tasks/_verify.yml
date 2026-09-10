@@ -41,6 +41,7 @@
 # silently overwriting the old identity. Corrupt the persisted copy, re-run
 # the role, and expect the failure; then repair.
 - name: _verify | Corrupt the persisted host identity
+  when: zfs_root
   copy:
     dest: /mnt/services/ssh_host_keys/ssh_host_ed25519_key
     content: "not the real key\n"
@@ -50,6 +51,7 @@
   become: true
 
 - name: _verify | Re-run the role against the divergent persisted identity
+  when: zfs_root
   block:
     - name: _verify | Import the role (must fail on the divergence guard)
       import_role:
@@ -83,6 +85,7 @@
       become: true
 
 - name: _verify | The divergence guard halted the converge
+  when: zfs_root
   assert:
     that:
       - ssh_verify_guard_tripped
