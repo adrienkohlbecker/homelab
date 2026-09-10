@@ -183,7 +183,7 @@ condition_coverage:
     - mise run ci:bootstrap
   script:
     - >-
-      mise exec -- test/condition_coverage.py
+      mise exec -- python test/condition_coverage.py
       --roles {{ roles | join(',') }}
 {% if site_test %}
       --include-site
