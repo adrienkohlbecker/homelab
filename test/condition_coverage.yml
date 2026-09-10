@@ -456,3 +456,253 @@ scenarios:
         variables:
           jellyfin_oidc_desired_fp: desired
           jellyfin_oidc_current_fp: current
+
+  # Fresh-check and external-state variants
+  - path: roles/apt_source/tasks/configure.yml
+    expression: apt_deb822_available | default(true)
+    cases:
+      - outcome: false
+        variables:
+          apt_deb822_available: false
+      - outcome: true
+        variables:
+          apt_deb822_available: true
+
+  - path: roles/authelia/tasks/main.yml
+    expression: not ansible_check_mode or authelia_podman_available
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          authelia_podman_available: false
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          authelia_podman_available: false
+
+  - path: roles/headscale/tasks/main.yml
+    expression: not ansible_check_mode or headscale_podman_available
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          headscale_podman_available: false
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          headscale_podman_available: false
+
+  - path: roles/influxdb/tasks/main.yml
+    expression: not ansible_check_mode or influxdb_podman_available
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          influxdb_podman_available: false
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          influxdb_podman_available: false
+
+  - path: roles/influxdb/tasks/main.yml
+    expression: influxdb_bolt_db.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          influxdb_bolt_db:
+            stat:
+              exists: false
+      - outcome: true
+        variables:
+          influxdb_bolt_db:
+            stat:
+              exists: true
+
+  - path: roles/influxdb/tasks/main.yml
+    expression: _influxdb_root_password_secret.changed | default(false)
+    cases:
+      - outcome: false
+        variables:
+          _influxdb_root_password_secret: {}
+      - outcome: true
+        variables:
+          _influxdb_root_password_secret:
+            changed: true
+
+  - path: roles/homeassistant/tasks/main.yml
+    expression: not (ansible_check_mode and (homeassistant_hacs_dir.changed or homeassistant_hacs_download.changed | default(false)))
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          homeassistant_hacs_dir:
+            changed: true
+          homeassistant_hacs_download: {}
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          homeassistant_hacs_dir:
+            changed: true
+          homeassistant_hacs_download: {}
+
+  - path: roles/homeassistant/tasks/main.yml
+    expression: homeassistant_unit_file.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          homeassistant_unit_file:
+            stat:
+              exists: false
+      - outcome: true
+        variables:
+          homeassistant_unit_file:
+            stat:
+              exists: true
+
+  - path: roles/kuma/tasks/main.yml
+    expression: kuma_disableauth_seed.changed | default(false)
+    cases:
+      - outcome: false
+        variables:
+          kuma_disableauth_seed: {}
+      - outcome: true
+        variables:
+          kuma_disableauth_seed:
+            changed: true
+
+  - path: roles/locale/tasks/main.yml
+    expression: not (ansible_check_mode and locale_apt.changed)
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          locale_apt:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          locale_apt:
+            changed: true
+
+  - path: roles/locale/tasks/main.yml
+    expression: locale_cfg.changed
+    cases:
+      - outcome: false
+        variables:
+          locale_cfg:
+            changed: false
+      - outcome: true
+        variables:
+          locale_cfg:
+            changed: true
+
+  - path: roles/mutt/tasks/main.yml
+    expression: not ansible_check_mode or _mutt_getmail_maildir.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          _mutt_getmail_maildir:
+            stat:
+              exists: false
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          _mutt_getmail_maildir:
+            stat:
+              exists: false
+
+  - path: roles/transmission/tasks/main.yml
+    expression: not ansible_check_mode or transmission_podman_available
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          transmission_podman_available: false
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          transmission_podman_available: false
+
+  - path: roles/user/tasks/main.yml
+    expression: ansible_user_id != "root"
+    cases:
+      - outcome: false
+        variables:
+          ansible_user_id: root
+      - outcome: true
+        variables:
+          ansible_user_id: ubuntu
+
+  - path: roles/zfs_autobackup/tasks/dest.yml
+    expression: zfs_root
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          zfs_root: false
+      - outcome: true
+        variables:
+          zfs_root: true
+
+  - path: roles/zfs_autobackup/tasks/source.yml
+    expression: zfs_root
+    cases:
+      - outcome: false
+        variables:
+          zfs_root: false
+      - outcome: true
+        variables:
+          zfs_root: true
+
+  - path: roles/zfs_autobackup/tasks/identity.yml
+    expression: not (ansible_check_mode and zfs_autobackup_identity_directory.changed)
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          ansible_check_mode: true
+          zfs_autobackup_identity_directory:
+            changed: true
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          zfs_autobackup_identity_directory:
+            changed: true
+
+  - path: roles/zfs_dataset/tasks/dataset.yml
+    expression: (zfs_dataset_args.extra_properties | default({})) | length > 0
+    all: true
+    cases:
+      - outcome: false
+        variables:
+          zfs_dataset_args: {}
+      - outcome: true
+        variables:
+          zfs_dataset_args:
+            extra_properties:
+              compression: zstd
+
+  - path: roles/zfs_dataset/tasks/dataset.yml
+    expression: __prop_line.split()[1] != 'local'
+    cases:
+      - outcome: false
+        variables:
+          __prop_line: compression local
+      - outcome: true
+        variables:
+          __prop_line: compression received
+
+  - path: roles/zfsbootmenu/tasks/main.yml
+    expression: zfsbootmenu_common_artifact_install is changed or (zfsbootmenu_aarch64_component_install is defined and zfsbootmenu_aarch64_component_install is changed)
+    cases:
+      - outcome: false
+        variables:
+          zfsbootmenu_common_artifact_install:
+            changed: false
+      - outcome: true
+        variables:
+          zfsbootmenu_common_artifact_install:
+            changed: true
