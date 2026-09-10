@@ -1,2 +1,5 @@
+---
 machines:
   box:
+  # Minimal has no persistent services dataset and exercises ephemeral host keys.
+  minimal:
