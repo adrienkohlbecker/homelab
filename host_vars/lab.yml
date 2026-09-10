@@ -217,8 +217,10 @@ netdata_zfspool_thresholds:
   # bump can close the gap before the operator reacts. 75% is ~4.5
   # TiB free, gives a week+ of lead time.
   tank:  [ 75, 85, 95 ]
-  mouse: [ 85, 90, 95 ]
   dozer: [ 85, 90, 95 ]
+  # No mouse: it stays exported and unmanaged (see zfs_pool_properties above),
+  # so the zfspool collector never charts it and an alarm here attaches to
+  # nothing.
 netdata_diskspace_blocklist:
   - /
   - /mnt/brumath
