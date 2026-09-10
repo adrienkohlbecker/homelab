@@ -58,6 +58,7 @@
     - samba
 
 - name: Configure samba
+  when: not (ansible_check_mode and samba_apt.changed)
   template:
     src: smb.conf.j2
     dest: /etc/samba/smb.conf
@@ -93,6 +94,7 @@
     systemd_unit_args:
       src: smbd_zfs_mounts_override.conf.j2
       for: smbd.service
+      condition: "{{ not (ansible_check_mode and samba_apt.changed) }}"
   tags:
     - samba
 
