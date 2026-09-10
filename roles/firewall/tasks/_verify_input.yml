@@ -360,7 +360,7 @@
     fail_msg: >-
       VRRP rule referencing counter `vrrp_accept` is missing
       iifname={{ default_interface }} or protocol=vrrp scope.
-  when: firewall_vrrp_enabled
+  when: dns_vrrp_enabled
 
 - name: _verify_input | DNS VIP silence rules retain their destination scope
   vars:
@@ -378,7 +378,7 @@
     fail_msg: >-
       DNS VIP silence rules must match the current INPUT destination or the
       original FORWARD destination so unrelated vmac traffic stays observable.
-  when: firewall_vrrp_enabled
+  when: dns_vrrp_enabled
 
 # The other half of the flag: a host outside the VRRP election must render no
 # accept for peer VRRP and no VIP silence rules, so a compromised LAN device
@@ -398,7 +398,7 @@
     - input_silenced_vip_tcp
     - input_silenced_vip
     - forward_silenced_vip
-  when: not firewall_vrrp_enabled
+  when: not dns_vrrp_enabled
 
 - name: _verify_input | INPUT — mDNS rendered rule keeps LAN iif/source/port scope
   vars:

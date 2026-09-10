@@ -77,12 +77,12 @@
       name: keepalived_vrrp
       script: keepalived_vrrp.chart.sh
       conf: charts_d_keepalived_vrrp.conf.j2
-      condition: "{{ netdata_keepalived_vrrp_enabled and not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
+      condition: "{{ dns_vrrp_enabled and not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed)) }}"
   tags:
     - netdata
 
 - name: Remove stale keepalived VRRP collector files
-  when: not netdata_keepalived_vrrp_enabled
+  when: not dns_vrrp_enabled
   file:
     path: "{{ item }}"
     state: absent

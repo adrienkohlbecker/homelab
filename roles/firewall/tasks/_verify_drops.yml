@@ -118,7 +118,7 @@
 # netavark's DNAT is temporarily absent. Exercise TCP and UDP separately: TCP
 # must preserve the fast-fail reset, while UDP is silently dropped.
 - name: _verify_drops | Input — TCP to the DNS VIP through the vmac hits the VIP reset rule
-  when: firewall_vrrp_enabled
+  when: dns_vrrp_enabled
   command: >
     ip netns exec extns hping3 -S -p 853 -c 1 --quiet
     --interface vrrp_ext {{ network.virtual_ips.dns }}
@@ -127,7 +127,7 @@
   become: true
 
 - name: _verify_drops | Input — UDP to the DNS VIP through the vmac hits the VIP drop rule
-  when: firewall_vrrp_enabled
+  when: dns_vrrp_enabled
   command:
     argv:
       - ip
@@ -151,7 +151,7 @@
 # but PREROUTING rewrites it to a peer reachable through wg0. The packet enters
 # on the vmac and reaches FORWARD without matching the earlier podman DNAT allow.
 - name: _verify_drops | Install stale DNS VIP DNAT fixture
-  when: firewall_vrrp_enabled
+  when: dns_vrrp_enabled
   command:
     argv:
       - nft
@@ -169,7 +169,7 @@
   become: true
 
 - name: _verify_drops | Forward — stale DNS VIP DNAT through the vmac hits the VIP drop rule
-  when: firewall_vrrp_enabled
+  when: dns_vrrp_enabled
   command:
     argv:
       - ip
@@ -231,7 +231,7 @@
 # drops the iif scope (`ip saddr ... ip protocol vrrp accept`) would
 # accept this packet and increment the counter.
 - name: _verify_drops | Input — VRRP (proto 112) on wg0 ingress doesn't match the WAN-iif rule
-  when: firewall_vrrp_enabled
+  when: dns_vrrp_enabled
   command: ip netns exec extns hping3 --rawip -H 112 -c 1 -d 0 --quiet 192.0.2.1
   changed_when: false
   failed_when: false

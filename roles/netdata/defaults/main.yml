@@ -1,4 +1,3 @@
-netdata_keepalived_vrrp_enabled: "{{ dns_vrrp_enabled }}"
 netdata_intelgpu_enabled: false
 netdata_keepalived_lost_master_alert: >-
   {{ (dns_keepalived_priority | default(0) | int)

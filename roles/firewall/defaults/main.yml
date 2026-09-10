@@ -1,1 +1,0 @@
-firewall_vrrp_enabled: "{{ dns_vrrp_enabled }}"
