@@ -1,3 +1,7 @@
 # Release-divergent: nginx config depends on the distribution
+machines:
+  box:
+  # Lab enables the inventory-driven static reverse proxies.
+  lab:
 ubuntu:
   - resolute
