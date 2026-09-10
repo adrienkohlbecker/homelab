@@ -241,6 +241,7 @@
 # --- Dry-run health script ---
 
 - name: _verify | Health script runs without error
+  when: zfs_root
   command: /usr/local/bin/zfs_health
   changed_when: false
   become: true
