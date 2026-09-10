@@ -59,7 +59,9 @@
     - regexp: '^FLAGS='
       line: 'FLAGS="--state=/mnt/services/tailscale/tailscaled.state"'
   register: tailscale_defaults
-  when: not (ansible_check_mode and apt_source_tailscale_changed)
+  when: >-
+    not (ansible_check_mode and
+         (apt_source_tailscale_changed or tailscale_apt.changed))
   become: true
   tags:
     - tailscale
@@ -100,7 +102,9 @@
 # Restart inline when the package, defaults, or drop-in changed so the current
 # daemon configuration is active before register.yml runs `tailscale login`/`set`.
 - name: Enable and start tailscaled
-  when: not (ansible_check_mode and apt_source_tailscale_changed)
+  when: >-
+    not (ansible_check_mode and
+         (apt_source_tailscale_changed or tailscale_apt.changed))
   systemd:
     name: tailscaled.service
     enabled: true
