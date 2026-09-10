@@ -1,0 +1,80 @@
+# The minimal fixture deliberately disables host-specific collectors while
+# retaining the shared Netdata, Prometheus, and presence-collector surfaces.
+- name: _verify | Minimal Netdata service is active
+  systemd:
+    name: netdata
+  register: _netdata_minimal_unit
+  failed_when: >-
+    _netdata_minimal_unit.status.LoadState != "loaded"
+    or _netdata_minimal_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | Read minimal Prometheus collector configuration
+  slurp:
+    src: /etc/netdata/go.d/prometheus.conf
+  register: _netdata_minimal_prometheus_conf
+  become: true
+
+- name: _verify | Minimal Prometheus jobs match their declared inputs
+  vars:
+    _prometheus: "{{ _netdata_minimal_prometheus_conf.content | b64decode }}"
+  assert:
+    that:
+      - >-
+        _prometheus is search('(?m)^  - name: gitlab_runner$')
+      - >-
+        _prometheus is not search('(?m)^  - name: minio$')
+    fail_msg: >-
+      The minimal fixture must retain the GitLab Runner scrape while omitting
+      the disabled MinIO scrape. Rendered config: {{ _prometheus }}
+
+- name: _verify | Wait for minimal presence charts
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
+  register: _netdata_minimal_charts
+  retries: 30
+  delay: 2
+  vars:
+    _charts: "{{ (_netdata_minimal_charts.json | default({})).charts | default({}) }}"
+  until: >-
+    _netdata_minimal_charts.status == 200
+    and 'netdata_presence.context_system_cpu' in _charts
+    and 'netdata_presence.context_fixture_does_not_exist' in _charts
+    and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in _charts
+    and 'netdata_presence.collector_go_d_collector_prometheus_gitlab_runner' in _charts
+    and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in _charts
+    and 'netdata_presence.chart_system_cpu_chart' in _charts
+    and 'netdata_presence.chart_missing_fixture_chart' in _charts
+    and 'keepalived_vrrp.state' not in _charts
+
+- name: _verify | Minimal presence charts report live and absent surfaces
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=netdata_presence.*
+  register: _netdata_minimal_presence
+  retries: 30
+  delay: 2
+  vars:
+    _metrics: "{{ _netdata_minimal_presence.json | default({}) }}"
+    _system_cpu: "{{ _metrics['netdata_presence.context_system_cpu'] | default({}) }}"
+    _missing_context: "{{ _metrics['netdata_presence.context_fixture_does_not_exist'] | default({}) }}"
+    _systemdunits: "{{ _metrics['netdata_presence.collector_go_d_collector_systemdunits_service_units'] | default({}) }}"
+    _gitlab_runner: "{{ _metrics['netdata_presence.collector_go_d_collector_prometheus_gitlab_runner'] | default({}) }}"
+    _fake_collector: "{{ _metrics['netdata_presence.collector_go_d_collector_fake_plugin_fake_job'] | default({}) }}"
+    _system_cpu_chart: "{{ _metrics['netdata_presence.chart_system_cpu_chart'] | default({}) }}"
+    _missing_chart: "{{ _metrics['netdata_presence.chart_missing_fixture_chart'] | default({}) }}"
+  until: >-
+    _netdata_minimal_presence.status == 200
+    and _system_cpu.dimensions.present.value | default(-1) | int == 1
+    and _system_cpu.dimensions.ready.value | default(-1) | int == 1
+    and _missing_context.dimensions.present.value | default(-1) | int == 0
+    and _missing_context.dimensions.ready.value | default(-1) | int == 1
+    and _systemdunits.dimensions.present.value | default(-1) | int == 1
+    and _systemdunits.dimensions.ready.value | default(-1) | int == 1
+    and _gitlab_runner.dimensions.present.value | default(-1) | int == 1
+    and _gitlab_runner.dimensions.ready.value | default(-1) | int == 1
+    and _fake_collector.dimensions.present.value | default(-1) | int == 0
+    and _fake_collector.dimensions.ready.value | default(-1) | int == 1
+    and _system_cpu_chart.dimensions.present.value | default(-1) | int == 1
+    and _system_cpu_chart.dimensions.ready.value | default(-1) | int == 1
+    and _missing_chart.dimensions.present.value | default(-1) | int == 0
+    and _missing_chart.dimensions.ready.value | default(-1) | int == 1

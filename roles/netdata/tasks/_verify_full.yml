@@ -1,0 +1,759 @@
+# Full-fixture verification of netdata_presence.chart.sh and the
+# context_liveness templates that consume netdata_contexts /
+# netdata_collectors. host_vars/box.yml seeds:
+#   netdata_contexts:
+#     - system.cpu             (real chart, always live)
+#     - foo.does_not_exist     (never-existed chart)
+#   netdata_collectors:
+#     - go.d:collector:systemdunits:service-units  (real, always-live -- the role configures it)
+#     - go.d:collector:fake_plugin:fake_job        (never-existed collector)
+#   netdata_expected_charts:
+#     system_cpu_chart: system.cpu                 (real exact chart)
+#     missing_fixture_chart: fixture.does_not_exist (never-existed exact chart)
+# So the collector emits present=1 for system.cpu + systemdunits and
+# system_cpu_chart, present=0 for foo.does_not_exist + fake_plugin:fake_job +
+# missing_fixture_chart, and the health templates fan out across the resulting
+# charts. systemdunits is the present=1 witness for the collector prefix match
+# (instanced mode, plugin != job) -- not just the trivial present=0 path;
+# fake_plugin:fake_job is the present=0 witness.
+
+- name: _verify | Netdata.service is loaded and active
+  systemd:
+    name: netdata
+  register: _netdata_unit
+  failed_when: >-
+    _netdata_unit.status.LoadState != "loaded"
+    or _netdata_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | Read Prometheus collector configuration
+  slurp:
+    src: /etc/netdata/go.d/prometheus.conf
+  register: _netdata_prometheus_conf
+  become: true
+
+- name: _verify | MinIO inputs enable its Prometheus scrape job
+  assert:
+    that:
+      - >-
+        (_netdata_prometheus_conf.content | b64decode)
+        is search('(?m)^  - name: minio$')
+    fail_msg: >-
+      Expected minio_buckets to enable the MinIO job in prometheus.conf.
+
+- name: _verify | Read systemd unit health configuration
+  slurp:
+    src: /etc/netdata/health.d/systemdunits.conf
+  register: _netdata_systemdunits_health
+  become: true
+
+- name: _verify | Every systemd unit alert uses sustained failure state
+  vars:
+    _health: "{{ _netdata_systemdunits_health.content | b64decode }}"
+  assert:
+    that:
+      - >-
+        _health
+        | regex_findall('lookup: average -5m unaligned of failed')
+        | length == 11
+      - '"delay: up" not in _health'
+    fail_msg: >-
+      Expected all 11 rendered systemd unit alerts to require five minutes of
+      sustained failure without notification-only delay.
+
+- name: _verify | Read Fluent Bit health configuration
+  slurp:
+    src: /etc/netdata/health.d/fluentbit.conf
+  register: _netdata_fluentbit_health
+  become: true
+
+- name: _verify | Fluent Bit alert uses sustained record drops
+  vars:
+    _health: "{{ _netdata_fluentbit_health.content | b64decode }}"
+  assert:
+    that:
+      - '"lookup: min -5m unaligned of fluentbit_output_dropped_records_total" in _health'
+      - '"delay: up" not in _health'
+      - '"delay: down 1h" in _health'
+    fail_msg: >-
+      Expected the Fluent Bit alarm to require a sustained positive drop rate
+      and retain only recovery hysteresis.
+
+- name: _verify | Read Postfix health configuration
+  slurp:
+    src: /etc/netdata/health.d/postfix.conf
+  register: _netdata_postfix_health
+  become: true
+
+- name: _verify | Postfix alert uses sustained queue depth
+  vars:
+    _health: "{{ _netdata_postfix_health.content | b64decode }}"
+  assert:
+    that:
+      - '"lookup: min -10m unaligned of emails" in _health'
+      - '"delay: up" not in _health'
+      - '"delay: down 30m" in _health'
+    fail_msg: >-
+      Expected the Postfix alarm to require a sustained queue depth and retain
+      only recovery hysteresis.
+
+- name: _verify | Wait for Postfix queue metrics
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=postfix_local.postfix_queue_emails
+    return_content: true
+  register: _netdata_postfix_chart
+  until: _netdata_postfix_chart.status == 200
+  retries: 12
+  delay: 5
+
+- name: _verify | Postfix collector reports the fixture queue
+  assert:
+    that:
+      - _netdata_postfix_chart.json.context == "postfix.qemails"
+      - _netdata_postfix_chart.json.dimensions.emails is defined
+    fail_msg: >-
+      Expected the explicit Postfix collector job to emit its queue chart;
+      got {{ _netdata_postfix_chart.json | default({}) }}.
+
+- name: _verify | Read netdata apt policy
+  command: apt-cache policy netdata
+  changed_when: false
+  register: _netdata_apt_policy
+
+- name: _verify | Netdata pin selects the configured major from its mirror
+  vars:
+    _netdata_policy_re: "[*][*][*] {{ netdata_version.split('.')[0] }}[.][^ ]+ 999"
+  assert:
+    that:
+      - _netdata_apt_policy.stdout is search(_netdata_policy_re)
+      - (mirror_apt_netdata | regex_replace('/$', '')) in _netdata_apt_policy.stdout
+    fail_msg: >-
+      Expected netdata {{ netdata_version }} at priority 999 from
+      {{ mirror_apt_netdata }}; got policy:
+      {{ _netdata_apt_policy.stdout | default('') }}
+
+- name: _verify | Wait for keepalived_vrrp chart to register
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
+  register: _netdata_keepalived_vrrp_charts
+  retries: 30
+  delay: 2
+  until: >-
+    _netdata_keepalived_vrrp_charts.status == 200
+    and 'keepalived_vrrp.state' in ((_netdata_keepalived_vrrp_charts.json | default({})).charts | default({}))
+
+# allmetrics reports the last collected sample directly, so no query-window
+# bucketing can leave the newest value invisible.
+- name: _verify | Keepalived_vrrp fixture reports holds_vip=1
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=keepalived_vrrp.state
+  register: _netdata_keepalived_vrrp_data
+  retries: 30
+  delay: 2
+  until: >-
+    _netdata_keepalived_vrrp_data.status == 200
+    and ((_netdata_keepalived_vrrp_data.json | default({}))['keepalived_vrrp.state'] | default({}))
+        .dimensions.holds_vip.value | default(-1) | int == 1
+
+- name: _verify | Keepalived_vrrp chart carries VIP label + shared context
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=keepalived_vrrp.state
+  register: _netdata_keepalived_vrrp_chart
+- name: _verify | Assert keepalived_vrrp labels + context
+  assert:
+    that:
+      - _netdata_keepalived_vrrp_chart.json.context == "keepalived_vrrp.state"
+      - _netdata_keepalived_vrrp_chart.json.chart_labels.vip | default('') == "198.51.100.10"
+    fail_msg: >-
+      chart {{ _netdata_keepalived_vrrp_chart.json.id }} context={{ _netdata_keepalived_vrrp_chart.json.context }}
+      labels={{ _netdata_keepalived_vrrp_chart.json.chart_labels | default({}) }}
+
+# Gate on the charts appearing before the singular /api/v1/chart probes
+# below -- that endpoint 404s for unknown charts, which would fail those
+# tasks outright instead of letting `until:` retry.
+- name: _verify | Wait for both context-presence charts to register
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
+  register: _netdata_charts
+  retries: 30
+  delay: 2
+  vars:
+    _charts: "{{ (_netdata_charts.json | default({})).charts | default({}) }}"
+  until: >-
+    _netdata_charts.status == 200
+    and 'netdata_presence.context_system_cpu' in _charts
+    and 'netdata_presence.context_foo_does_not_exist' in _charts
+    and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in _charts
+    and 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job' in _charts
+    and 'netdata_presence.chart_system_cpu_chart' in _charts
+    and 'netdata_presence.chart_missing_fixture_chart' in _charts
+
+# allmetrics reports the last collected sample per chart directly, so no
+# query-window bucketing can leave the newest value invisible.
+- name: _verify | Presence charts resolve to the expected present/ready values
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=netdata_presence.*
+  register: _netdata_presence_metrics
+  retries: 30
+  delay: 2
+  vars:
+    _system_cpu: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_system_cpu'] | default({}) }}"
+    _systemdunits: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_systemdunits_service_units'] | default({}) }}"
+    _missing_context: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_foo_does_not_exist'] | default({}) }}"
+    _fake_collector: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_fake_plugin_fake_job'] | default({}) }}"
+    _system_cpu_chart: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.chart_system_cpu_chart'] | default({}) }}"
+    _missing_chart: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.chart_missing_fixture_chart'] | default({}) }}"
+  until: >-
+    _netdata_presence_metrics.status == 200
+    and _system_cpu.dimensions.present.value | default(-1) | int == 1
+    and _system_cpu.dimensions.ready.value | default(-1) | int == 1
+    and _systemdunits.dimensions.present.value | default(-1) | int == 1
+    and _systemdunits.dimensions.ready.value | default(-1) | int == 1
+    and _missing_context.dimensions.present.value | default(-1) | int == 0
+    and _missing_context.dimensions.ready.value | default(-1) | int == 1
+    and _fake_collector.dimensions.present.value | default(-1) | int == 0
+    and _fake_collector.dimensions.ready.value | default(-1) | int == 1
+    and _system_cpu_chart.dimensions.present.value | default(-1) | int == 1
+    and _system_cpu_chart.dimensions.ready.value | default(-1) | int == 1
+    and _missing_chart.dimensions.present.value | default(-1) | int == 0
+    and _missing_chart.dimensions.ready.value | default(-1) | int == 1
+
+# Unit-test the collector's pure derivations directly. The live
+# present=1 path above only exercises 'instanced' mode (systemdunits,
+# plugin != job); 'exact' mode (plugin == job -- nvme and zfspool,
+# the dominant prod shape) and the non-go.d skip have no always-live
+# witness on the box fixture, so assert the pure derivation here.
+# The agent-start derivation gets the same treatment: its grace-suppress
+# behavior only manifests on a prod-cadence plugin respawn, so assert
+# the derivation (pid 1 == boot epoch, unallocated pid == now fallback)
+# instead. Sourcing the collector is side-effect-free (no curl/error at
+# load time).
+- name: _verify | Assert the collector derivations (chart prefix + agent start)
+  shell: |
+    source /usr/libexec/netdata/charts.d/netdata_presence.chart.sh
+    fail=0
+    check() {
+      got=$(_netdata_presence_collector_chart_prefix "$1")
+      if [ "$got" != "$2" ]; then
+        echo "FAIL: prefix('$1') = '$got', expected '$2'"
+        fail=1
+      fi
+    }
+    check "go.d:collector:nvme:nvme" "exact nvme"
+    check "go.d:collector:systemdunits:service-units" "instanced systemdunits_service-units"
+    check "not-go.d:foo:bar:baz" ""
+    # ready keys off the agent start (via the plugin parent /proc start
+    # time): pid 1 is born at boot, so its result must be the boot epoch.
+    # An unallocated pid must fall back to now, never to a bogus old
+    # epoch that would keep alerts suppressed.
+    now=$EPOCHSECONDS
+    boot_epoch=$(( now - $(awk '{print int($1)}' /proc/uptime) ))
+    got=$(_netdata_presence_agent_started_at 1)
+    if [ "$got" -lt $(( boot_epoch - 60 )) ] || [ "$got" -gt $(( boot_epoch + 60 )) ]; then
+      echo "FAIL: agent_started_at(pid 1) = $got, expected ~boot epoch $boot_epoch"
+      fail=1
+    fi
+    got=$(_netdata_presence_agent_started_at "$(cat /proc/sys/kernel/pid_max)")
+    if [ "$got" -lt $(( now - 5 )) ]; then
+      echo "FAIL: agent_started_at(unallocated pid) = $got, expected ~now $now"
+      fail=1
+    fi
+    exit $fail
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+# Each chart carries its configured ID as a CLABEL; the alert templates use it
+# in their summary/info so the alert text identifies which entry failed.
+- name: _verify | System_cpu chart carries context ID + shared context
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.context_system_cpu
+  register: _netdata_system_cpu_chart
+- name: _verify | Assert system_cpu context ID + context
+  assert:
+    that:
+      - _netdata_system_cpu_chart.json.context == "netdata_presence.context"
+      - _netdata_system_cpu_chart.json.chart_labels.context_id | default('') == "system.cpu"
+    fail_msg: >-
+      chart {{ _netdata_system_cpu_chart.json.id }} context={{ _netdata_system_cpu_chart.json.context }}
+      labels={{ _netdata_system_cpu_chart.json.chart_labels | default({}) }}
+
+- name: _verify | Fake collector chart carries collector label + shared context
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job
+  register: _netdata_fake_collector_chart
+- name: _verify | Assert collector label + context
+  assert:
+    that:
+      - _netdata_fake_collector_chart.json.context == "netdata_presence.collector"
+      - _netdata_fake_collector_chart.json.chart_labels.collector | default('') == "go.d:collector:fake_plugin:fake_job"
+    fail_msg: >-
+      chart {{ _netdata_fake_collector_chart.json.id }} context={{ _netdata_fake_collector_chart.json.context }}
+      labels={{ _netdata_fake_collector_chart.json.chart_labels | default({}) }}
+
+- name: _verify | Missing exact chart carries name, chart ID, and shared context
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.chart_missing_fixture_chart
+  register: _netdata_missing_exact_chart
+
+- name: _verify | Assert exact chart labels + context
+  assert:
+    that:
+      - _netdata_missing_exact_chart.json.context == "netdata_presence.chart"
+      - _netdata_missing_exact_chart.json.chart_labels.name | default('') == "missing_fixture_chart"
+      - _netdata_missing_exact_chart.json.chart_labels.chart_id | default('') == "fixture.does_not_exist"
+    fail_msg: >-
+      chart {{ _netdata_missing_exact_chart.json.id }} context={{ _netdata_missing_exact_chart.json.context }}
+      labels={{ _netdata_missing_exact_chart.json.chart_labels | default({}) }}
+
+# Two alert template fan-outs to assert here:
+#   1) netdata_context_missing / netdata_collector_missing (presence alerts)
+#      should instantiate per-chart on the shared contexts.
+#   2) liveness_<name> (per-context staleness) from context_liveness.conf.j2
+#      should instantiate only for real charts -- liveness_foo_does_not_exist
+#      is expected to silently drop because the context isn't in the registry.
+# Health passes register alert fan-outs per chart, so gate the fetch on every
+# instantiation the assertions below consume: the presence/liveness fan-outs
+# against the fresh charts, and the stock systemdunits alarm the sustained-state
+# asserts read (its whole family registers in the same health pass), plus the
+# stock predictive disk alarms, the blocklist's muted disk-space override and
+# the un-silenced collector alarms, and the Keepalived lost-master alarm. The
+# four GitLab Runner instances cover every actionable failure reason in Runner
+# 19; the three ordinary job outcomes are asserted absent below.
+- name: _verify | Fetch alarms
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
+  register: _netdata_alarms
+  retries: 30
+  delay: 2
+  vars:
+    _alarms: "{{ ((_netdata_alarms.json | default({})).alarms | default({})) }}"
+    _keys: "{{ _alarms.keys() | list }}"
+    _runner_alerts: >-
+      {{
+        _alarms.values()
+        | selectattr('name', 'equalto', 'gitlab_runner_actionable_failure')
+        | list
+      }}
+    _collector_failure_alerts: >-
+      {{
+        _alarms.values()
+        | selectattr('name', 'equalto', 'plugin_data_collection_status')
+        | rejectattr('recipient', 'equalto', 'silent')
+        | list
+      }}
+    _silenced_disk_alerts: >-
+      {{
+        _alarms.values()
+        | selectattr('name', 'equalto', 'disk_space_usage')
+        | selectattr('recipient', 'equalto', 'silent')
+        | list
+      }}
+  until: >-
+    _netdata_alarms.status == 200
+    and _keys | select('search', 'netdata_presence.context_system_cpu.netdata_context_missing') | list | length > 0
+    and _keys | select('search', 'netdata_presence.context_foo_does_not_exist.netdata_context_missing') | list | length > 0
+    and _keys | select('search', 'netdata_presence.collector_go_d_collector_fake_plugin_fake_job.netdata_collector_missing') | list | length > 0
+    and _keys | select('search', 'netdata_presence.chart_missing_fixture_chart.netdata_chart_missing') | list | length > 0
+    and _keys | select('search', 'liveness_system_cpu') | list | length > 0
+    and _keys | select('search', 'systemd_service_unit_failed_state') | list | length > 0
+    and _keys | select('search', 'out_of_disk_space_time') | list | length > 0
+    and _keys | select('search', 'out_of_disk_inodes_time') | list | length > 0
+    and 'keepalived_vrrp.state.keepalived_lost_master' in _keys
+    and _collector_failure_alerts | length > 0
+    and _silenced_disk_alerts | length == netdata_diskspace_blocklist | length
+    and _runner_alerts | length == 4
+
+- name: _verify | Predictive disk-fill alarms remain silent
+  vars:
+    _predictive_disk_alerts: >-
+      {{
+        _netdata_alarms.json.alarms.values()
+        | selectattr('name', 'in', [
+            'out_of_disk_space_time',
+            'out_of_disk_inodes_time'
+          ])
+        | list
+      }}
+  assert:
+    that:
+      - >-
+        _predictive_disk_alerts
+        | map(attribute='name')
+        | unique
+        | sort
+        == ['out_of_disk_inodes_time', 'out_of_disk_space_time']
+      - _predictive_disk_alerts | rejectattr('recipient', 'equalto', 'silent') | list | length == 0
+    fail_msg: >-
+      Expected the stock out_of_disk_space_time and out_of_disk_inodes_time
+      alarms to retain their silent recipient. Got: {{ _predictive_disk_alerts }}
+
+# The blocklist overrides upstream's alarm by chart id, which is easy to render
+# wrong: an id matching no chart attaches nothing and leaves the stock alarm in
+# force with no error anywhere. Assert both directions -- every blocklisted
+# filesystem muted, and no others.
+- name: _verify | Blocklisted filesystems run the muted disk-space alarm
+  vars:
+    _silenced_disk_mounts: >-
+      {{
+        _netdata_alarms.json.alarms.values()
+        | selectattr('name', 'equalto', 'disk_space_usage')
+        | selectattr('recipient', 'equalto', 'silent')
+        | map(attribute='chart')
+        | map('regex_replace', '^disk_space[.]', '')
+        | list
+      }}
+  assert:
+    that: _silenced_disk_mounts | sort == netdata_diskspace_blocklist | sort
+    fail_msg: >-
+      Expected the disk-space blocklist to mute exactly
+      {{ netdata_diskspace_blocklist | sort }}; netdata reports
+      {{ _silenced_disk_mounts | sort }}. A chart id that matches no chart
+      leaves the stock alarm in force.
+
+- name: _verify | Keepalived alarm uses sustained VIP absence
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms
+         ["keepalived_vrrp.state.keepalived_lost_master"])
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "max"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_dimensions | default('') == "holds_vip"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected keepalived_lost_master to require five minutes without the VIP
+      and no notification-only delay. Got: {{ _alarm }}
+
+- name: _verify | Presence alerts use readiness and sustained absence
+  vars:
+    _alarms: "{{ _netdata_alarms.json.alarms }}"
+    _names:
+      - netdata_presence.context_foo_does_not_exist.netdata_context_missing
+      - netdata_presence.collector_go_d_collector_fake_plugin_fake_job.netdata_collector_missing
+      - netdata_presence.chart_missing_fixture_chart.netdata_chart_missing
+    _alarm: "{{ _alarms[item] | default({}) }}"
+  assert:
+    that:
+      - _alarm.lookup_method | default('') == "max"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_dimensions | default('') == "present"
+      - '"ready" in (_alarm.crit | default(""))'
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected {{ item }} to require collector readiness and five minutes of
+      continuous absence without notification-only delay. Got: {{ _alarm }}
+  loop: "{{ _names }}"
+
+- name: _verify | Real-context liveness present, missing-context liveness absent
+  vars:
+    _keys: "{{ _netdata_alarms.json.alarms.keys() | list }}"
+  assert:
+    that:
+      - _keys | select('search', 'liveness_system_cpu') | list | length > 0
+      - _keys | select('search', 'liveness_foo_does_not_exist') | list | length == 0
+    fail_msg: >-
+      Expected liveness_system_cpu to be registered and
+      liveness_foo_does_not_exist to be silently dropped because its context
+      is not in the chart registry.
+      Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
+
+- name: _verify | Context liveness alarm uses an explicit stale age
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms.values()
+         | selectattr('name', 'equalto', 'liveness_system_cpu') | list | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - '"360" in (_alarm.crit | default(""))'
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected liveness_system_cpu to alert after six minutes of stale data
+      without notification-only delay. Got: {{ _alarm }}
+
+- name: _verify | Reboot-required alarm uses sustained file-presence lookup
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms
+         ["system.post_update_reboot_status.system_post_update_reboot_status"])
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "min"
+      - _alarm.lookup_after | default(0) == -1800
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "required"
+    fail_msg: >-
+      Expected system_post_update_reboot_status to route to sysadmin only after
+      required stayed high for 30m. Got:
+      {{ _alarm }}
+
+- name: _verify | Systemd service failure alarm uses sustained state
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms.values()
+         | selectattr('name', 'equalto', 'systemd_service_unit_failed_state')
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "average"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "failed"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected systemd_service_unit_failed_state to require a sustained 5m
+      failure without queued notification delays. Got:
+      {{ _alarm }}
+
+- name: _verify | Available systemd unit failure alarms use sustained state
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms.values()
+         | selectattr('name', 'equalto', item)
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "average"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_dimensions | default('') == "failed"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected {{ item }} to use sustained failure state without notification
+      delays. Got: {{ _alarm }}
+  loop:
+    - systemd_socket_unit_failed_state
+    - systemd_target_unit_failed_state
+    - systemd_path_unit_failed_state
+    - systemd_device_unit_failed_state
+    - systemd_mount_unit_failed_state
+    - systemd_automount_unit_failed_state
+    - systemd_swap_unit_failed_state
+    # skip_transient suppresses scope charts in the fixture, so the rendered
+    # configuration assertion above covers the scope template.
+    - systemd_slice_unit_failed_state
+    - systemd_timer_unit_failed_state
+
+- name: _verify | GitLab Runner alert covers only actionable failure reasons
+  vars:
+    _alarms: "{{ _netdata_alarms.json.alarms.values() | list }}"
+    _alarm: >-
+      {{
+        (_alarms
+         | selectattr('name', 'equalto', 'gitlab_runner_actionable_failure')
+         | selectattr('chart', 'search', 'failure_reason=' ~ item)
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      # A fresh unchanged counter has no rate sample, so the alert remains
+      # UNINITIALIZED until the first increment. Existing charts may be CLEAR.
+      - _alarm.status | default('') in ["UNINITIALIZED", "CLEAR"]
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "max"
+      - _alarm.lookup_after | default(0) == -30
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "gitlab_runner_failed_jobs_total"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected a 30-second test GitLab Runner failure-rate alert for {{ item }};
+      got {{ _alarm }}
+  loop:
+    - runner_system_failure
+    - image_pull_failure
+    - job_execution_timeout
+    - unknown_failure
+
+- name: _verify | Ordinary GitLab Runner job outcomes have no alerts
+  vars:
+    _keys: "{{ _netdata_alarms.json.alarms.keys() | list }}"
+  assert:
+    that:
+      - _keys | select('search', 'failure_reason=' ~ item ~ '.*gitlab_runner_actionable_failure') | list | length == 0
+    fail_msg: "Unexpected GitLab Runner infrastructure alert for {{ item }}"
+  loop:
+    - script_failure
+    - configuration_error
+    - job_canceled
+
+- name: _verify | Increment GitLab Runner failure counters
+  template:
+    src: _gitlab_runner_metrics.prom.j2
+    dest: /var/lib/netdata_test/gitlab_runner_metrics.prom
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  vars:
+    netdata_gitlab_runner_failure_count: 1
+  become: true
+
+- name: _verify | Actionable GitLab Runner counter increments raise warnings
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
+  register: _netdata_runner_failure_alarms
+  retries: 30
+  delay: 2
+  vars:
+    _alarms: "{{ ((_netdata_runner_failure_alarms.json | default({})).alarms | default({})).values() | list }}"
+    _warnings: >-
+      {{
+        _alarms
+        | selectattr('name', 'equalto', 'gitlab_runner_actionable_failure')
+        | selectattr('status', 'equalto', 'WARNING')
+        | list
+      }}
+  until: _netdata_runner_failure_alarms.status == 200 and _warnings | length == 4
+
+- name: _verify | Collector-failure alarm uses sustained state
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms.values()
+         | selectattr('name', 'equalto', 'plugin_data_collection_status')
+         | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == "sysadmin"
+      - _alarm.lookup_method | default('') == "average"
+      - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_before | default(0) == 0
+      - _alarm.lookup_dimensions | default('') == "failed"
+      - _alarm.delay_up_duration | default(0) == 0
+      - _alarm.delay_down_duration | default(0) == 0
+    fail_msg: >-
+      Expected plugin_data_collection_status to require a sustained 5m failure
+      without queued notification delays. Got:
+      {{ _alarm }}
+
+# Map the netdata vhost FQDN to loopback for SNI-correct probing: noble/resolute
+# OpenSSL 3.x rejects SNI=localhost with TLSV1_UNRECOGNIZED_NAME.
+- name: _verify | Map the netdata vhost FQDN to loopback for SNI-correct probing
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.0\.1\s+netdata\.'
+    line: "127.0.0.1 netdata.{{ inventory_hostname }}.{{ domain }}"
+  become: true
+
+# --- nginx Authelia gate ---
+# Browser path through `https://netdata.<host>.<domain>` is gated by Authelia
+# forward-auth: an unauthenticated hit must 302 to the auth portal. The generic
+# nginx role verification exercises the opt-in Basic Authorization forwarding
+# and confirms the credential is stripped from the protected upstream.
+- name: _verify | Browser hit without auth redirects to Authelia
+  uri:
+    url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/"
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _netdata_no_auth
+  failed_when: >-
+    _netdata_no_auth.status != 302
+    or ("auth." not in (_netdata_no_auth.location | default("")))
+  become: true
+
+# netdata.conf pins `allow ... by dns = no`, so the running instance never
+# reverse-resolves the loopback peer (127.0.0.1 -> localhost, no DNS record) on
+# an accepted connection. Probe it over loopback and assert it stays silent.
+# Cursor-scoped to this probe, not the whole boot: the converge + fast-poll
+# restarts above run transient configs without the toggle (and netdata warns
+# under its stock localhost-DNS config during install), so only a fresh probe
+# against the final production instance is a clean witness.
+- name: _verify | No localhost DNS-validation warning logged on a fresh connect
+  shell: |
+    set -euo pipefail
+    rm -f /tmp/nd_verify_cursor
+    journalctl -u netdata -n0 --cursor-file=/tmp/nd_verify_cursor >/dev/null 2>&1 || true
+    for i in 1 2 3 4; do curl -s --connect-timeout 1 --max-time 5 -o /dev/null "http://localhost:{{ service_ports.netdata }}/api/v1/info"; done
+    sleep 1
+    journalctl -u netdata --cursor-file=/tmp/nd_verify_cursor --no-pager | grep -cF "Cannot validate" || true
+    rm -f /tmp/nd_verify_cursor
+  args:
+    executable: /bin/bash
+  register: _netdata_localhost_warn
+  changed_when: false
+  become: true
+  failed_when: _netdata_localhost_warn.stdout | trim | int != 0
+
+# Cover the cross-role coupling: netdata's main.yml imports certbot's
+# tasks_from: netdata to render x509check.conf. A break in the
+# certbot-side template (x509check.conf.j2) or the netdata template
+# helper would surface here.
+- name: _verify | Slurp rendered x509check config
+  slurp:
+    src: /etc/netdata/go.d/x509check.conf
+  register: _netdata_x509check
+  become: true
+
+- name: _verify | X509check renders structurally-valid YAML pointing at the host cert
+  vars:
+    _x509check: "{{ _netdata_x509check.content | b64decode | trim | from_yaml }}"
+    _expected_source: "file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem"
+  assert:
+    that:
+      - _x509check.jobs | length == 1
+      - _x509check.jobs[0].source == _expected_source
+      - _x509check.jobs[0].check_full_chain
+    fail_msg: >-
+      x509check.conf didn't render the host cert path correctly
+      (parsed={{ _x509check }}, expected source={{ _expected_source }})
+
+- name: _verify | Exercise netdata fluent-bit recovery severity
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: netdata
+      records:
+        - MESSAGE: "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from WARNING to CLEAR."
+          SYSTEMD_UNIT: netdata.service
+          marker: netdata-warning-clear-keep
+        - MESSAGE: "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from CLEAR to WARNING."
+          SYSTEMD_UNIT: netdata.service
+          marker: netdata-warning-keep
+        - MESSAGE: "PARSER: malformed collector data"
+          SYSTEMD_UNIT: netdata.service
+          PRIORITY: "3"
+          marker: netdata-parser-error-keep
+      expected:
+        # A recovery stays informational even though its alert name carries the
+        # generic error keyword; a transition into WARNING remains actionable.
+        - level: info
+          service: netdata
+          fields.marker: netdata-warning-clear-keep
+        - level: error
+          service: netdata
+          fields.marker: netdata-warning-keep
+        - level: error
+          service: netdata
+          fields.marker: netdata-parser-error-keep
