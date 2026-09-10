@@ -90,14 +90,14 @@
 # not just that the ZFS property was set. The non-GRUB aarch64 fixture cannot
 # exercise that handoff because its EFI-stub command line is staged elsewhere.
 - name: _verify | Read the running kernel's cmdline
-  when: qemu_boot_changes_reachable
+  when: qemu_boot_changes_reachable and not grub_bootloader
   slurp:
     src: /proc/cmdline
   register: _boot_verify_proc_cmdline
   become: true
 
 - name: _verify | Running kernel booted with console=tty0
-  when: qemu_boot_changes_reachable
+  when: qemu_boot_changes_reachable and not grub_bootloader
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:
@@ -108,7 +108,7 @@
       ZBM property may not have propagated: {{ _cmdline }}
 
 - name: _verify | Running kernel booted with earlycon (when configured)
-  when: qemu_boot_changes_reachable
+  when: qemu_boot_changes_reachable and not grub_bootloader
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:
