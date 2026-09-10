@@ -1,0 +1,1 @@
+hd_idle_foreground_override_enabled: "{{ ansible_distribution_release == 'noble' }}"
