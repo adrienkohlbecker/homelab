@@ -226,6 +226,8 @@
     - path: /var/log/fluent-bit/lnav.jsonl.2
       content: |
         {"time":"{{ ansible_date_time.iso8601 }}","host":"box","service":"lnav_older","unit":"lnav_older.service","identifier":"lnav_older","level":"info","message":"lnav wrapper older history","stream":"journald","fields":{"SYSTEMD_UNIT":"lnav_older.service"}}
+  loop_control:
+    label: "{{ item.path }}"
   become: true
   tags:
     - lnav

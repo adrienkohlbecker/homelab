@@ -65,5 +65,7 @@
       permissions: rwx
     - etype: other
       permissions: "---"
+  loop_control:
+    label: "{{ item.etype }}"
   tags:
     - homelab_ci

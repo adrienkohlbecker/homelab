@@ -10,6 +10,8 @@
 - name: _verify | IPv4 hosts entries resolve
   command: getent -s files ahosts {{ item.key }}
   loop: "{{ [{'key': inventory_hostname, 'value': '127.0.1.1'}] + (etc_hosts_entries | dict2items) }}"
+  loop_control:
+    label: "{{ item.key }}"
   register: _hostname_ipv4_entries
   changed_when: false
   failed_when: >-

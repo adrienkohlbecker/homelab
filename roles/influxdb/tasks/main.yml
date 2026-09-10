@@ -22,6 +22,8 @@
   loop:
     - { path: /mnt/services/influxdb/data,    mode: "0700" }
     - { path: /mnt/services/influxdb/config,  mode: "0775" }
+  loop_control:
+    label: "{{ item.path }}"
   become: true
   tags:
     - influxdb

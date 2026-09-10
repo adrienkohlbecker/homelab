@@ -58,6 +58,8 @@
       line: 'PORT="{{ tailscale_port }}"'
     - regexp: '^FLAGS='
       line: 'FLAGS="--state=/mnt/services/tailscale/tailscaled.state"'
+  loop_control:
+    label: "{{ item.regexp }}"
   register: tailscale_defaults
   when: >-
     not (ansible_check_mode and
