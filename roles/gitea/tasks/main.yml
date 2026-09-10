@@ -200,6 +200,7 @@
               - /etc/gitea/app.ini
           environment:
             GITEA_WORK_DIR: /mnt/services/gitea
+          check_mode: false
           become: true
           become_user: git
           register: gitea_auth_list
