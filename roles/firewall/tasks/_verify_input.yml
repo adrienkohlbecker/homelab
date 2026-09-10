@@ -36,6 +36,7 @@
   become: true
 
 - name: _verify_input | INPUT allow — tailscale0 ingress reaches mesh accept
+  when: tailscale_advertise_routes is defined
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_tailscale }}
       --connect-timeout 3 --max-time 5 -sf http://100.64.99.1:80/

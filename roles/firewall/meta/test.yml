@@ -1,5 +1,8 @@
 # Release-divergent: resolute+ removes the iptables-nft compat package (no
 # users left there); noble keeps it. resolute is the only release that
 # exercises the removal path.
+machines:
+  box:
+  minimal:
 ubuntu:
   - resolute
