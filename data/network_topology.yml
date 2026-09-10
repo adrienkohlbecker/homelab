@@ -193,6 +193,7 @@ static_leases:
   daikin_adrien:           { ip: 10.123.4.28, site: home, vlan: iot }
   daikin_kitchen:          { ip: 10.123.4.29, site: home, vlan: iot }
   daikin_tv:               { ip: 10.123.4.30, site: home, vlan: iot }
+  apollo_air_1:            { ip: 10.123.4.31, site: home, vlan: iot }
 
   dahua_vto_entrance:  { ip: 10.123.6.10, site: home, vlan: intercom }
   dahua_vto_apartment: { ip: 10.123.6.11, site: home, vlan: intercom }
