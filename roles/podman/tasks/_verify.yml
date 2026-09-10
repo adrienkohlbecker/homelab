@@ -22,6 +22,30 @@
   failed_when: podman_operator_linger_state.stat.exists
   become: true
 
+- name: _verify | Operator linger is enabled on Lab
+  when: podman_operator_prune_enabled
+  stat:
+    path: /var/lib/systemd/linger/{{ ansible_user_id }}
+  register: podman_operator_linger_enabled
+  failed_when: not podman_operator_linger_enabled.stat.exists
+  become: true
+
+- name: _verify | Read the operator prune timer state
+  when: podman_operator_prune_enabled
+  systemd:
+    name: podman_prune.timer
+    scope: user
+  register: podman_operator_prune_timer
+  become: true
+  become_user: "{{ ansible_user_id }}"
+
+- name: _verify | Operator prune timer is active and enabled
+  when: podman_operator_prune_enabled
+  assert:
+    that:
+      - podman_operator_prune_timer.status.ActiveState == 'active'
+      - podman_operator_prune_timer.status.UnitFileState == 'enabled'
+
 - name: _verify | Read podman's effective runtime config
   command: podman info --format json
   become: true
