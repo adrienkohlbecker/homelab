@@ -52,8 +52,6 @@
       run as the named user; User= in /etc/systemd/user/ is invalid.
 
 - name: install | Validate environment keys for {{ systemd_timer_args.name }}
-  when:
-    - systemd_timer_args.environment is defined
   assert:
     quiet: true
     that:
@@ -62,7 +60,7 @@
       systemd_timer {{ systemd_timer_args.name }}: environment key
       '{{ systemd_timer_environment_key }}'
       is not a valid POSIX variable name ([A-Za-z_][A-Za-z0-9_]*).
-  loop: "{{ systemd_timer_args.environment.keys() | list }}"
+  loop: "{{ (systemd_timer_args.environment | default({})).keys() | list }}"
   loop_control:
     loop_var: systemd_timer_environment_key
     label: "{{ systemd_timer_environment_key }}"
