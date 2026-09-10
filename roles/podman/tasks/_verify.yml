@@ -30,6 +30,20 @@
       - not podman_condition_probe_podman_available
       - not podman_condition_probe_image_changed
 
+- name: _verify | Exercise an enabled image helper call
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: podman_enabled_condition_probe
+      image: "{{ podman_probe_image }}"
+
+- name: _verify | Enabled image helper publishes runtime availability
+  assert:
+    that:
+      - podman_enabled_condition_probe_podman_available
+
 - name: _verify | Operator linger is disabled outside Lab
   when: not podman_operator_prune_enabled
   stat:
