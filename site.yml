@@ -296,8 +296,8 @@
     # deliberately holds its inhibitor forever. Its role test covers that lock;
     # disable it here so the integration test can exercise both the reboot and
     # its final poweroff without the guard returning after boot. Stat first: the
-    # guard rides the adguard role, which this play outlives -- fox reaches the
-    # reboot without it, and so would any future fixture.
+    # unit rides the adguard role, so a tag-scoped or --start-at-task converge
+    # that never reached that role leaves nothing for `state: stopped` to find.
     - name: Stat the DNS reboot guard unit in QEMU
       stat:
         path: /etc/systemd/system/adguard_reboot_guard.service
