@@ -36,8 +36,8 @@ class CheckModeMachine:
     async def ensure_system_running(self) -> None:
         self.system_running_calls += 1
 
-    async def ansible_command(self, *args: str) -> None:
-        self.ansible_calls.append(args)
+    async def ansible_command(self, *args: str, coverage_phase: str | None = None) -> None:
+        self.ansible_calls.append((*args, f"phase={coverage_phase}"))
 
     async def ssh_command(self, *args: str, check: bool = True) -> None:
         self.ssh_calls.append(args)
@@ -53,9 +53,9 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10, check_mode=True))
 
     assert machine.ansible_calls == [
-        (str(tmp_path / "_environment.yml"),),
-        (str(tmp_path / "_site_check_prerequisites.yml"),),
-        (str(tmp_path / "site.yml"), "--check"),
+        (str(tmp_path / "_environment.yml"), "phase=environment"),
+        (str(tmp_path / "_site_check_prerequisites.yml"), "phase=None"),
+        (str(tmp_path / "site.yml"), "--check", "phase=site_check"),
     ]
     assert machine.system_running_calls == 1
     assert machine.ssh_calls == []

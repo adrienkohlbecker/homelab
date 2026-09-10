@@ -1018,7 +1018,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:box", "podman:box:resolute"], site_test=False)
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
-        assert doc["stages"] == ["test1", "test2"]
+        assert doc["stages"] == ["test1", "test2", "coverage"]
         # All cells run the qemu backend; the harness defaults to it, so there is
         # no HOMELAB_TEST_BACKEND variable.
         assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
@@ -1036,6 +1036,8 @@ class TestRenderChildPipeline:
         assert "_site_test:box" not in doc
         assert "_site_check:box" not in doc
         assert "no_cells" not in doc
+        assert doc["condition_coverage"]["stage"] == "coverage"
+        assert "--roles nginx,podman" in doc["condition_coverage"]["script"][0]
 
     def test_cells_auto_run_by_default(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=True)
@@ -1068,7 +1070,7 @@ class TestRenderChildPipeline:
         # it first. needs:[] (from .cell) keeps it parallel, so the leading
         # stage never gates the cells.
         doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=True)
-        assert doc["stages"] == ["site", "test1", "test2"]
+        assert doc["stages"] == ["site", "test1", "test2", "coverage"]
         assert doc["_site_test:box"]["stage"] == "site"
         assert doc["_site_check:box"]["stage"] == "site"
         assert doc[".cell"]["needs"] == []
@@ -1076,10 +1078,11 @@ class TestRenderChildPipeline:
     def test_site_test_only_stage(self) -> None:
         # site_test with no cells still seeds a single leading `site` stage.
         doc = _render_child_doc([], site_test=True)
-        assert doc["stages"] == ["site"]
+        assert doc["stages"] == ["site", "coverage"]
         assert doc["_site_test:box"]["stage"] == "site"
         assert doc["_site_check:box"]["stage"] == "site"
         assert "no_cells" not in doc
+        assert "--include-site" in doc["condition_coverage"]["script"][0]
 
     def test_empty_gets_noop_placeholder(self) -> None:
         doc = _render_child_doc([], site_test=False)

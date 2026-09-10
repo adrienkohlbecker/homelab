@@ -10,7 +10,9 @@ from condition_coverage import (
     ConditionKey,
     ConditionOutcome,
     evaluated_outcomes,
+    format_missing_outcomes,
     inventory_conditions,
+    missing_outcomes,
     normalize_source_path,
 )
 
@@ -72,3 +74,19 @@ def test_inventory_reads_scalar_and_list_conditions(tmp_path: Path) -> None:
     conditions = inventory_conditions([source])
 
     assert {condition.expression for condition in conditions} == {"scalar_enabled", "first_enabled", "second_enabled"}
+
+
+def test_missing_outcomes_requires_true_and_false() -> None:
+    complete = ConditionKey("roles/example/tasks/main.yml", 10, 9, "complete")
+    true_only = ConditionKey("roles/example/tasks/main.yml", 20, 9, "true_only")
+    unseen = ConditionKey("roles/example/tasks/main.yml", 30, 9, "unseen")
+
+    missing = missing_outcomes(
+        {complete, true_only, unseen},
+        {complete: {False, True}, true_only: {True}},
+    )
+
+    assert missing == {true_only: {False}, unseen: {False, True}}
+    rendered = format_missing_outcomes(missing)
+    assert "main.yml:20:9: missing false: true_only" in rendered
+    assert "main.yml:30:9: missing false, true: unseen" in rendered

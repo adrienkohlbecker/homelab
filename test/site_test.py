@@ -106,7 +106,10 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
         await m.ensure_system_running()
 
         print_line("Preparing test environment")
-        await m.ansible_command(str(m.workdir_path / "_environment.yml"))
+        await m.ansible_command(
+            str(m.workdir_path / "_environment.yml"),
+            coverage_phase="environment",
+        )
 
         if check_mode:
             # A production check starts with the persistent services dataset
@@ -123,7 +126,11 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
         print_line(f"Running site.yml {label}")
         try:
             extra = ["--check"] if check_mode else []
-            await m.ansible_command(str(staged), *extra)
+            await m.ansible_command(
+                str(staged),
+                *extra,
+                coverage_phase="site_check" if check_mode else "site_converge",
+            )
         except CommandFailedException:
             print_line(f"Site {label} failed")
             await m.collect_failure_artifacts()
