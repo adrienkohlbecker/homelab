@@ -16,6 +16,20 @@ journald_storage: volatile
 # need an L2-on-LAN presence for containers.
 grub_bootloader: true
 
+# Required Netdata monitoring surface for the minimal role-test cell. The
+# always-live and deliberately-missing entries exercise both liveness outcomes;
+# _setup serves the Prometheus fixture on the production collector port.
+netdata_contexts:
+  - system.cpu
+  - fixture.does_not_exist
+netdata_collectors:
+  - go.d:collector:systemdunits:service-units
+  - go.d:collector:prometheus:gitlab_runner
+  - go.d:collector:fake_plugin:fake_job
+netdata_expected_charts:
+  system_cpu_chart: system.cpu
+  missing_fixture_chart: fixture.does_not_exist
+
 # The role installs the optional kernel-module package omitted by this trimmed
 # cloud image, making minimal the zram-only fixture.
 swap_zram_size: 2G
