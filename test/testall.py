@@ -26,16 +26,20 @@ from pathlib import Path
 from condition_coverage import (
     check_block_coverage,
     check_coverage,
+    check_exit_coverage,
+    check_include_coverage,
     check_loop_coverage,
     check_result_predicate_coverage,
     check_task_coverage,
     check_until_coverage,
     format_block_gaps,
+    format_exit_gaps,
     format_missing_outcomes,
     format_missing_result_predicate_outcomes,
     format_missing_until_outcomes,
     format_unexecuted_loops,
     format_unexecuted_tasks,
+    format_unexpanded_includes,
 )
 from machine import (
     MACHINE_CHOICES,
@@ -500,6 +504,8 @@ def main() -> int:
             block_gaps = check_block_coverage(selected_roles, reports)
             missing_until_outcomes = check_until_coverage(selected_roles, reports)
             missing_result_predicate_outcomes = check_result_predicate_coverage(selected_roles, reports)
+            unexpanded_includes = check_include_coverage(selected_roles, reports)
+            exit_gaps = check_exit_coverage(selected_roles, reports)
         except (OSError, ValueError) as exc:
             print(f"Condition coverage report error: {exc}", file=sys.stderr)
             return 1
@@ -515,6 +521,10 @@ def main() -> int:
             print(format_missing_until_outcomes(missing_until_outcomes), file=sys.stderr)
         if missing_result_predicate_outcomes:
             print(format_missing_result_predicate_outcomes(missing_result_predicate_outcomes), file=sys.stderr)
+        if unexpanded_includes:
+            print(format_unexpanded_includes(unexpanded_includes), file=sys.stderr)
+        if exit_gaps:
+            print(format_exit_gaps(exit_gaps), file=sys.stderr)
         if (
             missing
             or unexecuted_loops
@@ -522,12 +532,14 @@ def main() -> int:
             or block_gaps
             or missing_until_outcomes
             or missing_result_predicate_outcomes
+            or unexpanded_includes
+            or exit_gaps
         ):
             return 1
         print(
             f"Every condition in {len(selected_roles)} selected role(s) evaluated both true and false, "
-            "every loop iterated, every task ran, every block path executed, and every retry predicate "
-            "and result predicate evaluated false and true.",
+            "every loop iterated, every task ran, every block path executed, every retry and result predicate "
+            "evaluated false and true, every dynamic include expanded, and every early exit took both paths.",
             file=sys.stderr,
         )
     else:
