@@ -1194,3 +1194,692 @@ scenarios:
             - lab
             - pug
           inventory_hostname: lab
+
+  # Task-result predicates whose failure or drift outcomes are destructive,
+  # platform-specific, or depend on external faults. Evaluate the production
+  # expressions directly so stale scenarios fail when the task changes.
+  - kind: changed_when
+    path: roles/apt_source/tasks/configure.yml
+    expression: apt_source_refresh.rc == 0
+    cases:
+      - outcome: false
+        variables:
+          apt_source_refresh:
+            rc: 1
+
+  - kind: changed_when
+    path: roles/kuma/tasks/main.yml
+    expression: (kuma_disableauth_seed.stdout | trim | int) > 0
+    cases:
+      - outcome: true
+        variables:
+          kuma_disableauth_seed:
+            stdout: "1"
+
+  - kind: changed_when
+    path: roles/macos_vm/tasks/artifacts.yml
+    expression: "'changed' in macos_vm_opencore_seed.stdout | default('')"
+    cases:
+      - outcome: false
+        variables:
+          macos_vm_opencore_seed:
+            stdout: ""
+
+  - kind: changed_when
+    path: roles/refind/tasks/main.yml
+    expression: refind_efi_stub_hook is changed
+    cases:
+      - outcome: true
+        variables:
+          refind_efi_stub_hook:
+            changed: true
+
+  - kind: changed_when
+    path: roles/smart/tasks/main.yml
+    expression:
+      - smart_smartmontools_started.changed
+      - smart_smartmontools_started.status.ConditionResult | default('yes') != 'no'
+      - smart_smartmontools_started.status.AssertResult | default('yes') != 'no'
+    cases:
+      - outcome: true
+        variables:
+          smart_smartmontools_started:
+            changed: true
+            status:
+              ConditionResult: "yes"
+              AssertResult: "yes"
+
+  - kind: changed_when
+    path: roles/z2m/tasks/main.yml
+    expression: "'CHANGED' in z2m_cover_patch.stdout"
+    cases:
+      - outcome: true
+        variables:
+          z2m_cover_patch:
+            stdout: CHANGED
+
+  - kind: failed_when
+    path: roles/adguard/tasks/main.yml
+    expression: adguard_network_info.failed and not ansible_check_mode
+    cases:
+      - outcome: true
+        variables:
+          adguard_network_info:
+            failed: true
+          ansible_check_mode: false
+
+  - kind: failed_when
+    path: roles/boot/tasks/efi_entries.yml
+    expression: _boot_efi_result.rc != 0 or (_boot_efi_result.stdout | from_json).failed | default(false)
+    cases:
+      - outcome: true
+        variables:
+          _boot_efi_result:
+            rc: 1
+            stdout: '{"failed": false}'
+
+  - kind: failed_when
+    path: roles/fan2go/tasks/main.yml
+    expression: fan2go_api.status | default(0) != 200 or fan2go_api.json | default({}) | length == 0
+    cases:
+      - outcome: false
+        variables:
+          fan2go_api:
+            status: 200
+            json:
+              status: ok
+      - outcome: true
+        variables:
+          fan2go_api:
+            status: 500
+            json: {}
+
+  - kind: failed_when
+    path: roles/firewall/tasks/main.yml
+    expression: not ansible_check_mode and firewall_nftables_active.rc != 0
+    cases:
+      - outcome: true
+        variables:
+          ansible_check_mode: false
+          firewall_nftables_active:
+            rc: 1
+
+  - kind: failed_when
+    path: roles/fluentbit/tasks/verify_extension.yml
+    expression: fluentbit_verify_result.rc not in [0, 124]
+    cases:
+      - outcome: true
+        variables:
+          fluentbit_verify_result:
+            rc: 1
+
+  - kind: failed_when
+    path: roles/influxdb/tasks/bucket.yml
+    line: 51
+    expression: "_influxdb_bucket_user_query.rc != 0 and '404 Not Found: user not found' not in _influxdb_bucket_user_query.stderr"
+    cases:
+      - outcome: true
+        variables:
+          _influxdb_bucket_user_query:
+            rc: 1
+            stderr: permission denied
+
+  - kind: failed_when
+    path: roles/influxdb/tasks/bucket.yml
+    line: 91
+    expression: >-
+      _influxdb_bucket_bucket_query.rc != 0 and not (
+        '404 Not Found: bucket' in _influxdb_bucket_bucket_query.stderr
+        and 'not found' in _influxdb_bucket_bucket_query.stderr)
+    cases:
+      - outcome: true
+        variables:
+          _influxdb_bucket_bucket_query:
+            rc: 1
+            stderr: permission denied
+
+  - kind: failed_when
+    path: roles/influxdb/tasks/bucket.yml
+    line: 135
+    expression: >-
+      _influxdb_bucket_bucket_id_query.rc != 0 or (_influxdb_bucket_bucket_id_query.stdout
+        | from_json
+        | selectattr('name', 'eq', influxdb_bucket_args.bucket)
+        | list
+        | length) == 0
+    cases:
+      - outcome: true
+        variables:
+          _influxdb_bucket_bucket_id_query:
+            rc: 1
+            stdout: "[]"
+          influxdb_bucket_args:
+            bucket: coverage
+
+  - kind: failed_when
+    path: roles/kuma/tasks/main.yml
+    expression:
+      - kuma_disableauth_seed.rc != 0
+      - "'no such table' not in kuma_disableauth_seed.stderr"
+    cases:
+      - outcome: true
+        variables:
+          kuma_disableauth_seed:
+            rc: 1
+            stderr: permission denied
+
+  - kind: failed_when
+    path: roles/netplan/tasks/apply.yml
+    line: 46
+    expression: netplan_remove_origin_result.rc != 0 or netplan_remove_origin_result.stdout | trim != 'b true'
+    cases:
+      - outcome: true
+        variables:
+          netplan_remove_origin_result:
+            rc: 1
+            stdout: ""
+
+  - kind: failed_when
+    path: roles/netplan/tasks/apply.yml
+    line: 65
+    expression: netplan_stage_config_result.rc != 0 or netplan_stage_config_result.stdout | trim != 'b true'
+    cases:
+      - outcome: true
+        variables:
+          netplan_stage_config_result:
+            rc: 1
+            stdout: ""
+
+  - kind: failed_when
+    path: roles/netplan/tasks/apply.yml
+    line: 125
+    expression: >-
+      netplan_try_result.finished
+      and (netplan_try_result.rc | default(1) != 0
+           or netplan_try_result.stdout | default('') | trim != 'b true')
+    cases:
+      - outcome: true
+        variables:
+          netplan_try_result:
+            finished: true
+            rc: 1
+            stdout: ""
+
+  - kind: failed_when
+    path: roles/netplan/tasks/apply.yml
+    line: 141
+    expression: netplan_apply_result.rc != 0 or netplan_apply_result.stdout | trim != 'b true'
+    cases:
+      - outcome: true
+        variables:
+          netplan_apply_result:
+            rc: 1
+            stdout: ""
+
+  - kind: failed_when
+    path: roles/nginx/tasks/verify_authelia_gate.yml
+    expression: >-
+      _nginx_authelia_gate is not authelia_redirects_to(
+        nginx_verify_authelia_gate_args.subdomain,
+        inventory_hostname,
+        domain,
+        require_rd=(nginx_verify_authelia_gate_args.require_rd | default(true))
+      )
+    cases:
+      - outcome: true
+        variables:
+          _nginx_authelia_gate:
+            status: 200
+          nginx_verify_authelia_gate_args:
+            subdomain: coverage
+          inventory_hostname: box
+          domain: example.test
+
+  - kind: failed_when
+    path: roles/ssh/tasks/main.yml
+    expression: ssh_services_mount.rc != 0 and not ansible_check_mode
+    cases:
+      - outcome: true
+        variables:
+          ssh_services_mount:
+            rc: 1
+          ansible_check_mode: false
+
+  - kind: failed_when
+    path: roles/swap/tasks/main.yml
+    expression:
+      - swap_partition_swapon.rc != 0
+      - "'Device or resource busy' not in swap_partition_swapon.stderr"
+    cases:
+      - outcome: true
+        variables:
+          swap_partition_swapon:
+            rc: 1
+            stderr: permission denied
+
+  - kind: failed_when
+    path: roles/systemd_unit/tasks/install.yml
+    expression: not _systemd_unit_linger.stat.exists and not ansible_check_mode
+    cases:
+      - outcome: true
+        variables:
+          _systemd_unit_linger:
+            stat:
+              exists: false
+          ansible_check_mode: false
+
+  - kind: failed_when
+    path: roles/systemd_unit/tasks/remove.yml
+    line: 47
+    expression: not _systemd_unit_linger.stat.exists and not ansible_check_mode
+    cases:
+      - outcome: true
+        variables:
+          _systemd_unit_linger:
+            stat:
+              exists: false
+          ansible_check_mode: false
+
+  - kind: failed_when
+    path: roles/systemd_unit/tasks/remove.yml
+    line: 82
+    expression: >-
+      _systemd_unit_stop.failed | default(false) and
+      'could not find' not in (_systemd_unit_stop.msg | default('') | lower)
+    cases:
+      - outcome: true
+        variables:
+          _systemd_unit_stop:
+            failed: true
+            msg: permission denied
+
+  - kind: failed_when
+    path: roles/tailscale/tasks/dsm.yml
+    expression: not tailscale_dsm_bin.stat.exists
+    cases:
+      - outcome: false
+        variables:
+          tailscale_dsm_bin:
+            stat:
+              exists: true
+      - outcome: true
+        variables:
+          tailscale_dsm_bin:
+            stat:
+              exists: false
+
+  # Conditional task bodies tied to production-only services, hardware, or
+  # architectures. Every named task must still exist, and every effective
+  # condition must evaluate true together under the declared variables.
+  - kind: task
+    path: roles/boot/tasks/efi_entries.yml
+    cases:
+      - tasks:
+          - efi_entries | Surface firmware warnings
+        variables:
+          _boot_efi_result:
+            stdout: '{"warnings": ["coverage warning"]}'
+
+  - kind: task
+    path: roles/fan2go/tasks/main.yml
+    cases:
+      - tasks:
+          - Download fan2go binary
+          - Symlink /usr/local/bin/fan2go to versioned binary
+          - Download fan2go-tui binary
+          - Symlink /usr/local/bin/fan2go-tui to versioned binary
+          - Create fan2go config directories
+          - Install /etc/fan2go/fan2go.yaml (per-host)
+          - Install /etc/fan2go-tui/fan2go-tui.yaml
+          - Verify fan2go API reports configured fans
+        variables:
+          fan2go_enabled: true
+          ansible_check_mode: false
+
+  - kind: task
+    path: roles/firewall/tasks/main.yml
+    cases:
+      - tasks:
+          - Stop ufw.service before nftables takes over the INPUT hook
+        variables:
+          firewall_ufw_unit:
+            stat:
+              exists: true
+
+  - kind: task
+    path: roles/gitea/tasks/main.yml
+    cases:
+      - tasks:
+          - Compose desired OIDC source state
+          - Read existing OIDC provisioning fingerprint
+          - Compute desired vs current OIDC fingerprints
+        variables:
+          qemu_test: false
+      - tasks:
+          - List existing gitea auth sources
+          - Locate existing Authelia auth source ID
+          - Register Authelia OIDC auth source
+          - Persist OIDC provisioning fingerprint
+        variables:
+          qemu_test: false
+          gitea_oidc_desired_fp: desired
+          gitea_oidc_current_fp: current
+          gitea_authelia_source_id: ""
+      - tasks:
+          - Update Authelia OIDC auth source
+        variables:
+          qemu_test: false
+          gitea_oidc_desired_fp: desired
+          gitea_oidc_current_fp: current
+          gitea_authelia_source_id: "1"
+
+  - kind: task
+    path: roles/headscale/tasks/main.yml
+    cases:
+      - tasks:
+          - Assert headscale DERP advertised IPs are held by this host
+        variables:
+          headscale_derp_ipv4: 192.0.2.1
+          headscale_derp_ipv6: 2001:db8::1
+
+  - kind: task
+    path: roles/homeassistant/tasks/main.yml
+    cases:
+      - tasks:
+          - Stop homeassistant to reconcile its config entry registry
+        variables:
+          homeassistant_smtp_check:
+            stdout: '{"changed": true}'
+          homeassistant_unit_file:
+            stat:
+              exists: true
+
+  - kind: task
+    path: roles/influxdb/tasks/main.yml
+    cases:
+      - tasks:
+          - Fail if bootstrap password changed with an existing database
+        variables:
+          influxdb_bolt_db:
+            stat:
+              exists: true
+          _influxdb_root_password_secret:
+            changed: true
+
+  - kind: task
+    path: roles/jellyfin/tasks/main.yml
+    cases:
+      - tasks:
+          - Compose desired SSO OID provider state
+          - Read existing SSO OID provisioning fingerprint
+          - Compute desired vs current SSO OID fingerprints
+        variables:
+          qemu_test: false
+      - tasks:
+          - Provision SSO OID provider via plugin API
+          - Persist SSO OID provisioning fingerprint
+        variables:
+          qemu_test: false
+          jellyfin_oidc_desired_fp: desired
+          jellyfin_oidc_current_fp: current
+      - tasks:
+          - Confirm hardware transcoding works
+        variables:
+          jellyfin_transcoding_backend: intel_qsv
+          qemu_test: false
+
+  - kind: task
+    path: roles/kuma/tasks/main.yml
+    cases:
+      - tasks:
+          - Restart kuma to load disableAuth
+        variables:
+          kuma_disableauth_seed:
+            changed: true
+
+  - kind: task
+    path: roles/lm_sensors/tasks/main.yml
+    cases:
+      - tasks:
+          - Ask to reboot
+        variables:
+          lm_sensors_dropped_loaded:
+            results:
+              - rc: 0
+      - tasks:
+          - Apply the libsensors limits live
+        variables:
+          lm_sensors_has_set: true
+          lm_sensors_config_file:
+            changed: true
+          lm_sensors_hwmon:
+            matched: 1
+
+  - kind: task
+    path: roles/locale/tasks/main.yml
+    cases:
+      - tasks:
+          - Ask to reboot
+        variables:
+          locale_cfg:
+            changed: true
+
+  - kind: task
+    path: roles/macos_vm/tasks/artifacts.yml
+    cases:
+      - tasks:
+          - artifacts | Stage fetch-macOS script
+          - artifacts | Install python deps for fetch-macOS
+          - artifacts | Fetch BaseSystem recovery image
+          - artifacts | Convert BaseSystem DMG to raw image
+          - artifacts | Set BaseSystem ownership for QEMU
+        variables:
+          macos_vm_install_mode: true
+          ansible_check_mode: false
+
+  - kind: task
+    path: roles/netdata/tasks/configure.yml
+    cases:
+      - tasks:
+          - Install intel-gpu-tools
+        variables:
+          netdata_intelgpu_enabled: true
+          ansible_architecture: x86_64
+
+  - kind: task
+    path: roles/tailscale/tasks/dsm.yml
+    cases:
+      - tasks:
+          - dsm | Restart the package after configuration changes
+        variables:
+          tailscale_dsm_configure:
+            changed: true
+          tailscale_dsm_port:
+            changed: false
+
+  - kind: task
+    path: roles/user/tasks/main.yml
+    cases:
+      - tasks:
+          - Install amd64-only packages
+        variables:
+          ansible_architecture: x86_64
+
+  - kind: task
+    path: roles/zfs_dataset/tasks/dataset.yml
+    cases:
+      - tasks:
+          - Force extra properties to a local source when a restore left them received
+        variables:
+          zfs_root: true
+          zfs_dataset_args:
+            extra_properties:
+              compression: zstd
+          __prop_line: compression received
+
+  - kind: task
+    path: roles/zfsbootmenu/tasks/main.yml
+    cases:
+      - tasks:
+          - Ask to reboot
+        variables:
+          zfsbootmenu_common_artifact_install:
+            changed: true
+
+  # External retries normally succeed on their first local-fixture attempt.
+  # These cases exercise the exact false predicate without introducing network
+  # flakes or multi-minute sleeps into every role test.
+  - kind: until
+    path: roles/apt_source/tasks/configure.yml
+    expression: apt_source_refresh.rc == 0
+    cases:
+      - outcome: false
+        variables:
+          apt_source_refresh:
+            rc: 1
+
+  - kind: until
+    path: roles/influxdb/tasks/main.yml
+    expression: _influxdb_auth_check.rc == 0
+    cases:
+      - outcome: false
+        variables:
+          _influxdb_auth_check:
+            rc: 1
+
+  - kind: until
+    path: roles/jellyfin/tasks/main.yml
+    expression: jellyfin_oidc_post.status | default(0) in [200, 204]
+    cases:
+      - outcome: false
+        variables:
+          jellyfin_oidc_post:
+            status: 500
+      - outcome: true
+        variables:
+          jellyfin_oidc_post:
+            status: 204
+
+  - kind: until
+    path: roles/lnav/tasks/main.yml
+    expression: lnav_zip_download is succeeded
+    cases:
+      - outcome: false
+        variables:
+          lnav_zip_download:
+            failed: true
+
+  - kind: until
+    path: roles/minio/tasks/client.yml
+    expression: minio_mcli_deb_download is succeeded
+    cases:
+      - outcome: false
+        variables:
+          minio_mcli_deb_download:
+            failed: true
+
+  - kind: until
+    path: roles/minio/tasks/main.yml
+    expression: minio_deb_download is succeeded
+    cases:
+      - outcome: false
+        variables:
+          minio_deb_download:
+            failed: true
+
+  - kind: until
+    path: roles/netplan/tasks/apply.yml
+    expression: netplan_try_result.finished
+    cases:
+      - outcome: false
+        variables:
+          netplan_try_result:
+            finished: false
+
+  - kind: until
+    path: roles/podman/tasks/image.yml
+    expression: _podman_image_result is not failed
+    cases:
+      - outcome: false
+        variables:
+          _podman_image_result:
+            failed: true
+
+  - kind: until
+    path: roles/refind/tasks/main.yml
+    expression: refind_theme_download is succeeded
+    cases:
+      - outcome: false
+        variables:
+          refind_theme_download:
+            failed: true
+
+  - kind: until
+    path: roles/tailscale/tasks/register.yml
+    line: 35
+    expression: >-
+      tailscale_status.rc != 0
+      or not (tailscale_status.stdout | default('') | trim).startswith('{')
+      or ((tailscale_status.stdout | from_json).BackendState | default('')) != 'Starting'
+    cases:
+      - outcome: false
+        variables:
+          tailscale_status:
+            rc: 0
+            stdout: '{"BackendState": "Starting"}'
+
+  - kind: until
+    path: roles/tailscale/tasks/register.yml
+    line: 186
+    expression: >-
+      ((tailscale_nodes.stdout | default('[]', true) | from_json)
+          | selectattr('user.name', 'eq', tailscale_headscale_user)
+          | selectattr('given_name', 'eq', ansible_hostname | lower)
+          | list
+          | length > 0)
+    cases:
+      - outcome: false
+        variables:
+          tailscale_nodes:
+            stdout: "[]"
+          tailscale_headscale_user: coverage
+          ansible_hostname: box
+
+  - kind: until
+    path: roles/user/tasks/main.yml
+    line: 232
+    expression: user_gpg_import.rc == 0
+    cases:
+      - outcome: false
+        variables:
+          user_gpg_import:
+            rc: 1
+
+  - kind: until
+    path: roles/user/tasks/main.yml
+    line: 253
+    expression: user_dotfiles_clone is not failed
+    cases:
+      - outcome: false
+        variables:
+          user_dotfiles_clone:
+            failed: true
+
+  - kind: until
+    path: roles/user/tasks/main.yml
+    line: 327
+    expression: user_mise_tools is not failed
+    cases:
+      - outcome: false
+        variables:
+          user_mise_tools:
+            failed: true
+
+  - kind: until
+    path: roles/zfsbootmenu/tasks/main.yml
+    expression: zfsbootmenu_bundle is succeeded
+    cases:
+      - outcome: false
+        variables:
+          zfsbootmenu_bundle:
+            failed: true
