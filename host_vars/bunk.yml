@@ -20,10 +20,12 @@ ansible_become_pass: !vault |
 # can only WRITE into its own root -- it cannot read another host's backups,
 # escape the dir, or open a shell.
 #
-# name must match the source's offsite target in
-# roles/zfs_autobackup/files/zfs_backup_offsite.sh, and public_key the source
-# host's actual root key. Neither coupling is checked anywhere: a mismatch
-# surfaces as a nightly rrsync refusal, not a converge failure.
+# zfs_backup_offsite.sh pushes to a relative path, so name alone selects which
+# /volume1/Backup tree a source writes into. Renaming an entry does not fail:
+# bunk.yml creates the new root, and the next nightly run re-uploads everything
+# into it while the old tree and its history sit orphaned. public_key must be
+# the source host's live root key; a mismatch fails the nightly job at ssh
+# publickey authentication. Neither coupling is checked at converge time.
 bunk_offsite_backup_sources:
   - name: lab
     public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
