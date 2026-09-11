@@ -236,13 +236,17 @@ def condition_key(value: object) -> ConditionKey:
 def loop_key(value: object) -> LoopKey:
     """Return the tagged YAML origin and source text for one loop value."""
     origin = Origin.get_tag(value)
+    expression = str(value)
+    if origin is None and isinstance(value, list) and value:
+        origin = Origin.get_tag(value[0])
+        expression = str(value[0]) if len(value) == 1 else str([str(item) for item in value])
     if origin is None or origin.path is None or origin.line_num is None or origin.col_num is None:
         raise ValueError(f"loop has no complete YAML origin: {value!r}")
     return LoopKey(
         path=normalize_source_path(origin.path),
         line=origin.line_num,
         column=origin.col_num,
-        expression=str(value),
+        expression=expression,
     )
 
 

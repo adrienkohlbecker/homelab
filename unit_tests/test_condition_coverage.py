@@ -156,6 +156,18 @@ def test_inventory_reads_modern_and_legacy_loops(tmp_path: Path) -> None:
     assert {loop.expression for loop in loops} == {"{{ modern_items }}", "['first', 'second']"}
 
 
+def test_loop_key_normalizes_ansible_runtime_list_wrapper() -> None:
+    expression = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=24,
+        col_num=9,
+    ).tag("{{ example_items }}")
+
+    assert condition_coverage_callback.loop_key([expression]) == LoopKey(
+        "roles/example/tasks/main.yml", 24, 9, "{{ example_items }}"
+    )
+
+
 def test_inventory_reads_executable_tasks_but_not_structural_actions(tmp_path: Path) -> None:
     source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
     source.parent.mkdir(parents=True)
