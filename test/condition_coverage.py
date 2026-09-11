@@ -172,7 +172,8 @@ def load_synthetic_outcomes(
 
     A scenario selects by path and expression, narrowed by ``task`` (the
     declaring task's name) when the expression repeats within the file.
-    ``line`` still narrows too, but shifts with every edit above it.
+    ``line`` still narrows too, but shifts with every edit above it. ``all``
+    (default 1) is the exact number of conditions the selector must match.
     """
     document = yaml.safe_load(path.read_text()) or {}
     scenarios = document.get("scenarios", [])
@@ -194,9 +195,11 @@ def load_synthetic_outcomes(
         source_task = scenario.get("task")
         if source_task is not None and not isinstance(source_task, str):
             raise ValueError(f"{path}: scenario {index} task must be a string")
-        all_matches = scenario.get("all", False)
-        if not isinstance(all_matches, bool):
-            raise ValueError(f"{path}: scenario {index} all must be a Boolean")
+        # `all` pins how many identical conditions one scenario covers, so a
+        # new copy of the expression fails here instead of being absorbed.
+        expected_matches = scenario.get("all", 1)
+        if isinstance(expected_matches, bool) or not isinstance(expected_matches, int) or expected_matches < 1:
+            raise ValueError(f"{path}: scenario {index} all must be the expected match count")
         matches = {
             condition
             for condition in conditions
@@ -210,9 +213,12 @@ def load_synthetic_outcomes(
             raise ValueError(
                 f"{path}: scenario {index} does not match a current condition: {source_path}: {expression}{task}"
             )
-        if len(matches) > 1 and not all_matches:
+        if len(matches) != expected_matches:
             lines = ", ".join(str(condition.line) for condition in sorted(matches))
-            raise ValueError(f"{path}: scenario {index} matches lines {lines}; select one with task or set all: true")
+            raise ValueError(
+                f"{path}: scenario {index} matches {len(matches)} condition(s) at lines {lines} but expects "
+                f"{expected_matches}; narrow it with task or set all to the reviewed count"
+            )
 
         cases = scenario.get("cases", [])
         if not isinstance(cases, list) or not cases:

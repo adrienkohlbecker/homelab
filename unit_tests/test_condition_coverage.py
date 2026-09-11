@@ -268,7 +268,7 @@ scenarios:
 """
     )
 
-    with pytest.raises(ValueError, match="select one with task or set all: true"):
+    with pytest.raises(ValueError, match=r"matches 2 condition\(s\) at lines 2, 4 but expects 1"):
         load_synthetic_outcomes(scenarios)
 
 
@@ -338,4 +338,39 @@ scenarios:
 
     (tasks / "main.yml").write_text((tasks / "main.yml").read_text().replace("Second", "Renamed"))
     with pytest.raises(ValueError, match=r"does not match a current condition: .* in task 'Second'"):
+        load_synthetic_outcomes(scenarios)
+
+
+def test_synthetic_scenario_all_pins_the_match_count(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    source = tasks / "main.yml"
+    copy = "- debug: {msg: copy}\n  when: feature_enabled\n"
+    source.write_text(copy * 2)
+    scenarios = tmp_path / "scenarios.yml"
+    scenario = """\
+scenarios:
+  - path: roles/example/tasks/main.yml
+    expression: feature_enabled
+    all: {all}
+    cases:
+      - outcome: true
+        variables:
+          feature_enabled: true
+"""
+    scenarios.write_text(scenario.format(all=2))
+
+    assert len(load_synthetic_outcomes(scenarios)) == 2
+
+    # A third copy of the expression must be reviewed, not silently covered.
+    source.write_text(copy * 3)
+    with pytest.raises(ValueError, match=r"matches 3 condition\(s\) at lines 2, 4, 6 but expects 2"):
+        load_synthetic_outcomes(scenarios)
+
+    scenarios.write_text(scenario.format(all="true"))
+    with pytest.raises(ValueError, match="all must be the expected match count"):
         load_synthetic_outcomes(scenarios)
