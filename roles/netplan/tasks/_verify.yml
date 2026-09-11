@@ -66,3 +66,27 @@
   until: netplan_verify_restored_dns.rc == 0
   changed_when: false
   become: true
+
+# The connectivity rejection above fails after staging. Exercise the separate
+# staging-failure path and verify it cancels the D-Bus transaction before
+# surfacing the error.
+- name: _verify staging failure | Exercise transaction cancellation
+  become: true
+  block:
+    - name: _verify staging failure | Try an unrenderable netplan config
+      import_tasks: apply.yml
+      vars:
+        netplan_apply_config: "{{ netplan_undefined_fixture }}"
+        netplan_remove_origins: []
+
+    - name: _verify staging failure | Unexpectedly completed the transaction
+      fail:
+        msg: "Expected netplan staging to fail"
+
+  rescue:
+    - name: _verify staging failure | Confirm the staging error was reported
+      assert:
+        that:
+          - ansible_failed_task.name == 'Report the netplan staging failure'
+        fail_msg: >-
+          The transaction did not exercise the staging rescue path
