@@ -16,13 +16,17 @@ from condition_coverage import (
     BlockKey,
     LoopKey,
     TaskKey,
+    UntilKey,
+    UntilOutcome,
     append_block_events,
     append_loop_executions,
     append_outcomes,
     append_task_executions,
+    append_until_outcomes,
     evaluated_outcomes,
     loop_key,
     task_key_from_path,
+    until_key,
 )
 
 
@@ -39,6 +43,7 @@ class CallbackModule(CallbackBase):
         self._recorded_loops: set[tuple[Path, LoopKey]] = set()
         self._recorded_tasks: set[tuple[Path, TaskKey]] = set()
         self._block_modes: dict[tuple[Path, str, BlockKey], str] = {}
+        self._recorded_until_outcomes: set[tuple[Path, UntilKey, bool]] = set()
 
     @staticmethod
     def _block_contexts(task) -> list[tuple[BlockKey, str]]:
@@ -88,6 +93,22 @@ class CallbackModule(CallbackBase):
             events.append(BlockEvent(block, task_key, section, status, after))
         append_block_events(path, events, phase=phase)
 
+    def _record_until_outcome(self, task, *, path: Path, phase: str, outcome: bool) -> None:
+        if not getattr(task, "until", None):
+            return
+        key = until_key(task.until)
+        marker = (path, key, outcome)
+        if marker not in self._recorded_until_outcomes:
+            append_until_outcomes(path, [UntilOutcome(key, outcome)], phase=phase)
+            self._recorded_until_outcomes.add(marker)
+
+    @staticmethod
+    def _record_error(path: Path, exc: Exception) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"error": str(exc)}, sort_keys=True, separators=(",", ":")))
+            handle.write("\n")
+
     def _record(self, result, *, status: str = "ok", for_item: bool = False) -> None:
         output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
         if not output:
@@ -100,6 +121,8 @@ class CallbackModule(CallbackBase):
             task_key = task_key_from_path(task.get_path())
             if not for_item:
                 self._record_block_events(result, path=path, phase=phase, task_key=task_key, status=status)
+            if status in {"ok", "failed"}:
+                self._record_until_outcome(task, path=path, phase=phase, outcome=status == "ok")
             if status not in {"skipped", "unreachable"}:
                 task_marker = (path, task_key)
                 if task_marker not in self._recorded_tasks:
@@ -131,10 +154,21 @@ class CallbackModule(CallbackBase):
                 phase=phase,
             )
         except Exception as exc:
-            Path(output).parent.mkdir(parents=True, exist_ok=True)
-            with Path(output).open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps({"error": str(exc)}, sort_keys=True, separators=(",", ":")))
-                handle.write("\n")
+            self._record_error(Path(output), exc)
+
+    def v2_runner_retry(self, result) -> None:
+        output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
+        if not output:
+            return
+        try:
+            self._record_until_outcome(
+                result.task,
+                path=Path(output),
+                phase=os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"),
+                outcome=False,
+            )
+        except Exception as exc:
+            self._record_error(Path(output), exc)
 
     def v2_runner_on_ok(self, result) -> None:
         self._record(result)
