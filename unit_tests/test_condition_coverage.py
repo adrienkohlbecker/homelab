@@ -268,7 +268,7 @@ scenarios:
 """
     )
 
-    with pytest.raises(ValueError, match="select one with line or set all: true"):
+    with pytest.raises(ValueError, match="select one with task or set all: true"):
         load_synthetic_outcomes(scenarios)
 
 
@@ -301,3 +301,41 @@ scenarios:
     assert len(outcomes) == 1
     assert next(iter(outcomes)).line == 4
     assert list(outcomes.values()) == [{False}]
+
+
+def test_synthetic_scenario_can_select_duplicate_by_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- name: First\n  debug: {msg: first}\n  when: feature_enabled\n"
+        "- name: Second\n  debug: {msg: second}\n  when: feature_enabled\n"
+    )
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - path: roles/example/tasks/main.yml
+    task: Second
+    expression: feature_enabled
+    cases:
+      - outcome: false
+        variables:
+          feature_enabled: false
+"""
+    )
+
+    outcomes = load_synthetic_outcomes(scenarios)
+
+    assert [condition.line for condition in outcomes] == [6]
+
+    # A shifted line leaves the task selector valid; a renamed task does not.
+    (tasks / "main.yml").write_text("# shifted\n" + (tasks / "main.yml").read_text())
+    assert [condition.line for condition in load_synthetic_outcomes(scenarios)] == [7]
+
+    (tasks / "main.yml").write_text((tasks / "main.yml").read_text().replace("Second", "Renamed"))
+    with pytest.raises(ValueError, match=r"does not match a current condition: .* in task 'Second'"):
+        load_synthetic_outcomes(scenarios)
