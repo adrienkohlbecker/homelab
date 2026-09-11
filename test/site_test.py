@@ -121,6 +121,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                 str(m.workdir_path / "site.yml"),
                 "-e",
                 "_test_role_under_test=services",
+                coverage_phase="site_check_prerequisites",
             )
 
         staged = m.workdir_path / "site.yml"
