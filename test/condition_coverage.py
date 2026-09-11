@@ -1,4 +1,4 @@
-"""Collect and validate branch outcomes for Ansible ``when`` expressions."""
+"""Collect and validate Ansible condition branches and loop iterations."""
 
 from __future__ import annotations
 
@@ -42,6 +42,16 @@ class ConditionOutcome:
     outcome: bool
 
 
+@dataclass(frozen=True, order=True)
+class LoopKey:
+    """Stable source identity for one declared task loop."""
+
+    path: str
+    line: int
+    column: int
+    expression: str
+
+
 def normalize_source_path(path: str) -> str:
     """Normalize original and staged Ansible paths to repository-relative paths."""
     normalized = Path(path).as_posix()
@@ -58,6 +68,19 @@ def condition_key(value: object) -> ConditionKey:
     if origin is None or origin.path is None or origin.line_num is None or origin.col_num is None:
         raise ValueError(f"condition has no complete YAML origin: {value!r}")
     return ConditionKey(
+        path=normalize_source_path(origin.path),
+        line=origin.line_num,
+        column=origin.col_num,
+        expression=str(value),
+    )
+
+
+def loop_key(value: object) -> LoopKey:
+    """Return the tagged YAML origin and source text for one loop value."""
+    origin = Origin.get_tag(value)
+    if origin is None or origin.path is None or origin.line_num is None or origin.col_num is None:
+        raise ValueError(f"loop has no complete YAML origin: {value!r}")
+    return LoopKey(
         path=normalize_source_path(origin.path),
         line=origin.line_num,
         column=origin.col_num,
@@ -97,6 +120,17 @@ def _walk_when_values(value: object) -> Iterator[tuple[object, str | None]]:
             yield from _walk_when_values(child)
 
 
+def _walk_loop_values(value: object) -> Iterator[object]:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key) == "loop" or str(key).startswith("with_"):
+                yield child
+            yield from _walk_loop_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_loop_values(child)
+
+
 def production_condition_paths(roles: Iterable[str] | None = None, *, include_site: bool = False) -> list[Path]:
     """Return production task files in the requested coverage scope.
 
@@ -131,6 +165,16 @@ def inventory_conditions(paths: Iterable[Path]) -> dict[ConditionKey, str | None
     return conditions
 
 
+def inventory_loops(paths: Iterable[Path]) -> set[LoopKey]:
+    """Load every declared task loop from production task files."""
+    loader = DataLoader()
+    loops: set[LoopKey] = set()
+    for path in paths:
+        document = loader.load_from_file(str(path.resolve()))
+        loops.update(loop_key(value) for value in _walk_loop_values(document))
+    return loops
+
+
 def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: str) -> None:
     """Append observed outcomes as compact JSON lines."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,9 +184,16 @@ def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: 
             handle.write("\n")
 
 
-def load_outcomes(paths: Iterable[Path]) -> dict[ConditionKey, set[bool]]:
-    """Merge condition outcomes from callback JSONL reports."""
-    merged: dict[ConditionKey, set[bool]] = {}
+def append_loop_executions(path: Path, loops: Iterable[LoopKey], *, phase: str) -> None:
+    """Append loop declarations observed through per-item callbacks."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for loop in loops:
+            handle.write(json.dumps({"loop": asdict(loop), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write("\n")
+
+
+def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
     for path in paths:
         with path.open(encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, 1):
@@ -151,9 +202,25 @@ def load_outcomes(paths: Iterable[Path]) -> dict[ConditionKey, set[bool]]:
                 data: dict[str, Any] = json.loads(line)
                 if error := data.get("error"):
                     raise ValueError(f"{path}:{line_number}: callback error: {error}")
-                key = ConditionKey(**data["condition"])
-                merged.setdefault(key, set()).add(bool(data["outcome"]))
+                if "condition" not in data and "loop" not in data:
+                    raise ValueError(f"{path}:{line_number}: unknown coverage record")
+                yield path, line_number, data
+
+
+def load_outcomes(paths: Iterable[Path]) -> dict[ConditionKey, set[bool]]:
+    """Merge condition outcomes from callback JSONL reports."""
+    merged: dict[ConditionKey, set[bool]] = {}
+    for _path, _line_number, data in _report_rows(paths):
+        if "condition" not in data:
+            continue
+        key = ConditionKey(**data["condition"])
+        merged.setdefault(key, set()).add(bool(data["outcome"]))
     return merged
+
+
+def load_executed_loops(paths: Iterable[Path]) -> set[LoopKey]:
+    """Merge loop executions from callback JSONL reports."""
+    return {LoopKey(**data["loop"]) for _path, _line_number, data in _report_rows(paths) if "loop" in data}
 
 
 def _normalized_expression(expression: str) -> str:
@@ -273,6 +340,15 @@ def format_missing_outcomes(missing: dict[ConditionKey, set[bool]]) -> str:
     return "\n".join(lines)
 
 
+def format_unexecuted_loops(missing: set[LoopKey]) -> str:
+    """Render loops that never produced an item callback."""
+    lines = [f"{len(missing)} Ansible loop(s) never iterated:"]
+    for loop in sorted(missing):
+        expression = " ".join(loop.expression.split())
+        lines.append(f"  {loop.path}:{loop.line}:{loop.column}: {expression}")
+    return "\n".join(lines)
+
+
 def check_coverage(
     roles: Iterable[str],
     reports: Iterable[Path],
@@ -296,6 +372,17 @@ def check_coverage(
     return missing_outcomes(expected, observed)
 
 
+def check_loop_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> set[LoopKey]:
+    """Return production task loops that did not iterate in any report."""
+    expected = inventory_loops(production_condition_paths(roles, include_site=include_site))
+    return expected.difference(load_executed_loops(reports))
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -314,17 +401,21 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Check condition coverage from the command line."""
+    """Check condition and loop coverage from the command line."""
     args = _parse_args()
     try:
         missing = check_coverage(args.roles, args.reports, include_site=args.include_site)
+        unexecuted_loops = check_loop_coverage(args.roles, args.reports, include_site=args.include_site)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Condition coverage report error: {exc}", file=sys.stderr)
         return 1
     if missing:
         print(format_missing_outcomes(missing), file=sys.stderr)
+    if unexecuted_loops:
+        print(format_unexecuted_loops(unexecuted_loops), file=sys.stderr)
+    if missing or unexecuted_loops:
         return 1
-    print("Every selected Ansible condition evaluated both true and false.")
+    print("Every selected Ansible condition evaluated both true and false, and every loop iterated.")
     return 0
 
 
