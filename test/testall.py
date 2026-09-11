@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from condition_coverage import check_coverage, format_missing_outcomes
+from condition_coverage import check_coverage, check_loop_coverage, format_missing_outcomes, format_unexecuted_loops
 from machine import (
     MACHINE_CHOICES,
     UBUNTU_RELEASES,
@@ -479,16 +479,22 @@ def main() -> int:
 
     if complete_matrix:
         selected_roles = {cell.role for cell in cells}
+        reports = _condition_coverage_reports(selected_roles)
         try:
-            missing = check_coverage(selected_roles, _condition_coverage_reports(selected_roles))
+            missing = check_coverage(selected_roles, reports)
+            unexecuted_loops = check_loop_coverage(selected_roles, reports)
         except (OSError, ValueError) as exc:
             print(f"Condition coverage report error: {exc}", file=sys.stderr)
             return 1
         if missing:
             print(format_missing_outcomes(missing), file=sys.stderr)
+        if unexecuted_loops:
+            print(format_unexecuted_loops(unexecuted_loops), file=sys.stderr)
+        if missing or unexecuted_loops:
             return 1
         print(
-            f"Every condition in {len(selected_roles)} selected role(s) evaluated both true and false.",
+            f"Every condition in {len(selected_roles)} selected role(s) evaluated both true and false, "
+            "and every loop iterated.",
             file=sys.stderr,
         )
     else:
