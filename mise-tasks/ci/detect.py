@@ -45,7 +45,6 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"group_vars/all/[^/]+\.(yml|yaml)",
     r"group_vars/test\.yml",
     r"test/[^/]+\.py",
-    r"test/condition_coverage\.yml",
     r"test/inventory\.ini",
     r"test/playbooks/.+",
     r"ansible\.cfg",
@@ -69,6 +68,10 @@ _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, 
 
 
 PACKER_PATH_PREFIXES = ("packer/", "mise-tasks/packer/")
+
+# A scenario edit changes the coverage gate only for the file its `path:` names;
+# the unit suite validates every selector against current sources.
+CONDITION_SCENARIOS_PATH = "test/condition_coverage.yml"
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
@@ -111,6 +114,31 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
     )
 
 
+def changed_scenario_paths(base_text: str | None, head_text: str | None) -> set[str] | None:
+    """Return the ``path:`` of every condition scenario added, removed, or edited.
+
+    None means the two revisions cannot be compared (the file is missing or
+    malformed at either end); callers treat that as a full-universe change.
+    """
+
+    def scenarios(text: str | None) -> dict[str, str] | None:
+        if text is None:
+            return None
+        try:
+            document = yaml.safe_load(text) or {}
+        except yaml.YAMLError:
+            return None
+        entries = document.get("scenarios") if isinstance(document, dict) else None
+        if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
+            return None
+        return {json.dumps(entry, sort_keys=True, default=str): str(entry.get("path", "")) for entry in entries}
+
+    base, head = scenarios(base_text), scenarios(head_text)
+    if base is None or head is None:
+        return None
+    return {(base | head)[key] for key in base.keys() ^ head.keys()}
+
+
 def propagate_release_cells(
     direct_roles: list[str],
     consumers: dict[str, list[str]],
@@ -151,6 +179,11 @@ def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
 def git_diff_files(base: str, head: str = "HEAD") -> list[str]:
     result = _git("diff", "--name-only", "--no-renames", base, head)
     return [line for line in result.stdout.strip().splitlines() if line]
+
+
+def git_show_file(ref: str, path: str) -> str | None:
+    result = _git("show", f"{ref}:{path}", check=False)
+    return result.stdout if result.returncode == 0 else None
 
 
 def git_rev_parse(ref: str) -> str | None:
@@ -675,6 +708,20 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
             log(f"     {p}")
         return full_universe("full-universe path changed")
 
+    scenario_roles: set[str] = set()
+    if CONDITION_SCENARIOS_PATH in changed:
+        head_path = Path(CONDITION_SCENARIOS_PATH)
+        scenario_paths = changed_scenario_paths(
+            git_show_file(base, CONDITION_SCENARIOS_PATH),
+            head_path.read_text() if head_path.exists() else None,
+        )
+        if scenario_paths is None:
+            return full_universe("condition scenarios not comparable with the base")
+        role_matches = {path: ROLE_PATH_RE.match(path) for path in sorted(scenario_paths)}
+        if unscoped := [path for path, match in role_matches.items() if match is None]:
+            return full_universe(f"condition scenarios changed for {', '.join(unscoped)}")
+        scenario_roles = {match.group(1) for match in role_matches.values() if match}
+
     universe = set(list_testable_roles())
     roles: set[str] = set()
 
@@ -701,6 +748,11 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
         for consumer in consumers:
             if consumer in universe:
                 roles.add(consumer)
+
+    # Only the edited scenarios' own roles gate differently; consumers do not.
+    if scenario_roles:
+        log(f"condition scenarios changed -> roles: {' '.join(sorted(scenario_roles))}")
+        roles.update(scenario_roles & universe)
 
     role_releases = {r: list(load_role_test_config(r).ubuntu) for r in classification.direct_roles}
     all_consumers = {c for r in classification.direct_roles for c in deps_map.get(r, []) if c in universe}
