@@ -19,26 +19,33 @@ from condition_coverage import (
     LoopKey,
     TaskDefinition,
     TaskKey,
+    UntilKey,
+    UntilOutcome,
     append_block_events,
     append_loop_executions,
     append_task_executions,
+    append_until_outcomes,
     check_block_coverage,
     check_coverage,
     check_loop_coverage,
     check_task_coverage,
+    check_until_coverage,
     evaluated_outcomes,
     format_block_gaps,
     format_missing_outcomes,
+    format_missing_until_outcomes,
     format_unexecuted_loops,
     format_unexecuted_tasks,
     inventory_blocks,
     inventory_conditions,
     inventory_loops,
     inventory_tasks,
+    inventory_untils,
     load_block_events,
     load_executed_loops,
     load_executed_tasks,
     load_synthetic_outcomes,
+    load_until_outcomes,
     missing_outcomes,
     normalize_source_path,
     production_condition_paths,
@@ -251,6 +258,51 @@ def test_rescue_only_block_uses_terminal_primary_for_normal_coverage(
     assert check_block_coverage(["example"], [report]) == set()
 
 
+def test_until_coverage_requires_retry_and_success_outcomes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- name: Retry operation
+  command: /bin/true
+  register: retry_result
+  until: retry_result is succeeded
+  retries: 2
+"""
+    )
+    report = tmp_path / "coverage.jsonl"
+    until = UntilKey("roles/example/tasks/main.yml", 4, 10, "retry_result is succeeded")
+
+    assert inventory_untils([source]) == {until}
+    assert check_until_coverage(["example"], []) == {until: {False, True}}
+    assert "missing false, true: retry_result is succeeded" in format_missing_until_outcomes({until: {False, True}})
+
+    append_until_outcomes(
+        report,
+        [UntilOutcome(until, False), UntilOutcome(until, True)],
+        phase="converge",
+    )
+
+    assert load_until_outcomes([report]) == {until: {False, True}}
+    assert check_until_coverage(["example"], [report]) == {}
+
+
+def test_until_key_normalizes_ansible_runtime_list_wrapper() -> None:
+    expression = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=24,
+        col_num=10,
+    ).tag("retry_result is succeeded")
+
+    assert condition_coverage_callback.until_key([expression]) == UntilKey(
+        "roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"
+    )
+
+
 def test_inventory_accepts_an_empty_task_file(tmp_path: Path) -> None:
     source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
     source.parent.mkdir(parents=True)
@@ -375,6 +427,36 @@ def test_callback_correlates_always_with_normal_and_rescued_paths(
 
     always_events = {event.after for event in load_block_events([report]) if event.section == "always"}
     assert always_events == {"normal", "rescued"}
+
+
+def test_callback_records_retry_false_then_terminal_true(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "coverage.jsonl"
+    monkeypatch.setenv("ANSIBLE_CONDITION_COVERAGE_FILE", str(report))
+    until = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=24,
+        col_num=10,
+    ).tag("retry_result is succeeded")
+    task = SimpleNamespace(
+        _parent=None,
+        loop=None,
+        loop_with=None,
+        until=until,
+        when=[],
+        get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:20",
+    )
+    result = SimpleNamespace(task=task, result={})
+    callback = condition_coverage_callback.CallbackModule()
+
+    callback.v2_runner_retry(cast(Any, result))
+    callback.v2_runner_on_ok(cast(Any, result))
+
+    assert load_until_outcomes([report]) == {
+        UntilKey("roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"): {False, True}
+    }
 
 
 def test_task_coverage_requires_a_non_skipped_terminal_callback(
