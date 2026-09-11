@@ -126,6 +126,25 @@ class UntilOutcome:
     outcome: bool
 
 
+@dataclass(frozen=True, order=True)
+class ResultPredicateKey:
+    """Stable source identity for one dynamic result predicate group."""
+
+    kind: str
+    path: str
+    line: int
+    column: int
+    expressions: tuple[str, ...]
+
+
+@dataclass(frozen=True, order=True)
+class ResultPredicateOutcome:
+    """One observed aggregate result for a dynamic task predicate."""
+
+    predicate: ResultPredicateKey
+    outcome: bool
+
+
 _TASK_STRUCTURAL_KEYS = frozenset({"block", "rescue", "always"})
 _TASK_NON_EXECUTING_ACTIONS = frozenset({"import_role", "import_tasks", "include_role", "include_tasks", "meta"})
 _TASK_ATTRIBUTE_KEYS = frozenset(Task.fattributes).union(_TASK_STRUCTURAL_KEYS)
@@ -192,6 +211,26 @@ def until_key(value: object) -> UntilKey:
     )
 
 
+def result_predicate_key(kind: str, value: object) -> ResultPredicateKey | None:
+    """Return source identity for a nonconstant changed/failed predicate group."""
+    if kind not in {"changed_when", "failed_when"}:
+        raise ValueError(f"unknown result predicate kind: {kind}")
+    values = value if isinstance(value, list) else [value]
+    if not values or all(isinstance(item, bool) for item in values):
+        return None
+    origins = (Origin.get_tag(item) for item in values)
+    origin = next((item for item in origins if item is not None), None)
+    if origin is None or origin.path is None or origin.line_num is None or origin.col_num is None:
+        raise ValueError(f"{kind} predicate has no complete YAML origin: {value!r}")
+    return ResultPredicateKey(
+        kind=kind,
+        path=normalize_source_path(origin.path),
+        line=origin.line_num,
+        column=origin.col_num,
+        expressions=tuple(str(item) for item in values),
+    )
+
+
 def evaluated_outcomes(
     conditions: Sequence[object],
     false_condition: object | None = None,
@@ -244,6 +283,17 @@ def _walk_until_values(value: object) -> Iterator[object]:
     elif isinstance(value, list):
         for child in value:
             yield from _walk_until_values(child)
+
+
+def _walk_result_predicate_values(value: object) -> Iterator[tuple[str, object]]:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key) in {"changed_when", "failed_when"}:
+                yield str(key), child
+            yield from _walk_result_predicate_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_result_predicate_values(child)
 
 
 def _walk_task_mappings(tasks: object) -> Iterator[dict[object, object]]:
@@ -397,6 +447,18 @@ def inventory_untils(paths: Iterable[Path]) -> set[UntilKey]:
     return untils
 
 
+def inventory_result_predicates(paths: Iterable[Path]) -> set[ResultPredicateKey]:
+    """Load every dynamic production ``changed_when`` and ``failed_when`` group."""
+    loader = DataLoader()
+    predicates: set[ResultPredicateKey] = set()
+    for path in paths:
+        document = loader.load_from_file(str(path.resolve()))
+        for kind, value in _walk_result_predicate_values(document):
+            if key := result_predicate_key(kind, value):
+                predicates.add(key)
+    return predicates
+
+
 def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: str) -> None:
     """Append observed outcomes as compact JSON lines."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -444,6 +506,22 @@ def append_until_outcomes(path: Path, outcomes: Iterable[UntilOutcome], *, phase
             handle.write("\n")
 
 
+def append_result_predicate_outcomes(
+    path: Path,
+    outcomes: Iterable[ResultPredicateOutcome],
+    *,
+    phase: str,
+) -> None:
+    """Append observed dynamic task-result predicate outcomes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for outcome in outcomes:
+            handle.write(
+                json.dumps({"result_predicate": asdict(outcome), "phase": phase}, sort_keys=True, separators=(",", ":"))
+            )
+            handle.write("\n")
+
+
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
     for path in paths:
         with path.open(encoding="utf-8") as handle:
@@ -453,7 +531,7 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                 data: dict[str, Any] = json.loads(line)
                 if error := data.get("error"):
                     raise ValueError(f"{path}:{line_number}: callback error: {error}")
-                if not {"condition", "loop", "task", "block_event", "until"}.intersection(data):
+                if not {"condition", "loop", "task", "block_event", "until", "result_predicate"}.intersection(data):
                     raise ValueError(f"{path}:{line_number}: unknown coverage record")
                 yield path, line_number, data
 
@@ -510,6 +588,25 @@ def load_until_outcomes(paths: Iterable[Path]) -> dict[UntilKey, set[bool]]:
     return outcomes
 
 
+def load_result_predicate_outcomes(paths: Iterable[Path]) -> dict[ResultPredicateKey, set[bool]]:
+    """Merge dynamic task-result predicate outcomes from callback reports."""
+    outcomes: dict[ResultPredicateKey, set[bool]] = {}
+    for _path, _line_number, data in _report_rows(paths):
+        if "result_predicate" not in data:
+            continue
+        outcome = data["result_predicate"]
+        raw_key = outcome["predicate"]
+        key = ResultPredicateKey(
+            kind=raw_key["kind"],
+            path=raw_key["path"],
+            line=raw_key["line"],
+            column=raw_key["column"],
+            expressions=tuple(raw_key["expressions"]),
+        )
+        outcomes.setdefault(key, set()).add(bool(outcome["outcome"]))
+    return outcomes
+
+
 def _normalized_expression(expression: str) -> str:
     return " ".join(expression.split())
 
@@ -541,6 +638,11 @@ def load_synthetic_outcomes(
     for index, scenario in enumerate(scenarios, 1):
         if not isinstance(scenario, dict):
             raise ValueError(f"{path}: scenario {index} must be a mapping")
+        kind = scenario.get("kind", "when")
+        if kind not in {"when", "changed_when", "failed_when"}:
+            raise ValueError(f"{path}: scenario {index} has unknown kind: {kind}")
+        if kind != "when":
+            continue
         source_path = str(scenario.get("path", ""))
         expression = _normalized_expression(str(scenario.get("expression", "")))
         source_line = scenario.get("line")
@@ -592,6 +694,78 @@ def load_synthetic_outcomes(
                 )
             for condition in matches:
                 outcomes.setdefault(condition, set()).add(actual)
+    return outcomes
+
+
+def load_synthetic_result_predicate_outcomes(
+    path: Path,
+    predicates: set[ResultPredicateKey] | None = None,
+) -> dict[ResultPredicateKey, set[bool]]:
+    """Evaluate declared synthetic cases for dynamic result predicates."""
+    document = yaml.safe_load(path.read_text()) or {}
+    scenarios = document.get("scenarios", [])
+    if not isinstance(scenarios, list):
+        raise ValueError(f"{path}: scenarios must be a list")
+
+    if predicates is None:
+        predicates = inventory_result_predicates(production_condition_paths(include_site=True))
+    outcomes: dict[ResultPredicateKey, set[bool]] = {}
+    loader = DataLoader()
+    for index, scenario in enumerate(scenarios, 1):
+        if not isinstance(scenario, dict):
+            raise ValueError(f"{path}: scenario {index} must be a mapping")
+        kind = scenario.get("kind", "when")
+        if kind not in {"when", "changed_when", "failed_when"}:
+            raise ValueError(f"{path}: scenario {index} has unknown kind: {kind}")
+        if kind == "when":
+            continue
+        source_path = str(scenario.get("path", ""))
+        raw_expressions = scenario.get("expression", "")
+        expressions = raw_expressions if isinstance(raw_expressions, list) else [raw_expressions]
+        normalized_expressions = tuple(_normalized_expression(str(expression)) for expression in expressions)
+        source_line = scenario.get("line")
+        if source_line is not None and not isinstance(source_line, int):
+            raise ValueError(f"{path}: scenario {index} line must be an integer")
+        all_matches = scenario.get("all", False)
+        if not isinstance(all_matches, bool):
+            raise ValueError(f"{path}: scenario {index} all must be a Boolean")
+        matches = {
+            predicate
+            for predicate in predicates
+            if predicate.kind == kind
+            and predicate.path == source_path
+            and tuple(_normalized_expression(expression) for expression in predicate.expressions)
+            == normalized_expressions
+            and (source_line is None or predicate.line == source_line)
+        }
+        if not matches:
+            joined = ", ".join(normalized_expressions)
+            raise ValueError(
+                f"{path}: scenario {index} does not match a current {kind} predicate: {source_path}: {joined}"
+            )
+        if len(matches) > 1 and not all_matches:
+            lines = ", ".join(str(predicate.line) for predicate in sorted(matches))
+            raise ValueError(f"{path}: scenario {index} matches lines {lines}; select one with line or set all: true")
+
+        cases = scenario.get("cases", [])
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"{path}: scenario {index} cases must be a non-empty list")
+        source_expressions = next(iter(matches)).expressions
+        trusted_expressions = [TrustedAsTemplate().tag(expression) for expression in source_expressions]
+        for case_index, case in enumerate(cases, 1):
+            if not isinstance(case, dict) or not isinstance(case.get("outcome"), bool):
+                raise ValueError(f"{path}: scenario {index} case {case_index} requires a Boolean outcome")
+            variables = case.get("variables", {})
+            if not isinstance(variables, dict):
+                raise ValueError(f"{path}: scenario {index} case {case_index} variables must be a mapping")
+            engine = TemplateEngine(loader, variables=variables)
+            actual = all(engine.evaluate_conditional(expression) for expression in trusted_expressions)
+            if actual is not case["outcome"]:
+                raise ValueError(
+                    f"{path}: scenario {index} case {case_index} expected {case['outcome']} but evaluated {actual}"
+                )
+            for predicate in matches:
+                outcomes.setdefault(predicate, set()).add(actual)
     return outcomes
 
 
@@ -660,6 +834,18 @@ def format_missing_until_outcomes(missing: dict[UntilKey, set[bool]]) -> str:
         labels = ", ".join(str(outcome).lower() for outcome in sorted(outcomes))
         expression = " ".join(until.expression.split())
         lines.append(f"  {until.path}:{until.line}:{until.column}: missing {labels}: {expression}")
+    return "\n".join(lines)
+
+
+def format_missing_result_predicate_outcomes(missing: dict[ResultPredicateKey, set[bool]]) -> str:
+    """Render result predicates missing their false or true outcome."""
+    lines = [f"{len(missing)} Ansible result predicate(s) lack Boolean branch coverage:"]
+    for predicate, outcomes in sorted(missing.items()):
+        labels = ", ".join(str(outcome).lower() for outcome in sorted(outcomes))
+        expressions = " and ".join(" ".join(expression.split()) for expression in predicate.expressions)
+        lines.append(
+            f"  {predicate.path}:{predicate.line}:{predicate.column}: {predicate.kind} missing {labels}: {expressions}"
+        )
     return "\n".join(lines)
 
 
@@ -755,6 +941,33 @@ def check_until_coverage(
     }
 
 
+def check_result_predicate_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+    scenario_path: Path | None = SYNTHETIC_SCENARIOS_PATH,
+) -> dict[ResultPredicateKey, set[bool]]:
+    """Return false/true outcomes absent for dynamic result predicates."""
+    scope = {path.as_posix() for path in production_condition_paths(roles, include_site=include_site)}
+    predicates = inventory_result_predicates(production_condition_paths(include_site=True))
+    expected = {predicate for predicate in predicates if predicate.path in scope}
+    synthetic = (
+        load_synthetic_result_predicate_outcomes(scenario_path, predicates)
+        if scenario_path is not None and scenario_path.exists()
+        else {}
+    )
+    observed = load_result_predicate_outcomes(reports)
+    for predicate, outcomes in synthetic.items():
+        observed.setdefault(predicate, set()).update(outcomes)
+    both = {False, True}
+    return {
+        predicate: both.difference(observed.get(predicate, set()))
+        for predicate in expected
+        if observed.get(predicate, set()) != both
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -781,6 +994,11 @@ def main() -> int:
         unexecuted_tasks = check_task_coverage(args.roles, args.reports, include_site=args.include_site)
         block_gaps = check_block_coverage(args.roles, args.reports, include_site=args.include_site)
         missing_until_outcomes = check_until_coverage(args.roles, args.reports, include_site=args.include_site)
+        missing_result_predicate_outcomes = check_result_predicate_coverage(
+            args.roles,
+            args.reports,
+            include_site=args.include_site,
+        )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Condition coverage report error: {exc}", file=sys.stderr)
         return 1
@@ -794,11 +1012,20 @@ def main() -> int:
         print(format_block_gaps(block_gaps), file=sys.stderr)
     if missing_until_outcomes:
         print(format_missing_until_outcomes(missing_until_outcomes), file=sys.stderr)
-    if missing or unexecuted_loops or unexecuted_tasks or block_gaps or missing_until_outcomes:
+    if missing_result_predicate_outcomes:
+        print(format_missing_result_predicate_outcomes(missing_result_predicate_outcomes), file=sys.stderr)
+    if (
+        missing
+        or unexecuted_loops
+        or unexecuted_tasks
+        or block_gaps
+        or missing_until_outcomes
+        or missing_result_predicate_outcomes
+    ):
         return 1
     print(
         "Every selected Ansible condition evaluated both true and false, every loop iterated, "
-        "every task ran, every block path executed, and every retry predicate evaluated false and true."
+        "every task ran, every block path executed, and every retry and result predicate evaluated false and true."
     )
     return 0
 
