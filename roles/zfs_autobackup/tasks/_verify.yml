@@ -38,6 +38,24 @@
       - "'connecttimeout 10' in zfs_autobackup_verify_ssh_config.stdout"
     fail_msg: "backup SSH config missing expected directives"
 
+- name: _verify | Remove the localhost backup host key fixture
+  known_hosts:
+    path: /root/.ssh/known_hosts
+    name: 127.0.0.1
+    state: absent
+  become: true
+
+- name: _verify | Exercise backup peer host-key registration
+  import_tasks: dest.yml
+  vars:
+    qemu_test: false
+    external_ips:
+      box: 127.0.0.1
+      bunk: 127.0.0.1
+    zfs_autobackup_sources:
+      - host: box
+        dest_dataset: rpool/zfs_autobackup_receive_test
+
 - name: _verify | Exercise backup identity migration and persistence
   import_tasks: _verify_identity.yml
 
