@@ -14,6 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "test"))
 from condition_coverage import (
     BlockEvent,
     BlockKey,
+    ExitKey,
+    ExitOutcome,
+    IncludeEvent,
     LoopKey,
     ResultPredicateKey,
     ResultPredicateOutcome,
@@ -21,13 +24,17 @@ from condition_coverage import (
     UntilKey,
     UntilOutcome,
     append_block_events,
+    append_exit_outcomes,
+    append_include_events,
     append_loop_executions,
     append_outcomes,
     append_result_predicate_outcomes,
     append_task_executions,
     append_until_outcomes,
     evaluated_outcomes,
+    include_key_from_task,
     loop_key,
+    normalize_source_path,
     result_predicate_key,
     task_key_from_path,
     until_key,
@@ -49,6 +56,8 @@ class CallbackModule(CallbackBase):
         self._block_modes: dict[tuple[Path, str, BlockKey], str] = {}
         self._recorded_until_outcomes: set[tuple[Path, UntilKey, bool]] = set()
         self._recorded_result_predicate_outcomes: set[tuple[Path, ResultPredicateKey, bool]] = set()
+        self._recorded_include_events: set[tuple[Path, IncludeEvent]] = set()
+        self._pending_exits: dict[Path, ExitKey] = {}
 
     @staticmethod
     def _block_contexts(task) -> list[tuple[BlockKey, str]]:
@@ -126,6 +135,14 @@ class CallbackModule(CallbackBase):
                 self._recorded_result_predicate_outcomes.add(marker)
 
     @staticmethod
+    def _is_end_role(task) -> bool:
+        return str(getattr(task, "action", "")).rsplit(".", 1)[-1] == "meta" and task._get_meta() == "end_role"
+
+    def _flush_pending_exit(self, path: Path, phase: str) -> None:
+        if key := self._pending_exits.pop(path, None):
+            append_exit_outcomes(path, [ExitOutcome(key, True)], phase=phase)
+
+    @staticmethod
     def _record_error(path: Path, exc: Exception) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
@@ -142,6 +159,9 @@ class CallbackModule(CallbackBase):
             path = Path(output)
             phase = os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown")
             task_key = task_key_from_path(task.get_path())
+            if status == "skipped" and self._is_end_role(task):
+                append_exit_outcomes(path, [ExitOutcome(ExitKey(task_key.path, task_key.line), False)], phase=phase)
+                self._pending_exits.pop(path, None)
             if not for_item:
                 self._record_block_events(result, path=path, phase=phase, task_key=task_key, status=status)
             if status in {"ok", "failed"}:
@@ -180,6 +200,52 @@ class CallbackModule(CallbackBase):
             )
         except Exception as exc:
             self._record_error(Path(output), exc)
+
+    def v2_playbook_on_task_start(self, task, is_conditional) -> None:
+        output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
+        if not output:
+            return
+        path = Path(output)
+        try:
+            phase = os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown")
+            self._flush_pending_exit(path, phase)
+            if self._is_end_role(task):
+                key = task_key_from_path(task.get_path())
+                self._pending_exits[path] = ExitKey(key.path, key.line)
+        except Exception as exc:
+            self._record_error(path, exc)
+
+    def v2_playbook_on_include(self, included_file) -> None:
+        output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
+        if not output:
+            return
+        path = Path(output)
+        try:
+            key = include_key_from_task(included_file._task)
+            if included_file._is_role:
+                tasks_from = included_file._task._from_files.get("tasks", "main")
+                target = Path("roles") / included_file._filename / "tasks" / f"{tasks_from}.yml"
+                target_path = target.as_posix()
+            else:
+                target_path = normalize_source_path(included_file._filename)
+            event = IncludeEvent(key, target_path)
+            marker = (path, event)
+            if marker not in self._recorded_include_events:
+                append_include_events(
+                    path,
+                    [event],
+                    phase=os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"),
+                )
+                self._recorded_include_events.add(marker)
+        except Exception as exc:
+            self._record_error(path, exc)
+
+    def v2_playbook_on_stats(self, stats) -> None:
+        for path in list(self._pending_exits):
+            try:
+                self._flush_pending_exit(path, os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"))
+            except Exception as exc:
+                self._record_error(path, exc)
 
     def v2_runner_retry(self, result) -> None:
         output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
