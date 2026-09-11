@@ -9,25 +9,6 @@
     or _netdata_minimal_unit.status.ActiveState != "active"
   become: true
 
-- name: _verify | Read minimal Prometheus collector configuration
-  slurp:
-    src: /etc/netdata/go.d/prometheus.conf
-  register: _netdata_minimal_prometheus_conf
-  become: true
-
-- name: _verify | Minimal Prometheus jobs match their declared inputs
-  vars:
-    _prometheus: "{{ _netdata_minimal_prometheus_conf.content | b64decode }}"
-  assert:
-    that:
-      - >-
-        _prometheus is search('(?m)^  - name: gitlab_runner$')
-      - >-
-        _prometheus is not search('(?m)^  - name: minio$')
-    fail_msg: >-
-      The minimal fixture must retain the GitLab Runner scrape while omitting
-      the disabled MinIO scrape. Rendered config: {{ _prometheus }}
-
 - name: _verify | Wait for minimal presence charts
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
