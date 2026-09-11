@@ -55,6 +55,7 @@ class CallbackModule(CallbackBase):
         self._recorded_tasks: set[tuple[Path, TaskKey]] = set()
         self._block_modes: dict[tuple[Path, str, BlockKey], str] = {}
         self._recorded_until_outcomes: set[tuple[Path, UntilKey, bool]] = set()
+        self._last_retry_attempts: dict[tuple[Path, str, UntilKey], int] = {}
         self._recorded_result_predicate_outcomes: set[tuple[Path, ResultPredicateKey, bool]] = set()
         self._recorded_include_events: set[tuple[Path, IncludeEvent]] = set()
         self._pending_exits: dict[Path, ExitKey] = {}
@@ -116,6 +117,23 @@ class CallbackModule(CallbackBase):
             append_until_outcomes(path, [UntilOutcome(key, outcome)], phase=phase)
             self._recorded_until_outcomes.add(marker)
 
+    @staticmethod
+    def _until_execution_key(result, path: Path, key: UntilKey) -> tuple[Path, str, UntilKey]:
+        return path, result._host.get_name(), key
+
+    def _record_terminal_until_outcome(self, result, *, path: Path, phase: str, status: str) -> None:
+        task = result.task
+        if not getattr(task, "until", None):
+            return
+        key = until_key(task.until)
+        execution_key = self._until_execution_key(result, path, key)
+        last_retry_attempt = self._last_retry_attempts.pop(execution_key, None)
+        terminal_attempt = result.result.get("attempts")
+        # Ansible rewrites an exhausted result's attempt number to the last
+        # retry callback's number. A successful predicate advances beyond it.
+        outcome = last_retry_attempt != terminal_attempt if isinstance(terminal_attempt, int) else status == "ok"
+        self._record_until_outcome(task, path=path, phase=phase, outcome=outcome)
+
     def _record_result_predicates(self, result, *, path: Path, phase: str, status: str) -> None:
         outcomes = {
             "changed_when": bool(result.result.get("changed", False)),
@@ -165,7 +183,8 @@ class CallbackModule(CallbackBase):
             if not for_item:
                 self._record_block_events(result, path=path, phase=phase, task_key=task_key, status=status)
             if status in {"ok", "failed"}:
-                self._record_until_outcome(task, path=path, phase=phase, outcome=status == "ok")
+                if for_item or not (task.loop or task.loop_with):
+                    self._record_terminal_until_outcome(result, path=path, phase=phase, status=status)
                 if for_item or not (task.loop or task.loop_with):
                     self._record_result_predicates(result, path=path, phase=phase, status=status)
             if status not in {"skipped", "unreachable"}:
@@ -252,9 +271,14 @@ class CallbackModule(CallbackBase):
         if not output:
             return
         try:
+            path = Path(output)
+            key = until_key(result.task.until)
+            attempt = result.result.get("attempts")
+            if isinstance(attempt, int):
+                self._last_retry_attempts[self._until_execution_key(result, path, key)] = attempt
             self._record_until_outcome(
                 result.task,
-                path=Path(output),
+                path=path,
                 phase=os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"),
                 outcome=False,
             )

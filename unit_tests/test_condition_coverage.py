@@ -776,14 +776,50 @@ def test_callback_records_retry_false_then_terminal_true(
         when=[],
         get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:20",
     )
-    result = SimpleNamespace(task=task, result={})
+    host = SimpleNamespace(get_name=lambda: "example")
+    result = SimpleNamespace(task=task, result={"attempts": 1}, _host=host)
     callback = condition_coverage_callback.CallbackModule()
 
     callback.v2_runner_retry(cast(Any, result))
+    result.result = {"attempts": 2}
     callback.v2_runner_on_ok(cast(Any, result))
 
     assert load_until_outcomes([report]) == {
         UntilKey("roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"): {False, True}
+    }
+
+
+def test_callback_does_not_record_suppressed_retry_exhaustion_as_true(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "coverage.jsonl"
+    monkeypatch.setenv("ANSIBLE_CONDITION_COVERAGE_FILE", str(report))
+    until = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=24,
+        col_num=10,
+    ).tag("retry_result is succeeded")
+    task = SimpleNamespace(
+        _parent=None,
+        loop=None,
+        loop_with=None,
+        until=until,
+        when=[],
+        get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:20",
+    )
+    host = SimpleNamespace(get_name=lambda: "example")
+    result = SimpleNamespace(task=task, result={"attempts": 1}, _host=host)
+    callback = condition_coverage_callback.CallbackModule()
+
+    callback.v2_runner_retry(cast(Any, result))
+    result.result = {"attempts": 2}
+    callback.v2_runner_retry(cast(Any, result))
+    result.result = {"failed_when_result": False, "attempts": 2}
+    callback.v2_runner_on_ok(cast(Any, result))
+
+    assert load_until_outcomes([report]) == {
+        UntilKey("roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"): {False}
     }
 
 
