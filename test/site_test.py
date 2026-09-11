@@ -117,7 +117,10 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             # identity roles can safely inspect their durable key paths; a
             # fresh check may predict the dataset creation but cannot mount it.
             print_line("Preparing site check prerequisites")
-            await m.ansible_command(str(m.workdir_path / "_site_check_prerequisites.yml"))
+            await m.ansible_command(
+                str(m.workdir_path / "_site_check_prerequisites.yml"),
+                coverage_phase="site_check_prerequisites",
+            )
 
         staged = m.workdir_path / "site.yml"
         shutil.copy(Path("site.yml"), staged)
