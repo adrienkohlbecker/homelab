@@ -145,9 +145,69 @@ class ResultPredicateOutcome:
     outcome: bool
 
 
+@dataclass(frozen=True, order=True)
+class IncludeKey:
+    """Stable source identity for one dynamic include declaration."""
+
+    path: str
+    line: int
+    action: str
+
+
+@dataclass(frozen=True, order=True)
+class IncludeDefinition:
+    """One dynamic include and the file it must expand."""
+
+    key: IncludeKey
+    name: str
+    target: str
+
+
+@dataclass(frozen=True, order=True)
+class IncludeEvent:
+    """One dynamic include expansion observed by Ansible."""
+
+    include: IncludeKey
+    target: str
+
+
+@dataclass(frozen=True, order=True)
+class ExitKey:
+    """Stable source identity for one ``meta: end_role`` declaration."""
+
+    path: str
+    line: int
+
+
+@dataclass(frozen=True, order=True)
+class ExitDefinition:
+    """One early role exit and its first fallthrough task."""
+
+    key: ExitKey
+    name: str
+    fallthrough: TaskKey
+
+
+@dataclass(frozen=True, order=True)
+class ExitOutcome:
+    """Whether one encountered early exit ended the role."""
+
+    exit: ExitKey
+    outcome: bool
+
+
+@dataclass(frozen=True, order=True)
+class ExitGap:
+    """One unobserved branch of an early role exit."""
+
+    exit: ExitDefinition
+    outcome: str
+
+
 _TASK_STRUCTURAL_KEYS = frozenset({"block", "rescue", "always"})
 _TASK_NON_EXECUTING_ACTIONS = frozenset({"import_role", "import_tasks", "include_role", "include_tasks", "meta"})
 _TASK_ATTRIBUTE_KEYS = frozenset(Task.fattributes).union(_TASK_STRUCTURAL_KEYS)
+_INCLUDE_ACTIONS = frozenset({"include_role", "include_tasks"})
 
 
 def normalize_source_path(path: str) -> str:
@@ -192,6 +252,12 @@ def task_key_from_path(path: str) -> TaskKey:
     if not separator or not source_path or not source_line.isdigit():
         raise ValueError(f"task has no complete source identity: {path!r}")
     return TaskKey(normalize_source_path(source_path), int(source_line))
+
+
+def include_key_from_task(task) -> IncludeKey:
+    """Return source identity for one runtime dynamic include task."""
+    key = task_key_from_path(task.get_path())
+    return IncludeKey(key.path, key.line, str(task.action).rsplit(".", 1)[-1])
 
 
 def until_key(value: object) -> UntilKey:
@@ -320,26 +386,114 @@ def _document_task_mappings(document: object) -> Iterator[dict[object, object]]:
     yield from _walk_task_mappings(document)
 
 
-def _task_definition(task: dict[object, object]) -> TaskDefinition | None:
+def _task_action(task: dict[object, object]) -> str:
     if "block" in task:
-        return None
+        return "block"
     action_keys = [str(key) for key in task if str(key) not in _TASK_ATTRIBUTE_KEYS]
     if not action_keys and "action" in task:
         action_keys = [str(task["action"])]
     if len(action_keys) != 1:
         name = str(task.get("name", "<unnamed>"))
         raise ValueError(f"task {name!r} has {len(action_keys)} action keys: {', '.join(action_keys)}")
-    action = action_keys[0]
-    if action in _TASK_NON_EXECUTING_ACTIONS:
-        return None
+    return action_keys[0].rsplit(".", 1)[-1]
+
+
+def _task_origin(task: dict[object, object]) -> TaskKey:
     origin = Origin.get_tag(task)
     if origin is None or origin.path is None or origin.line_num is None:
         raise ValueError(f"task has no complete YAML origin: {task!r}")
+    return TaskKey(normalize_source_path(origin.path), origin.line_num)
+
+
+def _task_definition(task: dict[object, object]) -> TaskDefinition | None:
+    if "block" in task:
+        return None
+    action = _task_action(task)
+    if action in _TASK_NON_EXECUTING_ACTIONS:
+        return None
     return TaskDefinition(
-        key=TaskKey(normalize_source_path(origin.path), origin.line_num),
+        key=_task_origin(task),
         action=action,
         name=str(task.get("name", "<unnamed>")),
     )
+
+
+def _action_value(task: dict[object, object], action: str) -> object:
+    return next(value for key, value in task.items() if str(key).rsplit(".", 1)[-1] == action)
+
+
+def _include_definition(task: dict[object, object]) -> IncludeDefinition | None:
+    action = _task_action(task)
+    if action not in _INCLUDE_ACTIONS:
+        return None
+    source = _task_origin(task)
+    value = _action_value(task, action)
+    if action == "include_tasks":
+        raw_target = value.get("file") if isinstance(value, dict) else value
+        target = Path(source.path).parent / str(raw_target)
+    else:
+        if not isinstance(value, dict):
+            raise ValueError(f"include_role must use a mapping: {task!r}")
+        role = value.get("name", value.get("role"))
+        tasks_from = value.get("tasks_from", "main")
+        raw_target = f"{role}:{tasks_from}"
+        target = Path("roles") / str(role) / "tasks" / f"{tasks_from}.yml"
+    if "{{" in str(raw_target) or "{%" in str(raw_target):
+        raise ValueError(f"dynamic include target needs an explicit coverage target: {source.path}:{source.line}")
+    return IncludeDefinition(
+        key=IncludeKey(source.path, source.line, action),
+        name=str(task.get("name", "<unnamed>")),
+        target=target.as_posix(),
+    )
+
+
+def _first_execution_target(task: dict[object, object], loader: DataLoader) -> TaskKey | None:
+    if definition := _task_definition(task):
+        return definition.key
+    if _task_action(task) != "import_tasks":
+        return None
+    source = _task_origin(task)
+    value = _action_value(task, "import_tasks")
+    raw_target = value.get("file") if isinstance(value, dict) else value
+    if "{{" in str(raw_target) or "{%" in str(raw_target):
+        raise ValueError(f"early-exit fallthrough import must be static: {source.path}:{source.line}")
+    target = Path(source.path).parent / str(raw_target)
+    document = loader.load_from_file(str(target.resolve()))
+    return next(
+        (
+            execution
+            for child in _document_task_mappings(document)
+            if (execution := _first_execution_target(child, loader)) is not None
+        ),
+        None,
+    )
+
+
+def _walk_exit_definitions(tasks: object, loader: DataLoader) -> Iterator[ExitDefinition]:
+    if not isinstance(tasks, list):
+        return
+    for index, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            raise ValueError(f"task list entry must be a mapping: {task!r}")
+        if _task_action(task) == "meta" and str(task.get("meta")) == "end_role":
+            fallthrough = next(
+                (
+                    target
+                    for sibling in tasks[index + 1 :]
+                    if (target := _first_execution_target(sibling, loader)) is not None
+                ),
+                None,
+            )
+            source = _task_origin(task)
+            if fallthrough is None:
+                raise ValueError(f"meta: end_role has no observable fallthrough task: {source.path}:{source.line}")
+            yield ExitDefinition(
+                key=ExitKey(source.path, source.line),
+                name=str(task.get("name", "<unnamed>")),
+                fallthrough=fallthrough,
+            )
+        for section in _TASK_STRUCTURAL_KEYS:
+            yield from _walk_exit_definitions(task.get(section), loader)
 
 
 def _block_definition(task: dict[object, object]) -> BlockDefinition | None:
@@ -459,6 +613,42 @@ def inventory_result_predicates(paths: Iterable[Path]) -> set[ResultPredicateKey
     return predicates
 
 
+def inventory_includes(paths: Iterable[Path]) -> dict[IncludeKey, IncludeDefinition]:
+    """Load every production dynamic include and its expected target."""
+    loader = DataLoader()
+    includes: dict[IncludeKey, IncludeDefinition] = {}
+    for path in paths:
+        document = loader.load_from_file(str(path.resolve()))
+        for task in _document_task_mappings(document):
+            if definition := _include_definition(task):
+                if previous := includes.get(definition.key):
+                    raise ValueError(f"duplicate include source identity: {previous!r}, {definition!r}")
+                includes[definition.key] = definition
+    return includes
+
+
+def inventory_exits(paths: Iterable[Path]) -> dict[ExitKey, ExitDefinition]:
+    """Load every production early role exit and its fallthrough task."""
+    loader = DataLoader()
+    exits: dict[ExitKey, ExitDefinition] = {}
+    for path in paths:
+        document = loader.load_from_file(str(path.resolve()))
+        if (
+            isinstance(document, list)
+            and document
+            and all(isinstance(entry, dict) and "hosts" in entry for entry in document)
+        ):
+            task_lists = [play.get(section) for play in document for section in ("pre_tasks", "tasks", "post_tasks")]
+        else:
+            task_lists = [document]
+        for task_list in task_lists:
+            for definition in _walk_exit_definitions(task_list, loader):
+                if previous := exits.get(definition.key):
+                    raise ValueError(f"duplicate early-exit source identity: {previous!r}, {definition!r}")
+                exits[definition.key] = definition
+    return exits
+
+
 def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: str) -> None:
     """Append observed outcomes as compact JSON lines."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -522,6 +712,26 @@ def append_result_predicate_outcomes(
             handle.write("\n")
 
 
+def append_include_events(path: Path, events: Iterable[IncludeEvent], *, phase: str) -> None:
+    """Append observed dynamic include expansions."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for event in events:
+            handle.write(
+                json.dumps({"include_event": asdict(event), "phase": phase}, sort_keys=True, separators=(",", ":"))
+            )
+            handle.write("\n")
+
+
+def append_exit_outcomes(path: Path, outcomes: Iterable[ExitOutcome], *, phase: str) -> None:
+    """Append observed early role exit outcomes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for outcome in outcomes:
+            handle.write(json.dumps({"exit": asdict(outcome), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write("\n")
+
+
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
     for path in paths:
         with path.open(encoding="utf-8") as handle:
@@ -531,7 +741,16 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                 data: dict[str, Any] = json.loads(line)
                 if error := data.get("error"):
                     raise ValueError(f"{path}:{line_number}: callback error: {error}")
-                if not {"condition", "loop", "task", "block_event", "until", "result_predicate"}.intersection(data):
+                if not {
+                    "condition",
+                    "loop",
+                    "task",
+                    "block_event",
+                    "until",
+                    "result_predicate",
+                    "include_event",
+                    "exit",
+                }.intersection(data):
                     raise ValueError(f"{path}:{line_number}: unknown coverage record")
                 yield path, line_number, data
 
@@ -603,6 +822,30 @@ def load_result_predicate_outcomes(paths: Iterable[Path]) -> dict[ResultPredicat
             column=raw_key["column"],
             expressions=tuple(raw_key["expressions"]),
         )
+        outcomes.setdefault(key, set()).add(bool(outcome["outcome"]))
+    return outcomes
+
+
+def load_include_events(paths: Iterable[Path]) -> set[IncludeEvent]:
+    """Merge dynamic include expansions from callback reports."""
+    events: set[IncludeEvent] = set()
+    for _path, _line_number, data in _report_rows(paths):
+        if "include_event" not in data:
+            continue
+        event = data["include_event"]
+        key = IncludeKey(**event["include"])
+        events.add(IncludeEvent(key, event["target"]))
+    return events
+
+
+def load_exit_outcomes(paths: Iterable[Path]) -> dict[ExitKey, set[bool]]:
+    """Merge early role exit outcomes from callback reports."""
+    outcomes: dict[ExitKey, set[bool]] = {}
+    for _path, _line_number, data in _report_rows(paths):
+        if "exit" not in data:
+            continue
+        outcome = data["exit"]
+        key = ExitKey(**outcome["exit"])
         outcomes.setdefault(key, set()).add(bool(outcome["outcome"]))
     return outcomes
 
@@ -849,6 +1092,25 @@ def format_missing_result_predicate_outcomes(missing: dict[ResultPredicateKey, s
     return "\n".join(lines)
 
 
+def format_unexpanded_includes(missing: set[IncludeDefinition]) -> str:
+    """Render dynamic includes that never expanded to their expected target."""
+    lines = [f"{len(missing)} Ansible dynamic include(s) never expanded to the expected target:"]
+    lines.extend(
+        f"  {include.key.path}:{include.key.line}: [{include.key.action}] {include.name} -> {include.target}"
+        for include in sorted(missing)
+    )
+    return "\n".join(lines)
+
+
+def format_exit_gaps(missing: set[ExitGap]) -> str:
+    """Render early role exits missing their exit or fallthrough path."""
+    lines = [f"{len(missing)} Ansible early-exit path(s) lack coverage:"]
+    lines.extend(
+        f"  {gap.exit.key.path}:{gap.exit.key.line}: missing {gap.outcome}: {gap.exit.name}" for gap in sorted(missing)
+    )
+    return "\n".join(lines)
+
+
 def check_coverage(
     roles: Iterable[str],
     reports: Iterable[Path],
@@ -968,6 +1230,42 @@ def check_result_predicate_coverage(
     }
 
 
+def check_include_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> set[IncludeDefinition]:
+    """Return dynamic includes not observed expanding to their expected target."""
+    expected = inventory_includes(production_condition_paths(roles, include_site=include_site))
+    observed = load_include_events(reports)
+    return {
+        definition
+        for definition in expected.values()
+        if IncludeEvent(definition.key, definition.target) not in observed
+    }
+
+
+def check_exit_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> set[ExitGap]:
+    """Return early role exits missing their exit or fallthrough path."""
+    expected = inventory_exits(production_condition_paths(roles, include_site=include_site))
+    outcomes = load_exit_outcomes(reports)
+    executed_tasks = load_executed_tasks(reports)
+    gaps: set[ExitGap] = set()
+    for definition in expected.values():
+        observed = outcomes.get(definition.key, set())
+        if True not in observed:
+            gaps.add(ExitGap(definition, "exit"))
+        if False not in observed or definition.fallthrough not in executed_tasks:
+            gaps.add(ExitGap(definition, "fallthrough"))
+    return gaps
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -999,6 +1297,8 @@ def main() -> int:
             args.reports,
             include_site=args.include_site,
         )
+        unexpanded_includes = check_include_coverage(args.roles, args.reports, include_site=args.include_site)
+        exit_gaps = check_exit_coverage(args.roles, args.reports, include_site=args.include_site)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Condition coverage report error: {exc}", file=sys.stderr)
         return 1
@@ -1014,6 +1314,10 @@ def main() -> int:
         print(format_missing_until_outcomes(missing_until_outcomes), file=sys.stderr)
     if missing_result_predicate_outcomes:
         print(format_missing_result_predicate_outcomes(missing_result_predicate_outcomes), file=sys.stderr)
+    if unexpanded_includes:
+        print(format_unexpanded_includes(unexpanded_includes), file=sys.stderr)
+    if exit_gaps:
+        print(format_exit_gaps(exit_gaps), file=sys.stderr)
     if (
         missing
         or unexecuted_loops
@@ -1021,11 +1325,14 @@ def main() -> int:
         or block_gaps
         or missing_until_outcomes
         or missing_result_predicate_outcomes
+        or unexpanded_includes
+        or exit_gaps
     ):
         return 1
     print(
         "Every selected Ansible condition evaluated both true and false, every loop iterated, "
-        "every task ran, every block path executed, and every retry and result predicate evaluated false and true."
+        "every task ran, every block path executed, every retry and result predicate evaluated false and true, "
+        "every dynamic include expanded, and every early exit took both paths."
     )
     return 0
 

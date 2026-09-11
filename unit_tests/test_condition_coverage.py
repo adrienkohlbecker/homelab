@@ -16,6 +16,12 @@ from condition_coverage import (
     BlockKey,
     ConditionKey,
     ConditionOutcome,
+    ExitGap,
+    ExitKey,
+    ExitOutcome,
+    IncludeDefinition,
+    IncludeEvent,
+    IncludeKey,
     LoopKey,
     ResultPredicateKey,
     ResultPredicateOutcome,
@@ -24,25 +30,33 @@ from condition_coverage import (
     UntilKey,
     UntilOutcome,
     append_block_events,
+    append_exit_outcomes,
+    append_include_events,
     append_loop_executions,
     append_result_predicate_outcomes,
     append_task_executions,
     append_until_outcomes,
     check_block_coverage,
     check_coverage,
+    check_exit_coverage,
+    check_include_coverage,
     check_loop_coverage,
     check_result_predicate_coverage,
     check_task_coverage,
     check_until_coverage,
     evaluated_outcomes,
     format_block_gaps,
+    format_exit_gaps,
     format_missing_outcomes,
     format_missing_result_predicate_outcomes,
     format_missing_until_outcomes,
     format_unexecuted_loops,
     format_unexecuted_tasks,
+    format_unexpanded_includes,
     inventory_blocks,
     inventory_conditions,
+    inventory_exits,
+    inventory_includes,
     inventory_loops,
     inventory_result_predicates,
     inventory_tasks,
@@ -50,6 +64,8 @@ from condition_coverage import (
     load_block_events,
     load_executed_loops,
     load_executed_tasks,
+    load_exit_outcomes,
+    load_include_events,
     load_result_predicate_outcomes,
     load_synthetic_outcomes,
     load_synthetic_result_predicate_outcomes,
@@ -436,6 +452,134 @@ def test_callback_records_failed_when_from_terminal_status(
         ("force_failure",),
     )
     assert load_result_predicate_outcomes([report]) == {key: {False, True}}
+
+
+def test_include_coverage_requires_expected_task_and_role_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- name: Load task file
+  ansible.builtin.include_tasks:
+    file: included.yml
+- name: Load helper role
+  include_role:
+    name: helper
+    tasks_from: install
+"""
+    )
+    report = tmp_path / "coverage.jsonl"
+    task_include = IncludeDefinition(
+        IncludeKey("roles/example/tasks/main.yml", 1, "include_tasks"),
+        "Load task file",
+        "roles/example/tasks/included.yml",
+    )
+    role_include = IncludeDefinition(
+        IncludeKey("roles/example/tasks/main.yml", 4, "include_role"),
+        "Load helper role",
+        "roles/helper/tasks/install.yml",
+    )
+
+    assert set(inventory_includes([source]).values()) == {task_include, role_include}
+    assert check_include_coverage(["example"], []) == {task_include, role_include}
+    assert "Load task file -> roles/example/tasks/included.yml" in format_unexpanded_includes({task_include})
+
+    append_include_events(
+        report,
+        [
+            IncludeEvent(task_include.key, task_include.target),
+            IncludeEvent(role_include.key, role_include.target),
+        ],
+        phase="converge",
+    )
+
+    assert len(load_include_events([report])) == 2
+    assert check_include_coverage(["example"], [report]) == set()
+
+
+def test_early_exit_coverage_requires_exit_and_executed_fallthrough(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    source = tasks / "main.yml"
+    source.write_text(
+        """\
+- name: Protected sequence
+  block:
+    - name: End role conditionally
+      meta: end_role
+      when: take_exit
+    - name: Continue through imported tasks
+      import_tasks: apply.yml
+"""
+    )
+    (tasks / "apply.yml").write_text("- name: Apply change\n  command: /bin/true\n")
+    report = tmp_path / "coverage.jsonl"
+    definition = next(iter(inventory_exits([source]).values()))
+
+    assert definition.fallthrough == TaskKey("roles/example/tasks/apply.yml", 1)
+    assert check_exit_coverage(["example"], []) == {
+        ExitGap(definition, "exit"),
+        ExitGap(definition, "fallthrough"),
+    }
+    assert "missing exit: End role conditionally" in format_exit_gaps({ExitGap(definition, "exit")})
+
+    append_exit_outcomes(
+        report,
+        [ExitOutcome(definition.key, False), ExitOutcome(definition.key, True)],
+        phase="converge",
+    )
+    append_task_executions(report, [definition.fallthrough], phase="converge")
+
+    assert load_exit_outcomes([report]) == {definition.key: {False, True}}
+    assert check_exit_coverage(["example"], [report]) == set()
+
+
+def test_callback_records_include_expansion_and_early_exit_outcomes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "coverage.jsonl"
+    monkeypatch.setenv("ANSIBLE_CONDITION_COVERAGE_FILE", str(report))
+    include_task = SimpleNamespace(
+        action="ansible.builtin.include_tasks",
+        get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:10",
+    )
+    included_file = SimpleNamespace(
+        _task=include_task,
+        _is_role=False,
+        _filename="/tmp/staged/roles/example/tasks/included.yml",
+    )
+    exit_task = SimpleNamespace(
+        action="ansible.builtin.meta",
+        _parent=None,
+        loop=None,
+        loop_with=None,
+        when=[],
+        _get_meta=lambda: "end_role",
+        get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:20",
+    )
+    ordinary_task = SimpleNamespace(action="debug", _get_meta=lambda: None)
+    callback = condition_coverage_callback.CallbackModule()
+
+    callback.v2_playbook_on_include(cast(Any, included_file))
+    callback.v2_playbook_on_task_start(cast(Any, exit_task), False)
+    callback.v2_runner_on_skipped(cast(Any, SimpleNamespace(task=exit_task, result={})))
+    callback.v2_playbook_on_task_start(cast(Any, ordinary_task), False)
+    callback.v2_playbook_on_task_start(cast(Any, exit_task), False)
+    callback.v2_playbook_on_task_start(cast(Any, ordinary_task), False)
+
+    include = IncludeKey("roles/example/tasks/main.yml", 10, "include_tasks")
+    exit_key = ExitKey("roles/example/tasks/main.yml", 20)
+    assert load_include_events([report]) == {IncludeEvent(include, "roles/example/tasks/included.yml")}
+    assert load_exit_outcomes([report]) == {exit_key: {False, True}}
 
 
 def test_inventory_accepts_an_empty_task_file(tmp_path: Path) -> None:
