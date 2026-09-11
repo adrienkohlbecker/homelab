@@ -6,7 +6,7 @@
 scenarios:
   # Ubuntu release variants
   - path: roles/apt/tasks/configure.yml
-    expression: ansible_distribution_version is version('25.10', '>=')
+    expression: ansible_distribution_version is version('26.04', '>=')
     all: true
     cases:
       - outcome: false
@@ -14,7 +14,7 @@ scenarios:
           ansible_distribution_version: "24.04"
       - outcome: true
         variables:
-          ansible_distribution_version: "25.10"
+          ansible_distribution_version: "26.04"
 
   - path: roles/apt/tasks/configure.yml
     expression: apt_coreutils_from_gnu.rc != 0 or 'install ok installed' not in apt_coreutils_from_gnu.stdout
