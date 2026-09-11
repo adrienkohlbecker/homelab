@@ -2,12 +2,14 @@
 # Conditions whose opposite branch requires a platform or external state that
 # the local QEMU matrix cannot safely provide. Each case evaluates the exact
 # current Ansible expression; stale selectors or incorrect expected outcomes
-# fail the gate.
+# fail the gate. `task` narrows a repeated expression to its declaring task, and
+# `all` is the reviewed count of identical conditions one scenario covers, so a
+# new copy of an expression fails until someone decides how it is covered.
 scenarios:
   # Ubuntu release variants
   - path: roles/apt/tasks/configure.yml
     expression: ansible_distribution_version is version('26.04', '>=')
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -33,7 +35,7 @@ scenarios:
   # Architecture variants
   - path: roles/jellyfin/tasks/main.yml
     expression: jellyfin_transcoding_backend == 'intel_qsv'
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -74,7 +76,7 @@ scenarios:
 
   - path: roles/netdata/tasks/configure.yml
     expression: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -87,7 +89,7 @@ scenarios:
 
   - path: roles/refind/tasks/main.yml
     expression: boot_via_efi_stub
-    all: true
+    all: 5
     cases:
       - outcome: false
         variables:
@@ -129,7 +131,7 @@ scenarios:
 
   - path: roles/jellyfin/tasks/main.yml
     expression: not qemu_test
-    all: true
+    all: 5
     cases:
       - outcome: false
         variables:
@@ -180,7 +182,7 @@ scenarios:
 
   - path: roles/zfs_autobackup/tasks/dest.yml
     expression: not qemu_test
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -205,7 +207,7 @@ scenarios:
   # Hardware-dependent feature variants
   - path: roles/fan2go/tasks/main.yml
     expression: fan2go_enabled
-    all: true
+    all: 9
     cases:
       - outcome: false
         variables:
@@ -252,7 +254,7 @@ scenarios:
 
   - path: roles/fan2go/tasks/main.yml
     expression: not (ansible_check_mode and fan2go_config_directories.changed)
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -313,7 +315,7 @@ scenarios:
   # macOS installer mode requires external recovery artifacts and VM firmware.
   - path: roles/macos_vm/tasks/artifacts.yml
     expression: macos_vm_install_mode
-    all: true
+    all: 5
     cases:
       - outcome: false
         variables:
@@ -324,7 +326,7 @@ scenarios:
 
   - path: roles/macos_vm/tasks/artifacts.yml
     expression: not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -446,7 +448,7 @@ scenarios:
 
   - path: roles/jellyfin/tasks/main.yml
     expression: jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -494,7 +496,7 @@ scenarios:
 
   - path: roles/influxdb/tasks/main.yml
     expression: not ansible_check_mode or influxdb_podman_available
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -573,7 +575,7 @@ scenarios:
 
   - path: roles/locale/tasks/main.yml
     expression: not (ansible_check_mode and locale_apt.changed)
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -638,7 +640,7 @@ scenarios:
 
   - path: roles/zfs_autobackup/tasks/dest.yml
     expression: zfs_root
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -659,7 +661,7 @@ scenarios:
 
   - path: roles/zfs_autobackup/tasks/identity.yml
     expression: not (ansible_check_mode and zfs_autobackup_identity_directory.changed)
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -674,7 +676,7 @@ scenarios:
 
   - path: roles/zfs_dataset/tasks/dataset.yml
     expression: (zfs_dataset_args.extra_properties | default({})) | length > 0
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -745,7 +747,7 @@ scenarios:
 
   - path: roles/firewall/tasks/main.yml
     expression: not (ansible_check_mode and firewall_apt_nftables.changed)
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -755,7 +757,7 @@ scenarios:
 
   - path: roles/fluentbit/tasks/extension_remove.yml
     expression: not ansible_check_mode
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -896,7 +898,7 @@ scenarios:
 
   - path: roles/firewall/tasks/main.yml
     expression: firewall_pre_reload_snapshot.stat.exists
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -1044,7 +1046,7 @@ scenarios:
 
   - path: site.yml
     expression: reboot_required.stat.exists
-    all: true
+    all: 6
     cases:
       - outcome: false
         variables:
@@ -1059,7 +1061,7 @@ scenarios:
 
   - path: site.yml
     expression: dns_reboot_guard_enabled | default(false)
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables: {}
@@ -1085,7 +1087,7 @@ scenarios:
 
   - path: site.yml
     expression: _reboot_is_lowest_priority | bool
-    all: true
+    all: 4
     cases:
       - outcome: false
         variables:
@@ -1096,7 +1098,7 @@ scenarios:
 
   - path: site.yml
     expression: _reboot_dns_reprobe.results is not any_successful_stdout
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -1141,7 +1143,7 @@ scenarios:
 
   - path: site.yml
     expression: qemu_test
-    all: true
+    all: 2
     cases:
       - outcome: false
         variables:
