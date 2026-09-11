@@ -81,6 +81,84 @@
   failed_when: _tailscale_forwarding.stdout | trim != '1'
   become: true
 
+# DSM itself cannot boot in QEMU, so provide its package-owned paths and client
+# commands while retaining the production DSM task file and shared registration
+# flow. The live headscale node remains the functional registration witness.
+- name: _verify DSM | Create package fixture directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /var/packages/Tailscale/scripts
+    - /usr/syno/bin
+  become: true
+
+- name: _verify DSM | Install package client fixture
+  copy:
+    dest: /tmp/tailscale_dsm_fixture
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      case "${1:-}" in
+        configure)
+          mkdir -p /var/packages/Tailscale/conf
+          touch /var/packages/Tailscale/conf/resource.own
+          ;;
+        status)
+          printf '%s\n' '{"BackendState":"Running"}'
+          ;;
+        set)
+          ;;
+      esac
+    mode: "0755"
+  become: true
+
+- name: _verify DSM | Install package launcher fixture
+  copy:
+    dest: /var/packages/Tailscale/scripts/start-stop-status
+    content: |
+      PORT="0"
+    mode: "0755"
+  become: true
+
+- name: _verify DSM | Install package restart fixture
+  copy:
+    dest: /usr/syno/bin/synosystemctl
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      exit 0
+    mode: "0755"
+  become: true
+
+- name: _verify DSM | Exercise the package entry point
+  import_tasks: dsm.yml
+  vars:
+    tailscale_bin: /tmp/tailscale_dsm_fixture
+
+# The successful converge exercises cleanup after login. Repeat registration
+# with a failing client binary to prove the staged one-time key is also removed
+# when login aborts the block.
+- name: _verify failure cleanup | Exercise auth-key cleanup after failed login
+  block:
+    - name: _verify failure cleanup | Register with a failing client
+      import_tasks: register.yml
+      vars:
+        tailscale_bin: /bin/false
+
+    - name: _verify failure cleanup | Registration unexpectedly succeeded
+      fail:
+        msg: "Expected the fixture Tailscale login to fail"
+
+  rescue:
+    - name: _verify failure cleanup | Confirm login triggered cleanup
+      assert:
+        that:
+          - ansible_failed_task.name == 'register | Log in to headscale'
+        fail_msg: >-
+          Registration did not exercise cleanup after a failed login
+
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the add-wants link brings it back with the target's start.
 # Kept last because it bounces the daemon; the harness reaches the VM over the
