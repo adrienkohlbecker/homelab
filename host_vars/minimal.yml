@@ -9,8 +9,8 @@ zfs_root: false
 zfs_trim_pools: []
 zfs_pool_properties: []
 zfs_mount_cache_datasets: []
-# Match the bounded ARC policy used by the real non-root-ZFS host. A positive
-# maximum also keeps the rendered modprobe configuration meaningful.
+# Mirror fox's small-VM ARC policy (no floor, 512 MiB cap) so zfs.conf.j2
+# renders its unset-minimum branch; box sets both bounds.
 zfs_arc_min: 0
 zfs_arc_max: 536870912
 # Volatile: VM is ephemeral; persistent journals on the ext4 root would
