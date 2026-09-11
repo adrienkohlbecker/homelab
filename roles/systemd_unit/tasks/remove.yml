@@ -102,7 +102,10 @@
   become_user: "{{ _systemd_unit_user }}"
 
 # Same fact name install.yml uses, so callers can read `.changed` off
-# `<name>_<type>_result` regardless of which operation just ran.
+# `<name>_<type>_result` regardless of which operation just ran. That also
+# means a caller pairing install and remove on one unit (a toggle between the
+# two) loses install's result here: this publishes unchanged whenever its own
+# condition is false. Capture install's result first, as roles/hd_idle does.
 - name: remove | Record removal result for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
     "{{ _systemd_unit_name | ansible_var_key }}_result":
