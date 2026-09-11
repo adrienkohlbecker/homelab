@@ -27,10 +27,12 @@ from condition_coverage import (
     check_block_coverage,
     check_coverage,
     check_loop_coverage,
+    check_result_predicate_coverage,
     check_task_coverage,
     check_until_coverage,
     format_block_gaps,
     format_missing_outcomes,
+    format_missing_result_predicate_outcomes,
     format_missing_until_outcomes,
     format_unexecuted_loops,
     format_unexecuted_tasks,
@@ -497,6 +499,7 @@ def main() -> int:
             unexecuted_tasks = check_task_coverage(selected_roles, reports)
             block_gaps = check_block_coverage(selected_roles, reports)
             missing_until_outcomes = check_until_coverage(selected_roles, reports)
+            missing_result_predicate_outcomes = check_result_predicate_coverage(selected_roles, reports)
         except (OSError, ValueError) as exc:
             print(f"Condition coverage report error: {exc}", file=sys.stderr)
             return 1
@@ -510,12 +513,21 @@ def main() -> int:
             print(format_block_gaps(block_gaps), file=sys.stderr)
         if missing_until_outcomes:
             print(format_missing_until_outcomes(missing_until_outcomes), file=sys.stderr)
-        if missing or unexecuted_loops or unexecuted_tasks or block_gaps or missing_until_outcomes:
+        if missing_result_predicate_outcomes:
+            print(format_missing_result_predicate_outcomes(missing_result_predicate_outcomes), file=sys.stderr)
+        if (
+            missing
+            or unexecuted_loops
+            or unexecuted_tasks
+            or block_gaps
+            or missing_until_outcomes
+            or missing_result_predicate_outcomes
+        ):
             return 1
         print(
             f"Every condition in {len(selected_roles)} selected role(s) evaluated both true and false, "
             "every loop iterated, every task ran, every block path executed, and every retry predicate "
-            "evaluated false and true.",
+            "and result predicate evaluated false and true.",
             file=sys.stderr,
         )
     else:

@@ -17,34 +17,42 @@ from condition_coverage import (
     ConditionKey,
     ConditionOutcome,
     LoopKey,
+    ResultPredicateKey,
+    ResultPredicateOutcome,
     TaskDefinition,
     TaskKey,
     UntilKey,
     UntilOutcome,
     append_block_events,
     append_loop_executions,
+    append_result_predicate_outcomes,
     append_task_executions,
     append_until_outcomes,
     check_block_coverage,
     check_coverage,
     check_loop_coverage,
+    check_result_predicate_coverage,
     check_task_coverage,
     check_until_coverage,
     evaluated_outcomes,
     format_block_gaps,
     format_missing_outcomes,
+    format_missing_result_predicate_outcomes,
     format_missing_until_outcomes,
     format_unexecuted_loops,
     format_unexecuted_tasks,
     inventory_blocks,
     inventory_conditions,
     inventory_loops,
+    inventory_result_predicates,
     inventory_tasks,
     inventory_untils,
     load_block_events,
     load_executed_loops,
     load_executed_tasks,
+    load_result_predicate_outcomes,
     load_synthetic_outcomes,
+    load_synthetic_result_predicate_outcomes,
     load_until_outcomes,
     missing_outcomes,
     normalize_source_path,
@@ -301,6 +309,133 @@ def test_until_key_normalizes_ansible_runtime_list_wrapper() -> None:
     assert condition_coverage_callback.until_key([expression]) == UntilKey(
         "roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"
     )
+
+
+def test_inventory_reads_only_dynamic_result_predicates(tmp_path: Path) -> None:
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- command: /bin/true
+  changed_when: dynamic_change
+  failed_when:
+    - result.rc != 0
+    - force_failure
+- command: /bin/true
+  changed_when: false
+  failed_when: false
+"""
+    )
+
+    predicates = inventory_result_predicates([source])
+
+    assert {(predicate.kind, predicate.expressions) for predicate in predicates} == {
+        ("changed_when", ("dynamic_change",)),
+        ("failed_when", ("result.rc != 0", "force_failure")),
+    }
+
+
+def test_result_predicate_coverage_requires_false_and_true(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text("- command: /bin/true\n  changed_when: dynamic_change\n")
+    report = tmp_path / "coverage.jsonl"
+    predicate = next(iter(inventory_result_predicates([source])))
+
+    assert check_result_predicate_coverage(["example"], [], scenario_path=None) == {predicate: {False, True}}
+    rendered = format_missing_result_predicate_outcomes({predicate: {False, True}})
+    assert "changed_when missing false, true: dynamic_change" in rendered
+
+    append_result_predicate_outcomes(
+        report,
+        [ResultPredicateOutcome(predicate, False), ResultPredicateOutcome(predicate, True)],
+        phase="converge",
+    )
+
+    assert load_result_predicate_outcomes([report]) == {predicate: {False, True}}
+    assert check_result_predicate_coverage(["example"], [report], scenario_path=None) == {}
+
+
+def test_callback_records_loop_result_predicates_per_item(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "coverage.jsonl"
+    monkeypatch.setenv("ANSIBLE_CONDITION_COVERAGE_FILE", str(report))
+    predicate = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=24,
+        col_num=17,
+    ).tag("dynamic_change")
+    loop = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=25,
+        col_num=9,
+    ).tag("{{ example_items }}")
+    task = SimpleNamespace(
+        _parent=None,
+        loop=loop,
+        loop_with=None,
+        until=None,
+        when=[],
+        changed_when=[predicate],
+        failed_when=[],
+        get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:20",
+    )
+    callback = condition_coverage_callback.CallbackModule()
+
+    callback.v2_runner_on_ok(cast(Any, SimpleNamespace(task=task, result={"changed": True})))
+    callback.v2_runner_item_on_ok(cast(Any, SimpleNamespace(task=task, result={"changed": False})))
+    callback.v2_runner_item_on_ok(cast(Any, SimpleNamespace(task=task, result={"changed": True})))
+
+    key = ResultPredicateKey(
+        "changed_when",
+        "roles/example/tasks/main.yml",
+        24,
+        17,
+        ("dynamic_change",),
+    )
+    assert load_result_predicate_outcomes([report]) == {key: {False, True}}
+
+
+def test_callback_records_failed_when_from_terminal_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "coverage.jsonl"
+    monkeypatch.setenv("ANSIBLE_CONDITION_COVERAGE_FILE", str(report))
+    predicate = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=24,
+        col_num=16,
+    ).tag("force_failure")
+    task = SimpleNamespace(
+        _parent=None,
+        loop=None,
+        loop_with=None,
+        until=None,
+        when=[],
+        changed_when=[],
+        failed_when=[predicate],
+        get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:20",
+    )
+    callback = condition_coverage_callback.CallbackModule()
+
+    callback.v2_runner_on_ok(cast(Any, SimpleNamespace(task=task, result={})))
+    callback.v2_runner_on_failed(cast(Any, SimpleNamespace(task=task, result={})))
+
+    key = ResultPredicateKey(
+        "failed_when",
+        "roles/example/tasks/main.yml",
+        24,
+        16,
+        ("force_failure",),
+    )
+    assert load_result_predicate_outcomes([report]) == {key: {False, True}}
 
 
 def test_inventory_accepts_an_empty_task_file(tmp_path: Path) -> None:
@@ -592,6 +727,41 @@ scenarios:
     outcomes = load_synthetic_outcomes(scenarios)
 
     assert list(outcomes.values()) == [{False, True}]
+
+
+def test_synthetic_result_predicate_scenario_evaluates_expression_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text("- command: /bin/true\n  failed_when:\n    - result.rc != 0\n    - force_failure\n")
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - kind: failed_when
+    path: roles/example/tasks/main.yml
+    expression:
+      - result.rc != 0
+      - force_failure
+    cases:
+      - outcome: false
+        variables:
+          result: {rc: 0}
+          force_failure: true
+      - outcome: true
+        variables:
+          result: {rc: 1}
+          force_failure: true
+"""
+    )
+
+    outcomes = load_synthetic_result_predicate_outcomes(scenarios)
+
+    assert list(outcomes.values()) == [{False, True}]
+    assert load_synthetic_outcomes(scenarios) == {}
 
 
 def test_synthetic_scenario_rejects_stale_expression(
