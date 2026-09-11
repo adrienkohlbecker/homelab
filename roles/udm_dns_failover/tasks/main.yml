@@ -62,6 +62,14 @@
 
 # The UDM does not reliably ship python3-apt after firmware updates. Bootstrap
 # the binding with apt-get before using Ansible's apt module.
+- name: Update apt cache  # noqa: command-instead-of-module -- bootstraps the module dependency
+  when: not ansible_check_mode
+  command: apt-get update
+  become: true
+  changed_when: false
+  tags:
+    - udm_dns_failover
+
 - name: Install python3-apt for Ansible's apt module  # noqa: command-instead-of-module -- bootstraps the module dependency
   when: not ansible_check_mode
   command: apt-get install -y -qq python3-apt
