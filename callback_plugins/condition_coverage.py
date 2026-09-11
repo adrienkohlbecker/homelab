@@ -15,16 +15,20 @@ from condition_coverage import (
     BlockEvent,
     BlockKey,
     LoopKey,
+    ResultPredicateKey,
+    ResultPredicateOutcome,
     TaskKey,
     UntilKey,
     UntilOutcome,
     append_block_events,
     append_loop_executions,
     append_outcomes,
+    append_result_predicate_outcomes,
     append_task_executions,
     append_until_outcomes,
     evaluated_outcomes,
     loop_key,
+    result_predicate_key,
     task_key_from_path,
     until_key,
 )
@@ -44,6 +48,7 @@ class CallbackModule(CallbackBase):
         self._recorded_tasks: set[tuple[Path, TaskKey]] = set()
         self._block_modes: dict[tuple[Path, str, BlockKey], str] = {}
         self._recorded_until_outcomes: set[tuple[Path, UntilKey, bool]] = set()
+        self._recorded_result_predicate_outcomes: set[tuple[Path, ResultPredicateKey, bool]] = set()
 
     @staticmethod
     def _block_contexts(task) -> list[tuple[BlockKey, str]]:
@@ -102,6 +107,24 @@ class CallbackModule(CallbackBase):
             append_until_outcomes(path, [UntilOutcome(key, outcome)], phase=phase)
             self._recorded_until_outcomes.add(marker)
 
+    def _record_result_predicates(self, result, *, path: Path, phase: str, status: str) -> None:
+        outcomes = {
+            "changed_when": bool(result.result.get("changed", False)),
+            "failed_when": status == "failed",
+        }
+        for kind, outcome in outcomes.items():
+            value = getattr(result.task, kind, None)
+            if not value or (key := result_predicate_key(kind, value)) is None:
+                continue
+            marker = (path, key, outcome)
+            if marker not in self._recorded_result_predicate_outcomes:
+                append_result_predicate_outcomes(
+                    path,
+                    [ResultPredicateOutcome(key, outcome)],
+                    phase=phase,
+                )
+                self._recorded_result_predicate_outcomes.add(marker)
+
     @staticmethod
     def _record_error(path: Path, exc: Exception) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +146,8 @@ class CallbackModule(CallbackBase):
                 self._record_block_events(result, path=path, phase=phase, task_key=task_key, status=status)
             if status in {"ok", "failed"}:
                 self._record_until_outcome(task, path=path, phase=phase, outcome=status == "ok")
+                if for_item or not (task.loop or task.loop_with):
+                    self._record_result_predicates(result, path=path, phase=phase, status=status)
             if status not in {"skipped", "unreachable"}:
                 task_marker = (path, task_key)
                 if task_marker not in self._recorded_tasks:
