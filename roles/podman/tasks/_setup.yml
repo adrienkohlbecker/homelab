@@ -29,13 +29,15 @@
         mode: "0755"
       become: true
 
+    # Keep the stock $LOGGING expansion so the role's LOGGING drop-in still
+    # reaches the daemon argv that _verify inspects.
     - name: _setup | Disable the API service idle timeout for the restart exercise
       copy:
         dest: /etc/systemd/system/podman.service.d/condition_coverage.conf
         content: |
           [Service]
           ExecStart=
-          ExecStart=/usr/bin/podman system service --time=0
+          ExecStart=/usr/bin/podman $LOGGING system service --time=0
         owner: root
         group: root
         mode: "0644"
