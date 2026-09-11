@@ -967,12 +967,15 @@ scenarios:
         check_coverage(["scoped"], [], scenario_path=scenarios)
 
 
-def test_repository_scenarios_match_current_conditions(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repository_scenarios_match_current_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     # The gate only reads the scenario file after a VM matrix has run, so a
     # selector left stale by a task edit must fail here first.
     monkeypatch.chdir(Path(__file__).resolve().parent.parent)
 
     assert load_synthetic_outcomes(SYNTHETIC_SCENARIOS_PATH)
+    assert load_synthetic_until_outcomes(SYNTHETIC_SCENARIOS_PATH)
+    assert load_synthetic_result_predicate_outcomes(SYNTHETIC_SCENARIOS_PATH)
+    assert load_synthetic_task_reachability(SYNTHETIC_SCENARIOS_PATH)
 
 
 def test_missing_outcomes_requires_true_and_false() -> None:

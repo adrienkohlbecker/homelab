@@ -1053,6 +1053,18 @@ class TestGitlabChangeMatrixScenarios:
         assert detect._gitlab_change_matrix(None, logs.append) == (["full"], True)
         assert any("condition scenarios changed for site.yml" in line for line in logs)
 
+    def test_unknown_role_scenario_tests_the_full_universe(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        added = _SCENARIOS + "  - kind: task\n    path: roles/typo/tasks/main.yml\n    cases: []\n"
+        self._scenario_diff(monkeypatch, tmp_path, _SCENARIOS, added)
+        logs: list[str] = []
+
+        assert detect._gitlab_change_matrix(None, logs.append) == (["full"], True)
+        assert any("condition scenarios changed for unknown role(s): typo" in line for line in logs)
+
     def test_missing_base_tests_the_full_universe(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         self._scenario_diff(monkeypatch, tmp_path, None, _SCENARIOS)
         assert detect._gitlab_change_matrix(None, lambda _: None) == (["full"], True)
