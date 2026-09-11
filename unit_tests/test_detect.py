@@ -46,7 +46,7 @@ class TestClassifyChangedFiles:
             ("test/machine.py", True),
             ("test/testall.py", True),
             ("test/matrix.py", True),
-            ("test/condition_coverage.yml", True),
+            ("test/condition_coverage.yml", False),
             ("test/inventory.ini", True),
             ("test/playbooks/site.yml", True),
             ("ansible.cfg", True),
@@ -1006,6 +1006,82 @@ def _render_child_doc(
 ) -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
     return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
+
+
+_SCENARIOS = """\
+scenarios:
+  - path: roles/zfs/tasks/main.yml
+    expression: zfs_root
+    cases:
+      - outcome: false
+        variables:
+          zfs_root: false
+  - path: roles/apt/tasks/configure.yml
+    expression: apt_enabled
+    cases:
+      - outcome: true
+        variables:
+          apt_enabled: true
+"""
+
+
+class TestChangedScenarioPaths:
+    def test_unchanged_scenarios_name_nothing(self) -> None:
+        reformatted = "# header comment\n" + _SCENARIOS
+        assert detect.changed_scenario_paths(_SCENARIOS, reformatted) == set()
+
+    def test_edited_added_and_removed_scenarios_name_their_paths(self) -> None:
+        edited = _SCENARIOS.replace("zfs_root: false", "zfs_root: true").replace("outcome: false", "outcome: true")
+        assert detect.changed_scenario_paths(_SCENARIOS, edited) == {"roles/zfs/tasks/main.yml"}
+        added = _SCENARIOS + "  - path: site.yml\n    expression: qemu_test\n    cases: []\n"
+        assert detect.changed_scenario_paths(_SCENARIOS, added) == {"site.yml"}
+        assert detect.changed_scenario_paths(added, _SCENARIOS) == {"site.yml"}
+
+    @pytest.mark.parametrize(
+        ("base", "head"),
+        [
+            (None, _SCENARIOS),
+            (_SCENARIOS, None),
+            ("scenarios: [\n", _SCENARIOS),
+            (_SCENARIOS, "scenarios: not-a-list\n"),
+        ],
+    )
+    def test_incomparable_revisions_return_none(self, base: str | None, head: str | None) -> None:
+        assert detect.changed_scenario_paths(base, head) is None
+
+
+class TestGitlabChangeMatrixScenarios:
+    @staticmethod
+    def _scenario_diff(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, base: str | None, head: str) -> None:
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "test").mkdir()
+        (tmp_path / detect.CONDITION_SCENARIOS_PATH).write_text(head)
+        monkeypatch.setenv("CI_BASE_REF", "base")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
+        monkeypatch.setattr(detect, "git_diff_files", lambda base: [detect.CONDITION_SCENARIOS_PATH])
+        monkeypatch.setattr(detect, "git_show_file", lambda ref, path: base)
+        monkeypatch.setattr(detect, "list_testable_roles", lambda: ["apt", "zfs", "zfs_autobackup"])
+        monkeypatch.setattr(detect, "build_role_deps_map", lambda: {"zfs": ["zfs_autobackup"]})
+        monkeypatch.setattr(detect, "build_test_matrix", lambda roles, extra=None: roles)
+        monkeypatch.setattr(detect, "cells_to_ci_specs", list)
+        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["full"])
+
+    def test_role_scenario_edit_tests_only_that_role(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        edited = _SCENARIOS.replace("zfs_root: false", "zfs_root: true").replace("outcome: false", "outcome: true")
+        self._scenario_diff(monkeypatch, tmp_path, _SCENARIOS, edited)
+        # The zfs consumer is not pulled in: only zfs's own gate changed.
+        assert detect._gitlab_change_matrix(None, lambda _: None) == (["zfs"], False)
+
+    def test_site_scenario_edit_tests_the_full_universe(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        added = _SCENARIOS + "  - path: site.yml\n    expression: qemu_test\n    cases: []\n"
+        self._scenario_diff(monkeypatch, tmp_path, _SCENARIOS, added)
+        logs: list[str] = []
+        assert detect._gitlab_change_matrix(None, logs.append) == (["full"], True)
+        assert any("condition scenarios changed for site.yml" in line for line in logs)
+
+    def test_missing_base_tests_the_full_universe(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        self._scenario_diff(monkeypatch, tmp_path, None, _SCENARIOS)
+        assert detect._gitlab_change_matrix(None, lambda _: None) == (["full"], True)
 
 
 class TestGitlabChangeMatrix:
