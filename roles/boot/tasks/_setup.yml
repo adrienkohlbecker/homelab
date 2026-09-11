@@ -1,0 +1,45 @@
+- name: _setup | Create the grub package fixture directory
+  file:
+    path: /tmp/grub-coverage/DEBIAN
+    state: directory
+    mode: "0755"
+
+- name: _setup | Write the grub package fixture metadata
+  copy:
+    dest: /tmp/grub-coverage/DEBIAN/control
+    content: |
+      Package: grub-coverage-fixture
+      Version: 1.0
+      Architecture: all
+      Maintainer: Homelab tests <noreply@example.invalid>
+      Description: Test fixture for grub package hold coverage
+    mode: "0644"
+
+- name: _setup | Build the grub package fixture
+  command: dpkg-deb --build /tmp/grub-coverage /tmp/grub-coverage-fixture.deb
+  args:
+    creates: /tmp/grub-coverage-fixture.deb
+
+- name: _setup | Install the grub package fixture
+  apt:
+    deb: /tmp/grub-coverage-fixture.deb
+  become: true
+
+- name: _setup | Install an unused storage unit fixture
+  copy:
+    dest: /usr/lib/systemd/system/lvm2-monitor.service
+    content: |
+      [Unit]
+      Description=Unused storage monitor test fixture
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/true
+      RemainAfterExit=yes
+    mode: "0644"
+  become: true
+
+- name: _setup | Reload systemd for the unused storage unit fixture
+  systemd:
+    daemon_reload: true
+  become: true

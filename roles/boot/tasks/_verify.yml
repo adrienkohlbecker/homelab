@@ -13,6 +13,27 @@
 # The hold is the mechanism; the invariant is that no grub package is installed
 # to compete with rEFInd. Check dpkg state directly without depending on apt's
 # mirror-backed cache.
+- name: _verify | Grub package fixture was held
+  when: not grub_bootloader
+  command: dpkg-query -W -f='${db:Status-Status} ${binary:Package} ${db:Status-Want}\n' grub-coverage-fixture
+  changed_when: false
+  register: _boot_verify_grub_fixture
+  failed_when: _boot_verify_grub_fixture.stdout | trim != 'installed grub-coverage-fixture hold'
+  become: true
+
+- name: _verify | Unhold the grub package fixture
+  when: not grub_bootloader
+  dpkg_selections:
+    name: grub-coverage-fixture
+    selection: install
+  become: true
+
+- name: _verify | Remove the grub package fixture
+  apt:
+    name: grub-coverage-fixture
+    state: absent
+  become: true
+
 - name: _verify | Dpkg install status for grub*
   when: not grub_bootloader
   command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
