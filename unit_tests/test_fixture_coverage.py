@@ -31,7 +31,7 @@ COVERAGE_FLAGS = [
         "box",
         "netdata_diskspace_blocklist",
         lambda value: bool(value),
-        "roles/netdata/tasks/_verify.yml",
+        "roles/netdata/tasks/_verify_full.yml",
         "the muted per-filesystem disk-space override",
     ),
     (
