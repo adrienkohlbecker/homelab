@@ -1,14 +1,5 @@
 # The minimal fixture deliberately disables host-specific collectors while
 # retaining the shared Netdata, Prometheus, and presence-collector surfaces.
-- name: _verify | Minimal Netdata service is active
-  systemd:
-    name: netdata
-  register: _netdata_minimal_unit
-  failed_when: >-
-    _netdata_minimal_unit.status.LoadState != "loaded"
-    or _netdata_minimal_unit.status.ActiveState != "active"
-  become: true
-
 - name: _verify | Wait for minimal presence charts
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/charts

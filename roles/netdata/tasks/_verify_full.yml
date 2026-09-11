@@ -17,15 +17,6 @@
 # (instanced mode, plugin != job) -- not just the trivial present=0 path;
 # fake_plugin:fake_job is the present=0 witness.
 
-- name: _verify | Netdata.service is loaded and active
-  systemd:
-    name: netdata
-  register: _netdata_unit
-  failed_when: >-
-    _netdata_unit.status.LoadState != "loaded"
-    or _netdata_unit.status.ActiveState != "active"
-  become: true
-
 - name: _verify | Read Prometheus collector configuration
   slurp:
     src: /etc/netdata/go.d/prometheus.conf
@@ -97,41 +88,6 @@
       Expected the Postfix alarm to require a sustained queue depth and retain
       only recovery hysteresis.
 
-- name: _verify | Wait for Postfix queue metrics
-  uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=postfix_local.postfix_queue_emails
-    return_content: true
-  register: _netdata_postfix_chart
-  until: _netdata_postfix_chart.status == 200
-  retries: 12
-  delay: 5
-
-- name: _verify | Postfix collector reports the fixture queue
-  assert:
-    that:
-      - _netdata_postfix_chart.json.context == "postfix.qemails"
-      - _netdata_postfix_chart.json.dimensions.emails is defined
-    fail_msg: >-
-      Expected the explicit Postfix collector job to emit its queue chart;
-      got {{ _netdata_postfix_chart.json | default({}) }}.
-
-- name: _verify | Read netdata apt policy
-  command: apt-cache policy netdata
-  changed_when: false
-  register: _netdata_apt_policy
-
-- name: _verify | Netdata pin selects the configured major from its mirror
-  vars:
-    _netdata_policy_re: "[*][*][*] {{ netdata_version.split('.')[0] }}[.][^ ]+ 999"
-  assert:
-    that:
-      - _netdata_apt_policy.stdout is search(_netdata_policy_re)
-      - (mirror_apt_netdata | regex_replace('/$', '')) in _netdata_apt_policy.stdout
-    fail_msg: >-
-      Expected netdata {{ netdata_version }} at priority 999 from
-      {{ mirror_apt_netdata }}; got policy:
-      {{ _netdata_apt_policy.stdout | default('') }}
-
 - name: _verify | Wait for keepalived_vrrp chart to register
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
@@ -159,6 +115,7 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=keepalived_vrrp.state
   register: _netdata_keepalived_vrrp_chart
+
 - name: _verify | Assert keepalived_vrrp labels + context
   assert:
     that:
@@ -269,6 +226,7 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.context_system_cpu
   register: _netdata_system_cpu_chart
+
 - name: _verify | Assert system_cpu context ID + context
   assert:
     that:
@@ -282,6 +240,7 @@
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=netdata_presence.collector_go_d_collector_fake_plugin_fake_job
   register: _netdata_fake_collector_chart
+
 - name: _verify | Assert collector label + context
   assert:
     that:
@@ -654,106 +613,3 @@
       Expected plugin_data_collection_status to require a sustained 5m failure
       without queued notification delays. Got:
       {{ _alarm }}
-
-# Map the netdata vhost FQDN to loopback for SNI-correct probing: noble/resolute
-# OpenSSL 3.x rejects SNI=localhost with TLSV1_UNRECOGNIZED_NAME.
-- name: _verify | Map the netdata vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    regexp: '^127\.0\.0\.1\s+netdata\.'
-    line: "127.0.0.1 netdata.{{ inventory_hostname }}.{{ domain }}"
-  become: true
-
-# --- nginx Authelia gate ---
-# Browser path through `https://netdata.<host>.<domain>` is gated by Authelia
-# forward-auth: an unauthenticated hit must 302 to the auth portal. The generic
-# nginx role verification exercises the opt-in Basic Authorization forwarding
-# and confirms the credential is stripped from the protected upstream.
-- name: _verify | Browser hit without auth redirects to Authelia
-  uri:
-    url: "https://netdata.{{ inventory_hostname }}.{{ domain }}/"
-    validate_certs: false
-    follow_redirects: none
-    status_code: 302
-  register: _netdata_no_auth
-  failed_when: >-
-    _netdata_no_auth.status != 302
-    or ("auth." not in (_netdata_no_auth.location | default("")))
-  become: true
-
-# netdata.conf pins `allow ... by dns = no`, so the running instance never
-# reverse-resolves the loopback peer (127.0.0.1 -> localhost, no DNS record) on
-# an accepted connection. Probe it over loopback and assert it stays silent.
-# Cursor-scoped to this probe, not the whole boot: the converge + fast-poll
-# restarts above run transient configs without the toggle (and netdata warns
-# under its stock localhost-DNS config during install), so only a fresh probe
-# against the final production instance is a clean witness.
-- name: _verify | No localhost DNS-validation warning logged on a fresh connect
-  shell: |
-    set -euo pipefail
-    rm -f /tmp/nd_verify_cursor
-    journalctl -u netdata -n0 --cursor-file=/tmp/nd_verify_cursor >/dev/null 2>&1 || true
-    for i in 1 2 3 4; do curl -s --connect-timeout 1 --max-time 5 -o /dev/null "http://localhost:{{ service_ports.netdata }}/api/v1/info"; done
-    sleep 1
-    journalctl -u netdata --cursor-file=/tmp/nd_verify_cursor --no-pager | grep -cF "Cannot validate" || true
-    rm -f /tmp/nd_verify_cursor
-  args:
-    executable: /bin/bash
-  register: _netdata_localhost_warn
-  changed_when: false
-  become: true
-  failed_when: _netdata_localhost_warn.stdout | trim | int != 0
-
-# Cover the cross-role coupling: netdata's main.yml imports certbot's
-# tasks_from: netdata to render x509check.conf. A break in the
-# certbot-side template (x509check.conf.j2) or the netdata template
-# helper would surface here.
-- name: _verify | Slurp rendered x509check config
-  slurp:
-    src: /etc/netdata/go.d/x509check.conf
-  register: _netdata_x509check
-  become: true
-
-- name: _verify | X509check renders structurally-valid YAML pointing at the host cert
-  vars:
-    _x509check: "{{ _netdata_x509check.content | b64decode | trim | from_yaml }}"
-    _expected_source: "file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem"
-  assert:
-    that:
-      - _x509check.jobs | length == 1
-      - _x509check.jobs[0].source == _expected_source
-      - _x509check.jobs[0].check_full_chain
-    fail_msg: >-
-      x509check.conf didn't render the host cert path correctly
-      (parsed={{ _x509check }}, expected source={{ _expected_source }})
-
-- name: _verify | Exercise netdata fluent-bit recovery severity
-  import_role:
-    name: fluentbit
-    tasks_from: verify_extension
-  vars:
-    fluentbit_verify_args:
-      name: netdata
-      records:
-        - MESSAGE: "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from WARNING to CLEAR."
-          SYSTEMD_UNIT: netdata.service
-          marker: netdata-warning-clear-keep
-        - MESSAGE: "ALERT 'go.d:collector_error' of 'go.d:collector_status' raised from CLEAR to WARNING."
-          SYSTEMD_UNIT: netdata.service
-          marker: netdata-warning-keep
-        - MESSAGE: "PARSER: malformed collector data"
-          SYSTEMD_UNIT: netdata.service
-          PRIORITY: "3"
-          marker: netdata-parser-error-keep
-      expected:
-        # A recovery stays informational even though its alert name carries the
-        # generic error keyword; a transition into WARNING remains actionable.
-        - level: info
-          service: netdata
-          fields.marker: netdata-warning-clear-keep
-        - level: error
-          service: netdata
-          fields.marker: netdata-warning-keep
-        - level: error
-          service: netdata
-          fields.marker: netdata-parser-error-keep

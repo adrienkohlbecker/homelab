@@ -1,3 +1,6 @@
+- name: _verify | Run the checks shared by every fixture
+  import_tasks: _verify_common.yml
+
 - name: _verify | Run the full-fixture checks
   when: not qemu_test_minimal
   import_tasks: _verify_full.yml
