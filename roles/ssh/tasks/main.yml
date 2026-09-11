@@ -30,16 +30,15 @@
   tags:
     - ssh
 
-- name: Record the unavailable services dataset mount
-  when: not zfs_root
+# A host without a ZFS root has no services dataset and keeps ephemeral keys.
+- name: Record whether the host identity persists
   set_fact:
-    ssh_services_mount:
-      rc: 1
+    ssh_host_identity_persistent: "{{ zfs_root and ssh_services_mount.rc == 0 }}"
   tags:
     - ssh
 
 - name: Stat the live host identity
-  when: ssh_services_mount.rc == 0
+  when: ssh_host_identity_persistent
   stat:
     path: "/etc/ssh/{{ _ssh_host_private_key_file }}"
   become: true
@@ -48,7 +47,7 @@
     - ssh
 
 - name: Stat the persisted host identity
-  when: ssh_services_mount.rc == 0
+  when: ssh_host_identity_persistent
   stat:
     path: "/mnt/services/ssh_host_keys/{{ _ssh_host_private_key_file }}"
   become: true
@@ -60,7 +59,7 @@
 # restoring its host key. Halt before the copy loop can destroy the old pin.
 - name: Refuse to overwrite a divergent persisted host identity
   when:
-    - ssh_services_mount.rc == 0
+    - ssh_host_identity_persistent
     - ssh_host_live_identity.stat.exists
     - ssh_host_persisted_identity.stat.exists
     - ssh_host_live_identity.stat.checksum != ssh_host_persisted_identity.stat.checksum
@@ -76,7 +75,7 @@
     - ssh
 
 - name: Create the host-key persistence directory
-  when: ssh_services_mount.rc == 0
+  when: ssh_host_identity_persistent
   file:
     dest: /mnt/services/ssh_host_keys
     state: directory
@@ -90,7 +89,7 @@
 
 - name: Persist the host keys
   when:
-    - ssh_services_mount.rc == 0
+    - ssh_host_identity_persistent
     - not (ansible_check_mode and ssh_host_persist_dir.changed)
   copy:
     src: "/etc/ssh/{{ item }}"
