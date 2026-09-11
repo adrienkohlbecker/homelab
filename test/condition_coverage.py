@@ -68,6 +68,7 @@ class TaskDefinition:
     key: TaskKey
     action: str
     name: str
+    conditions: tuple[ConditionKey, ...] = ()
 
 
 @dataclass(frozen=True, order=True)
@@ -409,7 +410,18 @@ def _task_origin(task: dict[object, object]) -> TaskKey:
     return TaskKey(normalize_source_path(origin.path), origin.line_num)
 
 
-def _task_definition(task: dict[object, object]) -> TaskDefinition | None:
+def _task_conditions(task: dict[object, object]) -> tuple[ConditionKey, ...]:
+    raw_conditions = task.get("when")
+    if raw_conditions is None:
+        return ()
+    values = raw_conditions if isinstance(raw_conditions, list) else [raw_conditions]
+    return tuple(condition_key(value) for value in values)
+
+
+def _task_definition(
+    task: dict[object, object],
+    inherited_conditions: tuple[ConditionKey, ...] = (),
+) -> TaskDefinition | None:
     if "block" in task:
         return None
     action = _task_action(task)
@@ -419,7 +431,24 @@ def _task_definition(task: dict[object, object]) -> TaskDefinition | None:
         key=_task_origin(task),
         action=action,
         name=str(task.get("name", "<unnamed>")),
+        conditions=inherited_conditions + _task_conditions(task),
     )
+
+
+def _walk_task_definitions(
+    tasks: object,
+    inherited_conditions: tuple[ConditionKey, ...] = (),
+) -> Iterator[TaskDefinition]:
+    if not isinstance(tasks, list):
+        return
+    for task in tasks:
+        if not isinstance(task, dict):
+            raise ValueError(f"task list entry must be a mapping: {task!r}")
+        conditions = inherited_conditions + _task_conditions(task)
+        if definition := _task_definition(task, inherited_conditions):
+            yield definition
+        for section in _TASK_STRUCTURAL_KEYS:
+            yield from _walk_task_definitions(task.get(section), conditions)
 
 
 def _action_value(task: dict[object, object], action: str) -> object:
@@ -573,8 +602,16 @@ def inventory_tasks(paths: Iterable[Path]) -> dict[TaskKey, TaskDefinition]:
     tasks: dict[TaskKey, TaskDefinition] = {}
     for path in paths:
         document = loader.load_from_file(str(path.resolve()))
-        for task in _document_task_mappings(document):
-            if definition := _task_definition(task):
+        if (
+            isinstance(document, list)
+            and document
+            and all(isinstance(entry, dict) and "hosts" in entry for entry in document)
+        ):
+            task_lists = [play.get(section) for play in document for section in ("pre_tasks", "tasks", "post_tasks")]
+        else:
+            task_lists = [document]
+        for task_list in task_lists:
+            for definition in _walk_task_definitions(task_list):
                 if previous := tasks.get(definition.key):
                     raise ValueError(f"duplicate task source identity: {previous!r}, {definition!r}")
                 tasks[definition.key] = definition
@@ -886,7 +923,7 @@ def load_synthetic_outcomes(
         if not isinstance(scenario, dict):
             raise ValueError(f"{path}: scenario {index} must be a mapping")
         kind = scenario.get("kind", "when")
-        if kind not in {"when", "changed_when", "failed_when"}:
+        if kind not in {"when", "until", "changed_when", "failed_when", "task"}:
             raise ValueError(f"{path}: scenario {index} has unknown kind: {kind}")
         if kind != "when":
             continue
@@ -962,9 +999,9 @@ def load_synthetic_result_predicate_outcomes(
         if not isinstance(scenario, dict):
             raise ValueError(f"{path}: scenario {index} must be a mapping")
         kind = scenario.get("kind", "when")
-        if kind not in {"when", "changed_when", "failed_when"}:
+        if kind not in {"when", "until", "changed_when", "failed_when", "task"}:
             raise ValueError(f"{path}: scenario {index} has unknown kind: {kind}")
-        if kind == "when":
+        if kind not in {"changed_when", "failed_when"}:
             continue
         source_path = str(scenario.get("path", ""))
         raw_expressions = scenario.get("expression", "")
@@ -1016,6 +1053,136 @@ def load_synthetic_result_predicate_outcomes(
     return outcomes
 
 
+def load_synthetic_until_outcomes(
+    path: Path,
+    untils: set[UntilKey] | None = None,
+) -> dict[UntilKey, set[bool]]:
+    """Evaluate declared synthetic cases against current ``until`` predicates."""
+    document = yaml.safe_load(path.read_text()) or {}
+    scenarios = document.get("scenarios", [])
+    if not isinstance(scenarios, list):
+        raise ValueError(f"{path}: scenarios must be a list")
+
+    if untils is None:
+        untils = inventory_untils(production_condition_paths(include_site=True))
+    outcomes: dict[UntilKey, set[bool]] = {}
+    loader = DataLoader()
+    for index, scenario in enumerate(scenarios, 1):
+        if not isinstance(scenario, dict):
+            raise ValueError(f"{path}: scenario {index} must be a mapping")
+        kind = scenario.get("kind", "when")
+        if kind not in {"when", "until", "changed_when", "failed_when", "task"}:
+            raise ValueError(f"{path}: scenario {index} has unknown kind: {kind}")
+        if kind != "until":
+            continue
+        source_path = str(scenario.get("path", ""))
+        expression = _normalized_expression(str(scenario.get("expression", "")))
+        source_line = scenario.get("line")
+        if source_line is not None and not isinstance(source_line, int):
+            raise ValueError(f"{path}: scenario {index} line must be an integer")
+        all_matches = scenario.get("all", False)
+        if not isinstance(all_matches, bool):
+            raise ValueError(f"{path}: scenario {index} all must be a Boolean")
+        matches = {
+            until
+            for until in untils
+            if until.path == source_path
+            and _normalized_expression(until.expression) == expression
+            and (source_line is None or until.line == source_line)
+        }
+        if not matches:
+            raise ValueError(
+                f"{path}: scenario {index} does not match a current until predicate: {source_path}: {expression}"
+            )
+        if len(matches) > 1 and not all_matches:
+            lines = ", ".join(str(until.line) for until in sorted(matches))
+            raise ValueError(f"{path}: scenario {index} matches lines {lines}; select one with line or set all: true")
+
+        cases = scenario.get("cases", [])
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"{path}: scenario {index} cases must be a non-empty list")
+        trusted_expression = TrustedAsTemplate().tag(next(iter(matches)).expression)
+        for case_index, case in enumerate(cases, 1):
+            if not isinstance(case, dict) or not isinstance(case.get("outcome"), bool):
+                raise ValueError(f"{path}: scenario {index} case {case_index} requires a Boolean outcome")
+            variables = case.get("variables", {})
+            if not isinstance(variables, dict):
+                raise ValueError(f"{path}: scenario {index} case {case_index} variables must be a mapping")
+            actual = TemplateEngine(loader, variables=variables).evaluate_conditional(trusted_expression)
+            if actual is not case["outcome"]:
+                raise ValueError(
+                    f"{path}: scenario {index} case {case_index} expected {case['outcome']} but evaluated {actual}"
+                )
+            for until in matches:
+                outcomes.setdefault(until, set()).add(actual)
+    return outcomes
+
+
+def load_synthetic_task_reachability(
+    path: Path,
+    tasks: dict[TaskKey, TaskDefinition] | None = None,
+) -> set[TaskKey]:
+    """Prove selected conditional tasks reachable under declared variables."""
+    document = yaml.safe_load(path.read_text()) or {}
+    scenarios = document.get("scenarios", [])
+    if not isinstance(scenarios, list):
+        raise ValueError(f"{path}: scenarios must be a list")
+
+    if tasks is None:
+        tasks = inventory_tasks(production_condition_paths(include_site=True))
+    reachable: set[TaskKey] = set()
+    loader = DataLoader()
+    for index, scenario in enumerate(scenarios, 1):
+        if not isinstance(scenario, dict):
+            raise ValueError(f"{path}: scenario {index} must be a mapping")
+        kind = scenario.get("kind", "when")
+        if kind not in {"when", "until", "changed_when", "failed_when", "task"}:
+            raise ValueError(f"{path}: scenario {index} has unknown kind: {kind}")
+        if kind != "task":
+            continue
+        source_path = str(scenario.get("path", ""))
+        candidates = [task for task in tasks.values() if task.key.path == source_path]
+        if not candidates:
+            raise ValueError(f"{path}: scenario {index} does not match a current task file: {source_path}")
+        cases = scenario.get("cases", [])
+        if not isinstance(cases, list) or not cases:
+            raise ValueError(f"{path}: scenario {index} cases must be a non-empty list")
+        for case_index, case in enumerate(cases, 1):
+            if not isinstance(case, dict):
+                raise ValueError(f"{path}: scenario {index} case {case_index} must be a mapping")
+            names = case.get("tasks", [])
+            if not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names):
+                raise ValueError(f"{path}: scenario {index} case {case_index} tasks must be a non-empty string list")
+            if len(names) != len(set(names)):
+                raise ValueError(f"{path}: scenario {index} case {case_index} repeats a task name")
+            selected: list[TaskDefinition] = []
+            for name in names:
+                matches = [task for task in candidates if task.name == name]
+                if len(matches) != 1:
+                    raise ValueError(
+                        f"{path}: scenario {index} case {case_index} task {name!r} matched {len(matches)} definitions"
+                    )
+                selected.append(matches[0])
+            variables = case.get("variables", {})
+            if not isinstance(variables, dict):
+                raise ValueError(f"{path}: scenario {index} case {case_index} variables must be a mapping")
+            engine = TemplateEngine(loader, variables=variables)
+            for task in selected:
+                if not task.conditions:
+                    raise ValueError(
+                        f"{path}: scenario {index} case {case_index} cannot synthesize unconditional task {task.name!r}"
+                    )
+                if not all(
+                    engine.evaluate_conditional(TrustedAsTemplate().tag(condition.expression))
+                    for condition in task.conditions
+                ):
+                    raise ValueError(
+                        f"{path}: scenario {index} case {case_index} does not make task {task.name!r} reachable"
+                    )
+                reachable.add(task.key)
+    return reachable
+
+
 def merge_outcomes(*sources: dict[ConditionKey, set[bool]]) -> dict[ConditionKey, set[bool]]:
     """Union outcomes from runtime and synthetic test sources."""
     merged: dict[ConditionKey, set[bool]] = {}
@@ -1058,8 +1225,8 @@ def format_unexecuted_loops(missing: set[LoopKey]) -> str:
 
 
 def format_unexecuted_tasks(missing: set[TaskDefinition]) -> str:
-    """Render production tasks that never completed without being skipped."""
-    lines = [f"{len(missing)} Ansible task(s) never executed:"]
+    """Render production tasks with neither runtime nor reachability coverage."""
+    lines = [f"{len(missing)} Ansible task(s) neither executed nor proved synthetically reachable:"]
     lines.extend(f"  {task.key.path}:{task.key.line}: [{task.action}] {task.name}" for task in sorted(missing))
     return "\n".join(lines)
 
@@ -1154,10 +1321,19 @@ def check_task_coverage(
     reports: Iterable[Path],
     *,
     include_site: bool = False,
+    scenario_path: Path | None = SYNTHETIC_SCENARIOS_PATH,
 ) -> set[TaskDefinition]:
-    """Return production tasks with no non-skipped terminal callback."""
-    expected = inventory_tasks(production_condition_paths(roles, include_site=include_site))
-    missing_keys = set(expected).difference(load_executed_tasks(reports))
+    """Return tasks neither executed nor proven reachable as a conditional path."""
+    scope = {path.as_posix() for path in production_condition_paths(roles, include_site=include_site)}
+    tasks = inventory_tasks(production_condition_paths(include_site=True))
+    expected = {key: task for key, task in tasks.items() if task.key.path in scope}
+    synthetic = (
+        load_synthetic_task_reachability(scenario_path, tasks)
+        if scenario_path is not None and scenario_path.exists()
+        else set()
+    )
+    covered = load_executed_tasks(reports).union(synthetic)
+    missing_keys = set(expected).difference(covered)
     return {expected[key] for key in missing_keys}
 
 
@@ -1197,10 +1373,20 @@ def check_until_coverage(
     reports: Iterable[Path],
     *,
     include_site: bool = False,
+    scenario_path: Path | None = SYNTHETIC_SCENARIOS_PATH,
 ) -> dict[UntilKey, set[bool]]:
     """Return false/true outcomes absent for production retry predicates."""
-    expected = inventory_untils(production_condition_paths(roles, include_site=include_site))
+    scope = {path.as_posix() for path in production_condition_paths(roles, include_site=include_site)}
+    untils = inventory_untils(production_condition_paths(include_site=True))
+    expected = {until for until in untils if until.path in scope}
     observed = load_until_outcomes(reports)
+    synthetic = (
+        load_synthetic_until_outcomes(scenario_path, untils)
+        if scenario_path is not None and scenario_path.exists()
+        else {}
+    )
+    for until, outcomes in synthetic.items():
+        observed.setdefault(until, set()).update(outcomes)
     both = {False, True}
     return {
         until: both.difference(observed.get(until, set())) for until in expected if observed.get(until, set()) != both
@@ -1335,7 +1521,8 @@ def main() -> int:
         return 1
     print(
         "Every selected Ansible condition evaluated both true and false, every loop iterated, "
-        "every task ran, every block path executed, every retry and result predicate evaluated false and true, "
+        "every task ran or was proved synthetically reachable, every block path executed, "
+        "every retry and result predicate evaluated false and true, "
         "every dynamic include expanded, and every early exit took both paths."
     )
     return 0

@@ -69,6 +69,8 @@ from condition_coverage import (
     load_result_predicate_outcomes,
     load_synthetic_outcomes,
     load_synthetic_result_predicate_outcomes,
+    load_synthetic_task_reachability,
+    load_synthetic_until_outcomes,
     load_until_outcomes,
     missing_outcomes,
     normalize_source_path,
@@ -337,6 +339,41 @@ def test_until_key_normalizes_ansible_runtime_list_wrapper() -> None:
     assert condition_coverage_callback.until_key([expression]) == UntilKey(
         "roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"
     )
+
+
+def test_synthetic_until_scenario_evaluates_current_expression(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- command: /bin/true\n  register: retry_result\n  until: retry_result.rc == 0\n  retries: 2\n"
+    )
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - kind: until
+    path: roles/example/tasks/main.yml
+    expression: retry_result.rc == 0
+    cases:
+      - outcome: false
+        variables:
+          retry_result: {rc: 1}
+      - outcome: true
+        variables:
+          retry_result: {rc: 0}
+"""
+    )
+
+    outcomes = load_synthetic_until_outcomes(scenarios)
+
+    assert list(outcomes.values()) == [{False, True}]
+    assert check_until_coverage(["example"], [], scenario_path=scenarios) == {}
+    assert load_synthetic_outcomes(scenarios) == {}
+    assert load_synthetic_result_predicate_outcomes(scenarios) == {}
 
 
 def test_inventory_reads_only_dynamic_result_predicates(tmp_path: Path) -> None:
@@ -768,6 +805,69 @@ def test_task_coverage_requires_a_non_skipped_terminal_callback(
 
     assert load_executed_tasks([report]) == {expected.key}
     assert check_task_coverage(["example"], [report]) == set()
+
+
+def test_synthetic_task_reachability_requires_all_effective_conditions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- name: Optional tasks
+  when: feature_enabled
+  block:
+    - name: Conditional action
+      command: /bin/true
+      when: service_ready
+"""
+    )
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - kind: task
+    path: roles/example/tasks/main.yml
+    cases:
+      - tasks:
+          - Conditional action
+        variables:
+          feature_enabled: true
+          service_ready: true
+"""
+    )
+
+    reachable = load_synthetic_task_reachability(scenarios)
+
+    assert len(reachable) == 1
+    assert check_task_coverage(["example"], [], scenario_path=scenarios) == set()
+    assert load_synthetic_result_predicate_outcomes(scenarios) == {}
+
+
+def test_synthetic_task_reachability_rejects_unconditional_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text("- name: Always runs\n  command: /bin/true\n")
+    scenarios = tmp_path / "scenarios.yml"
+    scenarios.write_text(
+        """\
+scenarios:
+  - kind: task
+    path: roles/example/tasks/main.yml
+    cases:
+      - tasks: [Always runs]
+        variables: {}
+"""
+    )
+
+    with pytest.raises(ValueError, match="cannot synthesize unconditional task"):
+        load_synthetic_task_reachability(scenarios)
 
 
 def test_unknown_role_is_rejected_rather_than_scoping_to_nothing(
