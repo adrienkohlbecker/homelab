@@ -83,7 +83,8 @@
     - tailscale
 
 # PartOf propagates the snapshot stop but not its subsequent start. Wire the want
-# explicitly when the target exists; the standalone role fixture omits it.
+# explicitly when the target exists; zfs_autobackup installs it, so a host
+# without that role skips the binding.
 - name: Check whether the snapshot target is installed
   stat:
     path: /etc/systemd/system/zfs_autosnapshot.target
