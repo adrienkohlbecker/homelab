@@ -80,3 +80,43 @@
   changed_when: false
   failed_when: _tailscale_forwarding.stdout | trim != '1'
   become: true
+
+# The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
+# tailscaled, and the add-wants link brings it back with the target's start.
+# Kept last because it bounces the daemon; the harness reaches the VM over the
+# qemu port-forward, not the tailnet.
+- name: _verify | Start the snapshot target fixture
+  systemd:
+    name: zfs_autosnapshot.target
+    state: started
+  become: true
+
+- name: _verify | Stop the snapshot target
+  systemd:
+    name: zfs_autosnapshot.target
+    state: stopped
+  become: true
+
+- name: _verify | Tailscaled stopped with the snapshot target
+  systemd:
+    name: tailscaled.service
+  register: _tailscale_after_target_stop
+  failed_when: _tailscale_after_target_stop.status.ActiveState != 'inactive'
+  become: true
+
+- name: _verify | Start the snapshot target again
+  systemd:
+    name: zfs_autosnapshot.target
+    state: started
+  become: true
+
+# tailscaled is ordered after the target, so the target's start job returns
+# while the daemon is still activating.
+- name: _verify | Tailscaled came back with the snapshot target
+  systemd:
+    name: tailscaled.service
+  register: _tailscale_after_target_start
+  until: _tailscale_after_target_start.status.ActiveState == 'active'
+  retries: 15
+  delay: 2
+  become: true
