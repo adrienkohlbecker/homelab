@@ -20,6 +20,7 @@ import yaml
 from ansible._internal._datatag._tags import Origin, TrustedAsTemplate
 from ansible._internal._templating._engine import TemplateEngine
 from ansible.parsing.dataloader import DataLoader
+from ansible.playbook.task import Task
 
 SYNTHETIC_SCENARIOS_PATH = Path("test/condition_coverage.yml")
 
@@ -50,6 +51,28 @@ class LoopKey:
     line: int
     column: int
     expression: str
+
+
+@dataclass(frozen=True, order=True)
+class TaskKey:
+    """Stable source identity for one executable task."""
+
+    path: str
+    line: int
+
+
+@dataclass(frozen=True, order=True)
+class TaskDefinition:
+    """One inventoried executable task and its diagnostic metadata."""
+
+    key: TaskKey
+    action: str
+    name: str
+
+
+_TASK_STRUCTURAL_KEYS = frozenset({"block", "rescue", "always"})
+_TASK_NON_EXECUTING_ACTIONS = frozenset({"import_role", "import_tasks", "include_role", "include_tasks", "meta"})
+_TASK_ATTRIBUTE_KEYS = frozenset(Task.fattributes).union(_TASK_STRUCTURAL_KEYS)
 
 
 def normalize_source_path(path: str) -> str:
@@ -86,6 +109,14 @@ def loop_key(value: object) -> LoopKey:
         column=origin.col_num,
         expression=str(value),
     )
+
+
+def task_key_from_path(path: str) -> TaskKey:
+    """Return a task key from Ansible's ``path:line`` callback identity."""
+    source_path, separator, source_line = path.rpartition(":")
+    if not separator or not source_path or not source_line.isdigit():
+        raise ValueError(f"task has no complete source identity: {path!r}")
+    return TaskKey(normalize_source_path(source_path), int(source_line))
 
 
 def evaluated_outcomes(
@@ -131,6 +162,52 @@ def _walk_loop_values(value: object) -> Iterator[object]:
             yield from _walk_loop_values(child)
 
 
+def _walk_task_mappings(tasks: object) -> Iterator[dict[object, object]]:
+    if not isinstance(tasks, list):
+        return
+    for task in tasks:
+        if not isinstance(task, dict):
+            raise ValueError(f"task list entry must be a mapping: {task!r}")
+        yield task
+        for section in _TASK_STRUCTURAL_KEYS:
+            yield from _walk_task_mappings(task.get(section))
+
+
+def _document_task_mappings(document: object) -> Iterator[dict[object, object]]:
+    if document is None:
+        return
+    if not isinstance(document, list):
+        raise ValueError("Ansible task document must be a list")
+    if document and all(isinstance(entry, dict) and "hosts" in entry for entry in document):
+        for play in document:
+            for section in ("pre_tasks", "tasks", "post_tasks"):
+                yield from _walk_task_mappings(play.get(section))
+        return
+    yield from _walk_task_mappings(document)
+
+
+def _task_definition(task: dict[object, object]) -> TaskDefinition | None:
+    if "block" in task:
+        return None
+    action_keys = [str(key) for key in task if str(key) not in _TASK_ATTRIBUTE_KEYS]
+    if not action_keys and "action" in task:
+        action_keys = [str(task["action"])]
+    if len(action_keys) != 1:
+        name = str(task.get("name", "<unnamed>"))
+        raise ValueError(f"task {name!r} has {len(action_keys)} action keys: {', '.join(action_keys)}")
+    action = action_keys[0]
+    if action in _TASK_NON_EXECUTING_ACTIONS:
+        return None
+    origin = Origin.get_tag(task)
+    if origin is None or origin.path is None or origin.line_num is None:
+        raise ValueError(f"task has no complete YAML origin: {task!r}")
+    return TaskDefinition(
+        key=TaskKey(normalize_source_path(origin.path), origin.line_num),
+        action=action,
+        name=str(task.get("name", "<unnamed>")),
+    )
+
+
 def production_condition_paths(roles: Iterable[str] | None = None, *, include_site: bool = False) -> list[Path]:
     """Return production task files in the requested coverage scope.
 
@@ -142,7 +219,8 @@ def production_condition_paths(roles: Iterable[str] | None = None, *, include_si
     paths = [
         path
         for path in Path("roles").glob("*/tasks/*.yml")
-        if not path.name.startswith("_") and (selected_roles is None or path.parts[1] in selected_roles)
+        if not path.stem.startswith(("_setup", "_verify", "_test"))
+        and (selected_roles is None or path.parts[1] in selected_roles)
     ]
     if selected_roles is not None and (unknown := selected_roles.difference(path.parts[1] for path in paths)):
         raise ValueError(f"no roles/<role>/tasks/*.yml for requested role(s): {', '.join(sorted(unknown))}")
@@ -175,6 +253,20 @@ def inventory_loops(paths: Iterable[Path]) -> set[LoopKey]:
     return loops
 
 
+def inventory_tasks(paths: Iterable[Path]) -> dict[TaskKey, TaskDefinition]:
+    """Load every executable task from production task files."""
+    loader = DataLoader()
+    tasks: dict[TaskKey, TaskDefinition] = {}
+    for path in paths:
+        document = loader.load_from_file(str(path.resolve()))
+        for task in _document_task_mappings(document):
+            if definition := _task_definition(task):
+                if previous := tasks.get(definition.key):
+                    raise ValueError(f"duplicate task source identity: {previous!r}, {definition!r}")
+                tasks[definition.key] = definition
+    return tasks
+
+
 def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: str) -> None:
     """Append observed outcomes as compact JSON lines."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -193,6 +285,15 @@ def append_loop_executions(path: Path, loops: Iterable[LoopKey], *, phase: str) 
             handle.write("\n")
 
 
+def append_task_executions(path: Path, tasks: Iterable[TaskKey], *, phase: str) -> None:
+    """Append tasks observed through non-skipped terminal callbacks."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for task in tasks:
+            handle.write(json.dumps({"task": asdict(task), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write("\n")
+
+
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
     for path in paths:
         with path.open(encoding="utf-8") as handle:
@@ -202,7 +303,7 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                 data: dict[str, Any] = json.loads(line)
                 if error := data.get("error"):
                     raise ValueError(f"{path}:{line_number}: callback error: {error}")
-                if "condition" not in data and "loop" not in data:
+                if not {"condition", "loop", "task"}.intersection(data):
                     raise ValueError(f"{path}:{line_number}: unknown coverage record")
                 yield path, line_number, data
 
@@ -221,6 +322,11 @@ def load_outcomes(paths: Iterable[Path]) -> dict[ConditionKey, set[bool]]:
 def load_executed_loops(paths: Iterable[Path]) -> set[LoopKey]:
     """Merge loop executions from callback JSONL reports."""
     return {LoopKey(**data["loop"]) for _path, _line_number, data in _report_rows(paths) if "loop" in data}
+
+
+def load_executed_tasks(paths: Iterable[Path]) -> set[TaskKey]:
+    """Merge executed tasks from callback JSONL reports."""
+    return {TaskKey(**data["task"]) for _path, _line_number, data in _report_rows(paths) if "task" in data}
 
 
 def _normalized_expression(expression: str) -> str:
@@ -349,6 +455,13 @@ def format_unexecuted_loops(missing: set[LoopKey]) -> str:
     return "\n".join(lines)
 
 
+def format_unexecuted_tasks(missing: set[TaskDefinition]) -> str:
+    """Render production tasks that never completed without being skipped."""
+    lines = [f"{len(missing)} Ansible task(s) never executed:"]
+    lines.extend(f"  {task.key.path}:{task.key.line}: [{task.action}] {task.name}" for task in sorted(missing))
+    return "\n".join(lines)
+
+
 def check_coverage(
     roles: Iterable[str],
     reports: Iterable[Path],
@@ -383,6 +496,18 @@ def check_loop_coverage(
     return expected.difference(load_executed_loops(reports))
 
 
+def check_task_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> set[TaskDefinition]:
+    """Return production tasks with no non-skipped terminal callback."""
+    expected = inventory_tasks(production_condition_paths(roles, include_site=include_site))
+    missing_keys = set(expected).difference(load_executed_tasks(reports))
+    return {expected[key] for key in missing_keys}
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -406,6 +531,7 @@ def main() -> int:
     try:
         missing = check_coverage(args.roles, args.reports, include_site=args.include_site)
         unexecuted_loops = check_loop_coverage(args.roles, args.reports, include_site=args.include_site)
+        unexecuted_tasks = check_task_coverage(args.roles, args.reports, include_site=args.include_site)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Condition coverage report error: {exc}", file=sys.stderr)
         return 1
@@ -413,9 +539,11 @@ def main() -> int:
         print(format_missing_outcomes(missing), file=sys.stderr)
     if unexecuted_loops:
         print(format_unexecuted_loops(unexecuted_loops), file=sys.stderr)
-    if missing or unexecuted_loops:
+    if unexecuted_tasks:
+        print(format_unexecuted_tasks(unexecuted_tasks), file=sys.stderr)
+    if missing or unexecuted_loops or unexecuted_tasks:
         return 1
-    print("Every selected Ansible condition evaluated both true and false, and every loop iterated.")
+    print("Every selected Ansible condition evaluated both true and false, every loop iterated, and every task ran.")
     return 0
 
 

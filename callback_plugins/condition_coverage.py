@@ -11,7 +11,16 @@ from ansible.plugins.callback import CallbackBase
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "test"))
 
-from condition_coverage import LoopKey, append_loop_executions, append_outcomes, evaluated_outcomes, loop_key
+from condition_coverage import (
+    LoopKey,
+    TaskKey,
+    append_loop_executions,
+    append_outcomes,
+    append_task_executions,
+    evaluated_outcomes,
+    loop_key,
+    task_key_from_path,
+)
 
 
 class CallbackModule(CallbackBase):
@@ -25,8 +34,9 @@ class CallbackModule(CallbackBase):
     def __init__(self) -> None:
         super().__init__()
         self._recorded_loops: set[tuple[Path, LoopKey]] = set()
+        self._recorded_tasks: set[tuple[Path, TaskKey]] = set()
 
-    def _record(self, result, *, skipped: bool = False, for_item: bool = False) -> None:
+    def _record(self, result, *, skipped: bool = False, for_item: bool = False, unreachable: bool = False) -> None:
         output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
         if not output:
             return
@@ -35,6 +45,12 @@ class CallbackModule(CallbackBase):
         try:
             path = Path(output)
             phase = os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown")
+            if not skipped and not unreachable:
+                task_key = task_key_from_path(task.get_path())
+                task_marker = (path, task_key)
+                if task_marker not in self._recorded_tasks:
+                    append_task_executions(path, [task_key], phase=phase)
+                    self._recorded_tasks.add(task_marker)
             if for_item and (task.loop or task.loop_with):
                 loop = loop_key(task.loop)
                 marker = (path, loop)
@@ -73,7 +89,7 @@ class CallbackModule(CallbackBase):
         self._record(result)
 
     def v2_runner_on_unreachable(self, result) -> None:
-        self._record(result)
+        self._record(result, unreachable=True)
 
     def v2_runner_on_skipped(self, result) -> None:
         self._record(result, skipped=True)
