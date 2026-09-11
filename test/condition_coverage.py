@@ -83,11 +83,14 @@ def evaluated_outcomes(
     raise ValueError(f"false condition is absent from task condition list: {false_text!r}")
 
 
-def _walk_when_values(value: object) -> Iterator[object]:
+def _walk_when_values(value: object) -> Iterator[tuple[object, str | None]]:
+    """Yield each ``when`` condition with the name of the task or block declaring it."""
     if isinstance(value, dict):
+        name = next((str(child) for key, child in value.items() if str(key) == "name"), None)
         for key, child in value.items():
             if str(key) == "when":
-                yield from child if isinstance(child, list) else [child]
+                for condition in child if isinstance(child, list) else [child]:
+                    yield condition, name
             yield from _walk_when_values(child)
     elif isinstance(value, list):
         for child in value:
@@ -114,13 +117,17 @@ def production_condition_paths(roles: Iterable[str] | None = None, *, include_si
     return sorted(paths)
 
 
-def inventory_conditions(paths: Iterable[Path]) -> set[ConditionKey]:
-    """Load every declared ``when`` expression from production task files."""
+def inventory_conditions(paths: Iterable[Path]) -> dict[ConditionKey, str | None]:
+    """Map every declared ``when`` expression in the given files to its task name.
+
+    The name (None for an unnamed task or block) lets synthetic scenarios pick
+    one of several identical expressions without pinning a line number.
+    """
     loader = DataLoader()
-    conditions: set[ConditionKey] = set()
+    conditions: dict[ConditionKey, str | None] = {}
     for path in paths:
         document = loader.load_from_file(str(path.resolve()))
-        conditions.update(condition_key(value) for value in _walk_when_values(document))
+        conditions.update((condition_key(value), name) for value, name in _walk_when_values(document))
     return conditions
 
 
@@ -155,13 +162,17 @@ def _normalized_expression(expression: str) -> str:
 
 def load_synthetic_outcomes(
     path: Path,
-    conditions: set[ConditionKey] | None = None,
+    conditions: dict[ConditionKey, str | None] | None = None,
 ) -> dict[ConditionKey, set[bool]]:
     """Evaluate declared synthetic cases against current source expressions.
 
     Scenarios are matched against the whole repository, not the caller's
     coverage scope, so a stale selector fails the gate from any cell. Callers
     that already hold that inventory pass it in; the parse is ~160 files.
+
+    A scenario selects by path and expression, narrowed by ``task`` (the
+    declaring task's name) when the expression repeats within the file.
+    ``line`` still narrows too, but shifts with every edit above it.
     """
     document = yaml.safe_load(path.read_text()) or {}
     scenarios = document.get("scenarios", [])
@@ -180,6 +191,9 @@ def load_synthetic_outcomes(
         source_line = scenario.get("line")
         if source_line is not None and not isinstance(source_line, int):
             raise ValueError(f"{path}: scenario {index} line must be an integer")
+        source_task = scenario.get("task")
+        if source_task is not None and not isinstance(source_task, str):
+            raise ValueError(f"{path}: scenario {index} task must be a string")
         all_matches = scenario.get("all", False)
         if not isinstance(all_matches, bool):
             raise ValueError(f"{path}: scenario {index} all must be a Boolean")
@@ -189,14 +203,16 @@ def load_synthetic_outcomes(
             if condition.path == source_path
             and _normalized_expression(condition.expression) == expression
             and (source_line is None or condition.line == source_line)
+            and (source_task is None or conditions[condition] == source_task)
         }
         if not matches:
+            task = f" in task {source_task!r}" if source_task is not None else ""
             raise ValueError(
-                f"{path}: scenario {index} does not match a current condition: {source_path}: {expression}"
+                f"{path}: scenario {index} does not match a current condition: {source_path}: {expression}{task}"
             )
         if len(matches) > 1 and not all_matches:
             lines = ", ".join(str(condition.line) for condition in sorted(matches))
-            raise ValueError(f"{path}: scenario {index} matches lines {lines}; select one with line or set all: true")
+            raise ValueError(f"{path}: scenario {index} matches lines {lines}; select one with task or set all: true")
 
         cases = scenario.get("cases", [])
         if not isinstance(cases, list) or not cases:
