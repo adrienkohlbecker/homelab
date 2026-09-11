@@ -40,3 +40,40 @@
       The configured disk selection was not propagated to hd-idle.
       pgrep output: {{ hd_idle_proc.stdout }}
   loop: "{{ rotational_disks_by_id }}"
+
+# Reinstalling the foreground drop-in alone, with the package and environment
+# file unchanged, must restart the daemon into foreground mode. The removal
+# helper call that follows the install publishes the same result fact, so this
+# proves the restart decision still sees the install outcome.
+- name: _verify | Reinstalling the foreground drop-in restarts hd-idle
+  when: hd_idle_foreground_override_enabled
+  block:
+    - name: _verify | Remove the foreground drop-in
+      file:
+        path: /etc/systemd/system/hd-idle.service.d/override.conf
+        state: absent
+      become: true
+
+    - name: _verify | Restart hd-idle under the packaged unit
+      systemd:
+        name: hd-idle.service
+        state: restarted
+        daemon_reload: true
+      become: true
+
+    - name: _verify | Re-run the role with only the drop-in drifted
+      import_tasks: main.yml
+
+    - name: _verify | Read the restarted hd-idle process argv
+      command: pgrep -a hd-idle
+      register: hd_idle_foreground_proc
+      changed_when: false
+      become: true
+
+    - name: _verify | Assert hd-idle runs in foreground mode
+      assert:
+        that:
+          - hd_idle_foreground_proc.stdout is search('hd-idle -d ')
+        fail_msg: >-
+          The drop-in was reinstalled but hd-idle was not restarted into
+          foreground mode. pgrep output: {{ hd_idle_foreground_proc.stdout }}
