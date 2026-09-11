@@ -108,6 +108,24 @@ class BlockGap:
     outcome: str
 
 
+@dataclass(frozen=True, order=True)
+class UntilKey:
+    """Stable source identity for one ``until`` predicate group."""
+
+    path: str
+    line: int
+    column: int
+    expression: str
+
+
+@dataclass(frozen=True, order=True)
+class UntilOutcome:
+    """One observed Boolean result for an ``until`` predicate group."""
+
+    until: UntilKey
+    outcome: bool
+
+
 _TASK_STRUCTURAL_KEYS = frozenset({"block", "rescue", "always"})
 _TASK_NON_EXECUTING_ACTIONS = frozenset({"import_role", "import_tasks", "include_role", "include_tasks", "meta"})
 _TASK_ATTRIBUTE_KEYS = frozenset(Task.fattributes).union(_TASK_STRUCTURAL_KEYS)
@@ -157,6 +175,23 @@ def task_key_from_path(path: str) -> TaskKey:
     return TaskKey(normalize_source_path(source_path), int(source_line))
 
 
+def until_key(value: object) -> UntilKey:
+    """Return the tagged YAML origin and source text for an ``until`` value."""
+    values = value if isinstance(value, list) else [value]
+    if not values:
+        raise ValueError("until predicate group is empty")
+    origin = Origin.get_tag(values[0])
+    if origin is None or origin.path is None or origin.line_num is None or origin.col_num is None:
+        raise ValueError(f"until predicate has no complete YAML origin: {value!r}")
+    expression = str(values[0]) if len(values) == 1 else str([str(item) for item in values])
+    return UntilKey(
+        path=normalize_source_path(origin.path),
+        line=origin.line_num,
+        column=origin.col_num,
+        expression=expression,
+    )
+
+
 def evaluated_outcomes(
     conditions: Sequence[object],
     false_condition: object | None = None,
@@ -198,6 +233,17 @@ def _walk_loop_values(value: object) -> Iterator[object]:
     elif isinstance(value, list):
         for child in value:
             yield from _walk_loop_values(child)
+
+
+def _walk_until_values(value: object) -> Iterator[object]:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key) == "until":
+                yield child
+            yield from _walk_until_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_until_values(child)
 
 
 def _walk_task_mappings(tasks: object) -> Iterator[dict[object, object]]:
@@ -341,6 +387,16 @@ def inventory_blocks(paths: Iterable[Path]) -> dict[BlockKey, BlockDefinition]:
     return blocks
 
 
+def inventory_untils(paths: Iterable[Path]) -> set[UntilKey]:
+    """Load every production ``until`` predicate group."""
+    loader = DataLoader()
+    untils: set[UntilKey] = set()
+    for path in paths:
+        document = loader.load_from_file(str(path.resolve()))
+        untils.update(until_key(value) for value in _walk_until_values(document))
+    return untils
+
+
 def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: str) -> None:
     """Append observed outcomes as compact JSON lines."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -379,6 +435,15 @@ def append_block_events(path: Path, events: Iterable[BlockEvent], *, phase: str)
             handle.write("\n")
 
 
+def append_until_outcomes(path: Path, outcomes: Iterable[UntilOutcome], *, phase: str) -> None:
+    """Append observed ``until`` predicate outcomes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for outcome in outcomes:
+            handle.write(json.dumps({"until": asdict(outcome), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write("\n")
+
+
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
     for path in paths:
         with path.open(encoding="utf-8") as handle:
@@ -388,7 +453,7 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                 data: dict[str, Any] = json.loads(line)
                 if error := data.get("error"):
                     raise ValueError(f"{path}:{line_number}: callback error: {error}")
-                if not {"condition", "loop", "task", "block_event"}.intersection(data):
+                if not {"condition", "loop", "task", "block_event", "until"}.intersection(data):
                     raise ValueError(f"{path}:{line_number}: unknown coverage record")
                 yield path, line_number, data
 
@@ -431,6 +496,18 @@ def load_block_events(paths: Iterable[Path]) -> set[BlockEvent]:
             )
         )
     return events
+
+
+def load_until_outcomes(paths: Iterable[Path]) -> dict[UntilKey, set[bool]]:
+    """Merge ``until`` outcomes from callback JSONL reports."""
+    outcomes: dict[UntilKey, set[bool]] = {}
+    for _path, _line_number, data in _report_rows(paths):
+        if "until" not in data:
+            continue
+        outcome = data["until"]
+        key = UntilKey(**outcome["until"])
+        outcomes.setdefault(key, set()).add(bool(outcome["outcome"]))
+    return outcomes
 
 
 def _normalized_expression(expression: str) -> str:
@@ -576,6 +653,16 @@ def format_block_gaps(missing: set[BlockGap]) -> str:
     return "\n".join(lines)
 
 
+def format_missing_until_outcomes(missing: dict[UntilKey, set[bool]]) -> str:
+    """Render retry predicates missing their false or true outcome."""
+    lines = [f"{len(missing)} Ansible until predicate(s) lack retry branch coverage:"]
+    for until, outcomes in sorted(missing.items()):
+        labels = ", ".join(str(outcome).lower() for outcome in sorted(outcomes))
+        expression = " ".join(until.expression.split())
+        lines.append(f"  {until.path}:{until.line}:{until.column}: missing {labels}: {expression}")
+    return "\n".join(lines)
+
+
 def check_coverage(
     roles: Iterable[str],
     reports: Iterable[Path],
@@ -653,6 +740,21 @@ def check_block_coverage(
     return gaps
 
 
+def check_until_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> dict[UntilKey, set[bool]]:
+    """Return false/true outcomes absent for production retry predicates."""
+    expected = inventory_untils(production_condition_paths(roles, include_site=include_site))
+    observed = load_until_outcomes(reports)
+    both = {False, True}
+    return {
+        until: both.difference(observed.get(until, set())) for until in expected if observed.get(until, set()) != both
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -678,6 +780,7 @@ def main() -> int:
         unexecuted_loops = check_loop_coverage(args.roles, args.reports, include_site=args.include_site)
         unexecuted_tasks = check_task_coverage(args.roles, args.reports, include_site=args.include_site)
         block_gaps = check_block_coverage(args.roles, args.reports, include_site=args.include_site)
+        missing_until_outcomes = check_until_coverage(args.roles, args.reports, include_site=args.include_site)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Condition coverage report error: {exc}", file=sys.stderr)
         return 1
@@ -689,11 +792,13 @@ def main() -> int:
         print(format_unexecuted_tasks(unexecuted_tasks), file=sys.stderr)
     if block_gaps:
         print(format_block_gaps(block_gaps), file=sys.stderr)
-    if missing or unexecuted_loops or unexecuted_tasks or block_gaps:
+    if missing_until_outcomes:
+        print(format_missing_until_outcomes(missing_until_outcomes), file=sys.stderr)
+    if missing or unexecuted_loops or unexecuted_tasks or block_gaps or missing_until_outcomes:
         return 1
     print(
         "Every selected Ansible condition evaluated both true and false, every loop iterated, "
-        "every task ran, and every block path executed."
+        "every task ran, every block path executed, and every retry predicate evaluated false and true."
     )
     return 0
 
