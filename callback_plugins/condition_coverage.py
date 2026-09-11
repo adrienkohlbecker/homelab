@@ -1,4 +1,4 @@
-"""Record Boolean outcomes for Ansible ``when`` expressions during tests."""
+"""Record Ansible condition outcomes and loop iterations during tests."""
 
 from __future__ import annotations
 
@@ -11,16 +11,20 @@ from ansible.plugins.callback import CallbackBase
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "test"))
 
-from condition_coverage import append_outcomes, evaluated_outcomes
+from condition_coverage import LoopKey, append_loop_executions, append_outcomes, evaluated_outcomes, loop_key
 
 
 class CallbackModule(CallbackBase):
-    """Write condition outcomes when the harness supplies an output path."""
+    """Write condition and loop coverage when the harness supplies an output path."""
 
     CALLBACK_VERSION = 2.0
     CALLBACK_TYPE = "notification"
     CALLBACK_NAME = "condition_coverage"
     CALLBACK_NEEDS_ENABLED = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._recorded_loops: set[tuple[Path, LoopKey]] = set()
 
     def _record(self, result, *, skipped: bool = False, for_item: bool = False) -> None:
         output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
@@ -28,26 +32,33 @@ class CallbackModule(CallbackBase):
             return
 
         task = result.task
-        # A looped task evaluates its `when` once per item, so the per-item
-        # callbacks carry the outcomes and the aggregate would double-count
-        # them. The cost is that an empty loop emits no item callback at all and
-        # records nothing -- which fails closed, since a condition with no
-        # observed outcome is reported as missing both.
-        if not for_item and (task.loop or task.loop_with):
-            return
-        conditions = list(task.when)
-        if not conditions:
-            return
-
-        false_condition = result.result.get("false_condition") if skipped else None
-        if skipped and false_condition is None:
-            return
-
         try:
+            path = Path(output)
+            phase = os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown")
+            if for_item and (task.loop or task.loop_with):
+                loop = loop_key(task.loop)
+                marker = (path, loop)
+                if marker not in self._recorded_loops:
+                    append_loop_executions(path, [loop], phase=phase)
+                    self._recorded_loops.add(marker)
+
+            # A looped task evaluates its `when` once per item, so the per-item
+            # callbacks carry the outcomes and the aggregate would double-count
+            # them. An empty loop emits no item callback, so its declaration is
+            # left unrecorded and fails the loop-coverage gate.
+            if not for_item and (task.loop or task.loop_with):
+                return
+            conditions = list(task.when)
+            if not conditions:
+                return
+
+            false_condition = result.result.get("false_condition") if skipped else None
+            if skipped and false_condition is None:
+                return
             append_outcomes(
-                Path(output),
+                path,
                 evaluated_outcomes(conditions, false_condition),
-                phase=os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"),
+                phase=phase,
             )
         except Exception as exc:
             Path(output).parent.mkdir(parents=True, exist_ok=True)

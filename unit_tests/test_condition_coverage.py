@@ -1,8 +1,10 @@
-"""Tests for Ansible ``when`` branch coverage collection."""
+"""Tests for Ansible condition and loop coverage collection."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from ansible._internal._datatag._tags import Origin
@@ -10,15 +12,23 @@ from condition_coverage import (
     SYNTHETIC_SCENARIOS_PATH,
     ConditionKey,
     ConditionOutcome,
+    LoopKey,
+    append_loop_executions,
     check_coverage,
+    check_loop_coverage,
     evaluated_outcomes,
     format_missing_outcomes,
+    format_unexecuted_loops,
     inventory_conditions,
+    inventory_loops,
+    load_executed_loops,
     load_synthetic_outcomes,
     missing_outcomes,
     normalize_source_path,
     production_condition_paths,
 )
+
+import callback_plugins.condition_coverage as condition_coverage_callback
 
 
 def _condition(text: str, line: int) -> object:
@@ -78,6 +88,73 @@ def test_inventory_reads_scalar_and_list_conditions(tmp_path: Path) -> None:
     conditions = inventory_conditions([source])
 
     assert {condition.expression for condition in conditions} == {"scalar_enabled", "first_enabled", "second_enabled"}
+
+
+def test_inventory_reads_modern_and_legacy_loops(tmp_path: Path) -> None:
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- debug: {msg: modern}
+  loop: "{{ modern_items }}"
+- debug: {msg: legacy}
+  with_items:
+    - first
+    - second
+"""
+    )
+
+    loops = inventory_loops([source])
+
+    assert {loop.expression for loop in loops} == {"{{ modern_items }}", "['first', 'second']"}
+
+
+def test_loop_coverage_requires_an_observed_iteration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text("- debug: {msg: '{{ item }}'}\n  loop: '{{ example_items }}'\n")
+    report = tmp_path / "coverage.jsonl"
+
+    loop = next(iter(inventory_loops([source])))
+    assert check_loop_coverage(["example"], []) == {loop}
+    assert "main.yml:2:9: {{ example_items }}" in format_unexecuted_loops({loop})
+
+    append_loop_executions(report, [loop], phase="converge")
+
+    assert load_executed_loops([report]) == {loop}
+    assert check_coverage(["example"], [report], scenario_path=None) == {}
+    assert check_loop_coverage(["example"], [report]) == set()
+
+
+def test_callback_counts_item_callback_but_not_empty_loop_aggregate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "coverage.jsonl"
+    monkeypatch.setenv("ANSIBLE_CONDITION_COVERAGE_FILE", str(report))
+    loop = Origin(
+        path="/tmp/staged/roles/example/tasks/main.yml",
+        line_num=20,
+        col_num=9,
+    ).tag("{{ example_items }}")
+    result = SimpleNamespace(
+        task=SimpleNamespace(loop=loop, loop_with=None, when=[]),
+        result={},
+    )
+    callback = condition_coverage_callback.CallbackModule()
+
+    callback.v2_runner_on_skipped(cast(Any, result))
+    assert not report.exists()
+
+    callback.v2_runner_item_on_ok(cast(Any, result))
+    callback.v2_runner_item_on_ok(cast(Any, result))
+
+    assert load_executed_loops([report]) == {LoopKey("roles/example/tasks/main.yml", 20, 9, "{{ example_items }}")}
+    assert len(report.read_text().splitlines()) == 1
 
 
 def test_unknown_role_is_rejected_rather_than_scoping_to_nothing(
