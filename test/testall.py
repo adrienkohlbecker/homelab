@@ -23,7 +23,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from condition_coverage import check_coverage, check_loop_coverage, format_missing_outcomes, format_unexecuted_loops
+from condition_coverage import (
+    check_coverage,
+    check_loop_coverage,
+    check_task_coverage,
+    format_missing_outcomes,
+    format_unexecuted_loops,
+    format_unexecuted_tasks,
+)
 from machine import (
     MACHINE_CHOICES,
     UBUNTU_RELEASES,
@@ -483,6 +490,7 @@ def main() -> int:
         try:
             missing = check_coverage(selected_roles, reports)
             unexecuted_loops = check_loop_coverage(selected_roles, reports)
+            unexecuted_tasks = check_task_coverage(selected_roles, reports)
         except (OSError, ValueError) as exc:
             print(f"Condition coverage report error: {exc}", file=sys.stderr)
             return 1
@@ -490,11 +498,13 @@ def main() -> int:
             print(format_missing_outcomes(missing), file=sys.stderr)
         if unexecuted_loops:
             print(format_unexecuted_loops(unexecuted_loops), file=sys.stderr)
-        if missing or unexecuted_loops:
+        if unexecuted_tasks:
+            print(format_unexecuted_tasks(unexecuted_tasks), file=sys.stderr)
+        if missing or unexecuted_loops or unexecuted_tasks:
             return 1
         print(
             f"Every condition in {len(selected_roles)} selected role(s) evaluated both true and false, "
-            "and every loop iterated.",
+            "every loop iterated, and every task ran.",
             file=sys.stderr,
         )
     else:

@@ -13,15 +13,22 @@ from condition_coverage import (
     ConditionKey,
     ConditionOutcome,
     LoopKey,
+    TaskDefinition,
+    TaskKey,
     append_loop_executions,
+    append_task_executions,
     check_coverage,
     check_loop_coverage,
+    check_task_coverage,
     evaluated_outcomes,
     format_missing_outcomes,
     format_unexecuted_loops,
+    format_unexecuted_tasks,
     inventory_conditions,
     inventory_loops,
+    inventory_tasks,
     load_executed_loops,
+    load_executed_tasks,
     load_synthetic_outcomes,
     missing_outcomes,
     normalize_source_path,
@@ -109,6 +116,70 @@ def test_inventory_reads_modern_and_legacy_loops(tmp_path: Path) -> None:
     assert {loop.expression for loop in loops} == {"{{ modern_items }}", "['first', 'second']"}
 
 
+def test_inventory_reads_executable_tasks_but_not_structural_actions(tmp_path: Path) -> None:
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- name: Plain
+  debug: {msg: plain}
+- name: Dynamic action
+  action: "{{ module_name }}"
+  args: {path: /tmp/example}
+- name: Static import
+  import_tasks: imported.yml
+- name: Dynamic include
+  include_tasks: included.yml
+- name: Block container
+  block:
+    - name: Primary
+      command: /bin/true
+  rescue:
+    - name: Recovery
+      fail: {msg: recovered}
+  always:
+    - name: Cleanup
+      file: {path: /tmp/example, state: absent}
+- name: Meta action
+  meta: end_role
+"""
+    )
+
+    tasks = inventory_tasks([source])
+
+    assert {(task.key.line, task.action, task.name) for task in tasks.values()} == {
+        (1, "debug", "Plain"),
+        (3, "{{ module_name }}", "Dynamic action"),
+        (12, "command", "Primary"),
+        (15, "fail", "Recovery"),
+        (18, "file", "Cleanup"),
+    }
+
+
+def test_inventory_accepts_an_empty_task_file(tmp_path: Path) -> None:
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Intentionally empty.\n")
+
+    assert inventory_tasks([source]) == {}
+
+
+def test_production_paths_include_helpers_but_not_test_hooks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    tasks = tmp_path / "roles" / "example" / "tasks"
+    tasks.mkdir(parents=True)
+    for name in ("main.yml", "_trim_timer.yml", "_setup.yml", "_setup_extra.yml", "_verify.yml", "_verify_more.yml"):
+        (tasks / name).write_text("- debug: {msg: example}\n")
+
+    assert production_condition_paths(["example"]) == [
+        Path("roles/example/tasks/_trim_timer.yml"),
+        Path("roles/example/tasks/main.yml"),
+    ]
+
+
 def test_loop_coverage_requires_an_observed_iteration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -142,7 +213,12 @@ def test_callback_counts_item_callback_but_not_empty_loop_aggregate(
         col_num=9,
     ).tag("{{ example_items }}")
     result = SimpleNamespace(
-        task=SimpleNamespace(loop=loop, loop_with=None, when=[]),
+        task=SimpleNamespace(
+            loop=loop,
+            loop_with=None,
+            when=[],
+            get_path=lambda: "/tmp/staged/roles/example/tasks/main.yml:20",
+        ),
         result={},
     )
     callback = condition_coverage_callback.CallbackModule()
@@ -154,7 +230,28 @@ def test_callback_counts_item_callback_but_not_empty_loop_aggregate(
     callback.v2_runner_item_on_ok(cast(Any, result))
 
     assert load_executed_loops([report]) == {LoopKey("roles/example/tasks/main.yml", 20, 9, "{{ example_items }}")}
-    assert len(report.read_text().splitlines()) == 1
+    assert load_executed_tasks([report]) == {TaskKey("roles/example/tasks/main.yml", 20)}
+    assert len(report.read_text().splitlines()) == 2
+
+
+def test_task_coverage_requires_a_non_skipped_terminal_callback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text("- name: Example\n  debug: {msg: example}\n")
+    report = tmp_path / "coverage.jsonl"
+    expected = TaskDefinition(TaskKey("roles/example/tasks/main.yml", 1), "debug", "Example")
+
+    assert check_task_coverage(["example"], []) == {expected}
+    assert "main.yml:1: [debug] Example" in format_unexecuted_tasks({expected})
+
+    append_task_executions(report, [expected.key], phase="converge")
+
+    assert load_executed_tasks([report]) == {expected.key}
+    assert check_task_coverage(["example"], [report]) == set()
 
 
 def test_unknown_role_is_rejected_rather_than_scoping_to_nothing(
