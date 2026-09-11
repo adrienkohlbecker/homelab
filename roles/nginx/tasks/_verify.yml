@@ -581,6 +581,86 @@
         state: absent
       become: true
 
+# A site can drift to a different symlink target. If correcting the target and
+# replacing the config then fails validation, rollback must restore both pieces
+# of prior state rather than disabling the site.
+- name: _verify | Exercise rollback after replacing an existing site symlink
+  vars:
+    _nginx_verify_retarget_name: nginxverifyretarget
+    _nginx_verify_retarget_old: nginxverifyretargetold
+    _nginx_verify_retarget_old_path: /etc/nginx/sites-available/nginxverifyretargetold
+  block:
+    - name: _verify | Seed the existing retargeted site configs
+      copy:
+        dest: "/etc/nginx/sites-available/{{ item.name }}"
+        content: "{{ item.content }}"
+        owner: root
+        group: root
+        mode: "0640"
+      loop:
+        - name: "{{ _nginx_verify_retarget_name }}"
+          content: "# nginx verify retarget site sentinel\n"
+        - name: "{{ _nginx_verify_retarget_old }}"
+          content: "# nginx verify retarget destination sentinel\n"
+      loop_control:
+        label: "{{ item.name }}"
+      become: true
+
+    - name: _verify | Point the existing site symlink at its old target
+      file:
+        src: "{{ _nginx_verify_retarget_old_path }}"
+        dest: "/etc/nginx/sites-enabled/{{ _nginx_verify_retarget_name }}"
+        state: link
+      become: true
+
+    - name: _verify | Broken retargeted-site update restores the prior link
+      block:
+        - name: _verify | Configure a broken replacement for the retargeted site
+          import_tasks: site.yml
+          vars:
+            nginx_site_args:
+              subdomain: "{{ _nginx_verify_retarget_name }}"
+              proxy_pass: http://127.0.0.1:18080/
+              server_conf: |
+                nginx_verify_broken_site_directive on;
+
+        - name: _verify | Broken retargeted-site replacement must fail validation
+          fail:
+            msg: The broken retargeted-site replacement unexpectedly passed validation.
+
+      rescue:
+        - name: _verify | Inspect the restored retargeted site
+          stat:
+            path: "/etc/nginx/sites-enabled/{{ _nginx_verify_retarget_name }}"
+          register: nginx_verify_retarget_link
+          become: true
+
+        - name: _verify | Read the restored retargeted site config
+          slurp:
+            src: "/etc/nginx/sites-available/{{ _nginx_verify_retarget_name }}"
+          register: nginx_verify_retarget_config
+          become: true
+
+        - name: _verify | Retargeted site config and link were restored
+          assert:
+            that:
+              - nginx_verify_retarget_link.stat.islnk
+              - nginx_verify_retarget_link.stat.lnk_target == _nginx_verify_retarget_old_path
+              - >-
+                nginx_verify_retarget_config.content | b64decode
+                == '# nginx verify retarget site sentinel\n'
+
+  always:
+    - name: _verify | Remove the retargeted-site fixture
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/etc/nginx/sites-enabled/{{ _nginx_verify_retarget_name }}"
+        - "/etc/nginx/sites-available/{{ _nginx_verify_retarget_name }}"
+        - "{{ _nginx_verify_retarget_old_path }}"
+      become: true
+
 # Make the enable step fail after an idempotent template write. The helper's
 # rescue must leave an unchanged config alone and must not try to remove a
 # symlink it did not create.

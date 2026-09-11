@@ -99,6 +99,14 @@
 # brick the next host-wide reload for every other site. The template task
 # carries no `validate:` because `nginx -t` needs the full assembled config
 # (events{}, http{}, and the symlink), not a standalone server{} snippet.
+- name: site | Inspect the existing nginx site link
+  stat:
+    path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+  register: nginx_static_conf_enable_before
+  become: true
+  tags:
+    - nginx_site
+
 - name: site | Configure and enable nginx site
   become: true
   tags:
@@ -156,8 +164,21 @@
         path: "{{ nginx_static_conf.backup_file }}"
         state: absent
 
+    - name: site | Restore the previous site symlink
+      when:
+        - nginx_static_conf_enable.changed | default(false)
+        - nginx_static_conf_enable_before.stat.islnk | default(false)
+      file:
+        src: "{{ nginx_static_conf_enable_before.stat.lnk_target }}"
+        path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+        state: link
+        force: true
+
     - name: site | Remove a newly enabled site symlink
-      when: nginx_static_conf_enable.changed | default(false)
+      when:
+        - nginx_static_conf_enable.changed | default(false)
+        - not nginx_static_conf_enable_before.stat.exists | default(false)
+        - not (nginx_static_conf_enable_before.stat.islnk | default(false))
       file:
         path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
         state: absent
