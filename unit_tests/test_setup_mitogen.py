@@ -21,7 +21,8 @@ def test_parallel_repair_uses_an_atomic_symlink_swap(tmp_path: Path, monkeypatch
     link.symlink_to(old_target)
 
     worker_count = 8
-    read_barrier = threading.Barrier(worker_count)
+    # Bounded, so a worker that never reaches readlink fails the test instead of hanging it.
+    read_barrier = threading.Barrier(worker_count, timeout=10)
     original_readlink = os.readlink
 
     def synchronized_readlink(path: os.PathLike[str] | str) -> str:
