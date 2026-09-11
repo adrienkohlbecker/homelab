@@ -20,7 +20,6 @@ lm_sensors_config: |
 swap_partition: /dev/disk/by-partlabel/swap
 
 podman_storage_device: /dev/disk/by-partlabel/podman
-user_i7z_enabled: true
 
 # zram is the primary swap; the partition above is the overflow
 # (notes/swap_strategy.md).
