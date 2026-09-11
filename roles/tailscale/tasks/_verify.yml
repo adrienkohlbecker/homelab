@@ -152,12 +152,25 @@
         msg: "Expected the fixture Tailscale login to fail"
 
   rescue:
-    - name: _verify failure cleanup | Confirm login triggered cleanup
+    - name: _verify failure cleanup | Confirm login reached the failure path
       assert:
         that:
           - ansible_failed_task.name == 'register | Log in to headscale'
         fail_msg: >-
-          Registration did not exercise cleanup after a failed login
+          Registration did not reach the failed-login cleanup path
+
+    - name: _verify failure cleanup | Inspect the staged auth-key file
+      stat:
+        path: "{{ tailscale_authkey_temp.path }}"
+      register: tailscale_authkey_after_failed_login
+      become: true
+
+    - name: _verify failure cleanup | Confirm the staged auth key was removed
+      assert:
+        that:
+          - not tailscale_authkey_after_failed_login.stat.exists
+        fail_msg: >-
+          Failed login left the staged auth-key file on disk
 
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the add-wants link brings it back with the target's start.
