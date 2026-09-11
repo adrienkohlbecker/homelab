@@ -749,6 +749,10 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     universe = set(list_testable_roles())
     roles: set[str] = set()
 
+    if unknown_scenario_roles := scenario_roles.difference(universe):
+        unknown = ", ".join(sorted(unknown_scenario_roles))
+        return full_universe(f"condition scenarios changed for unknown role(s): {unknown}")
+
     if classification.packer_changed:
         roles.add("packer")
 
@@ -773,7 +777,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     # Only the edited scenarios' own roles gate differently; consumers do not.
     if scenario_roles:
         log(f"condition scenarios changed -> roles: {' '.join(sorted(scenario_roles))}")
-        roles.update(scenario_roles & universe)
+        roles.update(scenario_roles)
 
     release_cells = propagate_release_cells(classification.direct_roles, deps_map, universe)
     if release_cells:
