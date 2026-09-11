@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from ansible._internal._datatag._tags import Origin
 from condition_coverage import (
+    SYNTHETIC_SCENARIOS_PATH,
     ConditionKey,
     ConditionOutcome,
     check_coverage,
@@ -138,6 +139,14 @@ scenarios:
     scenarios.write_text(scenarios.read_text().replace("other_enabled", "renamed_away"))
     with pytest.raises(ValueError, match="does not match a current condition"):
         check_coverage(["scoped"], [], scenario_path=scenarios)
+
+
+def test_repository_scenarios_match_current_conditions(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The gate only reads the scenario file after a VM matrix has run, so a
+    # selector left stale by a task edit must fail here first.
+    monkeypatch.chdir(Path(__file__).resolve().parent.parent)
+
+    assert load_synthetic_outcomes(SYNTHETIC_SCENARIOS_PATH)
 
 
 def test_missing_outcomes_requires_true_and_false() -> None:
