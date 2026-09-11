@@ -10,23 +10,32 @@ import pytest
 from ansible._internal._datatag._tags import Origin
 from condition_coverage import (
     SYNTHETIC_SCENARIOS_PATH,
+    BlockDefinition,
+    BlockEvent,
+    BlockGap,
+    BlockKey,
     ConditionKey,
     ConditionOutcome,
     LoopKey,
     TaskDefinition,
     TaskKey,
+    append_block_events,
     append_loop_executions,
     append_task_executions,
+    check_block_coverage,
     check_coverage,
     check_loop_coverage,
     check_task_coverage,
     evaluated_outcomes,
+    format_block_gaps,
     format_missing_outcomes,
     format_unexecuted_loops,
     format_unexecuted_tasks,
+    inventory_blocks,
     inventory_conditions,
     inventory_loops,
     inventory_tasks,
+    load_block_events,
     load_executed_loops,
     load_executed_tasks,
     load_synthetic_outcomes,
@@ -156,6 +165,92 @@ def test_inventory_reads_executable_tasks_but_not_structural_actions(tmp_path: P
     }
 
 
+def test_block_coverage_requires_normal_rescue_and_always_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- name: Protected operation
+  block:
+    - name: Primary
+      command: /bin/true
+  rescue:
+    - name: Recover
+      debug: {msg: recovered}
+  always:
+    - name: Cleanup
+      debug: {msg: cleanup}
+"""
+    )
+    report = tmp_path / "coverage.jsonl"
+    definition = BlockDefinition(
+        BlockKey("roles/example/tasks/main.yml", 1),
+        "Protected operation",
+        TaskKey("roles/example/tasks/main.yml", 3),
+        True,
+        True,
+    )
+
+    assert inventory_blocks([source]) == {definition.key: definition}
+    assert check_block_coverage(["example"], []) == {
+        BlockGap(definition, "normal"),
+        BlockGap(definition, "rescue"),
+        BlockGap(definition, "always_after_normal"),
+        BlockGap(definition, "always_after_rescued"),
+    }
+
+    append_block_events(
+        report,
+        [
+            BlockEvent(definition.key, definition.normal_terminal, "block", "ok"),
+            BlockEvent(definition.key, TaskKey(definition.key.path, 6), "rescue", "ok"),
+            BlockEvent(definition.key, TaskKey(definition.key.path, 9), "always", "ok", "normal"),
+            BlockEvent(definition.key, TaskKey(definition.key.path, 9), "always", "ok", "rescued"),
+        ],
+        phase="verify",
+    )
+
+    assert len(load_block_events([report])) == 4
+    assert check_block_coverage(["example"], [report]) == set()
+    assert "missing rescue: Protected operation" in format_block_gaps({BlockGap(definition, "rescue")})
+
+
+def test_rescue_only_block_uses_terminal_primary_for_normal_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """\
+- name: Protected operation
+  block:
+    - name: Primary
+      command: /bin/true
+  rescue:
+    - name: Recover
+      debug: {msg: recovered}
+"""
+    )
+    report = tmp_path / "coverage.jsonl"
+    definition = next(iter(inventory_blocks([source]).values()))
+    append_block_events(
+        report,
+        [
+            BlockEvent(definition.key, definition.normal_terminal, "block", "ok"),
+            BlockEvent(definition.key, TaskKey(definition.key.path, 6), "rescue", "ok"),
+        ],
+        phase="verify",
+    )
+
+    assert check_block_coverage(["example"], [report]) == set()
+
+
 def test_inventory_accepts_an_empty_task_file(tmp_path: Path) -> None:
     source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
     source.parent.mkdir(parents=True)
@@ -232,6 +327,54 @@ def test_callback_counts_item_callback_but_not_empty_loop_aggregate(
     assert load_executed_loops([report]) == {LoopKey("roles/example/tasks/main.yml", 20, 9, "{{ example_items }}")}
     assert load_executed_tasks([report]) == {TaskKey("roles/example/tasks/main.yml", 20)}
     assert len(report.read_text().splitlines()) == 2
+
+
+def test_callback_correlates_always_with_normal_and_rescued_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = tmp_path / "coverage.jsonl"
+    monkeypatch.setenv("ANSIBLE_CONDITION_COVERAGE_FILE", str(report))
+    block_path = "/tmp/staged/roles/example/tasks/main.yml:10"
+
+    def task(name: str, line: int, uuid: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            name=name,
+            _uuid=uuid,
+            _parent=None,
+            loop=None,
+            loop_with=None,
+            when=[],
+            get_path=lambda: f"/tmp/staged/roles/example/tasks/main.yml:{line}",
+        )
+
+    primary = task("Primary", 12, "primary")
+    rescue = task("Rescue", 15, "rescue")
+    always = task("Always", 18, "always")
+    parent = SimpleNamespace(
+        _uuid="block",
+        _parent=None,
+        block=[primary],
+        rescue=[rescue],
+        always=[always],
+        get_path=lambda: block_path,
+    )
+    for child in (primary, rescue, always):
+        child._parent = parent
+    host = SimpleNamespace(get_name=lambda: "example")
+
+    def result(child: SimpleNamespace) -> SimpleNamespace:
+        return SimpleNamespace(task=child, result={}, _host=host)
+
+    callback = condition_coverage_callback.CallbackModule()
+    callback.v2_runner_on_ok(cast(Any, result(primary)))
+    callback.v2_runner_on_ok(cast(Any, result(always)))
+    callback.v2_runner_on_failed(cast(Any, result(primary)))
+    callback.v2_runner_on_ok(cast(Any, result(rescue)))
+    callback.v2_runner_on_ok(cast(Any, result(always)))
+
+    always_events = {event.after for event in load_block_events([report]) if event.section == "always"}
+    assert always_events == {"normal", "rescued"}
 
 
 def test_task_coverage_requires_a_non_skipped_terminal_callback(

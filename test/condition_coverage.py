@@ -70,6 +70,44 @@ class TaskDefinition:
     name: str
 
 
+@dataclass(frozen=True, order=True)
+class BlockKey:
+    """Stable source identity for one branch-bearing block."""
+
+    path: str
+    line: int
+
+
+@dataclass(frozen=True, order=True)
+class BlockDefinition:
+    """One block with rescue or always control flow."""
+
+    key: BlockKey
+    name: str
+    normal_terminal: TaskKey
+    has_rescue: bool
+    has_always: bool
+
+
+@dataclass(frozen=True, order=True)
+class BlockEvent:
+    """One observed branch-bearing block section callback."""
+
+    block: BlockKey
+    task: TaskKey
+    section: str
+    status: str
+    after: str | None = None
+
+
+@dataclass(frozen=True, order=True)
+class BlockGap:
+    """One unobserved control-flow outcome for a block."""
+
+    block: BlockDefinition
+    outcome: str
+
+
 _TASK_STRUCTURAL_KEYS = frozenset({"block", "rescue", "always"})
 _TASK_NON_EXECUTING_ACTIONS = frozenset({"import_role", "import_tasks", "include_role", "include_tasks", "meta"})
 _TASK_ATTRIBUTE_KEYS = frozenset(Task.fattributes).union(_TASK_STRUCTURAL_KEYS)
@@ -208,6 +246,28 @@ def _task_definition(task: dict[object, object]) -> TaskDefinition | None:
     )
 
 
+def _block_definition(task: dict[object, object]) -> BlockDefinition | None:
+    if "block" not in task or not (task.get("rescue") or task.get("always")):
+        return None
+    origin = Origin.get_tag(task)
+    if origin is None or origin.path is None or origin.line_num is None:
+        raise ValueError(f"block has no complete YAML origin: {task!r}")
+    primary_tasks = [
+        definition
+        for child in _walk_task_mappings(task["block"])
+        if (definition := _task_definition(child)) is not None
+    ]
+    if not primary_tasks:
+        raise ValueError(f"branch-bearing block has no executable primary task: {task!r}")
+    return BlockDefinition(
+        key=BlockKey(normalize_source_path(origin.path), origin.line_num),
+        name=str(task.get("name", "<unnamed>")),
+        normal_terminal=primary_tasks[-1].key,
+        has_rescue=bool(task.get("rescue")),
+        has_always=bool(task.get("always")),
+    )
+
+
 def production_condition_paths(roles: Iterable[str] | None = None, *, include_site: bool = False) -> list[Path]:
     """Return production task files in the requested coverage scope.
 
@@ -267,6 +327,20 @@ def inventory_tasks(paths: Iterable[Path]) -> dict[TaskKey, TaskDefinition]:
     return tasks
 
 
+def inventory_blocks(paths: Iterable[Path]) -> dict[BlockKey, BlockDefinition]:
+    """Load every production block with rescue or always control flow."""
+    loader = DataLoader()
+    blocks: dict[BlockKey, BlockDefinition] = {}
+    for path in paths:
+        document = loader.load_from_file(str(path.resolve()))
+        for task in _document_task_mappings(document):
+            if definition := _block_definition(task):
+                if previous := blocks.get(definition.key):
+                    raise ValueError(f"duplicate block source identity: {previous!r}, {definition!r}")
+                blocks[definition.key] = definition
+    return blocks
+
+
 def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: str) -> None:
     """Append observed outcomes as compact JSON lines."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -294,6 +368,17 @@ def append_task_executions(path: Path, tasks: Iterable[TaskKey], *, phase: str) 
             handle.write("\n")
 
 
+def append_block_events(path: Path, events: Iterable[BlockEvent], *, phase: str) -> None:
+    """Append observed block section callbacks."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        for event in events:
+            handle.write(
+                json.dumps({"block_event": asdict(event), "phase": phase}, sort_keys=True, separators=(",", ":"))
+            )
+            handle.write("\n")
+
+
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
     for path in paths:
         with path.open(encoding="utf-8") as handle:
@@ -303,7 +388,7 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                 data: dict[str, Any] = json.loads(line)
                 if error := data.get("error"):
                     raise ValueError(f"{path}:{line_number}: callback error: {error}")
-                if not {"condition", "loop", "task"}.intersection(data):
+                if not {"condition", "loop", "task", "block_event"}.intersection(data):
                     raise ValueError(f"{path}:{line_number}: unknown coverage record")
                 yield path, line_number, data
 
@@ -327,6 +412,25 @@ def load_executed_loops(paths: Iterable[Path]) -> set[LoopKey]:
 def load_executed_tasks(paths: Iterable[Path]) -> set[TaskKey]:
     """Merge executed tasks from callback JSONL reports."""
     return {TaskKey(**data["task"]) for _path, _line_number, data in _report_rows(paths) if "task" in data}
+
+
+def load_block_events(paths: Iterable[Path]) -> set[BlockEvent]:
+    """Merge block events from callback JSONL reports."""
+    events: set[BlockEvent] = set()
+    for _path, _line_number, data in _report_rows(paths):
+        if "block_event" not in data:
+            continue
+        event = data["block_event"]
+        events.add(
+            BlockEvent(
+                block=BlockKey(**event["block"]),
+                task=TaskKey(**event["task"]),
+                section=event["section"],
+                status=event["status"],
+                after=event.get("after"),
+            )
+        )
+    return events
 
 
 def _normalized_expression(expression: str) -> str:
@@ -462,6 +566,16 @@ def format_unexecuted_tasks(missing: set[TaskDefinition]) -> str:
     return "\n".join(lines)
 
 
+def format_block_gaps(missing: set[BlockGap]) -> str:
+    """Render unobserved block control-flow outcomes."""
+    lines = [f"{len(missing)} Ansible block outcome(s) lack coverage:"]
+    lines.extend(
+        f"  {gap.block.key.path}:{gap.block.key.line}: missing {gap.outcome}: {gap.block.name}"
+        for gap in sorted(missing)
+    )
+    return "\n".join(lines)
+
+
 def check_coverage(
     roles: Iterable[str],
     reports: Iterable[Path],
@@ -508,6 +622,37 @@ def check_task_coverage(
     return {expected[key] for key in missing_keys}
 
 
+def check_block_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> set[BlockGap]:
+    """Return branch-bearing block outcomes absent from all reports."""
+    expected = inventory_blocks(production_condition_paths(roles, include_site=include_site))
+    events = load_block_events(reports)
+    gaps: set[BlockGap] = set()
+    for block in expected.values():
+        block_events = {event for event in events if event.block == block.key}
+        normal_covered = (
+            any(event.section == "always" and event.after == "normal" for event in block_events)
+            if block.has_always
+            else any(
+                event.section == "block" and event.task == block.normal_terminal and event.status in {"ok", "skipped"}
+                for event in block_events
+            )
+        )
+        if not normal_covered:
+            gaps.add(BlockGap(block, "normal"))
+        if block.has_rescue and not any(event.section == "rescue" for event in block_events):
+            gaps.add(BlockGap(block, "rescue"))
+        if block.has_always:
+            for predecessor in ("normal", "rescued" if block.has_rescue else "failed"):
+                if not any(event.section == "always" and event.after == predecessor for event in block_events):
+                    gaps.add(BlockGap(block, f"always_after_{predecessor}"))
+    return gaps
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -532,6 +677,7 @@ def main() -> int:
         missing = check_coverage(args.roles, args.reports, include_site=args.include_site)
         unexecuted_loops = check_loop_coverage(args.roles, args.reports, include_site=args.include_site)
         unexecuted_tasks = check_task_coverage(args.roles, args.reports, include_site=args.include_site)
+        block_gaps = check_block_coverage(args.roles, args.reports, include_site=args.include_site)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Condition coverage report error: {exc}", file=sys.stderr)
         return 1
@@ -541,9 +687,14 @@ def main() -> int:
         print(format_unexecuted_loops(unexecuted_loops), file=sys.stderr)
     if unexecuted_tasks:
         print(format_unexecuted_tasks(unexecuted_tasks), file=sys.stderr)
-    if missing or unexecuted_loops or unexecuted_tasks:
+    if block_gaps:
+        print(format_block_gaps(block_gaps), file=sys.stderr)
+    if missing or unexecuted_loops or unexecuted_tasks or block_gaps:
         return 1
-    print("Every selected Ansible condition evaluated both true and false, every loop iterated, and every task ran.")
+    print(
+        "Every selected Ansible condition evaluated both true and false, every loop iterated, "
+        "every task ran, and every block path executed."
+    )
     return 0
 
 

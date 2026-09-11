@@ -24,9 +24,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from condition_coverage import (
+    check_block_coverage,
     check_coverage,
     check_loop_coverage,
     check_task_coverage,
+    format_block_gaps,
     format_missing_outcomes,
     format_unexecuted_loops,
     format_unexecuted_tasks,
@@ -491,6 +493,7 @@ def main() -> int:
             missing = check_coverage(selected_roles, reports)
             unexecuted_loops = check_loop_coverage(selected_roles, reports)
             unexecuted_tasks = check_task_coverage(selected_roles, reports)
+            block_gaps = check_block_coverage(selected_roles, reports)
         except (OSError, ValueError) as exc:
             print(f"Condition coverage report error: {exc}", file=sys.stderr)
             return 1
@@ -500,11 +503,13 @@ def main() -> int:
             print(format_unexecuted_loops(unexecuted_loops), file=sys.stderr)
         if unexecuted_tasks:
             print(format_unexecuted_tasks(unexecuted_tasks), file=sys.stderr)
-        if missing or unexecuted_loops or unexecuted_tasks:
+        if block_gaps:
+            print(format_block_gaps(block_gaps), file=sys.stderr)
+        if missing or unexecuted_loops or unexecuted_tasks or block_gaps:
             return 1
         print(
             f"Every condition in {len(selected_roles)} selected role(s) evaluated both true and false, "
-            "every loop iterated, and every task ran.",
+            "every loop iterated, every task ran, and every block path executed.",
             file=sys.stderr,
         )
     else:
