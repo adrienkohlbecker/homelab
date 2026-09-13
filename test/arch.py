@@ -7,21 +7,22 @@ an arch means adding one profile constant plus a platform.machine() mapping.
 from __future__ import annotations
 
 import dataclasses
+import os
 import platform
 from pathlib import Path
 
-# Newer edk2 firmware fetched by `mise run test:firmware` into a gitignored
-# path (symlinked across worktrees by mise-tasks/worktree/populate.sh, so one
-# fetch in the main checkout covers all). Homebrew's qemu (through 11.0.1)
-# bundles edk2-stable202408, whose DXE pool allocator hits a heap ASSERT in
-# MdeModulePkg/Core/Dxe/Mem/Pool.c when rEFInd boots the OS across an aarch64
-# *warm* reboot (`systemctl reboot`) -- the cold first boot is fine, so it only
-# bites tests that reboot (reboot/kdump/console _verify).
-# edk2-stable202511 fixes it. Required on aarch64 (set as required_firmware
-# below): uefi_code_path_for raises with fetch guidance when it is absent rather
-# than silently falling back to Homebrew's broken blob. macOS-only concern:
-# aarch64 qemu is the local fixture; CI runs x86 EC2 cells and prod is amd64.
-_AARCH64_PINNED_FIRMWARE = Path(__file__).resolve().parent / "firmware" / "edk2-aarch64-code.fd"
+_AARCH64_FIRMWARE_ENV = "HOMELAB_AARCH64_FIRMWARE_DIR"
+_AARCH64_FIRMWARE_DIR = Path(__file__).resolve().parent / "firmware"
+
+
+@dataclasses.dataclass(frozen=True)
+class FirmwareRequirement:
+    """A pinned CODE/VARS pair required instead of host-packaged firmware."""
+
+    default_dir: Path
+    directory_env: str
+    code_name: str
+    vars_name: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -56,11 +57,9 @@ class ArchProfile:
     # minimal variant doesn't need UEFI pflash. aarch64 virt only boots via
     # UEFI -- pflash must be attached even on minimal.
     bios_boot_supported: bool
-    # A firmware blob the harness fetches itself and *requires* over any
-    # system-provided one. When set, uefi_code_path_for returns it (or raises
-    # with fetch guidance if absent) and never consults uefi_code_candidates.
-    # None = use the candidate search. aarch64 pins a newer edk2 (see above).
-    required_firmware: Path | None = None
+    # A CODE/VARS pair the harness requires over any system-provided firmware.
+    # None = use the CODE candidate search and synthesize a blank VARS file.
+    required_firmware: FirmwareRequirement | None = None
 
 
 X86_64 = ArchProfile(
@@ -105,12 +104,17 @@ AARCH64 = ArchProfile(
         "-device",
         "usb-tablet",
     ),
-    # aarch64 requires the fetched edk2 (required_firmware below); the candidate
-    # search is unused because Homebrew's/the distro's bundled blob ASSERTs on
-    # warm reboot (see above).
+    # Homebrew's QEMU and Ubuntu Noble both package edk2-stable202408, whose DXE
+    # allocator ASSERTs when rEFInd warm-reboots. Keep the newer pin mandatory
+    # on every aarch64 host rather than silently accepting the packaged blobs.
     uefi_code_candidates=(),
     bios_boot_supported=False,
-    required_firmware=_AARCH64_PINNED_FIRMWARE,
+    required_firmware=FirmwareRequirement(
+        default_dir=_AARCH64_FIRMWARE_DIR,
+        directory_env=_AARCH64_FIRMWARE_ENV,
+        code_name="edk2-aarch64-code.fd",
+        vars_name="edk2-aarch64-vars.fd",
+    ),
 )
 
 
@@ -131,26 +135,31 @@ def detect_host_arch() -> ArchProfile:
     return profile
 
 
-def uefi_code_path_for(profile: ArchProfile) -> Path:
-    """Locate the EDK2/OVMF CODE blob matching *profile* on this host.
+def uefi_firmware_paths_for(profile: ArchProfile) -> tuple[Path, Path | None]:
+    """Locate the EDK2/OVMF CODE and optional VARS template for *profile*.
 
-    When the profile pins a required_firmware, return it (or raise with fetch
-    guidance if absent) -- the harness-managed blob is mandatory and we never
-    fall back to a system one. Otherwise search uefi_code_candidates in order;
-    first existing path wins. Raises RuntimeError if nothing is found.
+    Required firmware can be relocated as one directory through its environment
+    override. Both members must exist; otherwise fail with fetch guidance rather
+    than falling back to an older host package. Architectures without a pin use
+    the first existing CODE candidate and let the harness create blank VARS.
     """
     if profile.required_firmware is not None:
-        if profile.required_firmware.exists():
-            return profile.required_firmware
-        raise RuntimeError(
-            f"Required {profile.name} UEFI firmware is missing: {profile.required_firmware}\n"
-            "Run `mise run test:firmware` to fetch it. Homebrew's bundled "
-            "edk2-stable202408 ASSERTs in rEFInd across a warm reboot, wedging "
-            "any role that reboots (reboot/kdump/console _verify)."
-        )
+        requirement = profile.required_firmware
+        directory = Path(os.environ.get(requirement.directory_env, requirement.default_dir))
+        code_path = directory / requirement.code_name
+        vars_path = directory / requirement.vars_name
+        missing = [path for path in (code_path, vars_path) if not path.is_file()]
+        if missing:
+            raise RuntimeError(
+                f"Required {profile.name} UEFI firmware is missing: {', '.join(map(str, missing))}\n"
+                f"Run `mise run test:firmware` to fetch it, or set {requirement.directory_env} "
+                "to the directory containing the pinned CODE and VARS files. Older packaged "
+                "edk2 builds ASSERT in rEFInd across a warm reboot."
+            )
+        return code_path, vars_path
     for c in profile.uefi_code_candidates:
         if Path(c).exists():
-            return Path(c)
+            return Path(c), None
     raise RuntimeError(
         f"No {profile.name} UEFI firmware found in {list(profile.uefi_code_candidates)}. "
         "Install via `brew install qemu` (macOS), "

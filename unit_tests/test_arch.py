@@ -57,7 +57,7 @@ class TestDetectHostArch:
             arch.detect_host_arch()
 
 
-class TestUefiCodePath:
+class TestUefiFirmwarePaths:
     def test_finds_first_existing(self, tmp_path: Path) -> None:
         profile = arch.ArchProfile(
             name="test",
@@ -76,7 +76,7 @@ class TestUefiCodePath:
         )
         (tmp_path / "found.fd").write_bytes(b"uefi")
         (tmp_path / "also_found.fd").write_bytes(b"uefi2")
-        assert arch.uefi_code_path_for(profile) == tmp_path / "found.fd"
+        assert arch.uefi_firmware_paths_for(profile) == (tmp_path / "found.fd", None)
 
     def test_raises_when_none_exist(self) -> None:
         profile = arch.ArchProfile(
@@ -91,4 +91,58 @@ class TestUefiCodePath:
             bios_boot_supported=False,
         )
         with pytest.raises(RuntimeError, match="No test UEFI firmware"):
-            arch.uefi_code_path_for(profile)
+            arch.uefi_firmware_paths_for(profile)
+
+    def test_required_pair_uses_directory_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        default_dir = tmp_path / "default"
+        override_dir = tmp_path / "override"
+        override_dir.mkdir()
+        code = override_dir / "code.fd"
+        variables = override_dir / "vars.fd"
+        code.write_bytes(b"code")
+        variables.write_bytes(b"vars")
+        monkeypatch.setenv("TEST_FIRMWARE_DIR", str(override_dir))
+        profile = arch.ArchProfile(
+            name="test",
+            qemu_binary="qemu-system-test",
+            machine_type="virt",
+            cloud_image_suffix="test",
+            serial_console_token="console=tty",
+            serial_console_default="console=tty0",
+            keep_vm_extra_devices=(),
+            uefi_code_candidates=(),
+            bios_boot_supported=False,
+            required_firmware=arch.FirmwareRequirement(
+                default_dir=default_dir,
+                directory_env="TEST_FIRMWARE_DIR",
+                code_name=code.name,
+                vars_name=variables.name,
+            ),
+        )
+
+        assert arch.uefi_firmware_paths_for(profile) == (code, variables)
+
+    def test_required_pair_rejects_missing_vars(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("TEST_FIRMWARE_DIR", raising=False)
+        code = tmp_path / "code.fd"
+        code.write_bytes(b"code")
+        profile = arch.ArchProfile(
+            name="test",
+            qemu_binary="qemu-system-test",
+            machine_type="virt",
+            cloud_image_suffix="test",
+            serial_console_token="console=tty",
+            serial_console_default="console=tty0",
+            keep_vm_extra_devices=(),
+            uefi_code_candidates=(),
+            bios_boot_supported=False,
+            required_firmware=arch.FirmwareRequirement(
+                default_dir=tmp_path,
+                directory_env="TEST_FIRMWARE_DIR",
+                code_name=code.name,
+                vars_name="vars.fd",
+            ),
+        )
+
+        with pytest.raises(RuntimeError, match=r"vars\.fd"):
+            arch.uefi_firmware_paths_for(profile)

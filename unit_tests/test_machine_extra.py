@@ -229,6 +229,30 @@ class TestDiscoverPackerDisks:
             machine.discover_packer_disks(tmp_path)
 
 
+class TestUefiDrives:
+    def test_copies_required_vars_template(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        code = tmp_path / "code.fd"
+        variables = tmp_path / "vars.fd"
+        code.write_bytes(b"code")
+        variables.write_bytes(b"variables")
+        monkeypatch.setattr(machine, "uefi_firmware_paths_for", lambda _arch: (code, variables))
+        instance = machine_factory(host_arch="aarch64")
+
+        drives = asyncio.run(instance._uefi_drives())
+
+        copied_vars = instance.workdir_path / "uefi-vars.fd"
+        assert copied_vars.read_bytes() == b"variables"
+        assert drives == [
+            f"file={code},if=pflash,unit=0,format=raw,readonly=on",
+            f"file={copied_vars},if=pflash,unit=1,format=raw",
+        ]
+
+
 # ---------------------------------------------------------------------------
 # Machine.__init__ ubuntu validation
 # ---------------------------------------------------------------------------
