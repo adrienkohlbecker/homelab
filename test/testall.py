@@ -365,10 +365,11 @@ def _condition_coverage_reports(roles: Collection[str]) -> list[Path]:
 def _clear_condition_coverage_reports(roles: Collection[str]) -> None:
     """Drop prior reports for the roles this run is about to exercise.
 
-    Each Machine only unlinks its own ``<machine>.<ubuntu>.<role>.jsonl``, but the
-    gate globs by role. A report left behind by a machine since dropped from a
-    role's meta/test.yml would merge in as though this run had produced it, so a
-    branch that is no longer exercised anywhere would still read as covered.
+    Each Machine only unlinks its own
+    ``<machine>.<ubuntu>.<architecture>.<role>.jsonl``, but the gate globs by
+    role. A report left behind by a machine since dropped from a role's
+    meta/test.yml would merge in as though this run had produced it, so a branch
+    that is no longer exercised anywhere would still read as covered.
     """
     for stale in _condition_coverage_reports(roles):
         stale.unlink()
@@ -520,7 +521,10 @@ def main() -> int:
         if missing_until_outcomes:
             print(format_missing_until_outcomes(missing_until_outcomes), file=sys.stderr)
         if missing_result_predicate_outcomes:
-            print(format_missing_result_predicate_outcomes(missing_result_predicate_outcomes), file=sys.stderr)
+            print(
+                format_missing_result_predicate_outcomes(missing_result_predicate_outcomes),
+                file=sys.stderr,
+            )
         if unexpanded_includes:
             print(format_unexpanded_includes(unexpanded_includes), file=sys.stderr)
         if exit_gaps:

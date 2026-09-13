@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 from ansible._internal._datatag._tags import Origin
 from condition_coverage import (
+    COVERAGE_SCHEMA_VERSION,
     SYNTHETIC_SCENARIOS_PATH,
     BlockDefinition,
     BlockEvent,
@@ -16,6 +17,7 @@ from condition_coverage import (
     BlockKey,
     ConditionKey,
     ConditionOutcome,
+    CoverageProvenance,
     ExitGap,
     ExitKey,
     ExitOutcome,
@@ -33,6 +35,8 @@ from condition_coverage import (
     append_exit_outcomes,
     append_include_events,
     append_loop_executions,
+    append_outcomes,
+    append_report_provenance,
     append_result_predicate_outcomes,
     append_task_executions,
     append_until_outcomes,
@@ -66,6 +70,7 @@ from condition_coverage import (
     load_executed_tasks,
     load_exit_outcomes,
     load_include_events,
+    load_outcomes,
     load_result_predicate_outcomes,
     load_synthetic_outcomes,
     load_synthetic_result_predicate_outcomes,
@@ -78,6 +83,19 @@ from condition_coverage import (
 )
 
 import callback_plugins.condition_coverage as condition_coverage_callback
+
+_SOURCE_SHA = "1" * 40
+
+
+def _start_report(path: Path, *, architecture: str = "x86_64", source_sha: str = _SOURCE_SHA) -> None:
+    append_report_provenance(
+        path,
+        CoverageProvenance(
+            schema=COVERAGE_SCHEMA_VERSION,
+            source_sha=source_sha,
+            architecture=architecture,
+        ),
+    )
 
 
 def _condition(text: str, line: int) -> object:
@@ -115,6 +133,57 @@ def test_unknown_false_condition_is_rejected() -> None:
         evaluated_outcomes([_condition("first", 10)], "other")
 
 
+def test_reports_merge_matching_source_across_architectures(tmp_path: Path) -> None:
+    condition = ConditionKey("roles/example/tasks/main.yml", 10, 9, "enabled")
+    x86_report = tmp_path / "x86_64.jsonl"
+    arm_report = tmp_path / "aarch64.jsonl"
+    _start_report(x86_report, architecture="x86_64")
+    _start_report(arm_report, architecture="aarch64")
+    append_outcomes(x86_report, [ConditionOutcome(condition, False)], phase="converge")
+    append_outcomes(arm_report, [ConditionOutcome(condition, True)], phase="converge")
+
+    assert load_outcomes([x86_report, arm_report]) == {condition: {False, True}}
+
+
+def test_reports_reject_mixed_source_shas(tmp_path: Path) -> None:
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+    _start_report(first)
+    _start_report(second, source_sha="2" * 40)
+
+    with pytest.raises(ValueError, match="mixed coverage source SHAs"):
+        load_outcomes([first, second])
+
+
+def test_reports_reject_mixed_schemas(tmp_path: Path) -> None:
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+    _start_report(first)
+    append_report_provenance(
+        second,
+        CoverageProvenance(
+            schema=COVERAGE_SCHEMA_VERSION + 1,
+            source_sha=_SOURCE_SHA,
+            architecture="aarch64",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="mixed coverage schemas"):
+        load_outcomes([first, second])
+
+
+def test_reports_reject_legacy_unprovenanced_records(tmp_path: Path) -> None:
+    report = tmp_path / "legacy.jsonl"
+    append_outcomes(
+        report,
+        [ConditionOutcome(ConditionKey("roles/example/tasks/main.yml", 10, 9, "enabled"), True)],
+        phase="converge",
+    )
+
+    with pytest.raises(ValueError, match="unprovenanced coverage record"):
+        load_outcomes([report])
+
+
 def test_inventory_reads_scalar_and_list_conditions(tmp_path: Path) -> None:
     tasks = tmp_path / "roles" / "example" / "tasks"
     tasks.mkdir(parents=True)
@@ -136,7 +205,11 @@ def test_inventory_reads_scalar_and_list_conditions(tmp_path: Path) -> None:
 
     conditions = inventory_conditions([source])
 
-    assert {condition.expression for condition in conditions} == {"scalar_enabled", "first_enabled", "second_enabled"}
+    assert {condition.expression for condition in conditions} == {
+        "scalar_enabled",
+        "first_enabled",
+        "second_enabled",
+    }
 
 
 def test_inventory_reads_modern_and_legacy_loops(tmp_path: Path) -> None:
@@ -155,7 +228,10 @@ def test_inventory_reads_modern_and_legacy_loops(tmp_path: Path) -> None:
 
     loops = inventory_loops([source])
 
-    assert {loop.expression for loop in loops} == {"{{ modern_items }}", "['first', 'second']"}
+    assert {loop.expression for loop in loops} == {
+        "{{ modern_items }}",
+        "['first', 'second']",
+    }
 
 
 def test_loop_key_normalizes_ansible_runtime_list_wrapper() -> None:
@@ -170,7 +246,9 @@ def test_loop_key_normalizes_ansible_runtime_list_wrapper() -> None:
     )
 
 
-def test_inventory_reads_executable_tasks_but_not_structural_actions(tmp_path: Path) -> None:
+def test_inventory_reads_executable_tasks_but_not_structural_actions(
+    tmp_path: Path,
+) -> None:
     source = tmp_path / "roles" / "example" / "tasks" / "main.yml"
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -248,13 +326,26 @@ def test_block_coverage_requires_normal_rescue_and_always_paths(
         BlockGap(definition, "always_after_rescued"),
     }
 
+    _start_report(report)
     append_block_events(
         report,
         [
             BlockEvent(definition.key, definition.normal_terminal, "block", "ok"),
             BlockEvent(definition.key, TaskKey(definition.key.path, 6), "rescue", "ok"),
-            BlockEvent(definition.key, TaskKey(definition.key.path, 9), "always", "ok", "normal"),
-            BlockEvent(definition.key, TaskKey(definition.key.path, 9), "always", "ok", "rescued"),
+            BlockEvent(
+                definition.key,
+                TaskKey(definition.key.path, 9),
+                "always",
+                "ok",
+                "normal",
+            ),
+            BlockEvent(
+                definition.key,
+                TaskKey(definition.key.path, 9),
+                "always",
+                "ok",
+                "rescued",
+            ),
         ],
         phase="verify",
     )
@@ -284,6 +375,7 @@ def test_rescue_only_block_uses_terminal_primary_for_normal_coverage(
     )
     report = tmp_path / "coverage.jsonl"
     definition = next(iter(inventory_blocks([source]).values()))
+    _start_report(report)
     append_block_events(
         report,
         [
@@ -319,6 +411,7 @@ def test_until_coverage_requires_retry_and_success_outcomes(
     assert check_until_coverage(["example"], []) == {until: {False, True}}
     assert "missing false, true: retry_result is succeeded" in format_missing_until_outcomes({until: {False, True}})
 
+    _start_report(report)
     append_until_outcomes(
         report,
         [UntilOutcome(until, False), UntilOutcome(until, True)],
@@ -415,9 +508,13 @@ def test_result_predicate_coverage_requires_false_and_true(
     rendered = format_missing_result_predicate_outcomes({predicate: {False, True}})
     assert "changed_when missing false, true: dynamic_change" in rendered
 
+    _start_report(report)
     append_result_predicate_outcomes(
         report,
-        [ResultPredicateOutcome(predicate, False), ResultPredicateOutcome(predicate, True)],
+        [
+            ResultPredicateOutcome(predicate, False),
+            ResultPredicateOutcome(predicate, True),
+        ],
         phase="converge",
     )
 
@@ -537,6 +634,7 @@ def test_include_coverage_requires_expected_task_and_role_targets(
     assert check_include_coverage(["example"], []) == {task_include, role_include}
     assert "Load task file -> roles/example/tasks/included.yml" in format_unexpanded_includes({task_include})
 
+    _start_report(report)
     append_include_events(
         report,
         [
@@ -580,6 +678,7 @@ def test_early_exit_coverage_requires_exit_and_executed_fallthrough(
     }
     assert "missing exit: End role conditionally" in format_exit_gaps({ExitGap(definition, "exit")})
 
+    _start_report(report)
     append_exit_outcomes(
         report,
         [ExitOutcome(definition.key, False), ExitOutcome(definition.key, True)],
@@ -646,7 +745,14 @@ def test_production_paths_include_helpers_but_not_test_hooks(
     monkeypatch.chdir(tmp_path)
     tasks = tmp_path / "roles" / "example" / "tasks"
     tasks.mkdir(parents=True)
-    for name in ("main.yml", "_trim_timer.yml", "_setup.yml", "_setup_extra.yml", "_verify.yml", "_verify_more.yml"):
+    for name in (
+        "main.yml",
+        "_trim_timer.yml",
+        "_setup.yml",
+        "_setup_extra.yml",
+        "_verify.yml",
+        "_verify_more.yml",
+    ):
         (tasks / name).write_text("- debug: {msg: example}\n")
 
     assert production_condition_paths(["example"]) == [
@@ -669,6 +775,7 @@ def test_loop_coverage_requires_an_observed_iteration(
     assert check_loop_coverage(["example"], []) == {loop}
     assert "main.yml:2:9: {{ example_items }}" in format_unexecuted_loops({loop})
 
+    _start_report(report)
     append_loop_executions(report, [loop], phase="converge")
 
     assert load_executed_loops([report]) == {loop}
@@ -699,14 +806,14 @@ def test_callback_counts_item_callback_but_not_empty_loop_aggregate(
     callback = condition_coverage_callback.CallbackModule()
 
     callback.v2_runner_on_skipped(cast(Any, result))
-    assert not report.exists()
+    assert len(report.read_text().splitlines()) == 1
 
     callback.v2_runner_item_on_ok(cast(Any, result))
     callback.v2_runner_item_on_ok(cast(Any, result))
 
     assert load_executed_loops([report]) == {LoopKey("roles/example/tasks/main.yml", 20, 9, "{{ example_items }}")}
     assert load_executed_tasks([report]) == {TaskKey("roles/example/tasks/main.yml", 20)}
-    assert len(report.read_text().splitlines()) == 2
+    assert len(report.read_text().splitlines()) == 3
 
 
 def test_callback_correlates_always_with_normal_and_rescued_paths(
@@ -785,7 +892,10 @@ def test_callback_records_retry_false_then_terminal_true(
     callback.v2_runner_on_ok(cast(Any, result))
 
     assert load_until_outcomes([report]) == {
-        UntilKey("roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"): {False, True}
+        UntilKey("roles/example/tasks/main.yml", 24, 10, "retry_result is succeeded"): {
+            False,
+            True,
+        }
     }
 
 
@@ -837,6 +947,7 @@ def test_task_coverage_requires_a_non_skipped_terminal_callback(
     assert check_task_coverage(["example"], []) == {expected}
     assert "main.yml:1: [debug] Example" in format_unexecuted_tasks({expected})
 
+    _start_report(report)
     append_task_executions(report, [expected.key], phase="converge")
 
     assert load_executed_tasks([report]) == {expected.key}
@@ -967,7 +1078,9 @@ scenarios:
         check_coverage(["scoped"], [], scenario_path=scenarios)
 
 
-def test_repository_scenarios_match_current_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repository_scenarios_match_current_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # The gate only reads the scenario file after a VM matrix has run, so a
     # selector left stale by a task edit must fail here first.
     monkeypatch.chdir(Path(__file__).resolve().parent.parent)

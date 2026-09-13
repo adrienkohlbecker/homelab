@@ -428,8 +428,8 @@ class Machine:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
         spec = spec._replace(
-            vcpus=self.run_options.vcpus if self.run_options.vcpus is not None else spec.vcpus,
-            memory_mb=self.run_options.memory_mb if self.run_options.memory_mb is not None else spec.memory_mb,
+            vcpus=(self.run_options.vcpus if self.run_options.vcpus is not None else spec.vcpus),
+            memory_mb=(self.run_options.memory_mb if self.run_options.memory_mb is not None else spec.memory_mb),
         )
 
         self.imagedir: Path = imagedir_for_host()
@@ -478,7 +478,8 @@ class Machine:
         self.dmesg_file = output_dir / f"{prefix}.dmesg.ansi"
         self.systemctl_failed_file = output_dir / f"{prefix}.systemctl-failed.ansi"
         self.passt_file = output_dir / f"{prefix}.passt.ansi"
-        self.condition_coverage_file = output_dir / "condition_coverage" / f"{prefix}.jsonl"
+        coverage_name = f"{self.machine}.{self.ubuntu_name}.{self.arch.name}.{self.role}.jsonl"
+        self.condition_coverage_file = output_dir / "condition_coverage" / coverage_name
         self._artifact_files = (
             self.output_file,
             self.journal_file,
@@ -695,7 +696,11 @@ class Machine:
         Driven by HOMELAB_TEST_IN_AWS: set by the aws_qemu CI cell (a qemu
         guest on an AWS shell runner), unset for local/lab qemu.
         """
-        return os.environ.get("HOMELAB_TEST_IN_AWS", "").strip().lower() in ("1", "true", "yes")
+        return os.environ.get("HOMELAB_TEST_IN_AWS", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details.
@@ -739,7 +744,11 @@ class Machine:
             "-e",
             f"wan_probe_host={self.ssh_host}",
             "-e",
-            json.dumps({"wan_forward_ports": self.wan_forward_ports}, sort_keys=True, separators=(",", ":")),
+            json.dumps(
+                {"wan_forward_ports": self.wan_forward_ports},
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
             # Keepalives on the ansible/mitogen SSH transport too, matching
             # _ssh_options(): a cell that vanishes mid-task fails in ~60s
             # rather than hanging a mitogen read on a half-open TCP. JSON -e
@@ -1033,9 +1042,20 @@ class Machine:
             (
                 "Systemd journal",
                 self.journal_file,
-                ("env", "SYSTEMD_COLORS=true", "journalctl", "--no-pager", "--priority", "info"),
+                (
+                    "env",
+                    "SYSTEMD_COLORS=true",
+                    "journalctl",
+                    "--no-pager",
+                    "--priority",
+                    "info",
+                ),
             ),
-            ("Kernel ring buffer", self.dmesg_file, ("sudo", "dmesg", "--color=always", "--ctime")),
+            (
+                "Kernel ring buffer",
+                self.dmesg_file,
+                ("sudo", "dmesg", "--color=always", "--ctime"),
+            ),
             (
                 "Failed units",
                 self.systemctl_failed_file,
@@ -1572,7 +1592,14 @@ class Machine:
             cmd += ["--udp-ports", udp_spec]
         fields = passt_address_fields(self.inventory_host)
         if fields is not None:
-            cmd += ["--address", fields["address"], "--netmask", fields["netmask"], "--gateway", fields["gateway"]]
+            cmd += [
+                "--address",
+                fields["address"],
+                "--netmask",
+                fields["netmask"],
+                "--gateway",
+                fields["gateway"],
+            ]
         return cmd
 
     async def _start_passt(self) -> None:

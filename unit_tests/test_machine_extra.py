@@ -21,7 +21,12 @@ import pytest
 class TestQemuUserNetArgs:
     def test_returns_empty_for_unknown_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            machine, "_load_test_topology", lambda: {"hosts": {}, "partitions": {"physical": {"cidr": "10.234.0.0/16"}}}
+            machine,
+            "_load_test_topology",
+            lambda: {
+                "hosts": {},
+                "partitions": {"physical": {"cidr": "10.234.0.0/16"}},
+            },
         )
         assert machine.qemu_user_net_args("nonexistent") == ""
 
@@ -278,6 +283,14 @@ class TestMachineArtifactOwnership:
         instance.cleanup_logs()
 
         assert instance.condition_coverage_file.read_text() == "coverage\n"
+
+    def test_condition_coverage_filename_includes_architecture(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+    ) -> None:
+        instance = machine_factory(host_arch="aarch64")
+
+        assert instance.condition_coverage_file.name == "lab.noble.aarch64.testrole.jsonl"
 
 class TestSystemReadiness:
     def test_accepts_running_state(
