@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-# MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
-# USAGE arg "<machine>" help="Promoted qemu image bundle: box, box_deps, or lab"
-# USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
-# USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
-# USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-# USAGE flag "--force" help="Re-download even when the local manifest already matches"
+# fmt: off
+#MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
+#USAGE arg "<machine>" help="Promoted qemu image bundle: box, box_deps, or lab"
+#USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+#USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
+#USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
+#USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
+#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64)" default="x86_64"
+#USAGE flag "--build-id <build_id>" help="Hydrate an immutable build directly instead of reading promoted.json"
+#USAGE flag "--force" help="Re-download even when the local manifest already matches"
+# fmt: on
 """Hydrate the local qemu harness image cache from S3.
 
 The aws_qemu cells populate their qemu harness images from the S3 bundles
-selected by a pointer object:
+selected by a pointer object, or by an explicit immutable build id when deriving
+one image from another:
 
-    s3://homelab-ci-images/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
-    s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/{manifest.json,disks.tar.zst}
+    s3://<bucket>/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
+    s3://<bucket>/<ubuntu>/<machine>/<build-id>/{manifest.json,disks.tar.zst}
 
 The lab target does not call this: lab bakes write the artifacts into lab's
 local /mnt/scratch/homelab_ci and its cells boot them in place.
@@ -24,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
 import fcntl
 import json
 import os
@@ -40,6 +48,7 @@ from qemu_image_store import (
     BUNDLE_NAME,
     MANIFEST_NAME,
     POINTER_NAME,
+    VALID_ARCHITECTURES,
     VALID_MACHINES,
     find_tar,
     manifest_files,
@@ -53,6 +62,12 @@ S3_BUCKET = "homelab-ci-images"
 AWS_REGION = "eu-central-1"
 
 
+@dataclasses.dataclass(frozen=True)
+class ImageSelection:
+    build_id: str
+    source_sha: str | None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
@@ -63,6 +78,14 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(UBUNTU_RELEASES),
         default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
     )
+    parser.add_argument("--bucket", default=os.environ.get("usage_bucket", S3_BUCKET))
+    parser.add_argument("--region", default=os.environ.get("usage_region", AWS_REGION))
+    parser.add_argument(
+        "--architecture",
+        choices=sorted(VALID_ARCHITECTURES),
+        default=os.environ.get("usage_architecture", "x86_64"),
+    )
+    parser.add_argument("--build-id", default=os.environ.get("usage_build_id"))
     parser.add_argument(
         "--force",
         action="store_true",
@@ -71,11 +94,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def aws_base() -> list[str]:
+def aws_base(args: argparse.Namespace) -> list[str]:
     return [
         "aws",
         "--region",
-        AWS_REGION,
+        args.region,
         "--cli-connect-timeout",
         "10",
         "--cli-read-timeout",
@@ -88,10 +111,34 @@ def dest_root() -> Path:
     return Path(root).expanduser().resolve()
 
 
-def resolve_build_id(args: argparse.Namespace) -> str:
+def allows_legacy_provenance(args: argparse.Namespace) -> bool:
+    return args.architecture == "x86_64" and args.bucket == S3_BUCKET and args.region == AWS_REGION
+
+
+def validated_source_sha(document: dict[str, Any], args: argparse.Namespace, label: str) -> str | None:
+    architecture = document.get("architecture")
+    source_sha = document.get("source_sha")
+    if architecture is None and allows_legacy_provenance(args):
+        if source_sha is not None:
+            sys.exit(f"{label} source_sha is present without architecture")
+        return None
+    if architecture != args.architecture:
+        sys.exit(f"{label} architecture mismatch: expected {args.architecture!r}, got {architecture!r}")
+    if (
+        not isinstance(source_sha, str)
+        or len(source_sha) not in (40, 64)
+        or any(character not in "0123456789abcdef" for character in source_sha)
+    ):
+        sys.exit(f"{label} source_sha must be a full lowercase Git object id")
+    return source_sha
+
+
+def resolve_image(args: argparse.Namespace) -> ImageSelection:
+    if args.build_id:
+        return ImageSelection(build_id=args.build_id, source_sha=None)
     key = f"{args.ubuntu}/{args.machine}/{POINTER_NAME}"
-    uri = f"s3://{S3_BUCKET}/{key}"
-    body = output([*aws_base(), "s3", "cp", uri, "-"])
+    uri = f"s3://{args.bucket}/{key}"
+    body = output([*aws_base(args), "s3", "cp", uri, "-"])
     if not body:
         sys.exit(f"missing or empty promoted pointer: {uri}")
     try:
@@ -104,15 +151,18 @@ def resolve_build_id(args: argparse.Namespace) -> str:
     build_id = pointer.get("build_id")
     if not isinstance(build_id, str) or not build_id:
         sys.exit(f"pointer build_id must be a non-empty string at {uri}")
-    return build_id
+    return ImageSelection(
+        build_id=build_id,
+        source_sha=validated_source_sha(pointer, args, f"pointer at {uri}"),
+    )
 
 
-def download_s3(key: str, dest: Path) -> None:
-    uri = f"s3://{S3_BUCKET}/{key}"
+def download_s3(args: argparse.Namespace, key: str, dest: Path) -> None:
+    uri = f"s3://{args.bucket}/{key}"
     print(f"==> downloading {uri}")
     run(
         [
-            *aws_base(),
+            *aws_base(args),
             "s3",
             "cp",
             uri,
@@ -124,14 +174,17 @@ def download_s3(key: str, dest: Path) -> None:
     )
 
 
-def read_manifest(path: Path, args: argparse.Namespace, build_id: str) -> dict[str, Any]:
+def read_manifest(path: Path, args: argparse.Namespace, selection: ImageSelection) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text())
     except json.JSONDecodeError as exc:
         raise SystemExit(f"invalid manifest JSON in {path}: {exc}") from exc
-    for key, expected in (("machine", args.machine), ("ubuntu", args.ubuntu), ("build_id", build_id)):
+    for key, expected in (("machine", args.machine), ("ubuntu", args.ubuntu), ("build_id", selection.build_id)):
         if manifest.get(key) != expected:
             sys.exit(f"manifest {key} mismatch: expected {expected!r}, got {manifest.get(key)!r}")
+    manifest_source_sha = validated_source_sha(manifest, args, "manifest")
+    if selection.source_sha is not None and manifest_source_sha != selection.source_sha:
+        sys.exit(f"manifest source_sha mismatch: expected {selection.source_sha!r}, got {manifest_source_sha!r}")
     try:
         manifest_files(manifest)
     except ValueError as exc:
@@ -158,16 +211,26 @@ def validate_archive_members(tar: str, bundle: Path, expected_members: list[str]
         sys.exit(f"archive members do not match manifest; missing: {missing}; extra: {extra}")
 
 
-def local_cache_complete(target: Path, build_id: str) -> bool:
+def local_cache_complete(target: Path, args: argparse.Namespace, selection: ImageSelection) -> bool:
     manifest_path = target / LOCAL_MANIFEST_NAME
     if not manifest_path.is_file():
         return False
     try:
         manifest = json.loads(manifest_path.read_text())
+        for key, expected in (
+            ("machine", args.machine),
+            ("ubuntu", args.ubuntu),
+            ("build_id", selection.build_id),
+        ):
+            if manifest.get(key) != expected:
+                return False
+        manifest_source_sha = validated_source_sha(manifest, args, "cached manifest")
+        if selection.source_sha is not None and manifest_source_sha != selection.source_sha:
+            return False
         files = manifest_files(manifest)
     except json.JSONDecodeError, ValueError, SystemExit:
         return False
-    return manifest.get("build_id") == build_id and all((target / entry["name"]).is_file() for entry in files)
+    return all((target / entry["name"]).is_file() for entry in files)
 
 
 def remove_path(path: Path) -> None:
@@ -208,13 +271,13 @@ def main() -> int:
         print(f"==> waiting for hydrate lock {lock_path}")
         fcntl.flock(lock, fcntl.LOCK_EX)
 
-        build_id = resolve_build_id(args)
-        if not args.force and local_cache_complete(target, build_id):
-            print(f"==> {target} already hydrated for {build_id}")
+        selection = resolve_image(args)
+        if not args.force and local_cache_complete(target, args, selection):
+            print(f"==> {target} already hydrated for {selection.build_id}")
             return 0
 
-        prefix = f"{args.ubuntu}/{args.machine}/{build_id}"
-        print(f"==> hydrating {target} from s3://{S3_BUCKET}/{prefix}/")
+        prefix = f"{args.ubuntu}/{args.machine}/{selection.build_id}"
+        print(f"==> hydrating {target} from s3://{args.bucket}/{prefix}/")
         with tempfile.TemporaryDirectory(prefix=f".hydrate-{args.ubuntu}-{args.machine}-", dir=root) as tmp:
             tmpdir = Path(tmp)
             manifest_path = tmpdir / MANIFEST_NAME
@@ -222,11 +285,11 @@ def main() -> int:
             staged = tmpdir / "image"
             staged.mkdir()
 
-            download_s3(f"{prefix}/{MANIFEST_NAME}", manifest_path)
-            manifest = read_manifest(manifest_path, args, build_id)
+            download_s3(args, f"{prefix}/{MANIFEST_NAME}", manifest_path)
+            manifest = read_manifest(manifest_path, args, selection)
             files = manifest_files(manifest)
             members = [entry["name"] for entry in files]
-            download_s3(f"{prefix}/{BUNDLE_NAME}", bundle_path)
+            download_s3(args, f"{prefix}/{BUNDLE_NAME}", bundle_path)
 
             print(f"==> extracting {BUNDLE_NAME}")
             validate_archive_members(tar, bundle_path, members)
@@ -237,7 +300,7 @@ def main() -> int:
 
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             replace_target(staged, target)
-            print(f"==> hydrated {target} for {build_id}")
+            print(f"==> hydrated {target} for {selection.build_id}")
     return 0
 
 

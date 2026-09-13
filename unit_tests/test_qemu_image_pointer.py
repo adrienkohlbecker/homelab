@@ -2,7 +2,7 @@
 
 The pointer object replaces the old SSM parameter as the live-build selector.
 These cover the producer-side format (upload-s3.py ``pointer_body``) and the
-consumer-side validation (hydrate-qemu-images.py ``resolve_build_id``), since
+consumer-side validation (hydrate-qemu-images.py ``resolve_image``), since
 both must agree on the same JSON shape for S3.
 
 The task scripts have hyphenated filenames, so they are loaded via
@@ -25,8 +25,10 @@ hydrate = load_repo_module("mise-tasks/ci/hydrate-qemu-images.py", name="hydrate
 def _args(**overrides: object) -> argparse.Namespace:
     base: dict[str, object] = {
         "architecture": "x86_64",
+        "bucket": "homelab-ci-images",
         "build_id": "ci-42-gdeadbeef0000",
         "machine": "box",
+        "region": "eu-central-1",
         "source_sha": "d" * 40,
         "ubuntu": "noble",
     }
@@ -91,7 +93,8 @@ class TestManifest:
             {"name": disk.name},
             {"name": efivars.name},
         ]
-        assert hydrate.read_manifest(manifest_path, args, args.build_id) == manifest
+        selection = hydrate.ImageSelection(args.build_id, args.source_sha)
+        assert hydrate.read_manifest(manifest_path, args, selection) == manifest
 
     def test_manifest_without_files_is_rejected(self, tmp_path: Path) -> None:
         manifest = {
@@ -103,7 +106,11 @@ class TestManifest:
         manifest_path.write_text(json.dumps(manifest))
 
         with pytest.raises(SystemExit, match="manifest files must be a non-empty list"):
-            hydrate.read_manifest(manifest_path, _args(), manifest["build_id"])
+            hydrate.read_manifest(
+                manifest_path,
+                _args(),
+                hydrate.ImageSelection(manifest["build_id"], None),
+            )
 
     def test_legacy_hash_is_ignored(self, tmp_path: Path) -> None:
         manifest = {
@@ -115,18 +122,86 @@ class TestManifest:
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert hydrate.read_manifest(manifest_path, _args(), manifest["build_id"]) == manifest
+        assert hydrate.read_manifest(manifest_path, _args(), hydrate.ImageSelection(manifest["build_id"], None)) == manifest
+
+    def test_wrong_architecture_is_rejected(self, tmp_path: Path) -> None:
+        args = _args(architecture="aarch64", bucket="homelab-ci-arm-images-eu-west-1", region="eu-west-1")
+        manifest = {
+            "architecture": "x86_64",
+            "build_id": args.build_id,
+            "files": [{"name": "disk.raw"}],
+            "machine": args.machine,
+            "source_sha": args.source_sha,
+            "ubuntu": args.ubuntu,
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        with pytest.raises(SystemExit, match="manifest architecture mismatch"):
+            hydrate.read_manifest(
+                manifest_path,
+                args,
+                hydrate.ImageSelection(args.build_id, args.source_sha),
+            )
+
+    def test_pointer_and_manifest_source_sha_must_match(self, tmp_path: Path) -> None:
+        args = _args()
+        manifest = {
+            "architecture": args.architecture,
+            "build_id": args.build_id,
+            "files": [{"name": "disk.raw"}],
+            "machine": args.machine,
+            "source_sha": "e" * 40,
+            "ubuntu": args.ubuntu,
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        with pytest.raises(SystemExit, match="manifest source_sha mismatch"):
+            hydrate.read_manifest(
+                manifest_path,
+                args,
+                hydrate.ImageSelection(args.build_id, args.source_sha),
+            )
+
+    def test_legacy_x86_manifest_remains_readable(self, tmp_path: Path) -> None:
+        args = _args()
+        manifest = {
+            "build_id": args.build_id,
+            "files": [{"name": "disk.raw", "sha256": "0" * 64}],
+            "machine": args.machine,
+            "ubuntu": args.ubuntu,
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        assert (
+            hydrate.read_manifest(
+                manifest_path,
+                args,
+                hydrate.ImageSelection(args.build_id, None),
+            )
+            == manifest
+        )
 
     def test_local_cache_uses_manifest_build_id_and_files(self, tmp_path: Path) -> None:
         disk = tmp_path / "disk.raw"
         disk.write_bytes(b"disk")
-        manifest = {"build_id": "build-1", "files": [{"name": disk.name}]}
+        args = _args(build_id="build-1")
+        manifest = {
+            "architecture": args.architecture,
+            "build_id": args.build_id,
+            "files": [{"name": disk.name}],
+            "machine": args.machine,
+            "source_sha": args.source_sha,
+            "ubuntu": args.ubuntu,
+        }
         (tmp_path / hydrate.LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest))
 
-        assert hydrate.local_cache_complete(tmp_path, "build-1")
-        assert not hydrate.local_cache_complete(tmp_path, "build-2")
+        assert hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-1", args.source_sha))
+        assert not hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-2", args.source_sha))
         disk.unlink()
-        assert not hydrate.local_cache_complete(tmp_path, "build-1")
+        assert not hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-1", args.source_sha))
 
 
 class TestRetention:
@@ -173,17 +248,86 @@ class TestRetention:
         ]
 
 
-class TestResolveBuildId:
-    def _resolve(self, monkeypatch: pytest.MonkeyPatch, body: str, **arg_overrides: object) -> str:
+class TestResolveImage:
+    def _resolve(self, monkeypatch: pytest.MonkeyPatch, body: str, **arg_overrides: object):
         monkeypatch.setattr(hydrate, "output", lambda argv, **kw: body)
-        base: dict[str, object] = {"machine": "box", "ubuntu": "noble"}
+        base: dict[str, object] = {
+            "architecture": "x86_64",
+            "bucket": "homelab-ci-images",
+            "build_id": None,
+            "machine": "box",
+            "region": "eu-central-1",
+            "ubuntu": "noble",
+        }
         base.update(arg_overrides)
         args = argparse.Namespace(**base)
-        return hydrate.resolve_build_id(args)
+        return hydrate.resolve_image(args)
 
     def test_reads_build_id_from_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="noble"), ["ci-7-gabc"])
-        assert self._resolve(monkeypatch, body) == "ci-7-gabc"
+        assert self._resolve(monkeypatch, body) == hydrate.ImageSelection("ci-7-gabc", "d" * 40)
+
+    def test_reads_arm_pointer_from_selected_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[list[str]] = []
+        args = _args(
+            architecture="aarch64",
+            bucket="homelab-ci-arm-images-eu-west-1",
+            build_id="arm-build",
+            region="eu-west-1",
+        )
+        body = upload.pointer_body(args, [args.build_id])
+
+        def output(argv: list[str], **_kwargs: object) -> str:
+            calls.append(argv)
+            return body
+
+        monkeypatch.setattr(hydrate, "output", output)
+        selection_args = argparse.Namespace(
+            architecture=args.architecture,
+            bucket=args.bucket,
+            build_id=None,
+            machine=args.machine,
+            region=args.region,
+            ubuntu=args.ubuntu,
+        )
+        assert hydrate.resolve_image(selection_args) == hydrate.ImageSelection(args.build_id, args.source_sha)
+        assert calls == [
+            [
+                "aws",
+                "--region",
+                args.region,
+                "--cli-connect-timeout",
+                "10",
+                "--cli-read-timeout",
+                "300",
+                "s3",
+                "cp",
+                f"s3://{args.bucket}/noble/box/promoted.json",
+                "-",
+            ]
+        ]
+
+    def test_explicit_build_id_skips_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(hydrate, "output", lambda *_args, **_kwargs: pytest.fail("pointer read was attempted"))
+
+        assert self._resolve(monkeypatch, "", build_id="selected") == hydrate.ImageSelection("selected", None)
+
+    def test_legacy_x86_pointer_remains_readable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = json.dumps({"build_id": "legacy", "machine": "box", "ubuntu": "noble"})
+
+        assert self._resolve(monkeypatch, body) == hydrate.ImageSelection("legacy", None)
+
+    def test_arm_pointer_requires_architecture(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = json.dumps({"build_id": "legacy", "machine": "box", "ubuntu": "noble"})
+
+        with pytest.raises(SystemExit, match="architecture mismatch"):
+            self._resolve(
+                monkeypatch,
+                body,
+                architecture="aarch64",
+                bucket="homelab-ci-arm-images-eu-west-1",
+                region="eu-west-1",
+            )
 
     @pytest.mark.parametrize(("field", "value"), [("machine", "box_deps"), ("ubuntu", "resolute")])
     def test_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch, field: str, value: str) -> None:
