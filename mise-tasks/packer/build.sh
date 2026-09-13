@@ -101,12 +101,16 @@ if [ "${usage_no_publish:-false}" = "true" ]; then
   publish=false
 fi
 
+repo_root=$(git rev-parse --show-toplevel)
+aarch64_firmware_dir="${HOMELAB_AARCH64_FIRMWARE_DIR:-${repo_root}/test/firmware}"
+
 packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
   -var "ubuntu_name=${usage_ubuntu}" \
   -var "upstream_mirrors=${usage_upstream:-false}" \
+  -var "aarch64_firmware_dir=${aarch64_firmware_dir}" \
   -var "publish=${publish}" \
   -var "build_directory=${tmp}" \
   -var "output_directory=${base}" \
