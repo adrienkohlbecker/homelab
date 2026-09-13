@@ -249,6 +249,59 @@ qemu_host_ami:
           - UBUNTU: [ '$[[ matrix.UBUNTU ]]' ]
       artifacts: false
 
+# Build native aarch64 fixtures on the Ireland ARM pool. Every mutable path is
+# job-local on the ephemeral instance-store-backed checkout. This reduces
+# accidental cross-job state reuse; the shared runner is not a security boundary.
+.qemu_image_arm:
+  stage: prepare
+  extends: .protected_manual_job
+  tags:
+    - aws-shell-qemu-arm
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  interruptible: false
+  timeout: 90m
+  variables:
+    UBUNTU: noble
+    HOME: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/home"
+    XDG_CONFIG_HOME: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/xdg"
+    PACKER_PLUGIN_PATH: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/packer_plugins"
+    MISE_DATA_DIR: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/mise"
+    MISE_DISABLE_TOOLS: aqua:Kampfkarren/selene
+    UV_CACHE_DIR: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/uv_cache"
+    HOMELAB_CI_DIR: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/images"
+    AWS_CONFIG_FILE: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/aws/config"
+    AWS_SHARED_CREDENTIALS_FILE: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/aws/credentials"
+    HOMELAB_AARCH64_FIRMWARE_DIR: /opt/homelab-ci/qemu-firmware/aarch64
+  before_script:
+    - mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$PACKER_PLUGIN_PATH" "$MISE_DATA_DIR" "$UV_CACHE_DIR" "$HOMELAB_CI_DIR" "$(dirname "$AWS_CONFIG_FILE")"
+    - mise run ci:bootstrap
+    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-arm-$CI_JOB_ID" --cache-dir --region eu-west-1
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
+
+"qemu_image:box:arm":
+  extends: .qemu_image_arm
+  rules:
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      allow_failure: false
+  resource_group: qemu_image_box_aarch64_$UBUNTU
+  script:
+    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-west-1 --region eu-west-1 --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --promote
+
+"qemu_image:box_deps:arm":
+  extends: .qemu_image_arm
+  rules:
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+  resource_group: qemu_image_box_deps_aarch64_$UBUNTU
+  script:
+    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-west-1 --region eu-west-1 --architecture aarch64 --base-build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU" --promote
+  needs:
+    - job: "qemu_image:box:arm"
+      artifacts: false
+
 # Build fox's ZFS-root disk on lab, stream it through a temporary Hetzner rescue
 # server, and retain the two newest snapshots. The published project-global
 # snapshot becomes Terraform's most_recent fox image. This protected manual job
