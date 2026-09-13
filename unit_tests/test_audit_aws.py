@@ -116,3 +116,215 @@ def test_safe_records_transport_errors():
 
 def test_retry_budget_counts_total_attempts():
     assert audit_aws.CFG.retries == {"total_max_attempts": 10, "mode": "adaptive"}
+
+
+def test_supported_qemu_images_are_region_and_architecture_specific():
+    x86 = image(
+        "ami-x86",
+        tags={
+            "Name": "homelab-ci-qemu-host-noble",
+            "machine": "qemu_host",
+            "role": "ci-ami",
+            "ubuntu": "noble",
+        },
+        snapshot_id="snap-x86",
+    )
+    arm = image(
+        "ami-arm",
+        tags={
+            "Name": "homelab-ci-qemu-host-aarch64-noble",
+            "architecture": "aarch64",
+            "machine": "qemu_host",
+            "role": "ci-ami",
+            "ubuntu": "noble",
+        },
+        snapshot_id="snap-arm",
+    )
+
+    assert audit_aws.is_supported_qemu_host_image("eu-central-1", x86)
+    assert audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
+    assert not audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
+    assert not audit_aws.is_supported_qemu_host_image("eu-west-1", x86)
+
+
+def _spot_asg(name: str, maximum: int) -> dict:
+    group = {
+        "AutoScalingGroupName": name,
+        "MinSize": 0,
+        "MaxSize": maximum,
+        "NewInstancesProtectedFromScaleIn": True,
+        "MixedInstancesPolicy": {
+            "InstancesDistribution": {
+                "OnDemandBaseCapacity": 0,
+                "OnDemandPercentageAboveBaseCapacity": 0,
+                "SpotAllocationStrategy": "price-capacity-optimized",
+            }
+        },
+    }
+    if name == "homelab-ci-qemu-arm":
+        group["AvailabilityZones"] = sorted(audit_aws.ARM_AVAILABILITY_ZONES)
+        group["MixedInstancesPolicy"]["LaunchTemplate"] = {
+            "Overrides": [{"InstanceType": instance_type} for instance_type in sorted(audit_aws.ARM_INSTANCE_TYPES)]
+        }
+    return group
+
+
+def _arm_instance_type(instance_type: str) -> dict:
+    return {
+        "InstanceType": instance_type,
+        "VCpuInfo": {"DefaultVCpus": 64},
+        "MemoryInfo": {"SizeInMiB": 128 * 1024},
+        "InstanceStorageSupported": True,
+        "InstanceStorageInfo": {
+            "TotalSizeInGB": 3800,
+            "Disks": [{"Count": 2, "SizeInGB": 1900, "Type": "ssd"}],
+        },
+    }
+
+
+def test_arm_regional_contract_documents_are_accepted():
+    audit_aws.audit_asg_documents("eu-west-1", [_spot_asg("homelab-ci-qemu-arm", 1)])
+    audit_aws.audit_arm_capacity_documents(
+        {"Value": 96.0},
+        [
+            {"InstanceType": "c6gd.metal", "Location": "eu-west-1a"},
+            {"InstanceType": "c7gd.metal", "Location": "eu-west-1b"},
+        ],
+        [_arm_instance_type("c6gd.metal"), _arm_instance_type("c7gd.metal")],
+    )
+    audit_aws.audit_promoted_image_document(
+        "eu-west-1",
+        "ami-arm",
+        [{"ImageId": "ami-arm", "Architecture": "arm64"}],
+    )
+    audit_aws.audit_guard_documents(
+        "eu-west-1",
+        {"ImageBlockPublicAccessState": "block-new-sharing"},
+        {"State": "block-all-sharing"},
+        {"AccountLevel": {"HttpTokens": "required", "HttpPutResponseHopLimit": 1}},
+    )
+    audit_aws.audit_ecr_documents(
+        "eu-west-1",
+        [
+            {
+                "ecrRepositoryPrefix": prefix,
+                "upstreamRegistryUrl": upstream,
+                **(
+                    {"credentialArn": f"arn:aws:secretsmanager:eu-west-1:123:secret:{prefix}"}
+                    if prefix != "quay"
+                    else {}
+                ),
+            }
+            for prefix, upstream in audit_aws.ECR_UPSTREAMS.items()
+        ],
+        [{"repositoryName": "docker-hub/library/ubuntu"}],
+    )
+    audit_aws.audit_bucket_documents(
+        "eu-west-1",
+        {"LocationConstraint": "eu-west-1"},
+        {
+            "PublicAccessBlockConfiguration": {
+                "BlockPublicAcls": True,
+                "BlockPublicPolicy": True,
+                "IgnorePublicAcls": True,
+                "RestrictPublicBuckets": True,
+            }
+        },
+        {"Status": "Enabled"},
+        {
+            "Statement": [
+                {
+                    "Sid": "DenyInsecureTransport",
+                    "Effect": "Deny",
+                    "Condition": {"Bool": {"aws:SecureTransport": "false"}},
+                },
+                {
+                    "Sid": "DenyCrossAccountAccess",
+                    "Effect": "Deny",
+                    "Condition": {"StringNotEquals": {"aws:PrincipalAccount": "000390721279"}},
+                },
+            ]
+        },
+    )
+    audit_aws.audit_scheduler_role_documents(
+        {
+            "Statement": [
+                {
+                    "Condition": {
+                        "StringEquals": {
+                            "aws:SourceArn": [
+                                "arn:aws:scheduler:eu-central-1:000390721279:schedule-group/default",
+                                "arn:aws:scheduler:eu-west-1:000390721279:schedule-group/default",
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "Statement": [
+                {
+                    "Resource": [
+                        "arn:aws:ec2:eu-central-1:000390721279:instance/*",
+                        "arn:aws:ec2:eu-west-1:000390721279:instance/*",
+                    ]
+                }
+            ]
+        },
+    )
+
+    assert audit_aws.anomalies == []
+
+
+def test_arm_regional_contract_mismatches_are_reported():
+    audit_aws.audit_asg_documents(
+        "eu-west-1",
+        [
+            _spot_asg("homelab-ci-qemu-arm", 2),
+            _spot_asg("homelab-ci-stale", 1),
+        ],
+    )
+    audit_aws.audit_arm_capacity_documents(
+        {"Value": 32.0},
+        [],
+        [],
+    )
+    audit_aws.audit_promoted_image_document(
+        "eu-west-1",
+        "ami-wrong",
+        [{"ImageId": "ami-wrong", "Architecture": "x86_64"}],
+    )
+    audit_aws.audit_guard_documents("eu-west-1", {}, {}, {})
+    audit_aws.audit_ecr_documents("eu-west-1", [], [{"repositoryName": "unexpected/repo"}])
+    audit_aws.audit_bucket_documents("eu-west-1", {}, {}, {}, {})
+    audit_aws.audit_scheduler_role_documents(
+        {
+            "Statement": [
+                {
+                    "Condition": {
+                        "StringEquals": {
+                            "aws:SourceArn": "arn:aws:scheduler:eu-central-1:000390721279:schedule-group/default"
+                        }
+                    }
+                }
+            ]
+        },
+        {"Statement": [{"Resource": "arn:aws:ec2:eu-central-1:000390721279:instance/*"}]},
+    )
+
+    output = "\n".join(audit_aws.anomalies)
+    for message in (
+        "ASG homelab-ci-qemu-arm bounds",
+        "unexpected CI Auto Scaling group homelab-ci-stale",
+        "Standard Spot quota",
+        "c6gd.metal is unavailable",
+        "c7gd.metal is unavailable",
+        "promoted qemu-host AMI ami-wrong architecture",
+        "AMI public-access block",
+        "ECR pull-through rules differ",
+        "unexpected ECR repository",
+        "public-access block is incomplete",
+        "bake scheduler trust",
+        "bake scheduler termination policy",
+    ):
+        assert message in output
