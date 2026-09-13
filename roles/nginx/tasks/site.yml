@@ -178,7 +178,6 @@
       when:
         - nginx_static_conf_enable.changed | default(false)
         - not nginx_static_conf_enable_before.stat.exists | default(false)
-        - not (nginx_static_conf_enable_before.stat.islnk | default(false))
       file:
         path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
         state: absent
