@@ -2,26 +2,24 @@
 #MISE description="Fetch the pinned newer edk2 aarch64 firmware (warm-reboot fix) into test/firmware/"
 set -euo pipefail
 
-# Homebrew's qemu (through 11.0.1) bundles edk2-stable202408, whose DXE pool
-# allocator hits a heap ASSERT (MdeModulePkg/Core/Dxe/Mem/Pool.c) when rEFInd
-# boots the OS across an aarch64 *warm* reboot -- so any test that reboots
-# (reboot/kdump/console _verify) wedges the firmware and times
-# out. edk2-stable202511 fixes it. There is no Homebrew formula for a newer
-# build and qemu has not bumped its bundled blob, so source it from Debian's
-# edk2 package (qemu-efi-aarch64) and drop it where test/arch.py looks first.
-#
-# Pinned by hash to snapshot.debian.org so the URL never rots when sid bumps
-# the version (the live pool URL would be
-# http://deb.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2025.11-5_all.deb).
-# Bump the version, URL, and firmware hash together: query
-#   https://snapshot.debian.org/mr/binary/qemu-efi-aarch64/<ver>/binfiles
-# for the new sha1 and download it to derive the firmware sha256.
-DEB_VERSION="2025.11-5" # edk2-stable202511
-DEB_URL="https://snapshot.debian.org/file/137d1a34bd9ec2e10b1d81331e92d163824579c4"
-FW_SHA256="4003fc28e677193432558b717b74221fae671c92aeef174b84ecc2c3242fd013"
+# Homebrew's qemu (through 11.0.1) and Ubuntu Noble bundle edk2-stable202408,
+# whose DXE pool allocator hits a heap ASSERT (MdeModulePkg/Core/Dxe/Mem/Pool.c)
+# when rEFInd boots the OS across an aarch64 *warm* reboot. Any test that
+# reboots (reboot/kdump/console _verify) then wedges the firmware and times out.
+# edk2-stable202511 fixes it. Source the matching CODE and VARS templates
+# from Debian's content-addressed qemu-efi-aarch64 package; their immutable URL
+# and checksums live with the other upstream pins in versions.yml.
 
 root="$(git rev-parse --show-toplevel)"
-dest="${root}/test/firmware/edk2-aarch64-code.fd"
+versions="${root}/group_vars/all/versions.yml"
+firmware_dir="${HOMELAB_AARCH64_FIRMWARE_DIR:-${root}/test/firmware}"
+code_dest="${firmware_dir}/edk2-aarch64-code.fd"
+vars_dest="${firmware_dir}/edk2-aarch64-vars.fd"
+archive_marker="${firmware_dir}/archive.sha256"
+
+deb_version=$(yq -r '.qemu_efi_aarch64_version' "${versions}")
+deb_url=$(yq -r '.qemu_efi_aarch64_artifact.url' "${versions}")
+deb_sha256=$(yq -r '.qemu_efi_aarch64_artifact.sha256' "${versions}")
 
 # shasum is the macOS builtin (the aarch64 fixture is the local Mac); fall back
 # to sha256sum on Linux so a Linux-aarch64 dev can run this too.
@@ -33,28 +31,39 @@ sha256() {
   fi
 }
 
-if [ -f "${dest}" ] && [ "$(sha256 "${dest}")" = "${FW_SHA256}" ]; then
-  echo "==> edk2 ${DEB_VERSION} firmware already present and verified at ${dest}"
+verify_sha256() {
+  local expected=$1 file=$2 got
+  got=$(sha256 "${file}")
+  if [ "${got}" != "${expected}" ]; then
+    echo "ERROR: $(basename "${file}") sha256 mismatch: expected ${expected}, got ${got}" >&2
+    exit 1
+  fi
+}
+
+if [ -f "${code_dest}" ] && [ -f "${vars_dest}" ] && [ "$(awk 'NR == 1 { print; exit }' "${archive_marker}" 2>/dev/null || true)" = "${deb_sha256}" ]; then
+  echo "==> edk2 ${deb_version} firmware already present at ${firmware_dir}"
   exit 0
 fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
-echo "==> Fetching edk2 ${DEB_VERSION} firmware (${DEB_URL})"
-curl -fsSL -o "${tmp}/edk2.deb" "${DEB_URL}"
+echo "==> Fetching edk2 ${deb_version} firmware (${deb_url})"
+curl -fsSL -o "${tmp}/edk2.deb" "${deb_url}"
+verify_sha256 "${deb_sha256}" "${tmp}/edk2.deb"
 
 # A .deb is an ar archive; the firmware lives in its data tarball. BSD ar
 # (macOS) and GNU ar both extract it; tar auto-detects the xz compression.
 (cd "${tmp}" && ar x edk2.deb)
-tar -xf "${tmp}"/data.tar.* -C "${tmp}" ./usr/share/AAVMF/AAVMF_CODE.no-secboot.fd
-fw="${tmp}/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd"
-got="$(sha256 "${fw}")"
-if [ "${got}" != "${FW_SHA256}" ]; then
-  echo "ERROR: firmware sha256 mismatch: expected ${FW_SHA256}, got ${got}" >&2
-  exit 1
-fi
+tar -xf "${tmp}"/data.tar.* -C "${tmp}" \
+  ./usr/share/AAVMF/AAVMF_CODE.no-secboot.fd \
+  ./usr/share/AAVMF/AAVMF_VARS.fd
+code_source="${tmp}/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd"
+vars_source="${tmp}/usr/share/AAVMF/AAVMF_VARS.fd"
 
-mkdir -p "$(dirname "${dest}")"
-mv "${fw}" "${dest}"
-echo "==> Installed edk2 ${DEB_VERSION} firmware at ${dest}"
+mkdir -p "${firmware_dir}"
+install -m 0644 "${code_source}" "${code_dest}"
+install -m 0644 "${vars_source}" "${vars_dest}"
+printf '%s\n' "${deb_sha256}" >"${archive_marker}.tmp"
+mv "${archive_marker}.tmp" "${archive_marker}"
+echo "==> Installed edk2 ${deb_version} CODE and VARS firmware at ${firmware_dir}"
