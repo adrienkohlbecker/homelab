@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
 HETZNER_SH = REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
+PUBLISH_QEMU_SH = REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
 QEMU_POSTPROCESS_SH = REPO_ROOT / "packer" / "scripts" / "postprocess.sh"
@@ -25,7 +26,7 @@ UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
     REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh",
     QEMU_HOST_AMI_SH,
-    REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh",
+    PUBLISH_QEMU_SH,
     REPO_ROOT / "mise-tasks" / "test" / "build_box_deps.sh",
     REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
     REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
@@ -80,6 +81,32 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
         assert f"output_directory={env['HOMELAB_CI_DIR']}/{ubuntu}" in call
         assert "-only=qemu.box" in call
     assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus)
+
+
+def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    log = tmp_path / "mise.log"
+    _executable(
+        fake_bin / "mise",
+        '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n',
+    )
+    env = dict(os.environ)
+    env.update(
+        MISE_TEST_LOG=str(log),
+        PATH=f"{fake_bin}:{env['PATH']}",
+        usage_machine="lab",
+        usage_promote="true",
+        usage_ubuntu="noble",
+    )
+
+    result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines() == [
+        "run packer:init",
+        "run packer:build lab --ubuntu noble",
+        "run packer:upload-s3 lab --ubuntu noble --promote",
+    ]
 
 
 def test_qemu_build_uploads_only_required_role_files() -> None:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
-# USAGE arg "<machine>" help="Promoted qemu image bundle: box or box_deps"
-# USAGE complete "machine" run="printf 'box\nbox_deps\n'"
+# USAGE arg "<machine>" help="Promoted qemu image bundle: box, box_deps, or lab"
+# USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 # USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 # USAGE flag "--force" help="Re-download even when the local marker already matches"

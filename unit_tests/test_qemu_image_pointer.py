@@ -60,6 +60,11 @@ class TestPointerBody:
         assert upload.POINTER_NAME == "promoted.json"
         assert hydrate.POINTER_NAME == "promoted.json"
 
+    def test_producer_and_consumer_support_all_fixture_machines(self) -> None:
+        expected = {"box", "box_deps", "lab"}
+        assert expected == upload.VALID_MACHINES
+        assert expected == hydrate.VALID_MACHINES
+
 
 class TestManifest:
     def test_round_trip_contains_only_identity_and_verified_files(

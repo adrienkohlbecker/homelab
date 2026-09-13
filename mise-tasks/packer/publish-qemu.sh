@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Build or seed a qemu fixture image and publish it to the CI image bucket"
-#USAGE arg "<machine>" help="Qemu fixture machine to publish: box or box_deps"
-#USAGE complete "machine" run="printf 'box\nbox_deps\n'"
+#USAGE arg "<machine>" help="Qemu fixture machine to publish: box, box_deps, or lab"
+#USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build"
@@ -13,9 +13,9 @@ machine=$usage_machine
 ubuntu=$usage_ubuntu
 
 case "$machine" in
-box)
+box | lab)
   mise run packer:init
-  mise run packer:build box --ubuntu "$ubuntu"
+  mise run packer:build "$machine" --ubuntu "$ubuntu"
   ;;
 box_deps)
   mise run test:build_box_deps --ubuntu "$ubuntu"

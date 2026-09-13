@@ -181,7 +181,7 @@ qemu_host_ami:
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID"
     - mise run packer:qemu-host-ami --promote
 
-# Build protected box fixtures on lab's KVM runner, retain them locally for lab,
+# Build protected QEMU fixtures on lab's KVM runner, retain them locally for lab,
 # and promote versioned bundles plus promoted.json pointers to S3 for AWS cells.
 # Promotion is global but verify-boots first, retains prior S3 versions, and
 # prints rollback instructions. Per-machine/release resource groups serialize
@@ -217,6 +217,12 @@ qemu_host_ami:
   resource_group: qemu_image_box_$UBUNTU
   script:
     - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --promote
+
+"qemu_image:lab":
+  extends: .qemu_image
+  resource_group: qemu_image_lab_$UBUNTU
+  script:
+    - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
 
 # box_deps layers seed_deps.yml onto the matching box artifact in lab's shared
 # HOMELAB_CI_DIR; the explicit need prevents using an older box.

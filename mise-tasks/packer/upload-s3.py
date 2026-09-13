@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # MISE description="Bundle a published packer qemu artifact and upload it to the S3 image bucket"
-# USAGE arg "<machine>" help="Packer source/artifact name: box or box_deps"
-# USAGE complete "machine" run="printf 'box\nbox_deps\n'"
+# USAGE arg "<machine>" help="Packer source/artifact name: box, box_deps, or lab"
+# USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 # USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 # USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
