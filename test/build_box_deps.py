@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from machine import SSH_HOST, LaunchOptions, Machine
@@ -18,6 +20,66 @@ from utils import print_line, tee_output
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_TIMEOUT = 1200
+HYDRATED_BUILD_ID_NAME = ".homelab_s3_build_id"
+HYDRATED_MANIFEST_NAME = ".homelab_s3_manifest.json"
+
+
+@dataclass(frozen=True)
+class BaseProvenance:
+    build_id: str
+    source_sha: str
+    architecture: str
+
+
+def base_provenance_from_env() -> BaseProvenance | None:
+    """Return the explicitly selected hydrated base, requiring all fields."""
+
+    values = {
+        "build_id": os.environ.get("HOMELAB_BOX_BASE_BUILD_ID", "").strip(),
+        "source_sha": os.environ.get("HOMELAB_BOX_BASE_SOURCE_SHA", "").strip(),
+        "architecture": os.environ.get("HOMELAB_BOX_BASE_ARCHITECTURE", "").strip(),
+    }
+    if not any(values.values()):
+        return None
+    missing = sorted(name for name, value in values.items() if not value)
+    if missing:
+        raise RuntimeError(f"Incomplete box base provenance; missing: {', '.join(missing)}")
+    if len(values["source_sha"]) not in (40, 64) or any(
+        character not in "0123456789abcdef" for character in values["source_sha"]
+    ):
+        raise RuntimeError("HOMELAB_BOX_BASE_SOURCE_SHA must be a full lowercase Git object id")
+    if values["architecture"] not in ("x86_64", "aarch64"):
+        raise RuntimeError(f"Unsupported box base architecture: {values['architecture']}")
+    return BaseProvenance(**values)
+
+
+def validate_base_provenance(source: Path, ubuntu: str, expected: BaseProvenance) -> None:
+    """Fail unless a hydrated box tree matches the explicitly selected base."""
+
+    marker = source / HYDRATED_BUILD_ID_NAME
+    manifest_path = source / HYDRATED_MANIFEST_NAME
+    if not marker.is_file() or marker.read_text().strip() != expected.build_id:
+        raise RuntimeError(f"Hydrated box build id does not match requested base {expected.build_id!r}")
+    if not manifest_path.is_file():
+        raise RuntimeError(f"Hydrated box manifest is missing: {manifest_path}")
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Hydrated box manifest is invalid JSON: {manifest_path}") from exc
+    expected_fields = {
+        "machine": "box",
+        "ubuntu": ubuntu,
+        "build_id": expected.build_id,
+        "source_sha": expected.source_sha,
+        "architecture": expected.architecture,
+    }
+    mismatches = {
+        name: {"expected": value, "actual": manifest.get(name)}
+        for name, value in expected_fields.items()
+        if manifest.get(name) != value
+    }
+    if mismatches:
+        raise RuntimeError(f"Hydrated box provenance mismatch: {json.dumps(mismatches, sort_keys=True)}")
 
 
 def clone_artifacts(source: Path, destination: Path) -> None:
@@ -77,7 +139,7 @@ def publish_artifacts(root: Path, source: Path, destination: Path) -> None:
     )
 
 
-def build_one(root: Path, ubuntu: str) -> None:
+def build_one(root: Path, ubuntu: str, base_provenance: BaseProvenance | None = None) -> None:
     """Build and atomically publish one Ubuntu box_deps fixture."""
 
     source = root / ubuntu / "box"
@@ -86,6 +148,8 @@ def build_one(root: Path, ubuntu: str) -> None:
         raise RuntimeError(
             f"Source box artifacts missing at {source}\nRun 'mise run packer:build box --ubuntu {ubuntu}' first."
         )
+    if base_provenance is not None:
+        validate_base_provenance(source, ubuntu, base_provenance)
 
     staging = Path(tempfile.mkdtemp(prefix=f".build-box-deps-{ubuntu}-", dir=root))
     staging.chmod(0o2770)
@@ -94,8 +158,12 @@ def build_one(root: Path, ubuntu: str) -> None:
         clone_artifacts(source, staging)
         staging.chmod(0o2770)
         asyncio.run(seed_image(staging, ubuntu))
+        if base_provenance is not None:
+            validate_base_provenance(staging, ubuntu, base_provenance)
         print_line(f"==> Publishing {staging} -> {destination}")
         publish_artifacts(root, staging, destination)
+        if base_provenance is not None:
+            validate_base_provenance(destination, ubuntu, base_provenance)
     finally:
         if staging.exists():
             shutil.rmtree(staging)
@@ -114,8 +182,9 @@ def main() -> int:
     unknown = sorted(set(ubuntus) - set(UBUNTU_RELEASES))
     if unknown:
         raise RuntimeError(f"Unknown Ubuntu release(s): {', '.join(unknown)}")
+    base_provenance = base_provenance_from_env()
     for ubuntu in ubuntus:
-        build_one(root, ubuntu)
+        build_one(root, ubuntu, base_provenance)
     return 0
 
 
