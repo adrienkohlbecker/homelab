@@ -172,10 +172,10 @@ netdata_collectors:
 # reconstructible images and container layers.
 podman_storage_device: /dev/disk/by-partlabel/podman
 
-# Process-wide safety ceiling across both AWS runner blocks. Actual work remains
+# Process-wide safety ceiling across the AWS runner blocks. Actual work remains
 # bounded by each runner's limit and the AWS Spot quota; fox only holds their
 # connections and log streams.
-gitlab_runner_concurrent: 82
+gitlab_runner_concurrent: 134
 
 gitlab_runner_aws_qemu_enabled: true
 
@@ -225,3 +225,25 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
 # aws_qemu site_runner_tag.
 # One job per pipeline, so warm reuse buys nothing here either -- same 2m drain.
 gitlab_runner_aws_qemu_site_idle_time: "2m"
+
+# One Ireland ARM bare-metal worker supplies 52 cells at the same CPU and memory
+# density as the established x86 role pool. The initial acquisition bound leaves
+# room for cold Spot metal readiness and will be tightened from rollout data.
+gitlab_runner_aws_qemu_arm_enabled: true
+gitlab_runner_aws_qemu_arm_token: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;prod
+          32363661636138313539316263613337333931623065353833333834336634666530366437323534
+          3531366335383832653437643237663930316566396162310a636434386433366634396433313034
+          38366634623934653633396664303939643437323937353535353033373962323761386265346439
+          3363623031646561370a376231333462366266623366323031653562656238373564636336316134
+          33356132663762613462303932316137386361613138396334653732383331336466616434336130
+          37343264303161626339623133306535373965353538613263613832616562353233643636363965
+          39613932313665326466303337383963303438616133666335643265333337336663313933336134
+          36393935326638643135
+gitlab_runner_aws_qemu_arm_profile: homelab-ci-fleeting-arm
+gitlab_runner_aws_qemu_arm_asg_name: homelab-ci-qemu-arm
+gitlab_runner_aws_qemu_arm_capacity_per_instance: 52
+gitlab_runner_aws_qemu_arm_max_instances: 1
+gitlab_runner_aws_qemu_arm_idle_time: "2m"
+gitlab_runner_aws_qemu_arm_connector_timeout: "2m0s"
+gitlab_runner_aws_qemu_arm_instance_acquire_timeout: "20m0s"
