@@ -265,11 +265,11 @@ class TestDispatchMatrix:
 
 
 class TestOnDemandMachines:
-    def test_drops_lab_and_pug_keeps_others(self) -> None:
+    def test_drops_pug_and_keeps_lab(self) -> None:
         specs = ["zfs:box", "zfs:lab", "zfs:pug", "swap:lab:noble", "nginx:box"]
         kept, dropped = matrix.drop_on_demand_cells(specs)
-        assert kept == ["zfs:box", "nginx:box"]
-        assert dropped == ["zfs:lab", "zfs:pug", "swap:lab:noble"]
+        assert kept == ["zfs:box", "zfs:lab", "swap:lab:noble", "nginx:box"]
+        assert dropped == ["zfs:pug"]
 
     def test_no_on_demand_cells_is_noop(self) -> None:
         specs = ["nginx:box", "zfs:box:noble"]
@@ -277,5 +277,5 @@ class TestOnDemandMachines:
         assert kept == specs
         assert dropped == []
 
-    def test_on_demand_machines_are_lab_and_pug(self) -> None:
-        assert frozenset({"lab", "pug"}) == matrix.ON_DEMAND_MACHINES
+    def test_pug_is_the_only_on_demand_machine(self) -> None:
+        assert frozenset({"pug"}) == matrix.ON_DEMAND_MACHINES

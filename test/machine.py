@@ -246,9 +246,8 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         inventory_host="box",
         # box: single-disk rpool + a 1G flat `zee` pool (second disk). The
         # default push-CI fixture; the second pool gives it multi-pool
-        # coverage (zfs trim/mount-cache loops), folding in the functional
-        # coverage the dropped lab/pug AMIs carried. Prod-faithful
-        # mirror/raidz geometry stays on the qemu-only lab/pug fixtures.
+        # coverage (zfs trim/mount-cache loops). Prod-faithful mirror/raidz
+        # geometry stays on the lab/pug fixtures.
     ),
     "box_deps": QemuMachineSpec(
         ssh_user="vagrant",
@@ -270,7 +269,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         inventory_host="lab",
         # lab: matches the lab prod host. mdadm-EFI + mdadm-swap +
         # 3-disk mirror rpool + dozer + tank + mouse, all baked in.
-        # Push CI doesn't fan out to lab; kept for on-demand
+        # Promoted for CI role variants and also available for on-demand
         # --machine lab debug + nightly + packer script regression.
     ),
     "pug": QemuMachineSpec(

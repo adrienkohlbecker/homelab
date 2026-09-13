@@ -57,10 +57,12 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"mise-tasks/ci/.+",
 ]
 
-# Machine-wide fixtures fan out only to that machine. Heavyweight lab/pug
-# fixtures remain role-triggered rather than fanning out on host_vars changes.
+# Machine-wide fixtures fan out only to that machine. Pug remains an on-demand
+# fixture, so its host vars do not select CI cells.
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
     (r"host_vars/box\.yml", "box"),
+    (r"host_vars/lab\.yml", "lab"),
+    (r"host_vars/lab-qemu\.yml", "lab"),
     (r"host_vars/minimal\.yml", "minimal"),
     (r"test/minimal/.+", "minimal"),
 ]
@@ -611,7 +613,7 @@ def _emit_gitlab(
     if target not in TARGETS:
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
-    # lab/pug fixtures run only on demand and have no CI image source.
+    # Pug runs only on demand and has no CI image source.
     specs, on_demand = drop_on_demand_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
@@ -620,7 +622,7 @@ def _emit_gitlab(
     log(f"target={target} runner={target_config['cell_runner_tag']}")
     log(f"matrix={json.dumps(specs)}")
     if on_demand:
-        log(f"dropped {len(on_demand)} on-demand lab/pug cell(s): {' '.join(sorted(on_demand))}")
+        log(f"dropped {len(on_demand)} on-demand cell(s): {' '.join(sorted(on_demand))}")
     if specs:
         unmeasured = [s for s in specs if s not in runtimes]
         log(f"cell order: longest-first by median recent runtime ({len(unmeasured)} unmeasured cell(s) first)")

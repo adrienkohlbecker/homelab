@@ -91,10 +91,10 @@ class TestClassifyChangedFiles:
         ("path", "expected"),
         [
             ("host_vars/box.yml", {"box"}),
+            ("host_vars/lab.yml", {"lab"}),
+            ("host_vars/lab-qemu.yml", {"lab"}),
             ("host_vars/minimal.yml", {"minimal"}),
             ("test/minimal/cloud-init.yml", {"minimal"}),
-            ("host_vars/lab.yml", set()),
-            ("host_vars/lab-qemu.yml", set()),
             ("host_vars/pug.yml", set()),
             ("host_vars/pug-qemu.yml", set()),
         ],
@@ -1179,15 +1179,26 @@ class TestEmitGitlab:
         assert order == sorted(order)
 
     @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
-    def test_lab_pug_cells_dropped(self, tmp_path: Path, target: str) -> None:
-        # lab/pug fixtures only run on demand -- neither qemu CI target can
-        # hydrate their images, so they never reach a generated pipeline.
+    def test_lab_cells_kept_and_pug_cells_dropped(self, tmp_path: Path, target: str) -> None:
         child = tmp_path / "child.yml"
         detect._emit_gitlab(["zfs:box", "zfs:lab", "zfs:pug"], False, str(child), {}, lambda *_: None, target=target)
         loaded = detect.yaml.safe_load(child.read_text())
         assert "zfs:box" in loaded
-        assert "zfs:lab" not in loaded
+        assert "zfs:lab" in loaded
         assert "zfs:pug" not in loaded
+
+    def test_full_universe_includes_declared_lab_cells(self) -> None:
+        expected = {
+            "gitlab_runner:lab",
+            "nginx:lab",
+            "nginx:lab:resolute",
+            "podman:lab",
+            "podman:lab:resolute",
+            "swap:lab",
+            "zfs:lab",
+        }
+
+        assert expected <= set(detect._full_universe_specs())
 
 
 class TestCmdGitlab:

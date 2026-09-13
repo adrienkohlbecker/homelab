@@ -3,8 +3,7 @@
 #
 # Storage coverage: box uses a dedicated raw ext4 partition, minimal stays on
 # the root filesystem, and lab exercises the three-member mdadm raid5 device.
-# box + minimal run on every push; lab is also available through a manual
-# `testrole.py podman --machine lab` run.
+# All declared variants run in CI.
 machines:
   box:
   minimal:

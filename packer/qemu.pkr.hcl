@@ -156,7 +156,7 @@ locals {
     }
     # box: the default push-CI fixture. Its 1G `zee` pool exercises multi-pool
     # loops without activating named dataset consumers; those stay on rpool.
-    # See notes/archive/ci_box_multidisk_drop_lab_pug_amis.md.
+    # Lab retains the prod-faithful storage topology for declared role variants.
     # box_deps is derived from box by `mise run test:build_box_deps`, which
     # applies test/playbooks/build_box_deps.yml; it is not a Packer source.
     # The 50G Podman partition holds the whole-fleet site's image set and
