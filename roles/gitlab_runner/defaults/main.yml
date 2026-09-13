@@ -28,9 +28,25 @@ gitlab_runner_aws_qemu_capacity_per_instance: 1
 gitlab_runner_aws_qemu_max_instances: 1
 gitlab_runner_aws_qemu_idle_time: "15m"
 gitlab_runner_aws_qemu_username: ubuntu
+gitlab_runner_aws_qemu_connector_timeout: "2m0s"
+gitlab_runner_aws_qemu_instance_acquire_timeout: "10m0s"
 
 # Dedicated one-host pool for _site_test. It reuses the AWS plugin/profile and
 # has its own GitLab token and Terraform-owned ASG.
 gitlab_runner_aws_qemu_site_token: ""
 gitlab_runner_aws_qemu_site_asg_name: homelab-ci-qemu-site
 gitlab_runner_aws_qemu_site_idle_time: "5m"
+
+# ── AWS ARM qemu runner (instance / fleeting) ───────────────────────────────
+# A second runner block uses the same manager IAM access key with a regional
+# profile and an independent autoscaler ceiling.
+gitlab_runner_aws_qemu_arm_enabled: false
+gitlab_runner_aws_qemu_arm_token: ""
+gitlab_runner_aws_qemu_arm_profile: homelab-ci-fleeting-arm
+gitlab_runner_aws_qemu_arm_region: eu-west-1
+gitlab_runner_aws_qemu_arm_asg_name: homelab-ci-qemu-arm
+gitlab_runner_aws_qemu_arm_capacity_per_instance: 1
+gitlab_runner_aws_qemu_arm_max_instances: 1
+gitlab_runner_aws_qemu_arm_idle_time: "15m"
+gitlab_runner_aws_qemu_arm_connector_timeout: "2m0s"
+gitlab_runner_aws_qemu_arm_instance_acquire_timeout: "20m0s"

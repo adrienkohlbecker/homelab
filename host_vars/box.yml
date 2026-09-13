@@ -143,6 +143,8 @@ netdata_packer_process_group_enabled: true
 # placeholder credentials are never accepted by AWS.
 gitlab_runner_aws_qemu_enabled: true
 gitlab_runner_aws_qemu_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
+gitlab_runner_aws_qemu_arm_enabled: true
+gitlab_runner_aws_qemu_arm_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_aws_qemu_access_key_id: TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_aws_qemu_secret_access_key: TEST_PLACEHOLDER_DO_NOT_USE
 
