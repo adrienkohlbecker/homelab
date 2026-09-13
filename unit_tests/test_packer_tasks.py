@@ -244,8 +244,30 @@ def test_qemu_host_retains_caches_without_a_shared_virtualenv() -> None:
 
     assert "MISE_DATA_DIR=/opt/mise" in provision
     assert "UV_CACHE_DIR=/opt/uv-cache" in provision
-    assert "mise exec -- uv sync --frozen --link-mode hardlink" in provision
+    assert "mise exec -- uv sync --locked --link-mode hardlink" in provision
     assert "/opt/venv" not in provision
+
+
+def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -> None:
+    template = QEMU_HOST_TEMPLATE.read_text()
+    provision = QEMU_HOST_PROVISION_SH.read_text()
+
+    assert 'qemu_packages        = "qemu-system-arm qemu-efi-aarch64"' in template
+    assert 'qemu_system_binary   = "qemu-system-aarch64"' in template
+    assert "runner_artifact      = local.versions.gitlab_runner_archive.aarch64" in template
+    assert "firmware_url         = local.versions.qemu_efi_aarch64_artifact.url" in template
+    assert "firmware_sha256      = local.versions.qemu_efi_aarch64_artifact.sha256" in template
+    assert 'firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"' in template
+    assert 'mise_disable_tools   = "aqua:Kampfkarren/selene"' in template
+
+    assert 'echo "${AARCH64_FIRMWARE_SHA256}  ${firmware_deb}" | sha256sum -c -' in provision
+    assert "AAVMF_CODE.no-secboot.fd" in provision
+    assert "AAVMF_VARS.fd" in provision
+    assert 'MISE_DISABLE_TOOLS="$MISE_DISABLE_TOOLS"' in provision
+    assert 'disable_tools = ["%s"]' in provision
+    assert "mise exec -- true" in provision
+    assert "mise run ci:hydrate-qemu-images --help" in provision
+    assert "command -v __QEMU_SYSTEM_BINARY__" in provision
 
 
 def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:

@@ -3,6 +3,24 @@ set -euxo pipefail
 
 : "${GITLAB_RUNNER_URL:?gitlab_runner_url is required}"
 : "${GITLAB_RUNNER_SHA256:?gitlab_runner_sha256 is required}"
+: "${TARGET_ARCHITECTURE:?target_architecture is required}"
+: "${QEMU_PACKAGES:?qemu_packages is required}"
+: "${QEMU_SYSTEM_BINARY:?qemu_system_binary is required}"
+
+case "$TARGET_ARCHITECTURE" in
+x86_64) ;;
+aarch64)
+  : "${AARCH64_FIRMWARE_URL:?aarch64_firmware_url is required}"
+  : "${AARCH64_FIRMWARE_SHA256:?aarch64_firmware_sha256 is required}"
+  : "${HOMELAB_AARCH64_FIRMWARE_DIR:?aarch64_firmware_dir is required}"
+  ;;
+*)
+  echo "provision_qemu_host: unsupported architecture ${TARGET_ARCHITECTURE}" >&2
+  exit 2
+  ;;
+esac
+
+read -r -a qemu_packages <<<"$QEMU_PACKAGES"
 
 sudo install -dm 755 /etc/apt/keyrings
 sudo apt-get update -qq
@@ -21,9 +39,8 @@ sudo apt-get update -qq
     unzip \
     gpg \
     gpg-agent \
-    qemu-system-x86 \
+    "${qemu_packages[@]}" \
     qemu-utils \
-    ovmf \
     openssh-client \
     netcat-openbsd \
     passt \
@@ -34,6 +51,22 @@ sudo apt-get update -qq
     mdadm \
     ec2-instance-connect
 )
+
+if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
+  firmware_deb=$(mktemp)
+  firmware_root=$(mktemp -d)
+  curl -fsSL -o "$firmware_deb" "$AARCH64_FIRMWARE_URL"
+  echo "${AARCH64_FIRMWARE_SHA256}  ${firmware_deb}" | sha256sum -c -
+  dpkg-deb -x "$firmware_deb" "$firmware_root"
+  sudo install -dm 0755 "$HOMELAB_AARCH64_FIRMWARE_DIR"
+  sudo install -m 0644 \
+    "$firmware_root/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd" \
+    "$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-code.fd"
+  sudo install -m 0644 \
+    "$firmware_root/usr/share/AAVMF/AAVMF_VARS.fd" \
+    "$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-vars.fd"
+  rm -rf "$firmware_deb" "$firmware_root"
+fi
 
 curl -fsSL https://mise.en.dev/gpg-key.pub |
   gpg --dearmor |
@@ -55,22 +88,34 @@ sudo install -dm 0755 /opt/mise /opt/uv-cache /etc/mise /tmp/homelab-ci-build
 sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
 (
   cd /tmp/homelab-ci-build
-  sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
-    mise trust /tmp/homelab-ci-build/mise.toml
-  sudo env MISE_DATA_DIR=/opt/mise PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
-    mise install
+  mise_environment=(
+    MISE_DATA_DIR=/opt/mise
+    PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
+  )
+  if [ -n "$MISE_DISABLE_TOOLS" ]; then
+    mise_environment+=("MISE_DISABLE_TOOLS=${MISE_DISABLE_TOOLS}")
+  fi
+  sudo env "${mise_environment[@]}" mise trust /tmp/homelab-ci-build/mise.toml
+  sudo env "${mise_environment[@]}" mise install
   # Warm the persistent uv cache through a project-local environment. The
   # environment is build output and is removed with homelab-ci-build below;
   # concurrent jobs create their own environments from the shared cache.
   sudo env \
     MISE_DATA_DIR=/opt/mise \
+    MISE_DISABLE_TOOLS="$MISE_DISABLE_TOOLS" \
     UV_CACHE_DIR=/opt/uv-cache \
     MISE_PYTHON_UV_VENV_AUTO=false \
     PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
-    mise exec -- uv sync --frozen --link-mode hardlink
+    mise exec -- uv sync --locked --link-mode hardlink
+  sudo env "${mise_environment[@]}" mise exec -- true
+  sudo env "${mise_environment[@]}" mise run ci:hydrate-qemu-images --help >/dev/null
 )
 sudo awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/homelab-ci-build/mise.toml |
   sudo tee /etc/mise/config.toml >/dev/null
+if [ -n "$MISE_DISABLE_TOOLS" ]; then
+  printf '\n[settings]\ndisable_tools = ["%s"]\n' "$MISE_DISABLE_TOOLS" |
+    sudo tee -a /etc/mise/config.toml >/dev/null
+fi
 sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache
 
 sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'
@@ -82,11 +127,18 @@ set -euo pipefail
 [ -w /mnt/scratch/gitlab-runner/builds ]
 [ -w /mnt/scratch/homelab_ci ]
 env -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null
-command -v qemu-system-x86_64 >/dev/null
+command -v __QEMU_SYSTEM_BINARY__ >/dev/null
 command -v qemu-img >/dev/null
 command -v passt >/dev/null
 command -v mise >/dev/null
 EOF
+sudo sed -i "s/__QEMU_SYSTEM_BINARY__/${QEMU_SYSTEM_BINARY}/" /usr/local/bin/homelab_ci_ready
+if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
+  sudo tee -a /usr/local/bin/homelab_ci_ready >/dev/null <<EOF
+test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/edk2-aarch64-code.fd
+test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/edk2-aarch64-vars.fd
+EOF
+fi
 sudo chmod 0755 /usr/local/bin/homelab_ci_ready
 
 sudo tee /etc/systemd/system/homelab-ci-scratch.service >/dev/null <<'EOF'
