@@ -33,6 +33,10 @@ UBUNTU_COMPLETION_TASKS = (
     REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
     REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
 )
+PYTHON_USAGE_TASKS = (
+    REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
+    REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
+)
 
 
 def _executable(path: Path, content: str) -> None:
@@ -435,6 +439,15 @@ def test_ubuntu_completions_use_release_catalog() -> None:
         assert "printf 'noble\\nresolute\\n'" not in content
 
     assert "noble | resolute)" not in QEMU_HOST_AMI_SH.read_text()
+
+
+def test_python_task_usage_headers_are_visible_to_mise() -> None:
+    for task in PYTHON_USAGE_TASKS:
+        content = task.read_text()
+        assert "\n#MISE description=" in content
+        assert "\n#USAGE arg " in content
+        assert "\n# MISE " not in content
+        assert "\n# USAGE " not in content
 
 
 def test_qemu_postprocess_bounds_boot_verification() -> None:
