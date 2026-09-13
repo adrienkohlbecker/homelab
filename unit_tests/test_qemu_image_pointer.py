@@ -23,7 +23,13 @@ hydrate = load_repo_module("mise-tasks/ci/hydrate-qemu-images.py", name="hydrate
 
 
 def _args(**overrides: object) -> argparse.Namespace:
-    base: dict[str, object] = {"build_id": "ci-42-gdeadbeef0000", "machine": "box", "ubuntu": "noble"}
+    base: dict[str, object] = {
+        "architecture": "x86_64",
+        "build_id": "ci-42-gdeadbeef0000",
+        "machine": "box",
+        "source_sha": "d" * 40,
+        "ubuntu": "noble",
+    }
     base.update(overrides)
     return argparse.Namespace(**base)
 
@@ -52,8 +58,9 @@ class TestPointerBody:
         assert body.endswith("\n")
         # sort_keys=True, indent=2
         assert body == (
-            '{\n  "build_id": "ci-42-gdeadbeef0000",\n  "machine": "box",\n'
-            '  "rollback_build_ids": [\n    "previous"\n  ],\n  "ubuntu": "noble"\n}\n'
+            '{\n  "architecture": "x86_64",\n  "build_id": "ci-42-gdeadbeef0000",\n'
+            '  "machine": "box",\n  "rollback_build_ids": [\n    "previous"\n  ],\n'
+            f'  "source_sha": "{"d" * 40}",\n  "ubuntu": "noble"\n}}\n'
         )
 
 
@@ -72,7 +79,14 @@ class TestManifest:
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert set(manifest) == {"build_id", "files", "machine", "ubuntu"}
+        assert set(manifest) == {
+            "architecture",
+            "build_id",
+            "files",
+            "machine",
+            "source_sha",
+            "ubuntu",
+        }
         assert manifest["files"] == [
             {"name": disk.name},
             {"name": efivars.name},

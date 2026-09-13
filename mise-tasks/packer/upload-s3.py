@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-# MISE description="Bundle a published packer qemu artifact and upload it to the S3 image bucket"
-# USAGE arg "<machine>" help="Packer source/artifact name: box, box_deps, or lab"
-# USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
-# USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
-# USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-# USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
-# USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-# USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"
-# USAGE flag "--artifact-dir <path>" help="Artifact dir to bundle; default is $HOMELAB_CI_DIR/<ubuntu>/<machine>"
-# USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build id"
-# USAGE flag "--dry-run" help="Build and print the manifest plan without creating the tarball, uploading, or promoting"
+# fmt: off
+#MISE description="Bundle a published packer qemu artifact and upload it to the S3 image bucket"
+#USAGE arg "<machine>" help="Packer source/artifact name: box, box_deps, or lab"
+#USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+#USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
+#USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
+#USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
+#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64)" default="x86_64"
+#USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"
+#USAGE flag "--artifact-dir <path>" help="Artifact dir to bundle; default is $HOMELAB_CI_DIR/<ubuntu>/<machine>"
+#USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build id"
+#USAGE flag "--dry-run" help="Build and print the manifest plan without creating the tarball, uploading, or promoting"
+# fmt: on
 """Upload qemu packer artifacts to the nested-CI S3 bundle layout.
 
 The nested-qemu runner design uses S3 as the source of truth for qemu fixture
@@ -65,6 +68,7 @@ from qemu_image_store import (  # noqa: E402
     BUNDLE_NAME,
     MANIFEST_NAME,
     POINTER_NAME,
+    VALID_ARCHITECTURES,
     VALID_MACHINES,
     find_tar,
     output,
@@ -89,6 +93,13 @@ def default_build_id() -> str:
     return f"{stamp}-g{sha}"
 
 
+def source_sha() -> str:
+    sha = os.environ.get("CI_COMMIT_SHA") or git_output(["rev-parse", "HEAD"], default="")
+    if len(sha) not in (40, 64) or any(character not in "0123456789abcdef" for character in sha):
+        sys.exit(f"source SHA must be a full lowercase Git object id, got {sha!r}")
+    return sha
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
@@ -101,6 +112,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--bucket", default=os.environ.get("usage_bucket", "homelab-ci-images"))
     parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
+    parser.add_argument(
+        "--architecture",
+        choices=sorted(VALID_ARCHITECTURES),
+        default=os.environ.get("usage_architecture", "x86_64"),
+    )
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id") or default_build_id())
     parser.add_argument("--artifact-dir", default=os.environ.get("usage_artifact_dir"))
     parser.add_argument(
@@ -148,6 +164,8 @@ def build_manifest(
         "machine": args.machine,
         "ubuntu": args.ubuntu,
         "build_id": args.build_id,
+        "architecture": args.architecture,
+        "source_sha": args.source_sha,
         "files": [{"name": path.name} for path in files],
     }
 
@@ -285,8 +303,10 @@ def pointer_body(args: argparse.Namespace, retained_build_ids: list[str]) -> str
         json.dumps(
             {
                 "build_id": args.build_id,
+                "architecture": args.architecture,
                 "machine": args.machine,
                 "rollback_build_ids": retained_build_ids[1:],
+                "source_sha": args.source_sha,
                 "ubuntu": args.ubuntu,
             },
             indent=2,
@@ -298,6 +318,7 @@ def pointer_body(args: argparse.Namespace, retained_build_ids: list[str]) -> str
 
 def main() -> int:
     args = parse_args()
+    args.source_sha = source_sha()
     root = artifact_dir(args)
     disks, efivars = collect_artifact_files(root)
     s3_prefix = f"{args.ubuntu}/{args.machine}/{args.build_id}"

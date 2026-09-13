@@ -107,8 +107,36 @@ def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
     assert log.read_text().splitlines() == [
         "run packer:init",
         "run packer:build lab --ubuntu noble",
-        "run packer:upload-s3 lab --ubuntu noble --promote",
+        "run packer:upload-s3 lab --ubuntu noble --bucket homelab-ci-images --region eu-central-1 --architecture x86_64 --promote",
     ]
+
+
+def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    log = tmp_path / "mise.log"
+    _executable(
+        fake_bin / "mise",
+        '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n',
+    )
+    env = dict(os.environ)
+    env.update(
+        MISE_TEST_LOG=str(log),
+        PATH=f"{fake_bin}:{env['PATH']}",
+        usage_architecture="aarch64",
+        usage_bucket="homelab-ci-arm-images-eu-west-1",
+        usage_machine="box",
+        usage_promote="true",
+        usage_region="eu-west-1",
+        usage_ubuntu="noble",
+    )
+
+    result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines()[-1] == (
+        "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-west-1 "
+        "--region eu-west-1 --architecture aarch64 --promote"
+    )
 
 
 def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict[str, str], Path, Path]:

@@ -12,6 +12,7 @@ BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
 POINTER_NAME = "promoted.json"
 VALID_MACHINES = {"box", "box_deps", "lab"}
+VALID_ARCHITECTURES = {"aarch64", "x86_64"}
 
 
 def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
