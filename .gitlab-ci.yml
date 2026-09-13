@@ -14,6 +14,8 @@ default:
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
+  # Ansible ignores cwd config under world-writable /builds unless pinned.
+  ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
 
 # GitLab expands tags before job rules:variables, so select the runner tag at
 # workflow scope. Target alone is authoritative across web, push-option, and API
@@ -110,8 +112,6 @@ lint:
   variables:
     # Syntax-check loads vaulted vars; CI must never attempt the prod identity.
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
-    # Ansible ignores cwd config under world-writable /builds unless pinned.
-    ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
   script:
     - mise run lint
 
