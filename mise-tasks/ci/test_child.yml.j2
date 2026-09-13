@@ -27,6 +27,10 @@ stages:
   variables:
     # Select mirrors and DNS for the guest's network environment.
     HOMELAB_TEST_IN_AWS: "{{ "true" if in_aws else "false" }}"
+    # Existing x86 and local cells keep their Frankfurt compute/APT and ECR
+    # endpoints. The harness forwards both values as Ansible extra-vars.
+    HOMELAB_TEST_AWS_COMPUTE_REGION: eu-central-1
+    HOMELAB_TEST_AWS_ECR_REGION: eu-central-1
     # passt loses first-boot DHCP under synchronized launch bursts (~84/138
     # failures in a full-matrix trial). Remove this pin after that race is fixed.
     HOMELAB_NET_BACKEND: slirp
@@ -53,6 +57,16 @@ stages:
     expire_in: 30 days
     paths:
       - test/out/
+{% if target == "aws_qemu" %}
+
+# ARM jobs extend this scaffold when the ARM lane is rendered. Keeping the
+# regional override here makes that architecture boundary explicit.
+.arm_cell:
+  extends: .cell
+  variables:
+    HOMELAB_TEST_AWS_COMPUTE_REGION: eu-west-1
+    HOMELAB_TEST_AWS_ECR_REGION: eu-west-1
+{% endif %}
 {% if site_test %}
 
 # The leading stage gives the critical-path converge the first build id;

@@ -234,9 +234,9 @@ nexus_url: ""
 # and still egresses through EC2, so it wants the regional mirror too. AWS cells
 # are amd64 today, so the ports branch is latent -- kept for symmetry and a
 # future Graviton cell.
-mirror_apt_ubuntu_archive: 'http://{{ nexus_url ~ "/repository/ubuntu-archive" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "archive.ubuntu.com/ubuntu") }}'
-mirror_apt_ubuntu_security: 'http://{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "security.ubuntu.com/ubuntu") }}'
-mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else (test_aws_region ~ ".ec2.ports.ubuntu.com/ubuntu-ports" if test_in_aws | default(false) | bool else "ports.ubuntu.com/ubuntu-ports") }}'
+mirror_apt_ubuntu_archive: 'http://{{ nexus_url ~ "/repository/ubuntu-archive" if nexus_url else (test_aws_compute_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "archive.ubuntu.com/ubuntu") }}'
+mirror_apt_ubuntu_security: 'http://{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else (test_aws_compute_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "security.ubuntu.com/ubuntu") }}'
+mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else (test_aws_compute_region ~ ".ec2.ports.ubuntu.com/ubuntu-ports" if test_in_aws | default(false) | bool else "ports.ubuntu.com/ubuntu-ports") }}'
 mirror_apt_netdata: 'https://{{ nexus_url ~ "/repository/netdata" if nexus_url else "repo.netdata.cloud/repos/stable/ubuntu" }}'
 mirror_apt_fluentbit: 'https://{{ nexus_url ~ "/repository/fluentbit" if nexus_url else "packages.fluentbit.io/ubuntu" }}'
 mirror_apt_docker: 'https://{{ nexus_url ~ "/repository/docker-ce" if nexus_url else "download.docker.com/linux/ubuntu" }}'

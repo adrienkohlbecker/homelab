@@ -41,11 +41,13 @@ test_dot_servers: >-
   {{ bootstrap_dns_resolver
      if test_in_aws
      else [prod_network.virtual_ips.dns ~ '#dns.fahm.fr'] }}
-# AWS region the qemu CI cells egress through (the aws_qemu target). Single
-# source for the in-region EC2 apt mirror and ECR; only consulted when
-# test_in_aws is true.
-test_aws_region: eu-central-1
-test_ecr_registry: "000390721279.dkr.ecr.{{ test_aws_region }}.amazonaws.com"
+# AWS regions the qemu CI cells use for compute/APT and ECR. The harness
+# overrides both per architecture; Frankfurt remains the compatible default
+# for existing x86 and local invocations. Only consulted when test_in_aws is
+# true.
+test_aws_compute_region: eu-central-1
+test_aws_ecr_region: eu-central-1
+test_ecr_registry: "000390721279.dkr.ecr.{{ test_aws_ecr_region }}.amazonaws.com"
 # aws_qemu cells egress through AWS and mirror through ECR. Local cells use
 # Nexus unless --upstream-mirrors clears nexus_url, in which case the empty map
 # suppresses registry configuration entirely.

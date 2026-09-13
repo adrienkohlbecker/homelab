@@ -1042,6 +1042,12 @@ class TestRenderChildPipeline:
         # no HOMELAB_TEST_BACKEND variable.
         assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_COMPUTE_REGION"] == "eu-central-1"
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_ECR_REGION"] == "eu-central-1"
+        assert doc[".arm_cell"]["variables"] == {
+            "HOMELAB_TEST_AWS_COMPUTE_REGION": "eu-west-1",
+            "HOMELAB_TEST_AWS_ECR_REGION": "eu-west-1",
+        }
         # No spot retry on the qemu targets.
         assert "retry" not in doc[".cell"]
         # nginx:box defaults to Noble; podman:box:resolute is explicit.
@@ -1106,7 +1112,7 @@ class TestRenderChildPipeline:
         assert "_site_test:box" not in doc
         assert "_site_check:box" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
-        jobs = [k for k in doc if k not in ("default", "stages", ".cell")]
+        jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
         assert jobs == ["no_cells"]
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
@@ -1118,6 +1124,9 @@ class TestRenderChildPipeline:
         assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
         # lab's shell runner is on the operator LAN: qemu guest, not in AWS.
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_COMPUTE_REGION"] == "eu-central-1"
+        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_ECR_REGION"] == "eu-central-1"
+        assert ".arm_cell" not in doc
         # lab's shell runner is not the baked AMI -- no /opt/mise to point at.
         assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]
         assert "image" not in doc[".cell"]

@@ -2,6 +2,7 @@
 
 import shlex
 from collections.abc import Callable
+from pathlib import Path
 
 import machine
 import pytest
@@ -103,7 +104,10 @@ def test_format_ansible_cmd_default_envelope(
 
     # Harness inputs are indirect so Ansible task vars can override the public
     # environment variables during fixture coverage.
-    assert '{"_test_in_aws":false,"_test_nexus_url":"nexus.lab.fahm.fr"}' in cmd
+    assert (
+        '{"_test_aws_compute_region":"eu-central-1","_test_aws_ecr_region":"eu-central-1",'
+        '"_test_in_aws":false,"_test_nexus_url":"nexus.lab.fahm.fr"}'
+    ) in cmd
     assert not any("tailscale_wan_direct" in part for part in cmd)
 
 
@@ -116,11 +120,28 @@ def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
     # and clears nexus_url even without --upstream-mirrors, because the LAN
     # Nexus is unreachable from AWS.
     monkeypatch.setenv("HOMELAB_TEST_IN_AWS", "true")
+    monkeypatch.setenv("HOMELAB_TEST_AWS_COMPUTE_REGION", "eu-west-1")
+    monkeypatch.setenv("HOMELAB_TEST_AWS_ECR_REGION", "eu-north-1")
     m = machine_factory()
     cmd = m.format_ansible_cmd("site.yml")
 
-    assert '{"_test_in_aws":true,"_test_nexus_url":""}' in cmd
+    assert (
+        '{"_test_aws_compute_region":"eu-west-1","_test_aws_ecr_region":"eu-north-1",'
+        '"_test_in_aws":true,"_test_nexus_url":""}'
+    ) in cmd
     assert "nexus_url=" not in cmd
+
+
+def test_ecr_login_uses_only_ecr_region() -> None:
+    login_lines = [
+        line
+        for line in Path("test/playbooks/_environment.yml").read_text().splitlines()
+        if "ecr get-login-password" in line
+    ]
+
+    assert len(login_lines) == 1
+    assert "test_aws_ecr_region" in login_lines[0]
+    assert "test_aws_compute_region" not in login_lines[0]
 
 
 def test_ansible_env_default_envelope(
