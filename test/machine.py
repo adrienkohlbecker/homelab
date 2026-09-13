@@ -753,6 +753,16 @@ class Machine:
             "yes",
         )
 
+    @property
+    def aws_compute_region(self) -> str:
+        """AWS compute/APT region selected by the job."""
+        return os.environ.get("HOMELAB_TEST_AWS_COMPUTE_REGION", "").strip() or "eu-central-1"
+
+    @property
+    def aws_ecr_region(self) -> str:
+        """AWS ECR region selected by the job."""
+        return os.environ.get("HOMELAB_TEST_AWS_ECR_REGION", "").strip() or "eu-central-1"
+
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details.
 
@@ -777,12 +787,20 @@ class Machine:
             # stays role-agnostic on disk.
             "-e",
             f"_role_under_test={self.role}",
-            # Cloud-environment discriminator (see in_aws): true whenever the
-            # guest egresses through AWS, so roles pick the in-region EC2
-            # mirrors + public DNS over the LAN Nexus / AdGuard VIP. JSON form
-            # so it lands as a real bool for `| bool`.
+            # Cloud-environment inputs (see in_aws): the bool selects AWS
+            # mirrors/public DNS, while the independent regions keep the
+            # guest's APT and ECR traffic local to its architecture's pool.
+            # JSON form also lands test_in_aws as a real bool for `| bool`.
             "-e",
-            json.dumps({"test_in_aws": self.in_aws}),
+            json.dumps(
+                {
+                    "test_aws_compute_region": self.aws_compute_region,
+                    "test_aws_ecr_region": self.aws_ecr_region,
+                    "test_in_aws": self.in_aws,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
             # Controller-side WAN probe endpoint for verify probes that
             # delegate_to: localhost (see the wan_* field comment).
             "-e",

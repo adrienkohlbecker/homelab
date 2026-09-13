@@ -80,7 +80,7 @@
               {
                 "auths": {
                   "{{ test_ecr_registry }}": {
-                    "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_aws_region ~ ' ecr get-login-password')) | b64encode }}"
+                    "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_aws_ecr_region ~ ' ecr get-login-password')) | b64encode }}"
                   }
                 }
               }
