@@ -78,7 +78,6 @@ locals {
     "github"                = "https://github.com/"
     "gitlab"                = "https://gitlab.com/"
     "raw-githubusercontent" = "https://raw.githubusercontent.com/"
-    "minio"                 = "https://dl.min.io/"
     "gitea-dl"              = "https://dl.gitea.com/"
     "ubuntu-cloud-images"   = "https://cloud-images.ubuntu.com/"
   }
