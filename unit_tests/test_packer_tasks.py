@@ -13,6 +13,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
+FIRMWARE_SH = REPO_ROOT / "mise-tasks" / "test" / "firmware.sh"
 HETZNER_SH = REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 PUBLISH_QEMU_SH = REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh"
@@ -192,6 +193,42 @@ def test_qemu_build_uses_one_install_target() -> None:
     assert 'export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"' in provision
     assert "IMAGE_TARGET" not in template
     assert "QEMU_TEST_IMAGE" not in template
+
+
+def test_qemu_build_separates_host_os_from_architecture() -> None:
+    template = QEMU_TEMPLATE.read_text()
+
+    assert 'data "external-raw" "host_arch"' in template
+    assert 'data "external-raw" "host_os"' in template
+    assert re.search(r"accelerator\s+= local\.host_os_cfg\.accelerator", template)
+    assert re.search(r"format\s+= local\.host_os_cfg\.image_format", template)
+    assert 'cloud_image_suffix = "arm64"' in template
+    assert 'upstream_archive   = "http://ports.ubuntu.com/ubuntu-ports"' in template
+
+
+def test_qemu_build_passes_shared_aarch64_firmware_override() -> None:
+    template = QEMU_TEMPLATE.read_text()
+    build = BUILD_SH.read_text()
+
+    assert 'variable "aarch64_firmware_dir"' in template
+    assert 'code = "${local.aarch64_firmware_dir}/edk2-aarch64-code.fd"' in template
+    assert 'vars = "${local.aarch64_firmware_dir}/edk2-aarch64-vars.fd"' in template
+    assert '"HOMELAB_AARCH64_FIRMWARE_DIR=${local.aarch64_firmware_dir}"' in template
+    assert 'aarch64_firmware_dir="${HOMELAB_AARCH64_FIRMWARE_DIR:-${repo_root}/test/firmware}"' in build
+    assert '-var "aarch64_firmware_dir=${aarch64_firmware_dir}"' in build
+
+
+def test_aarch64_firmware_pin_covers_package_code_and_vars() -> None:
+    versions = yaml.safe_load((REPO_ROOT / "group_vars" / "all" / "versions.yml").read_text())
+    artifact = versions["qemu_efi_aarch64_artifact"]
+    script = FIRMWARE_SH.read_text()
+
+    assert artifact == {
+        "url": "https://snapshot.debian.org/file/137d1a34bd9ec2e10b1d81331e92d163824579c4",
+        "sha256": "95388b7606e821dd8af1dd852767094d569ff78cb2e8f1dc218b60959a52ee81",
+    }
+    assert "AAVMF_CODE.no-secboot.fd" in script
+    assert "AAVMF_VARS.fd" in script
 
 
 def test_qemu_host_uses_canonical_mise_upstream() -> None:

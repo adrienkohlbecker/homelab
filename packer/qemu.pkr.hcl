@@ -11,13 +11,16 @@ packer {
   }
 }
 
-# Host arch detected at template-eval time. The build VM and the
-# shipped image are always the same arch as documented (x86_64 =
-# Linux + KVM, aarch64 = arm Mac + HVF), so the host's arch is the
-# right value to feed everywhere downstream. The arch_table lookup
-# at local.arch_cfg fails loudly on anything outside x86_64/aarch64.
+# Native host architecture and operating system are separate dimensions: both
+# Linux/KVM and macOS/HVF can build aarch64 images. The table lookups below fail
+# loudly for unsupported values.
 data "external-raw" "host_arch" {
   program = ["uname", "-m"]
+  query   = ""
+}
+
+data "external-raw" "host_os" {
+  program = ["uname", "-s"]
   query   = ""
 }
 
@@ -48,11 +51,18 @@ variable "upstream_mirrors" {
   description = "When true, build from upstream Ubuntu mirrors instead of Nexus."
 }
 
+variable "aarch64_firmware_dir" {
+  type        = string
+  default     = null
+  description = "Directory containing the pinned aarch64 CODE and VARS firmware files."
+}
+
 locals {
   # Normalize Mac's "arm64" to "aarch64" (qemu / refind / ZBM use the
   # latter; uname -m reports the former). Pass-through for x86_64.
   arch_raw = trimspace(data.external-raw.host_arch.result)
   arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
+  host_os  = lower(trimspace(data.external-raw.host_os.result))
   versions = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
 
   # Codename -> Ubuntu version and immutable released-image serial.
@@ -61,17 +71,10 @@ locals {
   ubuntu_release = local.ubuntu_catalog.releases[local.ubuntu_name]
   ubuntu_version = local.ubuntu_release.version
 
-  # Arch-keyed configuration table. Centralizes everything that varies
-  # between the supported builds. In this stack arch is a 1:1 proxy for
-  # OS (x86_64 = Linux + KVM, aarch64 = arm Mac + HVF).
+  # Architecture controls the guest machine, artifacts, and mirrors. Host OS
+  # independently controls the accelerator and image format.
   #
   # Field notes:
-  # - accelerator: kvm on Linux, hvf on Mac.
-  # - efi_firmware_*: ovmf on Linux, Homebrew qemu (aarch64 code + arm
-  #   vars) on Mac.
-  # - image_format: raw on Linux (zfs already does CoW + zstd
-  #   so qcow2 stacks redundant work); qcow2 on Mac (APFS has no
-  #   fs-level compression).
   # - qemuargs: aarch64's `virt` machine ships no default graphics or
   #   input devices so VNC would be blank without these. q35 already
   #   has std VGA + PS/2 keyboard, so the x86_64 list is empty.
@@ -81,14 +84,8 @@ locals {
   nexus_base = "http://nexus.lab.fahm.fr/repository"
   arch_table = {
     x86_64 = {
-      machine_type = "q35"
-      accelerator  = "kvm"
-      zbm_version  = local.versions.zfsbootmenu_release.x86_64.version
-      # 4M variants because Ubuntu 24.04 dropped the legacy non-4M
-      # OVMF_{CODE,VARS}.fd from the `ovmf` package.
-      efi_firmware_code  = "/usr/share/OVMF/OVMF_CODE_4M.fd"
-      efi_firmware_vars  = "/usr/share/OVMF/OVMF_VARS_4M.fd"
-      image_format       = "raw"
+      machine_type       = "q35"
+      zbm_version        = local.versions.zfsbootmenu_release.x86_64.version
       qemuargs           = []
       cloud_image_suffix = "amd64"
       upstream_archive   = "http://archive.ubuntu.com/ubuntu"
@@ -97,12 +94,8 @@ locals {
       nexus_security     = "${local.nexus_base}/ubuntu-security"
     }
     aarch64 = {
-      machine_type      = "virt"
-      accelerator       = "hvf"
-      zbm_version       = local.versions.zfsbootmenu_release.aarch64.version
-      efi_firmware_code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
-      efi_firmware_vars = "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
-      image_format      = "qcow2"
+      machine_type = "virt"
+      zbm_version  = local.versions.zfsbootmenu_release.aarch64.version
       qemuargs = [
         ["-device", "virtio-gpu-pci"],
         ["-device", "qemu-xhci"],
@@ -117,6 +110,36 @@ locals {
     }
   }
   arch_cfg = local.arch_table[local.arch]
+
+  host_os_table = {
+    linux = {
+      accelerator = "kvm"
+      # ZFS already provides CoW and zstd compression on the Linux builders.
+      image_format = "raw"
+    }
+    darwin = {
+      accelerator = "hvf"
+      # APFS has no filesystem-level compression for these sparse artifacts.
+      image_format = "qcow2"
+    }
+  }
+  host_os_cfg = local.host_os_table[local.host_os]
+
+  aarch64_firmware_dir = coalesce(var.aarch64_firmware_dir, "${path.cwd}/test/firmware")
+  # The pinned ARM pair is host-independent. x86_64 keeps the packaged OVMF
+  # paths used by its only supported native builder, Linux/KVM.
+  firmware_table = {
+    x86_64 = {
+      # Ubuntu 24.04 dropped the legacy non-4M names.
+      code = "/usr/share/OVMF/OVMF_CODE_4M.fd"
+      vars = "/usr/share/OVMF/OVMF_VARS_4M.fd"
+    }
+    aarch64 = {
+      code = "${local.aarch64_firmware_dir}/edk2-aarch64-code.fd"
+      vars = "${local.aarch64_firmware_dir}/edk2-aarch64-vars.fd"
+    }
+  }
+  firmware_cfg = local.firmware_table[local.arch]
 
   # Each qemu source below has one entry. disk_sizes covers every attached disk
   # in device order; the space-delimited disks prefix becomes rpool and
@@ -216,7 +239,7 @@ locals {
 }
 
 source "qemu" "ubuntu" {
-  accelerator        = local.arch_cfg.accelerator
+  accelerator        = local.host_os_cfg.accelerator
   boot_wait          = "2s"
   cpu_model          = "host"
   cores              = 4
@@ -233,9 +256,9 @@ source "qemu" "ubuntu" {
   # ship — the size only matters for the build-time pivot.
   disk_size         = "10G"
   efi_boot          = true
-  efi_firmware_code = local.arch_cfg.efi_firmware_code
-  efi_firmware_vars = local.arch_cfg.efi_firmware_vars
-  format            = local.arch_cfg.image_format
+  efi_firmware_code = local.firmware_cfg.code
+  efi_firmware_vars = local.firmware_cfg.vars
+  format            = local.host_os_cfg.image_format
   headless          = true
   iso_checksum      = local.cloud_checksum
   iso_url           = local.cloud_url
@@ -386,9 +409,10 @@ build {
       environment_vars = [
         "BUILD_DIRECTORY=${var.build_directory}",
         "SOURCE_NAME=${source.name}",
-        "IMAGE_FORMAT=${local.arch_cfg.image_format}",
+        "IMAGE_FORMAT=${local.host_os_cfg.image_format}",
         "INSTALL_TARGET=${source.name == "hetzner" ? "hetzner" : "qemu"}",
         "UBUNTU_NAME=${local.ubuntu_name}",
+        "HOMELAB_AARCH64_FIRMWARE_DIR=${local.aarch64_firmware_dir}",
         "PUBLISH=${var.publish}",
         "OUTPUT_DIRECTORY=${var.output_directory}",
       ]
