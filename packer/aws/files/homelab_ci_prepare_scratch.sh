@@ -16,6 +16,29 @@ set -euo pipefail
 
 mountpoint=/mnt/scratch
 
+calculate_swap_gib() {
+  local meminfo_path=${1:-/proc/meminfo}
+  local key="" memory_kib="" unit="" swap_gib
+  read -r key memory_kib unit < <(awk '$1 == "MemTotal:" { print $1, $2, $3; exit }' "$meminfo_path") || true
+  if [ "$key" != "MemTotal:" ] || ! [[ $memory_kib =~ ^[0-9]+$ ]] || [ "$memory_kib" -eq 0 ] || [ "$unit" != kB ]; then
+    echo "homelab_ci_prepare_scratch: invalid MemTotal in ${meminfo_path}" >&2
+    return 1
+  fi
+
+  swap_gib=$((memory_kib / 4 / 1024 / 1024))
+  if [ "$swap_gib" -lt 16 ]; then
+    swap_gib=16
+  elif [ "$swap_gib" -gt 32 ]; then
+    swap_gib=32
+  fi
+  printf '%s\n' "$swap_gib"
+}
+
+if [ "${1:-}" = --calculate-swap-gib ]; then
+  calculate_swap_gib "${2:-/proc/meminfo}"
+  exit
+fi
+
 if ! mountpoint -q "$mountpoint"; then
   mapfile -t devs < <(
     lsblk -dn -o NAME,MODEL | awk '/Instance Storage/ { print "/dev/" $1 }'
@@ -60,7 +83,6 @@ install -dm 0755 -o ubuntu -g ubuntu "$mountpoint/homelab_ci"
 # host -- no instance store -- keeps its small root untouched. Best-effort: a
 # swap failure must not fail this unit (the host still runs, just without the
 # cushion), so the setup is guarded and swappiness only flips on success.
-swap_gib=16
 swapfile="$mountpoint/swapfile"
 if mountpoint -q "$mountpoint" &&
   ! swapon --show=NAME --noheadings 2>/dev/null | grep -qx "$swapfile"; then
@@ -69,15 +91,19 @@ if mountpoint -q "$mountpoint" &&
   # the oneshot in activating for ~40s while it floods page cache -- and since
   # the readiness dirs above are already staged, that delay would needlessly keep
   # the unit (and any later swap-dependent ordering) busy in the boot path.
-  if rm -f "$swapfile" &&
-    fallocate -l "${swap_gib}G" "$swapfile" &&
-    chmod 0600 "$swapfile" &&
-    mkswap "$swapfile" >/dev/null &&
-    swapon "$swapfile"; then
-    sysctl -q -w vm.swappiness=1
+  if swap_gib=$(calculate_swap_gib); then
+    if rm -f "$swapfile" &&
+      fallocate -l "${swap_gib}G" "$swapfile" &&
+      chmod 0600 "$swapfile" &&
+      mkswap "$swapfile" >/dev/null &&
+      swapon "$swapfile"; then
+      sysctl -q -w vm.swappiness=1
+    else
+      echo "homelab_ci_prepare_scratch: swap setup failed, continuing without cushion" >&2
+      swapoff "$swapfile" 2>/dev/null || true
+      rm -f "$swapfile" || true
+    fi
   else
-    echo "homelab_ci_prepare_scratch: swap setup failed, continuing without cushion" >&2
-    swapoff "$swapfile" 2>/dev/null || true
-    rm -f "$swapfile" || true
+    echo "homelab_ci_prepare_scratch: swap sizing failed, continuing without cushion" >&2
   fi
 fi

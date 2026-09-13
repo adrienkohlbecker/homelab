@@ -19,6 +19,7 @@ QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 PUBLISH_QEMU_SH = REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
+QEMU_HOST_SCRATCH_SH = REPO_ROOT / "packer" / "aws" / "files" / "homelab_ci_prepare_scratch.sh"
 QEMU_POSTPROCESS_SH = REPO_ROOT / "packer" / "scripts" / "postprocess.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
@@ -268,6 +269,54 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert "mise exec -- true" in provision
     assert "mise run ci:hydrate-qemu-images --help" in provision
     assert "command -v __QEMU_SYSTEM_BINARY__" in provision
+
+
+@pytest.mark.parametrize(
+    ("ram_gib", "swap_gib"),
+    [
+        (16, 16),
+        (32, 16),
+        (128, 32),
+    ],
+)
+def test_qemu_host_scratch_swap_scales_with_memory(tmp_path: Path, ram_gib: int, swap_gib: int) -> None:
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(f"MemTotal:       {ram_gib * 1024 * 1024} kB\n")
+
+    result = subprocess.run(
+        ["bash", str(QEMU_HOST_SCRATCH_SH), "--calculate-swap-gib", str(meminfo)],
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(swap_gib)
+
+
+@pytest.mark.parametrize("memtotal", ["", "MemTotal: unknown kB\n", "MemTotal: 0 kB\n", "MemTotal: 1024 bytes\n"])
+def test_qemu_host_scratch_swap_rejects_malformed_memory(tmp_path: Path, memtotal: str) -> None:
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text(memtotal)
+
+    result = subprocess.run(
+        ["bash", str(QEMU_HOST_SCRATCH_SH), "--calculate-swap-gib", str(meminfo)],
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode != 0
+    assert "invalid MemTotal" in result.stderr
+
+
+def test_qemu_host_scratch_uses_every_instance_store_device_in_raid0() -> None:
+    script = QEMU_HOST_SCRATCH_SH.read_text()
+
+    assert "mapfile -t devs" in script
+    assert "lsblk -dn -o NAME,MODEL" in script
+    assert "'/Instance Storage/" in script
+    assert "--level=0" in script
+    assert '--raid-devices="${#devs[@]}" "${devs[@]}"' in script
+    assert "Before=multi-user.target" in QEMU_HOST_PROVISION_SH.read_text()
 
 
 def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
