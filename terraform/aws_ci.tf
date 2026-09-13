@@ -1,30 +1,37 @@
-# AWS-backed CI nested-qemu fleet (notes/ci_aws_nested_qemu_cells.md): role tests run
-# on a pool of spot qemu hosts (an ASG scaled by fleeting-plugin-aws on fox),
-# where each cell hydrates a promoted qemu image bundle from S3 and boots it
-# under nested KVM. The bake path publishes those bundles to S3 (consumers
-# follow a promoted.json pointer object in the bucket) and the host AMI through
-# SSM. This file owns the platform the harness does NOT: VPC,
-# security groups, IAM/OIDC, the qemu-host launch template + ASG, the image
-# bucket, the ECR pull-through cache, the EventBridge Scheduler execution role,
-# and the budget tripwire. Changing an instance type or spot policy happens
-# here, never in test/.
+# AWS-backed CI nested-qemu fleets (notes/ci_aws_nested_qemu_cells.md and
+# notes/ci_aws_arm_qemu_cells.md): role tests run on scale-to-zero Spot hosts in
+# Frankfurt (x86_64) or Ireland (aarch64), each scaled by fleeting-plugin-aws on
+# fox. Cells hydrate a promoted regional qemu image bundle and boot it under
+# nested KVM. This file owns the platform the harness does not: regional VPCs,
+# security groups, host launch templates and ASGs, image buckets, ECR caches,
+# SSM AMI pointers, shared IAM/OIDC, the bake scheduler role, and the account
+# budget. Changing an instance type or Spot policy happens here, never in test/.
 #
 # First-apply bootstrap (AMI parameter seeding, GitLab cutover):
 # notes/archive/ci_aws_test_cells.md, "Bootstrap".
 
 locals {
-  ci_aws_region = "eu-central-1"
+  ci_aws_region     = "eu-central-1"
+  ci_arm_aws_region = "eu-west-1"
   # GitLab project whose OIDC tokens may assume the CI roles. The sub claim
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
-  ci_gitlab_project         = "akohlbecker/homelab"
-  ci_account_id             = "000390721279"
-  ci_qemu_image_bucket_name = "homelab-ci-images"
+  ci_gitlab_project             = "akohlbecker/homelab"
+  ci_account_id                 = "000390721279"
+  ci_qemu_image_bucket_name     = "homelab-ci-images"
+  ci_qemu_arm_image_bucket_name = "homelab-ci-arm-images-eu-west-1"
   # Removing a release from test/matrix.py does not enumerate its S3 prefix.
   # Add its codename here so lifecycle explicitly retires every remaining object.
-  ci_qemu_retired_releases   = toset([])
-  ci_qemu_host_ami_parameter = "/homelab-ci/ami/qemu-host/noble"
+  ci_qemu_retired_releases       = toset([])
+  ci_qemu_host_ami_parameter     = "/homelab-ci/ami/qemu-host/noble"
+  ci_qemu_arm_host_ami_parameter = "/homelab-ci/ami/qemu-host/aarch64/noble"
+  ci_qemu_arm_pool = {
+    name             = "homelab-ci-qemu-arm"
+    instance_types   = ["c6gd.metal", "c7gd.metal"]
+    max_size         = 1
+    root_volume_size = 40
+  }
   ci_qemu_pools = {
     role = {
       # Instance-type-agnostic name: aws_autoscaling_group.name and
@@ -67,6 +74,20 @@ locals {
       Effect   = "Allow"
       Action   = "s3:GetObject"
       Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
+    },
+  ]
+  ci_qemu_arm_image_read_statements = [
+    {
+      Sid      = "LocateArmQemuImages"
+      Effect   = "Allow"
+      Action   = "s3:GetBucketLocation"
+      Resource = aws_s3_bucket.ci_qemu_arm_images.arn
+    },
+    {
+      Sid      = "ReadArmQemuImages"
+      Effect   = "Allow"
+      Action   = "s3:GetObject"
+      Resource = "${aws_s3_bucket.ci_qemu_arm_images.arn}/*"
     },
   ]
   ci_ecr_registries = {
@@ -287,6 +308,166 @@ resource "aws_s3_bucket_policy" "ci_qemu_images" {
   })
 }
 
+# Ireland keeps ARM disk-image hydration region-local. Resource duplication is
+# deliberate: the existing Frankfurt addresses remain untouched, and each
+# bucket keeps an independently auditable lifecycle and access policy.
+resource "aws_s3_bucket" "ci_qemu_arm_images" {
+  provider = aws.ireland
+  bucket   = local.ci_qemu_arm_image_bucket_name
+
+  tags = {
+    Name         = local.ci_qemu_arm_image_bucket_name
+    architecture = "aarch64"
+    role         = "ci"
+    purpose      = "qemu-images"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "ci_qemu_arm_images" {
+  provider = aws.ireland
+  bucket   = aws_s3_bucket.ci_qemu_arm_images.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "ci_qemu_arm_images" {
+  provider = aws.ireland
+  bucket   = aws_s3_bucket.ci_qemu_arm_images.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "ci_qemu_arm_images" {
+  provider = aws.ireland
+  bucket   = aws_s3_bucket.ci_qemu_arm_images.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_arm_images" {
+  provider = aws.ireland
+  bucket   = aws_s3_bucket.ci_qemu_arm_images.id
+
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  rule {
+    id     = "expire-abandoned-qemu-builds"
+    status = "Enabled"
+
+    filter {
+      tag {
+        key   = "qemu_image_state"
+        value = "candidate"
+      }
+    }
+
+    expiration {
+      days = 7
+    }
+  }
+
+  rule {
+    id     = "expire-superseded-qemu-builds"
+    status = "Enabled"
+
+    filter {
+      tag {
+        key   = "qemu_image_state"
+        value = "expirable"
+      }
+    }
+
+    expiration {
+      days = 7
+    }
+  }
+
+  dynamic "rule" {
+    for_each = local.ci_qemu_retired_releases
+
+    content {
+      id     = "expire-retired-${rule.value}"
+      status = "Enabled"
+
+      filter {
+        prefix = "${rule.value}/"
+      }
+
+      expiration {
+        days = 1
+      }
+    }
+  }
+
+  rule {
+    id     = "prune-old-versions"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 14
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "ci_qemu_arm_images" {
+  provider = aws.ireland
+  bucket   = aws_s3_bucket.ci_qemu_arm_images.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.ci_qemu_arm_images.arn,
+          "${aws_s3_bucket.ci_qemu_arm_images.arn}/*",
+        ]
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      },
+      {
+        Sid       = "DenyCrossAccountAccess"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.ci_qemu_arm_images.arn,
+          "${aws_s3_bucket.ci_qemu_arm_images.arn}/*",
+        ]
+        Condition = {
+          StringNotEquals = { "aws:PrincipalAccount" = local.ci_account_id }
+        }
+      },
+    ]
+  })
+}
+
 # ─── ECR pull-through cache ──────────────────────────────────────────────────
 # AWS cells cannot reach the lab Nexus Docker proxies. These regional ECR rules
 # cache the public registries that roles pull from, so the qemu hosts fetch
@@ -323,6 +504,43 @@ resource "aws_ecr_pull_through_cache_rule" "ci" {
   credential_arn        = try(aws_secretsmanager_secret.ci_ecr[each.key].arn, null)
 
   depends_on = [aws_secretsmanager_secret_version.ci_ecr]
+}
+
+# Pull-through repositories are created lazily on first guest pull, matching
+# Frankfurt. These regional rules and credential copies keep ARM traffic in
+# Ireland without introducing a second cache design.
+resource "aws_secretsmanager_secret" "ci_ecr_arm" {
+  provider = aws.ireland
+  for_each = local.ci_ecr_credentials
+
+  name = "ecr-pullthroughcache/${each.key}"
+
+  tags = {
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "ci_ecr_arm" {
+  provider = aws.ireland
+  for_each = local.ci_ecr_credentials
+
+  secret_id = aws_secretsmanager_secret.ci_ecr_arm[each.key].id
+  secret_string = jsonencode({
+    username    = each.value.username
+    accessToken = each.value.access_token
+  })
+}
+
+resource "aws_ecr_pull_through_cache_rule" "ci_arm" {
+  provider = aws.ireland
+  for_each = local.ci_ecr_registries
+
+  ecr_repository_prefix = each.key
+  upstream_registry_url = each.value.upstream_registry_url
+  credential_arn        = try(aws_secretsmanager_secret.ci_ecr_arm[each.key].arn, null)
+
+  depends_on = [aws_secretsmanager_secret_version.ci_ecr_arm]
 }
 
 # ─── Networking ──────────────────────────────────────────────────────────────
@@ -450,6 +668,115 @@ resource "aws_default_security_group" "ci" {
   }
 }
 
+# Ireland receives the same public-subnet shape as Frankfurt under a distinct
+# CIDR. Metal hosts need direct egress and ephemeral public SSH; a NAT gateway
+# would add a standing bill without improving this single-user CI boundary.
+resource "aws_vpc" "ci_arm" {
+  provider   = aws.ireland
+  cidr_block = "10.100.0.0/16"
+
+  tags = {
+    Name         = "homelab-ci-arm"
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_subnet" "ci_arm" {
+  provider = aws.ireland
+  for_each = {
+    a = 0
+    b = 1
+    c = 2
+  }
+
+  vpc_id                  = aws_vpc.ci_arm.id
+  availability_zone       = "${local.ci_arm_aws_region}${each.key}"
+  cidr_block              = cidrsubnet(aws_vpc.ci_arm.cidr_block, 8, each.value)
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name         = "homelab-ci-arm-${each.key}"
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_internet_gateway" "ci_arm" {
+  provider = aws.ireland
+  vpc_id   = aws_vpc.ci_arm.id
+
+  tags = {
+    Name         = "homelab-ci-arm"
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_default_route_table" "ci_arm" {
+  provider               = aws.ireland
+  default_route_table_id = aws_vpc.ci_arm.default_route_table_id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.ci_arm.id
+  }
+
+  tags = {
+    Name         = "homelab-ci-arm"
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_security_group" "ci_qemu_arm_host" {
+  provider    = aws.ireland
+  name        = local.ci_qemu_arm_pool.name
+  description = "CI ARM qemu hosts: SSH from fox and operator, open egress"
+  vpc_id      = aws_vpc.ci_arm.id
+
+  ingress {
+    description = "SSH from fox"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${hcloud_primary_ip.fox.ip_address}/32"]
+  }
+
+  ingress {
+    description = "SSH from operator workstation"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${var.home_wan_ip}/32"]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name         = local.ci_qemu_arm_pool.name
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_default_security_group" "ci_arm" {
+  provider = aws.ireland
+  vpc_id   = aws_vpc.ci_arm.id
+
+  tags = {
+    Name         = "homelab-ci-arm-default-empty"
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
 # ─── GitLab OIDC ─────────────────────────────────────────────────────────────
 # CI jobs request `id_tokens` with `aud: sts.amazonaws.com`, set AWS_ROLE_ARN
 # + AWS_WEB_IDENTITY_TOKEN_FILE, and AssumeRoleWithWebIdentity into one of the
@@ -497,7 +824,10 @@ resource "aws_iam_role" "ci_cell_scheduler" {
         # regardless of which schedule fires it.
         StringEquals = {
           "aws:SourceAccount" = local.ci_account_id
-          "aws:SourceArn"     = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule-group/default"
+          "aws:SourceArn" = [
+            "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule-group/default",
+            "arn:aws:scheduler:${local.ci_arm_aws_region}:${local.ci_account_id}:schedule-group/default",
+          ]
         }
       }
     }]
@@ -513,9 +843,12 @@ resource "aws_iam_role_policy" "ci_cell_scheduler" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = "ec2:TerminateInstances"
-      Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
+      Effect = "Allow"
+      Action = "ec2:TerminateInstances"
+      Resource = [
+        "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*",
+        "arn:aws:ec2:${local.ci_arm_aws_region}:${local.ci_account_id}:instance/*",
+      ]
       Condition = {
         StringEquals = {
           # Bake build instances (_bake_backstop.sh) — nothing else this role
@@ -566,7 +899,7 @@ resource "aws_iam_role_policy" "ci_cell" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat(local.ci_qemu_image_read_statements, [
+    Statement = concat(local.ci_qemu_image_read_statements, local.ci_qemu_arm_image_read_statements, [
       # test/playbooks/_environment.yml mints an ECR login token on the cell (the
       # controller) and the qemu guest then pulls container layers through the
       # pull-through cache as this same identity. GetAuthorizationToken is only
@@ -589,7 +922,10 @@ resource "aws_iam_role_policy" "ci_cell" {
           "ecr:BatchImportUpstreamImage",
           "ecr:CreateRepository",
         ]
-        Resource = "arn:aws:ecr:${local.ci_aws_region}:${local.ci_account_id}:repository/*"
+        Resource = concat(
+          ["arn:aws:ecr:${local.ci_aws_region}:${local.ci_account_id}:repository/*"],
+          [for prefix in keys(local.ci_ecr_registries) : "arn:aws:ecr:${local.ci_arm_aws_region}:${local.ci_account_id}:repository/${prefix}/*"],
+        )
       },
     ])
   })
@@ -633,6 +969,44 @@ resource "aws_iam_role_policy" "ci_qemu_host" {
   })
 }
 
+resource "aws_iam_role" "ci_qemu_arm_host" {
+  name = "homelab-ci-qemu-arm"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = {
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_iam_instance_profile" "ci_qemu_arm_host" {
+  name = "homelab-ci-qemu-arm"
+  role = aws_iam_role.ci_qemu_arm_host.name
+
+  tags = {
+    architecture = "aarch64"
+    role         = "ci"
+  }
+}
+
+resource "aws_iam_role_policy" "ci_qemu_arm_host" {
+  name = "ci-qemu-arm-host-readonly"
+  role = aws_iam_role.ci_qemu_arm_host.id
+
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = local.ci_qemu_arm_image_read_statements
+  })
+}
+
 # Manager-side AWS identity for fleeting-plugin-aws on fox. Terraform owns the
 # least-privilege policy and user; the access key itself is minted separately
 # and vaulted into gitlab_runner_aws_qemu_* so the secret does not have to move
@@ -659,7 +1033,10 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
           "autoscaling:SetInstanceProtection",
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
-        Resource = [for pool in aws_autoscaling_group.ci_qemu : pool.arn]
+        Resource = concat(
+          [for pool in aws_autoscaling_group.ci_qemu : pool.arn],
+          [aws_autoscaling_group.ci_qemu_arm.arn],
+        )
       },
       {
         Sid    = "DescribeQemuHostFleet"
@@ -674,13 +1051,19 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
         Resource = "*"
       },
       {
-        Sid      = "ConnectToQemuHost"
-        Effect   = "Allow"
-        Action   = "ec2-instance-connect:SendSSHPublicKey"
-        Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
+        Sid    = "ConnectToQemuHost"
+        Effect = "Allow"
+        Action = "ec2-instance-connect:SendSSHPublicKey"
+        Resource = [
+          "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*",
+          "arn:aws:ec2:${local.ci_arm_aws_region}:${local.ci_account_id}:instance/*",
+        ]
         Condition = {
           StringEquals = {
-            "ec2:ResourceTag/aws:autoscaling:groupName" = [for pool in local.ci_qemu_pools : pool.name]
+            "ec2:ResourceTag/aws:autoscaling:groupName" = concat(
+              [for pool in local.ci_qemu_pools : pool.name],
+              [local.ci_qemu_arm_pool.name],
+            )
           }
         }
       },
@@ -757,7 +1140,9 @@ resource "aws_iam_role_policy" "ci_bake" {
         ]
         Resource = "*"
         Condition = {
-          StringEquals = { "aws:RequestedRegion" = local.ci_aws_region }
+          StringEquals = {
+            "aws:RequestedRegion" = [local.ci_aws_region, local.ci_arm_aws_region]
+          }
         }
       },
       # Candidate write + current promotion of the nested-qemu host AMI
@@ -773,6 +1158,7 @@ resource "aws_iam_role_policy" "ci_bake" {
         ]
         Resource = [
           "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${local.ci_qemu_host_ami_parameter}",
+          "arn:aws:ssm:${local.ci_arm_aws_region}:${local.ci_account_id}:parameter${local.ci_qemu_arm_host_ami_parameter}",
         ]
       },
       {
@@ -782,7 +1168,10 @@ resource "aws_iam_role_policy" "ci_bake" {
           "s3:GetBucketLocation", "s3:ListBucket",
           "s3:ListBucketMultipartUploads",
         ]
-        Resource = aws_s3_bucket.ci_qemu_images.arn
+        Resource = [
+          aws_s3_bucket.ci_qemu_images.arn,
+          aws_s3_bucket.ci_qemu_arm_images.arn,
+        ]
       },
       # Writes and tags immutable builds, then updates the promoted pointer.
       # S3 lifecycle expires candidate and superseded objects by tag.
@@ -793,17 +1182,23 @@ resource "aws_iam_role_policy" "ci_bake" {
           "s3:GetObject", "s3:PutObject", "s3:PutObjectTagging",
           "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
         ]
-        Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
+        Resource = [
+          "${aws_s3_bucket.ci_qemu_images.arn}/*",
+          "${aws_s3_bucket.ci_qemu_arm_images.arn}/*",
+        ]
       },
       # Per-bake one-time termination schedules (mise-tasks/packer/
       # _bake_backstop.sh): a CI job-timeout SIGKILL bypasses the wrapper's
       # on-error cleanup, so the schedule is the only thing that reaps an
       # orphaned build instance.
       {
-        Sid      = "BakeSchedules"
-        Effect   = "Allow"
-        Action   = ["scheduler:CreateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"]
-        Resource = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule/default/ci-bake-*"
+        Sid    = "BakeSchedules"
+        Effect = "Allow"
+        Action = ["scheduler:CreateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"]
+        Resource = [
+          "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule/default/ci-bake-*",
+          "arn:aws:scheduler:${local.ci_arm_aws_region}:${local.ci_account_id}:schedule/default/ci-bake-*",
+        ]
       },
       {
         Sid      = "PassSchedulerRole"
@@ -840,6 +1235,22 @@ resource "aws_ec2_instance_metadata_defaults" "ci" {
   http_put_response_hop_limit = 1
 }
 
+resource "aws_ec2_image_block_public_access" "ci_arm" {
+  provider = aws.ireland
+  state    = "block-new-sharing"
+}
+
+resource "aws_ebs_snapshot_block_public_access" "ci_arm" {
+  provider = aws.ireland
+  state    = "block-all-sharing"
+}
+
+resource "aws_ec2_instance_metadata_defaults" "ci_arm" {
+  provider                    = aws.ireland
+  http_tokens                 = "required"
+  http_put_response_hop_limit = 1
+}
+
 # Spot launches need the EC2 Spot service-linked role to exist: the qemu-host
 # ASG runs spot (mixed_instances_policy), and the fleeting manager (rightly)
 # cannot create service-linked roles — without this, the first spot launch in a
@@ -861,6 +1272,17 @@ resource "aws_key_pair" "ci_operator" {
   public_key = local.operator_ssh_public_key
 
   tags = { role = "ci" }
+}
+
+resource "aws_key_pair" "ci_operator_arm" {
+  provider   = aws.ireland
+  key_name   = "homelab-ci-operator"
+  public_key = local.operator_ssh_public_key
+
+  tags = {
+    architecture = "aarch64"
+    role         = "ci"
+  }
 }
 
 # ─── Launch template: nested-qemu host pool ──────────────────────────────────
@@ -988,6 +1410,123 @@ resource "aws_autoscaling_group" "ci_qemu" {
   }
 }
 
+# ARM bare metal exposes KVM directly, so unlike the virtualized x86_64 hosts
+# this template deliberately has no nested-virtualization cpu_options block.
+resource "aws_launch_template" "ci_qemu_arm_host" {
+  provider               = aws.ireland
+  name                   = local.ci_qemu_arm_pool.name
+  description            = "homelab CI ARM nested-qemu host"
+  update_default_version = true
+
+  image_id      = "resolve:ssm:${local.ci_qemu_arm_host_ami_parameter}"
+  instance_type = local.ci_qemu_arm_pool.instance_types[0]
+
+  instance_initiated_shutdown_behavior = "terminate"
+
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.ci_qemu_arm_host.arn
+  }
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+    instance_metadata_tags      = "enabled"
+  }
+
+  block_device_mappings {
+    device_name = "/dev/sda1"
+
+    ebs {
+      volume_size           = local.ci_qemu_arm_pool.root_volume_size
+      volume_type           = "gp3"
+      iops                  = 3000
+      throughput            = 125
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  vpc_security_group_ids = [aws_security_group.ci_qemu_arm_host.id]
+  key_name               = aws_key_pair.ci_operator_arm.key_name
+
+  dynamic "tag_specifications" {
+    for_each = toset(["instance", "volume"])
+    iterator = tag_spec
+
+    content {
+      resource_type = tag_spec.value
+      tags = {
+        architecture = "aarch64"
+        role         = "ci-qemu-host"
+        pool         = local.ci_qemu_arm_pool.name
+      }
+    }
+  }
+
+  tags = {
+    Name         = local.ci_qemu_arm_pool.name
+    architecture = "aarch64"
+    role         = "ci"
+    pool         = local.ci_qemu_arm_pool.name
+  }
+}
+
+resource "aws_autoscaling_group" "ci_qemu_arm" {
+  provider              = aws.ireland
+  name                  = local.ci_qemu_arm_pool.name
+  min_size              = 0
+  max_size              = local.ci_qemu_arm_pool.max_size
+  desired_capacity      = 0
+  protect_from_scale_in = true
+  health_check_type     = "EC2"
+  suspended_processes   = ["AZRebalance"]
+  vpc_zone_identifier   = [for subnet in aws_subnet.ci_arm : subnet.id]
+
+  mixed_instances_policy {
+    instances_distribution {
+      on_demand_base_capacity                  = 0
+      on_demand_percentage_above_base_capacity = 0
+      spot_allocation_strategy                 = "price-capacity-optimized"
+    }
+
+    launch_template {
+      launch_template_specification {
+        launch_template_id = aws_launch_template.ci_qemu_arm_host.id
+        version            = "$Latest"
+      }
+
+      dynamic "override" {
+        for_each = toset(local.ci_qemu_arm_pool.instance_types)
+
+        content {
+          instance_type = override.value
+        }
+      }
+    }
+  }
+
+  dynamic "tag" {
+    for_each = {
+      Name         = local.ci_qemu_arm_pool.name
+      architecture = "aarch64"
+      role         = "ci-qemu-host"
+      pool         = local.ci_qemu_arm_pool.name
+    }
+    iterator = asg_tag
+
+    content {
+      key                 = asg_tag.key
+      value               = asg_tag.value
+      propagate_at_launch = true
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [desired_capacity]
+  }
+}
+
 # ─── SSM parameter: nested-qemu host AMI ─────────────────────────────────────
 # The nested-qemu host AMI promotion path needs a real parameter before the ASG
 # launch template can reference it. Terraform owns the parameter shell, seeding
@@ -1015,8 +1554,32 @@ resource "aws_ssm_parameter" "ci_qemu_host_ami" {
   }
 }
 
+data "aws_ssm_parameter" "canonical_ubuntu_arm" {
+  provider = aws.ireland
+  name     = "/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id"
+}
+
+resource "aws_ssm_parameter" "ci_qemu_arm_host_ami" {
+  provider  = aws.ireland
+  name      = local.ci_qemu_arm_host_ami_parameter
+  type      = "String"
+  data_type = "aws:ec2:image"
+  value     = data.aws_ssm_parameter.canonical_ubuntu_arm.value
+
+  tags = {
+    architecture = "aarch64"
+    role         = "ci-ami"
+    machine      = "qemu_host"
+    ubuntu       = "noble"
+  }
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
 # ─── Budget tripwire ─────────────────────────────────────────────────────────
-# Account-wide (the account holds nothing but CI), $10/mo. Alert-only —
+# Account-wide (the account holds nothing but CI), $25/mo. Alert-only —
 # budgets ride Cost Explorer data that lags hours, and forecast alerts need
 # weeks of billing history before AWS emits them at all — so the hard spend
 # ceilings are the qemu-host pool's instance-type/size and the spot quota; this
@@ -1025,7 +1588,7 @@ resource "aws_ssm_parameter" "ci_qemu_host_ami" {
 resource "aws_budgets_budget" "ci" {
   name         = "homelab-ci"
   budget_type  = "COST"
-  limit_amount = "10"
+  limit_amount = "25"
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
