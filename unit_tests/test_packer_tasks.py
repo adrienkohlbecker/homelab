@@ -242,7 +242,78 @@ def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
 
     assert 'ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))' in template
     assert "ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name].version" in template
-    assert "ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-amd64-server-*" in template
+    assert (
+        "ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-${local.architecture_config.ami_architecture}-server-*"
+        in template
+    )
+
+
+def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    packer_log = tmp_path / "packer.log"
+    _executable(
+        fake_bin / "packer",
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'printf "%s\\n" "$*" >"$PACKER_TEST_LOG"\n'
+        "manifest=\n"
+        "previous=\n"
+        'for argument in "$@"; do\n'
+        '  if [ "$previous" = "-var" ]; then\n'
+        '    case "$argument" in qemu_host_manifest_path=*) manifest=${argument#*=} ;; esac\n'
+        "  fi\n"
+        "  previous=$argument\n"
+        "done\n"
+        'printf \'{"builds":[{"artifact_id":"eu-west-1:ami-1234abcd"}]}\\n\' >"$manifest"\n',
+    )
+    env = dict(os.environ)
+    env.pop("CI", None)
+    env.update(
+        PATH=f"{fake_bin}:{env['PATH']}",
+        PACKER_TEST_LOG=str(packer_log),
+        usage_architecture="aarch64",
+        usage_promote="false",
+        usage_ubuntu="noble",
+    )
+
+    result = subprocess.run(
+        ["bash", str(QEMU_HOST_AMI_SH)],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call = packer_log.read_text()
+    assert "aws_region=eu-west-1" in call
+    assert "architecture=aarch64" in call
+    assert "Candidate AMI: ami-1234abcd" in result.stdout
+    assert "/homelab-ci/ami/qemu-host/aarch64/noble" in result.stdout
+
+
+def test_qemu_host_rejects_unknown_architecture() -> None:
+    env = dict(os.environ, usage_architecture="sparc")
+
+    result = subprocess.run(
+        ["bash", str(QEMU_HOST_AMI_SH)],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 2
+    assert "unsupported architecture sparc" in result.stderr
+
+
+def test_qemu_host_retention_keeps_legacy_x86_images_in_scope() -> None:
+    script = QEMU_HOST_AMI_SH.read_text()
+
+    assert (
+        'if [ "$architecture" = aarch64 ]; then\n    image_filters+=("Name=tag:architecture,Values=${architecture}")'
+        in script
+    )
 
 
 def test_qemu_cloud_images_use_immutable_release_builds() -> None:

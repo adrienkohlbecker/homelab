@@ -3,17 +3,37 @@
 #MISE interactive=true
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-#USAGE flag "--promote" help="After a successful bake, write the AMI id to /homelab-ci/ami/qemu-host/<ubuntu>"
+#USAGE flag "--architecture <architecture>" help="Target architecture (x86_64 or aarch64)" default="x86_64"
+#USAGE flag "--region <region>" help="AWS region (defaults by architecture)"
+#USAGE flag "--promote" help="After a successful bake, update the architecture-specific qemu-host AMI pointer"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
 BAKE_SCHEDULER_ROLE_ARN="arn:aws:iam::000390721279:role/homelab-ci-cell-scheduler"
 BAKE_BACKSTOP_TTL_HOURS=3
-region=eu-central-1
 machine=qemu_host
 ubuntu="${usage_ubuntu:-noble}"
+architecture="${usage_architecture:-x86_64}"
 build_id="${CI_PIPELINE_ID:-local}"
 repo_root=$(git rev-parse --show-toplevel)
+
+case "$architecture" in
+x86_64)
+  default_region=eu-central-1
+  name_prefix=homelab-ci-qemu-host
+  param="/homelab-ci/ami/qemu-host/${ubuntu}"
+  ;;
+aarch64)
+  default_region=eu-west-1
+  name_prefix=homelab-ci-qemu-host-aarch64
+  param="/homelab-ci/ami/qemu-host/aarch64/${ubuntu}"
+  ;;
+*)
+  echo "qemu-host-ami: unsupported architecture ${architecture}" >&2
+  exit 2
+  ;;
+esac
+region="${usage_region:-$default_region}"
 
 # CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
 # schedule for the build instance, then disarm it on normal exit.
@@ -26,6 +46,7 @@ bake_backstop_arm() {
       --filters "Name=tag:build_id,Values=${build_id}" \
       "Name=tag:machine,Values=${machine}" \
       "Name=tag:ubuntu,Values=${ubuntu}" \
+      "Name=tag:architecture,Values=${architecture}" \
       "Name=instance-state-name,Values=pending,running" \
       --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null | awk '{print $1; exit}')
     [ -n "$iid" ] && [ "$iid" != "None" ] && break
@@ -34,7 +55,7 @@ bake_backstop_arm() {
     waited=$((waited + 5))
   done
   if [ -z "$iid" ]; then
-    echo "bake-backstop: no build instance found for ${machine}/${ubuntu} in ${build_id}; not armed" >&2
+    echo "bake-backstop: no build instance found for ${machine}/${architecture}/${ubuntu} in ${build_id}; not armed" >&2
     return 0
   fi
 
@@ -84,7 +105,7 @@ promoted_ami() {
   local error_file value rc
   error_file=$(mktemp)
   if value=$(aws --region "$region" ssm get-parameter \
-    --name "/homelab-ci/ami/qemu-host/${ubuntu}" \
+    --name "$param" \
     --query Parameter.Value --output text 2>"$error_file"); then
     rm -f "$error_file"
     printf '%s\n' "$value"
@@ -105,7 +126,7 @@ promoted_ami() {
 # Keep the promoted image plus the newest two provenance-tagged builds. The
 # shared planner also drives ci:audit-aws, so the two paths cannot disagree.
 prune_old_amis() {
-  local name_tag="homelab-ci-qemu-host-${ubuntu}" promoted stale image_id current matches
+  local name_tag="${name_prefix}-${ubuntu}" promoted stale image_id current matches
   local -a retention_args=()
   local -a image_filters=(
     "Name=tag:Name,Values=${name_tag}"
@@ -113,6 +134,9 @@ prune_old_amis() {
     "Name=tag:machine,Values=qemu_host"
     "Name=tag:ubuntu,Values=${ubuntu}"
   )
+  if [ "$architecture" = aarch64 ]; then
+    image_filters+=("Name=tag:architecture,Values=${architecture}")
+  fi
   promoted=$(promoted_ami)
   if [ -n "$promoted" ]; then
     retention_args+=(--protected "$promoted")
@@ -152,7 +176,7 @@ prune_old_amis() {
   done <<<"$stale"
 }
 
-echo "==> qemu-host target architecture: x86_64"
+echo "==> qemu-host target: ${architecture} in ${region}"
 
 on_error=cleanup
 if [ -t 0 ] && [ -z "${CI:-}" ]; then
@@ -173,6 +197,8 @@ packer build \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
   -only="amazon-ebs.qemu_host" \
+  -var "aws_region=${region}" \
+  -var "architecture=${architecture}" \
   -var "ubuntu_name=${ubuntu}" \
   -var "qemu_host_build_id=${build_id}" \
   -var "qemu_host_manifest_path=${manifest}" \
@@ -185,7 +211,6 @@ print(manifest["builds"][-1]["artifact_id"].split(":")[1])
 ' "$manifest")
 echo "==> Baked ${ami}"
 
-param="/homelab-ci/ami/qemu-host/${ubuntu}"
 if [ "${usage_promote:-false}" = "true" ]; then
   previous=$(aws --region "$region" ssm get-parameter \
     --name "$param" \
@@ -200,9 +225,8 @@ if [ "${usage_promote:-false}" = "true" ]; then
   if [ -n "$previous" ]; then
     echo "    Rollback: aws --region ${region} ssm put-parameter --name ${param} --type String --value ${previous} --overwrite"
   fi
+  prune_old_amis
 else
   echo "==> Candidate AMI: ${ami}"
   echo "    Promote: aws --region ${region} ssm put-parameter --name ${param} --type String --data-type aws:ec2:image --value ${ami} --overwrite"
 fi
-
-prune_old_amis
