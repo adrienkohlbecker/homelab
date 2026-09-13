@@ -27,7 +27,9 @@ def test_comma_separated_rejects_unknown_choices() -> None:
         parse("box,pug")
 
 
-def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parallel_role_child_gets_private_stdin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured_kwargs: dict[str, object] = {}
 
     class Stdout:
@@ -81,8 +83,18 @@ class TestJoblogRoundTrip:
         log = tmp_path / "out.tsv"
         monkeypatch.setattr(testall, "LOG_FILE", log)
         results = [
-            testall.JobResult(testall.TestCell("box", "noble", "nginx"), 12.345, 0, "2026-01-01T00:00:00Z"),
-            testall.JobResult(testall.TestCell("lab", "noble", "podman"), 60.0, 1, "2026-01-01T01:00:00Z"),
+            testall.JobResult(
+                testall.TestCell("box", "noble", "nginx"),
+                12.345,
+                0,
+                "2026-01-01T00:00:00Z",
+            ),
+            testall.JobResult(
+                testall.TestCell("lab", "noble", "podman"),
+                60.0,
+                1,
+                "2026-01-01T01:00:00Z",
+            ),
         ]
         testall._write_joblog(results)
         assert testall._read_joblog() == results
@@ -102,15 +114,16 @@ class TestConditionCoverageReports:
         reports.mkdir()
         monkeypatch.setattr(testall, "CONDITION_COVERAGE_DIR", reports)
         for name in (
-            "box.noble.netdata.jsonl",
-            "lab.noble.netdata.jsonl",  # machine since dropped from meta/test.yml
-            "box.noble.zfs.jsonl",
+            "box.noble.x86_64.netdata.jsonl",
+            "lab.noble.x86_64.netdata.jsonl",  # machine since dropped from meta/test.yml
+            "box.noble.aarch64.netdata.jsonl",
+            "box.noble.x86_64.zfs.jsonl",
         ):
             (reports / name).write_text("stale\n")
 
         testall._clear_condition_coverage_reports({"netdata"})
 
-        assert sorted(path.name for path in reports.iterdir()) == ["box.noble.zfs.jsonl"]
+        assert sorted(path.name for path in reports.iterdir()) == ["box.noble.x86_64.zfs.jsonl"]
 
     def test_reports_glob_does_not_match_a_role_name_prefix(
         self,
@@ -120,7 +133,11 @@ class TestConditionCoverageReports:
         reports = tmp_path / "condition_coverage"
         reports.mkdir()
         monkeypatch.setattr(testall, "CONDITION_COVERAGE_DIR", reports)
-        (reports / "box.noble.zfs.jsonl").write_text("zfs\n")
-        (reports / "box.noble.zfs_autobackup.jsonl").write_text("autobackup\n")
+        (reports / "box.noble.x86_64.zfs.jsonl").write_text("zfs\n")
+        (reports / "box.noble.aarch64.zfs.jsonl").write_text("zfs\n")
+        (reports / "box.noble.x86_64.zfs_autobackup.jsonl").write_text("autobackup\n")
 
-        assert [path.name for path in testall._condition_coverage_reports({"zfs"})] == ["box.noble.zfs.jsonl"]
+        assert [path.name for path in testall._condition_coverage_reports({"zfs"})] == [
+            "box.noble.aarch64.zfs.jsonl",
+            "box.noble.x86_64.zfs.jsonl",
+        ]

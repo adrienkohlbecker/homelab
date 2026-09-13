@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
@@ -23,6 +24,16 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.playbook.task import Task
 
 SYNTHETIC_SCENARIOS_PATH = Path("test/condition_coverage.yml")
+COVERAGE_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class CoverageProvenance:
+    """Source-tree identity shared by every event in one coverage report."""
+
+    schema: int
+    source_sha: str
+    architecture: str
 
 
 @dataclass(frozen=True, order=True)
@@ -695,8 +706,28 @@ def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         for outcome in outcomes:
-            handle.write(json.dumps(asdict(outcome) | {"phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write(
+                json.dumps(
+                    asdict(outcome) | {"phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
             handle.write("\n")
+
+
+def append_report_provenance(path: Path, provenance: CoverageProvenance) -> None:
+    """Start a report segment with its schema, source commit, and architecture."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {"provenance": asdict(provenance)},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+        handle.write("\n")
 
 
 def append_loop_executions(path: Path, loops: Iterable[LoopKey], *, phase: str) -> None:
@@ -704,7 +735,13 @@ def append_loop_executions(path: Path, loops: Iterable[LoopKey], *, phase: str) 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         for loop in loops:
-            handle.write(json.dumps({"loop": asdict(loop), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write(
+                json.dumps(
+                    {"loop": asdict(loop), "phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
             handle.write("\n")
 
 
@@ -713,7 +750,13 @@ def append_task_executions(path: Path, tasks: Iterable[TaskKey], *, phase: str) 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         for task in tasks:
-            handle.write(json.dumps({"task": asdict(task), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write(
+                json.dumps(
+                    {"task": asdict(task), "phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
             handle.write("\n")
 
 
@@ -723,7 +766,11 @@ def append_block_events(path: Path, events: Iterable[BlockEvent], *, phase: str)
     with path.open("a", encoding="utf-8") as handle:
         for event in events:
             handle.write(
-                json.dumps({"block_event": asdict(event), "phase": phase}, sort_keys=True, separators=(",", ":"))
+                json.dumps(
+                    {"block_event": asdict(event), "phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             )
             handle.write("\n")
 
@@ -733,7 +780,13 @@ def append_until_outcomes(path: Path, outcomes: Iterable[UntilOutcome], *, phase
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         for outcome in outcomes:
-            handle.write(json.dumps({"until": asdict(outcome), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write(
+                json.dumps(
+                    {"until": asdict(outcome), "phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
             handle.write("\n")
 
 
@@ -748,7 +801,11 @@ def append_result_predicate_outcomes(
     with path.open("a", encoding="utf-8") as handle:
         for outcome in outcomes:
             handle.write(
-                json.dumps({"result_predicate": asdict(outcome), "phase": phase}, sort_keys=True, separators=(",", ":"))
+                json.dumps(
+                    {"result_predicate": asdict(outcome), "phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             )
             handle.write("\n")
 
@@ -759,7 +816,11 @@ def append_include_events(path: Path, events: Iterable[IncludeEvent], *, phase: 
     with path.open("a", encoding="utf-8") as handle:
         for event in events:
             handle.write(
-                json.dumps({"include_event": asdict(event), "phase": phase}, sort_keys=True, separators=(",", ":"))
+                json.dumps(
+                    {"include_event": asdict(event), "phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             )
             handle.write("\n")
 
@@ -769,19 +830,69 @@ def append_exit_outcomes(path: Path, outcomes: Iterable[ExitOutcome], *, phase: 
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         for outcome in outcomes:
-            handle.write(json.dumps({"exit": asdict(outcome), "phase": phase}, sort_keys=True, separators=(",", ":")))
+            handle.write(
+                json.dumps(
+                    {"exit": asdict(outcome), "phase": phase},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
             handle.write("\n")
 
 
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
+    expected_schema: int | None = None
+    expected_source_sha: str | None = None
     for path in paths:
+        report_architecture: str | None = None
+        provenance_seen = False
         with path.open(encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, 1):
                 if not line.strip():
                     continue
                 data: dict[str, Any] = json.loads(line)
+                if raw_provenance := data.get("provenance"):
+                    try:
+                        provenance = CoverageProvenance(**raw_provenance)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(f"{path}:{line_number}: invalid coverage provenance: {exc}") from exc
+                    if type(provenance.schema) is not int:
+                        raise ValueError(f"{path}:{line_number}: coverage schema must be an integer")
+                    if not re.fullmatch(r"[0-9a-f]{40,64}", provenance.source_sha):
+                        raise ValueError(f"{path}:{line_number}: invalid coverage source SHA")
+                    if not provenance.architecture:
+                        raise ValueError(f"{path}:{line_number}: coverage architecture is empty")
+                    if expected_schema is None:
+                        expected_schema = provenance.schema
+                    elif provenance.schema != expected_schema:
+                        raise ValueError(
+                            f"{path}:{line_number}: mixed coverage schemas: {expected_schema} and {provenance.schema}"
+                        )
+                    if provenance.schema != COVERAGE_SCHEMA_VERSION:
+                        raise ValueError(
+                            f"{path}:{line_number}: unsupported coverage schema {provenance.schema}; "
+                            f"expected {COVERAGE_SCHEMA_VERSION}"
+                        )
+                    if expected_source_sha is None:
+                        expected_source_sha = provenance.source_sha
+                    elif provenance.source_sha != expected_source_sha:
+                        raise ValueError(
+                            f"{path}:{line_number}: mixed coverage source SHAs: "
+                            f"{expected_source_sha} and {provenance.source_sha}"
+                        )
+                    if report_architecture is None:
+                        report_architecture = provenance.architecture
+                    elif provenance.architecture != report_architecture:
+                        raise ValueError(
+                            f"{path}:{line_number}: mixed coverage architectures in one report: "
+                            f"{report_architecture} and {provenance.architecture}"
+                        )
+                    provenance_seen = True
+                    continue
                 if error := data.get("error"):
                     raise ValueError(f"{path}:{line_number}: callback error: {error}")
+                if not provenance_seen:
+                    raise ValueError(f"{path}:{line_number}: unprovenanced coverage record")
                 if not {
                     "condition",
                     "loop",
@@ -794,6 +905,8 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                 }.intersection(data):
                     raise ValueError(f"{path}:{line_number}: unknown coverage record")
                 yield path, line_number, data
+        if not provenance_seen:
+            raise ValueError(f"{path}: coverage report has no provenance")
 
 
 def load_outcomes(paths: Iterable[Path]) -> dict[ConditionKey, set[bool]]:
@@ -848,7 +961,9 @@ def load_until_outcomes(paths: Iterable[Path]) -> dict[UntilKey, set[bool]]:
     return outcomes
 
 
-def load_result_predicate_outcomes(paths: Iterable[Path]) -> dict[ResultPredicateKey, set[bool]]:
+def load_result_predicate_outcomes(
+    paths: Iterable[Path],
+) -> dict[ResultPredicateKey, set[bool]]:
     """Merge dynamic task-result predicate outcomes from callback reports."""
     outcomes: dict[ResultPredicateKey, set[bool]] = {}
     for _path, _line_number, data in _report_rows(paths):
@@ -1251,7 +1366,9 @@ def format_missing_until_outcomes(missing: dict[UntilKey, set[bool]]) -> str:
     return "\n".join(lines)
 
 
-def format_missing_result_predicate_outcomes(missing: dict[ResultPredicateKey, set[bool]]) -> str:
+def format_missing_result_predicate_outcomes(
+    missing: dict[ResultPredicateKey, set[bool]],
+) -> str:
     """Render result predicates missing their false or true outcome."""
     lines = [f"{len(missing)} Ansible result predicate(s) lack Boolean branch coverage:"]
     for predicate, outcomes in sorted(missing.items()):
@@ -1503,7 +1620,10 @@ def main() -> int:
     if missing_until_outcomes:
         print(format_missing_until_outcomes(missing_until_outcomes), file=sys.stderr)
     if missing_result_predicate_outcomes:
-        print(format_missing_result_predicate_outcomes(missing_result_predicate_outcomes), file=sys.stderr)
+        print(
+            format_missing_result_predicate_outcomes(missing_result_predicate_outcomes),
+            file=sys.stderr,
+        )
     if unexpanded_includes:
         print(format_unexpanded_includes(unexpanded_includes), file=sys.stderr)
     if exit_gaps:

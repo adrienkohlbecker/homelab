@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -11,9 +12,12 @@ from ansible.plugins.callback import CallbackBase
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "test"))
 
+from arch import detect_host_arch
 from condition_coverage import (
+    COVERAGE_SCHEMA_VERSION,
     BlockEvent,
     BlockKey,
+    CoverageProvenance,
     ExitKey,
     ExitOutcome,
     IncludeEvent,
@@ -28,6 +32,7 @@ from condition_coverage import (
     append_include_events,
     append_loop_executions,
     append_outcomes,
+    append_report_provenance,
     append_result_predicate_outcomes,
     append_task_executions,
     append_until_outcomes,
@@ -59,6 +64,28 @@ class CallbackModule(CallbackBase):
         self._recorded_result_predicate_outcomes: set[tuple[Path, ResultPredicateKey, bool]] = set()
         self._recorded_include_events: set[tuple[Path, IncludeEvent]] = set()
         self._pending_exits: dict[Path, ExitKey] = {}
+        self._provenance: CoverageProvenance | None = None
+        self._provenance_paths: set[Path] = set()
+
+    def _ensure_provenance(self, path: Path) -> None:
+        if path in self._provenance_paths:
+            return
+        if self._provenance is None:
+            repo_root = Path(__file__).resolve().parents[1]
+            source_sha = subprocess.run(
+                ["git", "rev-parse", "HEAD^{commit}"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            self._provenance = CoverageProvenance(
+                schema=COVERAGE_SCHEMA_VERSION,
+                source_sha=source_sha,
+                architecture=detect_host_arch().name,
+            )
+        append_report_provenance(path, self._provenance)
+        self._provenance_paths.add(path)
 
     @staticmethod
     def _block_contexts(task) -> list[tuple[BlockKey, str]]:
@@ -175,10 +202,15 @@ class CallbackModule(CallbackBase):
         task = result.task
         try:
             path = Path(output)
+            self._ensure_provenance(path)
             phase = os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown")
             task_key = task_key_from_path(task.get_path())
             if status == "skipped" and self._is_end_role(task):
-                append_exit_outcomes(path, [ExitOutcome(ExitKey(task_key.path, task_key.line), False)], phase=phase)
+                append_exit_outcomes(
+                    path,
+                    [ExitOutcome(ExitKey(task_key.path, task_key.line), False)],
+                    phase=phase,
+                )
                 self._pending_exits.pop(path, None)
             if not for_item:
                 self._record_block_events(result, path=path, phase=phase, task_key=task_key, status=status)
@@ -226,6 +258,7 @@ class CallbackModule(CallbackBase):
             return
         path = Path(output)
         try:
+            self._ensure_provenance(path)
             phase = os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown")
             self._flush_pending_exit(path, phase)
             if self._is_end_role(task):
@@ -240,6 +273,7 @@ class CallbackModule(CallbackBase):
             return
         path = Path(output)
         try:
+            self._ensure_provenance(path)
             key = include_key_from_task(included_file._task)
             if included_file._is_role:
                 tasks_from = included_file._task._from_files.get("tasks", "main")
@@ -262,6 +296,7 @@ class CallbackModule(CallbackBase):
     def v2_playbook_on_stats(self, stats) -> None:
         for path in list(self._pending_exits):
             try:
+                self._ensure_provenance(path)
                 self._flush_pending_exit(path, os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"))
             except Exception as exc:
                 self._record_error(path, exc)
@@ -272,6 +307,7 @@ class CallbackModule(CallbackBase):
             return
         try:
             path = Path(output)
+            self._ensure_provenance(path)
             key = until_key(result.task.until)
             attempt = result.result.get("attempts")
             if isinstance(attempt, int):
