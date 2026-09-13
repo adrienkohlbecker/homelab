@@ -82,7 +82,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
     assert cmd[netdev_idx + 1] == (f"user,id=user.0,hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22")
 
 
-def test_default_aarch64_no_keep_no_direct_boot(
+def test_macos_aarch64_uses_hvf(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     m = machine_factory(host_arch="aarch64")
@@ -91,6 +91,20 @@ def test_default_aarch64_no_keep_no_direct_boot(
 
     assert cmd[3] == "qemu-system-aarch64"
     assert cmd[cmd.index("-machine") + 1] == "type=virt,accel=hvf,usb=on"
+
+
+def test_linux_aarch64_uses_kvm(
+    machine_factory: Callable[..., machine.Machine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    m = machine_factory(host_arch="aarch64")
+    _setup(m)
+    monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
+
+    cmd = m._boot_command()
+
+    assert cmd[3] == "qemu-system-aarch64"
+    assert cmd[cmd.index("-machine") + 1] == "type=virt,accel=kvm,usb=on"
 
 
 def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(

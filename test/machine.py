@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
 
 import yaml
-from arch import ArchProfile, detect_host_arch, uefi_code_path_for
+from arch import ArchProfile, detect_host_arch, uefi_firmware_paths_for
 from matrix import UBUNTU_RELEASES
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
@@ -1538,25 +1538,29 @@ class Machine:
     async def _uefi_drives(self) -> list[str]:
         """Return the auto-detected UEFI code and writable vars pair.
 
-        The CODE blob defaults to arch.uefi_code_path_for (Homebrew on macOS,
-        ovmf/qemu-efi-aarch64 on Linux). The VARS blob is one of:
+        The CODE blob comes from arch.uefi_firmware_paths_for. The VARS blob is
+        one of:
 
         - {workdir}/efivars.fd, copied from the packer image for ZFS
           variants so bootloader entries survive across runs;
-        - else a fresh empty file sized to the code blob -- right for
-          ad-hoc launches like minimal or launch.py --with-pflash where
-          there's no prior state. qemu pflash requires CODE and VARS to be
-          the same size, and EDK2 builds aren't uniform: aarch64 EDK2 ships
-          at 64 MiB, x86_64 OVMF typically at 4 MiB.
+        - else the architecture's pinned VARS template when it has one;
+        - else a fresh empty file sized to the code blob.
+
+        qemu pflash requires CODE and VARS to be the same size, and EDK2 builds
+        aren't uniform: aarch64 EDK2 ships at 64 MiB, x86_64 OVMF typically at
+        4 MiB.
         """
-        code_path = uefi_code_path_for(self.arch)
+        code_path, vars_template = uefi_firmware_paths_for(self.arch)
         packer_vars = self.workdir_path / "efivars.fd"
         if packer_vars.exists():
             vars_path = packer_vars
         else:
             vars_path = self.workdir_path / "uefi-vars.fd"
-            with vars_path.open("wb") as handle:
-                handle.truncate(code_path.stat().st_size)
+            if vars_template is not None:
+                shutil.copyfile(vars_template, vars_path)
+            else:
+                with vars_path.open("wb") as handle:
+                    handle.truncate(code_path.stat().st_size)
         return [
             f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
             f"file={vars_path},if=pflash,unit=1,format=raw",
