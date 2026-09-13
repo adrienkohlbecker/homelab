@@ -7,11 +7,9 @@
 - name: Bake homelab test deps into the box_deps variant image
   hosts: all
   tasks:
-    # This seed runs outside site.yml, so configure the same Nexus-backed apt
-    # sources that normal converges get before installing the baked dependencies.
-    # The qemu image has no cloud-init, so the rewrite persists until sanitized
-    # back to upstream below.
-    - name: Configure apt to use the Nexus mirror
+    # This seed runs outside site.yml, so configure the same environment-aware
+    # apt sources that normal converges get before installing dependencies.
+    - name: Configure apt for the build environment
       import_role:
         name: apt
         tasks_from: configure
@@ -35,12 +33,14 @@
     # the source-owning roles in upstream mode before publishing the fixture so
     # AWS nested-qemu cells do not try to route through the lab.
     - name: Assert the source Nexus URL is defined
+      when: not test_in_aws
       assert:
         that:
           - nexus_url | length > 0
         fail_msg: nexus_url must identify the source mirror before sanitizing box_deps.
 
     - name: Configure apt to use upstream mirrors
+      when: not test_in_aws
       import_role:
         name: apt
         tasks_from: sources
@@ -49,6 +49,7 @@
         test_in_aws: false # noqa: var-naming[no-role-prefix] -- shared environment selector under test
 
     - name: Configure fluent-bit to use upstream mirrors
+      when: not test_in_aws
       import_role:
         name: fluentbit
         tasks_from: repository
@@ -67,9 +68,31 @@
           - sources.list
           - "*.list"
           - "*.sources"
-        contains: "{{ nexus_url | regex_escape }}"
+        contains: nexus\.lab\.fahm\.fr
+        use_regex: true
         read_whole_file: true
       register: box_deps_apt_sources_leftover
       failed_when: >-
         (box_deps_apt_sources_leftover.failed | default(false)) or
         (box_deps_apt_sources_leftover.matched | default(1) != 0)
+
+    - name: Read active apt index origins
+      when: test_in_aws
+      command:
+        argv:
+          - apt-get
+          - indextargets
+          - --format
+          - $(SITE)
+      register: box_deps_apt_sites
+      changed_when: false
+
+    - name: Verify the AWS fixture used its regional Ubuntu mirror
+      when: test_in_aws
+      assert:
+        that:
+          - (ubuntu_mirror | urlsplit('hostname')) in box_deps_apt_sites.stdout_lines
+          - box_deps_apt_sites.stdout_lines | select('search', 'nexus\\.lab\\.fahm\\.fr') | list | length == 0
+        fail_msg: >-
+          The AWS box_deps fixture did not fetch Ubuntu indexes from
+          {{ ubuntu_mirror }} without the lab Nexus.
