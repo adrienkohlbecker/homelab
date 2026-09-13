@@ -109,6 +109,56 @@ def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
     ]
 
 
+def test_upload_qemu_stages_bundle_beside_artifacts(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    tar_log = tmp_path / "tar.log"
+    artifacts = tmp_path / "scratch" / "noble" / "lab"
+    artifacts.mkdir(parents=True)
+    (artifacts / "packer-ubuntu-1.raw").write_bytes(b"disk")
+    (artifacts / "efivars.fd").write_bytes(b"efi")
+    _executable(
+        fake_bin / "tar",
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'if [ "${1:-}" = "--help" ]; then printf "%s\\n" "--sparse --zstd"; exit 0; fi\n'
+        'while [ "$1" != "-cf" ]; do shift; done\n'
+        "shift\n"
+        'printf bundle >"$1"\n'
+        'printf "%s\\n" "$1" >"$TAR_TEST_LOG"\n',
+    )
+    _executable(
+        fake_bin / "aws",
+        '#!/bin/sh\nset -eu\ncase "$*" in *"s3api head-object"*) exit 1 ;; esac\n',
+    )
+    env = dict(os.environ)
+    env.update(
+        PATH=f"{fake_bin}:{env['PATH']}",
+        TAR_TEST_LOG=str(tar_log),
+    )
+
+    result = subprocess.run(
+        [
+            str(REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"),
+            "lab",
+            "--ubuntu",
+            "noble",
+            "--artifact-dir",
+            str(artifacts),
+            "--build-id",
+            "test-build",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    bundle = Path(tar_log.read_text().strip())
+    assert bundle.parent.parent == artifacts.parent
+    assert not bundle.exists()
+
+
 def test_qemu_build_uploads_only_required_role_files() -> None:
     template = QEMU_TEMPLATE.read_text()
 

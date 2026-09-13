@@ -338,7 +338,9 @@ def main() -> int:
     assert_new_object(args.bucket, bundle_key, args.region)
     assert_new_object(args.bucket, manifest_key, args.region)
 
-    with tempfile.TemporaryDirectory(prefix="packer-s3-", dir=os.environ.get("TMPDIR")) as tmp:
+    # Bundles can be larger than the runner's memory-backed /tmp. Stage beside
+    # the source artifacts so they stay on the same scratch filesystem.
+    with tempfile.TemporaryDirectory(prefix=".packer-s3-", dir=root.parent) as tmp:
         tmpdir = Path(tmp)
         bundle = tmpdir / BUNDLE_NAME
         manifest_path = tmpdir / MANIFEST_NAME
