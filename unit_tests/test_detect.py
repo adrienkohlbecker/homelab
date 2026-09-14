@@ -1142,13 +1142,13 @@ class TestRenderChildPipeline:
         assert doc[".condition_coverage"]["image"] == "$CI_REGISTRY_IMAGE/ci:latest"
         assert doc[".condition_coverage"]["tags"] == ["saas-linux-small-amd64"]
         assert "needs" not in doc[".condition_coverage"]
-        assert doc[".condition_coverage"]["variables"]["ANSIBLE_CONFIG"] == ("$CI_PROJECT_DIR/ansible.cfg")
         assert "MISE_DATA_DIR" not in doc[".condition_coverage"]["variables"]
         assert doc[".condition_coverage"]["before_script"] == [
             "mise install",
             "mise exec -- uv sync --frozen",
         ]
         assert doc["condition_coverage"]["script"][0].startswith(
+            'ANSIBLE_CONFIG="$CI_PROJECT_DIR/ansible.cfg" '
             "mise exec -- uv run --frozen python test/condition_coverage.py"
         )
         assert "*.x86_64.*.jsonl" in doc["condition_coverage"]["script"][0]

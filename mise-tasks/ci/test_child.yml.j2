@@ -176,7 +176,6 @@ stages:
     - saas-linux-small-amd64
   timeout: 10m
   variables:
-    ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
     UV_LINK_MODE: copy
   before_script:
     - mise install
@@ -186,6 +185,7 @@ condition_coverage:
   extends: .condition_coverage
   script:
     - >-
+      ANSIBLE_CONFIG="$CI_PROJECT_DIR/ansible.cfg"
       mise exec -- uv run --frozen python test/condition_coverage.py
       --roles {{ roles | join(',') }}
 {% if site_test %}
@@ -203,6 +203,7 @@ condition_coverage:
   allow_failure: true
   script:
     - >-
+      ANSIBLE_CONFIG="$CI_PROJECT_DIR/ansible.cfg"
       mise exec -- uv run --frozen python test/condition_coverage.py
       --roles {{ roles | join(',') }}
 {% if site_test %}
