@@ -6,7 +6,7 @@
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
 #USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64)" default="x86_64"
+#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default"
 #USAGE flag "--build-id <build_id>" help="Immutable S3 build id; defaults inside upload-s3.py"
 #USAGE flag "--base-build-id <base_build_id>" help="Exact box build to hydrate before an aarch64 box_deps build"
 #USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build"
@@ -18,11 +18,12 @@ machine=$usage_machine
 ubuntu=$usage_ubuntu
 bucket=${usage_bucket:-homelab-ci-images}
 region=${usage_region:-eu-central-1}
-architecture=${usage_architecture:-x86_64}
+architecture=${usage_architecture:-$(uname -m)}
 build_id=${usage_build_id:-}
 base_build_id=${usage_base_build_id:-}
 
 case "$architecture" in
+arm64) architecture=aarch64 ;;
 x86_64 | aarch64) ;;
 *)
   echo "unsupported qemu fixture architecture: $architecture" >&2
@@ -31,14 +32,7 @@ x86_64 | aarch64) ;;
 esac
 
 case "$machine" in
-box | lab)
-  mise run packer:init
-  build_args=("$machine" --ubuntu "$ubuntu")
-  if [ "$machine" = box ] && [ "$architecture" = aarch64 ]; then
-    build_args+=(--upstream)
-  fi
-  mise run packer:build "${build_args[@]}"
-  ;;
+box | lab) ;;
 box_deps)
   if [ "$architecture" = aarch64 ]; then
     if [ -z "$base_build_id" ]; then
@@ -49,18 +43,7 @@ box_deps)
       echo "CI_COMMIT_SHA is required for an aarch64 box_deps build" >&2
       exit 2
     fi
-    mise run ci:hydrate-qemu-images box \
-      --ubuntu "$ubuntu" \
-      --bucket "$bucket" \
-      --region "$region" \
-      --architecture "$architecture" \
-      --build-id "$base_build_id"
-    export HOMELAB_BOX_BASE_BUILD_ID="$base_build_id"
-    export HOMELAB_BOX_BASE_SOURCE_SHA="$CI_COMMIT_SHA"
-    export HOMELAB_BOX_BASE_ARCHITECTURE="$architecture"
-    export HOMELAB_TEST_IN_AWS=true
   fi
-  mise run test:build_box_deps --ubuntu "$ubuntu"
   ;;
 *)
   echo "unsupported qemu fixture machine: $machine" >&2
@@ -84,4 +67,34 @@ fi
 if [ "${usage_dry_run:-false}" = "true" ]; then
   upload_args+=(--dry-run)
 fi
+
+# Reject a mismatched architecture or bucket before spending a build on it.
+mise run packer:upload-s3 "${upload_args[@]}" --preflight
+
+case "$machine" in
+box | lab)
+  mise run packer:init
+  build_args=("$machine" --ubuntu "$ubuntu")
+  if [ "$machine" = box ] && [ "$architecture" = aarch64 ]; then
+    build_args+=(--upstream)
+  fi
+  mise run packer:build "${build_args[@]}"
+  ;;
+box_deps)
+  if [ "$architecture" = aarch64 ]; then
+    mise run ci:hydrate-qemu-images box \
+      --ubuntu "$ubuntu" \
+      --bucket "$bucket" \
+      --region "$region" \
+      --architecture "$architecture" \
+      --build-id "$base_build_id"
+    export HOMELAB_BOX_BASE_BUILD_ID="$base_build_id"
+    export HOMELAB_BOX_BASE_SOURCE_SHA="$CI_COMMIT_SHA"
+    export HOMELAB_BOX_BASE_ARCHITECTURE="$architecture"
+    export HOMELAB_TEST_IN_AWS=true
+  fi
+  mise run test:build_box_deps --ubuntu "$ubuntu"
+  ;;
+esac
+
 mise run packer:upload-s3 "${upload_args[@]}"

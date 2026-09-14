@@ -97,6 +97,7 @@ def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
         fake_bin / "mise",
         '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n',
     )
+    _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'x86_64\\n'\n")
     env = dict(os.environ)
     env.update(
         MISE_TEST_LOG=str(log),
@@ -105,15 +106,68 @@ def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
         usage_promote="true",
         usage_ubuntu="noble",
     )
+    env.pop("usage_architecture", None)
 
     result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
+    upload = "run packer:upload-s3 lab --ubuntu noble --bucket homelab-ci-images --region eu-central-1 --architecture x86_64 --promote"
     assert log.read_text().splitlines() == [
+        f"{upload} --preflight",
         "run packer:init",
         "run packer:build lab --ubuntu noble",
-        "run packer:upload-s3 lab --ubuntu noble --bucket homelab-ci-images --region eu-central-1 --architecture x86_64 --promote",
+        upload,
     ]
+
+
+def test_publish_qemu_defaults_to_the_normalized_build_host_architecture(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    log = tmp_path / "mise.log"
+    _executable(
+        fake_bin / "mise",
+        '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n',
+    )
+    _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'arm64\\n'\n")
+    env = dict(os.environ)
+    env.update(
+        MISE_TEST_LOG=str(log),
+        PATH=f"{fake_bin}:{env['PATH']}",
+        usage_bucket="homelab-ci-arm-images-eu-central-1",
+        usage_machine="box",
+        usage_region="eu-central-1",
+        usage_ubuntu="noble",
+    )
+    env.pop("usage_architecture", None)
+
+    result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines()[-1] == (
+        "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
+        "--region eu-central-1 --architecture aarch64"
+    )
+
+
+def test_publish_qemu_stops_before_building_when_preflight_fails(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    log = tmp_path / "mise.log"
+    _executable(
+        fake_bin / "mise",
+        '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\ncase "$*" in *--preflight) exit 1 ;; esac\n',
+    )
+    env = dict(os.environ)
+    env.update(
+        MISE_TEST_LOG=str(log),
+        PATH=f"{fake_bin}:{env['PATH']}",
+        usage_architecture="aarch64",
+        usage_machine="box",
+        usage_ubuntu="noble",
+    )
+
+    result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 1
+    assert len(log.read_text().splitlines()) == 1
 
 
 def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
@@ -138,13 +192,15 @@ def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
     result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
+    upload = (
+        "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
+        "--region eu-central-1 --architecture aarch64 --promote"
+    )
     assert log.read_text().splitlines() == [
+        f"{upload} --preflight",
         "run packer:init",
         "run packer:build box --ubuntu noble --upstream",
-        (
-            "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
-            "--region eu-central-1 --architecture aarch64 --promote"
-        ),
+        upload,
     ]
 
 
@@ -184,16 +240,18 @@ def test_publish_qemu_hydrates_exact_arm_box_before_box_deps(tmp_path: Path) -> 
     result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
+    upload = (
+        "run packer:upload-s3 box_deps --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
+        "--region eu-central-1 --architecture aarch64 --build-id 123.arm-box-deps-noble --promote"
+    )
     assert log.read_text().splitlines() == [
+        f"{upload} --preflight",
         (
             "run ci:hydrate-qemu-images box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
             "--region eu-central-1 --architecture aarch64 --build-id 123.arm-box-noble"
         ),
         "run test:build_box_deps --ubuntu noble",
-        (
-            "run packer:upload-s3 box_deps --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
-            "--region eu-central-1 --architecture aarch64 --build-id 123.arm-box-deps-noble --promote"
-        ),
+        upload,
     ]
     assert env_log.read_text().strip() == f"true|123.arm-box-noble|{'d' * 40}|aarch64"
 
@@ -252,6 +310,10 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
         str(artifacts),
         "--build-id",
         "test-build",
+        # The architecture defaults to this host; a non-x86 test host may
+        # not publish into the default x86_64 bucket.
+        "--bucket",
+        "homelab-ci-test-images",
     ]
     return argv, env, artifacts, tar_log
 
@@ -275,6 +337,33 @@ def test_upload_qemu_removes_staged_bundle_on_sigterm(tmp_path: Path) -> None:
     assert result.returncode == 143
     assert not Path(tar_log.read_text().strip()).parent.exists()
     assert [p.name for p in artifacts.parent.iterdir()] == ["lab"]
+
+
+def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    _executable(fake_bin / "aws", "#!/bin/sh\nexit 99\n")
+    host = {"arm64": "aarch64"}.get(os.uname().machine, os.uname().machine)
+    foreign = "x86_64" if host == "aarch64" else "aarch64"
+    env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}")
+
+    result = subprocess.run(
+        [
+            str(REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"),
+            "box",
+            "--architecture",
+            foreign,
+            "--bucket",
+            "homelab-ci-test-images",
+            "--preflight",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 1
+    assert f"built on this {host} host as {foreign}" in result.stderr
 
 
 def test_qemu_build_uploads_only_required_role_files() -> None:

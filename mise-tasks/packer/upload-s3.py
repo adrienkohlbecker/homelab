@@ -7,11 +7,12 @@
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
 #USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64)" default="x86_64"
+#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default"
 #USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"
 #USAGE flag "--artifact-dir <path>" help="Artifact dir to bundle; default is $HOMELAB_CI_DIR/<ubuntu>/<machine>"
 #USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build id"
 #USAGE flag "--dry-run" help="Build and print the manifest plan without creating the tarball, uploading, or promoting"
+#USAGE flag "--preflight" help="Validate the upload target and exit before reading artifacts or S3"
 # fmt: on
 """Upload qemu packer artifacts to the nested-CI S3 bundle layout.
 
@@ -46,6 +47,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import platform
 import shutil
 import signal
 import subprocess
@@ -55,6 +57,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+X86_64_BUCKET = "homelab-ci-images"
 S3_CHECKSUM_ALGORITHM = "SHA256"
 IMAGE_STATE_TAG = "qemu_image_state"
 CANDIDATE_STATE = "candidate"
@@ -100,6 +103,25 @@ def source_sha() -> str:
     return sha
 
 
+def host_architecture() -> str:
+    machine = platform.machine()
+    return "aarch64" if machine == "arm64" else machine
+
+
+def validate_target(args: argparse.Namespace) -> None:
+    """Refuse provenance labels and stores that cannot match the artifact.
+
+    Qemu fixtures are built natively, so the upload host's architecture is the
+    artifact's. Hydration trusts the recorded label, and the default bucket is
+    the x86_64 store whose hydration still accepts unlabelled legacy builds.
+    """
+    host = host_architecture()
+    if args.architecture != host:
+        sys.exit(f"refusing to label an artifact built on this {host} host as {args.architecture}")
+    if args.architecture != "x86_64" and args.bucket == X86_64_BUCKET:
+        sys.exit(f"refusing to publish {args.architecture} images into the x86_64 bucket {X86_64_BUCKET}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
@@ -110,12 +132,12 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(UBUNTU_RELEASES),
         default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
     )
-    parser.add_argument("--bucket", default=os.environ.get("usage_bucket", "homelab-ci-images"))
+    parser.add_argument("--bucket", default=os.environ.get("usage_bucket", X86_64_BUCKET))
     parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
     parser.add_argument(
         "--architecture",
         choices=sorted(VALID_ARCHITECTURES),
-        default=os.environ.get("usage_architecture", "x86_64"),
+        default=os.environ.get("usage_architecture") or host_architecture(),
     )
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id") or default_build_id())
     parser.add_argument("--artifact-dir", default=os.environ.get("usage_artifact_dir"))
@@ -128,6 +150,11 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         default=os.environ.get("usage_dry_run") == "true",
+    )
+    parser.add_argument(
+        "--preflight",
+        action="store_true",
+        default=os.environ.get("usage_preflight") == "true",
     )
     return parser.parse_args()
 
@@ -318,7 +345,11 @@ def pointer_body(args: argparse.Namespace, retained_build_ids: list[str]) -> str
 
 def main() -> int:
     args = parse_args()
+    validate_target(args)
     args.source_sha = source_sha()
+    if args.preflight:
+        print(f"==> upload target valid: {args.architecture} -> s3://{args.bucket}")
+        return 0
     root = artifact_dir(args)
     disks, efivars = collect_artifact_files(root)
     s3_prefix = f"{args.ubuntu}/{args.machine}/{args.build_id}"
