@@ -110,8 +110,9 @@ def test_box_deps_playbook_keeps_aws_mirrors_and_rejects_lab_nexus() -> None:
     assert "Configure apt for the build environment" in playbook
     assert playbook.count("when: not test_in_aws") == 3
     assert "when: test_in_aws" in playbook
-    assert "ubuntu_mirror | urlsplit('hostname')" in playbook
+    assert "ubuntu_mirror | regex_replace('/$', '')" in playbook
     assert r"contains: nexus\.lab\.fahm\.fr" in playbook
+    assert "use_regex: true" not in playbook
 
 
 def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
