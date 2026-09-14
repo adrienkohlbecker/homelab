@@ -175,7 +175,7 @@ podman_storage_device: /dev/disk/by-partlabel/podman
 # Process-wide safety ceiling across the AWS runner blocks. Actual work remains
 # bounded by each runner's limit and the AWS Spot quota; fox only holds their
 # connections and log streams.
-gitlab_runner_concurrent: 134
+gitlab_runner_concurrent: 160
 
 gitlab_runner_aws_qemu_enabled: true
 
@@ -226,9 +226,9 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
 # One job per pipeline, so warm reuse buys nothing here either -- same 2m drain.
 gitlab_runner_aws_qemu_site_idle_time: "2m"
 
-# One Ireland ARM bare-metal worker supplies 52 cells at the same CPU and memory
-# density as the established x86 role pool. The initial acquisition bound leaves
-# room for cold Spot metal readiness and will be tightened from rollout data.
+# One Ireland ARM bare-metal worker supplies up to 78 cells for staged density
+# commissioning. The acquisition bound leaves room for cold Spot metal
+# readiness.
 gitlab_runner_aws_qemu_arm_enabled: true
 gitlab_runner_aws_qemu_arm_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
@@ -242,7 +242,7 @@ gitlab_runner_aws_qemu_arm_token: !vault |
           36393935326638643135
 gitlab_runner_aws_qemu_arm_profile: homelab-ci-fleeting-arm
 gitlab_runner_aws_qemu_arm_asg_name: homelab-ci-qemu-arm
-gitlab_runner_aws_qemu_arm_capacity_per_instance: 52
+gitlab_runner_aws_qemu_arm_capacity_per_instance: 78
 gitlab_runner_aws_qemu_arm_max_instances: 1
 gitlab_runner_aws_qemu_arm_idle_time: "2m"
 gitlab_runner_aws_qemu_arm_connector_timeout: "2m0s"

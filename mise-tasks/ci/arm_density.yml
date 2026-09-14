@@ -5,6 +5,8 @@ stages:
   - density_26
   - density_39
   - density_52
+  - density_65
+  - density_78
 
 default:
   interruptible: false
@@ -79,3 +81,13 @@ default:
   extends: .arm_density_cell
   stage: density_52
   parallel: 52
+
+"arm_density:65":
+  extends: .arm_density_cell
+  stage: density_65
+  parallel: 65
+
+"arm_density:78":
+  extends: .arm_density_cell
+  stage: density_78
+  parallel: 78

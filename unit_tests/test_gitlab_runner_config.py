@@ -17,7 +17,7 @@ def _runner_values() -> dict:
         inventory_hostname="fox",
         service_ports={"gitlab_runner": 9252},
         gitlab_runner_shell_enabled=False,
-        gitlab_runner_concurrent=134,
+        gitlab_runner_concurrent=160,
         gitlab_runner_aws_qemu_enabled=True,
         gitlab_runner_aws_qemu_token="x86-token",
         gitlab_runner_aws_qemu_capacity_per_instance=13,
@@ -25,7 +25,7 @@ def _runner_values() -> dict:
         gitlab_runner_aws_qemu_idle_time="2m",
         gitlab_runner_aws_qemu_arm_enabled=True,
         gitlab_runner_aws_qemu_arm_token="arm-token",
-        gitlab_runner_aws_qemu_arm_capacity_per_instance=52,
+        gitlab_runner_aws_qemu_arm_capacity_per_instance=78,
         gitlab_runner_aws_qemu_arm_max_instances=1,
         gitlab_runner_aws_qemu_arm_idle_time="2m",
         gitlab_runner_aws_qemu_arm_ssh_private_key="arm-private-key",
@@ -41,7 +41,7 @@ def test_all_aws_runner_pools_render_consistently() -> None:
     rendered = _render_template((ROLE / "templates" / "config.toml.j2").read_text(), _runner_values())
     config = tomllib.loads(rendered)
 
-    assert config["concurrent"] == 134
+    assert config["concurrent"] == 160
     runners = {runner["name"]: runner for runner in config["runners"]}
     assert set(runners) == {
         "fox-aws-shell-qemu",
@@ -52,7 +52,7 @@ def test_all_aws_runner_pools_render_consistently() -> None:
     expected = {
         "fox-aws-shell-qemu": ("homelab-ci-qemu-host", "homelab-ci-fleeting", 65, 13, 5, "10m0s"),
         "fox-aws-shell-qemu-site": ("homelab-ci-qemu-site", "homelab-ci-fleeting", 1, 1, 1, "10m0s"),
-        "fox-aws-shell-qemu-arm": ("homelab-ci-qemu-arm", "homelab-ci-fleeting-arm", 52, 52, 1, "20m0s"),
+        "fox-aws-shell-qemu-arm": ("homelab-ci-qemu-arm", "homelab-ci-fleeting-arm", 78, 78, 1, "20m0s"),
     }
     for name, (asg, profile, limit, capacity, max_instances, acquire_timeout) in expected.items():
         runner = runners[name]
