@@ -13,6 +13,29 @@ wt=$(cd "$wt" && pwd)
 # Main repo = first entry in `worktree list` (always the real one).
 repo=$(git -C "$wt" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
 
+# Codex creates managed worktrees with a detached HEAD. Give each one a stable,
+# repository-visible branch named after its unique worktree directory, matching
+# the branch-backed worktrees created by the WorktreeCreate hook.
+if [ -n "${CODEX_WORKTREE_PATH:-}" ] && ! git -C "$wt" symbolic-ref --quiet HEAD >/dev/null; then
+  codex_wt=$(cd "$CODEX_WORKTREE_PATH" && pwd)
+  [ "$codex_wt" = "$wt" ] || {
+    echo "worktree:populate: CODEX_WORKTREE_PATH does not match '$wt'" >&2
+    exit 1
+  }
+
+  codex_branch="codex/$(basename "$(dirname "$wt")")"
+  codex_branch_ref="refs/heads/$codex_branch"
+  if git -C "$repo" show-ref --verify --quiet "$codex_branch_ref"; then
+    [ "$(git -C "$repo" rev-parse "$codex_branch_ref")" = "$(git -C "$wt" rev-parse HEAD)" ] || {
+      echo "worktree:populate: branch '$codex_branch' already points at another commit" >&2
+      exit 1
+    }
+    git -C "$wt" switch "$codex_branch"
+  else
+    git -C "$wt" switch -c "$codex_branch"
+  fi
+fi
+
 symlink_missing() {
   local path=$1
 
