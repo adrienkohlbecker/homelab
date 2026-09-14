@@ -34,6 +34,7 @@ def test_arm_density_child_has_sequential_unique_automatic_waves() -> None:
     scaffold = child[".arm_density_cell"]
 
     assert child["stages"] == [f"density_{size}" for size in waves]
+    assert scaffold["dependencies"] == []
     assert scaffold["tags"] == ["aws-shell-qemu-arm"]
     assert scaffold["variables"]["ARCH"] == "aarch64"
     assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
