@@ -167,6 +167,7 @@
             validate: ssh-keygen -y -f %s
           diff: false
           become: true
+          register: gitlab_runner_aws_qemu_arm_ssh_key
 
     - name: Remove ARM Fleeting SSH key when disabled
       when: not gitlab_runner_aws_qemu_arm_enabled
@@ -188,6 +189,7 @@
         backup: true
         validate: python3 -c 'import sys,tomllib; tomllib.load(open(sys.argv[1], "rb"))' %s
       become: true
+      register: gitlab_runner_config
 
     - name: Install gitlab_runner fluent-bit extension
       import_role:
@@ -197,9 +199,9 @@
         fluentbit_extension_args:
           name: gitlab_runner
 
-    # QEMU fixtures enable without registering. Config changes hot-reload every
-    # 3s; only binary or unit changes warrant a potentially long draining
-    # restart.
+    # QEMU fixtures enable without registering. Runner notices config changes,
+    # but an existing autoscaler's connector keeps the settings and private key
+    # loaded when its taskscaler started. Restart to apply either one.
     - name: Manage gitlab_runner.service
       import_role:
         name: systemd_unit
@@ -211,4 +213,6 @@
           start: "{{ not qemu_test }}"
           restart: >-
             {{ gitlab_runner_binary.changed
-               or gitlab_runner_fleeting_aws_binary.changed }}
+               or gitlab_runner_fleeting_aws_binary.changed
+               or (gitlab_runner_config.changed | default(false))
+               or (gitlab_runner_aws_qemu_arm_ssh_key.changed | default(false)) }}

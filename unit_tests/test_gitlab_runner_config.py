@@ -100,3 +100,18 @@ def test_aws_profiles_share_credentials_without_source_profile() -> None:
             == _runner_values()["gitlab_runner_aws_qemu_secret_access_key"]
         )
         assert "source_profile" not in credentials[section]
+
+
+def test_autoscaler_connector_changes_restart_runner() -> None:
+    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    role_tasks = tasks[0]["block"]
+    config_task = next(task for task in role_tasks if task["name"] == "Render gitlab-runner config.toml")
+    key_block = next(task for task in role_tasks if task["name"] == "Render ARM Fleeting SSH key")
+    key_task = next(task for task in key_block["block"] if task["name"] == "Render ARM Fleeting SSH private key")
+    unit_task = next(task for task in role_tasks if task["name"] == "Manage gitlab_runner.service")
+    restart = unit_task["vars"]["systemd_unit_args"]["restart"]
+
+    assert config_task["register"] == "gitlab_runner_config"
+    assert key_task["register"] == "gitlab_runner_aws_qemu_arm_ssh_key"
+    assert "gitlab_runner_config.changed" in restart
+    assert "gitlab_runner_aws_qemu_arm_ssh_key.changed" in restart
