@@ -69,7 +69,6 @@
           - "*.list"
           - "*.sources"
         contains: nexus\.lab\.fahm\.fr
-        use_regex: true
         read_whole_file: true
       register: box_deps_apt_sources_leftover
       failed_when: >-
@@ -91,7 +90,7 @@
       when: test_in_aws
       assert:
         that:
-          - (ubuntu_mirror | urlsplit('hostname')) in box_deps_apt_sites.stdout_lines
+          - (ubuntu_mirror | regex_replace('/$', '')) in box_deps_apt_sites.stdout_lines
           - box_deps_apt_sites.stdout_lines | select('search', 'nexus\\.lab\\.fahm\\.fr') | list | length == 0
         fail_msg: >-
           The AWS box_deps fixture did not fetch Ubuntu indexes from
