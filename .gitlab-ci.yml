@@ -14,8 +14,8 @@ default:
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
-  # ARM stays opt-in until the staged density and coverage gates pass.
-  HOMELAB_CI_ARM: "off"
+  # Generate change-selected ARM cells on the AWS qemu lane.
+  HOMELAB_CI_ARM: "auto"
   # Ansible ignores cwd config under world-writable /builds unless pinned.
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
 
