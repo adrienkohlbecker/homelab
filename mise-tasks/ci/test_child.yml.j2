@@ -185,7 +185,7 @@ condition_coverage:
   extends: .condition_coverage
   script:
     - >-
-      mise exec -- python test/condition_coverage.py
+      mise exec -- uv run --frozen python test/condition_coverage.py
       --roles {{ roles | join(',') }}
 {% if site_test %}
       --include-site
@@ -202,7 +202,7 @@ condition_coverage:
   allow_failure: true
   script:
     - >-
-      mise exec -- python test/condition_coverage.py
+      mise exec -- uv run --frozen python test/condition_coverage.py
       --roles {{ roles | join(',') }}
 {% if site_test %}
       --include-site

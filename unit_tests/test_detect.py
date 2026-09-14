@@ -1147,6 +1147,9 @@ class TestRenderChildPipeline:
             "mise install",
             "mise exec -- uv sync --frozen",
         ]
+        assert doc["condition_coverage"]["script"][0].startswith(
+            "mise exec -- uv run --frozen python test/condition_coverage.py"
+        )
         assert "*.x86_64.*.jsonl" in doc["condition_coverage"]["script"][0]
         assert "*.aarch64.*.jsonl" not in doc["condition_coverage"]["script"][0]
 
