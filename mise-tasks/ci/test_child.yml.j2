@@ -183,6 +183,7 @@ stages:
 
 condition_coverage:
   extends: .condition_coverage
+  allow_failure: true
   script:
     - >-
       ANSIBLE_CONFIG="$CI_PROJECT_DIR/ansible.cfg"

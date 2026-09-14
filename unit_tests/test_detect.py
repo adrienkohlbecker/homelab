@@ -1137,6 +1137,7 @@ class TestRenderChildPipeline:
         assert "_site_check:box" not in doc
         assert "no_cells" not in doc
         assert doc["condition_coverage"]["extends"] == ".condition_coverage"
+        assert doc["condition_coverage"]["allow_failure"] is True
         assert doc[".condition_coverage"]["stage"] == "coverage"
         assert "--roles nginx,podman" in doc["condition_coverage"]["script"][0]
         assert doc[".condition_coverage"]["image"] == "$CI_REGISTRY_IMAGE/ci:latest"
