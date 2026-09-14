@@ -29,6 +29,8 @@ from condition_coverage import (
     append_block_events,
     append_exit_outcomes,
     append_include_events,
+    append_jinja_branch_outcomes,
+    append_jinja_loop_executions,
     append_loop_executions,
     append_outcomes,
     append_report_error,
@@ -44,6 +46,7 @@ from condition_coverage import (
     task_key_from_path,
     until_key,
 )
+from jinja_coverage import JinjaBranchOutcome, JinjaLoopKey, install_jinja_coverage
 
 
 class CallbackModule(CallbackBase):
@@ -66,6 +69,7 @@ class CallbackModule(CallbackBase):
         self._pending_exits: dict[Path, ExitKey] = {}
         self._provenance: CoverageProvenance | None = None
         self._provenance_paths: set[Path] = set()
+        install_jinja_coverage(self._record_jinja_branch, self._record_jinja_loop)
 
     def _ensure_provenance(self, path: Path) -> None:
         if path in self._provenance_paths:
@@ -190,6 +194,26 @@ class CallbackModule(CallbackBase):
     @staticmethod
     def _record_error(path: Path, exc: Exception) -> None:
         append_report_error(path, str(exc))
+
+    def _record_jinja_branch(self, outcome: JinjaBranchOutcome) -> None:
+        if output := os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE"):
+            path = Path(output)
+            self._ensure_provenance(path)
+            append_jinja_branch_outcomes(
+                path,
+                [outcome],
+                phase=os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"),
+            )
+
+    def _record_jinja_loop(self, loop: JinjaLoopKey) -> None:
+        if output := os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE"):
+            path = Path(output)
+            self._ensure_provenance(path)
+            append_jinja_loop_executions(
+                path,
+                [loop],
+                phase=os.environ.get("ANSIBLE_CONDITION_COVERAGE_PHASE", "unknown"),
+            )
 
     def _record(self, result, *, status: str = "ok", for_item: bool = False) -> None:
         output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")

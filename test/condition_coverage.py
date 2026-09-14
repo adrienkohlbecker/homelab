@@ -23,9 +23,17 @@ from ansible._internal._datatag._tags import Origin, TrustedAsTemplate
 from ansible._internal._templating._engine import TemplateEngine
 from ansible.parsing.dataloader import DataLoader
 from ansible.playbook.task import Task
+from jinja_coverage import (
+    JinjaBranchKey,
+    JinjaBranchOutcome,
+    JinjaInventory,
+    JinjaLoopKey,
+    inventory_jinja,
+    normalize_source_path,
+)
 
 SYNTHETIC_SCENARIOS_PATH = Path("test/condition_coverage.yml")
-COVERAGE_SCHEMA_VERSION = 1
+COVERAGE_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -221,16 +229,6 @@ _TASK_STRUCTURAL_KEYS = frozenset({"block", "rescue", "always"})
 _TASK_NON_EXECUTING_ACTIONS = frozenset({"import_role", "import_tasks", "include_role", "include_tasks", "meta"})
 _TASK_ATTRIBUTE_KEYS = frozenset(Task.fattributes).union(_TASK_STRUCTURAL_KEYS)
 _INCLUDE_ACTIONS = frozenset({"include_role", "include_tasks"})
-
-
-def normalize_source_path(path: str) -> str:
-    """Normalize original and staged Ansible paths to repository-relative paths."""
-    normalized = Path(path).as_posix()
-    if marker := "/roles/" if "/roles/" in normalized else None:
-        return f"roles/{normalized.split(marker, 1)[1]}"
-    if normalized.endswith("/site.yml") or normalized == "site.yml":
-        return "site.yml"
-    return normalized
 
 
 def condition_key(value: object) -> ConditionKey:
@@ -584,6 +582,37 @@ def production_condition_paths(roles: Iterable[str] | None = None, *, include_si
     return sorted(paths)
 
 
+def production_jinja_paths(
+    roles: Iterable[str] | None = None,
+    *,
+    include_site: bool = False,
+) -> tuple[list[Path], list[Path]]:
+    """Return production inline-YAML and template-file Jinja sources."""
+    selected_roles = None if roles is None else set(roles)
+    task_paths = production_condition_paths(selected_roles, include_site=include_site)
+    role_names = {path.parts[1] for path in task_paths if path.parts[0] == "roles"}
+    inline_paths = set(task_paths)
+    for role in role_names:
+        for section in ("defaults", "vars"):
+            inline_paths.update(Path("roles", role, section).glob("*.yml"))
+    template_paths = {
+        path
+        for role in role_names
+        for path in Path("roles", role, "templates").glob("**/*")
+        if path.is_file() and not path.name.startswith(("_setup", "_verify", "_test"))
+    }
+    if include_site:
+        inline_paths.update(Path("group_vars").glob("**/*.yml"))
+        inline_paths.update(Path("host_vars").glob("**/*.yml"))
+    return sorted(inline_paths), sorted(template_paths)
+
+
+def inventory_role_jinja(roles: Iterable[str] | None = None, *, include_site: bool = False) -> JinjaInventory:
+    """Inventory Jinja decisions and loops in the selected production scope."""
+    inline_paths, template_paths = production_jinja_paths(roles, include_site=include_site)
+    return inventory_jinja(inline_paths, template_paths)
+
+
 def inventory_conditions(paths: Iterable[Path]) -> dict[ConditionKey, str | None]:
     """Map every declared ``when`` expression in the given files to its task name.
 
@@ -732,6 +761,16 @@ def append_report_error(path: Path, error: str) -> None:
     append_report_rows(path, [{"error": error}])
 
 
+def append_jinja_branch_outcomes(path: Path, outcomes: Iterable[JinjaBranchOutcome], *, phase: str) -> None:
+    """Append Jinja Boolean decisions observed during rendering."""
+    append_report_rows(path, ({"jinja_branch": asdict(outcome), "phase": phase} for outcome in outcomes))
+
+
+def append_jinja_loop_executions(path: Path, loops: Iterable[JinjaLoopKey], *, phase: str) -> None:
+    """Append Jinja loops observed entering their body."""
+    append_report_rows(path, ({"jinja_loop": asdict(loop), "phase": phase} for loop in loops))
+
+
 def append_loop_executions(path: Path, loops: Iterable[LoopKey], *, phase: str) -> None:
     """Append loop declarations observed through per-item callbacks."""
     append_report_rows(path, ({"loop": asdict(loop), "phase": phase} for loop in loops))
@@ -837,6 +876,8 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                     "result_predicate",
                     "include_event",
                     "exit",
+                    "jinja_branch",
+                    "jinja_loop",
                 }.intersection(data):
                     raise ValueError(f"{path}:{line_number}: unknown coverage record")
                 yield path, line_number, data
@@ -939,6 +980,25 @@ def load_exit_outcomes(paths: Iterable[Path]) -> dict[ExitKey, set[bool]]:
         key = ExitKey(**outcome["exit"])
         outcomes.setdefault(key, set()).add(bool(outcome["outcome"]))
     return outcomes
+
+
+def load_jinja_branch_outcomes(paths: Iterable[Path]) -> dict[JinjaBranchKey, set[bool]]:
+    """Merge Jinja decision outcomes from callback reports."""
+    outcomes: dict[JinjaBranchKey, set[bool]] = {}
+    for _path, _line_number, data in _report_rows(paths):
+        if "jinja_branch" not in data:
+            continue
+        outcome = data["jinja_branch"]
+        key = JinjaBranchKey(**outcome["branch"])
+        outcomes.setdefault(key, set()).add(bool(outcome["outcome"]))
+    return outcomes
+
+
+def load_executed_jinja_loops(paths: Iterable[Path]) -> set[JinjaLoopKey]:
+    """Merge Jinja loops whose body was entered in any report."""
+    return {
+        JinjaLoopKey(**data["jinja_loop"]) for _path, _line_number, data in _report_rows(paths) if "jinja_loop" in data
+    }
 
 
 def _normalized_expression(expression: str) -> str:
@@ -1334,6 +1394,27 @@ def format_exit_gaps(missing: set[ExitGap]) -> str:
     return "\n".join(lines)
 
 
+def _format_jinja_location(key: JinjaBranchKey | JinjaLoopKey) -> str:
+    root = f"{key.path}:{key.root_line}:{key.root_column}"
+    return f"{root} template-line {key.template_line}"
+
+
+def format_missing_jinja_branch_outcomes(missing: dict[JinjaBranchKey, set[bool]]) -> str:
+    """Render Jinja decisions missing their false or true outcome."""
+    lines = [f"{len(missing)} Jinja branch(es) lack Boolean coverage:"]
+    for branch, outcomes in sorted(missing.items()):
+        labels = ", ".join(str(outcome).lower() for outcome in sorted(outcomes))
+        lines.append(f"  {_format_jinja_location(branch)}: {branch.kind} missing {labels}: {branch.expression}")
+    return "\n".join(lines)
+
+
+def format_unexecuted_jinja_loops(missing: set[JinjaLoopKey]) -> str:
+    """Render Jinja loops that never entered their body."""
+    lines = [f"{len(missing)} Jinja loop(s) never iterated:"]
+    lines.extend(f"  {_format_jinja_location(loop)}: {loop.expression}" for loop in sorted(missing))
+    return "\n".join(lines)
+
+
 def check_coverage(
     roles: Iterable[str],
     reports: Iterable[Path],
@@ -1508,6 +1589,34 @@ def check_exit_coverage(
     return gaps
 
 
+def check_jinja_branch_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> dict[JinjaBranchKey, set[bool]]:
+    """Return false/true outcomes absent for production Jinja decisions."""
+    expected = inventory_role_jinja(roles, include_site=include_site).branches
+    observed = load_jinja_branch_outcomes(reports)
+    both = {False, True}
+    return {
+        branch: both.difference(observed.get(branch, set()))
+        for branch in expected
+        if observed.get(branch, set()) != both
+    }
+
+
+def check_jinja_loop_coverage(
+    roles: Iterable[str],
+    reports: Iterable[Path],
+    *,
+    include_site: bool = False,
+) -> set[JinjaLoopKey]:
+    """Return production Jinja loops that never entered their body."""
+    expected = inventory_role_jinja(roles, include_site=include_site).loops
+    return set(expected).difference(load_executed_jinja_loops(reports))
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1541,6 +1650,16 @@ def main() -> int:
         )
         unexpanded_includes = check_include_coverage(args.roles, args.reports, include_site=args.include_site)
         exit_gaps = check_exit_coverage(args.roles, args.reports, include_site=args.include_site)
+        missing_jinja_branch_outcomes = check_jinja_branch_coverage(
+            args.roles,
+            args.reports,
+            include_site=args.include_site,
+        )
+        unexecuted_jinja_loops = check_jinja_loop_coverage(
+            args.roles,
+            args.reports,
+            include_site=args.include_site,
+        )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"Condition coverage report error: {exc}", file=sys.stderr)
         return 1
@@ -1563,6 +1682,10 @@ def main() -> int:
         print(format_unexpanded_includes(unexpanded_includes), file=sys.stderr)
     if exit_gaps:
         print(format_exit_gaps(exit_gaps), file=sys.stderr)
+    if missing_jinja_branch_outcomes:
+        print(format_missing_jinja_branch_outcomes(missing_jinja_branch_outcomes), file=sys.stderr)
+    if unexecuted_jinja_loops:
+        print(format_unexecuted_jinja_loops(unexecuted_jinja_loops), file=sys.stderr)
     if (
         missing
         or unexecuted_loops
@@ -1572,6 +1695,8 @@ def main() -> int:
         or missing_result_predicate_outcomes
         or unexpanded_includes
         or exit_gaps
+        or missing_jinja_branch_outcomes
+        or unexecuted_jinja_loops
     ):
         return 1
     print(
@@ -1579,6 +1704,7 @@ def main() -> int:
         "every task ran or was proved synthetically reachable, every block path executed, "
         "every retry and result predicate evaluated false and true, "
         "every dynamic include expanded, and every early exit took both paths."
+        " Every Jinja decision evaluated both true and false, and every Jinja loop iterated."
     )
     return 0
 
