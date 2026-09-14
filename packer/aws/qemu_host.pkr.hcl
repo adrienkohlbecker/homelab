@@ -148,6 +148,7 @@ build {
       "${path.cwd}/pyproject.toml",
       "${path.cwd}/uv.lock",
       "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh",
+      "${path.cwd}/packer/aws/files/gitlab_runner_fleeting_arm.pub",
     ]
     destination = "/tmp/"
   }
