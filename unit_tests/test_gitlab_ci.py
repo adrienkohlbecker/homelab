@@ -29,15 +29,11 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
     job = pipeline["qemu_host_ami"]
 
+    # The hosted amd64 job only drives Packer. The AMI's reduced ARM toolset
+    # comes from qemu_host.pkr.hcl, not from this job's environment.
     assert job["parallel"]["matrix"] == [
-        {
-            "QEMU_HOST_ARCHITECTURE": "x86_64",
-            "MISE_DISABLE_TOOLS": "",
-        },
-        {
-            "QEMU_HOST_ARCHITECTURE": "aarch64",
-            "MISE_DISABLE_TOOLS": "aqua:Kampfkarren/selene",
-        },
+        {"QEMU_HOST_ARCHITECTURE": "x86_64"},
+        {"QEMU_HOST_ARCHITECTURE": "aarch64"},
     ]
     assert job["resource_group"] == "ami-qemu-host-$QEMU_HOST_ARCHITECTURE-noble"
     assert job["script"][-2:] == [

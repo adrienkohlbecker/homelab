@@ -179,9 +179,7 @@ qemu_host_ami:
   parallel:
     matrix:
       - QEMU_HOST_ARCHITECTURE: x86_64
-        MISE_DISABLE_TOOLS: ""
       - QEMU_HOST_ARCHITECTURE: aarch64
-        MISE_DISABLE_TOOLS: aqua:Kampfkarren/selene
   resource_group: ami-qemu-host-$QEMU_HOST_ARCHITECTURE-noble
   interruptible: false
   timeout: 60m
