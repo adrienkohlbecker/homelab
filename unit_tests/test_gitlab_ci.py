@@ -18,6 +18,52 @@ def test_child_pipeline_forwards_pipeline_variables() -> None:
     assert pipeline["test_cells"]["trigger"]["forward"]["pipeline_variables"] is True
 
 
+def test_arm_density_is_one_protected_manual_child_trigger() -> None:
+    pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
+    trigger = pipeline["arm_density"]
+
+    assert trigger["extends"] == ".protected_manual_job"
+    assert trigger["trigger"]["include"] == [{"local": "mise-tasks/ci/arm_density.yml"}]
+    assert trigger["trigger"]["forward"]["pipeline_variables"] is True
+    assert trigger["trigger"]["strategy"] == "depend"
+
+
+def test_arm_density_child_has_sequential_unique_automatic_waves() -> None:
+    child = yaml.safe_load((ROOT / "mise-tasks" / "ci" / "arm_density.yml").read_text())
+    waves = (13, 26, 39, 52)
+    scaffold = child[".arm_density_cell"]
+
+    assert child["stages"] == [f"density_{size}" for size in waves]
+    assert scaffold["tags"] == ["aws-shell-qemu-arm"]
+    assert scaffold["variables"]["ARCH"] == "aarch64"
+    assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
+    assert scaffold["variables"]["HOMELAB_AARCH64_FIRMWARE_DIR"] == ("/opt/homelab-ci/qemu-firmware/aarch64")
+    before_script = "\n".join(scaffold["before_script"])
+    assert "--arm-density-index" in before_script
+    assert "--region eu-west-1" in before_script
+    assert "--bucket homelab-ci-arm-images-eu-west-1" in before_script
+    assert "HOMELAB_TEST_OUT_DIR" in before_script
+    artifact_path = scaffold["artifacts"]["paths"][0]
+    assert "$CI_JOB_NAME_SLUG" in artifact_path
+    assert "$CI_NODE_INDEX" in artifact_path
+
+    expanded_names: list[str] = []
+    expanded_paths: list[str] = []
+    for size in waves:
+        name = f"arm_density:{size}"
+        job = child[name]
+        assert job["stage"] == f"density_{size}"
+        assert job["parallel"] == size
+        assert "when" not in job
+        for index in range(1, size + 1):
+            expanded_names.append(f"{name} {index}/{size}")
+            expanded_paths.append(f"test/out/arm_density/arm-density-{size}-{index}/")
+
+    assert len(expanded_names) == 130
+    assert len(expanded_names) == len(set(expanded_names))
+    assert len(expanded_paths) == len(set(expanded_paths))
+
+
 def test_lab_qemu_image_is_published_for_supported_releases() -> None:
     pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
 

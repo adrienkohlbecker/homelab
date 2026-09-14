@@ -103,6 +103,18 @@ test_cells:
       pipeline_variables: true
     strategy: depend
 
+# Protected, explicit concurrency burn-in. Jobs inside each fixed wave start
+# automatically; stage ordering prevents the next density from overlapping it.
+arm_density:
+  stage: test
+  extends: .protected_manual_job
+  trigger:
+    include:
+      - local: mise-tasks/ci/arm_density.yml
+    forward:
+      pipeline_variables: true
+    strategy: depend
+
 lint:
   stage: prepare
   extends:
