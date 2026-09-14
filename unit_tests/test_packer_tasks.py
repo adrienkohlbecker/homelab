@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import signal
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -109,7 +111,8 @@ def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
     ]
 
 
-def test_upload_qemu_stages_bundle_beside_artifacts(tmp_path: Path) -> None:
+def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict[str, str], Path, Path]:
+    """Fake tar/aws around a lab artifact dir; tar logs the bundle path it wrote."""
     fake_bin = tmp_path / "bin"
     tar_log = tmp_path / "tar.log"
     artifacts = tmp_path / "scratch" / "noble" / "lab"
@@ -124,7 +127,7 @@ def test_upload_qemu_stages_bundle_beside_artifacts(tmp_path: Path) -> None:
         'while [ "$1" != "-cf" ]; do shift; done\n'
         "shift\n"
         'printf bundle >"$1"\n'
-        'printf "%s\\n" "$1" >"$TAR_TEST_LOG"\n',
+        'printf "%s\\n" "$1" >"$TAR_TEST_LOG"\n' + tar_tail,
     )
     _executable(
         fake_bin / "aws",
@@ -135,28 +138,47 @@ def test_upload_qemu_stages_bundle_beside_artifacts(tmp_path: Path) -> None:
         PATH=f"{fake_bin}:{env['PATH']}",
         TAR_TEST_LOG=str(tar_log),
     )
+    argv = [
+        str(REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"),
+        "lab",
+        "--ubuntu",
+        "noble",
+        "--artifact-dir",
+        str(artifacts),
+        "--build-id",
+        "test-build",
+    ]
+    return argv, env, artifacts, tar_log
 
-    result = subprocess.run(
-        [
-            str(REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"),
-            "lab",
-            "--ubuntu",
-            "noble",
-            "--artifact-dir",
-            str(artifacts),
-            "--build-id",
-            "test-build",
-        ],
-        cwd=REPO_ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-    )
+
+def test_upload_qemu_stages_bundle_beside_artifacts(tmp_path: Path) -> None:
+    argv, env, artifacts, tar_log = _upload_fixture(tmp_path)
+
+    result = subprocess.run(argv, cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
     bundle = Path(tar_log.read_text().strip())
     assert bundle.parent.parent == artifacts.parent
     assert not bundle.exists()
+
+
+def test_upload_qemu_removes_staged_bundle_on_sigterm(tmp_path: Path) -> None:
+    argv, env, artifacts, tar_log = _upload_fixture(tmp_path, tar_tail="exec sleep 30\n")
+
+    proc = subprocess.Popen(argv, cwd=REPO_ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + 10
+        while not (tar_log.exists() and tar_log.read_text().strip()):
+            assert time.monotonic() < deadline, "fake tar never staged the bundle"
+            time.sleep(0.05)
+        proc.send_signal(signal.SIGTERM)
+        returncode = proc.wait(timeout=10)
+    finally:
+        proc.kill()
+
+    assert returncode == 128 + signal.SIGTERM
+    assert not Path(tar_log.read_text().strip()).parent.exists()
+    assert [p.name for p in artifacts.parent.iterdir()] == ["lab"]
 
 
 def test_qemu_build_uploads_only_required_role_files() -> None:

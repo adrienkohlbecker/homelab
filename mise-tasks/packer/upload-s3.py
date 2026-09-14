@@ -44,6 +44,7 @@ import datetime as dt
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -339,7 +340,10 @@ def main() -> int:
     assert_new_object(args.bucket, manifest_key, args.region)
 
     # Bundles can be larger than the runner's memory-backed /tmp. Stage beside
-    # the source artifacts so they stay on the same scratch filesystem.
+    # the source artifacts so they stay on the same scratch filesystem. GitLab
+    # sends SIGTERM on job timeout or cancel, and Python's default handler exits
+    # without unwinding, which would strand the bundle on persistent scratch.
+    signal.signal(signal.SIGTERM, lambda signum, _frame: sys.exit(128 + signum))
     with tempfile.TemporaryDirectory(prefix=".packer-s3-", dir=root.parent) as tmp:
         tmpdir = Path(tmp)
         bundle = tmpdir / BUNDLE_NAME
