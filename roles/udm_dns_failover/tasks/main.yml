@@ -65,6 +65,8 @@
 - name: Update apt cache  # noqa: command-instead-of-module -- bootstraps the module dependency
   when: not ansible_check_mode
   command: apt-get update
+  args:
+    creates: /usr/lib/python3/dist-packages/apt/__init__.py
   become: true
   changed_when: false
   tags:
