@@ -65,6 +65,9 @@ if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
   sudo install -m 0644 \
     "$firmware_root/usr/share/AAVMF/AAVMF_VARS.fd" \
     "$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-vars.fd"
+  printf '%s\n' "$AARCH64_FIRMWARE_SHA256" |
+    sudo tee "$HOMELAB_AARCH64_FIRMWARE_DIR/archive.sha256" >/dev/null
+  sudo chmod 0644 "$HOMELAB_AARCH64_FIRMWARE_DIR/archive.sha256"
   rm -rf "$firmware_deb" "$firmware_root"
 fi
 
@@ -147,6 +150,7 @@ if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
   sudo tee -a /usr/local/bin/homelab_ci_ready >/dev/null <<EOF
 test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/edk2-aarch64-code.fd
 test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/edk2-aarch64-vars.fd
+test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256
 EOF
 fi
 sudo chmod 0755 /usr/local/bin/homelab_ci_ready

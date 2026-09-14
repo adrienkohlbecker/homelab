@@ -337,6 +337,11 @@ def test_aarch64_firmware_pin_covers_package_code_and_vars() -> None:
     }
     assert "AAVMF_CODE.no-secboot.fd" in script
     assert "AAVMF_VARS.fd" in script
+    assert '[ ! -w "${firmware_dir}" ]' in script
+
+    provision = QEMU_HOST_PROVISION_SH.read_text()
+    assert '"$HOMELAB_AARCH64_FIRMWARE_DIR/archive.sha256"' in provision
+    assert "test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256" in provision
 
 
 def test_qemu_host_uses_canonical_mise_upstream() -> None:
