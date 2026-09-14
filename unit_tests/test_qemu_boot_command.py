@@ -105,6 +105,7 @@ def test_linux_aarch64_uses_kvm(
 
     assert cmd[3] == "qemu-system-aarch64"
     assert cmd[cmd.index("-machine") + 1] == "type=virt,accel=kvm,usb=on"
+    assert "virtio-net,romfile=,netdev=user.0" in cmd
 
 
 def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(

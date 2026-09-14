@@ -85,6 +85,7 @@ locals {
   arch_table = {
     x86_64 = {
       machine_type       = "q35"
+      net_device         = "virtio-net"
       zbm_version        = local.versions.zfsbootmenu_release.x86_64.version
       qemuargs           = []
       cloud_image_suffix = "amd64"
@@ -95,7 +96,10 @@ locals {
     }
     aarch64 = {
       machine_type = "virt"
-      zbm_version  = local.versions.zfsbootmenu_release.aarch64.version
+      # Ubuntu's ARM qemu package does not ship efi-virtio.rom. UEFI already
+      # discovers the virtio NIC, so suppress its optional PCI ROM lookup.
+      net_device  = "virtio-net,romfile="
+      zbm_version = local.versions.zfsbootmenu_release.aarch64.version
       qemuargs = [
         ["-device", "virtio-gpu-pci"],
         ["-device", "qemu-xhci"],
@@ -278,7 +282,7 @@ source "qemu" "ubuntu" {
   }
   machine_type = local.arch_cfg.machine_type
   memory       = 4096
-  net_device   = "virtio-net"
+  net_device   = local.arch_cfg.net_device
   # Shim over the arch's real emulator (which it resolves from PATH): on a
   # host with passt + qemu's `-netdev stream` (the lab CI shell runner) it
   # backs the build-VM NIC with passt instead of libslirp, whose UDP drops

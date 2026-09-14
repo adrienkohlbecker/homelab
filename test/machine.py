@@ -1581,7 +1581,7 @@ class Machine:
         if self._net_backend == "passt":
             assert self._passt_socket is not None
             netdev = f"stream,id=net0,server=off,addr.type=unix,addr.path={self._passt_socket}"
-            return netdev, "virtio-net,netdev=net0"
+            return netdev, f"{self.arch.net_device},netdev=net0"
         # Ports pre-picked in prepare(). qemu_user_net_args pins the VM's eth0
         # to network.hosts[inventory_host].physical (10.234.x test view); it's
         # empty for machines absent from the topology (minimal -> slirp's
@@ -1594,7 +1594,7 @@ class Machine:
                 for guest_port, host_port in self.wan_forward_ports[proto].items()
             )
         netdev = f"user,id=user.0,{','.join(hostfwds)}{qemu_user_net_args(self.inventory_host)}"
-        return netdev, "virtio-net,netdev=user.0"
+        return netdev, f"{self.arch.net_device},netdev=user.0"
 
     def _passt_command(self) -> list[str]:
         """Build the passt sidecar argv for this machine's forwarded ports."""
