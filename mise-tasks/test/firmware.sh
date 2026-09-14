@@ -45,6 +45,14 @@ if [ -f "${code_dest}" ] && [ -f "${vars_dest}" ] && [ "$(awk 'NR == 1 { print; 
   exit 0
 fi
 
+# A root-owned AMI path is populated only by provision_qemu_host.sh, which
+# verifies the pinned archive before extracting it. Older promoted AMIs predate
+# archive.sha256; reuse their immutable pair instead of trying to overwrite it.
+if [ -f "${code_dest}" ] && [ -f "${vars_dest}" ] && [ ! -w "${firmware_dir}" ]; then
+  echo "==> Using preinstalled edk2 ${deb_version} firmware at ${firmware_dir}"
+  exit 0
+fi
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
