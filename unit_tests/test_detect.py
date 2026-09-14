@@ -1142,6 +1142,7 @@ class TestRenderChildPipeline:
         assert doc[".condition_coverage"]["image"] == "$CI_REGISTRY_IMAGE/ci:latest"
         assert doc[".condition_coverage"]["tags"] == ["saas-linux-small-amd64"]
         assert "needs" not in doc[".condition_coverage"]
+        assert doc[".condition_coverage"]["variables"]["ANSIBLE_CONFIG"] == ("$CI_PROJECT_DIR/ansible.cfg")
         assert "MISE_DATA_DIR" not in doc[".condition_coverage"]["variables"]
         assert doc[".condition_coverage"]["before_script"] == [
             "mise install",
