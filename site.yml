@@ -4,7 +4,7 @@
 # service plays below are host-scoped and assume the full platform is already in
 # place. See CLAUDE.md "Role layering" for the rule on where a new role belongs.
 - name: Base machine install
-  hosts: base_hosts
+  hosts: lab,pug,fox
   roles:
     # Host base -- OS, networking, remote access, system services. Apt first
     # establishes package and deb822 tooling for every role below it.
@@ -49,13 +49,15 @@
 # Services -- host-scoped, built on the platform above. A role belongs here
 # (not in Base machine install) when only a subset of hosts run it.
 - name: External VPS services
-  hosts: external_services
+  hosts: fox,lab
   roles:
-    - headscale
-    - gitlab_runner
+    - role: headscale
+      when: external_services_enabled | default(false)
+    - role: gitlab_runner
+      when: external_services_enabled | default(false)
 
 - name: Lab storage datasets
-  hosts: lab_storage_hosts
+  hosts: lab
   roles:
     # Storage dataset producers -- placed before the apps that mount
     # /mnt/{scratch,data,media}.
@@ -64,7 +66,7 @@
     - media
 
 - name: Lab and Pug
-  hosts: home_hosts
+  hosts: lab,pug
   roles:
     - firewall
     - hd_idle
@@ -84,12 +86,12 @@
 
 - name: Tailscale mesh
   # Run once after fox's Headscale control plane and the home routers' firewalls.
-  hosts: mesh_hosts
+  hosts: lab,pug,fox
   roles:
     - tailscale
 
 - name: Lab roles
-  hosts: lab_services
+  hosts: lab
   roles:
     - samba
     - libvirt
@@ -119,14 +121,16 @@
     - homepage
 
 - name: Lab CI runner
-  hosts: lab_runner_hosts
+  hosts: lab
   roles:
-    - gitlab_runner
+    - role: gitlab_runner
+      when: not qemu_test
 
 - name: MacOS VM
-  hosts: macos_vm_hosts
+  hosts: lab
   roles:
-    - macos_vm
+    - role: macos_vm
+      when: not qemu_test
 
 - name: UDM appliance services
   hosts: udm
@@ -140,13 +144,13 @@
     - udm_wol_relay
 
 - name: Decomission services
-  hosts: base_hosts
+  hosts: lab,pug,fox
   roles:
     # Keep this role as scaffolding for future service retirements.
     - retired_services
 
 - name: Reboot check
-  hosts: base_hosts
+  hosts: lab,pug,fox
   tags:
     - always
   # serial: 1 reboots the fleet one host at a time. The reboot helper

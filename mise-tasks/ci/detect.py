@@ -63,12 +63,12 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
 
 # Machine-wide fixtures fan out only to the image that can exercise them.
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
-    (r"host_vars/minimal\.yml", "minimal"),
+    (r"test/host_vars/minimal\.yml", "minimal"),
     (r"test/minimal/.+", "minimal"),
-    (r"group_vars/integration\.yml", "lab"),
+    (r"test/host_vars/lab\.yml", "lab"),
+    (r"test/host_vars/pug\.yml", "pug"),
     (r"group_vars/storage_lab\.yml", "lab"),
     (r"group_vars/storage_pug\.yml", "pug"),
-    (r"group_vars/storage_single_rpool\.yml", "pug"),
 ]
 _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]
 
@@ -621,18 +621,6 @@ def render_child_pipeline(
     )
 
 
-def _split_pug_cells(specs: list[str]) -> tuple[list[str], list[str]]:
-    """Keep Pug local: its QEMU image is not promoted to either CI target."""
-    kept: list[str] = []
-    dropped: list[str] = []
-    for spec in specs:
-        if ci_spec_to_cell(spec).machine == "pug":
-            dropped.append(spec)
-        else:
-            kept.append(spec)
-    return kept, dropped
-
-
 def _emit_gitlab(
     specs: list[str],
     site_test: bool,
@@ -653,8 +641,6 @@ def _emit_gitlab(
     if target not in TARGETS:
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
-    # Pug runs only on demand and has no CI image source.
-    specs, on_demand = _split_pug_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
@@ -662,8 +648,6 @@ def _emit_gitlab(
     log(f"target={target} runner={target_config['cell_runner_tag']}")
     log(f"arm_cells={len(_arm_specs(specs, target))}")
     log(f"matrix={json.dumps(specs)}")
-    if on_demand:
-        log(f"dropped {len(on_demand)} on-demand cell(s): {' '.join(sorted(on_demand))}")
     if specs:
         unmeasured = [s for s in specs if s not in runtimes]
         log(f"cell order: longest-first by median recent runtime ({len(unmeasured)} unmeasured cell(s) first)")

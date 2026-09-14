@@ -1,6 +1,8 @@
-# Full-site integration behavior layered onto the QEMU Lab fixture. Physical
-# host settings remain in physical_* groups; role-specific QEMU behavior stays
+# Full-site integration behavior for the QEMU Lab fixture. Physical host
+# settings remain in physical_* groups; role-specific QEMU behavior stays
 # behind qemu_test gates.
+
+external_services_enabled: true
 
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two

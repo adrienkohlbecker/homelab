@@ -10,7 +10,7 @@
     cache_valid_time: 3600
   become: true
 
-# The smbtest share used by group_vars/integration.yml points here; create
+# The smbtest share used by test/host_vars/lab.yml points here; create
 # it owned by the SMB login user so the valid-users / write path is exercisable.
 - name: _test | Create test share directory
   file:

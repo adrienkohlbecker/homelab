@@ -116,8 +116,8 @@ def test_autoscaler_connector_changes_restart_runner() -> None:
     assert "gitlab_runner_aws_qemu_arm_ssh_key.changed" in restart
 
 
-def test_integration_fixture_supplies_every_enabled_arm_runner_secret() -> None:
-    values = yaml.safe_load((REPO_ROOT / "group_vars" / "integration.yml").read_text())
+def test_lab_fixture_supplies_every_enabled_arm_runner_secret() -> None:
+    values = yaml.safe_load((REPO_ROOT / "test" / "host_vars" / "lab.yml").read_text())
 
     assert values["gitlab_runner_aws_qemu_arm_enabled"] is True
     assert values["gitlab_runner_aws_qemu_arm_token"]

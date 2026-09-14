@@ -3,6 +3,8 @@
 zfs_arc_min: 1073741824
 zfs_arc_max: 4294967296
 
+swap_partition: /dev/disk/by-partlabel/swap
+
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
 lm_sensors_modules:
   - drivetemp

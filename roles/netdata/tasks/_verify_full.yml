@@ -1,6 +1,6 @@
 # Full-fixture verification of netdata_presence.chart.sh and the
 # context_liveness templates that consume netdata_contexts /
-# netdata_collectors. group_vars/integration.yml seeds:
+# netdata_collectors. test/host_vars/lab.yml seeds:
 #   netdata_contexts:
 #     - system.cpu             (real chart, always live)
 #     - foo.does_not_exist     (never-existed chart)

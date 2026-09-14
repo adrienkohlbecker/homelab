@@ -1,0 +1,2 @@
+# QEMU Pug exposes the same labeled swap partition as the physical host.
+swap_partition: /dev/disk/by-partlabel/swap

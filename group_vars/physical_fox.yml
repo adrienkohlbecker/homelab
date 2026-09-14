@@ -7,12 +7,14 @@
 #
 # fox is NOT a home host -- no home LAN/VLANs (it sits on its own
 # Hetzner private net, the `hetzner` topology site, at 10.123.55.2) -- so it
-# runs a curated role set through semantic inventory groups rather than the home
-# service groups. It DOES join the wg0 backbone (scoped:
+# runs a curated role set rather than the home service roles. It DOES join the
+# wg0 backbone (scoped:
 # peer host /32s only: each server peer's wg /32 plus the physical /32 for
 # cross-site peers), which lets fox reach lab/pug services at their LAN IPs
 # without routing whole home subnets. Provisioned by terraform/hetzner.tf;
 # reached at fox.fahm.fr (public A -> reserved primary IP).
+
+external_services_enabled: true
 
 # Hetzner cloud-init owns matching and addressing for both NICs, including the
 # private-net DHCP address and eth0's static IPv6 configuration. This stanza
