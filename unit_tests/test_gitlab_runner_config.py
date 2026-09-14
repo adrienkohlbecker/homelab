@@ -122,4 +122,6 @@ def test_box_fixture_supplies_every_enabled_arm_runner_secret() -> None:
 
     assert values["gitlab_runner_aws_qemu_arm_enabled"] is True
     assert values["gitlab_runner_aws_qemu_arm_token"]
-    assert values["gitlab_runner_aws_qemu_arm_ssh_private_key"]
+    assert values["gitlab_runner_aws_qemu_arm_ssh_private_key"] == (
+        "{{ lookup('file', inventory_dir + '/../packer/vagrant.key') }}"
+    )
