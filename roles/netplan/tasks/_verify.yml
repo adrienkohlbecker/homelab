@@ -90,3 +90,28 @@
           - ansible_failed_task.name == 'Report the netplan staging failure'
         fail_msg: >-
           The transaction did not exercise the staging rescue path
+
+    # The rescue ignores Cancel's result. Netplan unregisters the config object
+    # and removes its /run/netplan/config-<id> state only on a real cancel.
+    - name: _verify staging failure | Probe the cancelled D-Bus config object
+      command:
+        argv:
+          - busctl
+          - introspect
+          - io.netplan.Netplan
+          - "{{ netplan_dbus_path }}"
+      register: netplan_verify_cancelled_object
+      changed_when: false
+      failed_when: netplan_verify_cancelled_object.rc == 0
+
+    - name: _verify staging failure | Stat the cancelled transaction state
+      stat:
+        path: "/run/netplan/config-{{ netplan_dbus_path | basename }}"
+      register: netplan_verify_cancelled_state
+
+    - name: _verify staging failure | Cancelled transaction state was removed
+      assert:
+        that:
+          - not netplan_verify_cancelled_state.stat.exists
+        fail_msg: >-
+          Cancel left /run/netplan/config-{{ netplan_dbus_path | basename }} behind
