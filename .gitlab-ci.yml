@@ -14,6 +14,8 @@ default:
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
+  # ARM stays opt-in until the staged density and coverage gates pass.
+  HOMELAB_CI_ARM: "off"
   # Ansible ignores cwd config under world-writable /builds unless pinned.
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
 
@@ -79,7 +81,7 @@ detect:
   timeout: 15m
   script:
     - mise run ci:bootstrap
-    - mise run ci:detect --target "$HOMELAB_CI_TARGET"
+    - mise run ci:detect --target "$HOMELAB_CI_TARGET" --arm-mode "$HOMELAB_CI_ARM"
   artifacts:
     paths:
       - test-child.yml

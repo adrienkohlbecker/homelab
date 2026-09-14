@@ -977,9 +977,14 @@ class TestListTestableRoles:
         assert detect.list_testable_roles() == []
 
 
-def _render_child_doc(specs: list[str], site_test: bool, target: str = "aws_qemu") -> dict:
+def _render_child_doc(
+    specs: list[str],
+    site_test: bool,
+    target: str = "aws_qemu",
+    arm_mode: str = "off",
+) -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
-    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
+    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target, arm_mode=arm_mode))
 
 
 _SCENARIOS = """\
@@ -1114,10 +1119,10 @@ class TestRenderChildPipeline:
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
         assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_COMPUTE_REGION"] == "eu-central-1"
         assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_ECR_REGION"] == "eu-central-1"
-        assert doc[".arm_cell"]["variables"] == {
-            "HOMELAB_TEST_AWS_COMPUTE_REGION": "eu-west-1",
-            "HOMELAB_TEST_AWS_ECR_REGION": "eu-west-1",
-        }
+        assert doc[".arm_cell"]["tags"] == ["aws-shell-qemu-arm"]
+        assert doc[".arm_cell"]["variables"]["ARCH"] == "aarch64"
+        assert doc[".arm_cell"]["variables"]["HOMELAB_TEST_AWS_COMPUTE_REGION"] == "eu-west-1"
+        assert doc[".arm_cell"]["variables"]["HOMELAB_TEST_AWS_ECR_REGION"] == "eu-west-1"
         # No spot retry on the qemu targets.
         assert "retry" not in doc[".cell"]
         # nginx:box defaults to Noble; podman:box:resolute is explicit.
@@ -1131,8 +1136,19 @@ class TestRenderChildPipeline:
         assert "_site_test:box" not in doc
         assert "_site_check:box" not in doc
         assert "no_cells" not in doc
-        assert doc["condition_coverage"]["stage"] == "coverage"
+        assert doc["condition_coverage"]["extends"] == ".condition_coverage"
+        assert doc[".condition_coverage"]["stage"] == "coverage"
         assert "--roles nginx,podman" in doc["condition_coverage"]["script"][0]
+        assert doc[".condition_coverage"]["image"] == "$CI_REGISTRY_IMAGE/ci:latest"
+        assert doc[".condition_coverage"]["tags"] == ["saas-linux-small-amd64"]
+        assert "needs" not in doc[".condition_coverage"]
+        assert "MISE_DATA_DIR" not in doc[".condition_coverage"]["variables"]
+        assert doc[".condition_coverage"]["before_script"] == [
+            "mise install",
+            "mise exec -- uv sync --frozen",
+        ]
+        assert "*.x86_64.*.jsonl" in doc["condition_coverage"]["script"][0]
+        assert "*.aarch64.*.jsonl" not in doc["condition_coverage"]["script"][0]
 
     def test_cells_auto_run_by_default(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=True)
@@ -1187,6 +1203,94 @@ class TestRenderChildPipeline:
         # No cell jobs beyond the scaffolding + placeholder.
         jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
         assert jobs == ["no_cells"]
+
+    def test_manual_arm_mode_renders_fixed_optional_allowlist(self) -> None:
+        doc = _render_child_doc(["nginx:box"], site_test=False, arm_mode="manual")
+        arm_jobs = {f"{spec}:aarch64" for spec in detect.ARM_CELL_SPECS}
+
+        assert len(arm_jobs) == 12
+        assert "fan2go:box:aarch64" not in arm_jobs
+        assert arm_jobs <= doc.keys()
+        assert doc["stages"] == ["test1", "arm", "coverage"]
+        for job_name in arm_jobs:
+            assert doc[job_name]["extends"] == ".arm_cell"
+            assert doc[job_name]["when"] == "manual"
+            assert doc[job_name]["allow_failure"] is True
+            assert doc[job_name]["variables"]["UBUNTU"] == "noble"
+
+        assert doc["condition_coverage:combined"]["when"] == "manual"
+        assert doc["condition_coverage:combined"]["allow_failure"] is True
+        assert "*.x86_64.*.jsonl" in doc["condition_coverage:combined"]["script"][0]
+        assert "*.aarch64.*.jsonl" in doc["condition_coverage:combined"]["script"][0]
+        assert "*.aarch64.*.jsonl" not in doc["condition_coverage"]["script"][0]
+
+    def test_arm_scaffold_uses_ireland_images_and_bounded_runtime(self) -> None:
+        doc = _render_child_doc(["apt:box"], site_test=False, arm_mode="auto")
+        scaffold = doc[".arm_cell"]
+        before_script = "\n".join(scaffold["before_script"])
+
+        assert scaffold["timeout"] == "45m"
+        assert scaffold["needs"] == []
+        assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
+        assert scaffold["variables"]["HOMELAB_AARCH64_FIRMWARE_DIR"] == ("/opt/homelab-ci/qemu-firmware/aarch64")
+        assert f"--region {detect.ARM_REGION}" in before_script
+        assert f"--bucket {detect.ARM_IMAGE_BUCKET}" in before_script
+        assert "--architecture aarch64" in before_script
+        assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
+        assert scaffold["artifacts"]["paths"] == ["test/out/"]
+
+    def test_auto_arm_mode_preserves_change_selection_and_gates(self) -> None:
+        doc = _render_child_doc(
+            ["apt:box", "apt:box:resolute", "fan2go:box", "nginx:box"],
+            site_test=False,
+            arm_mode="auto",
+        )
+
+        assert "apt:box:aarch64" in doc
+        assert "fan2go:box:aarch64" not in doc
+        assert "nginx:box:aarch64" not in doc
+        assert "when" not in doc["apt:box:aarch64"]
+        assert "allow_failure" not in doc["apt:box:aarch64"]
+        assert "*.x86_64.*.jsonl" in doc["condition_coverage"]["script"][0]
+        assert "*.aarch64.*.jsonl" in doc["condition_coverage"]["script"][0]
+        assert "condition_coverage:combined" not in doc
+
+    def test_off_arm_mode_renders_no_arm_jobs(self) -> None:
+        doc = _render_child_doc(["apt:box"], site_test=False, arm_mode="off")
+
+        assert "apt:box:aarch64" not in doc
+        assert doc["stages"] == ["test1", "coverage"]
+
+    def test_auto_full_universe_keeps_130_x86_cells_and_all_arm_cells(self) -> None:
+        specs = detect._full_universe_specs()
+        doc = _render_child_doc(specs, site_test=True, arm_mode="auto")
+        x86_jobs = [name for name in specs if name in doc]
+        arm_jobs = [f"{spec}:aarch64" for spec in detect.ARM_CELL_SPECS]
+
+        assert len(specs) >= 130
+        assert len(x86_jobs) == len(specs)
+        assert all(name in doc for name in arm_jobs)
+        assert "needs" not in doc["condition_coverage"]
+
+    @pytest.mark.parametrize("arm_mode", detect.ARM_MODES)
+    def test_lab_target_never_renders_arm_jobs(self, arm_mode: str) -> None:
+        doc = _render_child_doc(["apt:box"], site_test=False, target="lab", arm_mode=arm_mode)
+
+        assert ".arm_cell" not in doc
+        assert not any(name.endswith(":aarch64") for name in doc)
+        assert "*.aarch64.*.jsonl" not in doc["condition_coverage"]["script"][0]
+
+    def test_manual_arm_only_pipeline_has_no_arm_only_coverage(self) -> None:
+        doc = _render_child_doc([], site_test=False, arm_mode="manual")
+
+        assert doc["stages"] == ["arm"]
+        assert "condition_coverage" not in doc
+        assert "condition_coverage:combined" not in doc
+        assert "no_cells" not in doc
+
+    def test_rejects_unknown_arm_mode(self) -> None:
+        with pytest.raises(ValueError, match="unsupported ARM mode"):
+            detect.render_child_pipeline(["apt:box"], False, arm_mode="sometimes")
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=False, target="lab")
@@ -1302,6 +1406,19 @@ class TestEmitGitlab:
         assert expected <= set(detect._full_universe_specs())
 
 
+class TestArmDensitySpec:
+    def test_cycles_the_single_arm_allowlist(self) -> None:
+        first_cycle = [detect.arm_density_spec(index) for index in range(1, 13)]
+
+        assert first_cycle == list(detect.ARM_CELL_SPECS)
+        assert detect.arm_density_spec(13) == detect.ARM_CELL_SPECS[0]
+        assert "fan2go:box" not in first_cycle
+
+    def test_rejects_nonpositive_index(self) -> None:
+        with pytest.raises(ValueError, match="at least 1"):
+            detect.arm_density_spec(0)
+
+
 class TestCmdGitlab:
     @pytest.fixture(autouse=True)
     def _offline_full_universe(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1360,6 +1477,40 @@ class TestCmdGitlab:
         loaded = detect.yaml.safe_load(child.read_text())
         assert loaded[".cell"]["tags"] == [runner_tag]
         assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == in_aws
+
+    @pytest.mark.parametrize(
+        ("arm_mode", "arm_job"),
+        [
+            ("off", False),
+            ("manual", True),
+            ("auto", True),
+        ],
+    )
+    def test_arm_mode_selection_from_environment(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        arm_mode: str,
+        arm_job: bool,
+    ) -> None:
+        monkeypatch.setenv("HOMELAB_CI_ARM", arm_mode)
+        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["apt:box"])
+        child = tmp_path / "child.yml"
+
+        assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
+        loaded = detect.yaml.safe_load(child.read_text())
+
+        assert ("apt:box:aarch64" in loaded) is arm_job
+
+    def test_unknown_arm_mode_returns_usage_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOMELAB_CI_ARM", "sometimes")
+        monkeypatch.setattr("sys.argv", ["detect.py", "--all"])
+
+        assert detect.main() == 2
+
+    def test_density_index_prints_selected_spec(self, capsys: pytest.CaptureFixture[str]) -> None:
+        assert detect._cmd_gitlab(["--arm-density-index", "13"]) == 0
+        assert capsys.readouterr().out == "apt:box\n"
 
     def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         child = tmp_path / "child.yml"
