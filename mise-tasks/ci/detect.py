@@ -542,6 +542,9 @@ ARM_CELL_SPECS = (
     "refind:box",
     "zfsbootmenu:box",
 )
+# Direct GitHub download roles turn synchronized waves into upstream egress
+# tests rather than host-capacity tests.
+ARM_DENSITY_CELL_SPECS = tuple(spec for spec in ARM_CELL_SPECS if spec not in {"lnav:box", "user:box"})
 ARM_MODES = ("off", "manual", "auto")
 ARM_IMAGE_BUCKET = "homelab-ci-arm-images-eu-west-1"
 ARM_REGION = "eu-west-1"
@@ -582,10 +585,10 @@ def _arm_specs(specs: list[str], target: str, arm_mode: str) -> list[str]:
 
 
 def arm_density_spec(index: int) -> str:
-    """Cycle a one-based density-job index through the ARM allowlist."""
+    """Cycle a one-based density-job index through the ARM burn-in cells."""
     if index < 1:
         raise ValueError("ARM density index must be at least 1")
-    return ARM_CELL_SPECS[(index - 1) % len(ARM_CELL_SPECS)]
+    return ARM_DENSITY_CELL_SPECS[(index - 1) % len(ARM_DENSITY_CELL_SPECS)]
 
 
 def render_child_pipeline(

@@ -1310,11 +1310,14 @@ class TestEmitGitlab:
 
 
 class TestArmDensitySpec:
-    def test_cycles_the_single_arm_allowlist(self) -> None:
-        first_cycle = [detect.arm_density_spec(index) for index in range(1, 13)]
+    def test_cycles_cells_without_direct_github_downloads(self) -> None:
+        first_cycle = [detect.arm_density_spec(index) for index in range(1, len(detect.ARM_DENSITY_CELL_SPECS) + 1)]
 
-        assert first_cycle == list(detect.ARM_CELL_SPECS)
-        assert detect.arm_density_spec(13) == detect.ARM_CELL_SPECS[0]
+        assert first_cycle == list(detect.ARM_DENSITY_CELL_SPECS)
+        assert set(first_cycle) < set(detect.ARM_CELL_SPECS)
+        assert "lnav:box" not in first_cycle
+        assert "user:box" not in first_cycle
+        assert detect.arm_density_spec(len(first_cycle) + 1) == first_cycle[0]
         assert "fan2go:box" not in first_cycle
 
     def test_rejects_nonpositive_index(self) -> None:
@@ -1413,7 +1416,7 @@ class TestCmdGitlab:
 
     def test_density_index_prints_selected_spec(self, capsys: pytest.CaptureFixture[str]) -> None:
         assert detect._cmd_gitlab(["--arm-density-index", "13"]) == 0
-        assert capsys.readouterr().out == "apt:box\n"
+        assert capsys.readouterr().out == f"{detect.arm_density_spec(13)}\n"
 
     def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         child = tmp_path / "child.yml"
