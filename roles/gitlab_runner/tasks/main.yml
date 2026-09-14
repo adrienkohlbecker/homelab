@@ -165,6 +165,7 @@
             backup: true
             content: "{{ gitlab_runner_aws_qemu_arm_ssh_private_key }}\n"
             validate: ssh-keygen -y -f %s
+          diff: false
           become: true
 
     - name: Remove ARM Fleeting SSH key when disabled
