@@ -27,7 +27,7 @@ def test_arm_density_is_one_protected_manual_child_trigger() -> None:
 
 def test_arm_density_child_has_sequential_unique_automatic_waves() -> None:
     child = yaml.safe_load((ROOT / "mise-tasks" / "ci" / "arm_density.yml").read_text())
-    waves = (13, 26, 39, 52)
+    waves = (13, 26, 39, 52, 65, 78)
     scaffold = child[".arm_density_cell"]
 
     assert child["stages"] == [f"density_{size}" for size in waves]
@@ -57,7 +57,7 @@ def test_arm_density_child_has_sequential_unique_automatic_waves() -> None:
             expanded_names.append(f"{name} {index}/{size}")
             expanded_paths.append(f"test/out/arm_density/arm-density-{size}-{index}/")
 
-    assert len(expanded_names) == 130
+    assert len(expanded_names) == sum(waves)
     assert len(expanded_names) == len(set(expanded_names))
     assert len(expanded_paths) == len(set(expanded_paths))
 
