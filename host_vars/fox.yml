@@ -226,8 +226,8 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
 # One job per pipeline, so warm reuse buys nothing here either -- same 2m drain.
 gitlab_runner_aws_qemu_site_idle_time: "2m"
 
-# One Ireland ARM bare-metal worker supplies up to 78 cells for staged density
-# commissioning. The acquisition bound leaves room for cold Spot metal
+# One Ireland ARM bare-metal worker supplies up to the validated 78-cell
+# density ceiling. The acquisition bound leaves room for cold Spot metal
 # readiness.
 gitlab_runner_aws_qemu_arm_enabled: true
 gitlab_runner_aws_qemu_arm_token: !vault |
