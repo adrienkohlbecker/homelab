@@ -145,7 +145,7 @@ gitlab_runner_aws_qemu_enabled: true
 gitlab_runner_aws_qemu_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_aws_qemu_arm_enabled: true
 gitlab_runner_aws_qemu_arm_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
-gitlab_runner_aws_qemu_arm_ssh_private_key: TEST_PLACEHOLDER_DO_NOT_USE
+gitlab_runner_aws_qemu_arm_ssh_private_key: "{{ lookup('file', inventory_dir + '/../packer/vagrant.key') }}"
 gitlab_runner_aws_qemu_access_key_id: TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_aws_qemu_secret_access_key: TEST_PLACEHOLDER_DO_NOT_USE
 
