@@ -298,6 +298,8 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
     )
     env = dict(os.environ)
     env.update(
+        # Pin provenance so a modified developer checkout does not refuse upload.
+        CI_COMMIT_SHA="d" * 40,
         PATH=f"{fake_bin}:{env['PATH']}",
         TAR_TEST_LOG=str(tar_log),
     )

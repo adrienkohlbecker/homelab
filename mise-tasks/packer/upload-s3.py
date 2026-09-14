@@ -97,7 +97,17 @@ def default_build_id() -> str:
 
 
 def source_sha() -> str:
-    sha = os.environ.get("CI_COMMIT_SHA") or git_output(["rev-parse", "HEAD"], default="")
+    """Return the commit recorded as the image's provenance.
+
+    Outside CI, HEAD only describes the artifact when tracked files match it,
+    so a modified checkout is refused instead of stamped with a commit that
+    did not build the image.
+    """
+    sha = os.environ.get("CI_COMMIT_SHA")
+    if not sha:
+        if git_output(["status", "--porcelain", "--untracked-files=no"], default=""):
+            sys.exit("refusing to record HEAD as source_sha: tracked files have uncommitted changes")
+        sha = git_output(["rev-parse", "HEAD"], default="")
     if len(sha) not in (40, 64) or any(character not in "0123456789abcdef" for character in sha):
         sys.exit(f"source SHA must be a full lowercase Git object id, got {sha!r}")
     return sha

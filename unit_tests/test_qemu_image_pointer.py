@@ -63,6 +63,29 @@ class TestValidateTarget:
             upload.validate_target(_args(architecture="aarch64"))
 
 
+class TestSourceSha:
+    def test_ci_commit_is_recorded_without_inspecting_the_checkout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CI_COMMIT_SHA", "d" * 40)
+        monkeypatch.setattr(upload, "git_output", lambda *_args, **_kwargs: pytest.fail("git consulted in CI"))
+
+        assert upload.source_sha() == "d" * 40
+
+    def test_clean_local_checkout_records_head(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CI_COMMIT_SHA", raising=False)
+        replies = {"status": "", "rev-parse": "e" * 40}
+        monkeypatch.setattr(upload, "git_output", lambda args, default="": replies[args[0]])
+
+        assert upload.source_sha() == "e" * 40
+
+    def test_modified_local_checkout_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CI_COMMIT_SHA", raising=False)
+        replies = {"status": " M mise-tasks/packer/upload-s3.py", "rev-parse": "e" * 40}
+        monkeypatch.setattr(upload, "git_output", lambda args, default="": replies[args[0]])
+
+        with pytest.raises(SystemExit, match="tracked files have uncommitted changes"):
+            upload.source_sha()
+
+
 class TestDefaultBuildId:
     def test_ci_retries_get_job_specific_ids(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CI_PIPELINE_ID", "42")
