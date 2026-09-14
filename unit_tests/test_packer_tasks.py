@@ -484,9 +484,21 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
         "done\n"
         'printf \'{"builds":[{"artifact_id":"eu-central-1:ami-1234abcd"}]}\\n\' >"$manifest"\n',
     )
+    aws_log = tmp_path / "aws.log"
+    _executable(
+        fake_bin / "aws",
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'printf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n'
+        'case "$*" in\n'
+        '*"ssm get-parameter"*) printf "ami-promoted\\n" ;;\n'
+        '*"ec2 describe-images"*) printf "[]\\n" ;;\n'
+        "esac\n",
+    )
     env = dict(os.environ)
     env.pop("CI", None)
     env.update(
+        AWS_TEST_LOG=str(aws_log),
         PATH=f"{fake_bin}:{env['PATH']}",
         PACKER_TEST_LOG=str(packer_log),
         usage_architecture="aarch64",
@@ -508,6 +520,12 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
     assert "architecture=aarch64" in call
     assert "Candidate AMI: ami-1234abcd" in result.stdout
     assert "/homelab-ci/ami/qemu-host/aarch64/noble" in result.stdout
+    # Candidate bakes prune too; retention protects the promoted AMI and keeps
+    # the newest builds, so unpromoted candidates cannot accumulate.
+    assert "Prune: nothing to remove" in result.stdout
+    describe = next(line for line in aws_log.read_text().splitlines() if "ec2 describe-images" in line)
+    assert "--region eu-west-1" in describe
+    assert "Name=tag:architecture,Values=aarch64" in describe
 
 
 def test_qemu_host_rejects_unknown_architecture() -> None:

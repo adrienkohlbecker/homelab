@@ -223,8 +223,9 @@ if [ "${usage_promote:-false}" = "true" ]; then
   if [ -n "$previous" ]; then
     echo "    Rollback: aws --region ${region} ssm put-parameter --name ${param} --type String --value ${previous} --overwrite"
   fi
-  prune_old_amis
 else
   echo "==> Candidate AMI: ${ami}"
   echo "    Promote: aws --region ${region} ssm put-parameter --name ${param} --type String --data-type aws:ec2:image --value ${ami} --overwrite"
 fi
+
+prune_old_amis
