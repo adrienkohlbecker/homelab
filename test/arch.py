@@ -36,6 +36,7 @@ class ArchProfile:
     name: str
     qemu_binary: str
     machine_type: str
+    net_device: str
     cloud_image_suffix: str
     # Substring used to detect whether a user-supplied kernel cmdline
     # already configures this arch's serial UART -- if found, we don't
@@ -66,6 +67,7 @@ X86_64 = ArchProfile(
     name="x86_64",
     qemu_binary="qemu-system-x86_64",
     machine_type="q35",
+    net_device="virtio-net",
     cloud_image_suffix="amd64",
     serial_console_token="console=ttyS",
     serial_console_default="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200",
@@ -91,6 +93,9 @@ AARCH64 = ArchProfile(
     name="aarch64",
     qemu_binary="qemu-system-aarch64",
     machine_type="virt",
+    # Ubuntu's ARM qemu package omits the optional virtio EFI ROM. The guest
+    # firmware discovers PCI devices directly, so no ROM is needed.
+    net_device="virtio-net,romfile=",
     cloud_image_suffix="arm64",
     serial_console_token="console=ttyAMA",
     serial_console_default="console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200",

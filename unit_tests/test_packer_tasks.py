@@ -297,7 +297,9 @@ def test_qemu_build_separates_host_os_from_architecture() -> None:
     assert 'data "external-raw" "host_os"' in template
     assert re.search(r"accelerator\s+= local\.host_os_cfg\.accelerator", template)
     assert re.search(r"format\s+= local\.host_os_cfg\.image_format", template)
+    assert re.search(r"net_device\s+= local\.arch_cfg\.net_device", template)
     assert 'cloud_image_suffix = "arm64"' in template
+    assert 'net_device  = "virtio-net,romfile="' in template
     assert 'upstream_archive   = "http://ports.ubuntu.com/ubuntu-ports"' in template
 
 
