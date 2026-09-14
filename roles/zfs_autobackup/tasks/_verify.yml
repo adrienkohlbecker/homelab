@@ -38,7 +38,9 @@
       - "'connecttimeout 10' in zfs_autobackup_verify_ssh_config.stdout"
     fail_msg: "backup SSH config missing expected directives"
 
-- name: _verify | Remove the localhost backup host key fixture
+# dest.yml only scans peers absent from known_hosts, so forget localhost first
+# to drive the check/scan/register chain against the local sshd.
+- name: _verify | Forget any localhost backup peer host key
   known_hosts:
     path: /root/.ssh/known_hosts
     name: 127.0.0.1
@@ -55,6 +57,27 @@
     zfs_autobackup_sources:
       - host: box
         dest_dataset: rpool/zfs_autobackup_receive_test
+
+# The keyscan tolerates failure, so only a known_hosts lookup proves the peer
+# key was actually registered.
+- name: _verify | Backup peer host key was registered
+  command: ssh-keygen -F 127.0.0.1 -f /root/.ssh/known_hosts
+  changed_when: false
+  become: true
+
+- name: _verify | Read the receive-target container properties
+  command: zfs get -H -o value canmount,mountpoint rpool/zfs_autobackup_receive_test
+  register: zfs_autobackup_verify_receive_root
+  changed_when: false
+  become: true
+
+- name: _verify | Receive target was created as a pure container
+  assert:
+    that:
+      - zfs_autobackup_verify_receive_root.stdout_lines == ['off', 'none']
+    fail_msg: >-
+      Expected canmount=off and mountpoint=none on the receive root, got
+      {{ zfs_autobackup_verify_receive_root.stdout_lines }}
 
 - name: _verify | Exercise backup identity migration and persistence
   import_tasks: _verify_identity.yml
