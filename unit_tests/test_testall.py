@@ -21,10 +21,10 @@ def test_comma_separated_rejects_empty_values() -> None:
 
 
 def test_comma_separated_rejects_unknown_choices() -> None:
-    parse = testall._comma_separated(choices=("box", "lab"), label="machine profile")
+    parse = testall._comma_separated(choices=("lab", "minimal"), label="machine profile")
 
     with pytest.raises(argparse.ArgumentTypeError, match=r"unknown machine profile\(s\): pug"):
-        parse("box,pug")
+        parse("lab,pug")
 
 
 def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,7 +51,7 @@ def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch)
     asyncio.run(
         testall._run_role(
             1,
-            testall.TestCell("box", "noble", "test"),
+            testall.TestCell("lab", "noble", "test"),
             [],
             asyncio.Semaphore(1),
         )
@@ -67,7 +67,7 @@ def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch)
 
 class TestCancelledResult:
     def test_returns_cancelled_job(self) -> None:
-        cell = testall.TestCell("box", "noble", "nginx")
+        cell = testall.TestCell("lab", "noble", "nginx")
         assert testall._cancelled_result(cell) == testall.JobResult(cell, 0.0, 130, "")
 
 

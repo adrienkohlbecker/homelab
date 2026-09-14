@@ -46,7 +46,7 @@ stages:
     # The branch-safe cell role can only read promoted qemu bundles.
     - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "{{ target }}-cell-$CI_JOB_ID" --cache-dir
     # minimal downloads its cloud image directly and has no bundle to hydrate.
-    - if [ "${VARIANT:-box}" != "minimal" ]; then mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-noble}"; fi
+    - if [ "${VARIANT:-lab}" != "minimal" ]; then mise run ci:hydrate-qemu-images "${VARIANT:-lab}" --ubuntu "${UBUNTU:-noble}"; fi
 {% endif %}
   artifacts:
     when: on_failure
@@ -94,7 +94,7 @@ stages:
 
 # The leading stage gives the critical-path converge the first build id;
 # inherited needs:[] keeps it parallel with every cell.
-"_site_test:box":
+"_site_test:lab":
   extends: .cell
   stage: site
   # AWS uses a dedicated runner so this critical path stays uncontended.
@@ -111,7 +111,7 @@ stages:
 
 # Full-site check mode covers cross-role rendering and gates without using the
 # dedicated converge runner.
-"_site_check:box":
+"_site_check:lab":
   extends: .cell
   stage: site
   timeout: 35m

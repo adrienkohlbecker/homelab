@@ -10,7 +10,7 @@
       - zfs_autobackup_ssh_public_key | length > 0
     fail_msg: >-
       zfs_autobackup_sources must be a list of { host, dest_dataset } dicts and
-      zfs_autobackup_ssh_public_key must be a non-empty string, both in host_vars.
+      zfs_autobackup_ssh_public_key must be a non-empty string in inventory vars.
   tags:
     - zfs_autobackup
 

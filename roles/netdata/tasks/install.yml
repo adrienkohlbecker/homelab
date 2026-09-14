@@ -110,7 +110,7 @@
 # pythond, slabinfo, otel, netdata-dashboard, …), so apt resolves them. The
 # only amd64-only piece is netdata-plugin-ebpf, which simply has no arm64 build
 # and is skipped there (everything else, slabinfo included, is multi-arch), so
-# `apt install netdata` resolves on the Apple-Silicon test box too. On amd64
+# `apt install netdata` resolves on the Apple-Silicon test host too. On amd64
 # ebpf.plugin lands but stays idle (`[plugins] ebpf = no` in main.yml).
-# Verified by testrole.py netdata on the arm64 box (netdata 2.10.3).
+# Verified by testrole.py netdata on arm64 (netdata 2.10.3).
 # See notes/archive/netdata_v2_migration_analysis.md.

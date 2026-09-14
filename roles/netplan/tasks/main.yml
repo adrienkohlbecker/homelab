@@ -9,7 +9,7 @@
         that:
           - netplan is mapping
           - netplan.keys() | list | intersect(['ethernets', 'modems', 'wifis', 'bonds', 'bridges', 'vlans', 'vrfs', 'tunnels']) | length > 0
-        fail_msg: "host_vars must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see host_vars/lab.yml for the schema"
+        fail_msg: "inventory must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see group_vars/physical_lab.yml for the schema"
 
     - name: Install netplan
       apt:

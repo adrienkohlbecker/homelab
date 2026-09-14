@@ -1,10 +1,5 @@
-# _setup.yml imports nginx/test_fixture + nginx/test_authelia_stub and the _verify path
-# exercises the full nginx+Authelia front (token bypass, redacted access
-# log), so route to box_deps where nginx is pre-baked
-# (test/playbooks/build_box_deps.yml) to skip the nginx install on every test run. netdata itself
-# isn't pre-baked -- the saving is the shared nginx bringup, same as the
-# the fluentbit consumer of the same _setup pattern.
+# Minimal covers disabled optional collectors alongside the full Lab fixture.
 machines:
-  box_deps:
+  lab:
 arm:
-  - box_deps
+  - lab

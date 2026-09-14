@@ -1,5 +1,5 @@
 # Test fixture (harness-only; never runs against prod). The libvirt role
-# installs the host-native qemu emulator -- on the aarch64 test box that's
+# installs the host-native qemu emulator -- on the aarch64 test host that's
 # qemu-system-arm, not x86. _verify defines an x86_64 domain to exercise
 # virsh_backup's domain-dump path, so install the x86 emulator here and
 # let libvirt validate that XML cross-arch under TCG -- the same cross-arch

@@ -6,7 +6,7 @@
 
 # A locally-tagged leaf dataset so converge's source.yml grants zfs allow on
 # it and _verify can drive a real local backup. rpool exists on every ZFS
-# fixture (box/lab/pug); minimal has no ZFS and is excluded from this role.
+# fixture (Lab/Pug).
 - name: _setup | Create and tag a scratch dataset for backup testing
   community.general.zfs:
     name: rpool/zfs_autobackup_test

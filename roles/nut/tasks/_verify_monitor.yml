@@ -87,11 +87,11 @@
 # ---- Forced-shutdown drill ----------------------------------------------
 # End-to-end exercise of the real shutdown chain: dummy driver -> upsd ->
 # upsmon -> FSD -> SHUTDOWNCMD. SHUTDOWNCMD is first re-pointed at a marker
-# file so the box survives to assert the outcome; then the dummy UPS flips
+# file so the fixture survives to assert the outcome; then the dummy UPS flips
 # to on-battery low-battery and upsmon must declare FSD and run the
 # (re-pointed) shutdown. Destructive to the converged upsmon.conf -- fine,
-# the box is torn down afterwards.
-- name: _verify | Re-point SHUTDOWNCMD at a marker instead of halting the box
+# the fixture is torn down afterwards.
+- name: _verify | Re-point SHUTDOWNCMD at a marker instead of halting the fixture
   replace:
     path: /etc/nut/upsmon.conf
     regexp: '^SHUTDOWNCMD .*$'

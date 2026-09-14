@@ -19,7 +19,7 @@
 # Plant in new/ as getmail does, so the checks below can detect Maildir renaming.
 - name: _verify | Plant a test HTML message in the archive Maildir
   copy:
-    dest: /mnt/services/getmail/new/1700000000.muttverify.box
+    dest: /mnt/services/getmail/new/1700000000.muttverify.lab
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
     mode: "0600"
@@ -62,7 +62,7 @@
   command: /usr/bin/notmuch --config /opt/mutt/notmuch-config search --output=files id:muttverify@example.com
   register: _mutt_notmuch_path
   changed_when: false
-  failed_when: (_mutt_notmuch_path.stdout | trim) != '/mnt/services/mutt/archive/new/1700000000.muttverify.box'
+  failed_when: (_mutt_notmuch_path.stdout | trim) != '/mnt/services/mutt/archive/new/1700000000.muttverify.lab'
 
 # Exercise the operator launcher under a PTY as the Maildir owner (no become).
 # Quit through stdin: putting qq in the push buffer exits before the pager paints.
@@ -106,7 +106,7 @@
 # Browsing must leave the original filename in new/ and cur/ empty.
 - name: _verify | Planted message stays in new/ (archive never mutated)
   stat:
-    path: /mnt/services/getmail/new/1700000000.muttverify.box
+    path: /mnt/services/getmail/new/1700000000.muttverify.lab
   register: _mutt_newfile
   failed_when: not _mutt_newfile.stat.exists
   become: true

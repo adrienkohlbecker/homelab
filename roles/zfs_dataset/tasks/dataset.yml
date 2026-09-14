@@ -15,7 +15,7 @@
 # previous caller's mode/group/etc. can't bleed into the next caller
 # that doesn't explicitly override.
 #
-# When `zfs_root` is false (non-ZFS host, e.g. the `minimal` fixture) the
+# When `zfs_root` is false (the minimal fixture), the
 # dataset and its mount unit are skipped, but the mountpoint directory is
 # still created unconditionally: consumer roles bind-mount or write into that
 # path and expect it to exist regardless of the storage backend, so a plain

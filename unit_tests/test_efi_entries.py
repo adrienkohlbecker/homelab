@@ -83,7 +83,7 @@ def run_check(
     return json.loads(capsys.readouterr().out)
 
 
-# --- Single-disk (box) fixtures ------------------------------------------
+# --- Single-disk (lab) fixtures ------------------------------------------
 
 _SINGLE: dict[str, Any] = dict(
     findmnt="/dev/sda1",

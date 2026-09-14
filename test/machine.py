@@ -108,7 +108,7 @@ def _load_test_topology() -> dict:
     """Load data/network_topology.yml with the 10.123 → 10.234 gsub
     applied. The test harness always uses the test view regardless of
     which machine is selected — `test/inventory.ini` puts every
-    machine (lab/pug/box/minimal) in the [test] group, so ansible
+    machine (minimal/lab/pug) in the [test] group, so ansible
     consistently resolves `network.*` through group_vars/test.yml's
     gsub'd view. Mirror that here so the qemu user-net subnet matches.
     """
@@ -120,10 +120,10 @@ def qemu_user_net_args(machine: str) -> str:
     """Comma-prefixed extras for `-netdev user,...` that pin the VM's
     primary NIC to its topology IP via slirp's `dhcpstart=`.
 
-    Returns "" for machines absent from the topology (e.g. `minimal`),
-    leaving qemu on its default 10.0.2.0/24 user-net. Concurrent qemu
-    processes each run their own slirp, so identical net/dhcpstart
-    across cells is fine — slirps don't share state.
+    Returns "" for machines absent from the topology (minimal), leaving QEMU
+    on its default 10.0.2.0/24 user-net. Concurrent QEMU processes each run
+    their own slirp, so identical net/dhcpstart across cells is fine -- slirps
+    do not share state.
     """
     topo = _load_test_topology()
     host = topo["hosts"].get(machine)
@@ -200,7 +200,7 @@ def resolve_net_backend(qemu_binary: str) -> str:
 
 def passt_address_fields(machine: str) -> dict[str, str] | None:
     """The address/netmask/gateway that pin the guest to its topology IP, or
-    None for machines absent from the topology (e.g. `minimal`).
+    None for machines absent from the topology (minimal).
 
     Mirrors `qemu_user_net_args`' slirp dhcpstart/host pinning so roles that
     key on the host's physical address see the same value under either backend.
@@ -241,44 +241,17 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         memory_mb=2048,
         vcpus=2,
     ),
-    "box": QemuMachineSpec(
-        ssh_user="vagrant",
-        inventory_host="box",
-        # box: single-disk rpool + a 1G flat `zee` pool (second disk). The
-        # default push-CI fixture; the second pool gives it multi-pool
-        # coverage (zfs trim/mount-cache loops). Prod-faithful mirror/raidz
-        # geometry stays on the lab/pug fixtures.
-    ),
-    "box_deps": QemuMachineSpec(
-        ssh_user="vagrant",
-        inventory_host="box",
-        # box_deps: same disks/inventory as box (incl. the second `zee`
-        # disk), but the test harness pre-bakes podman, nginx + snakeoil cert,
-        # and fluent-bit via test/playbooks/build_box_deps.yml. Roles opt in
-        # via roles/<role>/meta/test.yml's `machines: {box_deps:}`. Reuses
-        # host_vars/box.yml because inventory_host stays box.
-        # 5 GiB: box_deps roles pull large container images and run them
-        # during converge (HA alone is 2.4 GB on disk, ~1 GB RSS at
-        # startup); the expanded nginx_site assert+validate chain runs
-        # concurrently with the container startup, and 4 GiB is no
-        # longer enough headroom.
-        memory_mb=5120,
-    ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="lab",
         # lab: matches the lab prod host. mdadm-EFI + mdadm-swap +
         # 3-disk mirror rpool + dozer + tank + mouse, all baked in.
-        # Promoted for CI role variants and also available for on-demand
-        # --machine lab debug + nightly + packer script regression.
+        # Default integration fixture and promoted CI image.
     ),
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="pug",
-        # pug: matches the pug prod host. Single-disk rpool + apoc
-        # mirror, all baked in. Push CI doesn't fan out to pug;
-        # kept for on-demand --machine pug + nightly + packer script
-        # regression.
+        # Pug-specific single-disk rpool + apoc mirror fixture.
     ),
 }
 
@@ -338,25 +311,6 @@ class MachineRunOptions:
     vcpus: int | None = None
     memory_mb: int | None = None
     quiet_ansible: bool = False
-
-
-def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
-    """Return any -e overlay needed on top of inventory-loaded host_vars.
-
-    For test-only inventory hosts (box, minimal) the test fixture lives
-    directly in host_vars/<host>.yml and ansible loads it naturally; no
-    extra-vars layer is needed. For variants whose inventory host
-    doubles as a prod host (lab, pug), host_vars/<host>-qemu.yml carries
-    the VM-incompatible overrides (fake netplan, no UPS,
-    test-mode macos_vm) on top of the prod-shaped host_vars/<host>.yml
-    that inventory loads; we force-load it via -e so its values beat
-    the prod host_vars regardless of merge order. qemu_test comes from
-    the test inventory group rather than being harness-injected.
-    """
-    override = Path(f"host_vars/{spec.inventory_host}-qemu.yml")
-    if not override.exists():
-        return []
-    return ["-e", f"@{override}"]
 
 
 SSH_WAIT_TIMEOUT = 120
@@ -498,7 +452,7 @@ class Machine:
         self.ssh_port = 0
         self.ssh_host = loopback_host if loopback_host is not None else _cell_loopback_host()
         self.ssh_user = spec.ssh_user
-        self.ansible_args = _qemu_ansible_args(spec)
+        self.ansible_args: list[str] = []
         self.inventory_host = spec.inventory_host
         self.machine = machine
         self.role = role
@@ -972,15 +926,12 @@ class Machine:
                 await self._ssh_master_proc.wait()
 
     async def ensure_cloud_init(self) -> None:
-        """Block until cloud-init's config/final stages finish before converge.
+        """Block until cloud-init's config and final stages finish.
 
-        ensure_ssh only waits for the sshd banner, which opens in cloud-init's
-        network stage; its config stage (apt sources, manage_etc_hosts, package
-        installs) is still running. A converge or apt call that starts before
-        that settles races cloud-init's dpkg locks and its /etc/hosts rewrite --
-        the same race packer's provision.sh closes with a cloud-init wait of its
-        own. `cloud-init status --wait` blocks through the final stage; it exits
-        non-zero on a degraded-but-complete run, so don't gate on the result.
+        SSH opens during cloud-init's network stage. Waiting here prevents the
+        first converge from racing its package locks and /etc/hosts rewrite.
+        A degraded-but-complete run may return non-zero, so the result is not a
+        gate.
         """
         await self.ssh_command("sudo", "cloud-init", "status", "--wait", check=False)
 
@@ -1334,8 +1285,7 @@ class Machine:
                 self._virtio_drive(str(disk_img)),
                 f"file={seed_img},if=virtio,format=raw",
             ]
-            # x86_64's q35 falls back to SeaBIOS off the OS disk; aarch64's
-            # `virt` boots only via UEFI, so flash is required there.
+            # x86_64 q35 can fall back to SeaBIOS; aarch64 virt requires UEFI.
             if not self.arch.bios_boot_supported:
                 self.drives += await self._uefi_drives()
         else:
@@ -1348,9 +1298,7 @@ class Machine:
 
             os_disk_paths: list[str] = []
             if self.launch.write_image:
-                # No overlay: pass the source files straight to qemu in
-                # their on-disk format. Writes persist in image_dir so
-                # the derived-image builder can publish it afterwards.
+                # No overlay: launch the explicit artifact directory in place.
                 os_disk_paths = [str(path) for path in os_src_paths]
                 drive_format = artifact_format
             else:
@@ -1364,9 +1312,8 @@ class Machine:
             shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
             self.drives += await self._uefi_drives()
 
-        # Attach pflash on variants that don't already have it (x86_64
-        # minimal BIOS) when launch.py asked for it. Every ZFS variant and
-        # aarch64 minimal already attached pflash above.
+        # Attach pflash when launch.py requested it and the selected path did
+        # not already require it (for example x86_64 minimal under SeaBIOS).
         if self.launch.with_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
 
@@ -1435,12 +1382,10 @@ class Machine:
                 time.sleep(0.5)
 
     async def _ensure_minimal_cloudimg(self) -> Path:
-        """Download (once) the Ubuntu minimal cloud image used by the `minimal` variant.
+        """Download and cache the Ubuntu minimal cloud image.
 
-        Pulls through the lab Nexus raw proxy by default; `--upstream-mirrors`
-        bypasses to cloud-images.ubuntu.com directly, as does in_aws -- an AWS
-        cell can't reach the LAN Nexus, so it fetches upstream like the converge
-        mirrors do (see format_ansible_cmd).
+        Local runs use the Nexus proxy by default; AWS cells and
+        --upstream-mirrors fetch directly from cloud-images.ubuntu.com.
         """
         name = f"ubuntu-{UBUNTU_RELEASES[self.ubuntu_name]}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img"
         cache = self.imagedir / "cloud-images"
@@ -1449,11 +1394,6 @@ class Machine:
         if target.exists():
             return target
 
-        # On the AWS pool capacity_per_instance > 1 runs many minimal cells on
-        # one host, all sharing this cache dir. Serialize the fetch on a per-image
-        # exclusive flock so the first cell downloads and the rest reuse it,
-        # instead of racing on a shared temp path. await asyncio.sleep (not
-        # time.sleep) keeps the event loop responsive while waiting on a peer.
         lockfile = cache / f"{name}.lock"
         fd = os.open(str(lockfile), os.O_RDWR | os.O_CREAT, 0o644)
         try:
@@ -1471,7 +1411,7 @@ class Machine:
                             f"concurrent cell wedged? check `lsof {lockfile}`"
                         ) from e
                     await asyncio.sleep(0.5)
-            # Re-check under the lock: a peer may have finished while we waited.
+            # A peer may have completed the download while this process waited.
             if target.exists():
                 return target
             base = (
@@ -1480,8 +1420,8 @@ class Machine:
                 else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
             )
             url = f"{base}/minimal/releases/{self.ubuntu_name}/release/{name}"
-            # Unique temp name + atomic os.replace so a stray peer temp can never
-            # be renamed out from under us (the shared-temp bug this lock fixes).
+            # A unique temporary path plus atomic replace prevents concurrent
+            # cells from publishing a partial download.
             tmp = cache / f"{name}.{os.getpid()}.tmp"
             print_line(f"Downloading {url}")
             await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
@@ -1571,10 +1511,8 @@ class Machine:
             netdev = f"stream,id=net0,server=off,addr.type=unix,addr.path={self._passt_socket}"
             return netdev, f"{self.arch.net_device},netdev=net0"
         # Ports pre-picked in prepare(). qemu_user_net_args pins the VM's eth0
-        # to network.hosts[inventory_host].physical (10.234.x test view); it's
-        # empty for machines absent from the topology (minimal -> slirp's
-        # default 10.0.2.0/24). Keyed on inventory_host (box), not machine
-        # (box_deps), because the topology indexes inventory names.
+        # to network.hosts[inventory_host].physical (10.234.x test view); it is
+        # empty for minimal, which has no topology identity.
         hostfwds = [f"hostfwd=tcp:{self.ssh_host}:{self.ssh_port}-:22"]
         for proto in ("tcp", "udp"):
             hostfwds.extend(

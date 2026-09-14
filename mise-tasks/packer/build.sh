@@ -4,7 +4,7 @@
 # The build VM and its verify boot need the pinned firmware on aarch64 hosts.
 #MISE depends=["test:firmware"]
 #USAGE arg "[sources]..." help="Source names from qemu.pkr.hcl to build; empty = all"
-#USAGE complete "sources" run="printf 'box\nlab\npug\nhetzner\n'"
+#USAGE complete "sources" run="printf 'lab\npug\nhetzner\n'"
 #USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to build multiple releases" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."

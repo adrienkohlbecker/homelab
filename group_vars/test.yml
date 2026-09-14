@@ -1,8 +1,18 @@
 qemu_test: true
 _role_under_test: "{{ _test_role_under_test }}"
 
-# EFI-stub fixtures stage their command line outside the role under test, so
-# role-local boot changes cannot reach the running kernel after a reboot.
+# Every test guest is disposable and uses the insecure fixture key. Keep these
+# environment properties independent from the selected storage image.
+journald_storage: volatile
+ssh_public_keys: |
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
+zfs_arc_min: 268435456
+zfs_arc_max: 536870912
+swap_zram_size: 3G
+
+# An EFI-stub fixture stages its kernel command line through rEFInd, outside the
+# role under test, so role-local changes cannot reach the running kernel after a
+# reboot. GRUB and x86 ZFSBootMenu fixtures apply them directly.
 qemu_boot_changes_reachable: "{{ not boot_via_efi_stub }}"
 
 # Noble's archive has enough kernel history to exercise Packer's aarch64
@@ -13,8 +23,8 @@ packer_kernel_swap_expected_by_release:
   noble: true
   resolute: false
 
-# Shared single-NIC profile for every QEMU fixture. Lab and Pug rebind netplan
-# to this value from their extra-vars overlays so it outranks prod host_vars.
+# Shared single-NIC profile for every QEMU fixture. The test inventory resolves
+# this instead of any physical host's hardware-specific netplan.
 qemu_netplan:
   ethernets:
     en:
@@ -85,7 +95,7 @@ mac_addresses:
   lab_i225p2: d2:7d:10:e0:9c:68
   game: 02:5a:f1:9c:63:2e
 
-# 6-peer test fixture (lab/pug/pom/box + fox + laptop). pom is same-site with
+# 5-peer test fixture (lab/pug/pom + fox + laptop). pom is same-site with
 # no public endpoint to exercise the topology-derived LAN endpoint; fox is
 # cross-site (hetzner) to exercise the AllowedIPs physical-/32 branch; laptop
 # is a roaming peer with no endpoint to exercise the client
@@ -96,8 +106,6 @@ wireguard_peers:
   pug:
     public_endpoint: 192.0.2.1:51823
   pom: {}
-  box:
-    public_endpoint: 192.0.2.1:51823
   fox: {}
   laptop: {}
 
@@ -139,16 +147,6 @@ wireguard_keys:
   pom:
     public_key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
     private_key: changeme
-  box:
-    public_key: box/yMi21GMzxe/6x1zhs/HPXL+LU6WlVUn1nrsmKlM=
-    private_key: !vault |
-          $ANSIBLE_VAULT;1.2;AES256;test
-          61353432323739303435633537346161356434626164633665343161653139336238303236303338
-          6335623339613164393437626563643732613961666630300a643661656235663530363932323337
-          34383362386366323561636563323230666364323438373932646639373866396566646261366463
-          3033663531653637370a383732663463303038333630326439623366343030653838636335323831
-          62393936656438393436373865643033626166313262383132306433646435393637323166306466
-          6231663565306334323561396235323165333463313364643631
   laptop:
     public_key: McpkKBvRc7Z5Akc0PZHqnN1mSnjKVXiQ1rpoPbFt3UQ=
     private_key: changeme
@@ -170,7 +168,7 @@ cloudflare_api_token: !vault |
           6639643736323136356263313032363530356631386535343463
 minio_root_password: changeme
 influxdb_root_password: changeme
-# Operator token (placeholder). Seeds the box fixture's first-boot
+# Operator token (placeholder). Seeds the integration fixture's first-boot
 # DOCKER_INFLUXDB_INIT_ADMIN_TOKEN and the in-container CLI default config;
 # _verify exercises both via the authenticated bucket.yml roundtrip.
 influxdb_root_token: testuser_sso_placeholder_token
@@ -239,7 +237,7 @@ nexus_encryption_iv: changeme
 # uses the 4G/4G/2g defaults baked into the template.
 nexus_jvm_params: -Xms512M -Xmx1G -XX:MaxDirectMemorySize=512m
 spouse_firstname: changeme
-udm_dns_failover_heartbeat_url: http://127.0.0.1:9/api/push/box-test
+udm_dns_failover_heartbeat_url: http://127.0.0.1:9/api/push/lab-test
 homeassistant_latitude: 48.5817
 homeassistant_longitude: 7.7508
 homeassistant_elevation: 140
@@ -268,11 +266,10 @@ minio_users:
           3231623966613130353632326162366364386239383665383131
 
 # Authelia portal sits at auth.<inventory_hostname>.<domain> in test
-# (auth.box.mhaf.fr for the box fixture), not the apex auth.<domain>
-# that prod uses. Cloudflare's *.box.mhaf.fr wildcard makes the
-# longer name resolvable; auth.mhaf.fr at apex is not. Session
-# cookie scope follows: .box.mhaf.fr covers every protected service
-# on box (jellyfin.box.mhaf.fr, paperless.box.mhaf.fr, etc.).
+# (auth.lab.mhaf.fr for the integration fixture), not the apex auth.<domain>
+# that prod uses. Cloudflare's *.lab.mhaf.fr wildcard makes the longer name
+# resolvable; auth.mhaf.fr at apex is not. The cookie scope follows the same
+# per-host domain.
 # Templated against inventory_hostname so the same value works for
 # any future test host.
 authelia_cookie_domain: "{{ inventory_hostname }}.{{ domain }}"
@@ -400,7 +397,7 @@ authelia_oidc_clients:
     client_name: Jellyfin
     # Same "changeme" pbkdf2 hash. Jellyfin's SSO provider is provisioned
     # via the plugin API (POST /sso/OID/Add), gated not qemu_test like
-    # gitea -- the box fixture has no Jellyfin admin/token and no Authelia,
+    # gitea -- the integration fixture has no Jellyfin admin/token and no Authelia,
     # so no provider is registered there. This row keeps the authelia
     # _verify's clients list a stable shape.
     client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
@@ -418,7 +415,7 @@ gitea_oidc_client_secret: changeme
 
 # Test-fixture user. Hash is for the password "authelia" -- the
 # canonical example hash from Authelia's docs. Tracked plaintext
-# here because box is ephemeral. Prod users live vaulted in prod.yml.
+# here because the fixture is ephemeral. Prod users live vaulted in prod.yml.
 authelia_users:
   - username: testuser
     displayname: Test User
@@ -439,7 +436,7 @@ homepage_alerts_authelia_password: homepage-alerts-test-credential-0123456789abc
 # roles/tailscale mesh-client test config. The control plane is the local
 # headscale its _setup stands up, addressed over the plain-http loopback (no TLS
 # trust needed); both key-minting and route-approval delegate back to the
-# converging host itself (tailscale_headscale_host == inventory_hostname == box).
+# converging host itself.
 # The role auto-creates the headscale user below and mints a single-use pre-auth
 # key from it at registration -- same path as prod, just pointed at the local
 # control plane.

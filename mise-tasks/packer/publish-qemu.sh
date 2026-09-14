@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-#MISE description="Build or seed a qemu fixture image and publish it to the CI image bucket"
-#USAGE arg "<machine>" help="Qemu fixture machine to publish: box, box_deps, or lab"
-#USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
+#MISE description="Build a qemu fixture image and publish it to the CI image bucket"
+#USAGE arg "<machine>" help="Qemu fixture machine to publish: lab or pug"
+#USAGE complete "machine" run="printf 'lab\npug\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default, and selects the image store"
 #USAGE flag "--build-id <build_id>" help="Immutable S3 build id; defaults inside upload-s3.py"
-#USAGE flag "--base-build-id <base_build_id>" help="Exact box build to hydrate before an aarch64 box_deps build"
 #USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build"
 #USAGE flag "--dry-run" help="Build/seed normally, then print the upload plan without writing S3"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
@@ -16,7 +15,6 @@ machine=$usage_machine
 ubuntu=$usage_ubuntu
 architecture=${usage_architecture:-$(uname -m)}
 build_id=${usage_build_id:-}
-base_build_id=${usage_base_build_id:-}
 
 case "$architecture" in
 arm64) architecture=aarch64 ;;
@@ -28,19 +26,7 @@ x86_64 | aarch64) ;;
 esac
 
 case "$machine" in
-box | lab) ;;
-box_deps)
-  if [ "$architecture" = aarch64 ]; then
-    if [ -z "$base_build_id" ]; then
-      echo "--base-build-id is required for an aarch64 box_deps build" >&2
-      exit 2
-    fi
-    if [ -z "${CI_COMMIT_SHA:-}" ]; then
-      echo "CI_COMMIT_SHA is required for an aarch64 box_deps build" >&2
-      exit 2
-    fi
-  fi
-  ;;
+lab | pug) ;;
 *)
   echo "unsupported qemu fixture machine: $machine" >&2
   exit 2
@@ -66,26 +52,13 @@ fi
 mise run packer:upload-s3 "${upload_args[@]}" --preflight
 
 case "$machine" in
-box | lab)
+lab | pug)
   mise run packer:init
   build_args=("$machine" --ubuntu "$ubuntu")
-  if [ "$machine" = box ] && [ "$architecture" = aarch64 ]; then
+  if [ "$architecture" = aarch64 ]; then
     build_args+=(--upstream)
   fi
   mise run packer:build "${build_args[@]}"
-  ;;
-box_deps)
-  if [ "$architecture" = aarch64 ]; then
-    mise run ci:hydrate-qemu-images box \
-      --ubuntu "$ubuntu" \
-      --architecture "$architecture" \
-      --build-id "$base_build_id"
-    export HOMELAB_BOX_BASE_BUILD_ID="$base_build_id"
-    export HOMELAB_BOX_BASE_SOURCE_SHA="$CI_COMMIT_SHA"
-    export HOMELAB_BOX_BASE_ARCHITECTURE="$architecture"
-    export HOMELAB_TEST_IN_AWS=true
-  fi
-  mise run test:build_box_deps --ubuntu "$ubuntu"
   ;;
 esac
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env -S uv run
 """
-Full site.yml converge on a box fixture.
+Full site.yml converge on the Lab integration fixture.
 
-Boots a box qemu fixture, prepares test-only connectivity and credentials, then
-runs the real site.yml with --limit box.
+Boots a Lab QEMU fixture, prepares test-only connectivity and credentials, then
+runs the real site.yml with --limit lab.
 Catches role-ordering and cross-role interaction bugs that per-role tests miss.
 
 --check runs the same full site.yml in ansible check mode (a dry run) instead
 of a real converge: it makes no changes, so it needs no post-converge settle or
 poweroff dance, and it exercises the whole playbook's check-mode safety (every
-box-applicable role's template rendering and check-mode gating) through the
+integration role's template rendering and check-mode gating) through the
 full-site role ladder in one pass -- something the per-role cells, each running
 one role in isolation, can't.
 
@@ -48,7 +48,7 @@ from utils import (
 POWEROFF_TIMEOUT = 120
 
 # The converge runs dozens of services on a dedicated 8-vCPU/16-GiB CI host;
-# check mode renders the same site without starting them and keeps box sizing.
+# check mode renders the same site without starting them.
 SITE_CONVERGE_OPTIONS = MachineRunOptions(vcpus=6, memory_mb=12288, quiet_ansible=True)
 SITE_CHECK_OPTIONS = MachineRunOptions(quiet_ansible=True)
 
@@ -191,7 +191,7 @@ def main() -> int:
     sweep_stale_workdirs(imagedir_for_host())
 
     m = Machine(
-        machine="box",
+        machine="lab",
         # Distinct artifact names keep simultaneous check and converge logs
         # separate; run behavior is carried explicitly by run_options.
         role="_site_check" if args.check else "_site_test",

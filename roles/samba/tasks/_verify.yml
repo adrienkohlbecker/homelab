@@ -1,7 +1,7 @@
 # Functional contract: smbd is up (nmbd is deliberately masked -- asserted
 # below), the rendered config exposes the configured share with its access
 # restriction, an authenticated client can reach it, and an anonymous client
-# cannot. The smbtest share (host_vars/box.yml, valid users = the login user,
+# cannot. The smbtest share (group_vars/integration.yml, valid users = the login user,
 # fruit:time machine = yes) is the vehicle.
 
 - name: _verify | Render a share with the default writable policy

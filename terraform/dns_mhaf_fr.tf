@@ -10,12 +10,11 @@
 locals {
   mhaf_fr_records = {
     # A — test hosts derive from the 10.234.x view of the shared topology.
-    a_box          = { type = "A", name = "box.mhaf.fr", content = local.test_network.hosts.box.physical }
+    a_lab          = { type = "A", name = "lab.mhaf.fr", content = local.test_network.hosts.lab.physical }
     a_wildcard_lab = { type = "A", name = "*.lab.mhaf.fr", content = local.test_network.hosts.lab.physical }
 
     # CNAME
-    cname_wildcard_box  = { type = "CNAME", name = "*.box.mhaf.fr", content = "box.mhaf.fr" }
-    cname_echo          = { type = "CNAME", name = "echo.mhaf.fr", content = "box.mhaf.fr", proxied = true }
+    cname_echo          = { type = "CNAME", name = "echo.mhaf.fr", content = "lab.mhaf.fr", proxied = true }
     cname_fm1_domainkey = { type = "CNAME", name = "fm1._domainkey.mhaf.fr", content = "fm1.mhaf.fr.dkim.fmhosted.com", comment = "fastmail" }
     cname_fm2_domainkey = { type = "CNAME", name = "fm2._domainkey.mhaf.fr", content = "fm2.mhaf.fr.dkim.fmhosted.com", comment = "fastmail" }
     cname_fm3_domainkey = { type = "CNAME", name = "fm3._domainkey.mhaf.fr", content = "fm3.mhaf.fr.dkim.fmhosted.com", comment = "fastmail" }

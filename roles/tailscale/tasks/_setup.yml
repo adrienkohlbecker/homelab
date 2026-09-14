@@ -1,6 +1,6 @@
-# End-to-end client test: stand up a real headscale control plane on box, then
+# End-to-end client test: stand up a real headscale control plane on Lab, then
 # let the role's `tailscale login` register against it and have the approve-routes
-# step (delegated back to box) round-trip through the live gRPC API. This proves
+# step (delegated back to Lab) round-trip through the live gRPC API. This proves
 # the full mesh-join path, not just "the package installed".
 #
 # The control server runs with a plain-http loopback server_url
@@ -48,7 +48,7 @@
 
 # Bring up the headscale control plane. server_url points at the plain-http
 # loopback listener (not the https vhost) so the client below can register
-# without trusting the box's snakeoil cert.
+# without trusting the Lab fixture's snakeoil cert.
 - name: _setup | Stand up headscale control plane
   import_role:
     name: headscale
@@ -66,9 +66,9 @@
   until: _tailscale_health.status == 200
   become: true
 
-# The role's remaining test wiring is plain group_vars/host_vars (login_server,
+# The role's remaining test wiring is plain inventory vars (login_server,
 # headscale_host, headscale_user, advertised routes/exit); main.yml mints the
 # pre-auth key from this headscale at registration, delegated to
-# tailscale_headscale_host (== box here). _setup only stands up the control
+# tailscale_headscale_host (== lab here). _setup only stands up the control
 # plane -- the per-phase process boundary means a set_fact here wouldn't reach
 # the role's apply/--check runs, which is why the mint lives in main.yml.

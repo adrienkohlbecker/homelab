@@ -53,8 +53,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
     machine_idx = cmd.index("-machine")
     assert cmd[machine_idx + 1] == "type=q35,accel=hvf,usb=on"
 
-    # Sizing flows from QemuMachineSpec; "minimal" is sized down to
-    # 2048M / 2 vcpus.
+    # Sizing flows from QemuMachineSpec; minimal is sized down.
     assert cmd[cmd.index("-smp") + 1] == "2,sockets=1,cores=2"
     assert cmd[cmd.index("-m") + 1] == "2048M"
     assert cmd[cmd.index("-cpu") + 1] == "host"
@@ -286,7 +285,7 @@ def test_passt_backend_uses_stream_netdev(
     socket, with no slirp user-net or hostfwds in the cmdline."""
     # The Darwin fixture resolves slirp; force passt + the socket prepare()
     # would set (which _setup bypasses) to exercise the passt branch.
-    m = machine_factory(host_arch="x86_64", machine="box")
+    m = machine_factory(host_arch="x86_64", machine="lab")
     _setup(m, drives=["file=disk1.raw,if=virtio"])
     m._net_backend = "passt"
     m._passt_socket = m.workdir_path / "passt.sock"
@@ -307,7 +306,7 @@ def test_passt_command_forwards_mirror_slirp_ports(
 ) -> None:
     """passt's --tcp-ports/--udp-ports forward the same three controller-side
     ports slirp hostfwds, 127.0.0.1-bound, and pin the topology address."""
-    m = machine_factory(host_arch="x86_64", machine="box")
+    m = machine_factory(host_arch="x86_64", machine="lab")
     _setup(m)
     m._net_backend = "passt"
     m._passt_socket = m.workdir_path / "passt.sock"
@@ -324,7 +323,7 @@ def test_passt_command_forwards_mirror_slirp_ports(
     # Single addr/ prefix binds the whole list (repeating it is rejected).
     assert cmd[cmd.index("--tcp-ports") + 1] == f"{machine.SSH_HOST}/2222:22,3000:32400"
     assert cmd[cmd.index("--udp-ports") + 1] == f"{machine.SSH_HOST}/4000:51820"
-    # box is in the topology (10.123 -> 10.234 test view) -> address pinned.
+    # lab is in the topology (10.123 -> 10.234 test view) -> address pinned.
     assert cmd[cmd.index("--address") + 1].startswith("10.234.")
     assert cmd[cmd.index("--gateway") + 1].startswith("10.234.")
 
@@ -332,8 +331,7 @@ def test_passt_command_forwards_mirror_slirp_ports(
 def test_passt_command_skips_address_pin_off_topology(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    """minimal isn't in the topology, so passt assigns from the container's
-    default-route interface -- no --address pin (mirrors slirp's default net)."""
+    """Minimal has no topology address, so passt uses its default route."""
     m = machine_factory(host_arch="x86_64", machine="minimal")
     _setup(m)
     m._net_backend = "passt"

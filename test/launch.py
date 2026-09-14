@@ -7,7 +7,7 @@ Ctrl-C. Pass
 --kernel/--initrd/--append to direct-boot a custom kernel against the
 variant's qcow2:
 
-  test/launch.py --machine box \\
+  test/launch.py --machine lab \\
       --kernel /tmp/zbm/vmlinux-bootmenu \\
       --initrd /tmp/zbm/initramfs-bootmenu.img \\
       --append 'earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200 zbm.show' \\
@@ -87,8 +87,8 @@ def parse_args() -> argparse.Namespace:
         "code (Homebrew / Linux distro paths) and an empty vars file sized "
         "to the code. Needed for kernels that expect EFI runtime services; "
         "direct --kernel boots and the default x86_64 minimal BIOS boot skip "
-        "UEFI firmware. No-op when pflash is already "
-        "attached (x86_64 ZFS, aarch64 minimal).",
+        "UEFI firmware. No-op when pflash is already attached (Packer images "
+        "and aarch64 minimal).",
     )
     parser.add_argument(
         "--virtfs",

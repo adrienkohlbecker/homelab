@@ -215,7 +215,7 @@
       - podman_storage_device | length > 0
     fail_msg: >-
       ZFS-root hosts require podman_storage_device (the partition or /dev/md
-      path) in host_vars; got
+      path) in their storage inventory group; got
       {{ podman_storage_device | default('<unset>') }}.
   tags:
     - podman

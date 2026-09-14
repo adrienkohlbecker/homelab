@@ -27,37 +27,14 @@ class TestQemuUserNetArgs:
 
     def test_returns_string_for_known_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
         topo = {
-            "hosts": {"box": {"physical": "10.234.0.2"}},
+            "hosts": {"lab": {"physical": "10.234.0.2"}},
             "partitions": {"physical": {"cidr": "10.234.0.0/16"}},
         }
         monkeypatch.setattr(machine, "_load_test_topology", lambda: topo)
-        result = machine.qemu_user_net_args("box")
+        result = machine.qemu_user_net_args("lab")
         assert result.startswith(",")
         assert "net=10.234.0.0/16" in result
         assert "dhcpstart=10.234.0.2" in result
-
-
-# ---------------------------------------------------------------------------
-# _qemu_ansible_args
-# ---------------------------------------------------------------------------
-
-
-class TestQemuAnsibleArgs:
-    def test_no_overlay_for_box(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        spec = machine.QemuMachineSpec(ssh_user="vagrant", inventory_host="box")
-        assert machine._qemu_ansible_args(spec) == []
-
-    def test_overlay_for_lab(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        overlay = tmp_path / "host_vars" / "lab-qemu.yml"
-        overlay.parent.mkdir(parents=True)
-        overlay.write_text("qemu_test: true\n")
-        spec = machine.QemuMachineSpec(ssh_user="vagrant", inventory_host="lab")
-        result = machine._qemu_ansible_args(spec)
-        assert len(result) == 2
-        assert result[0] == "-e"
-        assert "lab-qemu.yml" in result[1]
 
 
 # ---------------------------------------------------------------------------
@@ -184,18 +161,21 @@ class TestConstants:
 
     def test_machine_choices_tuple(self) -> None:
         assert isinstance(machine.MACHINE_CHOICES, tuple)
-        assert "box" in machine.MACHINE_CHOICES
         assert "minimal" in machine.MACHINE_CHOICES
+        assert "lab" in machine.MACHINE_CHOICES
+        assert "pug" in machine.MACHINE_CHOICES
 
     def test_qemu_specs_match_choices(self) -> None:
         assert set(machine.QEMU_MACHINE_SPECS.keys()) == set(machine.MACHINE_CHOICES)
 
     def test_only_minimal_uses_a_cloud_image(self) -> None:
         assert machine.QEMU_MACHINE_SPECS["minimal"].cloud_image is True
-        assert machine.QEMU_MACHINE_SPECS["box"].cloud_image is False
+        assert machine.QEMU_MACHINE_SPECS["lab"].cloud_image is False
+        assert machine.QEMU_MACHINE_SPECS["pug"].cloud_image is False
 
-    def test_box_deps_shares_inventory_host_with_box(self) -> None:
-        assert machine.QEMU_MACHINE_SPECS["box_deps"].inventory_host == "box"
+    def test_each_packer_machine_uses_its_inventory_host(self) -> None:
+        assert machine.QEMU_MACHINE_SPECS["lab"].inventory_host == "lab"
+        assert machine.QEMU_MACHINE_SPECS["pug"].inventory_host == "pug"
 
 
 class TestDiscoverPackerDisks:
@@ -261,7 +241,7 @@ class TestUefiDrives:
 class TestMachineUbuntuValidation:
     def test_unknown_ubuntu_raises(self, machine_factory: Callable[..., machine.Machine]) -> None:
         with pytest.raises(ValueError, match="Unknown Ubuntu release"):
-            machine_factory(machine="box", role="test", ubuntu_name="bogus")
+            machine_factory(machine="lab", role="test", ubuntu_name="bogus")
 
     def test_write_image_requires_explicit_artifact_directory(
         self, machine_factory: Callable[..., machine.Machine]
@@ -378,10 +358,10 @@ class TestAnsibleControllerStaging:
 def test_ensure_booted_reports_early_qemu_exit(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = machine_factory(machine="box", role="test")
+    m = machine_factory(machine="lab", role="test")
     m.proc = cast(asyncio.subprocess.Process, SimpleNamespace(returncode=1))
 
-    with pytest.raises(RuntimeError, match=r"qemu wrapper exited with 1.*box\.noble\.test\.boot\.ansi"):
+    with pytest.raises(RuntimeError, match=r"qemu wrapper exited with 1.*lab\.noble\.test\.boot\.ansi"):
         asyncio.run(m.ensure_booted())
 
 
@@ -424,7 +404,7 @@ class TestCellLoopbackHost:
         assert "wan_probe_host=127.5.6.7" in cmd
 
     def test_explicit_loopback_binds_hostfwds(self, machine_factory: Callable[..., machine.Machine]) -> None:
-        m = machine_factory(machine="box", loopback_host="127.5.6.7")
+        m = machine_factory(machine="lab", loopback_host="127.5.6.7")
         m.ssh_port = 2222
         m.wan_forward_ports = {"tcp": {}, "udp": {}}
         m._net_backend = "slirp"

@@ -18,7 +18,7 @@ UBUNTU_RELEASES: dict[str, str] = {
     codename: release["version"] for codename, release in _UBUNTU_CATALOG["releases"].items()
 }
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
-DEFAULT_MACHINES = ("box",)
+DEFAULT_MACHINES = ("lab",)
 
 _ROLE_META_KEYS = {"arm", "base_prerequisites", "machines", "skip", "ubuntu"}
 

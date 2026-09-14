@@ -1,4 +1,0 @@
-# Podman, nginx, and fluent-bit are pre-baked into box_deps. The imports and
-# authelia stub still run against other machine profiles.
-machines:
-  box_deps:

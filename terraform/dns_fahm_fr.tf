@@ -3,7 +3,7 @@
 # Records live in a single map and cloudflare_dns_record resource. SRV inputs
 # use a compact source map that is expanded into the common record shape.
 #
-# Map entries are keyed by an opaque slug (e.g. a_box, mx_fahm_fr_in1)
+# Map entries are keyed by an opaque slug (e.g. a_lab, mx_fahm_fr_in1)
 # and carry type/name/content explicitly in the value, so the resource
 # body is a thin pass-through with no key parsing. Adding a record:
 # pick a slug that doesn't collide and fill in type/name/content.
@@ -21,9 +21,8 @@ locals {
     # data/network_topology.yml: lab/pug/bunk resolve to their Tailscale CGNAT
     # IPs so tailnet clients reach them peer-to-peer. AdGuard split-horizon
     # overrides these at home; non-tailnet clients fail closed on unroutable
-    # CGNAT addresses. box has no stable Tailscale IP, so it stays physical.
+    # CGNAT addresses.
     a_mail = { type = "A", name = "mail.fahm.fr", content = "103.168.172.65", comment = "fastmail" }
-    a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.physical }
     a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.tailscale }
     a_fox  = { type = "A", name = "fox.fahm.fr", content = local.network.hosts.fox.tailscale }
     a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.tailscale }
@@ -42,7 +41,6 @@ locals {
     cname_fm3_domainkey          = { type = "CNAME", name = "fm3._domainkey.fahm.fr", content = "fm3.fahm.fr.dkim.fmhosted.com", comment = "fastmail" }
     cname_pdk1_domainkey_noreply = { type = "CNAME", name = "pdk1._domainkey.noreply.fahm.fr", content = "pdk1._domainkey.50bf8.dkim2.eu.mgsend.org", comment = "mailgun" }
     cname_pdk2_domainkey_noreply = { type = "CNAME", name = "pdk2._domainkey.noreply.fahm.fr", content = "pdk2._domainkey.50bf8.dkim2.eu.mgsend.org", comment = "mailgun" }
-    cname_wildcard_box           = { type = "CNAME", name = "*.box.fahm.fr", content = "box.fahm.fr" }
     cname_wildcard_bunk          = { type = "CNAME", name = "*.bunk.fahm.fr", content = "bunk.fahm.fr" }
     cname_wildcard_fox           = { type = "CNAME", name = "*.fox.fahm.fr", content = "fox.fahm.fr" }
     cname_wildcard_lab           = { type = "CNAME", name = "*.lab.fahm.fr", content = "lab.fahm.fr" }

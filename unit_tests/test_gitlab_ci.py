@@ -36,6 +36,11 @@ def test_lab_qemu_image_is_published_for_supported_releases() -> None:
         "resource_group": "qemu_image_lab_$UBUNTU",
         "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote'],
     }
+    assert pipeline["qemu_image:pug"] == {
+        "extends": ".qemu_image",
+        "resource_group": "qemu_image_pug_$UBUNTU",
+        "script": ['mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --promote'],
+    }
 
 
 def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None:
@@ -58,8 +63,8 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
 def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
     scaffold = pipeline[".qemu_image_arm"]
-    box = pipeline["qemu_image:box:arm"]
-    box_deps = pipeline["qemu_image:box_deps:arm"]
+    lab = pipeline["qemu_image:lab:arm"]
+    pug = pipeline["qemu_image:pug:arm"]
 
     assert scaffold["tags"] == ["aws-shell-qemu-arm"]
     assert scaffold["variables"]["UBUNTU"] == "noble"

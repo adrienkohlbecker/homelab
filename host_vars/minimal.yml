@@ -1,28 +1,21 @@
-# minimal: the vanilla Ubuntu cloud image test fixture. ext4, no
-# ZFS, snapd + cloud-init preinstalled. Push CI fans out to this
-# variant for roles that list `minimal:` in their machines: dict
-# in meta/test.yml — exercises GRUB paths (vs ZBM on box), cloud-init
-# cleanup, non-ZFS compression toggles, and snap removal.
+# Minimal is the vanilla Ubuntu cloud-image fixture: ext4, with snapd and
+# cloud-init preinstalled. Roles list `minimal:` in meta/test.yml to exercise
+# GRUB paths (versus ZFSBootMenu on Lab/Pug), cloud-init cleanup, non-ZFS
+# compression toggles, and snap removal without another maintained Packer image.
 qemu_test_minimal: true
 
 zfs_root: false
 zfs_trim_pools: []
 zfs_pool_properties: []
 zfs_mount_cache_datasets: []
-# Mirror fox's small-VM ARC policy (no floor, 512 MiB cap) so zfs.conf.j2
-# renders its unset-minimum branch; box sets both bounds.
+# Mirror Fox's small-VM ARC policy (no floor, 512 MiB cap) so zfs.conf.j2
+# renders its unset-minimum branch; Lab and Pug test fixtures set both bounds.
 zfs_arc_min: 0
 zfs_arc_max: 536870912
-# Volatile: VM is ephemeral; persistent journals on the ext4 root would
-# stick around across throwaway test runs for no benefit.
-journald_storage: volatile
-# Inherits empty macvlan_blocks: minimal doesn't trunk any VLANs and doesn't
-# need an L2-on-LAN presence for containers.
+# Minimal inherits empty macvlan_blocks: it does not trunk VLANs or need an
+# L2-on-LAN presence for containers.
 grub_bootloader: true
 
 # The role installs the optional kernel-module package omitted by this trimmed
 # cloud image, making minimal the zram-only fixture.
 swap_zram_size: 2G
-
-ssh_public_keys: |
-  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key

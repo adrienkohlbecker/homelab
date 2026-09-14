@@ -145,8 +145,8 @@ locals {
   # Each qemu source below has one entry. disk_sizes covers every attached disk
   # in device order; the space-delimited disks prefix becomes rpool and
   # extra_disks supplies the remaining devices to extra_pools in order.
-  # Supported layouts are "" and mirror; extra_pools accepts apoc, dozer, zee,
-  # and tank_mouse. Empty optional fields disable their feature; zfs_arc_max=0
+  # Supported layouts are "" and mirror; extra_pools accepts apoc, dozer, and
+  # tank_mouse. Empty optional fields disable their feature; zfs_arc_max=0
   # disables the cap. The source name selects qemu versus Hetzner installation.
   # Keep pug and lab explicit here to document the physical hosts in the rack.
   variant_config = {
@@ -176,24 +176,6 @@ locals {
       podman_size = "5G"
       meta_size   = "2G"
       extra_pools = "dozer tank_mouse"
-      zfs_arc_max = 0
-    }
-    # box: the default push-CI fixture. Its 1G `zee` pool exercises multi-pool
-    # loops without activating named dataset consumers; those stay on rpool.
-    # Lab retains the prod-faithful storage topology for declared role variants.
-    # box_deps is derived from box by `mise run test:build_box_deps`, which
-    # applies test/playbooks/build_box_deps.yml; it is not a Packer source.
-    # The 50G Podman partition holds the whole-fleet site's image set and
-    # fake-root storage copies; 96G leaves roughly 40G for rpool after swap.
-    box = {
-      disks       = "/dev/vdb"
-      extra_disks = "/dev/vdc"
-      disk_sizes  = ["96G", "1G"]
-      layout      = ""
-      swap_size   = "4G"
-      podman_size = "50G"
-      meta_size   = ""
-      extra_pools = "zee"
       zfs_arc_max = 0
     }
     # hetzner: ZFS-root image for Hetzner Cloud. The 40G Podman partition must
@@ -324,12 +306,6 @@ build {
 
   source "qemu.ubuntu" {
     name                 = "lab"
-    output_directory     = "${var.build_directory}/${source.name}"
-    disk_additional_size = local.variant_config[source.name].disk_sizes
-  }
-
-  source "qemu.ubuntu" {
-    name                 = "box"
     output_directory     = "${var.build_directory}/${source.name}"
     disk_additional_size = local.variant_config[source.name].disk_sizes
   }

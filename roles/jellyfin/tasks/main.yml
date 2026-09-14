@@ -311,7 +311,7 @@
 # so we let the plugin persist it (POST /sso/OID/Add) rather than seeding
 # the file. Same fingerprint-sentinel + not-qemu_test shape as roles/gitea:
 # the API needs a real Jellyfin admin token (no admin user / token exists
-# on the box fixture), and the JSON body is PascalCase to match Jellyfin's
+# on the Lab fixture), and the JSON body is PascalCase to match Jellyfin's
 # null-naming-policy, case-sensitive model binder. Roles is [] (empty =>
 # every authenticated Authelia user may sign in); AdminRoles=[admins] maps
 # the groups claim to a Jellyfin admin. See
@@ -426,7 +426,7 @@
     - jellyfin
 
 # Functional HW-transcode gate. This is the only place the real VAAPI/QSV
-# path can be exercised: box can't (phantom render node + no codec
+# path can be exercised: Lab cannot (phantom render node + no codec
 # silicon) and _verify runs only against qemu, never prod. A regression to
 # silent software fallback (e.g. the crun 0.17 device-cgroup bug that
 # denied libdrm's access(F_OK) probe) passes every stat check, so assert

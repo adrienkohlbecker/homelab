@@ -1,5 +1,5 @@
 ---
-# Host-overridable knobs. Required subnet routes live in host_vars and
+# Host-overridable knobs. Required subnet routes live in inventory vars and
 # environment-specific control-plane inputs live in group_vars/{prod,test};
 # tasks/register.yml asserts both.
 

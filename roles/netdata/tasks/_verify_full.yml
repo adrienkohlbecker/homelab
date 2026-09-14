@@ -1,6 +1,6 @@
 # Full-fixture verification of netdata_presence.chart.sh and the
 # context_liveness templates that consume netdata_contexts /
-# netdata_collectors. host_vars/box.yml seeds:
+# netdata_collectors. group_vars/integration.yml seeds:
 #   netdata_contexts:
 #     - system.cpu             (real chart, always live)
 #     - foo.does_not_exist     (never-existed chart)
@@ -114,7 +114,7 @@
 # present=1 path above only exercises 'instanced' mode (systemdunits,
 # plugin != job); 'exact' mode (plugin == job -- nvme and zfspool,
 # the dominant prod shape) and the non-go.d skip have no always-live
-# witness on the box fixture, so assert the pure derivation here.
+# witness on the Lab fixture, so assert the pure derivation here.
 # The agent-start derivation gets the same treatment: its grace-suppress
 # behavior only manifests on a prod-cadence plugin respawn, so assert
 # the derivation (pid 1 == boot epoch, unallocated pid == now fallback)

@@ -66,7 +66,7 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
         # place before make() constructs the machine below.
         monkeypatch.setattr(machine.platform, "machine", lambda: host_arch)
         kwargs: dict[str, Any] = dict(
-            machine="box",
+            machine="lab",
             role="testrole",
             keep_vm=False,
             ubuntu_name="noble",

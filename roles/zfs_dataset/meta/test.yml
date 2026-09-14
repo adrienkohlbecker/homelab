@@ -1,5 +1,5 @@
 ---
+# Minimal covers the plain-directory fallback used on non-ZFS hosts.
 machines:
-  box:
-  # Minimal exercises the plain-directory fallback used on non-ZFS hosts.
+  lab:
   minimal:

@@ -1,14 +1,14 @@
 # _setup is test-only (runs only under test/testrole.py, never against
 # prod). The real target is the UDM, whose always-on dnsmasq answers the
 # loopback healthcheck and whose firmware-persistent /data the role
-# symlinks from. On the box VM we stub just enough for the role to reach
-# its functional state: dig (UniFi OS ships it; box may not) and a dnsmasq
+# symlinks from. On the Lab VM we stub just enough for the role to reach
+# its functional state: dig (UniFi OS ships it; Lab may not) and a dnsmasq
 # on 127.0.0.1:53 so the init_fail healthcheck (dig @127.0.0.1) passes,
 # letting keepalived leave FAULT and claim the VIP. dnsmasq here is a stand
 # in for the UDM's own resolver — this role never configures dnsmasq, it
 # only rides the resolver the appliance already runs.
 # iptables is part of UniFi OS on the real UDM (it firewalls with it), so
-# the role assumes it's present. The box cloud image ships neither iptables
+# the role assumes it's present. The Lab image ships neither iptables
 # nor a resolver, so the fixture provides them — mirroring how prod roles
 # (firewall, the appliance OS) would have on the target.
 - name: _setup | Install the site-level UDM on-boot prerequisite

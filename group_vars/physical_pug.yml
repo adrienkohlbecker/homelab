@@ -1,3 +1,5 @@
+# Physical Pug host configuration. QEMU Pug fixtures inherit storage and test
+# behavior through inventory groups instead of loading these hardware settings.
 zfs_arc_min: 1073741824
 zfs_arc_max: 4294967296
 
@@ -16,10 +18,6 @@ lm_sensors_config: |
   chip "nct6798-isa-02a0"
       set temp7_max 90
       set temp7_max_hyst 85
-
-swap_partition: /dev/disk/by-partlabel/swap
-
-podman_storage_device: /dev/disk/by-partlabel/podman
 
 # zram is the primary swap; the partition above is the overflow
 # (notes/swap_strategy.md).

@@ -61,14 +61,14 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"mise-tasks/ci/.+",
 ]
 
-# Machine-wide fixtures fan out only to that machine. Pug remains an on-demand
-# fixture, so its host vars do not select CI cells.
+# Machine-wide fixtures fan out only to the image that can exercise them.
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
-    (r"host_vars/box\.yml", "box"),
-    (r"host_vars/lab\.yml", "lab"),
-    (r"host_vars/lab-qemu\.yml", "lab"),
     (r"host_vars/minimal\.yml", "minimal"),
     (r"test/minimal/.+", "minimal"),
+    (r"group_vars/integration\.yml", "lab"),
+    (r"group_vars/storage_lab\.yml", "lab"),
+    (r"group_vars/storage_pug\.yml", "pug"),
+    (r"group_vars/storage_single_rpool\.yml", "pug"),
 ]
 _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]
 
@@ -724,10 +724,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
 
     if classification.machine_universe:
         for machine in sorted(classification.machine_universe):
-            match_keys = {machine}
-            if machine == "box":
-                match_keys.add("box_deps")
-            machine_roles = [r for r in universe if match_keys & set(load_role_test_config(r).machines)]
+            machine_roles = [r for r in universe if machine in load_role_test_config(r).machines]
             log(f"machine-universe changed -> all {machine} roles: {' '.join(machine_roles)}")
             roles.update(machine_roles)
 

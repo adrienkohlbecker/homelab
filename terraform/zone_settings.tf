@@ -3,7 +3,7 @@
 # effect *today*, but the moment a future subdomain starts proxying,
 # include_subdomains=true + max_age=1y would pin every subdomain on the
 # apex to HTTPS-only for a year -- including internal lab subdomains
-# (box/bunk/pug/lab.fahm.fr -> RFC1918) that serve plain HTTP. Re-enable
+# (bunk/pug/lab.fahm.fr -> private addresses) that serve plain HTTP. Re-enable
 # per-zone deliberately when that zone's subdomain landscape is all-HTTPS.
 #
 # Keeping all 3 zones in for_each (rather than filtering down to the one

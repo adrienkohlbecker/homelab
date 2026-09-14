@@ -1,4 +1,4 @@
-# Per-VM identity. Overridden in host_vars.
+# Per-VM identity. Overridden by the physical Lab inventory group.
 macos_vm_name: chi
 macos_vm_macos_version: "15"  # Sequoia. Passed verbatim to fetch-macOS-v2.py.
 

@@ -57,12 +57,13 @@ class TestClassifyChangedFiles:
             ("data/network_topology.schema.json", True),
             ("data/architectures.yml", True),
             ("mise-tasks/ci/detect.py", True),
-            ("host_vars/lab.yml", False),
-            ("host_vars/pug.yml", False),
-            ("host_vars/box.yml", False),
-            ("host_vars/minimal.yml", False),
-            ("host_vars/lab-qemu.yml", False),
-            ("test/minimal/cloud-init.yml", False),
+            ("group_vars/integration.yml", False),
+            ("group_vars/physical_lab.yml", False),
+            ("group_vars/physical_pug.yml", False),
+            ("group_vars/physical_fox.yml", False),
+            ("group_vars/storage_lab.yml", False),
+            ("group_vars/storage_pug.yml", False),
+            ("group_vars/storage_single_rpool.yml", False),
             ("site.yml", False),
             ("group_vars/all/sub/deep.yml", False),
             ("unit_tests/test_matrix.py", False),
@@ -92,13 +93,15 @@ class TestClassifyChangedFiles:
     @pytest.mark.parametrize(
         ("path", "expected"),
         [
-            ("host_vars/box.yml", {"box"}),
-            ("host_vars/lab.yml", {"lab"}),
-            ("host_vars/lab-qemu.yml", {"lab"}),
             ("host_vars/minimal.yml", {"minimal"}),
-            ("test/minimal/cloud-init.yml", {"minimal"}),
-            ("host_vars/pug.yml", set()),
-            ("host_vars/pug-qemu.yml", set()),
+            ("test/minimal/user-data", {"minimal"}),
+            ("group_vars/integration.yml", {"lab"}),
+            ("group_vars/physical_lab.yml", set()),
+            ("group_vars/physical_pug.yml", set()),
+            ("group_vars/physical_fox.yml", set()),
+            ("group_vars/storage_lab.yml", {"lab"}),
+            ("group_vars/storage_pug.yml", {"pug"}),
+            ("group_vars/storage_single_rpool.yml", {"pug"}),
         ],
     )
     def test_machine_universe_paths(self, path: str, expected: set[str]) -> None:
@@ -136,14 +139,14 @@ class TestClassifyChangedFiles:
                 "pyproject.toml",
                 "packer/scripts/chroot.sh",
                 "roles/zfs/tasks/main.yml",
-                "host_vars/box.yml",
-                "host_vars/minimal.yml",
+                "group_vars/storage_lab.yml",
+                "group_vars/storage_pug.yml",
             ]
         )
         assert result.direct_roles == ["zfs"]
         assert result.full_universe_paths == ["mise.toml", "pyproject.toml"]
         assert result.packer_changed
-        assert result.machine_universe == {"box", "minimal"}
+        assert result.machine_universe == {"lab", "pug"}
 
 
 # ---------------------------------------------------------------------------
@@ -755,29 +758,29 @@ class TestGitlabApiCreds:
 
 class TestSortSpecsByRuntime:
     def test_longest_first(self) -> None:
-        runtimes = {"a:box": 100.0, "b:box": 300.0, "c:box": 200.0}
-        assert detect.sort_specs_by_runtime(["a:box", "b:box", "c:box"], runtimes) == [
-            "b:box",
-            "c:box",
-            "a:box",
+        runtimes = {"a:lab": 100.0, "b:lab": 300.0, "c:lab": 200.0}
+        assert detect.sort_specs_by_runtime(["a:lab", "b:lab", "c:lab"], runtimes) == [
+            "b:lab",
+            "c:lab",
+            "a:lab",
         ]
 
     def test_unmeasured_sort_first(self) -> None:
         # A spec with no recorded runtime leads, so an unmeasured (possibly long)
         # cell is never left to start last.
-        runtimes = {"measured:box": 500.0}
-        out = detect.sort_specs_by_runtime(["measured:box", "new:box"], runtimes)
-        assert out == ["new:box", "measured:box"]
+        runtimes = {"measured:lab": 500.0}
+        out = detect.sort_specs_by_runtime(["measured:lab", "new:lab"], runtimes)
+        assert out == ["new:lab", "measured:lab"]
 
     def test_ties_break_by_name(self) -> None:
-        runtimes = {"z:box": 100.0, "a:box": 100.0}
-        assert detect.sort_specs_by_runtime(["z:box", "a:box"], runtimes) == ["a:box", "z:box"]
+        runtimes = {"z:lab": 100.0, "a:lab": 100.0}
+        assert detect.sort_specs_by_runtime(["z:lab", "a:lab"], runtimes) == ["a:lab", "z:lab"]
 
     def test_empty_runtimes_is_name_order(self) -> None:
-        assert detect.sort_specs_by_runtime(["c:box", "a:box", "b:box"], {}) == [
-            "a:box",
-            "b:box",
-            "c:box",
+        assert detect.sort_specs_by_runtime(["c:lab", "a:lab", "b:lab"], {}) == [
+            "a:lab",
+            "b:lab",
+            "c:lab",
         ]
 
 
@@ -810,15 +813,15 @@ class TestCollectCellJobs:
             if base_url.endswith("/pipelines/2/jobs"):
                 # An earlier attempt and its retry; the retry (higher id) wins.
                 return [
-                    {"name": "nginx:box", "id": 20, "duration": 111},
-                    {"name": "nginx:box", "id": 21, "duration": 222},
+                    {"name": "nginx:lab", "id": 20, "duration": 111},
+                    {"name": "nginx:lab", "id": 21, "duration": 222},
                 ]
             return []
 
         monkeypatch.setattr(detect, "_gl_api_get_all", mock_get_all)
         jobs = detect._collect_cell_jobs("http://api", 1, "t", "job")
-        assert jobs["nginx:box"]["id"] == 21
-        assert jobs["nginx:box"]["duration"] == 222
+        assert jobs["nginx:lab"]["id"] == 21
+        assert jobs["nginx:lab"]["duration"] == 222
 
     def test_empty_without_test_cells_child(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
@@ -837,14 +840,14 @@ class TestCellRuntimes:
             detect,
             "_collect_cell_jobs",
             lambda *a, **k: {
-                "nginx:box": {"id": 1, "duration": 200, "status": "success"},
-                "zfs:box": {"id": 2, "duration": 50, "status": "failed"},  # failed -- dropped
-                "running:box": {"id": 3, "duration": None, "status": "running"},  # no duration
+                "nginx:lab": {"id": 1, "duration": 200, "status": "success"},
+                "zfs:lab": {"id": 2, "duration": 50, "status": "failed"},  # failed -- dropped
+                "running:lab": {"id": 3, "duration": None, "status": "running"},  # no duration
             },
         )
         logs = []
         runtimes = detect._cell_runtimes("master", logs.append)
-        assert runtimes == {"nginx:box": 200}
+        assert runtimes == {"nginx:lab": 200}
         assert any("1 recent pipeline(s)" in m for m in logs)
 
     def test_takes_median_across_pipelines(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -853,17 +856,17 @@ class TestCellRuntimes:
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: ("http://api", "t", "job"))
         monkeypatch.setattr(detect, "_recent_pipeline_ids", lambda *a, **k: [4, 3, 2])
         per_pipeline = {
-            4: {"nginx:box": {"id": 40, "duration": 100, "status": "success"}},
-            3: {"nginx:box": {"id": 30, "duration": 300, "status": "success"}},
+            4: {"nginx:lab": {"id": 40, "duration": 100, "status": "success"}},
+            3: {"nginx:lab": {"id": 30, "duration": 300, "status": "success"}},
             2: {
-                "nginx:box": {"id": 20, "duration": 1000, "status": "success"},  # outlier
-                "zfs:box": {"id": 21, "duration": 400, "status": "success"},
+                "nginx:lab": {"id": 20, "duration": 1000, "status": "success"},  # outlier
+                "zfs:lab": {"id": 21, "duration": 400, "status": "success"},
             },
         }
         monkeypatch.setattr(detect, "_collect_cell_jobs", lambda pa, pid, t, tk: per_pipeline[pid])
         runtimes = detect._cell_runtimes("master", lambda m: None)
         # median([100, 300, 1000]) == 300 -- the outlier doesn't pull it up.
-        assert runtimes == {"nginx:box": 300, "zfs:box": 400}
+        assert runtimes == {"nginx:lab": 300, "zfs:lab": 400}
 
     def test_failed_in_newest_falls_back_to_older(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A cell that failed in the newest run but passed in an older one still
@@ -871,12 +874,12 @@ class TestCellRuntimes:
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: ("http://api", "t", "job"))
         monkeypatch.setattr(detect, "_recent_pipeline_ids", lambda *a, **k: [3, 2])
         per_pipeline = {
-            3: {"nginx:box": {"id": 30, "duration": 5, "status": "failed"}},
-            2: {"nginx:box": {"id": 20, "duration": 300, "status": "success"}},
+            3: {"nginx:lab": {"id": 30, "duration": 5, "status": "failed"}},
+            2: {"nginx:lab": {"id": 20, "duration": 300, "status": "success"}},
         }
         monkeypatch.setattr(detect, "_collect_cell_jobs", lambda pa, pid, t, tk: per_pipeline[pid])
         runtimes = detect._cell_runtimes("master", lambda m: None)
-        assert runtimes == {"nginx:box": 300}
+        assert runtimes == {"nginx:lab": 300}
 
     def test_no_creds_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
@@ -1039,7 +1042,7 @@ class TestGitlabChangeMatrix:
 
 class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
-        doc = _render_child_doc(["nginx:box", "podman:box:resolute"], site_test=False)
+        doc = _render_child_doc(["nginx:lab", "podman:lab:resolute"], site_test=False)
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc["stages"] == ["test1", "test2"]
@@ -1053,20 +1056,20 @@ class TestRenderChildPipeline:
         assert "HOMELAB_TEST_AWS_REGION" not in doc[".arm_cell"]["variables"]
         # No spot retry on the qemu targets.
         assert "retry" not in doc[".cell"]
-        # nginx:box defaults to Noble; podman:box:resolute is explicit.
-        assert doc["nginx:box"]["variables"] == {"ROLE": "nginx", "VARIANT": "box", "UBUNTU": "noble"}
-        assert doc["podman:box:resolute"]["variables"] == {
+        # nginx:lab defaults to Noble; podman:lab:resolute is explicit.
+        assert doc["nginx:lab"]["variables"] == {"ROLE": "nginx", "VARIANT": "lab", "UBUNTU": "noble"}
+        assert doc["podman:lab:resolute"]["variables"] == {
             "ROLE": "podman",
-            "VARIANT": "box",
+            "VARIANT": "lab",
             "UBUNTU": "resolute",
         }
-        assert doc["nginx:box"]["extends"] == ".cell"
-        assert "_site_test:box" not in doc
-        assert "_site_check:box" not in doc
+        assert doc["nginx:lab"]["extends"] == ".cell"
+        assert "_site_test:lab" not in doc
+        assert "_site_check:lab" not in doc
         assert "no_cells" not in doc
 
     def test_cells_auto_run_by_default(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=True)
+        doc = _render_child_doc(["nginx:lab"], site_test=True)
         assert "when" not in doc[".cell"]
         assert "allow_failure" not in doc[".cell"]
 
@@ -1079,12 +1082,12 @@ class TestRenderChildPipeline:
         assert "tags" not in doc["default"]
 
     def test_site_test_job_added(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=True)
-        assert "_site_test:box" in doc
-        assert doc["_site_test:box"]["timeout"] == "60m"
-        assert "_site_check:box" in doc
-        assert doc["_site_check:box"]["timeout"] == "35m"
-        script = "\n".join(doc["_site_check:box"]["script"])
+        doc = _render_child_doc(["nginx:lab"], site_test=True)
+        assert "_site_test:lab" in doc
+        assert doc["_site_test:lab"]["timeout"] == "60m"
+        assert "_site_check:lab" in doc
+        assert doc["_site_check:lab"]["timeout"] == "35m"
+        script = "\n".join(doc["_site_check:lab"]["script"])
         assert "site_test.py --check --timeout 1800" in script
         assert "timeout --kill-after=30s 1860" in script
         assert "no_cells" not in doc
@@ -1112,8 +1115,8 @@ class TestRenderChildPipeline:
     def test_empty_gets_noop_placeholder(self) -> None:
         doc = _render_child_doc([], site_test=False)
         assert "no_cells" in doc
-        assert "_site_test:box" not in doc
-        assert "_site_check:box" not in doc
+        assert "_site_test:lab" not in doc
+        assert "_site_check:lab" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
         jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
         assert jobs == ["no_cells"]
@@ -1176,7 +1179,7 @@ class TestRenderChildPipeline:
         assert not any(name.endswith(":aarch64") for name in doc)
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=False, target="lab")
+        doc = _render_child_doc(["nginx:lab"], site_test=False, target="lab")
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["lab-shell-qemu"]
@@ -1205,10 +1208,10 @@ class TestRenderChildPipeline:
         assert "HOMELAB_CI_MINIO_ACCESS_KEY" not in joined
         assert "HOMELAB_CI_S3_ENDPOINT" not in joined
         assert "ci:hydrate-qemu-images" not in joined
-        assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
+        assert "--upstream-mirrors" not in "\n".join(doc["nginx:lab"]["script"])
 
     def test_aws_qemu_target_uses_shell_qemu_runner(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=True, target="aws_qemu")
+        doc = _render_child_doc(["nginx:lab"], site_test=True, target="aws_qemu")
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
@@ -1224,10 +1227,10 @@ class TestRenderChildPipeline:
         assert "image" not in doc[".cell"]
         assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".cell"]
-        assert doc["_site_test:box"]["extends"] == ".cell"
-        assert doc["_site_test:box"]["tags"] == ["aws-shell-qemu-site"]
-        assert doc["_site_check:box"]["extends"] == ".cell"
-        assert "tags" not in doc["_site_check:box"]
+        assert doc["_site_test:lab"]["extends"] == ".cell"
+        assert doc["_site_test:lab"]["tags"] == ["aws-shell-qemu-site"]
+        assert doc["_site_check:lab"]["extends"] == ".cell"
+        assert "tags" not in doc["_site_check:lab"]
 
         joined = "\n".join(doc[".cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
@@ -1241,38 +1244,38 @@ class TestRenderChildPipeline:
         # aws_qemu reads from AWS S3 via OIDC -- never the lab MinIO mirror.
         assert "HOMELAB_CI_MINIO_ACCESS_KEY" not in joined
         assert "HOMELAB_CI_S3_ENDPOINT" not in joined
-        assert 'mise run ci:hydrate-qemu-images "${VARIANT:-box}" --ubuntu "${UBUNTU:-noble}"' in joined
-        assert "--upstream-mirrors" not in "\n".join(doc["nginx:box"]["script"])
-        assert "--upstream-mirrors" not in "\n".join(doc["_site_test:box"]["script"])
+        assert 'if [ "${VARIANT:-lab}" != "minimal" ]; then mise run ci:hydrate-qemu-images' in joined
+        assert '"${VARIANT:-lab}" --ubuntu "${UBUNTU:-noble}"; fi' in joined
+        assert "--upstream-mirrors" not in "\n".join(doc["nginx:lab"]["script"])
+        assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab"]["script"])
 
 
 class TestEmitGitlab:
     def test_writes_child_with_cells(self, tmp_path: Path) -> None:
         child = tmp_path / "child.yml"
-        rc = detect._emit_gitlab(["nginx:box"], False, str(child), {}, lambda *_: None)
+        rc = detect._emit_gitlab(["nginx:lab"], False, str(child), {}, lambda *_: None)
         assert rc == 0
         loaded = detect.yaml.safe_load(child.read_text())
-        assert "nginx:box" in loaded
+        assert "nginx:lab" in loaded
         assert "no_cells" not in loaded
 
     def test_orders_cells_longest_first(self, tmp_path: Path) -> None:
         # The emitted cell jobs follow the sorted order: unmeasured first, then
         # the rest longest-first. The child YAML preserves that job order.
         child = tmp_path / "child.yml"
-        runtimes = {"a:box": 100.0, "b:box": 300.0}
-        detect._emit_gitlab(["a:box", "b:box", "c:box"], False, str(child), runtimes, lambda *_: None)
+        runtimes = {"a:lab": 100.0, "b:lab": 300.0}
+        detect._emit_gitlab(["a:lab", "b:lab", "c:lab"], False, str(child), runtimes, lambda *_: None)
         text = child.read_text()
-        order = [text.index(f'"{name}":') for name in ("c:box", "b:box", "a:box")]
+        order = [text.index(f'"{name}":') for name in ("c:lab", "b:lab", "a:lab")]
         assert order == sorted(order)
 
     @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
-    def test_lab_cells_kept_and_pug_cells_dropped(self, tmp_path: Path, target: str) -> None:
+    def test_lab_and_pug_cells_are_kept(self, tmp_path: Path, target: str) -> None:
         child = tmp_path / "child.yml"
-        detect._emit_gitlab(["zfs:box", "zfs:lab", "zfs:pug"], False, str(child), {}, lambda *_: None, target=target)
+        detect._emit_gitlab(["zfs:lab", "zfs:pug"], False, str(child), {}, lambda *_: None, target=target)
         loaded = detect.yaml.safe_load(child.read_text())
-        assert "zfs:box" in loaded
         assert "zfs:lab" in loaded
-        assert "zfs:pug" not in loaded
+        assert "zfs:pug" in loaded
 
     def test_full_universe_includes_declared_lab_cells(self) -> None:
         expected = {
@@ -1292,7 +1295,7 @@ class TestCmdGitlab:
         # Keep these tests offline: a real CI environment exports the GitLab API
         # vars, which would otherwise drive a live green-pipeline lookup.
         monkeypatch.setattr(detect, "_gitlab_api_creds", lambda: None)
-        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["nginx:box"])
+        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["nginx:lab"])
 
     @pytest.mark.parametrize(
         ("args", "pipeline_source", "roles"),
@@ -1317,7 +1320,7 @@ class TestCmdGitlab:
         child = tmp_path / "child.yml"
         assert detect._cmd_gitlab([*args, "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
-        assert {"nginx:box", "_site_test:box"} <= loaded.keys()
+        assert {"nginx:lab", "_site_test:lab"} <= loaded.keys()
 
     @pytest.mark.parametrize(
         ("target", "runner_tag", "in_aws"),
@@ -1358,7 +1361,7 @@ class TestCmdGitlab:
         child = tmp_path / "child.yml"
         monkeypatch.setattr("sys.argv", ["detect.py", "--all", "--child-path", str(child)])
         assert detect.main() == 0
-        assert "nginx:box" in detect.yaml.safe_load(child.read_text())
+        assert "nginx:lab" in detect.yaml.safe_load(child.read_text())
 
     def test_unknown_command_returns_2(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["detect.py", "bogus"])

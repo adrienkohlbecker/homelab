@@ -1,4 +1,4 @@
-# _verify is test-only (CLAUDE.md) and runs against the box qemu VM. It
+# _verify is test-only (CLAUDE.md) and runs against the Lab qemu VM. It
 # exercises virsh_backup end-to-end -- something site.yml never does,
 # since a fresh host has zero domains and the backup loop is a no-op.
 # Defining a throwaway TCG domain (type='qemu', so no nested KVM needed)

@@ -1,7 +1,4 @@
-# Two distinct cmdline-delivery paths: grub_bootloader=true writes
-# /etc/default/grub.d/99-consoleblank.cfg + update-grub; grub_bootloader=false
-# writes a ZFS dataset property. The minimal cell exercises the GRUB path
-# that box (ZBM-booted) never reaches.
+# Cover both ZFSBootMenu and GRUB command-line delivery.
 machines:
-  box:
+  lab:
   minimal:

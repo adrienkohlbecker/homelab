@@ -1,7 +1,7 @@
 # Functional verification of the read-only filter: the GET sections netdata's
 # docker collector needs answer 200, while write requests and denied sections
-# are blocked. The proxy fronts the host's rootful podman socket (box_deps
-# pre-bakes podman).
+# are blocked. The fixture setup installs the rootful Podman socket the proxy
+# fronts.
 - name: _verify | Create unique socket_proxy fluent-bit marker
   set_fact:
     socket_proxy_lnav_marker: "verify_socket_proxy_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"

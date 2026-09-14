@@ -1,0 +1,2 @@
+# Storage behavior unique to the physical Pug host and QEMU Pug fixtures.
+swap_partition: /dev/disk/by-partlabel/swap

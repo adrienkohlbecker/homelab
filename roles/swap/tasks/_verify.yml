@@ -96,8 +96,9 @@
 # the reason it exists -- the active-swap assert above proves it's usable but
 # not that the mirror is intact. A regression that assembled the wrong level
 # or left the array degraded would pass swapon yet silently lose fault
-# tolerance. Gated on the resolved device being an md node, so the plain
-# partition fixtures (box) skip it. (Initial-create resync may still be
+# tolerance. Gated on the resolved device being an md node, so Pug's plain
+# partition and minimal's zram-only layout skip it; Lab exercises this path.
+# (Initial-create resync may still be
 # running here -- harmless: all members are active-sync throughout, so the
 # level/failed-count asserts hold; we deliberately don't gate on 'clean' to
 # avoid racing the resync.)

@@ -54,7 +54,7 @@ resource "hcloud_primary_ip" "fox" {
 # a server-generated allocation) keeps the address stable across rebuilds so
 # the AAAA needn't churn.
 #
-# host_vars/fox.yml pins the same ::1 as headscale_derp_ipv6 (headscale cannot
+# group_vars/physical_fox.yml pins the same ::1 as headscale_derp_ipv6 (headscale cannot
 # auto-detect it behind nginx + the podman bridge) -- rotate the two together.
 resource "hcloud_primary_ip" "fox_v6" {
   name              = "fox_v6"

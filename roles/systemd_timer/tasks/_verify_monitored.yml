@@ -5,7 +5,7 @@
 #
 # Split into its own file (imported from _verify.yml) only to keep that file
 # readable -- the collector rides netdata-plugin-chartsd, which is part of
-# netdata's multi-arch 2.x repo, so this runs on the arm64 box as well as
+# netdata's multi-arch 2.x repo, so this runs on arm64 as well as
 # x86_64.
 #
 # The fixture uses an hourly OnCalendar and is stopped so systemd cannot rewrite

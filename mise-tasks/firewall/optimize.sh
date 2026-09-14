@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Operator diagnostic: run nft --optimize against a host ruleset"
-#USAGE arg "<host>" help="inventory host (e.g. lab, pug, box)"
+#USAGE arg "<host>" help="inventory host (e.g. lab or pug)"
 #USAGE complete "host" run="awk '/^\\[/{next} /^$/{next} {print $1}' hosts.ini | sort -u"
 # shellcheck disable=SC2154  # usage_host injected by mise from the #USAGE spec
 set -euo pipefail

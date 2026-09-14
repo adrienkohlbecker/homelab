@@ -52,7 +52,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
         "--machine",
         default=None,
         choices=MACHINE_CHOICES,
-        help="Machine profile to run against (default: first roles/<role>/meta/test.yml `machines:` key, else 'box')",
+        help="Machine profile to run against (default: first roles/<role>/meta/test.yml `machines:` key, else 'lab')",
     )
     parser.add_argument(
         "--keep",
@@ -152,8 +152,8 @@ async def run_test(
             await m.ensure_ssh()
             print_line("SSH up")
 
-            # The vanilla cloud image runs cloud-init's config/final stages
-            # after sshd comes up, so settle it before changing packages.
+            # SSH opens before the vanilla cloud image finishes cloud-init, so
+            # settle it before touching packages or /etc/hosts.
             if m.machine == "minimal":
                 await m.ensure_cloud_init()
 

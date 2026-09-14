@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="ZBM smoke test: drive the serial menu and assert boot-environment handoff"
 # Exercises the ZBM recovery loop end-to-end with no terminal:
-# direct-boot the ZBM kernel + initrd against the box variant's packer image,
+# direct-boot the ZBM kernel + initrd against the Lab Packer image,
 # wait for the menu on the captured serial log, select the default boot
 # environment through the serial console, and assert the guest kexecs all the
 # way to its login prompt.
@@ -74,7 +74,7 @@ done
 base_cmdline=$(cat "${workdir}/cmdline")
 
 HOMELAB_NET_BACKEND=slirp "${repo_root}/test/launch.py" \
-  --machine box \
+  --machine lab \
   --kernel "$workdir"/vmlin*-bootmenu \
   --initrd "${workdir}/initramfs-bootmenu.img" \
   --append "$base_cmdline loglevel=7 zbm.show" \
@@ -105,7 +105,7 @@ wait_for() {
 
 menu_up() { LC_ALL=C grep -aq "Boot Environments" "$boot_log"; }
 wait_for 180 "the ZFSBootMenu menu on the serial console" menu_up
-echo "PASS: ZBM menu rendered and imported the box rpool"
+echo "PASS: ZBM menu rendered and imported the Lab rpool"
 
 printf '\r' >&3
 boot_started() { LC_ALL=C grep -aq "Booting " "$boot_log"; }

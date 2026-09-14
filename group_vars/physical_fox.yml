@@ -1,11 +1,14 @@
+# Physical Fox host configuration. Fox shares its single-rpool storage
+# substrate with Pug but keeps Hetzner-specific behavior in this group.
+#
 # fox: off-home Hetzner Cloud cpx22 VPS (x86_64, Ubuntu 24.04/noble) running
 # the Headscale control plane + embedded DERP for the Tailscale mesh. It is
 # the ONLY internet-facing host; the home hosts dial outbound to it.
 #
 # fox is NOT a home host -- no home LAN/VLANs (it sits on its own
 # Hetzner private net, the `hetzner` topology site, at 10.123.55.2) -- so it
-# runs a curated minimal role set (the dedicated `fox` play in site.yml),
-# excluded from the all:!bunk base plays. It DOES join the wg0 backbone (scoped:
+# runs a curated role set through semantic inventory groups rather than the home
+# service groups. It DOES join the wg0 backbone (scoped:
 # peer host /32s only: each server peer's wg /32 plus the physical /32 for
 # cross-site peers), which lets fox reach lab/pug services at their LAN IPs
 # without routing whole home subnets. Provisioned by terraform/hetzner.tf;
@@ -166,11 +169,6 @@ netdata_collectors:
   # gitlab_runner scrape goes missing (its config.toml metrics endpoint dies).
   - go.d:collector:prometheus:gitlab_runner
   - go.d:collector:zfspool:zfspool
-
-# The Hetzner image carves this rebuild-only partition before rpool. Persistent
-# service state remains under /mnt/services; this ext4 filesystem carries only
-# reconstructible images and container layers.
-podman_storage_device: /dev/disk/by-partlabel/podman
 
 # Process-wide safety ceiling across the AWS runner blocks. Actual work remains
 # bounded by each runner's limit and the AWS Spot quota; fox only holds their

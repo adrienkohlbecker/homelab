@@ -78,19 +78,19 @@
           log: headscale-latency-drop
           method: GET
           path: /derp/latency-check
-          server_name: headscale.box.example
+          server_name: headscale.lab.example
           status: 200
         - _tag: nginx.access
           log: headscale-latency-failure
           method: GET
           path: /derp/latency-check
-          server_name: headscale.box.example
+          server_name: headscale.lab.example
           status: 503
         - _tag: nginx.access
           log: headscale-nearby-path
           method: GET
           path: /derp/latency-check/details
-          server_name: headscale.box.example
+          server_name: headscale.lab.example
           status: 200
       expected:
         - message: headscale-valid

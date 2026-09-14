@@ -1,13 +1,12 @@
 # Release-divergent install paths: the default noble cell keeps the iptables
 # compatibility package; resolute uses netavark's native nftables driver.
 #
-# Storage coverage: box uses a dedicated raw ext4 partition, minimal stays on
-# the root filesystem, and lab exercises the three-member mdadm raid5 device.
-# All declared variants run in CI.
+# Lab exercises mdadm RAID5 storage, Pug a labelled raw partition, and minimal
+# the root-filesystem fallback.
 machines:
-  box:
-  minimal:
   lab:
+  pug:
+  minimal:
 ubuntu:
   - resolute
 skip:

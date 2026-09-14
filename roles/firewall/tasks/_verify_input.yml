@@ -382,8 +382,8 @@
 
 # The other half of the flag: a host outside the VRRP election must render no
 # accept for peer VRRP and no VIP silence rules, so a compromised LAN device
-# cannot forge a high-priority advertisement at it. The `minimal` fixture is the
-# only cell that reaches this branch, hence its coverage of the suppressed path.
+# cannot forge a high-priority advertisement at it. Minimal reaches this
+# branch, covering the suppressed path.
 - name: _verify_input | INPUT — VRRP and VIP rules absent where VRRP is disabled
   vars:
     vrrp_rules: "{{ _firewall_nft_ruleset_scope.stdout | nft_rules_by_counter(item) }}"

@@ -34,7 +34,7 @@ def _args(**overrides: object) -> argparse.Namespace:
         "architecture": "x86_64",
         "bucket": "homelab-ci-images",
         "build_id": "ci-42-gdeadbeef0000",
-        "machine": "box",
+        "machine": "lab",
         "region": "eu-central-1",
         "source_sha": "d" * 40,
         "ubuntu": "noble",
@@ -142,7 +142,7 @@ class TestPointerBody:
         # sort_keys=True, indent=2
         assert body == (
             '{\n  "architecture": "x86_64",\n  "build_id": "ci-42-gdeadbeef0000",\n'
-            '  "machine": "box",\n  "rollback_build_ids": [\n    "previous"\n  ],\n'
+            '  "machine": "lab",\n  "rollback_build_ids": [\n    "previous"\n  ],\n'
             f'  "source_sha": "{"d" * 40}",\n  "ubuntu": "noble"\n}}\n'
         )
 
@@ -752,7 +752,7 @@ class TestResolveImage:
             "architecture": "x86_64",
             "bucket": "homelab-ci-images",
             "build_id": None,
-            "machine": "box",
+            "machine": "lab",
             "region": "eu-central-1",
             "ubuntu": "noble",
         }
@@ -761,7 +761,7 @@ class TestResolveImage:
         return hydrate.resolve_image(args)
 
     def test_reads_build_id_from_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="box", ubuntu="noble"), ["ci-7-gabc"])
+        body = upload.pointer_body(_args(build_id="ci-7-gabc", machine="lab", ubuntu="noble"), ["ci-7-gabc"])
         assert self._resolve(monkeypatch, body) == hydrate.ImageSelection("ci-7-gabc", "d" * 40)
 
     def test_reads_arm_pointer_from_selected_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -816,7 +816,7 @@ class TestResolveImage:
         with pytest.raises(SystemExit, match="architecture mismatch"):
             self._resolve(monkeypatch, body, architecture=architecture)
 
-    @pytest.mark.parametrize(("field", "value"), [("machine", "box_deps"), ("ubuntu", "resolute")])
+    @pytest.mark.parametrize(("field", "value"), [("machine", "pug"), ("ubuntu", "resolute")])
     def test_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch, field: str, value: str) -> None:
         body = upload.pointer_body(_args(**{field: value}), ["ci-42-gdeadbeef0000"])
         with pytest.raises(SystemExit, match=f"{field} mismatch"):

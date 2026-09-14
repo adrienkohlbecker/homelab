@@ -130,7 +130,7 @@
 # host appears in a peer's keepalive_from. Assert the live count of peers with a
 # keepalive interval matches that membership -- guards the per-pair condition
 # from regressing to per-peer (which would force a heartbeat on mobile peers).
-# On box no peer lists box, so the expected count is 0.
+# No configured peer lists the Lab fixture, so the expected count is 0.
 - name: _verify | Assert persistent-keepalive matches keepalive_from membership
   vars:
     expected_keepalive_count: "{{ wireguard_peers | dict2items | selectattr('value.keepalive_from', 'defined') | map(attribute='value.keepalive_from') | select('contains', inventory_hostname) | list | length }}"

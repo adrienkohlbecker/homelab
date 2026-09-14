@@ -1,3 +1,0 @@
-# _setup.yml uses Podman and nginx, both pre-baked in box_deps.
-machines:
-  box_deps:

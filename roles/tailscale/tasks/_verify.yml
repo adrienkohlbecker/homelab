@@ -55,7 +55,7 @@
   changed_when: false
   become: true
 
-- name: _verify | Local preferences match host_vars
+- name: _verify | Local preferences match inventory vars
   vars:
     _prefs: "{{ _tailscale_prefs.stdout | from_json }}"
   assert:

@@ -1,5 +1,5 @@
 # _verify is test-only by contract (runs only under test/testrole.py against
-# the box VM). It exercises the role's load-bearing invariants on the live
+# the Lab VM). It exercises the role's load-bearing invariants on the live
 # host:
 #
 #   * keepalived validates, leaves init_fail FAULT once the loopback
@@ -8,9 +8,9 @@
 #   * Restarting the on-boot framework leaves keepalived active without a
 #     restart and with the VIP still held — proving recovery is non-disruptive.
 #
-# box is alone (its peers lab/pug aren't on the bridge), so it reaches
+# Lab is alone (its peers are not on the bridge), so it reaches
 # MASTER — unlike the real UDM, which sits BACKUP behind them. That's the
-# point: the box test drives the VIP-claim mechanism this role exists for.
+# point: the Lab test drives the VIP-claim mechanism this role exists for.
 
 - name: _verify | Load production defaults for a physical UDM
   include_vars:

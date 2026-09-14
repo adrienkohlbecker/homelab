@@ -48,8 +48,8 @@
 # disabled, update-initramfs no-op), either path is absent and this
 # fails.
 #
-# The minimal cloud fixture boots a pre-baked initrd outside /boot. Every
-# deployment-shaped host must provide the per-kernel initrd inspected here.
+# Minimal boots a pre-baked initrd outside /boot. Deployment-shaped fixtures
+# provide the per-kernel initrd inspected here.
 - name: _verify | List current kernel's initrd contents
   when: not qemu_test_minimal
   command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}

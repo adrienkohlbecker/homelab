@@ -5,7 +5,7 @@
   tags:
     - gitlab_runner
   block:
-    # Required inputs live in host_vars; reject empty rendered vault values.
+    # Required inputs live in inventory vars; reject empty rendered vault values.
     - name: Assert a runner backend is configured
       assert:
         that:

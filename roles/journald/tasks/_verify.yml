@@ -7,7 +7,7 @@
 # Why not assert against /var/log/journal/<machine-id>/ existence: the
 # directory is created lazily on first persistent write but never torn
 # down on a mode flip, so its presence is uncorrelated with the *current*
-# Storage= mode (box's packer image keeps it from an earlier build).
+# Storage= mode (the Lab Packer image keeps it from an earlier build).
 
 - name: _verify | Render persistent ext4 and ZFS journal configs
   template:

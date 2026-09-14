@@ -15,7 +15,7 @@ BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
 MANIFEST_VERSION = 2
 POINTER_NAME = "promoted.json"
-VALID_MACHINES = {"box", "box_deps", "lab"}
+VALID_MACHINES = {"lab", "pug"}
 ARCHITECTURES: dict[str, Any] = yaml.safe_load(
     (Path(__file__).resolve().parents[2] / "data" / "architectures.yml").read_text()
 )

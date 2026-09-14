@@ -5,10 +5,8 @@
     name: podman
     tasks_from: install
 
-# Force a valid ruleset drift on the full fixture so converge exercises the
-# live reload, auto-revert scheduling, cancellation, and snapshot promotion
-# path. Leave nftables inactive on minimal so the same canonical matrix also
-# exercises the first-install path without an eligible rollback target.
+# Force a valid ruleset drift on full fixtures so converge exercises live
+# reload and rollback. Minimal remains inactive to cover first installation.
 - name: _setup | Prepare the live reload exercise
   when: not (qemu_test_minimal | default(false))
   block:

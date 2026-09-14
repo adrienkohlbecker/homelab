@@ -26,7 +26,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 mise trust && mise install
 mise run ansible --limit lab --tags nginx --check
 mise run tf plan
-mise run packer:build box
+mise run packer:build lab
 mise run test:role -- nginx
 mise run test
 mise run lint

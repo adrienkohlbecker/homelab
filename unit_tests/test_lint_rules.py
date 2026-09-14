@@ -87,7 +87,7 @@ class TestRequireNamedRoleEntrypoint:
     def test_static_fixture_requires_tasks_from(self) -> None:
         result = RequireNamedRoleEntrypoint().matchtask(
             _task("import_role", {"name": "apt"}),
-            Lintable("test/playbooks/build_box_deps.yml"),
+            Lintable("test/playbooks/_environment.yml"),
         )
         assert result == "static test fixture role imports must set `tasks_from:`"
 

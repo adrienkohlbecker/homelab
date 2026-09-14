@@ -2,6 +2,6 @@
 # cell. resolute adds no distinct template branch; it covers the role against
 # the newer nut runtime the next prod release will carry.
 machines:
-  box:
+  lab:
 ubuntu:
   - resolute

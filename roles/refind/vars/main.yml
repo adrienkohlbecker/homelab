@@ -1,7 +1,7 @@
 ---
 # rEFInd EFI binary + firmware-fallback names, keyed by arch. The refind package
 # ships the arch's binary under /usr/share/refind/refind/; x64 on Intel/AMD, aa64
-# on arm64 (the test box).
+# on the arm64 test host.
 refind_efi_binary: "{{ 'refind_aa64.efi' if ansible_architecture == 'aarch64' else 'refind_x64.efi' }}"
 refind_fallback_binary: "{{ 'BOOTAA64.EFI' if ansible_architecture == 'aarch64' else 'BOOTX64.EFI' }}"
 

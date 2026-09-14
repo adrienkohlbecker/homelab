@@ -190,7 +190,7 @@ qemu_host_ami:
 # and promote versioned bundles plus promoted.json pointers to S3 for AWS cells.
 # Promotion is global but verify-boots first, retains prior S3 versions, and
 # prints rollback instructions. Per-machine/release resource groups serialize
-# only builds that share an output path and pointer; box_deps still needs box.
+# only builds that share an output path and pointer.
 .qemu_image:
   stage: prepare
   extends: .protected_manual_job
@@ -215,17 +215,6 @@ qemu_host_ami:
   after_script:
     - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
 
-"qemu_image:box":
-  extends: .qemu_image
-  # A failed box must block box_deps rather than seed from an older publication.
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      allow_failure: false
-  resource_group: qemu_image_box_$UBUNTU
-  script:
-    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --promote
-
 "qemu_image:lab":
   extends: .qemu_image
   rules:
@@ -236,22 +225,11 @@ qemu_host_ami:
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
 
-# box_deps layers seed_deps.yml onto the matching box artifact in lab's shared
-# HOMELAB_CI_DIR; the explicit need prevents using an older box.
-"qemu_image:box_deps":
+"qemu_image:pug":
   extends: .qemu_image
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-  resource_group: qemu_image_box_deps_$UBUNTU
+  resource_group: qemu_image_pug_$UBUNTU
   script:
-    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --promote
-  # Pair releases; artifacts stay in HOMELAB_CI_DIR rather than GitLab.
-  needs:
-    - job: "qemu_image:box"
-      parallel:
-        matrix:
-          - UBUNTU: [ '$[[ matrix.UBUNTU ]]' ]
-      artifacts: false
+    - mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --promote
 
 # Build native aarch64 fixtures on the Frankfurt ARM pool. Every mutable path is
 # job-local on the ephemeral instance-store-backed checkout. This reduces
@@ -285,26 +263,23 @@ qemu_host_ami:
   after_script:
     - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
 
-"qemu_image:box:arm":
+"qemu_image:lab:arm":
   extends: .qemu_image_arm
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: false
-  resource_group: qemu_image_box_aarch64_$UBUNTU
+  resource_group: qemu_image_lab_aarch64_$UBUNTU
   script:
-    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --promote
+    - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-lab-$UBUNTU" --promote
 
-"qemu_image:box_deps:arm":
+"qemu_image:pug:arm":
   extends: .qemu_image_arm
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
-  resource_group: qemu_image_box_deps_aarch64_$UBUNTU
+  resource_group: qemu_image_pug_aarch64_$UBUNTU
   script:
-    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --architecture aarch64 --base-build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU" --promote
-  needs:
-    - job: "qemu_image:box:arm"
-      artifacts: false
+    - mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-pug-$UBUNTU" --promote
 
 # Build fox's ZFS-root disk on lab, stream it through a temporary Hetzner rescue
 # server, and retain the two newest snapshots. The published project-global

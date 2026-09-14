@@ -64,15 +64,15 @@ def test_podman_health_wget_renders_get_probe_to_dev_null() -> None:
 def test_authelia_redirects_to_checks_status_auth_host_and_rd() -> None:
     result = {
         "status": 302,
-        "location": "https://auth.box.example.test/?rd=https://bazarr.box.example.test",
+        "location": "https://auth.lab.example.test/?rd=https://bazarr.lab.example.test",
     }
-    assert homelab_tests.authelia_redirects_to(result, "bazarr", "box", "example.test")
-    assert not homelab_tests.authelia_redirects_to(result, "radarr", "box", "example.test")
+    assert homelab_tests.authelia_redirects_to(result, "bazarr", "lab", "example.test")
+    assert not homelab_tests.authelia_redirects_to(result, "radarr", "lab", "example.test")
 
 
 def test_authelia_redirects_to_can_skip_rd_check() -> None:
-    result = {"status": 302, "location": "https://auth.box.example.test/"}
-    assert homelab_tests.authelia_redirects_to(result, "kuma", "box", "example.test", require_rd=False)
+    result = {"status": 302, "location": "https://auth.lab.example.test/"}
+    assert homelab_tests.authelia_redirects_to(result, "kuma", "lab", "example.test", require_rd=False)
 
 
 def test_host_vlan_block_derives_slot_indexed_subnet() -> None:
@@ -84,13 +84,13 @@ def test_host_vlan_block_derives_slot_indexed_subnet() -> None:
         "hosts": {
             "lab": {"site": "home", "slot": 0},
             "pug": {"site": "home", "slot": 1},
-            "box": {"site": "home", "slot": 3},
+            "node": {"site": "home", "slot": 3},
             "bunk": {"site": "remote", "slot": 0},
         },
     }
     assert homelab.host_vlan_block(network, "lab", "management") == "10.123.0.128/28"
     assert homelab.host_vlan_block(network, "pug", "management") == "10.123.0.144/28"
-    assert homelab.host_vlan_block(network, "box", "iot") == "10.123.4.176/28"
+    assert homelab.host_vlan_block(network, "node", "iot") == "10.123.4.176/28"
     assert homelab.host_vlan_block(network, "bunk", "management") == "10.124.0.128/28"
 
 

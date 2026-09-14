@@ -2,7 +2,7 @@
 # Run automatically by test/testrole.py after the role-apply +
 # idempotence passes. Add new assertions here as packer code grows.
 
-# --- ESP fundamentals (universal across box / lab / pug) ---
+# --- ESP fundamentals (universal across Lab and Pug) ---
 
 - name: _verify | Required boot artifacts are present and non-empty
   vars:

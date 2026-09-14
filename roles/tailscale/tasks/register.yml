@@ -11,7 +11,7 @@
     fail_msg: >-
       tailscale registration needs tailscale_login_server, tailscale_headscale_host
       and tailscale_headscale_user (group_vars/{prod,test}) plus non-empty
-      tailscale_advertise_routes (host_vars, e.g. ["10.123.0.0/21"]).
+      tailscale_advertise_routes in inventory vars (e.g. ["10.123.0.0/21"]).
       The pre-auth key is minted on-the-fly from the control plane at registration
       time, so there's no vaulted long-lived key to set.
   tags:

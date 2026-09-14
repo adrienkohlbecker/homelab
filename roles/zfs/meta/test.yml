@@ -1,7 +1,6 @@
-# box exercises multi-pool trim-timer creation and mount-cache generation;
-# lab exercises the prod tank special-vdev contract.
+# Lab exercises the multi-pool and tank special-vdev contracts; Pug exercises
+# the single-root-pool plus apoc layout. Minimal covers non-root ZFS.
 machines:
-  box:
   lab:
-  # Minimal boots from ext4 and exercises the supported non-root-ZFS path.
+  pug:
   minimal:

@@ -1,3 +1,0 @@
-# Keep the fixture ready for future Podman-backed service retirements.
-machines:
-  box_deps:

@@ -4,7 +4,7 @@
 # service plays below are host-scoped and assume the full platform is already in
 # place. See CLAUDE.md "Role layering" for the rule on where a new role belongs.
 - name: Base machine install
-  hosts: box,lab,pug,fox
+  hosts: base_hosts
   roles:
     # Host base -- OS, networking, remote access, system services. Apt first
     # establishes package and deb822 tooling for every role below it.
@@ -48,15 +48,14 @@
 
 # Services -- host-scoped, built on the platform above. A role belongs here
 # (not in Base machine install) when only a subset of hosts run it.
-- name: External VPS (fox)
-  # Box exercises fox-only services in the integration fixture.
-  hosts: box,fox
+- name: External VPS services
+  hosts: external_services
   roles:
     - headscale
     - gitlab_runner
 
 - name: Lab storage datasets
-  hosts: box,lab
+  hosts: lab_storage_hosts
   roles:
     # Storage dataset producers -- placed before the apps that mount
     # /mnt/{scratch,data,media}.
@@ -65,7 +64,7 @@
     - media
 
 - name: Lab and Pug
-  hosts: box,lab,pug
+  hosts: home_hosts
   roles:
     - firewall
     - hd_idle
@@ -85,12 +84,12 @@
 
 - name: Tailscale mesh
   # Run once after fox's Headscale control plane and the home routers' firewalls.
-  hosts: box,fox,lab,pug
+  hosts: mesh_hosts
   roles:
     - tailscale
 
 - name: Lab roles
-  hosts: box,lab
+  hosts: lab_services
   roles:
     - samba
     - libvirt
@@ -120,12 +119,12 @@
     - homepage
 
 - name: Lab CI runner
-  hosts: lab
+  hosts: lab_runner_hosts
   roles:
     - gitlab_runner
 
 - name: MacOS VM
-  hosts: lab
+  hosts: macos_vm_hosts
   roles:
     - macos_vm
 
@@ -141,13 +140,13 @@
     - udm_wol_relay
 
 - name: Decomission services
-  hosts: box,lab,pug,fox
+  hosts: base_hosts
   roles:
     # Keep this role as scaffolding for future service retirements.
     - retired_services
 
 - name: Reboot check
-  hosts: box,lab,pug,fox
+  hosts: base_hosts
   tags:
     - always
   # serial: 1 reboots the fleet one host at a time. The reboot helper

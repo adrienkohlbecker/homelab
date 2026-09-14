@@ -1,9 +1,7 @@
-# Removes /etc/netplan/50-cloud-init.yaml and installer-generated configs,
-# which only exist on the vanilla cloud image (minimal). Box starts with
-# a clean netplan state from packer. Resolute exercises Netplan 1.2 transaction
-# rollback and DNS recovery after SSH returns.
+# Resolute exercises Netplan 1.2 transaction rollback and DNS recovery after
+# SSH returns.
 machines:
-  box:
+  lab:
   minimal:
 ubuntu:
   - resolute

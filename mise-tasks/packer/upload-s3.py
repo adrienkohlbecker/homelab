@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # fmt: off
 #MISE description="Bundle a published packer qemu artifact and upload it to the S3 image bucket"
-#USAGE arg "<machine>" help="Packer source/artifact name: box, box_deps, or lab"
-#USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
+#USAGE arg "<machine>" help="Packer source/artifact name: lab or pug"
+#USAGE complete "machine" run="printf 'lab\npug\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default, and selects the image store"

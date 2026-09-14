@@ -1,6 +1,6 @@
-# minimal exercises zram-only installation from a trimmed cloud kernel; box
-# adds raw-partition swapon/fstab; lab exercises mdadm raid1 swap.
+# Lab exercises mdadm RAID1 swap, Pug a labelled raw partition, and minimal
+# zram-only installation.
 machines:
-  box:
-  minimal:
   lab:
+  pug:
+  minimal:

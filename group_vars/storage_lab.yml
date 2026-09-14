@@ -1,0 +1,24 @@
+# Storage topology shared by the physical Lab host and QEMU Lab fixtures.
+zfs_trim_pools:
+  - rpool
+  - dozer
+  - tank
+# mouse is omitted because its HDD leaves do not support trim. Tank remains in
+# the schedule because its NVMe special vdev does.
+zfs_pool_properties:
+  - { pool: rpool, name: autotrim, value: "on" }
+  - { pool: dozer, name: autotrim, value: "on" }
+  - { pool: tank, name: autotrim, value: "on" }
+zfs_mount_cache_datasets:
+  - rpool/ROOT/{{ ansible_distribution_release }}
+  - dozer/minio
+  - tank/data
+zfs_dozer_filesystem: dozer
+zfs_tank_filesystem: tank
+
+swap_partition: /dev/md/swap
+
+# Three-member mdadm RAID5. The Podman role verifies the ext4 geometry against
+# the live array topology.
+podman_storage_device: /dev/md/podman
+podman_storage_raid: true

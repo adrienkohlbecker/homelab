@@ -241,7 +241,7 @@ pollfreq = 15
 # raises its hardware LB around 5% charge, and the thresholds are per-host on
 # purpose: each host runs its own driver+upsd against the same UPS, so these
 # overrides ARE the staged-shutdown ladder (defaults 20%/300s; pug rides to
-# 5%/180s -- see roles/nut/defaults/main.yml and host_vars/pug.yml).
+# 5%/180s -- see roles/nut/defaults/main.yml and group_vars/physical_pug.yml).
 ignorelb
 override.battery.charge.low = {{ nut_battery_charge_low }}
 override.battery.runtime.low = {{ nut_battery_runtime_low }}

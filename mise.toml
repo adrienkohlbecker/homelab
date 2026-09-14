@@ -36,7 +36,7 @@ HCLOUD_TOKEN_OP = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 HOMELAB_CI_DIR = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/scratch/homelab_ci{% endif %}'
 # x86_64 (prod hosts + CI) stays pinned to the known-good 3.0.1/linux6.1
 # recovery line while lab kexec failures with newer ZBM kernels are
-# investigated. The aarch64 Mac test box -- the only arm builder, and not a
+# investigated. The aarch64 Mac test host -- the only arm builder, and not a
 # prod target -- tracks 3.1.0/linux6.18: v3.0.1's generate-zbm knows only the
 # x86_64 UEFI stub location, so forcing EFI output on aarch64 fails there;
 # v3.1.0 selects the stub by arch.

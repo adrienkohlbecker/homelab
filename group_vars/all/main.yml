@@ -39,7 +39,7 @@ zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
 # The rpool/ROOT/<release> entry is templated so it tracks the host's own
 # Ubuntu release -- a noble host mounts rpool/ROOT/noble -- without needing a
-# per-host override at each release migration. Matches the box fixture's
+# per-host override at each release migration. Matches the Lab fixture's
 # templated entry.
 zfs_mount_cache_datasets:
   - rpool/ROOT/{{ ansible_distribution_release }}
@@ -62,7 +62,7 @@ cloud_init_managed: false
 # Filter chain:
 #   name prefix    excludes md/dm/loop/sr/ram/zd kernel pseudo block
 #                  devices, which can report rotational=1 but have
-#                  nothing to spin (observed on box's mdadm-EFI/swap).
+#                  nothing to spin (observed on Lab's mdadm-EFI/swap).
 #                  ansible_devices' `virtual` field looks like it
 #                  should discriminate this, but on modern kernels
 #                  /sys/block/<x> is always a symlink and ansible's
@@ -155,7 +155,7 @@ service_ports:
   # headscale control-plane HTTP, loopback-published; nginx fronts it on 443.
   # Only the host-side --publish maps to this; the container's own listener
   # stays on 8080 (config.yaml listen_addr). The host port is deliberately
-  # NOT 8080: on the all-in-one box fixture headscale and sabnzbd co-locate,
+  # NOT 8080: on the all-in-one Lab fixture headscale and sabnzbd co-locate,
   # and sabnzbd already publishes 127.0.0.1:8080, so a shared host port would
   # collide there (prod never co-locates them).
   headscale: 8085
@@ -262,8 +262,6 @@ wireguard_peers:
     public_endpoint: "{{ home_endpoint }}:51821"
   pug:
     public_endpoint: "{{ home_endpoint }}:51822"
-  box:
-    public_endpoint: "{{ home_endpoint }}:51823"
   laptop: {}
   phone: {}
   bunk:
@@ -303,8 +301,8 @@ podman_default_network: 10.88.0.0/16
 # SNAT-rewritten to that bridge's gateway).
 podman_bridge_pool: 10.89.0.0/16
 
-# Production VRRP election topology. Box keeps a fixture priority in host_vars
-# but is deliberately absent here so it cannot join the production election.
+# Production VRRP election topology. The integration fixture overrides its
+# priority without joining this production election map.
 dns_keepalived_priorities:
   lab: 100
   pug: 10

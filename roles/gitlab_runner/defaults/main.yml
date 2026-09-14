@@ -1,4 +1,4 @@
-# Optional deploy tuning belongs in defaults so host_vars can override it.
+# Optional deploy tuning belongs in defaults so inventory vars can override it.
 # Fixed values stay inline in config.toml.j2.
 # Optional host-native shell executor for qemu CI fallback work on lab.
 gitlab_runner_shell_enabled: false

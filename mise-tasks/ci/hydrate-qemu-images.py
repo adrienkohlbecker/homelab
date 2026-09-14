@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # fmt: off
 #MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
-#USAGE arg "<machine>" help="Promoted qemu image bundle: box, box_deps, or lab"
-#USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
+#USAGE arg "<machine>" help="Promoted qemu image bundle: lab or pug"
+#USAGE complete "machine" run="printf 'lab\npug\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); defaults to this host and selects the image store"
@@ -12,8 +12,7 @@
 """Hydrate the local qemu harness image cache from S3.
 
 The aws_qemu cells populate their qemu harness images from the S3 bundles
-selected by a pointer object, or by an explicit immutable build id when deriving
-one image from another:
+selected by a pointer object, or by an explicit immutable build id:
 
     s3://<bucket>/<arch-prefix>/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
     s3://<bucket>/<arch-prefix>/<ubuntu>/<machine>/<build-id>/{manifest.json,disks.tar.zst}

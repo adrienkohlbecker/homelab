@@ -37,7 +37,6 @@ UBUNTU_COMPLETION_TASKS = (
     REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh",
     QEMU_HOST_AMI_SH,
     PUBLISH_QEMU_SH,
-    REPO_ROOT / "mise-tasks" / "test" / "build_box_deps.sh",
     REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
     REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
 )
@@ -58,7 +57,7 @@ def _environment(tmp_path: Path, ubuntus: str) -> dict[str, str]:
     env.update(
         HOMELAB_CI_DIR=str(tmp_path / "homelab_ci"),
         usage_no_publish="true",
-        usage_sources="box",
+        usage_sources="lab",
         usage_ubuntu=ubuntus,
         usage_upstream="false",
     )
@@ -93,11 +92,12 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
     for ubuntu, call in zip(ubuntus, calls, strict=True):
         assert f"ubuntu_name={ubuntu}" in call
         assert f"output_directory={env['HOMELAB_CI_DIR']}/{ubuntu}" in call
-        assert "-only=qemu.box" in call
+        assert "-only=qemu.lab" in call
     assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus)
 
 
-def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
+@pytest.mark.parametrize("fixture_machine", ["lab", "pug"])
+def test_publish_qemu_builds_and_uploads_promoted_fixture(tmp_path: Path, fixture_machine: str) -> None:
     fake_bin = tmp_path / "bin"
     log = tmp_path / "mise.log"
     _executable(
@@ -109,7 +109,7 @@ def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
     env.update(
         MISE_TEST_LOG=str(log),
         PATH=f"{fake_bin}:{env['PATH']}",
-        usage_machine="lab",
+        usage_machine=fixture_machine,
         usage_promote="true",
         usage_ubuntu="noble",
     )

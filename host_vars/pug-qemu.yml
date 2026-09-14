@@ -1,3 +1,0 @@
-# Test-only overlay loaded with -e after host_vars/pug.yml for Pug QEMU runs.
-# Override Pug's physical-NIC profile at extra-vars precedence.
-netplan: "{{ qemu_netplan }}"

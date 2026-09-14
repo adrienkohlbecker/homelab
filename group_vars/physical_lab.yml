@@ -1,3 +1,5 @@
+# Physical Lab host configuration. QEMU Lab fixtures inherit storage and test
+# behavior through inventory groups instead of loading these hardware settings.
 ssh_x11_forwarding: true
 zfsbootmenu_artifact:
   version: v3.0.1-linux6.1-upstream-x86_64
@@ -8,38 +10,10 @@ ssh_public_keys_additional: |
 
 zfs_arc_min: 1073741824   # 1 GiB — let ARC shrink under pressure so qemu VMs can wire
 zfs_arc_max: 4294967296   # 4 GiB — halved from 8 to free headroom for 6 concurrent CI VMs
-zfs_trim_pools:
-  - rpool
-  - dozer
-  - tank
-# autotrim=on on rpool/dozer/tank mirrors the live pool state on lab (rpool +
-# dozer from creation, tank set on the host after the fact). mouse is absent
-# here and from zfs_trim_pools because every one of its leaves reports `trim
-# unsupported` -- it is an all-HDD mirror, unlike tank, which qualifies on its
-# NVMe special vdev alone. tank also gets scheduled trim via the zfs_trim timer
-# above; the two are independent.
-zfs_pool_properties:
-  - { pool: rpool, name: autotrim, value: "on" }
-  - { pool: dozer, name: autotrim, value: "on" }
-  - { pool: tank, name: autotrim, value: "on" }
-zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
-  - rpool/ROOT/{{ ansible_distribution_release }}
-  - dozer/minio
-  - tank/data
-zfs_dozer_filesystem: dozer
-zfs_tank_filesystem: tank
-
-swap_partition: /dev/md/swap
-
 # zram is the primary swap; the 16G RAID1 partition above is the deadlock-free-by-
 # coldness overflow (notes/swap_strategy.md).
 swap_zram_size: 8G
 
-# Three-member mdadm raid5. mke2fs derives the ext4 stride/stripe-width from
-# the array topology at creation; the role's _verify asserts the recorded
-# geometry still matches the live array.
-podman_storage_device: /dev/md/podman
-podman_storage_raid: true
 podman_operator_prune_enabled: true
 
 # Host-native CI fallback runner. It deliberately uses its own token variable so
@@ -274,7 +248,7 @@ tailscale_wan_direct: true
 
 nginx_static_proxies_enabled: true
 
-# NUT shutdown-ladder wake (see host_vars/pug.yml for the full ladder and
+# NUT shutdown-ladder wake (see group_vars/physical_pug.yml for the full ladder and
 # notes/ups_shutdown_ladder.md for the design): lab reboots via the card's
 # Group 1 cut-and-restore in any outage deep enough to strand pug (whose
 # Group 2 shed at 2% sits below its 5% FSD trigger), so lab's boot-time

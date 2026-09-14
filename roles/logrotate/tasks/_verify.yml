@@ -1,4 +1,4 @@
-# Exercise both compression directions across box and minimal, including
+# Exercise both compression directions across Lab and minimal, including
 # package upgrades, repeated helper calls, and an untouched unowned policy.
 - name: _verify | Create a fixture logrotate config
   copy:

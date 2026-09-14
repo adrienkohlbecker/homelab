@@ -1,66 +1,12 @@
-# box: the canonical homelab test fixture. Box is purely a test-only
-# inventory host (see hosts.ini -- it lives in [test], never in [prod])
-# so this file IS the fixture; there's no prod-box to keep in sync
-# with. Single-disk rpool only (no apoc/dozer/tank/mouse) -- producer
-# roles still run but their datasets land flat under the global rpool
-# defaults. Lab-prod's multi-pool shape is exercised by --machine lab/pug
-# nightly. Machine-shape qemu values live here directly; role-specific qemu
-# behavior belongs in the roles behind qemu_test gates.
-
-# Volatile: VM is ephemeral and persistent journals would write to rpool
-# during throwaway test runs for no benefit.
-journald_storage: volatile
-
-ssh_public_keys: |
-  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
-
-# ARC sizing: test VMs run large containers (HA alone peaks at ~1 GiB
-# RSS during startup) so every MiB freed from ARC is headroom for
-# podman. 256/512 MiB is enough for ZFS to not thrash on a test workload.
-zfs_arc_min: 268435456
-zfs_arc_max: 536870912
-# Box has a second flat pool `zee` (packer provision.sh) alongside rpool, so it
-# exercises the zfs role's multi-pool trim-timer and mount-cache loops -- the
-# functional coverage the lab/pug AMIs used to carry. zee/data is the
-# canmount=on member provision.sh creates for the mount-generator; the
-# rpool/ROOT/<release> entry is templated so it works across the
-# noble/resolute box AMIs. See notes/archive/ci_box_multidisk_drop_lab_pug_amis.md.
-zfs_trim_pools:
-  - rpool
-  - zee
-zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
-  - rpool/ROOT/{{ ansible_distribution_release }}
-  - zee/data
-# zfs_{dozer,tank}_filesystem keep their global rpool default, so dozer/tank-
-# keyed producer datasets (minio/scratch/data/...) still land flat on rpool;
-# zee activates no named consumers -- it only feeds the generic multi-pool loops.
-
-# Podman container store on a dedicated raw ext4 partition (p4, GPT label
-# "podman"; packer provision.sh). Reconstructible image/overlay data stays out
-# of rpool. by-partlabel is unique here (single disk). 50G
-# (provision.sh podman_size) holds the whole-fleet _site_test cram, so the store
-# no longer lives inside rpool.
-podman_storage_device: /dev/disk/by-partlabel/podman
-
-# box's single-disk image bakes a swap partition (p3, GPT label "swap";
-# provision.sh) that chroot.sh already mkswap'd. Declaring it brings that
-# partition under the swap role + _verify -- folding in pug's raw-partition
-# swapon/fstab coverage. swap/_setup.yml clears the packer-baked fstab entry
-# (gated on swap_partition) so the role re-adds it cleanly.
-swap_partition: /dev/disk/by-partlabel/swap
-
-# Exercises the zram-primary path in CI: zram is primary, the partition
-# above sits below it as overflow. 3G is deliberately not the
-# generator's 2G default on this 4G VM, so the _verify size assertion actually
-# proves the config drove the size.
-swap_zram_size: 3G
+# Full-site integration behavior layered onto the QEMU Lab fixture. Physical
+# host settings remain in physical_* groups; role-specific QEMU behavior stays
+# behind qemu_test gates.
 
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two
 # podman macvlan networks coexisting on one parent NIC. Prod-shape uses
-# distinct parents (eth0 for mgmt, VLAN subifs for others); box collapses
-# them onto en* because the QEMU NIC isn't trunked. Lab/pug exercise the
-# distinct-parent path via host_vars/{lab,pug}-qemu.yml.
+# distinct parents (eth0 for mgmt, VLAN subifs for others); QEMU collapses
+# them onto en* because the QEMU NIC is not trunked.
 #
 # Macvlan blocks derive from data/network_topology.yml inside the role. Works
 # under qemu because test/machine.py pins slirp's user-net to the test-view
@@ -80,9 +26,9 @@ macvlan_blocks:
 # receive-root creation, and idempotence. _verify runs the local backup script,
 # not the full autosnapshot orchestrator, so it never attempts the SSH pull.
 zfs_autobackup_sources:
-  - host: box
+  - host: lab
     dest_dataset: rpool/zfs_autobackup_receive_test
-zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkvSWbVs696fArHKeBM6k6EvmqDckAic5Z root@box
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkvSWbVs696fArHKeBM6k6EvmqDckAic5Z root@lab
 
 dns_keepalived_priority: 5
 
@@ -90,8 +36,8 @@ netdata_intelgpu_enabled: true
 netdata_contexts:
   - system.cpu              # always-live chart, baseline
   - foo.does_not_exist      # never-existed chart, probes the "missing-chart" gap
-# Box is the positive fixture for the primary-only alert; its priority remains
-# outside the production election map.
+# Integration is the positive fixture for the primary-only alert; its priority
+# remains outside the production election map.
 netdata_keepalived_lost_master_alert: true
 netdata_keepalived_vrrp_ip: 198.51.100.10
 netdata_keepalived_vrrp_update_every: 5
@@ -115,7 +61,7 @@ netdata_diskspace_blocklist:
 # netdata so the sidecar populates per-host error entries. Two entries also
 # exercise the delimiter branch in the generated NETDATA_HOSTS environment.
 homepage_netdata_hosts:
-  - box
+  - lab
   - unreachable
 
 # Test shares so samba's smb.conf.j2 renders actual [share] blocks. The /srv
@@ -137,6 +83,7 @@ netdata_packer_process_group_enabled: true
 # start/metrics/stop smoke. The qemu harness never boots an ASG, and these
 # placeholder credentials are never accepted by AWS.
 gitlab_runner_aws_qemu_enabled: true
+gitlab_runner_shell_enabled: true
 gitlab_runner_aws_qemu_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
 gitlab_runner_aws_qemu_arm_enabled: true
 gitlab_runner_aws_qemu_arm_token: glrt-TEST_PLACEHOLDER_DO_NOT_USE
@@ -146,15 +93,15 @@ gitlab_runner_aws_qemu_secret_access_key: TEST_PLACEHOLDER_DO_NOT_USE
 
 # roles/tailscale test config. The control-plane pointers (login_server,
 # headscale_host, headscale_user) are environment constants in group_vars/test.yml;
-# the pre-auth key is minted on-the-fly by main.yml at registration. The advertised
-# subnet is box-specific so _verify can exercise the approve round-trip without
-# colliding with the test topology.
+# the pre-auth key is minted on-the-fly by main.yml at registration. The
+# advertised subnet is integration-specific so _verify can exercise the approve
+# round-trip without colliding with the test topology.
 tailscale_advertise_routes:
   - 10.99.99.0/24
 # Exercise the --accept-routes=true path under the harness (harmless on the
-# single-node test tailnet; the throwaway subnet isn't on box's real interfaces).
+# single-node test tailnet; the throwaway subnet is not on Lab's real interfaces).
 tailscale_accept_routes: true
-# The qemu WAN probe surface forwards this UDP port for every VM, so box can
+# The QEMU WAN probe surface forwards this UDP port for every VM, so Lab can
 # model the home-router tailscale DNAT directly instead of receiving a
 # role-specific harness override.
 tailscale_port: 41641

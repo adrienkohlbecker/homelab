@@ -148,7 +148,7 @@
     - podman network rm podman_verify_dns
 
 # pasta is a rootless-only network connector (default_rootless_network_cmd,
-# set in install.yml), so this exercises it as the box fixture's
+# set in install.yml), so this exercises it as the Lab fixture's
 # rootless-capable login user. A successful rootless container start is
 # itself proof the connector works -- podman errors out rather than silently
 # falling back when the configured connector is missing or broken; the

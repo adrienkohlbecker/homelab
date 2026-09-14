@@ -1,5 +1,5 @@
 base_prerequisites: false
 arm:
-  - box
+  - lab
 ubuntu:
   - resolute

@@ -7,9 +7,9 @@
       - netdata_contexts is defined
       - netdata_collectors is defined
     fail_msg: >-
-      netdata_contexts and netdata_collectors must be set in host_vars
-      (per-host alert and presence-collector inputs). See host_vars/box.yml
-      for the shape.
+      netdata_contexts and netdata_collectors must be set in inventory vars
+      (host alert and presence-collector inputs). See
+      group_vars/integration.yml for the shape.
   tags:
     - netdata
 

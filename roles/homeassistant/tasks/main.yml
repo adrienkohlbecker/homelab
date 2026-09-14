@@ -1,5 +1,5 @@
-# Precondition: the host must have a `mac_iot` macvlan_block in
-# host_vars with `podman_network: true` (lab has both). The macvlan
+# Precondition: the host must have a `mac_iot` macvlan_block in inventory vars
+# with `podman_network: true` (Lab has both). The macvlan
 # role provisions the iface + the podman network named `mac_iot` on
 # the IoT VLAN; HA attaches via --network=mac_iot (see
 # homeassistant_networks in vars/main.yml).

@@ -2,7 +2,7 @@
 # cleanly; these assert the end-state they're responsible for.
 #
 # Reboot first so /proc/cmdline reflects the role's writes. Same pattern as
-# console/_verify.yml. The non-GRUB aarch64 box bypasses ZBM, so the command
+# console/_verify.yml. The non-GRUB aarch64 fixture bypasses ZBM, so the command
 # line staged outside this role cannot reflect its writes yet.
 
 - name: _verify | Load production boot defaults for x86

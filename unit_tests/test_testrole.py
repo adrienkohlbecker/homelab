@@ -13,31 +13,31 @@ import testrole
 @pytest.mark.parametrize(
     ("stdout", "expected"),
     [
-        (["PLAY RECAP *****", "box  : ok=5  changed=3  unreachable=0  failed=0"], 3),
-        (["PLAY RECAP *****", "box  : ok=10  changed=0  unreachable=0  failed=0"], 0),
-        (["PLAY RECAP *****", "box  : ok=5  \x1b[0;33mchanged=2\x1b[0m  unreachable=0  failed=0"], 2),
+        (["PLAY RECAP *****", "lab  : ok=5  changed=3  unreachable=0  failed=0"], 3),
+        (["PLAY RECAP *****", "lab  : ok=10  changed=0  unreachable=0  failed=0"], 0),
+        (["PLAY RECAP *****", "lab  : ok=5  \x1b[0;33mchanged=2\x1b[0m  unreachable=0  failed=0"], 2),
         (
             [
                 "PLAY RECAP *****",
-                "box  : ok=5  changed=1  unreachable=0  failed=0",
+                "lab  : ok=5  changed=1  unreachable=0  failed=0",
                 "lab  : ok=3  changed=4  unreachable=0  failed=0",
             ],
             5,
         ),
-        (["TASK [debug]", "ok: [box]", ""], 0),
+        (["TASK [debug]", "ok: [lab]", ""], 0),
         ([], 0),
         (
             [
                 "PLAY RECAP *****",
-                "box  : ok=5  changed=1  unreachable=0  failed=0",
+                "lab  : ok=5  changed=1  unreachable=0  failed=0",
                 "PLAY RECAP *****",
-                "box  : ok=3  changed=2  unreachable=0  failed=0",
+                "lab  : ok=3  changed=2  unreachable=0  failed=0",
             ],
             3,
         ),
         (
             [
-                "\x1b[0;32mbox\x1b[0m  : \x1b[0;32mok=10\x1b[0m  "
+                "\x1b[0;32mlab\x1b[0m  : \x1b[0;32mok=10\x1b[0m  "
                 "\x1b[0;33mchanged=7\x1b[0m  unreachable=0  "
                 "\x1b[0;31mfailed=0\x1b[0m",
             ],

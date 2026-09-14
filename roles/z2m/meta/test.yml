@@ -1,4 +1,0 @@
-# Heavy _setup dependencies are pre-baked into box_deps (see
-# test/playbooks/build_box_deps.yml).
-machines:
-  box_deps:

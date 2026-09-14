@@ -59,17 +59,17 @@ class TestRoleMeta:
         monkeypatch.chdir(_REPO_ROOT)
         matrix.load_role_test_config(role, tuple(sorted(machine.MACHINE_CHOICES)))
 
-    def test_default_machine_falls_back_to_box(self) -> None:
+    def test_default_machine_falls_back_to_lab(self) -> None:
         _make_role("plain")
-        assert next(iter(matrix.load_role_test_config("plain").machines)) == "box"
+        assert next(iter(matrix.load_role_test_config("plain").machines)) == "lab"
 
     def test_default_machine_reads_meta(self) -> None:
-        _make_role("fancy", {"machines": {"box_deps": None}})
-        assert next(iter(matrix.load_role_test_config("fancy").machines)) == "box_deps"
+        _make_role("fancy", {"machines": {"pug": None}})
+        assert next(iter(matrix.load_role_test_config("fancy").machines)) == "pug"
 
     def test_machine_payload_is_rejected(self) -> None:
-        _make_role("configured", {"machines": {"box": {"memory_mb": 8192}}})
-        with pytest.raises(matrix.RoleTestConfigError, match=r"machines\.box must be empty"):
+        _make_role("configured", {"machines": {"lab": {"memory_mb": 8192}}})
+        with pytest.raises(matrix.RoleTestConfigError, match=r"machines\.lab must be empty"):
             matrix.load_role_test_config("configured")
 
     def test_base_prerequisites_defaults_to_true(self) -> None:
@@ -122,21 +122,26 @@ class TestBuildRoleCells:
     def test_plain_role_one_cell(self) -> None:
         _make_role("plain")
         cells = matrix.build_role_cells("plain")
-        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "plain")]
+        assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "plain")]
 
-    def test_box_deps_role(self) -> None:
-        _make_role("svc", {"machines": {"box_deps": None}})
+    def test_pug_role(self) -> None:
+        _make_role("svc", {"machines": {"pug": None}})
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box_deps", matrix.DEFAULT_UBUNTU, "svc")]
+        assert cells == [matrix.TestCell("pug", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_multi_machine_plus_release(self) -> None:
-        _make_role("podman", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
+        _make_role(
+            "podman",
+            {"machines": {"lab": None, "pug": None, "minimal": None}, "ubuntu": ["resolute"]},
+        )
         cells = matrix.build_role_cells("podman")
         expected = [
-            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "podman"),
+            matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "podman"),
             matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "podman"),
-            matrix.TestCell("box", "resolute", "podman"),
+            matrix.TestCell("pug", matrix.DEFAULT_UBUNTU, "podman"),
+            matrix.TestCell("lab", "resolute", "podman"),
             matrix.TestCell("minimal", "resolute", "podman"),
+            matrix.TestCell("pug", "resolute", "podman"),
         ]
         assert cells == expected
 
@@ -150,7 +155,7 @@ class TestBuildTestMatrix:
     def test_deduplicates(self) -> None:
         _make_role("alpha")
         cells = matrix.build_test_matrix(["alpha", "alpha"])
-        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")]
+        assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha")]
 
     def test_sorted_by_all_fields(self) -> None:
         _make_role("beta")
@@ -160,14 +165,14 @@ class TestBuildTestMatrix:
 
     def test_extra_cells_merged(self) -> None:
         _make_role("alpha")
-        extra = [matrix.TestCell("box", "resolute", "alpha")]
+        extra = [matrix.TestCell("lab", "resolute", "alpha")]
         cells = matrix.build_test_matrix(["alpha"], extra_cells=extra)
-        assert matrix.TestCell("box", "resolute", "alpha") in cells
-        assert matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha") in cells
+        assert matrix.TestCell("lab", "resolute", "alpha") in cells
+        assert matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha") in cells
 
     def test_empty_roles_with_extra(self) -> None:
-        cells = matrix.build_test_matrix([], extra_cells=[matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "foo")])
-        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "foo")]
+        cells = matrix.build_test_matrix([], extra_cells=[matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "foo")])
+        assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "foo")]
 
 
 # ---------------------------------------------------------------------------
@@ -177,10 +182,10 @@ class TestBuildTestMatrix:
 
 class TestSkip:
     def test_config_normalizes_machine_and_release_skips(self) -> None:
-        _make_role("svc", {"skip": {"minimal": "why", "box_deps:resolute": "why"}})
+        _make_role("svc", {"skip": {"pug": "why", "pug:resolute": "why"}})
         assert matrix.load_role_test_config("svc").skip == {
-            ("minimal", matrix.DEFAULT_UBUNTU),
-            ("box_deps", "resolute"),
+            ("pug", matrix.DEFAULT_UBUNTU),
+            ("pug", "resolute"),
         }
 
     def test_config_skip_empty_when_absent(self) -> None:
@@ -190,36 +195,36 @@ class TestSkip:
     def test_build_role_cells_drops_skipped_release_cell_only(self) -> None:
         _make_role(
             "svc",
-            {"machines": {"box": None}, "ubuntu": ["resolute"], "skip": {"box:resolute": "flaky"}},
+            {"machines": {"lab": None}, "ubuntu": ["resolute"], "skip": {"lab:resolute": "flaky"}},
         )
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
+        assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_bare_machine_skip_drops_only_that_machines_base_cell(self) -> None:
         # The bare form is the only correct spelling for the default cell.
-        _make_role("svc", {"machines": {"box": None, "minimal": None}, "skip": {"minimal": "flaky"}})
-        assert matrix.build_role_cells("svc") == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
+        _make_role("svc", {"machines": {"lab": None, "pug": None}, "skip": {"pug": "flaky"}})
+        assert matrix.build_role_cells("svc") == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_explicit_default_release_skip_is_rejected(self) -> None:
         _make_role(
             "svc",
-            {"machines": {"box": None, "minimal": None}, "skip": {"minimal:noble": "flaky"}},
+            {"machines": {"lab": None, "pug": None}, "skip": {"pug:noble": "flaky"}},
         )
         with pytest.raises(matrix.RoleTestConfigError, match="cancels the base cell"):
             matrix.load_role_test_config("svc")
 
     def test_listing_the_default_release_is_rejected(self) -> None:
-        _make_role("svc", {"machines": {"box": None}, "ubuntu": [matrix.DEFAULT_UBUNTU]})
+        _make_role("svc", {"machines": {"lab": None}, "ubuntu": [matrix.DEFAULT_UBUNTU]})
         with pytest.raises(matrix.RoleTestConfigError, match="the default release"):
             matrix.build_role_cells("svc")
 
     def test_build_test_matrix_drops_skipped_propagated_extra(self) -> None:
         # A consumer's release cell pushed in via CI fan-out must still drop
         # if that consumer skips it.
-        _make_role("svc", {"machines": {"box": None}, "skip": {"box:resolute": "flaky"}})
-        extra = [matrix.TestCell("box", "resolute", "svc")]
+        _make_role("svc", {"machines": {"lab": None}, "skip": {"lab:resolute": "flaky"}})
+        extra = [matrix.TestCell("lab", "resolute", "svc")]
         cells = matrix.build_test_matrix(["svc"], extra_cells=extra)
-        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "svc")]
+        assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "svc")]
 
 
 # ---------------------------------------------------------------------------
@@ -229,31 +234,31 @@ class TestSkip:
 
 class TestCiSpecs:
     def test_cell_to_ci_spec_default_ubuntu(self) -> None:
-        assert matrix.cell_to_ci_spec(matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")) == "alpha:box"
+        assert matrix.cell_to_ci_spec(matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha")) == "alpha:lab"
 
     def test_cell_to_ci_spec_non_default_ubuntu(self) -> None:
-        assert matrix.cell_to_ci_spec(matrix.TestCell("box_deps", "resolute", "netdata")) == "netdata:box_deps:resolute"
+        assert matrix.cell_to_ci_spec(matrix.TestCell("pug", "resolute", "netdata")) == "netdata:pug:resolute"
 
     def test_cells_to_ci_specs_sorted_deduped(self) -> None:
         cells = [
-            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "beta"),
-            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha"),
-            matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha"),
+            matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "beta"),
+            matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha"),
+            matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha"),
         ]
-        assert matrix.cells_to_ci_specs(cells) == ["alpha:box", "beta:box"]
+        assert matrix.cells_to_ci_specs(cells) == ["alpha:lab", "beta:lab"]
 
     def test_ci_spec_to_cell_two_parts(self) -> None:
-        assert matrix.ci_spec_to_cell("alpha:box") == matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")
+        assert matrix.ci_spec_to_cell("alpha:lab") == matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha")
 
     def test_ci_spec_to_cell_three_parts(self) -> None:
-        assert matrix.ci_spec_to_cell("netdata:box_deps:resolute") == matrix.TestCell("box_deps", "resolute", "netdata")
+        assert matrix.ci_spec_to_cell("netdata:pug:resolute") == matrix.TestCell("pug", "resolute", "netdata")
 
     def test_ci_spec_to_cell_invalid(self) -> None:
         with pytest.raises(ValueError, match="Invalid CI spec"):
             matrix.ci_spec_to_cell("bad")
 
     def test_roundtrip(self) -> None:
-        cell = matrix.TestCell("box_deps", matrix.DEFAULT_UBUNTU, "zfs")
+        cell = matrix.TestCell("pug", matrix.DEFAULT_UBUNTU, "zfs")
         assert matrix.ci_spec_to_cell(matrix.cell_to_ci_spec(cell)) == cell
 
 
@@ -264,15 +269,19 @@ class TestCiSpecs:
 
 class TestDispatchMatrix:
     def test_bare_role_expands(self) -> None:
-        _make_role("alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
+        _make_role(
+            "alpha",
+            {"machines": {"lab": None, "pug": None, "minimal": None}, "ubuntu": ["resolute"]},
+        )
         cells = matrix.build_dispatch_matrix("alpha")
-        assert matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha") in cells
+        assert matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha") in cells
         assert matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "alpha") in cells
+        assert matrix.TestCell("pug", matrix.DEFAULT_UBUNTU, "alpha") in cells
 
     def test_exact_spec_no_escalation(self) -> None:
-        _make_role("alpha", {"machines": {"box": None, "minimal": None}, "ubuntu": ["resolute"]})
-        cells = matrix.build_dispatch_matrix("alpha:box")
-        assert cells == [matrix.TestCell("box", matrix.DEFAULT_UBUNTU, "alpha")]
+        _make_role("alpha", {"machines": {"lab": None, "pug": None}, "ubuntu": ["resolute"]})
+        cells = matrix.build_dispatch_matrix("alpha:lab")
+        assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha")]
 
     def test_unknown_role_exits(self) -> None:
         with pytest.raises(SystemExit):
