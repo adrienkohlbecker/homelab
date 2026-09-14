@@ -126,7 +126,10 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
 sudo awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/homelab-ci-build/mise.toml |
   sudo tee /etc/mise/config.toml >/dev/null
 if [ -n "$MISE_DISABLE_TOOLS" ]; then
-  printf '\n[settings]\ndisable_tools = ["%s"]\n' "$MISE_DISABLE_TOOLS" |
+  # MISE_DISABLE_TOOLS is comma-separated; TOML needs one string per tool.
+  IFS=, read -r -a disabled_tools <<<"$MISE_DISABLE_TOOLS"
+  printf -v disabled_tools_toml '"%s", ' "${disabled_tools[@]}"
+  printf '\n[settings]\ndisable_tools = [%s]\n' "${disabled_tools_toml%, }" |
     sudo tee -a /etc/mise/config.toml >/dev/null
 fi
 sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache
