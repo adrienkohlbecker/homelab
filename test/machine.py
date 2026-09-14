@@ -521,13 +521,14 @@ class Machine:
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
-        OUT_DIR.mkdir(parents=True, exist_ok=True)
-        self.output_file = OUT_DIR / f"{prefix}.output.ansi"
-        self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
-        self.boot_file = OUT_DIR / f"{prefix}.boot.ansi"
-        self.dmesg_file = OUT_DIR / f"{prefix}.dmesg.ansi"
-        self.systemctl_failed_file = OUT_DIR / f"{prefix}.systemctl-failed.ansi"
-        self.passt_file = OUT_DIR / f"{prefix}.passt.ansi"
+        output_dir = Path(os.environ.get("HOMELAB_TEST_OUT_DIR", OUT_DIR))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self.output_file = output_dir / f"{prefix}.output.ansi"
+        self.journal_file = output_dir / f"{prefix}.journal.ansi"
+        self.boot_file = output_dir / f"{prefix}.boot.ansi"
+        self.dmesg_file = output_dir / f"{prefix}.dmesg.ansi"
+        self.systemctl_failed_file = output_dir / f"{prefix}.systemctl-failed.ansi"
+        self.passt_file = output_dir / f"{prefix}.passt.ansi"
         self._artifact_files = (
             self.output_file,
             self.journal_file,

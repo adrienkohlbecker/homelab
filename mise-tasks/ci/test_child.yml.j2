@@ -59,13 +59,42 @@ stages:
       - test/out/
 {% if target == "aws_qemu" %}
 
-# ARM jobs extend this scaffold when the ARM lane is rendered. Keeping the
-# regional override here makes that architecture boundary explicit.
+# ARM jobs use a separate native pool and region-local guest images. They keep
+# their own complete scaffold so x86 and hosted aggregation cannot inherit ARM
+# runner state accidentally.
 .arm_cell:
-  extends: .cell
+  stage: arm
+  needs: []
+  tags:
+    - {{ arm_runner_tag }}
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: sts.amazonaws.com
+  timeout: 45m
   variables:
-    HOMELAB_TEST_AWS_COMPUTE_REGION: eu-west-1
-    HOMELAB_TEST_AWS_ECR_REGION: eu-west-1
+    ARCH: aarch64
+    HOMELAB_TEST_IN_AWS: "true"
+    HOMELAB_TEST_AWS_COMPUTE_REGION: {{ arm_region }}
+    HOMELAB_TEST_AWS_ECR_REGION: {{ arm_region }}
+    HOMELAB_NET_BACKEND: slirp
+    ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+    MISE_DATA_DIR: /opt/mise
+    MISE_DISABLE_TOOLS: aqua:Kampfkarren/selene
+    UV_CACHE_DIR: /opt/uv-cache
+    UV_LINK_MODE: copy
+    HOMELAB_AARCH64_FIRMWARE_DIR: /opt/homelab-ci/qemu-firmware/aarch64
+  before_script:
+    - test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }
+    - mise run ci:bootstrap
+    - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "aws_qemu-arm-cell-$CI_JOB_ID" --cache-dir --region {{ arm_region }}
+    - mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU" --bucket {{ arm_image_bucket }} --region {{ arm_region }} --architecture aarch64
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - test/out/
 {% endif %}
 {% if site_test %}
 
@@ -119,7 +148,26 @@ stages:
       exit $rc
 {% endfor %}
 {% endfor %}
-{% if not cells and not site_test %}
+{% for cell in arm_cells %}
+
+"{{ cell.spec }}:aarch64":
+  extends: .arm_cell
+  variables:
+    ROLE: {{ cell.role }}
+    VARIANT: {{ cell.machine }}
+    UBUNTU: {{ cell.ubuntu }}
+{% if arm_mode == "manual" %}
+  when: manual
+  allow_failure: true
+{% endif %}
+  script:
+    - |
+      rc=0
+      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
+      echo "harness exit code: $rc"
+      exit $rc
+{% endfor %}
+{% if not cells and not arm_cells and not site_test %}
 
 no_cells:
   stage: test1

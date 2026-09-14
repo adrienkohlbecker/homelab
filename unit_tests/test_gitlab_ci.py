@@ -8,6 +8,7 @@ PIPELINE = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
 
 def test_ansible_config_is_global() -> None:
     assert PIPELINE["variables"]["ANSIBLE_CONFIG"] == "$CI_PROJECT_DIR/ansible.cfg"
+    assert PIPELINE["variables"]["HOMELAB_CI_ARM"] == "off"
 
 
 def test_child_pipeline_forwards_pipeline_variables() -> None:
