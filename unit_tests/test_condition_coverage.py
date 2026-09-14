@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -37,6 +39,7 @@ from condition_coverage import (
     append_loop_executions,
     append_outcomes,
     append_report_provenance,
+    append_report_rows,
     append_result_predicate_outcomes,
     append_task_executions,
     append_until_outcomes,
@@ -182,6 +185,24 @@ def test_reports_reject_legacy_unprovenanced_records(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="unprovenanced coverage record"):
         load_outcomes([report])
+
+
+def test_report_rows_allow_concurrent_process_writers(tmp_path: Path) -> None:
+    report = tmp_path / "concurrent.jsonl"
+    children: list[int] = []
+    for worker in range(4):
+        pid = os.fork()
+        if pid == 0:
+            append_report_rows(report, ({"worker": worker, "event": event} for event in range(100)))
+            os._exit(0)
+        children.append(pid)
+
+    assert all(os.waitpid(pid, 0)[1] == 0 for pid in children)
+    rows = [json.loads(line) for line in report.read_text().splitlines()]
+    assert len(rows) == 400
+    assert {(row["worker"], row["event"]) for row in rows} == {
+        (worker, event) for worker in range(4) for event in range(100)
+    }
 
 
 def test_inventory_reads_scalar_and_list_conditions(tmp_path: Path) -> None:

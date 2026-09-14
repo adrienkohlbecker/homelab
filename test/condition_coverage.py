@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import re
 import sys
@@ -703,91 +704,52 @@ def inventory_exits(paths: Iterable[Path]) -> dict[ExitKey, ExitDefinition]:
 
 def append_outcomes(path: Path, outcomes: Iterable[ConditionOutcome], *, phase: str) -> None:
     """Append observed outcomes as compact JSON lines."""
+    append_report_rows(path, (asdict(outcome) | {"phase": phase} for outcome in outcomes))
+
+
+def append_report_rows(path: Path, rows: Iterable[dict[str, Any]]) -> None:
+    """Append complete JSONL records while excluding concurrent writers."""
+    encoded = [(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode() for row in rows]
+    if not encoded:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for outcome in outcomes:
-            handle.write(
-                json.dumps(
-                    asdict(outcome) | {"phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    with path.open("ab", buffering=0) as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            for row in encoded:
+                handle.write(row)
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def append_report_provenance(path: Path, provenance: CoverageProvenance) -> None:
     """Start a report segment with its schema, source commit, and architecture."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(
-            json.dumps(
-                {"provenance": asdict(provenance)},
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-        )
-        handle.write("\n")
+    append_report_rows(path, [{"provenance": asdict(provenance)}])
+
+
+def append_report_error(path: Path, error: str) -> None:
+    """Append a callback or worker error to fail the aggregate closed."""
+    append_report_rows(path, [{"error": error}])
 
 
 def append_loop_executions(path: Path, loops: Iterable[LoopKey], *, phase: str) -> None:
     """Append loop declarations observed through per-item callbacks."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for loop in loops:
-            handle.write(
-                json.dumps(
-                    {"loop": asdict(loop), "phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    append_report_rows(path, ({"loop": asdict(loop), "phase": phase} for loop in loops))
 
 
 def append_task_executions(path: Path, tasks: Iterable[TaskKey], *, phase: str) -> None:
     """Append tasks observed through non-skipped terminal callbacks."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for task in tasks:
-            handle.write(
-                json.dumps(
-                    {"task": asdict(task), "phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    append_report_rows(path, ({"task": asdict(task), "phase": phase} for task in tasks))
 
 
 def append_block_events(path: Path, events: Iterable[BlockEvent], *, phase: str) -> None:
     """Append observed block section callbacks."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for event in events:
-            handle.write(
-                json.dumps(
-                    {"block_event": asdict(event), "phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    append_report_rows(path, ({"block_event": asdict(event), "phase": phase} for event in events))
 
 
 def append_until_outcomes(path: Path, outcomes: Iterable[UntilOutcome], *, phase: str) -> None:
     """Append observed ``until`` predicate outcomes."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for outcome in outcomes:
-            handle.write(
-                json.dumps(
-                    {"until": asdict(outcome), "phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    append_report_rows(path, ({"until": asdict(outcome), "phase": phase} for outcome in outcomes))
 
 
 def append_result_predicate_outcomes(
@@ -797,47 +759,20 @@ def append_result_predicate_outcomes(
     phase: str,
 ) -> None:
     """Append observed dynamic task-result predicate outcomes."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for outcome in outcomes:
-            handle.write(
-                json.dumps(
-                    {"result_predicate": asdict(outcome), "phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    append_report_rows(
+        path,
+        ({"result_predicate": asdict(outcome), "phase": phase} for outcome in outcomes),
+    )
 
 
 def append_include_events(path: Path, events: Iterable[IncludeEvent], *, phase: str) -> None:
     """Append observed dynamic include expansions."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for event in events:
-            handle.write(
-                json.dumps(
-                    {"include_event": asdict(event), "phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    append_report_rows(path, ({"include_event": asdict(event), "phase": phase} for event in events))
 
 
 def append_exit_outcomes(path: Path, outcomes: Iterable[ExitOutcome], *, phase: str) -> None:
     """Append observed early role exit outcomes."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        for outcome in outcomes:
-            handle.write(
-                json.dumps(
-                    {"exit": asdict(outcome), "phase": phase},
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            )
-            handle.write("\n")
+    append_report_rows(path, ({"exit": asdict(outcome), "phase": phase} for outcome in outcomes))
 
 
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:

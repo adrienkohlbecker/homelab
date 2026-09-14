@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -32,6 +31,7 @@ from condition_coverage import (
     append_include_events,
     append_loop_executions,
     append_outcomes,
+    append_report_error,
     append_report_provenance,
     append_result_predicate_outcomes,
     append_task_executions,
@@ -189,10 +189,7 @@ class CallbackModule(CallbackBase):
 
     @staticmethod
     def _record_error(path: Path, exc: Exception) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"error": str(exc)}, sort_keys=True, separators=(",", ":")))
-            handle.write("\n")
+        append_report_error(path, str(exc))
 
     def _record(self, result, *, status: str = "ok", for_item: bool = False) -> None:
         output = os.environ.get("ANSIBLE_CONDITION_COVERAGE_FILE")
