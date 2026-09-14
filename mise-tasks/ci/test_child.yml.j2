@@ -9,9 +9,6 @@ stages:
 {% for stage in stages %}
   - {{ stage }}
 {% endfor %}
-{% if cells or site_test %}
-  - coverage
-{% endif %}
 
 .cell:
   stage: test1
@@ -168,27 +165,47 @@ stages:
 {% endfor %}
 {% if cells or site_test %}
 
-condition_coverage:
+.condition_coverage:
   stage: coverage
+  image: $CI_REGISTRY_IMAGE/ci:latest
   tags:
-    - {{ cell_runner_tag }}
+    - saas-linux-small-amd64
   timeout: 10m
-{% if baked_toolchain %}
   variables:
-    MISE_DATA_DIR: /opt/mise
-    UV_CACHE_DIR: /opt/uv-cache
     UV_LINK_MODE: copy
-{% endif %}
   before_script:
-    - mise run ci:bootstrap
+    - mise install
+    - mise exec -- uv sync --frozen
+
+condition_coverage:
+  extends: .condition_coverage
   script:
     - >-
-      mise exec -- python test/condition_coverage.py
+      mise exec -- uv run --frozen python test/condition_coverage.py
       --roles {{ roles | join(',') }}
 {% if site_test %}
       --include-site
 {% endif %}
-      test/out/condition_coverage/*.jsonl
+      test/out/condition_coverage/*.x86_64.*.jsonl
+{% if arm_mode == "auto" and arm_cells %}
+      test/out/condition_coverage/*.aarch64.*.jsonl
+{% endif %}
+{% if arm_mode == "manual" and arm_cells %}
+
+"condition_coverage:combined":
+  extends: .condition_coverage
+  when: manual
+  allow_failure: true
+  script:
+    - >-
+      mise exec -- uv run --frozen python test/condition_coverage.py
+      --roles {{ roles | join(',') }}
+{% if site_test %}
+      --include-site
+{% endif %}
+      test/out/condition_coverage/*.x86_64.*.jsonl
+      test/out/condition_coverage/*.aarch64.*.jsonl
+{% endif %}
 {% endif %}
 {% if not cells and not arm_cells and not site_test %}
 

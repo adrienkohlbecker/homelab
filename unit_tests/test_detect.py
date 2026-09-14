@@ -1172,8 +1172,22 @@ class TestRenderChildPipeline:
         assert "_site_test:lab" not in doc
         assert "_site_check:lab" not in doc
         assert "no_cells" not in doc
-        assert doc["condition_coverage"]["stage"] == "coverage"
+        assert doc["condition_coverage"]["extends"] == ".condition_coverage"
+        assert doc[".condition_coverage"]["stage"] == "coverage"
         assert "--roles nginx,podman" in doc["condition_coverage"]["script"][0]
+        assert doc[".condition_coverage"]["image"] == "$CI_REGISTRY_IMAGE/ci:latest"
+        assert doc[".condition_coverage"]["tags"] == ["saas-linux-small-amd64"]
+        assert "needs" not in doc[".condition_coverage"]
+        assert "MISE_DATA_DIR" not in doc[".condition_coverage"]["variables"]
+        assert doc[".condition_coverage"]["before_script"] == [
+            "mise install",
+            "mise exec -- uv sync --frozen",
+        ]
+        assert doc["condition_coverage"]["script"][0].startswith(
+            "mise exec -- uv run --frozen python test/condition_coverage.py"
+        )
+        assert "*.x86_64.*.jsonl" in doc["condition_coverage"]["script"][0]
+        assert "*.aarch64.*.jsonl" not in doc["condition_coverage"]["script"][0]
 
     def test_cells_auto_run_by_default(self) -> None:
         doc = _render_child_doc(["nginx:lab"], site_test=True)

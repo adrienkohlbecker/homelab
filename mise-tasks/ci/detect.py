@@ -636,6 +636,8 @@ def render_child_pipeline(
     stages = (["site"] if site_test else []) + cell_stages
     if arm_cells:
         stages.append("arm")
+    if cells or site_test:
+        stages.append("coverage")
     if not stages:
         stages = ["test1"]
     return template.render(
