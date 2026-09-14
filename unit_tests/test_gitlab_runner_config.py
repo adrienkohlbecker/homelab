@@ -28,6 +28,7 @@ def _runner_values() -> dict:
         gitlab_runner_aws_qemu_arm_capacity_per_instance=52,
         gitlab_runner_aws_qemu_arm_max_instances=1,
         gitlab_runner_aws_qemu_arm_idle_time="2m",
+        gitlab_runner_aws_qemu_arm_ssh_private_key="arm-private-key",
     )
     return values
 
@@ -63,6 +64,13 @@ def test_all_aws_runner_pools_render_consistently() -> None:
         assert autoscaler["plugin_config"]["name"] == asg
         assert autoscaler["plugin_config"]["profile"] == profile
         assert autoscaler["connector_config"]["timeout"] == "2m0s"
+
+    for name in ("fox-aws-shell-qemu", "fox-aws-shell-qemu-site"):
+        assert "key_path" not in runners[name]["autoscaler"]["connector_config"]
+        assert "use_static_credentials" not in runners[name]["autoscaler"]["connector_config"]
+    arm_connector = runners["fox-aws-shell-qemu-arm"]["autoscaler"]["connector_config"]
+    assert arm_connector["key_path"] == "/mnt/services/gitlab_runner/.ssh/fleeting_arm"
+    assert arm_connector["use_static_credentials"] is True
 
 
 def test_aws_profiles_share_credentials_without_source_profile() -> None:

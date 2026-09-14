@@ -1,5 +1,5 @@
 #jinja2: lstrip_blocks: True
-{% macro aws_instance_runner(name_suffix, token, asg_name, profile, capacity, max_instances, idle_time, connector_timeout, instance_acquire_timeout) %}
+{% macro aws_instance_runner(name_suffix, token, asg_name, profile, capacity, max_instances, idle_time, connector_timeout, instance_acquire_timeout, connector_key_path) %}
 [[runners]]
   name = "{{ inventory_hostname }}-{{ name_suffix }}"
   url = "https://gitlab.com"
@@ -32,6 +32,10 @@
       username = "{{ gitlab_runner_aws_qemu_username }}"
       use_external_addr = true
       timeout = "{{ connector_timeout }}"
+{% if connector_key_path %}
+      key_path = "{{ connector_key_path }}"
+      use_static_credentials = true
+{% endif %}
 
     [[runners.autoscaler.policy]]
       idle_count = 0
@@ -73,7 +77,8 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
      gitlab_runner_aws_qemu_max_instances,
      gitlab_runner_aws_qemu_idle_time,
      gitlab_runner_aws_qemu_connector_timeout,
-     gitlab_runner_aws_qemu_instance_acquire_timeout
+     gitlab_runner_aws_qemu_instance_acquire_timeout,
+     ''
    ) }}
 
 # Dedicated one-host, one-job pool for the full-site converge cell.
@@ -86,7 +91,8 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
      1,
      gitlab_runner_aws_qemu_site_idle_time,
      gitlab_runner_aws_qemu_connector_timeout,
-     gitlab_runner_aws_qemu_instance_acquire_timeout
+     gitlab_runner_aws_qemu_instance_acquire_timeout,
+     ''
    ) }}
 {% endif %}
 {% if gitlab_runner_aws_qemu_arm_enabled %}
@@ -101,6 +107,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
      gitlab_runner_aws_qemu_arm_max_instances,
      gitlab_runner_aws_qemu_arm_idle_time,
      gitlab_runner_aws_qemu_arm_connector_timeout,
-     gitlab_runner_aws_qemu_arm_instance_acquire_timeout
+     gitlab_runner_aws_qemu_arm_instance_acquire_timeout,
+     gitlab_runner_aws_qemu_arm_ssh_private_key_path
    ) }}
 {% endif %}

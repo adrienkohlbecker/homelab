@@ -36,13 +36,17 @@
           - >-
             not gitlab_runner_aws_qemu_arm_enabled
             or gitlab_runner_aws_qemu_arm_token | length > 0
+          - >-
+            not gitlab_runner_aws_qemu_arm_enabled
+            or gitlab_runner_aws_qemu_arm_ssh_private_key | length > 0
           - gitlab_runner_aws_qemu_access_key_id | length > 0
           - gitlab_runner_aws_qemu_secret_access_key | length > 0
         fail_msg: >-
           An AWS qemu runner is enabled but its runner token and/or the manager
-          AWS credentials are unset for {{ inventory_hostname }}. Create the
-          required project runners and vault their tokens and the manager key
-          values before enabling the runner in prod.
+          AWS credentials are unset for {{ inventory_hostname }}, or the ARM
+          runner has no static connector key. Create the required project
+          runners and vault their tokens, manager credentials, and ARM
+          connector key before enabling the runner in prod.
 
     - name: Set up gitlab_runner system user, group, and config dir
       import_role:
@@ -137,6 +141,38 @@
               aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key }}
               {% endif %}
           become: true
+
+    - name: Render ARM Fleeting SSH key
+      when:
+        - gitlab_runner_aws_qemu_arm_enabled
+        - not ansible_check_mode or gitlab_runner_user.uid is defined
+      block:
+        - name: Create gitlab_runner SSH config directory
+          file:
+            path: "{{ gitlab_runner_aws_qemu_arm_ssh_private_key_path | dirname }}"
+            state: directory
+            owner: gitlab_runner
+            group: gitlab_runner
+            mode: "0700"
+          become: true
+
+        - name: Render ARM Fleeting SSH private key
+          copy:
+            dest: "{{ gitlab_runner_aws_qemu_arm_ssh_private_key_path }}"
+            owner: gitlab_runner
+            group: gitlab_runner
+            mode: "0600"
+            backup: true
+            content: "{{ gitlab_runner_aws_qemu_arm_ssh_private_key }}\n"
+            validate: ssh-keygen -y -f %s
+          become: true
+
+    - name: Remove ARM Fleeting SSH key when disabled
+      when: not gitlab_runner_aws_qemu_arm_enabled
+      file:
+        path: "{{ gitlab_runner_aws_qemu_arm_ssh_private_key_path }}"
+        state: absent
+      become: true
 
     # Parse TOML locally; `gitlab-runner verify` is an online registration check,
     # not a configuration linter.

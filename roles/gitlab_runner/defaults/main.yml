@@ -50,3 +50,5 @@ gitlab_runner_aws_qemu_arm_max_instances: 1
 gitlab_runner_aws_qemu_arm_idle_time: "15m"
 gitlab_runner_aws_qemu_arm_connector_timeout: "2m0s"
 gitlab_runner_aws_qemu_arm_instance_acquire_timeout: "20m0s"
+gitlab_runner_aws_qemu_arm_ssh_private_key: ""
+gitlab_runner_aws_qemu_arm_ssh_private_key_path: /mnt/services/gitlab_runner/.ssh/fleeting_arm

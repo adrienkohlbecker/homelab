@@ -378,6 +378,9 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert "homelab_ci_hydrate_images" not in provision
     assert "mise run ci:hydrate-qemu-images" not in provision
     assert "command -v __QEMU_SYSTEM_BINARY__" in provision
+    assert "gitlab_runner_fleeting_arm.pub" in template
+    assert "/etc/ssh/authorized_keys/ubuntu" in provision
+    assert "sshd -t" in provision
 
 
 @pytest.mark.parametrize(

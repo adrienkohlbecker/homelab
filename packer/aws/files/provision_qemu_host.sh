@@ -83,6 +83,18 @@ sudo ln -sf /usr/local/bin/gitlab-runner /usr/bin/gitlab-runner
 sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch.sh /usr/local/bin/homelab_ci_prepare_scratch
 sudo usermod -aG kvm ubuntu
 
+# ARM metal takes longer than EC2 Instance Connect's 60-second key lifetime to
+# reach sshd. Keep a dedicated, non-operator key available for the ARM Fleeting
+# connector; x86 continues to use EC2 Instance Connect.
+sudo install -dm 0755 /etc/ssh/authorized_keys
+sudo install -m 0644 -o root -g root \
+  /tmp/gitlab_runner_fleeting_arm.pub \
+  /etc/ssh/authorized_keys/ubuntu
+sudo tee /etc/ssh/sshd_config.d/70_homelab_ci.conf >/dev/null <<'EOF'
+AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2 /etc/ssh/authorized_keys/%u
+EOF
+sudo sshd -t
+
 sudo install -dm 0755 /opt/mise /opt/uv-cache /etc/mise /tmp/homelab-ci-build
 sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
 (
@@ -158,5 +170,6 @@ sudo apt-get clean
 sudo rm -rf \
   /var/lib/apt/lists/* \
   /tmp/gitlab-runner \
+  /tmp/gitlab_runner_fleeting_arm.pub \
   /tmp/homelab_ci_prepare_scratch.sh \
   /tmp/homelab-ci-build
