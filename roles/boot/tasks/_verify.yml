@@ -45,6 +45,18 @@
     | list | length > 0
   become: true
 
+# _setup installs an lvm2-monitor.service fixture; ZFS-root converge must mask
+# it rather than leave an unused storage monitor enabled.
+- name: _verify | Unused storage monitor fixture was masked and stopped
+  when: zfs_root | bool
+  systemd:
+    name: lvm2-monitor.service
+  register: _boot_verify_lvm_monitor
+  failed_when: >-
+    _boot_verify_lvm_monitor.status.UnitFileState != 'masked'
+    or _boot_verify_lvm_monitor.status.ActiveState != 'inactive'
+  become: true
+
 # Exercise the helper's removal direction on both bootloader families. The
 # fixture name is deliberately absent, so this remains idempotent while proving
 # an empty contribution selects the GRUB or ZFSBootMenu cleanup task.
