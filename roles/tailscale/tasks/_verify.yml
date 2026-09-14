@@ -100,6 +100,7 @@
     content: |
       #!/bin/bash
       set -euo pipefail
+      printf '%s\n' "$*" >>/tmp/tailscale_dsm_fixture.log
       case "${1:-}" in
         configure)
           mkdir -p /var/packages/Tailscale/conf
@@ -128,7 +129,7 @@
     content: |
       #!/bin/bash
       set -euo pipefail
-      exit 0
+      printf '%s\n' "$*" >>/tmp/tailscale_dsm_synosystemctl.log
     mode: "0755"
   become: true
 
@@ -136,6 +137,31 @@
   import_tasks: dsm.yml
   vars:
     tailscale_bin: /tmp/tailscale_dsm_fixture
+
+- name: _verify DSM | Read the package fixture state
+  slurp:
+    src: "{{ item }}"
+  loop:
+    - /var/packages/Tailscale/scripts/start-stop-status
+    - /tmp/tailscale_dsm_fixture.log
+    - /tmp/tailscale_dsm_synosystemctl.log
+  register: _tailscale_dsm_state
+  become: true
+
+- name: _verify DSM | Package was configured, pinned, restarted, and reconciled
+  vars:
+    _launcher: "{{ _tailscale_dsm_state.results[0].content | b64decode }}"
+    _client_calls: "{{ (_tailscale_dsm_state.results[1].content | b64decode).splitlines() }}"
+    _restart_calls: "{{ (_tailscale_dsm_state.results[2].content | b64decode).splitlines() }}"
+  assert:
+    that:
+      - _launcher is search('(?m)^PORT="' ~ tailscale_port ~ '"$')
+      - "'configure synology' in _client_calls"
+      - _client_calls | select('match', '^set --advertise-routes=') | list | length == 1
+      - _restart_calls == ['restart pkgctl-Tailscale.service']
+    fail_msg: >-
+      DSM entry point did not drive the package as expected.
+      launcher={{ _launcher }} client={{ _client_calls }} restart={{ _restart_calls }}
 
 # The successful converge exercises cleanup after login. Repeat registration
 # with a failing client binary to prove the staged one-time key is also removed
