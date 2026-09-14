@@ -80,7 +80,6 @@ curl -fsSL -o /tmp/gitlab-runner "$GITLAB_RUNNER_URL"
 echo "${GITLAB_RUNNER_SHA256}  /tmp/gitlab-runner" | sha256sum -c -
 sudo install -m 0755 -o root -g root /tmp/gitlab-runner /usr/local/bin/gitlab-runner
 sudo ln -sf /usr/local/bin/gitlab-runner /usr/bin/gitlab-runner
-sudo install -m 0755 -o root -g root /tmp/hydrate-qemu-images.py /usr/local/bin/homelab_ci_hydrate_images
 sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch.sh /usr/local/bin/homelab_ci_prepare_scratch
 sudo usermod -aG kvm ubuntu
 
@@ -108,7 +107,6 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
     PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
     mise exec -- uv sync --locked --link-mode hardlink
   sudo env "${mise_environment[@]}" mise exec -- true
-  sudo env "${mise_environment[@]}" mise run ci:hydrate-qemu-images --help >/dev/null
 )
 sudo awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/homelab-ci-build/mise.toml |
   sudo tee /etc/mise/config.toml >/dev/null
@@ -160,6 +158,5 @@ sudo apt-get clean
 sudo rm -rf \
   /var/lib/apt/lists/* \
   /tmp/gitlab-runner \
-  /tmp/hydrate-qemu-images.py \
   /tmp/homelab_ci_prepare_scratch.sh \
   /tmp/homelab-ci-build

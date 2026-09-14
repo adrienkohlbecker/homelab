@@ -361,7 +361,11 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert 'MISE_DISABLE_TOOLS="$MISE_DISABLE_TOOLS"' in provision
     assert 'disable_tools = ["%s"]' in provision
     assert "mise exec -- true" in provision
-    assert "mise run ci:hydrate-qemu-images --help" in provision
+    # Cells hydrate through their checked-out source tree. The AMI build must
+    # not try to execute a partial copy of that task without its imports.
+    assert "hydrate-qemu-images.py" not in template
+    assert "homelab_ci_hydrate_images" not in provision
+    assert "mise run ci:hydrate-qemu-images" not in provision
     assert "command -v __QEMU_SYSTEM_BINARY__" in provision
 
 

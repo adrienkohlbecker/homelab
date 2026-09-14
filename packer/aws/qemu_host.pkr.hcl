@@ -147,7 +147,6 @@ build {
       "${path.cwd}/mise.toml",
       "${path.cwd}/pyproject.toml",
       "${path.cwd}/uv.lock",
-      "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py",
       "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh",
     ]
     destination = "/tmp/"
