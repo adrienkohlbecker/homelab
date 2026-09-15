@@ -14,7 +14,6 @@
 set -euo pipefail
 
 mountpoint=/mnt/scratch
-scratch_backing=instance_store
 
 calculate_swap_gib() {
   local meminfo_path=${1:-/proc/meminfo}
@@ -44,7 +43,6 @@ if ! mountpoint -q "$mountpoint"; then
     lsblk -dn -o NAME,MODEL | awk '/Instance Storage/ { print "/dev/" $1 }'
   )
   if [ "${#devs[@]}" -eq 0 ]; then
-    scratch_backing=ebs
     root_source=$(findmnt -n -o SOURCE /)
     root_disk=$(lsblk -srdpno NAME,TYPE "$root_source" | awk '$2 == "disk" { print $1; exit }')
     mapfile -t ebs_devs < <(
@@ -92,12 +90,12 @@ install -dm 0755 -o ubuntu -g ubuntu "$mountpoint/homelab_ci"
 # many guests hit peak RSS at once and can momentarily overshoot the 64 GiB host
 # RAM; without swap that overshoot is an OOM-kill that culls a guest and flakes
 # its cell. A modest swapfile on the scratch device absorbs the
-# transient by paging out cold pages instead. Instance-store hosts keep
-# vm.swappiness=1. EBS-backed hosts use zero plus no swap read-ahead because
-# paging competes with guest image I/O on the same provisioned volume. This is a
-# cushion, NOT working memory: if it ever fills, the fix is fewer cells per host,
-# not more swap. Only on a separate scratch mount so the bake host, which falls
-# back to its small root filesystem, stays untouched. Best-effort: a
+# transient by paging out cold pages instead. vm.swappiness=1 keeps it dormant --
+# the kernel reclaims page cache first and only dips into swap as a near-last
+# resort, so steady-state cells never pay paging latency. This is a cushion, NOT
+# working memory: if it ever fills, the fix is fewer cells per host, not more
+# swap. Only on a separate scratch mount so the bake host, which falls back to
+# its small root filesystem, stays untouched. Best-effort: a
 # swap failure must not fail this unit (the host still runs, just without the
 # cushion), so the setup is guarded and swappiness only flips on success.
 swapfile="$mountpoint/swapfile"
@@ -114,12 +112,7 @@ if mountpoint -q "$mountpoint" &&
       chmod 0600 "$swapfile" &&
       mkswap "$swapfile" >/dev/null &&
       swapon "$swapfile"; then
-      if [ "$scratch_backing" = ebs ]; then
-        sysctl -q -w vm.swappiness=0
-        sysctl -q -w vm.page-cluster=0
-      else
-        sysctl -q -w vm.swappiness=1
-      fi
+      sysctl -q -w vm.swappiness=1
     else
       echo "homelab_ci_prepare_scratch: swap setup failed, continuing without cushion" >&2
       swapoff "$swapfile" 2>/dev/null || true

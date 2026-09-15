@@ -448,17 +448,6 @@ def test_qemu_host_scratch_uses_one_non_root_ebs_disk() -> None:
     assert "multiple non-root EBS disks are ambiguous" in script
 
 
-def test_qemu_host_scratch_penalizes_swap_on_ebs() -> None:
-    script = QEMU_HOST_SCRATCH_SH.read_text()
-
-    assert "scratch_backing=instance_store" in script
-    assert "scratch_backing=ebs" in script
-    assert 'if [ "$scratch_backing" = ebs ]; then' in script
-    assert "sysctl -q -w vm.swappiness=0" in script
-    assert "sysctl -q -w vm.page-cluster=0" in script
-    assert "sysctl -q -w vm.swappiness=1" in script
-
-
 def test_qemu_host_readiness_waits_for_scratch_setup() -> None:
     script = QEMU_HOST_PROVISION_SH.read_text()
 
