@@ -1,6 +1,6 @@
-# Mirror the production producer so the fixture gets the real dataset
-# properties, mount unit, and zfs_check_mount dependency before ssh runs.
+# ZFS fixtures need the production dataset producer before SSH persists keys.
 - name: _setup | Configure the services datasets
+  when: zfs_root
   import_role:
     name: services
     tasks_from: main
