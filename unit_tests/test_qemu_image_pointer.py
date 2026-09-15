@@ -56,6 +56,7 @@ class TestPointerBody:
             '  "rollback_build_ids": [\n    "previous"\n  ],\n  "ubuntu": "noble"\n}\n'
         )
 
+
 class TestManifest:
     def test_round_trip_contains_only_identity_and_verified_files(
         self,
