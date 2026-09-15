@@ -305,7 +305,6 @@
       when:
         - reboot_required.stat.exists
         - qemu_test
-      become: true
 
     - name: Disable DNS reboot guard in QEMU
       systemd:
@@ -315,7 +314,7 @@
       when:
         - reboot_required.stat.exists
         - qemu_test
-        - qemu_dns_reboot_guard_unit.stat.exists | default(false)
+        - qemu_dns_reboot_guard_unit.stat.exists
       become: true
 
     - name: Restart machine
@@ -341,5 +340,4 @@
         prompt: "Waiting 2 min for services to resettle before cycling the next host (Ctrl+C then C to skip)"
       when:
         - reboot_required.stat.exists
-        - ansible_play_hosts_all | length > 1
         - inventory_hostname != ansible_play_hosts_all[-1]
