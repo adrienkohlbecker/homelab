@@ -1191,7 +1191,6 @@ class TestEmitGitlab:
         expected = {
             "gitlab_runner:lab",
             "nginx:lab",
-            "nginx:lab:resolute",
             "podman:lab",
             "swap:lab",
             "zfs:lab",

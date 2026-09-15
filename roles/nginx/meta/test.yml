@@ -5,3 +5,7 @@ machines:
   lab:
 ubuntu:
   - resolute
+skip:
+  "lab:resolute": >-
+    Box Resolute covers the release-divergent nginx configuration; Lab Noble
+    covers the inventory-driven static proxy paths.
