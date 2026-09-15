@@ -82,13 +82,7 @@
           - _apt_verify_installed_dir.stat.gr_name == 'root'
           - _apt_verify_installed_dir.stat.mode == '0750'
 
-    # No shell wrapper: bash would only be absent from the picture by way of its
-    # exec optimisation (measured: both forms report the same status), and the
-    # nested quoting is a hazard on its own. GNU timeout signals its whole
-    # process group, so it dies of the KILL alongside the child and ansible
-    # reports -9; an implementation that reaps the child instead exits 137. Both
-    # mean the escalation happened, which is the property under test -- a
-    # timeout that never escalated would report 124.
+    # GNU timeout may die with its process group (-9) or reap the child (137).
     - name: _verify | Exercise timeout TERM-to-KILL escalation
       command:
         argv:
@@ -99,16 +93,8 @@
           - -c
           - "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(10)"
       register: _apt_verify_timeout
-      failed_when: false
+      failed_when: _apt_verify_timeout.rc not in [-9, 137]
       changed_when: false
-
-    - name: _verify | Timeout propagates the final KILL signal
-      assert:
-        that: _apt_verify_timeout.rc in [-9, 137]
-        fail_msg: >-
-          timeout --kill-after exited {{ _apt_verify_timeout.rc }}, expected -9
-          or 137 after escalating from TERM to KILL (124 would mean it timed out
-          without ever sending the KILL).
   always:
     - name: _verify | Remove the coreutils compatibility workspace
       file:
