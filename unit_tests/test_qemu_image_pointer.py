@@ -11,9 +11,13 @@ side-effect-free: both modules do their work under ``if __name__ == "__main__"``
 """
 
 import argparse
+import hashlib
+import io
 import json
 import re
+import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -256,6 +260,105 @@ class TestManifest:
         assert not hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-2", args.source_sha))
         disk.unlink()
         assert not hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-1", args.source_sha))
+
+
+def _zstd_bundle(path: Path, members: list[tarfile.TarInfo | tuple[str, bytes]]) -> Path:
+    with tarfile.open(path, "w:zst") as tar:
+        for member in members:
+            if isinstance(member, tarfile.TarInfo):
+                tar.addfile(member)
+                continue
+            name, content = member
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+    return path
+
+
+def _gnu_tar_with_zstd() -> str | None:
+    tar = shutil.which("gtar") or shutil.which("tar")
+    if tar is None or shutil.which("zstd") is None:
+        return None
+    version = subprocess.run([tar, "--version"], capture_output=True, text=True).stdout
+    return tar if "GNU tar" in version else None
+
+
+class TestExtractBundle:
+    def test_extracts_exactly_the_manifest_members(self, tmp_path: Path) -> None:
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("disk.raw", b"disk"), ("efivars.fd", b"efi")])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        hydrate.extract_bundle(bundle, staged, ["disk.raw", "efivars.fd"])
+
+        assert (staged / "disk.raw").read_bytes() == b"disk"
+        assert (staged / "efivars.fd").read_bytes() == b"efi"
+
+    def test_links_are_refused(self, tmp_path: Path) -> None:
+        link = tarfile.TarInfo("disk.raw")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "efivars.fd"
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("efivars.fd", b"efi"), link])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        with pytest.raises(SystemExit, match="not a regular file"):
+            hydrate.extract_bundle(bundle, staged, ["disk.raw", "efivars.fd"])
+        assert not (staged / "disk.raw").exists()
+
+    def test_traversal_is_refused_before_writing(self, tmp_path: Path) -> None:
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("../escaped", b"x")])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        with pytest.raises(SystemExit, match="unsafe archive member"):
+            hydrate.extract_bundle(bundle, staged, ["../escaped"])
+        assert not (tmp_path / "escaped").exists()
+
+    def test_unlisted_members_are_refused(self, tmp_path: Path) -> None:
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("disk.raw", b"disk"), ("extra", b"x")])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        with pytest.raises(SystemExit, match="not in the manifest: 'extra'"):
+            hydrate.extract_bundle(bundle, staged, ["disk.raw"])
+        assert not (staged / "extra").exists()
+
+    def test_missing_members_are_reported(self, tmp_path: Path) -> None:
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("disk.raw", b"disk")])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        with pytest.raises(SystemExit, match=r"missing manifest members: efivars\.fd"):
+            hydrate.extract_bundle(bundle, staged, ["disk.raw", "efivars.fd"])
+
+    @pytest.mark.skipif(_gnu_tar_with_zstd() is None, reason="needs GNU tar with zstd, as upload-s3 uses")
+    def test_restores_gnu_sparse_bundles_from_upload(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        disk = source / "packer-ubuntu-1.raw"
+        with disk.open("wb") as handle:
+            handle.truncate(64 * 1024 * 1024)
+            handle.seek(48 * 1024 * 1024)
+            handle.write(b"data after a hole")
+        (source / "efivars.fd").write_bytes(b"efi")
+        bundle = tmp_path / "disks.tar.zst"
+        tar = _gnu_tar_with_zstd()
+        assert tar is not None
+        subprocess.run(
+            [tar, "--sparse", "--zstd", "-cf", str(bundle), "-C", str(source), disk.name, "efivars.fd"], check=True
+        )
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        hydrate.extract_bundle(bundle, staged, [disk.name, "efivars.fd"])
+
+        restored = (staged / disk.name).stat()
+        with (staged / disk.name).open("rb") as restored_file, disk.open("rb") as source_file:
+            assert hashlib.file_digest(restored_file, "sha256").digest() == hashlib.file_digest(source_file, "sha256").digest()
+        # Filesystems round data extents differently (APFS reports 16 MiB), so
+        # only require that the 48 MiB hole was not written out.
+        assert restored.st_blocks * 512 < restored.st_size // 2
 
 
 class TestRetention:

@@ -35,6 +35,7 @@ import json
 import os
 import shutil
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -48,13 +49,11 @@ from qemu_image_store import (
     POINTER_NAME,
     VALID_ARCHITECTURES,
     VALID_MACHINES,
-    find_tar,
     host_architecture,
     image_store,
     manifest_files,
     output,
     run,
-    validate_member_name,
 )
 
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
@@ -184,23 +183,33 @@ def read_manifest(path: Path, args: argparse.Namespace, selection: ImageSelectio
     return manifest
 
 
-def validate_archive_members(tar: str, bundle: Path, expected_members: list[str]) -> None:
-    listed = output([tar, "--zstd", "-tf", str(bundle)]).splitlines()
-    for member in listed:
-        validate_member_name(member)
-    # Names alone do not bound where tar writes: a symlink member plus a member
-    # nested beneath it both pass the name check while the second lands outside
-    # the staging dir. A qemu image bundle only ever holds regular files, so
-    # require that -- the verbose listing's first column is the type flag.
-    for line in output([tar, "--zstd", "-tvf", str(bundle)]).splitlines():
-        if not line.startswith("-"):
-            sys.exit(f"archive member is not a regular file: {line!r}")
+def extract_bundle(bundle: Path, staged: Path, expected_members: list[str]) -> None:
+    """Extract a zstd bundle in one pass, admitting only the manifest's regular files.
+
+    tarfile's data filter refuses absolute paths, parent traversal, and links
+    that escape *staged*. A qemu image bundle only ever holds regular files, so
+    any other member type, or a name the manifest does not list, aborts before
+    that member is written. GNU sparse members keep their holes.
+    """
     expected = set(expected_members)
-    actual = set(listed)
-    if actual != expected:
-        missing = " ".join(sorted(expected - actual)) or "(none)"
-        extra = " ".join(sorted(actual - expected)) or "(none)"
-        sys.exit(f"archive members do not match manifest; missing: {missing}; extra: {extra}")
+    extracted: set[str] = set()
+
+    def admit(member: tarfile.TarInfo, path: str) -> tarfile.TarInfo:
+        member = tarfile.data_filter(member, path)
+        if not member.isreg():
+            sys.exit(f"archive member is not a regular file: {member.name!r}")
+        if member.name not in expected:
+            sys.exit(f"archive member is not in the manifest: {member.name!r}")
+        extracted.add(member.name)
+        return member
+
+    try:
+        with tarfile.open(bundle, "r:zst") as tar:
+            tar.extractall(staged, filter=admit)
+    except tarfile.FilterError as exc:
+        raise SystemExit(f"unsafe archive member: {exc}") from exc
+    if missing := sorted(expected - extracted):
+        sys.exit(f"archive is missing manifest members: {' '.join(missing)}")
 
 
 def local_cache_complete(target: Path, args: argparse.Namespace, selection: ImageSelection) -> bool:
@@ -251,7 +260,6 @@ def main() -> int:
     args = parse_args()
     if not shutil.which("aws"):
         sys.exit("required tool not found on PATH: aws")
-    tar = find_tar()
 
     root = dest_root()
     lock_dir = root / ".hydrate-locks"
@@ -284,11 +292,7 @@ def main() -> int:
             download_s3(args, f"{prefix}/{BUNDLE_NAME}", bundle_path)
 
             print(f"==> extracting {BUNDLE_NAME}")
-            validate_archive_members(tar, bundle_path, members)
-            run([tar, "--sparse", "--zstd", "--no-same-owner", "-xf", str(bundle_path), "-C", str(staged)])
-            for entry in files:
-                if not (staged / entry["name"]).is_file():
-                    sys.exit(f"bundle did not extract expected member: {entry['name']}")
+            extract_bundle(bundle_path, staged, members)
 
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             replace_target(staged, target)
