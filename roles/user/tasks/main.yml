@@ -96,8 +96,7 @@
     - user
 
 - name: Install amd64-only packages
-  when:
-    - ansible_architecture == "x86_64"
+  when: ansible_architecture == "x86_64"
   apt:
     pkg:
       - i7z
