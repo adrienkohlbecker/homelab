@@ -1,3 +1,5 @@
-# Reconstructible container storage lives outside rpool on the physical Pug and
-# Fox hosts and on the QEMU Pug fixture.
+# Storage topology shared by the physical Pug host and QEMU Pug fixtures.
+swap_partition: /dev/disk/by-partlabel/swap
+
+# Reconstructible container storage lives outside rpool.
 podman_storage_device: /dev/disk/by-partlabel/podman
