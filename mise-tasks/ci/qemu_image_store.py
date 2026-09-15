@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import platform
 import shutil
 import subprocess
@@ -62,6 +63,11 @@ def find_tar() -> str:
         if "--zstd" in probe.stdout and "--sparse" in probe.stdout:
             return path
     sys.exit("required tar support missing: need GNU tar/bsdtar with --zstd and --sparse")
+
+
+def sha256(path: Path) -> str:
+    with path.open("rb") as file:
+        return hashlib.file_digest(file, "sha256").hexdigest()
 
 
 def validate_member_name(member: str) -> None:
