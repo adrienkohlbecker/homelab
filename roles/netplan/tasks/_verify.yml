@@ -109,3 +109,10 @@
         path: "/run/netplan/config-{{ netplan_dbus_path | basename }}"
       register: netplan_verify_cancelled_state
       failed_when: netplan_verify_cancelled_state.stat.exists
+
+# The setup fixture supplied an installer origin for the first converge. Its
+# successful removal leaves the opposite production input for this final rerun.
+- name: _verify | Re-run production Netplan tasks without an installer origin
+  import_role:
+    name: netplan
+    tasks_from: main

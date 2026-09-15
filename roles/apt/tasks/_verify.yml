@@ -39,3 +39,20 @@
   register: _apt_verify_timeout
   failed_when: _apt_verify_timeout.rc not in [-9, 137]
   changed_when: false
+
+- name: _verify | Resolve both repository architecture variants through the production tasks
+  check_mode: true
+  block:
+    - name: _verify | Resolve x86 apt sources
+      import_role:
+        name: apt
+        tasks_from: sources
+      vars:
+        ansible_architecture: x86_64  # noqa: var-naming[no-role-prefix]
+
+    - name: _verify | Resolve ARM apt sources
+      import_role:
+        name: apt
+        tasks_from: sources
+      vars:
+        ansible_architecture: aarch64  # noqa: var-naming[no-role-prefix]

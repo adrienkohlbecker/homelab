@@ -30,3 +30,10 @@
   args:
     executable: /bin/bash
   changed_when: false
+
+- name: _verify | Re-run production cleanup while preserving cloud-init
+  import_role:
+    name: cleanup
+    tasks_from: main
+  vars:
+    cloud_init_managed: true  # noqa: var-naming[no-role-prefix]

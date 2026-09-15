@@ -53,3 +53,17 @@
     path: /tmp/smartd-device-variants.conf
     state: absent
   become: true
+
+- name: _verify | Exercise the production smartd reload selection
+  check_mode: true
+  vars:
+    smart_devices:
+      nvme0n1:
+        removable: "0"
+        links:
+          ids: [nvme-reload-fixture]
+  block:
+    - name: _verify | Check a changed smartd configuration
+      import_role:
+        name: smart
+        tasks_from: main

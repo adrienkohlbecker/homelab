@@ -190,6 +190,64 @@
       failed_when: tailscale_authkey_after_failed_login.stat.exists
       become: true
 
+- name: _verify | Install a client fixture that stops after preference reconciliation
+  copy:
+    dest: /tmp/tailscale_preference_fixture
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      case "${1:-}" in
+        status)
+          printf '%s\n' '{"BackendState":"Running"}'
+          ;;
+        set)
+          printf '%s\n' "$@" > /tmp/tailscale_preference_args
+          exit 42
+          ;;
+        *)
+          exit 42
+          ;;
+      esac
+    mode: "0755"
+  become: true
+
+- name: _verify | Exercise disabled accept-routes through production registration
+  block:
+    - name: _verify | Reconcile preferences with accept-routes disabled
+      import_tasks: register.yml
+      vars:
+        tailscale_bin: /tmp/tailscale_preference_fixture
+        tailscale_accept_routes: false
+
+    - name: _verify | Reject an unexpectedly completed preference fixture
+      fail:
+        msg: The preference fixture did not stop after tailscale set
+
+  rescue:
+    - name: _verify | Require the preference reconciliation failure
+      assert:
+        that: ansible_failed_task.name == 'register | Reconcile routes / exit node / accept-routes / accept-dns'
+
+    - name: _verify | Read the reconciled preference arguments
+      slurp:
+        src: /tmp/tailscale_preference_args
+      register: _tailscale_preference_args
+      become: true
+
+    - name: _verify | Accept-routes was explicitly disabled
+      assert:
+        that: "'--accept-routes=false' in (_tailscale_preference_args.content | b64decode)"
+
+  always:
+    - name: _verify | Remove preference fixture files
+      file:
+        path: "/tmp/{{ item }}"
+        state: absent
+      loop:
+        - tailscale_preference_fixture
+        - tailscale_preference_args
+      become: true
+
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the add-wants link brings it back with the target's start.
 # Kept last because it bounces the daemon; the harness reaches the VM over the

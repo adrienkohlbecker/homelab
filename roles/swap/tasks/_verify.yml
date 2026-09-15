@@ -2,6 +2,43 @@
 # coexists below it, and swappiness is tuned. testrole.py / testall.py only
 # (qemu); never site.yml. See notes/swap_strategy.md.
 
+- name: _verify | Create the ambivalent-signature blkid fixture
+  copy:
+    dest: /tmp/blkid
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      exit 8
+    mode: "0755"
+
+- name: _verify | Exercise the production ambivalent-signature rejection
+  environment:
+    PATH: /tmp:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  block:
+    - name: _verify | Run the swap role against the blkid fixture
+      import_role:
+        name: swap
+        tasks_from: main
+      vars:
+        swap_partition: /dev/verify_ambivalent
+
+    - name: _verify | Reject an unexpectedly accepted signature
+      fail:
+        msg: The ambivalent swap signature was accepted
+
+  rescue:
+    - name: _verify | Require the production rc=8 guidance
+      assert:
+        that:
+          - ansible_failed_task.name == 'Assert the partition carries a clean swap signature'
+          - "'rc=8 means ambivalent/multiple on-disk signatures' in ansible_failed_result.msg"
+
+  always:
+    - name: _verify | Remove the ambivalent-signature blkid fixture
+      file:
+        path: /tmp/blkid
+        state: absent
+
 - name: _verify | Read active swap devices with priorities and sizes
   command: swapon --show=NAME,PRIO,SIZE --noheadings --bytes --raw
   changed_when: false
