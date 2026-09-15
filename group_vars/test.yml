@@ -1,8 +1,7 @@
 qemu_test: true
 
-# An EFI-stub fixture stages its kernel command line through rEFInd, outside the
-# role under test, so role-local changes cannot reach the running kernel after a
-# reboot. GRUB and x86 ZFSBootMenu fixtures apply them directly.
+# EFI-stub fixtures stage their command line outside the role under test, so
+# role-local boot changes cannot reach the running kernel after a reboot.
 qemu_boot_changes_reachable: "{{ not boot_via_efi_stub }}"
 
 # Noble's archive has enough kernel history to exercise Packer's aarch64
