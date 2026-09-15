@@ -42,6 +42,7 @@ def test_arm_benchmark_is_one_protected_manual_child_trigger() -> None:
     trigger = pipeline["arm_benchmark"]
 
     assert trigger["extends"] == ".protected_manual_job"
+    assert trigger["needs"] == []
     assert trigger["trigger"]["include"] == [{"local": "mise-tasks/ci/arm_benchmark.yml"}]
     assert trigger["trigger"]["forward"]["pipeline_variables"] is True
     assert trigger["trigger"]["strategy"] == "depend"

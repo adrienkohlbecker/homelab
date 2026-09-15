@@ -126,6 +126,7 @@ arm_density:
 arm_benchmark:
   stage: test
   extends: .protected_manual_job
+  needs: []
   trigger:
     include:
       - local: mise-tasks/ci/arm_benchmark.yml
