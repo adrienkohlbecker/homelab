@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import signal
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -163,20 +161,11 @@ def test_upload_qemu_stages_bundle_beside_artifacts(tmp_path: Path) -> None:
 
 
 def test_upload_qemu_removes_staged_bundle_on_sigterm(tmp_path: Path) -> None:
-    argv, env, artifacts, tar_log = _upload_fixture(tmp_path, tar_tail="exec sleep 30\n")
+    argv, env, artifacts, tar_log = _upload_fixture(tmp_path, tar_tail='kill -TERM "$PPID"\n')
 
-    proc = subprocess.Popen(argv, cwd=REPO_ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try:
-        deadline = time.monotonic() + 10
-        while not (tar_log.exists() and tar_log.read_text().strip()):
-            assert time.monotonic() < deadline, "fake tar never staged the bundle"
-            time.sleep(0.05)
-        proc.send_signal(signal.SIGTERM)
-        returncode = proc.wait(timeout=10)
-    finally:
-        proc.kill()
+    result = subprocess.run(argv, cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
-    assert returncode == 128 + signal.SIGTERM
+    assert result.returncode == 143
     assert not Path(tar_log.read_text().strip()).parent.exists()
     assert [p.name for p in artifacts.parent.iterdir()] == ["lab"]
 
