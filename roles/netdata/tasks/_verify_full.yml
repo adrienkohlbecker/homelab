@@ -32,26 +32,6 @@
     fail_msg: >-
       Expected minio_buckets to enable the MinIO job in prometheus.conf.
 
-- name: _verify | Read systemd unit health configuration
-  slurp:
-    src: /etc/netdata/health.d/systemdunits.conf
-  register: _netdata_systemdunits_health
-  become: true
-
-- name: _verify | Every systemd unit alert uses sustained failure state
-  vars:
-    _health: "{{ _netdata_systemdunits_health.content | b64decode }}"
-  assert:
-    that:
-      - >-
-        _health
-        | regex_findall('lookup: average -5m unaligned of failed')
-        | length == 11
-      - '"delay: up" not in _health'
-    fail_msg: >-
-      Expected all 11 rendered systemd unit alerts to require five minutes of
-      sustained failure without notification-only delay.
-
 - name: _verify | Read Fluent Bit health configuration
   slurp:
     src: /etc/netdata/health.d/fluentbit.conf
@@ -477,29 +457,6 @@
       required stayed high for 30m. Got:
       {{ _alarm }}
 
-- name: _verify | Systemd service failure alarm uses sustained state
-  vars:
-    _alarm: >-
-      {{
-        (_netdata_alarms.json.alarms.values()
-         | selectattr('name', 'equalto', 'systemd_service_unit_failed_state')
-         | first)
-        | default({})
-      }}
-  assert:
-    that:
-      - _alarm.recipient | default('') == "sysadmin"
-      - _alarm.lookup_method | default('') == "average"
-      - _alarm.lookup_after | default(0) == -300
-      - _alarm.lookup_before | default(0) == 0
-      - _alarm.lookup_dimensions | default('') == "failed"
-      - _alarm.delay_up_duration | default(0) == 0
-      - _alarm.delay_down_duration | default(0) == 0
-    fail_msg: >-
-      Expected systemd_service_unit_failed_state to require a sustained 5m
-      failure without queued notification delays. Got:
-      {{ _alarm }}
-
 - name: _verify | Available systemd unit failure alarms use sustained state
   vars:
     _alarm: >-
@@ -514,6 +471,7 @@
       - _alarm.recipient | default('') == "sysadmin"
       - _alarm.lookup_method | default('') == "average"
       - _alarm.lookup_after | default(0) == -300
+      - _alarm.lookup_before | default(0) == 0
       - _alarm.lookup_dimensions | default('') == "failed"
       - _alarm.delay_up_duration | default(0) == 0
       - _alarm.delay_down_duration | default(0) == 0
@@ -521,6 +479,7 @@
       Expected {{ item }} to use sustained failure state without notification
       delays. Got: {{ _alarm }}
   loop:
+    - systemd_service_unit_failed_state
     - systemd_socket_unit_failed_state
     - systemd_target_unit_failed_state
     - systemd_path_unit_failed_state
@@ -528,8 +487,6 @@
     - systemd_mount_unit_failed_state
     - systemd_automount_unit_failed_state
     - systemd_swap_unit_failed_state
-    # skip_transient suppresses scope charts in the fixture, so the rendered
-    # configuration assertion above covers the scope template.
     - systemd_slice_unit_failed_state
     - systemd_timer_unit_failed_state
 
