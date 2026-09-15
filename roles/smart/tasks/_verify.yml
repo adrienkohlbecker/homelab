@@ -1,0 +1,55 @@
+- name: _verify | Render production smartd config with representative disks
+  template:
+    src: smartd.conf.j2
+    dest: /tmp/smartd-device-variants.conf
+    mode: "0644"
+  vars:
+    smart_devices:
+      nvme0n1:
+        removable: "0"
+        links:
+          ids: [nvme-verify]
+      sda:
+        removable: "0"
+        links:
+          ids: [ata-CT1000MX500SSD1]
+      sdb:
+        removable: "0"
+        links:
+          ids: [ata-verify-rotational]
+      sdc:
+        removable: "0"
+        links:
+          ids: [ata-unsafe/device]
+    rotational_disks_by_id:
+      - ata-verify-rotational
+    _unsafe_device_id: unsafe-device-id-was-rejected
+  become: true
+
+- name: _verify | Verify representative smartd device policies
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        config = pathlib.Path(sys.argv[1]).read_text()
+        assert "unsafe-device-id-was-rejected" in config
+        assert "/dev/disk/by-id/nvme-verify -d nvme,0xffffffff" in config
+        assert "ata-CT1000MX500SSD1" in config
+        assert "ata-verify-rotational" in config
+        device_lines = [line for line in config.splitlines() if line.startswith("/dev/disk/by-id/")]
+        assert sum(" -C 0 -U 0" in line for line in device_lines) == 1
+        rotational = next(line for line in device_lines if "ata-verify-rotational" in line)
+        assert "(S/../../6/01)" in rotational
+      - /tmp/smartd-device-variants.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Remove the representative smartd config
+  file:
+    path: /tmp/smartd-device-variants.conf
+    state: absent
+  become: true

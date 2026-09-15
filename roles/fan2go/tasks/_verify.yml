@@ -11,3 +11,45 @@
     path: /etc/systemd/system/fan2go.service
   register: fan2go_unit_stat_verify
   failed_when: fan2go_unit_stat_verify.stat.exists
+
+- name: _verify | Render production configs with a rotational disk
+  template:
+    src: "{{ item }}.yaml.j2"
+    dest: "/tmp/fan2go-{{ item }}.yaml"
+    mode: "0644"
+  vars:
+    rotational_disks_by_id:
+      - ata-verify-disk
+  loop:
+    - lab
+    - pug
+  become: true
+
+- name: _verify | Verify disk sensor and curve wiring
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        config = pathlib.Path(sys.argv[1]).read_text()
+        assert config.count("hdd_1_temp") == 2
+        assert config.count("hdd_1_curve") == 2
+        assert "device: /dev/disk/by-id/ata-verify-disk" in config
+      - "/tmp/fan2go-{{ item }}.yaml"
+  loop:
+    - lab
+    - pug
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate fan2go configs
+  file:
+    path: "/tmp/fan2go-{{ item }}.yaml"
+    state: absent
+  loop:
+    - lab
+    - pug
+  become: true

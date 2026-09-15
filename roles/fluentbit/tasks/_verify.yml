@@ -8,21 +8,24 @@
   until: _fluentbit_uptime.status == 200
   become: true
 
-# Exercise the reversible helper with an installed artifact. The removal
-# validates and reloads the rebuilt live configuration.
-- name: _verify | Seed a retired service extension
+# Exercise the reversible helper with installed artifacts. Removal validates
+# and reloads the rebuilt live configuration.
+- name: _verify | Seed retired service extensions
   copy:
-    dest: /etc/fluent-bit/services/condition_coverage_fixture.yaml
+    dest: "/etc/fluent-bit/services/{{ item }}.yaml"
     content: |
       pipeline:
         filters:
           - name: modify
-            match: condition_coverage_fixture.*
+            match: "{{ item }}.*"
             add:
-              - condition_coverage_fixture true
+              - "{{ item }} true"
     owner: root
     group: root
     mode: "0644"
+  loop:
+    - condition_coverage_fixture
+    - condition_coverage_remaining
   become: true
 
 - name: _verify | Remove the retired service extension
@@ -33,6 +36,25 @@
     fluentbit_extension_remove_args:
       names:
         - condition_coverage_fixture
+
+- name: _verify | Remove the remaining retired service extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension_remove
+  vars:
+    fluentbit_extension_remove_args:
+      names:
+        - condition_coverage_remaining
+
+- name: _verify | Disturb the managed config before exercising reload
+  lineinfile:
+    path: /etc/fluent-bit/fluent-bit.yaml
+    line: "# _verify reload path"
+    state: present
+  become: true
+
+- name: _verify | Restore the managed config through the production tasks
+  import_tasks: configure.yml
 
 # The shared core filters run against the deployed parsers/filters-pre/
 # filters-post files themselves, so this fixture cannot drift from what the

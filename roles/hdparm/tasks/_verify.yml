@@ -203,6 +203,32 @@
     backup: true
   become: true
 
+- name: _verify | Render the production collector config with a disk
+  template:
+    src: charts_d_hdparm.conf.j2
+    dest: /tmp/hdparm-with-disk.conf
+    mode: "0644"
+  vars:
+    rotational_disks_by_id:
+      - ata-verify-disk
+  become: true
+
+- name: _verify | Verify the production collector includes the disk
+  command:
+    argv:
+      - grep
+      - --fixed-strings
+      - ata-verify-disk
+      - /tmp/hdparm-with-disk.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate hdparm config
+  file:
+    path: /tmp/hdparm-with-disk.conf
+    state: absent
+  become: true
+
 - name: _verify | Remove device fixtures
   file:
     path: "/dev/disk/by-id/{{ item }}"

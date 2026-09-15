@@ -1,0 +1,3 @@
+---
+
+smart_devices: "{{ ansible_devices }}"

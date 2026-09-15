@@ -3,3 +3,82 @@
 
 - name: _verify | Run the full-fixture checks
   import_tasks: _verify_full.yml
+- name: _verify | Resolve expected charts with a keepalive peer
+  vars:
+    wireguard_peers:
+      bunk:
+        keepalive_from:
+          - "{{ inventory_hostname }}"
+  assert:
+    that: "'wireguard_bunk_peer' in netdata_expected_charts"
+
+- name: _verify | Resolve expected charts without a keepalive peer
+  vars:
+    wireguard_peers: {}
+  assert:
+    that: netdata_expected_charts == {}
+
+- name: _verify | Render production configs for alternate collectors
+  template:
+    src: "{{ item.src }}"
+    dest: "/tmp/{{ item.dest }}"
+    mode: "0644"
+  vars:
+    qemu_test: false
+    netdata_keepalived_vrrp_update_every: 11
+    netdata_collectors:
+      - go.d:collector:prometheus:kuma
+      - go.d:collector:prometheus:headscale
+    netdata_zfspool_thresholds:
+      verify_pool: [70, 80, 90]
+  loop:
+    - src: charts_d_keepalived_vrrp.conf.j2
+      dest: netdata-keepalived.conf
+    - src: charts_d_netdata_presence.conf.j2
+      dest: netdata-presence.conf
+    - src: gitlab_runner_alerts.conf.j2
+      dest: netdata-gitlab-runner-alerts.conf
+    - src: prometheus.conf.j2
+      dest: netdata-prometheus.conf
+    - src: zfs_alerts_override.conf.j2
+      dest: netdata-zfs-alerts.conf
+  become: true
+
+- name: _verify | Verify alternate collector configuration
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        root = pathlib.Path(sys.argv[1])
+        assert "keepalived_vrrp_update_every=11" in (root / "netdata-keepalived.conf").read_text()
+        presence = (root / "netdata-presence.conf").read_text()
+        assert "netdata_presence_update_every=60" in presence
+        assert "netdata_presence_startup_grace=300" in presence
+        alerts = (root / "netdata-gitlab-runner-alerts.conf").read_text()
+        assert "lookup: max -5m" in alerts
+        prometheus = (root / "netdata-prometheus.conf").read_text()
+        assert "name: kuma" in prometheus
+        assert "name: headscale" in prometheus
+        assert "name: gitlab_runner" not in prometheus
+        zfs = (root / "netdata-zfs-alerts.conf").read_text()
+        assert "zfspool.zfspool_verify_pool_space_utilization" in zfs
+        assert "? (70) : (80)" in zfs
+      - /tmp
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate Netdata configs
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop:
+    - netdata-keepalived.conf
+    - netdata-presence.conf
+    - netdata-gitlab-runner-alerts.conf
+    - netdata-prometheus.conf
+    - netdata-zfs-alerts.conf
+  become: true

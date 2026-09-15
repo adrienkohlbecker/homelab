@@ -159,7 +159,7 @@ DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools
 {% set smart_test_schedule = '(L/../(0[1-7])/7/04:024|S/../../6/01)' %}
 {% set smart_test_schedule_no_long = '(S/../../6/01)' %}
 {# Monitor stable ATA/NVMe IDs only; skip virtual and removable devices. #}
-{% set monitored_disks_by_id = ansible_devices
+{% set monitored_disks_by_id = smart_devices
   | dict2items
   | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)')
   | selectattr('value.removable', 'equalto', '0')
@@ -174,7 +174,7 @@ DEFAULT -a -C 197+ -U 198+ -n standby,q -m root -M exec /usr/share/smartmontools
 {{ _unsafe_device_id | mandatory('device id contains unsafe characters: ' ~ dev) }}
 {% elif dev.startswith('nvme-') %}
 /dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -s {{ smart_test_schedule }} -W 0,60,80
-{% elif dev.startswith('ata-') %}
+{% else %}
 {# Let smartd select SAT on Linux; forcing legacy ATA blocks 48-bit log commands. #}
 {#- Crucial MX500 firmware spuriously flaps Current_Pending_Sector (197)
     and Offline_Uncorrectable (198) to 1 and back to 0 with no real media
