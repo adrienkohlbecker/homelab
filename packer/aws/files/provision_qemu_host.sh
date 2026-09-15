@@ -134,6 +134,15 @@ sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache
 sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+for _ in {1..90}; do
+  scratch_state=$(systemctl is-active homelab-ci-scratch.service 2>/dev/null || true)
+  case "$scratch_state" in
+    active) break ;;
+    failed | inactive | deactivating) exit 1 ;;
+  esac
+  sleep 1
+done
+[ "$scratch_state" = active ]
 [ -c /dev/kvm ]
 [ -r /dev/kvm ]
 [ -w /dev/kvm ]
