@@ -448,6 +448,14 @@ def test_qemu_host_scratch_uses_one_non_root_ebs_disk() -> None:
     assert "multiple non-root EBS disks are ambiguous" in script
 
 
+def test_qemu_host_readiness_waits_for_scratch_setup() -> None:
+    script = QEMU_HOST_PROVISION_SH.read_text()
+
+    assert "for _ in {1..90}; do" in script
+    assert "systemctl is-active homelab-ci-scratch.service" in script
+    assert '[ "$scratch_state" = active ]' in script
+
+
 def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
     template = QEMU_HOST_TEMPLATE.read_text()
 
