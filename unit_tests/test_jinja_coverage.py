@@ -55,7 +55,10 @@ def test_inventory_covers_inline_role_variables_and_template_files(
     dest: /tmp/example
 """
     )
-    (defaults / "main.yml").write_text("choice: \"{{ 'yes' if default_enabled else 'no' }}\"\n")
+    (defaults / "main.yml").write_text(
+        "choice: \"{{ 'yes' if default_enabled else 'no' }}\"\n"
+        "filtered_choice: \"{{ default_enabled | ternary('yes', 'no') }}\"\n"
+    )
     (templates / "example.j2").write_text(
         """\
 #jinja2: lstrip_blocks: True
@@ -81,6 +84,7 @@ second
         "if",
         "elif",
         "ternary",
+        "ternary_filter",
         "for_filter",
         "for_else",
     }
@@ -100,12 +104,13 @@ def test_ast_instrumentation_preserves_output_and_records_control_flow() -> None
     ).tag(
         TrustedAsTemplate().tag(
             "{% for item in items if item.enabled %}{% if item.show %}{{ item.name }}{% endif %}"
-            '{% else %}empty{% endfor %}:{{ "yes" if flag else "no" }}'
+            '{% else %}empty{% endfor %}:{{ "yes" if flag else "no" }}:{{ flag | ternary("on", "off") }}'
         )
     )
     branches: list[tuple[JinjaBranchKey, bool]] = []
     loops: list[JinjaLoopKey] = []
     environment = Environment()
+    environment.filters["ternary"] = lambda value, true_value, false_value: true_value if value else false_value
     tree = environment.parse(source)
     inventory = instrument_jinja_tree(tree, source)
 
@@ -130,8 +135,8 @@ def test_ast_instrumentation_preserves_output_and_records_control_flow() -> None
     )
     second = template.render(items=[], flag=True)
 
-    assert first == "shown:no"
-    assert second == "empty:yes"
+    assert first == "shown:no:off"
+    assert second == "empty:yes:on"
     assert {outcome for _key, outcome in branches} == {False, True}
     assert set(loops) == set(inventory.loops)
     assert {key for key, _outcome in branches} == set(inventory.branches)
@@ -157,6 +162,9 @@ def test_callback_records_inline_and_file_template_events_across_workers(
   tasks:
     - debug:
         msg: "{{% if item %}}yes{{% else %}}no{{% endif %}}"
+      loop: [false, true]
+    - debug:
+        msg: "{{{{ item | ternary('yes', 'no') }}}}"
       loop: [false, true]
     - template:
         src: {template}

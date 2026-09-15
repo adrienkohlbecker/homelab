@@ -154,6 +154,11 @@ class _CoverageAnnotator(NodeVisitor):
         self.annotations.branches[id(node)] = self._branch_key(node, "ternary")
         self.generic_visit(node, *args, **kwargs)
 
+    def visit_Filter(self, node: nodes.Filter, *args: Any, **kwargs: Any) -> None:
+        if node.name in {"ternary", "ansible.builtin.ternary"}:
+            self.annotations.branches[id(node)] = self._branch_key(node, "ternary_filter")
+        self.generic_visit(node, *args, **kwargs)
+
     def visit_For(self, node: nodes.For, *args: Any, **kwargs: Any) -> None:
         self.annotations.loops[id(node)] = self._loop_key(node)
         if node.test is not None:
@@ -208,6 +213,12 @@ class _CoverageTransformer(NodeTransformer):
         node = cast(nodes.CondExpr, self.generic_visit(node, *args, **kwargs))
         if key := self._annotations.branches.get(id(node)):
             node.test = self._call("_record_jinja_branch", key, cast(nodes.Expr, node.test))
+        return node
+
+    def visit_Filter(self, node: nodes.Filter, *args: Any, **kwargs: Any) -> nodes.Filter:
+        node = cast(nodes.Filter, self.generic_visit(node, *args, **kwargs))
+        if key := self._annotations.branches.get(id(node)):
+            node.node = self._call("_record_jinja_branch", key, cast(nodes.Expr, node.node))
         return node
 
     def visit_For(self, node: nodes.For, *args: Any, **kwargs: Any) -> nodes.For:
