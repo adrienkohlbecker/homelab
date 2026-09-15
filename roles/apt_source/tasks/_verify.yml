@@ -1,19 +1,13 @@
-# Exercises the helper with a representative real repository. The standalone
-# apt_source:box cell runs this file directly; main.yml is a stub, so the block
-# below stands in for a consumer by configuring Docker's repository.
+# The standalone apt_source:box cell configures a representative real source.
 - name: _verify | Standalone — configure a representative source under test
-  block:
-    - name: _verify | Standalone — fixture args (docker, a real mirrored repo)
-      set_fact:
-        apt_source_args:
-          name: docker
-          key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-          key_url: https://download.docker.com/linux/ubuntu/gpg
-          uris: "{{ mirror_apt_docker }}"
-          suites: "{{ ansible_distribution_release }}"
-          components: stable
-
-    - name: _verify | Standalone — configure the source under test
-      import_role:
-        name: apt_source
-        tasks_from: configure
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: docker
+      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+      key_url: https://download.docker.com/linux/ubuntu/gpg
+      uris: "{{ mirror_apt_docker }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: stable
