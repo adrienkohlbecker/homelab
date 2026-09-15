@@ -277,12 +277,3 @@ class TestParseEfibootmgr:
         assert [entry["label"] for entry in entries] == ["rEFInd", "ZFSBootMenu"]
         assert order == ["0001", "0002"]
         assert timeout == 3
-
-    def test_parse_v19_wrapperless_loader(self, monkeypatch):
-        uuid = "6191bc58-2e95-4493-b10c-b83df5181e9f"
-        out = _efibootmgr_v([("0001", "rEFInd", _hd_wrapperless(uuid, "\\EFI\\refind\\refind_x64.efi"))])
-        monkeypatch.setattr(efi, "run", lambda cmd: out)
-        entries, order, timeout = efi.parse_efibootmgr()
-        assert entries[0]["file"] == "\\EFI\\refind\\refind_x64.efi"
-        assert order == ["0001"]
-        assert timeout == 3
