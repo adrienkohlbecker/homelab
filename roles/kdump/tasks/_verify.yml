@@ -2,6 +2,31 @@
 # aarch64 fixture uses a staged EFI-stub command line, so it exercises only the
 # written next-boot source rather than rebooting into it.
 
+- name: _verify | Re-run production kdump tasks for natural results
+  import_tasks: main.yml
+
+- name: _verify | Provide a reserved-memory result through Ansible
+  command: printf 1
+  register: kdump_kexec_crash_size
+  changed_when: false
+
+- name: _verify | Exercise unchanged kdump service lifecycle
+  import_tasks: service_state.yml
+  check_mode: true
+
+- name: _verify | Drift the kdump config before production reconciliation
+  lineinfile:
+    path: /etc/default/kdump-tools
+    line: '# coverage fixture'
+  become: true
+
+- name: _verify | Reconcile kdump config through production tasks
+  import_tasks: config.yml
+
+- name: _verify | Exercise changed kdump service lifecycle
+  import_tasks: service_state.yml
+  check_mode: true
+
 - name: _verify | ZBM commandline includes crashkernel
   when: zfs_root and not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT

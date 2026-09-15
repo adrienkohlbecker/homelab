@@ -1,0 +1,12 @@
+- name: service_state | Enable kdump-tools service
+  when: not (ansible_check_mode and kdump_apt_tools.changed)
+  systemd:
+    name: kdump-tools.service
+    enabled: true
+    state: >-
+      {{ ('restarted' if kdump_tools_cfg.changed else 'started')
+         if (kdump_kexec_crash_size.stdout | trim | int) > 0
+         else omit }}
+  become: true
+  tags:
+    - kdump

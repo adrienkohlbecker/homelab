@@ -1,0 +1,16 @@
+# Keep the upstream structure and documentation recognizable while applying
+# the local values atomically. Shell validation protects the sourced config.
+- name: config | Copy /etc/default/kdump-tools
+  when: not (ansible_check_mode and kdump_apt_tools.changed)
+  copy:
+    src: kdump-tools
+    dest: /etc/default/kdump-tools
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: 'sh -n %s'
+  become: true
+  register: kdump_tools_cfg
+  tags:
+    - kdump
