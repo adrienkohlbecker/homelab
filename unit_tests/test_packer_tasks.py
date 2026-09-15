@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
+import sys
+import tarfile
 import tomllib
 from pathlib import Path
 
@@ -393,22 +399,90 @@ def test_qemu_build_passes_shared_aarch64_firmware_override() -> None:
     assert '-var "aarch64_firmware_dir=${aarch64_firmware_dir}"' in build
 
 
-def test_aarch64_firmware_pin_covers_package_code_and_vars() -> None:
-    versions = yaml.safe_load((REPO_ROOT / "group_vars" / "all" / "versions.yml").read_text())
-    artifact = versions["qemu_efi_aarch64_artifact"]
-    script = FIRMWARE_SH.read_text()
+def _ar_member(name: str, data: bytes) -> bytes:
+    header = f"{name:<16}{0:<12}{0:<6}{0:<6}{'100644':<8}{len(data):<10}`\n".encode()
+    return header + data + (b"\n" if len(data) % 2 else b"")
 
-    assert artifact == {
-        "url": "https://snapshot.debian.org/file/137d1a34bd9ec2e10b1d81331e92d163824579c4",
-        "sha256": "95388b7606e821dd8af1dd852767094d569ff78cb2e8f1dc218b60959a52ee81",
+
+def _edk2_package(tmp_path: Path) -> Path:
+    """Build a minimal qemu-efi-aarch64-shaped .deb with a firmware descriptor."""
+    descriptor = {
+        "mapping": {
+            "executable": {"filename": "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd"},
+            "nvram-template": {"filename": "/usr/share/AAVMF/AAVMF_VARS.fd"},
+        }
     }
-    assert "AAVMF_CODE.no-secboot.fd" in script
-    assert "AAVMF_VARS.fd" in script
-    assert '[ ! -w "${firmware_dir}" ]' in script
+    members = {
+        "./usr/share/AAVMF/AAVMF_CODE.no-secboot.fd": b"plain code",
+        "./usr/share/AAVMF/AAVMF_CODE.secboot.fd": b"secure code",
+        "./usr/share/AAVMF/AAVMF_VARS.fd": b"vars template",
+        "./usr/share/qemu/firmware/60-edk2-aarch64.json": json.dumps(descriptor).encode(),
+    }
+    data = io.BytesIO()
+    with tarfile.open(fileobj=data, mode="w:xz") as tar:
+        for name, content in members.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+    package = tmp_path / "qemu-efi-aarch64.deb"
+    package.write_bytes(
+        b"!<arch>\n" + _ar_member("debian-binary", b"2.0\n") + _ar_member("data.tar.xz", data.getvalue())
+    )
+    return package
 
-    provision = QEMU_HOST_PROVISION_SH.read_text()
-    assert '"$HOMELAB_AARCH64_FIRMWARE_DIR/archive.sha256"' in provision
-    assert "test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256" in provision
+
+def _firmware_checkout(tmp_path: Path, package: Path, sha256: str) -> Path:
+    """Lay out firmware.sh with the pins it reads, as the AMI bake does."""
+    root = tmp_path / "checkout"
+    (root / "mise-tasks" / "test").mkdir(parents=True)
+    (root / "data").mkdir()
+    (root / "group_vars" / "all").mkdir(parents=True)
+    shutil.copy(FIRMWARE_SH, root / "mise-tasks" / "test" / "firmware.sh")
+    shutil.copy(REPO_ROOT / "data" / "architectures.yml", root / "data" / "architectures.yml")
+    versions = {
+        "qemu_efi_aarch64_version": "test",
+        "qemu_efi_aarch64_artifact": {"url": package.as_uri(), "sha256": sha256},
+    }
+    (root / "group_vars" / "all" / "versions.yml").write_text(yaml.safe_dump(versions))
+    return root / "mise-tasks" / "test" / "firmware.sh"
+
+
+def _run_firmware(script: Path, firmware_dir: Path) -> subprocess.CompletedProcess[str]:
+    # firmware.sh parses its pins with python3 + PyYAML; use this interpreter.
+    path = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
+    env = dict(os.environ, HOMELAB_AARCH64_FIRMWARE_DIR=str(firmware_dir), PATH=path)
+    return subprocess.run(["bash", str(script)], env=env, text=True, capture_output=True)
+
+
+def test_firmware_installs_the_descriptor_pair_once(tmp_path: Path) -> None:
+    package = _edk2_package(tmp_path)
+    script = _firmware_checkout(tmp_path, package, hashlib.sha256(package.read_bytes()).hexdigest())
+    firmware_dir = tmp_path / "firmware"
+
+    first = _run_firmware(script, firmware_dir)
+
+    assert first.returncode == 0, first.stderr
+    assert (firmware_dir / "edk2-aarch64-code.fd").read_bytes() == b"plain code"
+    assert (firmware_dir / "edk2-aarch64-vars.fd").read_bytes() == b"vars template"
+    assert (firmware_dir / "archive.sha256").read_text().strip() == hashlib.sha256(package.read_bytes()).hexdigest()
+
+    # A matching marker short-circuits before any download.
+    package.unlink()
+    second = _run_firmware(script, firmware_dir)
+    assert second.returncode == 0, second.stderr
+    assert "already present" in second.stdout
+
+
+def test_firmware_rejects_an_archive_that_does_not_match_its_pin(tmp_path: Path) -> None:
+    package = _edk2_package(tmp_path)
+    script = _firmware_checkout(tmp_path, package, "0" * 64)
+    firmware_dir = tmp_path / "firmware"
+
+    result = _run_firmware(script, firmware_dir)
+
+    assert result.returncode == 1
+    assert "sha256 mismatch" in result.stderr
+    assert not firmware_dir.exists()
 
 
 def test_qemu_host_uses_canonical_mise_upstream() -> None:
@@ -435,14 +509,14 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert 'qemu_packages        = "qemu-system-arm qemu-efi-aarch64"' in template
     assert 'qemu_system_binary   = "qemu-system-aarch64"' in template
     assert "runner_artifact      = local.versions.gitlab_runner_archive.aarch64" in template
-    assert "firmware_url         = local.versions.qemu_efi_aarch64_artifact.url" in template
-    assert "firmware_sha256      = local.versions.qemu_efi_aarch64_artifact.sha256" in template
     assert 'firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"' in template
     assert 'mise_disable_tools   = "aqua:Kampfkarren/selene"' in template
 
-    assert 'echo "${AARCH64_FIRMWARE_SHA256}  ${firmware_deb}" | sha256sum -c -' in provision
-    assert "AAVMF_CODE.no-secboot.fd" in provision
-    assert "AAVMF_VARS.fd" in provision
+    # The AMI installs firmware through the same script operators run locally.
+    assert '"${path.cwd}/mise-tasks/test/firmware.sh"' in template
+    assert 'bash "$firmware_tree/mise-tasks/test/firmware.sh"' in provision
+    assert "AAVMF" not in provision
+    assert "test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256" in provision
     assert 'MISE_DISABLE_TOOLS="$MISE_DISABLE_TOOLS"' in provision
     assert "mise exec -- true" in provision
     # Cells hydrate through their checked-out source tree. The AMI build must

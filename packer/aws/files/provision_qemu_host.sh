@@ -10,8 +10,6 @@ set -euxo pipefail
 case "$TARGET_ARCHITECTURE" in
 x86_64) ;;
 aarch64)
-  : "${AARCH64_FIRMWARE_URL:?aarch64_firmware_url is required}"
-  : "${AARCH64_FIRMWARE_SHA256:?aarch64_firmware_sha256 is required}"
   : "${HOMELAB_AARCH64_FIRMWARE_DIR:?aarch64_firmware_dir is required}"
   ;;
 *)
@@ -53,22 +51,15 @@ sudo apt-get update -qq
 )
 
 if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
-  firmware_deb=$(mktemp)
-  firmware_root=$(mktemp -d)
-  curl -fsSL -o "$firmware_deb" "$AARCH64_FIRMWARE_URL"
-  echo "${AARCH64_FIRMWARE_SHA256}  ${firmware_deb}" | sha256sum -c -
-  dpkg-deb -x "$firmware_deb" "$firmware_root"
-  sudo install -dm 0755 "$HOMELAB_AARCH64_FIRMWARE_DIR"
-  sudo install -m 0644 \
-    "$firmware_root/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd" \
-    "$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-code.fd"
-  sudo install -m 0644 \
-    "$firmware_root/usr/share/AAVMF/AAVMF_VARS.fd" \
-    "$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-vars.fd"
-  printf '%s\n' "$AARCH64_FIRMWARE_SHA256" |
-    sudo tee "$HOMELAB_AARCH64_FIRMWARE_DIR/archive.sha256" >/dev/null
-  sudo chmod 0644 "$HOMELAB_AARCH64_FIRMWARE_DIR/archive.sha256"
-  rm -rf "$firmware_deb" "$firmware_root"
+  # firmware.sh resolves its pins relative to its own location; give it the
+  # repository layout it expects.
+  firmware_tree=$(mktemp -d)
+  install -D -m 0755 /tmp/firmware.sh "$firmware_tree/mise-tasks/test/firmware.sh"
+  install -D -m 0644 /tmp/versions.yml "$firmware_tree/group_vars/all/versions.yml"
+  install -D -m 0644 /tmp/architectures.yml "$firmware_tree/data/architectures.yml"
+  sudo env HOMELAB_AARCH64_FIRMWARE_DIR="$HOMELAB_AARCH64_FIRMWARE_DIR" \
+    bash "$firmware_tree/mise-tasks/test/firmware.sh"
+  rm -rf "$firmware_tree"
 fi
 
 curl -fsSL https://mise.en.dev/gpg-key.pub |
@@ -188,4 +179,7 @@ sudo rm -rf \
   /tmp/gitlab-runner \
   /tmp/gitlab_runner_fleeting_arm.pub \
   /tmp/homelab_ci_prepare_scratch.sh \
+  /tmp/firmware.sh \
+  /tmp/versions.yml \
+  /tmp/architectures.yml \
   /tmp/homelab-ci-build

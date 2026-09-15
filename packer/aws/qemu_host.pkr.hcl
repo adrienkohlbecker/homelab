@@ -59,8 +59,6 @@ locals {
       qemu_system_binary   = "qemu-system-x86_64"
       runner_artifact      = local.versions.gitlab_runner_archive.x86_64
       mise_disable_tools   = ""
-      firmware_url         = ""
-      firmware_sha256      = ""
       firmware_destination = ""
     }
     aarch64 = {
@@ -70,8 +68,6 @@ locals {
       qemu_system_binary   = "qemu-system-aarch64"
       runner_artifact      = local.versions.gitlab_runner_archive.aarch64
       mise_disable_tools   = "aqua:Kampfkarren/selene"
-      firmware_url         = local.versions.qemu_efi_aarch64_artifact.url
-      firmware_sha256      = local.versions.qemu_efi_aarch64_artifact.sha256
       firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"
     }
   }
@@ -144,6 +140,10 @@ build {
       "${path.cwd}/uv.lock",
       "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh",
       "${path.cwd}/packer/aws/files/gitlab_runner_fleeting_arm.pub",
+      # The ARM firmware installer and the pins it reads.
+      "${path.cwd}/mise-tasks/test/firmware.sh",
+      "${path.cwd}/group_vars/all/versions.yml",
+      "${path.cwd}/data/architectures.yml",
     ]
     destination = "/tmp/"
   }
@@ -157,8 +157,6 @@ build {
       "GITLAB_RUNNER_URL"            = local.architecture_config.runner_artifact.url
       "GITLAB_RUNNER_SHA256"         = local.architecture_config.runner_artifact.sha256
       "MISE_DISABLE_TOOLS"           = local.architecture_config.mise_disable_tools
-      "AARCH64_FIRMWARE_URL"         = local.architecture_config.firmware_url
-      "AARCH64_FIRMWARE_SHA256"      = local.architecture_config.firmware_sha256
       "HOMELAB_AARCH64_FIRMWARE_DIR" = local.architecture_config.firmware_destination
     }
   }
