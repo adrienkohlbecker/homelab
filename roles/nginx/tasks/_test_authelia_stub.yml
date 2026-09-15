@@ -5,19 +5,18 @@
 #   gate        return 401 plus the portal redirect target
 #   authed      admit and return a fixed Remote-User header
 #   basic       admit only the fixed nginxverify:secret credential
-- name: Test authelia stub | Assert mode is a known value
-  assert:
-    that:
-      - (nginx_test_authelia_stub_args | default({})).mode | default('gate') in ['gate', 'authed', 'basic']
-    fail_msg: >-
-      nginx_test_authelia_stub_args.mode must be one of
-      gate/authed/basic; got
-      '{{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}'.
-
 - name: Test authelia stub | Resolve caller defaults
   set_fact:
     _nginx_test_authelia_stub_mode: >-
       {{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}
+
+- name: Test authelia stub | Assert mode is a known value
+  assert:
+    that:
+      - _nginx_test_authelia_stub_mode in ['gate', 'authed', 'basic']
+    fail_msg: >-
+      nginx_test_authelia_stub_args.mode must be one of gate/authed/basic; got
+      '{{ _nginx_test_authelia_stub_mode }}'.
 
 - name: Test authelia stub | Install fixture for /api/authz/auth-request  # noqa: require-validate
   copy:
