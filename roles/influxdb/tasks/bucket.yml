@@ -55,7 +55,7 @@
 
     - name: bucket | Create user {{ influxdb_bucket_args.user }}  # noqa: no-changed-when -- when: gates execution, like creates: did
       when: >-
-        '404 Not Found: user not found' in _influxdb_bucket_user_query.stderr
+        _influxdb_bucket_user_query.rc != 0
         or (_influxdb_bucket_user_query.stdout | from_json | length) == 0
       command:
         argv:
@@ -97,8 +97,7 @@
 
     - name: bucket | Create bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
       when: >-
-        ('404 Not Found: bucket' in _influxdb_bucket_bucket_query.stderr
-         and 'not found' in _influxdb_bucket_bucket_query.stderr)
+        _influxdb_bucket_bucket_query.rc != 0
         or (_influxdb_bucket_bucket_query.stdout | from_json | length) == 0
       command:
         argv:
