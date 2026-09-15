@@ -156,29 +156,23 @@
   tags:
     - netdata
 
-- name: Remove stale intel gpu metrics config
+- name: Remove disabled Intel GPU collector
   when: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
-  file:
-    path: /etc/netdata/go.d/intelgpu.conf
-    state: absent
-  register: netdata_intelgpu_absent
   become: true
   tags:
     - netdata
+  block:
+    - name: Remove stale intel gpu metrics config
+      file:
+        path: /etc/netdata/go.d/intelgpu.conf
+        state: absent
+      register: netdata_intelgpu_absent
 
-# Reverse the install above rather than leaving the tool behind: the collector
-# is the only consumer, and a host that never had it (or is not x86) no-ops.
-# Sibling opt-in flags elsewhere do not reverse themselves; this one does
-# because the collector config above is removed under the same condition, and
-# leaving the binary is pure cruft.
-- name: Remove stale intel-gpu-tools
-  when: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
-  apt:
-    pkg: intel-gpu-tools
-    state: absent
-  become: true
-  tags:
-    - netdata
+    # The collector is the only consumer of the package.
+    - name: Remove stale intel-gpu-tools
+      apt:
+        pkg: intel-gpu-tools
+        state: absent
 
 - name: Copy health_alarm_notify template
   command: cp /usr/lib/netdata/conf.d/health_alarm_notify.conf /etc/netdata/health_alarm_notify.conf
