@@ -1427,6 +1427,24 @@ class TestArmDensitySpec:
             detect.arm_density_spec(0)
 
 
+class TestArmBenchmarkSpec:
+    def test_maps_full_universe_onto_existing_noble_images(self) -> None:
+        specs = detect._full_universe_specs()
+        mapped = [detect.arm_benchmark_spec(index) for index in range(1, len(specs) + 1)]
+
+        assert len(mapped) == 130
+        assert detect.arm_benchmark_spec(specs.index("homeassistant:box_deps:resolute") + 1) == (
+            "homeassistant:box_deps"
+        )
+        assert detect.arm_benchmark_spec(specs.index("zfs:lab") + 1) == "zfs:box"
+        assert detect.arm_benchmark_spec(specs.index("cleanup:minimal") + 1) == "cleanup:box"
+
+    @pytest.mark.parametrize("index", [0, 131])
+    def test_rejects_out_of_range_index(self, index: int) -> None:
+        with pytest.raises(ValueError, match="between 1 and 130"):
+            detect.arm_benchmark_spec(index)
+
+
 class TestCmdGitlab:
     @pytest.fixture(autouse=True)
     def _offline_full_universe(self, monkeypatch: pytest.MonkeyPatch) -> None:

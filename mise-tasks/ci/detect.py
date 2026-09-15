@@ -626,6 +626,17 @@ def arm_density_spec(index: int) -> str:
     return ARM_DENSITY_CELL_SPECS[(index - 1) % len(ARM_DENSITY_CELL_SPECS)]
 
 
+def arm_benchmark_spec(index: int) -> str:
+    """Map one full-universe cell onto an existing Noble ARM fixture."""
+    specs = _full_universe_specs()
+    if index < 1 or index > len(specs):
+        raise ValueError(f"ARM benchmark index must be between 1 and {len(specs)}")
+
+    cell = ci_spec_to_cell(specs[index - 1])
+    machine = "box_deps" if cell.machine == "box_deps" else "box"
+    return f"{cell.role}:{machine}"
+
+
 def render_child_pipeline(
     specs: list[str],
     site_test: bool,
@@ -852,6 +863,7 @@ def _cmd_gitlab(args: list[str]) -> int:
     p.add_argument("--child-path", default="test-child.yml")
     p.add_argument("--all", action="store_true", help="Force the full universe (debug)")
     p.add_argument("--arm-density-index", type=int, help="Print one density job's representative ARM spec")
+    p.add_argument("--arm-benchmark-index", type=int, help="Print one full-universe spec on an existing ARM image")
     p.add_argument(
         "--target",
         default=os.environ.get("HOMELAB_CI_TARGET", "aws_qemu"),
@@ -871,6 +883,9 @@ def _cmd_gitlab(args: list[str]) -> int:
 
     if opts.arm_density_index is not None:
         print(arm_density_spec(opts.arm_density_index))
+        return 0
+    if opts.arm_benchmark_index is not None:
+        print(arm_benchmark_spec(opts.arm_benchmark_index))
         return 0
     if opts.arm_mode not in ARM_MODES:
         p.error(f"argument --arm-mode: invalid choice: {opts.arm_mode!r} (choose from {', '.join(ARM_MODES)})")

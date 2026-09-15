@@ -115,6 +115,18 @@ arm_density:
       pipeline_variables: true
     strategy: depend
 
+# Protected full-universe performance benchmark. The child repeats every
+# declared cell three times on the existing Noble ARM fixtures.
+arm_benchmark:
+  stage: test
+  extends: .protected_manual_job
+  trigger:
+    include:
+      - local: mise-tasks/ci/arm_benchmark.yml
+    forward:
+      pipeline_variables: true
+    strategy: depend
+
 lint:
   stage: prepare
   extends:

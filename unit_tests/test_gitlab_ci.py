@@ -28,6 +28,35 @@ def test_arm_density_is_one_protected_manual_child_trigger() -> None:
     assert trigger["trigger"]["strategy"] == "depend"
 
 
+def test_arm_benchmark_is_one_protected_manual_child_trigger() -> None:
+    pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
+    trigger = pipeline["arm_benchmark"]
+
+    assert trigger["extends"] == ".protected_manual_job"
+    assert trigger["trigger"]["include"] == [{"local": "mise-tasks/ci/arm_benchmark.yml"}]
+    assert trigger["trigger"]["forward"]["pipeline_variables"] is True
+    assert trigger["trigger"]["strategy"] == "depend"
+
+
+def test_arm_benchmark_repeats_full_universe_on_existing_images() -> None:
+    child = yaml.safe_load((ROOT / "mise-tasks" / "ci" / "arm_benchmark.yml").read_text())
+    scaffold = child[".arm_benchmark_cell"]
+
+    assert child["stages"] == ["benchmark"]
+    assert scaffold["dependencies"] == []
+    assert scaffold["tags"] == ["aws-shell-qemu-arm"]
+    assert scaffold["variables"]["ARCH"] == "aarch64"
+    before_script = "\n".join(scaffold["before_script"])
+    assert "--arm-benchmark-index" in before_script
+    assert "--bucket homelab-ci-arm-images-eu-west-1" in before_script
+    assert "export UBUNTU=noble" in before_script
+    assert "HOMELAB_TEST_OUT_DIR" in before_script
+
+    jobs = [child[f"arm_benchmark:{repetition}"] for repetition in range(1, 4)]
+    assert all(job["parallel"] == 130 for job in jobs)
+    assert sum(job["parallel"] for job in jobs) == 390
+
+
 def test_arm_density_child_has_sequential_unique_automatic_waves() -> None:
     child = yaml.safe_load((ROOT / "mise-tasks" / "ci" / "arm_density.yml").read_text())
     waves = (13, 26, 39, 52, 65, 78)
