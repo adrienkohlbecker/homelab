@@ -785,10 +785,10 @@
 
 - name: _verify | Verify remote Authelia routing
   vars:
-    authelia_host: lab
+    authelia_host: fox
   assert:
     that:
-      - network.hosts.lab.wireguard in nginx_authelia_internal_url
+      - network.hosts.fox.wireguard in nginx_authelia_internal_url
       - "'127.0.0.1' not in nginx_authelia_internal_url"
 
 - name: _verify | Remove the IPv6 config
