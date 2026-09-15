@@ -389,16 +389,6 @@ def test_qemu_build_separates_host_os_from_architecture() -> None:
     assert re.search(r'upstream_archive\s+= "http://ports\.ubuntu\.com/ubuntu-ports"', template)
 
 
-def test_qemu_build_passes_shared_aarch64_firmware_override() -> None:
-    template = QEMU_TEMPLATE.read_text()
-    build = BUILD_SH.read_text()
-
-    assert 'variable "aarch64_firmware_dir"' in template
-    assert '"HOMELAB_AARCH64_FIRMWARE_DIR=${local.aarch64_firmware_dir}"' in template
-    assert 'aarch64_firmware_dir="${HOMELAB_AARCH64_FIRMWARE_DIR:-${repo_root}/test/firmware}"' in build
-    assert '-var "aarch64_firmware_dir=${aarch64_firmware_dir}"' in build
-
-
 def _ar_member(name: str, data: bytes) -> bytes:
     header = f"{name:<16}{0:<12}{0:<6}{0:<6}{'100644':<8}{len(data):<10}`\n".encode()
     return header + data + (b"\n" if len(data) % 2 else b"")

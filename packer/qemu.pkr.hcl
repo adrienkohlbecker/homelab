@@ -52,9 +52,11 @@ variable "upstream_mirrors" {
 }
 
 variable "aarch64_firmware_dir" {
-  type        = string
-  default     = null
-  description = "Directory containing the pinned aarch64 CODE and VARS firmware files."
+  type = string
+  # The verify-boot post-processor inherits the same environment variable, so
+  # Packer and the harness always agree on the firmware location.
+  default     = env("HOMELAB_AARCH64_FIRMWARE_DIR")
+  description = "Directory containing the pinned aarch64 CODE and VARS firmware files; empty means test/firmware."
 }
 
 locals {
@@ -411,7 +413,6 @@ build {
         "IMAGE_FORMAT=${local.host_os_cfg.image_format}",
         "INSTALL_TARGET=${source.name == "hetzner" ? "hetzner" : "qemu"}",
         "UBUNTU_NAME=${local.ubuntu_name}",
-        "HOMELAB_AARCH64_FIRMWARE_DIR=${local.aarch64_firmware_dir}",
         "PUBLISH=${var.publish}",
         "OUTPUT_DIRECTORY=${var.output_directory}",
       ]
