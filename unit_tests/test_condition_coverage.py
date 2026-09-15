@@ -83,11 +83,12 @@ from condition_coverage import (
     missing_outcomes,
     normalize_source_path,
     production_condition_paths,
+    repository_source_sha,
 )
 
 import callback_plugins.condition_coverage as condition_coverage_callback
 
-_SOURCE_SHA = "1" * 40
+_SOURCE_SHA = repository_source_sha()
 
 
 def _start_report(path: Path, *, architecture: str = "x86_64", source_sha: str = _SOURCE_SHA) -> None:
@@ -156,6 +157,14 @@ def test_reports_reject_mixed_source_shas(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="mixed coverage source SHAs"):
         load_outcomes([first, second])
+
+
+def test_reports_reject_source_sha_from_another_checkout(tmp_path: Path) -> None:
+    report = tmp_path / "stale.jsonl"
+    _start_report(report, source_sha="2" * 40)
+
+    with pytest.raises(ValueError, match="does not match current checkout"):
+        load_outcomes([report])
 
 
 def test_reports_reject_mixed_schemas(tmp_path: Path) -> None:

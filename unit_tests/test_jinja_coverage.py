@@ -25,6 +25,7 @@ from condition_coverage import (
     load_executed_jinja_loops,
     load_jinja_branch_outcomes,
     production_jinja_paths,
+    repository_source_sha,
 )
 from jinja2 import Environment
 from jinja_coverage import instrument_jinja_tree, normalize_source_path
@@ -222,7 +223,7 @@ def test_jinja_gate_requires_both_branch_outcomes_and_a_loop_iteration(
 
     append_report_provenance(
         report,
-        CoverageProvenance(COVERAGE_SCHEMA_VERSION, "1" * 40, "x86_64"),
+        CoverageProvenance(COVERAGE_SCHEMA_VERSION, repository_source_sha(), "x86_64"),
     )
     append_jinja_branch_outcomes(
         report,

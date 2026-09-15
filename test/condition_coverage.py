@@ -6,9 +6,11 @@ import argparse
 import fcntl
 import json
 import re
+import subprocess
 import sys
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,18 @@ from jinja_coverage import (
 
 SYNTHETIC_SCENARIOS_PATH = Path("test/condition_coverage.yml")
 COVERAGE_SCHEMA_VERSION = 2
+
+
+@cache
+def repository_source_sha() -> str:
+    """Return the commit whose production sources the checker inventories."""
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD^{commit}"],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
 
 @dataclass(frozen=True)
@@ -817,6 +831,7 @@ def append_exit_outcomes(path: Path, outcomes: Iterable[ExitOutcome], *, phase: 
 def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, Any]]]:
     expected_schema: int | None = None
     expected_source_sha: str | None = None
+    current_source_sha = repository_source_sha()
     for path in paths:
         report_architecture: str | None = None
         provenance_seen = False
@@ -853,6 +868,11 @@ def _report_rows(paths: Iterable[Path]) -> Iterator[tuple[Path, int, dict[str, A
                         raise ValueError(
                             f"{path}:{line_number}: mixed coverage source SHAs: "
                             f"{expected_source_sha} and {provenance.source_sha}"
+                        )
+                    if provenance.source_sha != current_source_sha:
+                        raise ValueError(
+                            f"{path}:{line_number}: coverage source SHA {provenance.source_sha} "
+                            f"does not match current checkout {current_source_sha}"
                         )
                     if report_architecture is None:
                         report_architecture = provenance.architecture
