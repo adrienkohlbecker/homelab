@@ -4,7 +4,8 @@
   when: fan2go_enabled
   get_url:
     url: "{{ fan2go_artifacts[ansible_architecture].url }}"
-    dest: "/usr/local/bin/fan2go-{{ fan2go_version }}"
+    dest: /usr/local/bin/fan2go
+    tmp_dest: /usr/local/bin
     checksum: "sha256:{{ fan2go_artifacts[ansible_architecture].sha256 }}"
     owner: root
     group: root
@@ -14,45 +15,16 @@
   tags:
     - fan2go
 
-- name: Symlink /usr/local/bin/fan2go to versioned binary
-  when:
-    - fan2go_enabled
-    - not (ansible_check_mode and (fan2go_binary_download.changed | default(false)))
-  file:
-    src: "/usr/local/bin/fan2go-{{ fan2go_version }}"
-    dest: /usr/local/bin/fan2go
-    state: link
-    owner: root
-    group: root
-  become: true
-  register: fan2go_symlink
-  tags:
-    - fan2go
-
 - name: Download fan2go-tui binary
   when: fan2go_enabled
   get_url:
     url: "{{ fan2go_tui_artifacts[ansible_architecture].url }}"
-    dest: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
+    dest: /usr/local/bin/fan2go-tui
+    tmp_dest: /usr/local/bin
     checksum: "sha256:{{ fan2go_tui_artifacts[ansible_architecture].sha256 }}"
     owner: root
     group: root
     mode: "0755"
-  become: true
-  register: fan2go_tui_binary_download
-  tags:
-    - fan2go
-
-- name: Symlink /usr/local/bin/fan2go-tui to versioned binary
-  when:
-    - fan2go_enabled
-    - not (ansible_check_mode and (fan2go_tui_binary_download.changed | default(false)))
-  file:
-    src: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
-    dest: /usr/local/bin/fan2go-tui
-    state: link
-    owner: root
-    group: root
   become: true
   tags:
     - fan2go
@@ -140,7 +112,6 @@
       src: fan2go.service
       restart: >-
         {{ fan2go_config.changed | default(false)
-           or fan2go_symlink.changed | default(false)
            or fan2go_binary_download.changed | default(false) }}
   tags:
     - fan2go
