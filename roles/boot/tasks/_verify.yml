@@ -129,27 +129,17 @@
   register: _boot_verify_proc_cmdline
   become: true
 
-- name: _verify | Running kernel booted with console=tty0
+- name: _verify | Running kernel booted with expected command line
   when: qemu_boot_changes_reachable and not grub_bootloader
   vars:
     _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
   assert:
     that:
       - "'console=tty0' in _cmdline"
-    fail_msg: >-
-      /proc/cmdline does not carry console=tty0 after reboot — the
-      ZBM property may not have propagated: {{ _cmdline }}
-
-- name: _verify | Running kernel booted with earlycon (when configured)
-  when: qemu_boot_changes_reachable and not grub_bootloader
-  vars:
-    _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
-  assert:
-    that:
       - "'earlycon=' in _cmdline"
     fail_msg: >-
-      /proc/cmdline does not carry earlycon= after reboot — the
-      ZBM serial args may not have propagated: {{ _cmdline }}
+      /proc/cmdline does not carry the expected console arguments after
+      reboot; the ZBM property may not have propagated: {{ _cmdline }}
 
 # --- EFI NVRAM boot entries ---
 
