@@ -9,6 +9,14 @@ PIPELINE = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
 def test_ansible_config_is_global() -> None:
     assert PIPELINE["variables"]["ANSIBLE_CONFIG"] == "$CI_PROJECT_DIR/ansible.cfg"
     assert PIPELINE["variables"]["HOMELAB_CI_ARM"] == "auto"
+    assert PIPELINE["variables"]["HOMELAB_CI_BENCHMARK_ONLY"] == "false"
+
+
+def test_benchmark_only_mode_skips_regular_cell_pipeline() -> None:
+    skip_rule = {"if": '$HOMELAB_CI_BENCHMARK_ONLY == "true"', "when": "never"}
+
+    assert PIPELINE["detect"]["rules"][0] == skip_rule
+    assert PIPELINE["test_cells"]["rules"][0] == skip_rule
 
 
 def test_child_pipeline_forwards_pipeline_variables() -> None:

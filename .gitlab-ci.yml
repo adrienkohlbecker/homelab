@@ -16,6 +16,8 @@ variables:
   HOMELAB_CI_TARGET: aws_qemu
   # Generate change-selected ARM cells on the AWS qemu lane.
   HOMELAB_CI_ARM: "auto"
+  # Benchmark dispatches skip the regular x86 and ARM child matrix.
+  HOMELAB_CI_BENCHMARK_ONLY: "false"
   # Ansible ignores cwd config under world-writable /builds unless pinned.
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
 
@@ -65,6 +67,8 @@ detect:
   tags:
     - $DETECT_RUNNER_TAG
   rules:
+    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
+      when: never
     # The lab rule must precede source rules because lab uses host tools rather
     # than /opt caches.
     - if: $HOMELAB_CI_TARGET == "lab"
@@ -94,6 +98,8 @@ test_cells:
     - job: detect
       artifacts: true
   rules:
+    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
   trigger:
     include:
