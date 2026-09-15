@@ -427,6 +427,16 @@ def test_qemu_host_scratch_uses_every_instance_store_device_in_raid0() -> None:
     assert "Before=multi-user.target" in QEMU_HOST_PROVISION_SH.read_text()
 
 
+def test_qemu_host_scratch_uses_one_non_root_ebs_disk() -> None:
+    script = QEMU_HOST_SCRATCH_SH.read_text()
+
+    assert "findmnt -n -o SOURCE /" in script
+    assert 'lsblk -sdpno NAME,TYPE "$root_source"' in script
+    assert "/Elastic Block Store/" in script
+    assert 'if [ "$dev" != "$root_disk" ]' in script
+    assert "multiple non-root EBS disks are ambiguous" in script
+
+
 def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
     template = QEMU_HOST_TEMPLATE.read_text()
 

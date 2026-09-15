@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare the CI qemu host scratch area on local instance-store NVMe.
+# Prepare the CI qemu host scratch area on ephemeral block storage.
 #
 # c8id and friends expose one or more ephemeral NVMe disks (model
 # "Amazon EC2 NVMe Instance Storage"). RAID0 them into a single fast volume and
@@ -8,10 +8,9 @@
 # and build tree under gitlab-runner/. Instance store is physically wiped on
 # stop/terminate, which is exactly right for ephemeral CI scratch.
 #
-# Falls back to the EBS root filesystem when no instance store is present (the
-# c6a packer build host has none), so the bake's own boot still succeeds. The
-# prod pool is pinned to c8id, so there a missing or failed NVMe mount fails
-# this unit and homelab_ci_ready then rejects the host.
+# On EBS-only workers, use the sole non-root EBS disk. Falls back to the EBS
+# root filesystem when no scratch disk exists so the bake's own boot succeeds.
+# More than one non-root EBS disk is ambiguous and fails closed.
 set -euo pipefail
 
 mountpoint=/mnt/scratch
@@ -43,6 +42,22 @@ if ! mountpoint -q "$mountpoint"; then
   mapfile -t devs < <(
     lsblk -dn -o NAME,MODEL | awk '/Instance Storage/ { print "/dev/" $1 }'
   )
+  if [ "${#devs[@]}" -eq 0 ]; then
+    root_source=$(findmnt -n -o SOURCE /)
+    root_disk=$(lsblk -sdpno NAME,TYPE "$root_source" | awk '$2 == "disk" { print $1; exit }')
+    mapfile -t ebs_devs < <(
+      lsblk -dpno NAME,TYPE,MODEL | awk '$2 == "disk" && /Elastic Block Store/ { print $1 }'
+    )
+    for dev in "${ebs_devs[@]}"; do
+      if [ "$dev" != "$root_disk" ]; then
+        devs+=("$dev")
+      fi
+    done
+    if [ "${#devs[@]}" -gt 1 ]; then
+      echo "homelab_ci_prepare_scratch: multiple non-root EBS disks are ambiguous" >&2
+      exit 1
+    fi
+  fi
   if [ "${#devs[@]}" -gt 0 ]; then
     if [ "${#devs[@]}" -gt 1 ]; then
       mdadm --create /dev/md0 --level=0 --force --run \
@@ -71,16 +86,16 @@ install -dm 0755 -o ubuntu -g ubuntu \
 # check on it implies the whole tree is staged.
 install -dm 0755 -o ubuntu -g ubuntu "$mountpoint/homelab_ci"
 
-# Swap cushion on the instance-store NVMe. During a synchronized qemu converge
+# Swap cushion on the ephemeral scratch volume. During a synchronized qemu converge
 # many guests hit peak RSS at once and can momentarily overshoot the 64 GiB host
 # RAM; without swap that overshoot is an OOM-kill that culls a guest and flakes
-# its cell. A modest swapfile on the fast, near-idle local NVMe absorbs the
+# its cell. A modest swapfile on the scratch device absorbs the
 # transient by paging out cold pages instead. vm.swappiness=1 keeps it dormant --
 # the kernel reclaims page cache first and only dips into swap as a near-last
 # resort, so steady-state cells never pay paging latency. This is a cushion, NOT
 # working memory: if it ever fills, the fix is fewer cells per host, not more
-# swap. Only on a real NVMe mount (mountpoint true) so the EBS-fallback build
-# host -- no instance store -- keeps its small root untouched. Best-effort: a
+# swap. Only on a separate scratch mount so the bake host, which falls back to
+# its small root filesystem, stays untouched. Best-effort: a
 # swap failure must not fail this unit (the host still runs, just without the
 # cushion), so the setup is guarded and swappiness only flips on success.
 swapfile="$mountpoint/swapfile"
