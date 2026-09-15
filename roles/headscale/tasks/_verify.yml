@@ -112,3 +112,9 @@
 - name: _verify | Successful Headscale DERP latency probe was omitted
   assert:
     that: "'headscale-latency-drop' not in fluentbit_verify_result.stdout"
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: headscale
+    _storage_template: "{{ role_path }}/templates/headscale.service.j2"
+    _storage_mounts: [services]

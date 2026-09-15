@@ -154,3 +154,9 @@
     GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=publickey -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
     GIT_TERMINAL_PROMPT: "0"
   changed_when: false
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: gitea
+    _storage_template: "{{ role_path }}/templates/gitea.service.j2"
+    _storage_mounts: [services]

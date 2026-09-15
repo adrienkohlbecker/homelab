@@ -1,0 +1,62 @@
+- name: Resolve the service account for alternate unit rendering
+  getent:
+    database: passwd
+    key: "{{ _storage_service }}"
+
+- name: Publish the service account for the production unit template
+  set_fact:
+    "{{ _storage_service }}_user":
+      uid: "{{ ansible_facts.getent_passwd[_storage_service][1] }}"
+      gid: "{{ ansible_facts.getent_passwd[_storage_service][2] }}"
+
+- name: Render production units for alternate storage layouts
+  template:
+    src: "{{ _storage_template }}"
+    dest: "/tmp/{{ _storage_service }}-{{ item.name }}.service"
+    mode: "0644"
+  vars:
+    zfs_root: "{{ item.zfs_root }}"
+    zfs_has_services_mount: "{{ item.zfs_root }}"
+    zfs_has_scratch_mount: "{{ item.zfs_root }}"
+    zfs_has_media_mount: "{{ item.zfs_root }}"
+  loop:
+    - name: ext4
+      zfs_root: false
+    - name: zfs_datasets
+      zfs_root: true
+  become: true
+
+- name: Verify alternate storage dependencies
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        ext4 = pathlib.Path(sys.argv[1]).read_text()
+        zfs = pathlib.Path(sys.argv[2]).read_text()
+        assert "After=zfs_autosnapshot.target" not in ext4
+        assert "WantedBy=zfs_autosnapshot.target" not in ext4
+        assert "After=zfs_autosnapshot.target" in zfs
+        assert "WantedBy=zfs_autosnapshot.target" in zfs
+        for mount in sys.argv[3].split(","):
+            for directive in ("After", "Requires"):
+                dependency = f"{directive}=zfs_mount_mnt_{mount}.service"
+                assert dependency not in ext4
+                assert dependency in zfs
+      - "/tmp/{{ _storage_service }}-ext4.service"
+      - "/tmp/{{ _storage_service }}-zfs_datasets.service"
+      - "{{ _storage_mounts | join(',') }}"
+  changed_when: false
+  become: true
+
+- name: Remove alternate-storage production units
+  file:
+    path: "/tmp/{{ _storage_service }}-{{ item }}.service"
+    state: absent
+  loop:
+    - ext4
+    - zfs_datasets
+  become: true

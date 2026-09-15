@@ -174,3 +174,9 @@
           service: wolweb
         - message: "2099/01/02 03:04:09 same-unit lifecycle record"
           service: systemd
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: wolweb
+    _storage_template: "{{ role_path }}/templates/wolweb.service.j2"
+    _storage_mounts: [services]

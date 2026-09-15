@@ -166,3 +166,9 @@
           fields.service: attribute
         - message: jellyfin-raw
           service: jellyfin
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: jellyfin
+    _storage_template: "{{ role_path }}/templates/jellyfin.service.j2"
+    _storage_mounts: [services, scratch, media]

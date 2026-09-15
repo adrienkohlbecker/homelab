@@ -304,3 +304,9 @@
     - _seerr_restart_loopback.json is defined
     - _seerr_restart_loopback.json.version is defined
   become: true
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: seerr
+    _storage_template: "{{ role_path }}/templates/seerr.service.j2"
+    _storage_mounts: [services]

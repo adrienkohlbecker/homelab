@@ -192,3 +192,9 @@
       - (_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?usage_at_start = (\\d+)', '\\1') | first) == '987654321'
       - (_ini | regex_search('\\[\\[eu\\.newsdemon\\.com\\]\\][^\\[]*?connections = (\\d+)', '\\1') | first) == '50'
     fail_msg: "SABnzbd INI canonicalization or runtime-state preservation regressed"
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: sabnzbd
+    _storage_template: "{{ role_path }}/templates/sabnzbd.service.j2"
+    _storage_mounts: [services, scratch, media]

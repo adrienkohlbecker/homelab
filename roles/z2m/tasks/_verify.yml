@@ -59,3 +59,9 @@
           fields.service: attribute
         - message: z2m-raw
           service: z2m
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: z2m
+    _storage_template: "{{ role_path }}/templates/z2m.service.j2"
+    _storage_mounts: [services]

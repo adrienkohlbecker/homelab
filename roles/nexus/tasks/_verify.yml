@@ -336,3 +336,9 @@
       retries: 5
       delay: 2
       until: (_nexus_docker_rewrite.docker_distribution_api_version | default('')) == 'registry/2.0'
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: nexus
+    _storage_template: "{{ role_path }}/templates/nexus.service.j2"
+    _storage_mounts: [services, scratch]

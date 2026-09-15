@@ -186,3 +186,9 @@
           fields.service: attribute
         - message: authelia-raw
           service: authelia
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
+  vars:
+    _storage_service: authelia
+    _storage_template: "{{ role_path }}/templates/authelia.service.j2"
+    _storage_mounts: [services]
