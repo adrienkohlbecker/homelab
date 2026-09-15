@@ -33,6 +33,10 @@ zfs_autobackup_sources:
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkvSWbVs696fArHKeBM6k6EvmqDckAic5Z root@lab
 
 dns_keepalived_priority: 5
+# The fixture shares Lab's name in the production election map, but its peers
+# (Pug, the UDM) are neither in the test inventory nor reachable, so the
+# site.yml reboot gate would refuse every post-upgrade reboot.
+dns_reboot_guard_enabled: false
 
 netdata_intelgpu_enabled: true
 netdata_contexts:
