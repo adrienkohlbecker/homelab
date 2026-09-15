@@ -271,20 +271,7 @@ def test_frankfurt_contract_documents_are_accepted():
             ]
         },
     )
-    audit_aws.audit_scheduler_role_documents(
-        {
-            "Statement": [
-                {
-                    "Condition": {
-                        "StringEquals": {
-                            "aws:SourceArn": "arn:aws:scheduler:eu-central-1:000390721279:schedule-group/default"
-                        }
-                    }
-                }
-            ]
-        },
-        {"Statement": [{"Resource": "arn:aws:ec2:eu-central-1:000390721279:instance/*"}]},
-    )
+
 
     assert audit_aws.anomalies == []
 
@@ -311,20 +298,6 @@ def test_frankfurt_contract_mismatches_are_reported():
     audit_aws.audit_guard_documents("eu-central-1", {}, {}, {})
     audit_aws.audit_ecr_documents("eu-central-1", [], [{"repositoryName": "unexpected/repo"}])
     audit_aws.audit_bucket_documents("eu-central-1", "homelab-ci-arm-images-eu-central-1", {}, {}, {}, {})
-    audit_aws.audit_scheduler_role_documents(
-        {
-            "Statement": [
-                {
-                    "Condition": {
-                        "StringEquals": {
-                            "aws:SourceArn": "arn:aws:scheduler:eu-west-1:000390721279:schedule-group/default"
-                        }
-                    }
-                }
-            ]
-        },
-        {"Statement": [{"Resource": "arn:aws:ec2:eu-west-1:000390721279:instance/*"}]},
-    )
 
     output = "\n".join(audit_aws.anomalies)
     for message in (
@@ -340,7 +313,5 @@ def test_frankfurt_contract_mismatches_are_reported():
         "ECR pull-through rules differ",
         "unexpected ECR repository",
         "public-access block is incomplete",
-        "bake scheduler trust",
-        "bake scheduler termination policy",
     ):
         assert message in output

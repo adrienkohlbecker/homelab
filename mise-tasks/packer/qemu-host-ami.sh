@@ -8,9 +8,6 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-BAKE_SCHEDULER_ROLE_ARN="arn:aws:iam::000390721279:role/homelab-ci-cell-scheduler"
-BAKE_BACKSTOP_TTL_HOURS=3
-machine=qemu_host
 ubuntu="${usage_ubuntu:-noble}"
 architecture="${usage_architecture:-x86_64}"
 build_id="${CI_PIPELINE_ID:-local}"
@@ -28,72 +25,6 @@ region=$(ci_value aws_region)
 name_prefix=$(ci_value ami_name_prefix)
 param_template=$(ci_value ami_parameter)
 param=${param_template//\{ubuntu\}/$ubuntu}
-
-# CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
-# schedule for the build instance, then disarm it on normal exit.
-bake_backstop_arm() {
-  [ -n "${CI:-}" ] || return 0
-
-  local iid="" waited=0
-  while [ "$waited" -lt 180 ]; do
-    iid=$(aws --region "$region" ec2 describe-instances \
-      --filters "Name=tag:build_id,Values=${build_id}" \
-      "Name=tag:machine,Values=${machine}" \
-      "Name=tag:ubuntu,Values=${ubuntu}" \
-      "Name=tag:architecture,Values=${architecture}" \
-      "Name=instance-state-name,Values=pending,running" \
-      --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null | awk '{print $1; exit}')
-    [ -n "$iid" ] && [ "$iid" != "None" ] && break
-    iid=""
-    sleep 5
-    waited=$((waited + 5))
-  done
-  if [ -z "$iid" ]; then
-    echo "bake-backstop: no build instance found for ${machine}/${architecture}/${ubuntu} in ${build_id}; not armed" >&2
-    return 0
-  fi
-
-  local expires schedule_name target
-  expires=$(date -u -d "+${BAKE_BACKSTOP_TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%S 2>/dev/null ||
-    date -u -v "+${BAKE_BACKSTOP_TTL_HOURS}H" +%Y-%m-%dT%H:%M:%S)
-  schedule_name="ci-bake-${iid}"
-  printf '%s\n' "$schedule_name" >"$backstop_state"
-
-  aws --region "$region" ec2 create-tags --resources "$iid" \
-    --tags "Key=expires_at,Value=${expires}Z" >/dev/null 2>&1 || true
-
-  target=$(python3 -c 'import json, sys
-print(json.dumps({
-    "Arn": "arn:aws:scheduler:::aws-sdk:ec2:terminateInstances",
-    "RoleArn": sys.argv[1],
-    "Input": json.dumps({"InstanceIds": [sys.argv[2]]}),
-}))' "$BAKE_SCHEDULER_ROLE_ARN" "$iid")
-
-  if aws --region "$region" scheduler create-schedule \
-    --name "$schedule_name" \
-    --schedule-expression "at(${expires})" \
-    --schedule-expression-timezone UTC \
-    --flexible-time-window Mode=OFF \
-    --action-after-completion DELETE \
-    --target "$target" >/dev/null 2>&1; then
-    echo "bake-backstop: armed ${schedule_name} (terminates ${iid} at ${expires}Z)" >&2
-  else
-    echo "bake-backstop: could not create ${schedule_name} (IAM not applied?); not armed" >&2
-    : >"$backstop_state"
-  fi
-}
-
-bake_backstop_disarm() {
-  if [ -n "$backstop_pid" ]; then
-    kill "$backstop_pid" 2>/dev/null || true
-    wait "$backstop_pid" 2>/dev/null || true
-  fi
-  [ -f "$backstop_state" ] || return 0
-  local schedule_name
-  schedule_name=$(awk 'NR==1{print}' "$backstop_state")
-  [ -n "$schedule_name" ] || return 0
-  aws --region "$region" scheduler delete-schedule --name "$schedule_name" >/dev/null 2>&1 || true
-}
 
 promoted_ami() {
   local error_file value rc
@@ -177,14 +108,11 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
   on_error=ask
 fi
 
+# An orphaned build instance terminates itself; see shutdown_behavior in
+# packer/aws/qemu_host.pkr.hcl.
 manifest=$(mktemp)
-backstop_state=$(mktemp)
-backstop_pid=""
-trap 'bake_backstop_disarm; rm -f "$manifest" "$backstop_state"' EXIT
+trap 'rm -f "$manifest"' EXIT
 rm -f "$manifest"
-
-bake_backstop_arm &
-backstop_pid=$!
 
 packer build \
   -timestamp-ui \

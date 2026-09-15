@@ -81,7 +81,6 @@ ARM_INSTANCE_TYPES = {"c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"}
 ARM_AVAILABILITY_ZONES = {"eu-central-1a", "eu-central-1b", "eu-central-1c"}
 STANDARD_SPOT_QUOTA_CODE = "L-34B43A08"
 ARM_REQUIRED_SPOT_VCPUS = 152
-SCHEDULER_ROLE_NAME = "homelab-ci-cell-scheduler"
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
 expected: list[str] = []  # legitimate standing infra, reported for context
@@ -385,24 +384,6 @@ def audit_bucket_documents(
         expected.append(f"[{region}] secure versioned image bucket {bucket}")
 
 
-def audit_scheduler_role_documents(trust: dict, permissions: dict) -> None:
-    """Validate the bake-backstop role covers the CI region."""
-    anomaly_count = len(anomalies)
-    source_arns = trust["Statement"][0].get("Condition", {}).get("StringEquals", {}).get("aws:SourceArn", [])
-    if isinstance(source_arns, str):
-        source_arns = [source_arns]
-    expected_source_arns = {f"arn:aws:scheduler:{region}:000390721279:schedule-group/default" for region in CI_REGIONS}
-    if set(source_arns) != expected_source_arns:
-        anomalies.append("[global] bake scheduler trust does not match the CI region")
-    resources = permissions["Statement"][0].get("Resource", [])
-    if isinstance(resources, str):
-        resources = [resources]
-    expected_resources = {f"arn:aws:ec2:{region}:000390721279:instance/*" for region in CI_REGIONS}
-    if set(resources) != expected_resources:
-        anomalies.append("[global] bake scheduler termination policy does not match the CI region")
-    if len(anomalies) == anomaly_count:
-        expected.append("[global] regional bake scheduler role checked")
-
 
 def audit_region_contract(region: str, ec2) -> None:
     """Audit expected standing resources for one configured CI region."""
@@ -483,16 +464,6 @@ def audit_region_contract(region: str, ec2) -> None:
                 errors.append(f"{region} {bucket} policy: invalid JSON: {error}")
             else:
                 audit_bucket_documents(region, bucket, location, public_access, versioning, policy)
-
-    schedules = paginated(
-        f"{region} bake schedules",
-        client("scheduler", region),
-        "list_schedules",
-        "Schedules",
-        GroupName="default",
-        NamePrefix="ci-bake-",
-    )
-    expected.append(f"[{region}] {len(schedules)} active bake backstop schedules")
 
     if region == "eu-central-1":
         quota = safe(
@@ -647,22 +618,6 @@ def main():
             expected.append(f"[global] S3 bucket {b['Name']}")
         else:
             anomalies.append(f"[global] S3 bucket {b['Name']}")
-
-    iam = client("iam", "eu-central-1")
-    scheduler_role = safe(
-        "bake scheduler role",
-        lambda: iam.get_role(RoleName=SCHEDULER_ROLE_NAME)["Role"]["AssumeRolePolicyDocument"],
-        default=None,
-    )
-    scheduler_policy = safe(
-        "bake scheduler role policy",
-        lambda: iam.get_role_policy(RoleName=SCHEDULER_ROLE_NAME, PolicyName="terminate-ci-instances")[
-            "PolicyDocument"
-        ],
-        default=None,
-    )
-    if isinstance(scheduler_role, dict) and isinstance(scheduler_policy, dict):
-        audit_scheduler_role_documents(scheduler_role, scheduler_policy)
 
     print("\n── Expected CI infra ──")
     print("\n".join(f"  {line}" for line in expected) or "  (none)")

@@ -104,6 +104,13 @@ source "amazon-ebs" "qemu_host" {
     most_recent = true
   }
 
+  # A CI job timeout can kill Packer before its own cleanup runs. The build
+  # instance then ends itself: EC2 terminates it on an OS-initiated shutdown,
+  # and user data schedules that shutdown well past the bake job's timeout.
+  # The scheduled shutdown lives in /run, so the AMI does not inherit it.
+  shutdown_behavior = "terminate"
+  user_data         = "#!/bin/sh\nshutdown -h +180\n"
+
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"
