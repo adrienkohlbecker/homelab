@@ -554,25 +554,21 @@
         msg: The broken disabled-site replacement unexpectedly passed validation.
 
   rescue:
-    - name: _verify | Read the restored disabled site
+    - name: _verify | Restored disabled site keeps its content
       slurp:
         src: /etc/nginx/sites-available/nginxverifydisabled
       register: nginx_verify_disabled_site_restored
+      failed_when: >-
+        nginx_verify_disabled_site_restored.content | b64decode
+        != '# nginx verify disabled sentinel\n'
       become: true
 
-    - name: _verify | Stat the failed disabled-site symlink
+    - name: _verify | Restored disabled site stays disabled
       stat:
         path: /etc/nginx/sites-enabled/nginxverifydisabled
       register: nginx_verify_disabled_site_enabled
+      failed_when: nginx_verify_disabled_site_enabled.stat.exists
       become: true
-
-    - name: _verify | Disabled site content and state were restored
-      assert:
-        that:
-          - >-
-            nginx_verify_disabled_site_restored.content | b64decode
-            == '# nginx verify disabled sentinel\n'
-          - not nginx_verify_disabled_site_enabled.stat.exists
 
   always:
     - name: _verify | Remove the disabled-site fixture
@@ -629,26 +625,23 @@
             msg: The broken retargeted-site replacement unexpectedly passed validation.
 
       rescue:
-        - name: _verify | Inspect the restored retargeted site
+        - name: _verify | Restored site keeps its prior symlink target
           stat:
             path: "/etc/nginx/sites-enabled/{{ _nginx_verify_retarget_name }}"
           register: nginx_verify_retarget_link
+          failed_when: >-
+            not nginx_verify_retarget_link.stat.islnk
+            or nginx_verify_retarget_link.stat.lnk_target != _nginx_verify_retarget_old_path
           become: true
 
-        - name: _verify | Read the restored retargeted site config
+        - name: _verify | Restored site keeps its prior content
           slurp:
             src: "/etc/nginx/sites-available/{{ _nginx_verify_retarget_name }}"
           register: nginx_verify_retarget_config
+          failed_when: >-
+            nginx_verify_retarget_config.content | b64decode
+            != '# nginx verify retarget site sentinel\n'
           become: true
-
-        - name: _verify | Retargeted site config and link were restored
-          assert:
-            that:
-              - nginx_verify_retarget_link.stat.islnk
-              - nginx_verify_retarget_link.stat.lnk_target == _nginx_verify_retarget_old_path
-              - >-
-                nginx_verify_retarget_config.content | b64decode
-                == '# nginx verify retarget site sentinel\n'
 
   always:
     - name: _verify | Remove the retargeted-site fixture
