@@ -61,6 +61,9 @@ z2m_image:           ghcr.io/koenkk/zigbee2mqtt:2.12.0  # 2026-06-09
 # Alphabetical by role. URL adjacent to its sha256; per-arch maps keyed by
 # ansible_architecture where upstream ships per-arch assets.
 
+# Public artifacts published by this repository (GitLab project 83079143).
+homelab_gitlab_generic_packages_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic"
+
 # fan2go fan controller. No-nvml flavor: smaller, no NVIDIA dependency
 # (lab/pug have no GPUs).
 fan2go_version: "0.15.0"  # 2026-06-25
@@ -165,23 +168,21 @@ macos_vm_fetch_macos_artifact:
 # These discontinued upstream packages are preserved in the public homelab
 # GitLab generic package registry. mirror_gitlab keeps test fixtures on Nexus.
 minio_version: "20220526054841.0.0"  # 2022-05-26
-minio_repository_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic/minio"
 minio_release:
   x86_64:
-    url: "{{ minio_repository_url }}/{{ minio_version }}/minio_{{ minio_version }}_amd64.deb"
+    url: "{{ homelab_gitlab_generic_packages_url }}/minio/{{ minio_version }}/minio_{{ minio_version }}_amd64.deb"
     sha256: "c2183166105b418675c12a92b759f0ba470d3e4c6de68d9cacbe5fd6ede71a8f"
   aarch64:
-    url: "{{ minio_repository_url }}/{{ minio_version }}/minio_{{ minio_version }}_arm64.deb"
+    url: "{{ homelab_gitlab_generic_packages_url }}/minio/{{ minio_version }}/minio_{{ minio_version }}_arm64.deb"
     sha256: "04c327fa3b4f6a71587226d762564629dd7b35f9b737dd89af52da8531dfc6d5"
 
 minio_mcli_version: "20220610222912.0.0"  # 2022-06-10
-minio_mcli_repository_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic/mcli"
 minio_mcli_release:
   x86_64:
-    url: "{{ minio_mcli_repository_url }}/{{ minio_mcli_version }}/mcli_{{ minio_mcli_version }}_amd64.deb"
+    url: "{{ homelab_gitlab_generic_packages_url }}/mcli/{{ minio_mcli_version }}/mcli_{{ minio_mcli_version }}_amd64.deb"
     sha256: "175304d072db889d67824a3da2317b3b698ba09d79709010acdec62f05c38069"
   aarch64:
-    url: "{{ minio_mcli_repository_url }}/{{ minio_mcli_version }}/mcli_{{ minio_mcli_version }}_arm64.deb"
+    url: "{{ homelab_gitlab_generic_packages_url }}/mcli/{{ minio_mcli_version }}/mcli_{{ minio_mcli_version }}_arm64.deb"
     sha256: "31598860c2b5a6d03531b27ffffe03ca69de0ac3cd8c0f6ccc472e971270d5e1"
 
 # rEFInd theme: refind-theme-regular, pinned to an upstream commit.
@@ -203,7 +204,7 @@ zfs_autobackup_version: "3.3"  # 2024-12-17
 # dials gitlab.com directly. Each tarball contains the unified EFI image,
 # components-mode kernel/initrd, and the cmdline rEFInd passes on every arch.
 # Hosts can override zfsbootmenu_artifact directly (see host_vars/lab.yml).
-zfsbootmenu_repository_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic/zfsbootmenu"
+zfsbootmenu_repository_url: "{{ homelab_gitlab_generic_packages_url }}/zfsbootmenu"
 zfsbootmenu_release:
   x86_64:
     version: v3.0.1-linux6.1-ci.2615022324.14945838188-x86_64  # ZBM v3.0.1 2025-01-19 (CI build)
