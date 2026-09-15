@@ -1,7 +1,0 @@
-- name: Prepare persistent prerequisites for a production-style site check
-  hosts: all
-  tasks:
-    - name: Create and mount the services datasets
-      import_role:
-        name: services
-        tasks_from: main
