@@ -18,6 +18,18 @@
   tags:
     - libvirt
 
+# A fresh libvirt install creates the polkitd account while D-Bus is already
+# running. Reload its policy after package configuration has settled so virsh
+# does not wait for a failed PolicyKit activation on every invocation.
+- name: Reload D-Bus policy after installing virtualization tools
+  when: libvirt_apt.changed and not ansible_check_mode
+  systemd:
+    name: dbus.service
+    state: reloaded
+  become: true
+  tags:
+    - libvirt
+
 - name: Configure libvirt log compression
   import_role:
     name: logrotate

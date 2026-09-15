@@ -55,6 +55,8 @@
 - name: _verify | Operator reaches the libvirt system daemon
   command:
     argv:
+      - timeout
+      - 5s
       - runuser
       - -u
       - "{{ ansible_user_id }}"
