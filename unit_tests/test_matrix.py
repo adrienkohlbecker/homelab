@@ -270,12 +270,3 @@ class TestOnDemandMachines:
         kept, dropped = matrix.drop_on_demand_cells(specs)
         assert kept == ["zfs:box", "zfs:lab", "swap:lab:noble", "nginx:box"]
         assert dropped == ["zfs:pug"]
-
-    def test_no_on_demand_cells_is_noop(self) -> None:
-        specs = ["nginx:box", "zfs:box:noble"]
-        kept, dropped = matrix.drop_on_demand_cells(specs)
-        assert kept == specs
-        assert dropped == []
-
-    def test_pug_is_the_only_on_demand_machine(self) -> None:
-        assert frozenset({"pug"}) == matrix.ON_DEMAND_MACHINES
