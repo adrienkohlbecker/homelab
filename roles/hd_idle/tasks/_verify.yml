@@ -8,43 +8,8 @@
   changed_when: false
   become: true
 
-- name: _verify | Read hd-idle process argv
-  command: pgrep -a hd-idle
-  register: hd_idle_proc
-  changed_when: false
-  become: true
-
-- name: _verify | Assert hd-idle argv carries global flags from the env file
-  assert:
-    that:
-      - "'-i 0' in hd_idle_proc.stdout"
-      - "ansible_distribution_release == 'noble' or '-s 1' in hd_idle_proc.stdout"
-    fail_msg: >-
-      hd-idle running but missing expected flags; HD_IDLE_OPTS may have
-      failed to parse from /etc/default/hd-idle.
-      pgrep output: {{ hd_idle_proc.stdout }}
-
-- name: _verify | Confirm the rotational disk selection is exercised
-  assert:
-    that:
-      - rotational_disks_by_id | length > 0
-    fail_msg: scsi_debug did not produce a selected rotational disk
-
-- name: _verify | Assert each expected per-disk -a entry appears in argv
-  assert:
-    that:
-      - "'-a /dev/disk/by-id/' ~ item ~ ' -i 1200' in hd_idle_proc.stdout"
-    fail_msg: >-
-      hd-idle argv missing expected per-disk entry for
-      /dev/disk/by-id/{{ item }} -i 1200.
-      The configured disk selection was not propagated to hd-idle.
-      pgrep output: {{ hd_idle_proc.stdout }}
-  loop: "{{ rotational_disks_by_id }}"
-
 # Reinstalling the foreground drop-in alone, with the package and environment
-# file unchanged, must restart the daemon into foreground mode. The removal
-# helper call that follows the install publishes the same result fact, so this
-# proves the restart decision still sees the install outcome.
+# file unchanged, must restart the daemon into foreground mode.
 - name: _verify | Reinstalling the foreground drop-in restarts hd-idle
   when: hd_idle_foreground_override_enabled
   block:
@@ -64,16 +29,36 @@
     - name: _verify | Re-run the role with only the drop-in drifted
       import_tasks: main.yml
 
-    - name: _verify | Read the restarted hd-idle process argv
-      command: pgrep -a hd-idle
-      register: hd_idle_foreground_proc
-      changed_when: false
-      become: true
+- name: _verify | Read hd-idle process argv
+  command: pgrep -a hd-idle
+  register: hd_idle_proc
+  changed_when: false
+  become: true
 
-    - name: _verify | Assert hd-idle runs in foreground mode
-      assert:
-        that:
-          - hd_idle_foreground_proc.stdout is search('hd-idle -d ')
-        fail_msg: >-
-          The drop-in was reinstalled but hd-idle was not restarted into
-          foreground mode. pgrep output: {{ hd_idle_foreground_proc.stdout }}
+- name: _verify | Assert hd-idle argv carries global flags from the env file
+  assert:
+    that:
+      - "'-i 0' in hd_idle_proc.stdout"
+      - "ansible_distribution_release == 'noble' or '-s 1' in hd_idle_proc.stdout"
+      - not hd_idle_foreground_override_enabled or hd_idle_proc.stdout is search('hd-idle -d ')
+    fail_msg: >-
+      hd-idle is missing expected flags or foreground mode; HD_IDLE_OPTS or the
+      systemd override may not have applied.
+      pgrep output: {{ hd_idle_proc.stdout }}
+
+- name: _verify | Confirm the rotational disk selection is exercised
+  assert:
+    that:
+      - rotational_disks_by_id | length > 0
+    fail_msg: scsi_debug did not produce a selected rotational disk
+
+- name: _verify | Assert each expected per-disk -a entry appears in argv
+  assert:
+    that:
+      - "'-a /dev/disk/by-id/' ~ item ~ ' -i 1200' in hd_idle_proc.stdout"
+    fail_msg: >-
+      hd-idle argv missing expected per-disk entry for
+      /dev/disk/by-id/{{ item }} -i 1200.
+      The configured disk selection was not propagated to hd-idle.
+      pgrep output: {{ hd_idle_proc.stdout }}
+  loop: "{{ rotational_disks_by_id }}"
