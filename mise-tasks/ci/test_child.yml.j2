@@ -189,24 +189,7 @@ condition_coverage:
       --include-site
 {% endif %}
       test/out/condition_coverage/*.x86_64.*.jsonl
-{% if arm_mode == "auto" and arm_cells %}
-      test/out/condition_coverage/*.aarch64.*.jsonl
-{% endif %}
-{% if arm_mode == "manual" and arm_cells %}
-
-"condition_coverage:combined":
-  extends: .condition_coverage
-  when: manual
-  allow_failure: true
-  script:
-    - >-
-      ANSIBLE_CONFIG="$CI_PROJECT_DIR/ansible.cfg"
-      mise exec -- uv run --frozen python test/condition_coverage.py
-      --roles {{ roles | join(',') }}
-{% if site_test %}
-      --include-site
-{% endif %}
-      test/out/condition_coverage/*.x86_64.*.jsonl
+{% if arm_cells %}
       test/out/condition_coverage/*.aarch64.*.jsonl
 {% endif %}
 {% endif %}

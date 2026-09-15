@@ -605,9 +605,9 @@ def render_child_pipeline(
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One x86 job per cell spec (``role:variant[:ubuntu]``), the ARM subset
-    declared in role metadata, an optional site-converge job, and a no-op
-    placeholder when no runtime job is selected. X86 cells are split evenly
-    across two display stages but run as one DAG (``needs: []``).
+    declared in role metadata, an optional site-converge job, hosted coverage,
+    and a no-op placeholder when no runtime job is selected. X86 cells are
+    split evenly across two display stages but run as one DAG (``needs: []``).
 
     """
     env = jinja2.Environment(

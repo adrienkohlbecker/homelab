@@ -1275,6 +1275,9 @@ class TestRenderChildPipeline:
         assert doc["stages"][-2:] == ["arm", "coverage"]
         assert "when" not in doc["apt:lab:aarch64"]
         assert "allow_failure" not in doc["apt:lab:aarch64"]
+        assert "*.x86_64.*.jsonl" in doc["condition_coverage"]["script"][0]
+        assert "*.aarch64.*.jsonl" in doc["condition_coverage"]["script"][0]
+        assert "condition_coverage:combined" not in doc
 
     def test_arm_minimal_uses_upstream_cloud_image(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -1303,12 +1306,14 @@ class TestRenderChildPipeline:
         assert len(x86_jobs) == len(specs)
         assert arm_jobs
         assert {name for name in doc if name.endswith(":aarch64")} == arm_jobs
+        assert "needs" not in doc["condition_coverage"]
 
     def test_lab_target_never_renders_arm_jobs(self) -> None:
         doc = _render_child_doc(["apt:lab"], site_test=False, target="lab")
 
         assert ".arm_cell" not in doc
         assert not any(name.endswith(":aarch64") for name in doc)
+        assert "*.aarch64.*.jsonl" not in doc["condition_coverage"]["script"][0]
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:lab"], site_test=False, target="lab")
