@@ -16,6 +16,75 @@
   vars:
     qemu_test: false
 
+- name: _verify | Preserve the issued fixture domain
+  set_fact:
+    _certbot_fixture_domain: "{{ certbot_requested_domain }}"
+
+- name: _verify | Create a controlled certbot executable directory
+  file:
+    path: /tmp/certbot_coverage_bin
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _verify | Install a controlled certbot executable
+  copy:
+    dest: /tmp/certbot_coverage_bin/certbot
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      printf '%s\n' "$@" > /tmp/certbot_issuance_args
+      exit 42
+    mode: "0755"
+  become: true
+
+- name: _verify | Exercise drifted physical issuance through production tasks
+  environment:
+    PATH: "/tmp/certbot_coverage_bin:{{ ansible_env.PATH }}"
+  block:
+    - name: _verify | Reconcile a drifted certificate without the test flag
+      import_tasks: certificate.yml
+      vars:
+        certbot_apt:
+          changed: false
+        certbot_domains:
+          - "{{ _certbot_fixture_domain }}"
+          - "*.{{ _certbot_fixture_domain }}"
+          - coverage.invalid
+        qemu_test: false
+      become: true
+
+    - name: _verify | Reject an unexpectedly completed issuance fixture
+      fail:
+        msg: The controlled certbot executable did not stop issuance
+
+  rescue:
+    - name: _verify | Require the production issuance failure
+      assert:
+        that: ansible_failed_task.name == 'certificate | Issue certificate'
+
+    - name: _verify | Read the controlled issuance arguments
+      slurp:
+        src: /tmp/certbot_issuance_args
+      register: _certbot_issuance_args
+      become: true
+
+    - name: _verify | Drift forces renewal without staging flags
+      assert:
+        that:
+          - "'--force-renewal' in (_certbot_issuance_args.content | b64decode)"
+          - "'--test-cert' not in (_certbot_issuance_args.content | b64decode)"
+
+  always:
+    - name: _verify | Remove controlled certbot fixture files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/certbot_coverage_bin
+        - /tmp/certbot_issuance_args
+      become: true
+
 - name: _verify | Verify certbot
   become: true
   block:

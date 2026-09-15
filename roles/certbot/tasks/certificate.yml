@@ -1,0 +1,58 @@
+# --cert-name keeps the lineage path stable for every consumer. Omitting
+# --reuse-key rotates the private key on renewal, and the persisted deploy
+# hook makes timer-driven renewals reload nginx. Exact SAN comparison forces
+# reissuance after host, domain, or extra-SAN changes and rejects fixtures at
+# the same path whose certificate contents do not match.
+- name: certificate | Stat existing certificate
+  stat:
+    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+  register: certbot_cert_stat
+  tags:
+    - certbot
+
+- name: certificate | Read existing certificate SANs
+  community.crypto.x509_certificate_info:
+    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+  register: certbot_cert_info
+  when: certbot_cert_stat.stat.exists
+  tags:
+    - certbot
+
+# A certificate path can be a test fixture without a Certbot lineage. Treat a
+# missing renewal config as drift so issuance replaces the incomplete fixture.
+- name: certificate | Read existing renewal configuration
+  slurp:
+    src: /etc/letsencrypt/renewal/{{ inventory_hostname }}.{{ domain }}.conf
+  register: certbot_renewal
+  failed_when: false
+  when: certbot_cert_stat.stat.exists
+  tags:
+    - certbot
+
+- name: certificate | Issue certificate  # noqa: no-changed-when -- when: gates execution, like creates: did
+  command:
+    argv: >-
+      {{ ['certbot', 'certonly', '--noninteractive', '--dns-cloudflare',
+          '--cert-name', inventory_hostname + '.' + domain,
+          '--deploy-hook', certbot_deploy_hook,
+          '--domains', certbot_domains | join(',')]
+         + (certbot_renewal_required | ternary(['--force-renewal'], []))
+         + (qemu_test | ternary(['--test-cert'], [])) }}
+  vars:
+    certbot_deploy_hook: >-
+      systemctl is-active --quiet nginx || exit 0; systemctl reload nginx
+    certbot_expected_sans: >-
+      {{ certbot_domains | map('regex_replace', '^', 'DNS:') | list }}
+    certbot_sans_drifted: >-
+      {{ certbot_cert_stat.stat.exists
+         and (certbot_cert_info.subject_alt_name | sort) != (certbot_expected_sans | sort) }}
+    certbot_renewal_text: "{{ certbot_renewal.content | default('') | b64decode }}"
+    certbot_hook_drifted: >-
+      {{ certbot_cert_stat.stat.exists
+         and ('renew_hook = ' + certbot_deploy_hook) not in certbot_renewal_text }}
+    certbot_renewal_required: "{{ certbot_sans_drifted or certbot_hook_drifted }}"
+  when:
+    - not (ansible_check_mode and certbot_apt.changed)
+    - (not certbot_cert_stat.stat.exists) or certbot_renewal_required
+  tags:
+    - certbot
