@@ -11,7 +11,7 @@
 # Reinstalling the foreground drop-in alone, with the package and environment
 # file unchanged, must restart the daemon into foreground mode.
 - name: _verify | Reinstalling the foreground drop-in restarts hd-idle
-  when: hd_idle_foreground_override_enabled
+  when: ansible_distribution_release == 'noble'
   block:
     - name: _verify | Remove the foreground drop-in
       file:
@@ -40,7 +40,7 @@
     that:
       - "'-i 0' in hd_idle_proc.stdout"
       - "ansible_distribution_release == 'noble' or '-s 1' in hd_idle_proc.stdout"
-      - not hd_idle_foreground_override_enabled or hd_idle_proc.stdout is search('hd-idle -d ')
+      - ansible_distribution_release != 'noble' or hd_idle_proc.stdout is search('hd-idle -d ')
     fail_msg: >-
       hd-idle is missing expected flags or foreground mode; HD_IDLE_OPTS or the
       systemd override may not have applied.
