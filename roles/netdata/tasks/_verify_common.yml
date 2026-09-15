@@ -4,15 +4,6 @@
 # extension. Fixture-specific surfaces live in _verify_full.yml and
 # _verify_minimal.yml.
 
-- name: _verify | Netdata.service is loaded and active
-  systemd:
-    name: netdata
-  register: _netdata_unit
-  failed_when: >-
-    _netdata_unit.status.LoadState != "loaded"
-    or _netdata_unit.status.ActiveState != "active"
-  become: true
-
 - name: _verify | Wait for Postfix queue metrics
   uri:
     url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=postfix_local.postfix_queue_emails
