@@ -157,7 +157,7 @@ sudo chmod 0755 /usr/local/bin/homelab_ci_ready
 
 sudo tee /etc/systemd/system/homelab-ci-scratch.service >/dev/null <<'EOF'
 [Unit]
-Description=Format and mount local NVMe scratch for homelab CI qemu host
+Description=Format and mount ephemeral scratch for homelab CI qemu host
 Before=multi-user.target
 
 [Service]
