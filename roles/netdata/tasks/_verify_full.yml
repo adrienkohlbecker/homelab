@@ -68,16 +68,6 @@
       Expected the Postfix alarm to require a sustained queue depth and retain
       only recovery hysteresis.
 
-- name: _verify | Wait for keepalived_vrrp chart to register
-  uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
-  register: _netdata_keepalived_vrrp_charts
-  retries: 30
-  delay: 2
-  until: >-
-    _netdata_keepalived_vrrp_charts.status == 200
-    and 'keepalived_vrrp.state' in ((_netdata_keepalived_vrrp_charts.json | default({})).charts | default({}))
-
 # allmetrics reports the last collected sample directly, so no query-window
 # bucketing can leave the newest value invisible.
 - name: _verify | Keepalived_vrrp fixture reports holds_vip=1
