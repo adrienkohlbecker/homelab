@@ -24,8 +24,7 @@
 - name: _verify | Root listing reflects every tree mount flag (both directions)
   assert:
     that:
-      - "(not (item.enabled | bool)) or ('href=\"' ~ item.name ~ '/\"') in _filebrowser_root.content"
-      - "(item.enabled | bool) or ('href=\"' ~ item.name ~ '/\"') not in _filebrowser_root.content"
+      - "(('href=\"' ~ item.name ~ '/\"') in _filebrowser_root.content) == (item.enabled | bool)"
   loop: "{{ filebrowser_trees }}"
   loop_control:
     label: "{{ item.name }}"
