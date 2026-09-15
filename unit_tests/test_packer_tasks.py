@@ -438,11 +438,25 @@ def _firmware_checkout(tmp_path: Path, package: Path, sha256: str) -> Path:
     return root / "mise-tasks" / "test" / "firmware.sh"
 
 
-def _run_firmware(script: Path, firmware_dir: Path) -> subprocess.CompletedProcess[str]:
+def _run_firmware(script: Path, firmware_dir: Path, host: str = "aarch64") -> subprocess.CompletedProcess[str]:
+    fake_bin = script.parents[2] / "bin"
+    _executable(fake_bin / "uname", f"#!/bin/sh\nprintf '{host}\\n'\n")
     # firmware.sh parses its pins with python3 + PyYAML; use this interpreter.
-    path = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
+    path = f"{fake_bin}:{Path(sys.executable).parent}:{os.environ['PATH']}"
     env = dict(os.environ, HOMELAB_AARCH64_FIRMWARE_DIR=str(firmware_dir), PATH=path)
     return subprocess.run(["bash", str(script)], env=env, text=True, capture_output=True)
+
+
+def test_firmware_is_not_fetched_on_non_arm_hosts(tmp_path: Path) -> None:
+    missing_package = tmp_path / "absent.deb"
+    script = _firmware_checkout(tmp_path, missing_package, "0" * 64)
+    firmware_dir = tmp_path / "firmware"
+
+    result = _run_firmware(script, firmware_dir, host="x86_64")
+
+    assert result.returncode == 0, result.stderr
+    assert "nothing to fetch" in result.stdout
+    assert not firmware_dir.exists()
 
 
 def test_firmware_installs_the_descriptor_pair_once(tmp_path: Path) -> None:

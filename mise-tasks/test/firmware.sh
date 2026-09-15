@@ -14,6 +14,16 @@ set -euo pipefail
 # minimal copy of the repo layout, so it resolves its inputs relative to itself
 # and needs only python3 with PyYAML, curl, ar, and tar.
 
+# Only aarch64 guests boot the pinned pair, and fixtures always boot natively,
+# so other hosts (the x86 lab builder) have nothing to fetch.
+case "$(uname -m)" in
+arm64 | aarch64) ;;
+*)
+  echo "==> $(uname -m) host boots packaged firmware; nothing to fetch"
+  exit 0
+  ;;
+esac
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 firmware_dir="${HOMELAB_AARCH64_FIRMWARE_DIR:-${root}/test/firmware}"
 archive_marker="${firmware_dir}/archive.sha256"
