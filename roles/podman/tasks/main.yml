@@ -1,6 +1,4 @@
-# Status-only read: with no state/enabled requested the module just returns
-# `systemctl show podman.service`, which succeeds (LoadState=not-found) before
-# the package exists. Cheaper than service_facts, which enumerates every unit.
+# A status-only query succeeds with LoadState=not-found before package install.
 - name: Read podman.service state before package changes
   systemd:
     name: podman.service
@@ -35,15 +33,8 @@
   tags:
     - podman
 
-# override_service.conf (LOGGING) and a noble binary-swap change the running
-# podman.service, not the socket — and podman.service is a long-lived active
-# unit (netdata holds a persistent connection over the API socket), so the
-# socket restart above never recycles it. Restart the daemon directly when
-# its drop-in changed or apt swapped the binary under it: apt under
-# policy_rc_d=101 leaves the running daemon on disk, so the new /run/podman
-# socket would otherwise still be served by the stale process. A fresh install
-# has no active daemon to recycle; the socket task above starts it with the new
-# binary and environment.
+# Socket activation does not recycle an existing daemon after its package or
+# runtime drop-in changes; fresh installs have no process to restart.
 - name: Restart an existing podman.service after runtime changes
   when:
     - not ansible_check_mode

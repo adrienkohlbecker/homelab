@@ -235,9 +235,7 @@
   changed_when: false
   failed_when: "'--log-level=warn' not in (podman_service_unit.status.Environment | default(''))"
 
-# The Environment property above changes on daemon-reload alone. On the full
-# fixtures _setup starts the service before converge, so only a restart can
-# put the flag into the running daemon argv.
+# Full fixtures prestart the daemon, so live argv proves more than daemon-reload.
 - name: _verify | The running podman.service was restarted onto the drop-in
   when: not qemu_test_minimal
   command: ps -o args= -p {{ podman_service_unit.status.MainPID }}

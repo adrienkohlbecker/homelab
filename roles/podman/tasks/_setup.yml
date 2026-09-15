@@ -10,10 +10,8 @@
       name: "{{ ansible_user_id }}"
       uid: "{{ ansible_user_uid }}"
 
-# Start the package-owned API service on full fixtures before the role writes
-# its drop-in. Their converge must restart this already-running process when the
-# runtime configuration changes. Minimal stays fresh so its check/converge pair
-# exercises the predicted-package and inactive-service branches.
+# Full fixtures prestart the API daemon to exercise restart; Minimal covers the
+# fresh-install path.
 - name: _setup | Prepare the running-service restart exercise
   when: not (qemu_test_minimal | default(false))
   block:
@@ -29,8 +27,7 @@
         mode: "0755"
       become: true
 
-    # Keep the stock $LOGGING expansion so the role's LOGGING drop-in still
-    # reaches the daemon argv that _verify inspects.
+    # Preserve the stock $LOGGING expansion for the live argv assertion.
     - name: _setup | Disable the API service idle timeout for the restart exercise
       copy:
         dest: /etc/systemd/system/podman.service.d/condition_coverage.conf
