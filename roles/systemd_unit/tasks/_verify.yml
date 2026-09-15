@@ -144,16 +144,13 @@
       src: systemd_unit_verify_dropin.conf
       for: systemd_unit_verify_copy_ok.service
 
-- name: _verify | Cleanup drop-in directory
-  file:
-    path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d
-    state: absent
-  become: true
-
-- name: _verify | Daemon-reload after drop-in cleanup
-  systemd:
-    daemon_reload: true
-  become: true
+- name: _verify | Remove default drop-in via tasks_from=remove
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      for: systemd_unit_verify_copy_ok.service
 
 # Remove-path coverage consumes the valid fixture left by the install-path
 # scenarios, then exercises the four observable behaviours of
@@ -448,5 +445,99 @@
 - name: _verify | Cleanup the legacy target.wants dir
   file:
     path: /etc/systemd/system/systemd_unit_verify_stale.target.wants
+    state: absent
+  become: true
+
+# User-scope mask refusals stop before contacting the user manager, while still
+# exercising the helper's real scope, path, linger, and diagnostic branches.
+- name: _verify | Create a user-scope fixture account
+  user:
+    name: systemd_unit_verify
+    create_home: false
+    shell: /usr/sbin/nologin
+  become: true
+
+- name: _verify | Create the fixture linger marker
+  file:
+    path: /var/lib/systemd/linger/systemd_unit_verify
+    state: touch
+    mode: "0644"
+  become: true
+
+- name: _verify | Pre-mask a user-scope unit path
+  file:
+    src: /dev/null
+    dest: /etc/systemd/user/systemd_unit_user_mask_test.service
+    state: link
+    force: true
+  become: true
+
+- name: _verify | Install over a user-scope masked unit
+  block:
+    - name: _verify | Attempt user-scope install over masked unit
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: systemd_unit_verify_ok.service.j2
+          dest: systemd_unit_user_mask_test.service
+          user: systemd_unit_verify
+
+    - name: _verify | Reject an unexpectedly successful user-scope install
+      fail:
+        msg: user-scope install over a masked unit should have failed
+
+  rescue:
+    - name: _verify | User-scope install refusal names systemctl --user
+      assert:
+        that:
+          - ansible_failed_result.msg is search('systemctl --user unmask')
+
+- name: _verify | Remove a user-scope masked unit
+  block:
+    - name: _verify | Attempt user-scope removal of masked unit
+      import_role:
+        name: systemd_unit
+        tasks_from: remove
+      vars:
+        systemd_unit_args:
+          dest: systemd_unit_user_mask_test.service
+          user: systemd_unit_verify
+
+    - name: _verify | Reject an unexpectedly successful user-scope removal
+      fail:
+        msg: user-scope removal of a masked unit should have failed
+
+  rescue:
+    - name: _verify | User-scope removal refusal names systemctl --user
+      assert:
+        that:
+          - ansible_failed_result.msg is search('systemctl --user unmask')
+
+- name: _verify | User-scope mask survived both refusals
+  stat:
+    path: /etc/systemd/user/systemd_unit_user_mask_test.service
+  register: _systemd_unit_user_masked_stat
+  failed_when: >-
+    not _systemd_unit_user_masked_stat.stat.islnk
+    or _systemd_unit_user_masked_stat.stat.lnk_target != '/dev/null'
+  become: true
+
+- name: _verify | Remove user-scope mask fixture
+  file:
+    path: /etc/systemd/user/systemd_unit_user_mask_test.service
+    state: absent
+  become: true
+
+- name: _verify | Remove fixture linger marker
+  file:
+    path: /var/lib/systemd/linger/systemd_unit_verify
+    state: absent
+  become: true
+
+- name: _verify | Remove user-scope fixture account
+  user:
+    name: systemd_unit_verify
     state: absent
   become: true
