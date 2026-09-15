@@ -1,0 +1,10 @@
+- name: _setup | Seed an installer-owned netplan origin
+  copy:
+    dest: /etc/netplan/00-installer-config.yaml
+    content: |
+      network:
+        version: 2
+    owner: root
+    group: root
+    mode: "0600"
+  become: true

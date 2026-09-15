@@ -6,6 +6,32 @@
   changed_when: false
   failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
 
+- name: _verify | Render the production unit with ZFS-backed state
+  template:
+    src: gitlab_runner.service.j2
+    dest: /tmp/gitlab-runner-zfs.service
+    mode: "0644"
+  vars:
+    zfs_root: true
+    zfs_has_services_mount: true
+  become: true
+
+- name: _verify | Verify the ZFS-backed unit dependency
+  command:
+    argv:
+      - grep
+      - --fixed-strings
+      - Requires=zfs_mount_mnt_services.service
+      - /tmp/gitlab-runner-zfs.service
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate GitLab Runner unit
+  file:
+    path: /tmp/gitlab-runner-zfs.service
+    state: absent
+  become: true
+
 - name: _verify | Exercise gitlab_runner fluent-bit record contracts
   import_role:
     name: fluentbit

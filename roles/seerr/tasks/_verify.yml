@@ -219,7 +219,7 @@
         serverId: srv-abc123
         apiKey: jelly-test-key
         libraries:
-          - { id: f1, name: Films, enabled: true, type: movie }
+          - { id: f1, name: Films, enabled: true, type: movie, lastScan: 123 }
           - { id: s1, name: Shows, enabled: false, type: show }
       migrations:
         - "0007_migrate_arr_tags"
@@ -249,6 +249,7 @@
       - _parsed.jellyfin.ip == 'jellyfin.dns.podman'
       - _parsed.jellyfin.apiKey == 'jelly-test-key'
       - (_parsed.jellyfin.libraries | length) == 2
+      - _parsed.jellyfin.libraries[0].lastScan == 123
       - _parsed.plex.name == ''
       - _parsed.plex.ip == ''
       - (_parsed.plex.libraries | length) == 0

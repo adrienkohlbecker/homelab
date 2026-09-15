@@ -9,6 +9,43 @@
 # down on a mode flip, so its presence is uncorrelated with the *current*
 # Storage= mode (box's packer image keeps it from an earlier build).
 
+- name: _verify | Render persistent ext4 and ZFS journal configs
+  template:
+    src: 99-custom.conf.j2
+    dest: "/tmp/journald-{{ item.label }}.conf"
+    mode: "0644"
+  vars:
+    journald_storage: persistent
+    zfs_root: "{{ item.zfs_root }}"
+  loop:
+    - label: ext4
+      zfs_root: false
+    - label: zfs
+      zfs_root: true
+  become: true
+
+- name: _verify | Verify journal compression follows its filesystem
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+
+        assert "Compress=yes" in pathlib.Path("/tmp/journald-ext4.conf").read_text()
+        assert "Compress=no" in pathlib.Path("/tmp/journald-zfs.conf").read_text()
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate journal configs
+  file:
+    path: "/tmp/journald-{{ item }}.conf"
+    state: absent
+  loop:
+    - ext4
+    - zfs
+  become: true
+
 - name: _verify | Emit sentinel log line
   command: logger -t journald_verify -- {{ _journald_verify_token | quote }}
   vars:

@@ -796,3 +796,13 @@
     path: /tmp/nginx-ipv6.conf
     state: absent
   become: true
+
+- name: _verify | Disturb the managed config before exercising reload
+  lineinfile:
+    path: /etc/nginx/nginx.conf
+    line: "# _verify reload path"
+    state: present
+  become: true
+
+- name: _verify | Restore the managed config through the production tasks
+  import_tasks: install.yml

@@ -1,6 +1,49 @@
 # The qemu fixture has no usable relay credentials, so verify the local wiring:
 # parsing, effective parameters, maps, aliases, listener state, and sender
 # qualification through a locally injected message.
+- name: _verify | Render production configs for plain and wrapper TLS
+  template:
+    src: main.cf.j2
+    dest: "/tmp/postfix-{{ item.label }}.cf"
+    mode: "0644"
+  vars:
+    smtp_use_ssl: "{{ item.ssl }}"
+    smtp_use_tls: "{{ item.tls }}"
+  loop:
+    - label: plain
+      ssl: false
+      tls: false
+    - label: wrapper
+      ssl: true
+      tls: false
+  become: true
+
+- name: _verify | Verify alternate SMTP TLS policies
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+
+        plain = pathlib.Path("/tmp/postfix-plain.cf").read_text()
+        assert "smtp_tls_security_level = none" in plain
+        assert "smtp_tls_wrappermode = no" in plain
+        wrapper = pathlib.Path("/tmp/postfix-wrapper.cf").read_text()
+        assert "smtp_tls_security_level = secure" in wrapper
+        assert "smtp_tls_wrappermode = yes" in wrapper
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate Postfix configs
+  file:
+    path: "/tmp/postfix-{{ item }}.cf"
+    state: absent
+  loop:
+    - plain
+    - wrapper
+  become: true
+
 - name: _verify | Postfix configuration parses with no warnings
   command: postfix check
   register: _postfix_check

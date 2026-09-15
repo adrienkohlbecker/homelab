@@ -1,5 +1,36 @@
 # rEFInd reads its configuration and assets from the ESP at every boot, so the
 # on-disk files are the observable end state.
+- name: _verify | Render the production x86 ZBM-only config
+  template:
+    src: refind.conf.j2
+    dest: /tmp/refind-x86-zbm.conf
+    mode: "0644"
+  vars:
+    ansible_architecture: x86_64
+    boot_via_efi_stub: false
+  become: true
+
+- name: _verify | Verify the x86 ZBM-only config
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+
+        config = pathlib.Path("/tmp/refind-x86-zbm.conf").read_text()
+        assert 'default_selection "Ubuntu (ZBM)"' in config
+        assert 'menuentry "Ubuntu (Linux EFI Stub)"' not in config
+        assert "vmlinux-bootmenu" not in config
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate rEFInd config
+  file:
+    path: /tmp/refind-x86-zbm.conf
+    state: absent
+  become: true
+
 - name: _verify | Stat installed theme files
   stat:
     path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"

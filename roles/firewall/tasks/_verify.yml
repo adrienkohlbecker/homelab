@@ -52,6 +52,33 @@
     # the FORWARD chain's iif=wg0/oif=podman0 path resolves to.
     _firewall_probe_container_dest: "{{ podman_default_network | ansible.utils.ipmath(2) }}"
 
+- name: _verify | Render production rules without host-only exceptions
+  template:
+    src: nftables.conf.j2
+    dest: /tmp/nftables-without-host-exceptions.conf
+    mode: "0644"
+  vars:
+    authelia_host: another_host
+    dns_keepalived_peers:
+      - "{{ inventory_hostname }}"
+  become: true
+
+- name: _verify | Validate rules without host-only exceptions
+  command:
+    argv:
+      - nft
+      - --check
+      - --file
+      - /tmp/nftables-without-host-exceptions.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate firewall rules
+  file:
+    path: /tmp/nftables-without-host-exceptions.conf
+    state: absent
+  become: true
+
 - name: _verify | Set up netns/veth test rig
   import_tasks: _verify_rig.yml
 - name: _verify | Run INPUT chain probes

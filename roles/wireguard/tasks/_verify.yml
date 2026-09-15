@@ -2,6 +2,56 @@
 # Behavior probes against the live wg interface, not the rendered
 # config. Only invoked by test/testrole.py against a qemu VM; never
 # from site.yml or `mise run ansible --tags wireguard`.
+- name: _verify | Render the production config as a roaming client
+  template:
+    src: wg.conf.j2
+    dest: /tmp/wg-roaming.conf
+    mode: "0600"
+  vars:
+    own_peer_name: laptop
+  diff: false
+  become: true
+
+- name: _verify | Render a server peer with endpoint and keepalive
+  template:
+    src: wg.conf.j2
+    dest: /tmp/wg-endpoint-keepalive.conf
+    mode: "0600"
+  vars:
+    wireguard_peers:
+      box: {}
+      laptop:
+        public_endpoint: 192.0.2.10:51820
+        keepalive_from:
+          - box
+  diff: false
+  become: true
+
+- name: _verify | Verify roaming, endpoint, and keepalive policies
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+
+        roaming = pathlib.Path("/tmp/wg-roaming.conf").read_text()
+        assert "MTU = 1280" in roaming
+        endpoint = pathlib.Path("/tmp/wg-endpoint-keepalive.conf").read_text()
+        assert "Endpoint = 192.0.2.10:51820" in endpoint
+        assert "PersistentKeepalive = 25" in endpoint
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate WireGuard configs
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop:
+    - wg-roaming.conf
+    - wg-endpoint-keepalive.conf
+  become: true
+
 - name: _verify | Assert wg-quick@wg0 is active
   systemd:
     name: wg-quick@wg0.service
