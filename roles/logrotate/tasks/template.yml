@@ -3,8 +3,7 @@
 #   dest        required; on-disk path under /etc/logrotate.d/
 #   condition   optional bool, default true; gates the whole call
 #
-# The dict form prevents inter-call leakage at play-vars scope (see
-# compression.yml for the longer rationale; same shape).
+# The dict form prevents inter-call leakage at play-vars scope.
 - name: template | Assert inputs
   assert:
     that:

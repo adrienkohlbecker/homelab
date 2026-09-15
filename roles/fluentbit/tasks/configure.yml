@@ -178,10 +178,8 @@
   tags:
     - fluentbit
 
-# Split restart vs reload: apt package and systemd drop-in changes need
-# a restart; conf/lua changes hit Hot_Reload via SIGHUP and preserve the
-# in-memory backlog. Mutually exclusive (`and not restart`) matches the
-# avahi pattern.
+# Package and systemd changes require a restart; configuration and Lua changes
+# support a SIGHUP reload that preserves the in-memory backlog.
 - name: Enable fluent-bit service
   when: fluentbit_package_ready
   systemd:
