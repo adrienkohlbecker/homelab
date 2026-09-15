@@ -14,6 +14,7 @@ import yaml
 
 BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
+MANIFEST_VERSION = 2
 POINTER_NAME = "promoted.json"
 VALID_MACHINES = {"box", "box_deps", "lab"}
 ARCHITECTURES: dict[str, Any] = yaml.safe_load(
@@ -27,6 +28,21 @@ class ImageStore(NamedTuple):
 
     bucket: str
     region: str
+
+
+class ManifestBundle(NamedTuple):
+    """The compressed bundle named and optionally hashed by a manifest."""
+
+    name: str
+    sha256: str | None
+
+
+class ManifestFile(NamedTuple):
+    """One extracted bundle member from either manifest generation."""
+
+    name: str
+    size: int | None
+    sha256: str | None
 
 
 def image_store(architecture: str) -> ImageStore:
@@ -76,12 +92,46 @@ def validate_member_name(member: str) -> None:
         sys.exit(f"unsafe archive member path in manifest: {member!r}")
 
 
-def manifest_files(manifest: dict[str, Any]) -> list[dict[str, str]]:
+def _sha256(value: Any, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError(f"{label} sha256 is invalid")
+    return value
+
+
+def manifest_version(manifest: dict[str, Any]) -> int:
+    version = manifest.get("format_version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or version not in (1, MANIFEST_VERSION):
+        raise ValueError(f"unsupported manifest format_version: {version!r}")
+    return version
+
+
+def manifest_bundle(manifest: dict[str, Any]) -> ManifestBundle:
+    if manifest_version(manifest) == 1:
+        name = manifest.get("bundle_name", BUNDLE_NAME)
+        if not isinstance(name, str) or not name:
+            raise ValueError("manifest bundle_name must be a non-empty string")
+        return ManifestBundle(name=name, sha256=None)
+
+    bundle = manifest.get("bundle")
+    if not isinstance(bundle, dict):
+        raise ValueError("manifest bundle must be an object")
+    name = bundle.get("name")
+    if not isinstance(name, str) or not name:
+        raise ValueError("manifest bundle name must be a non-empty string")
+    return ManifestBundle(name=name, sha256=_sha256(bundle.get("sha256"), "manifest bundle"))
+
+
+def manifest_files(manifest: dict[str, Any]) -> list[ManifestFile]:
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
         raise ValueError("manifest files must be a non-empty list")
 
-    normalized: list[dict[str, str]] = []
+    version = manifest_version(manifest)
+    normalized: list[ManifestFile] = []
     for entry in files:
         if not isinstance(entry, dict):
             raise ValueError("manifest file entries must be objects")
@@ -89,9 +139,22 @@ def manifest_files(manifest: dict[str, Any]) -> list[dict[str, str]]:
         if not isinstance(name, str) or not name:
             raise ValueError("manifest file name must be a non-empty string")
         validate_member_name(name)
-        normalized.append({"name": name})
+        if version == 1:
+            digest = entry.get("sha256")
+            normalized.append(
+                ManifestFile(
+                    name=name,
+                    size=None,
+                    sha256=_sha256(digest, f"manifest file {name!r}") if digest is not None else None,
+                )
+            )
+            continue
+        size = entry.get("size")
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise ValueError(f"manifest file size is invalid for {name!r}")
+        normalized.append(ManifestFile(name=name, size=size, sha256=None))
 
-    names = [entry["name"] for entry in normalized]
+    names = [entry.name for entry in normalized]
     if len(names) != len(set(names)):
         raise ValueError("manifest file names must be unique")
     return normalized

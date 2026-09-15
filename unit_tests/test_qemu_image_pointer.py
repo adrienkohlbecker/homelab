@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import tarfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 from conftest import load_repo_module
@@ -127,7 +128,7 @@ class TestPointerBody:
 
 
 class TestManifest:
-    def test_round_trip_contains_only_identity_and_member_names(
+    def test_round_trip_contains_archive_hash_and_member_sizes(
         self,
         tmp_path: Path,
     ) -> None:
@@ -137,21 +138,29 @@ class TestManifest:
         efivars.write_bytes(b"efi")
 
         args = _args()
-        manifest = upload.build_manifest(args=args, disks=[disk], efivars=efivars)
+        manifest = upload.build_manifest(
+            args=args,
+            disks=[disk],
+            efivars=efivars,
+            bundle_sha256="a" * 64,
+        )
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
         assert set(manifest) == {
             "architecture",
             "build_id",
+            "bundle",
             "files",
+            "format_version",
             "machine",
             "source_sha",
             "ubuntu",
         }
+        assert manifest["bundle"] == {"name": "disks.tar.zst", "sha256": "a" * 64}
         assert manifest["files"] == [
-            {"name": disk.name},
-            {"name": efivars.name},
+            {"name": disk.name, "size": 4},
+            {"name": efivars.name, "size": 3},
         ]
         selection = hydrate.ImageSelection(args.build_id, args.source_sha)
         assert hydrate.read_manifest(manifest_path, args, selection) == manifest
@@ -174,19 +183,59 @@ class TestManifest:
                 hydrate.ImageSelection(manifest["build_id"], None),
             )
 
-    def test_legacy_hash_is_ignored(self, tmp_path: Path) -> None:
+    def test_legacy_member_hash_is_optional(self, tmp_path: Path) -> None:
         manifest = {
             "architecture": "x86_64",
             "machine": "box",
             "source_sha": "d" * 40,
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
-            "files": [{"name": "disk.raw", "sha256": "0" * 64}],
+            "files": [{"name": "disk.raw"}],
         }
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert hydrate.read_manifest(manifest_path, _args(), hydrate.ImageSelection(manifest["build_id"], None)) == manifest
+        assert (
+            hydrate.read_manifest(manifest_path, _args(), hydrate.ImageSelection(manifest["build_id"], None))
+            == manifest
+        )
+        assert hydrate.manifest_files(manifest) == [hydrate.ManifestFile("disk.raw", None, None)]
+
+    def test_version_two_requires_an_archive_hash(self, tmp_path: Path) -> None:
+        args = _args()
+        manifest = {
+            "architecture": args.architecture,
+            "build_id": args.build_id,
+            "bundle": {"name": "disks.tar.zst"},
+            "files": [{"name": "disk.raw", "size": 4}],
+            "format_version": 2,
+            "machine": args.machine,
+            "source_sha": args.source_sha,
+            "ubuntu": args.ubuntu,
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        with pytest.raises(SystemExit, match="manifest bundle sha256 is invalid"):
+            hydrate.read_manifest(manifest_path, args, hydrate.ImageSelection(args.build_id, args.source_sha))
+
+    def test_version_two_requires_member_sizes(self, tmp_path: Path) -> None:
+        args = _args()
+        manifest = {
+            "architecture": args.architecture,
+            "build_id": args.build_id,
+            "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
+            "files": [{"name": "disk.raw"}],
+            "format_version": 2,
+            "machine": args.machine,
+            "source_sha": args.source_sha,
+            "ubuntu": args.ubuntu,
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+
+        with pytest.raises(SystemExit, match="manifest file size is invalid"):
+            hydrate.read_manifest(manifest_path, args, hydrate.ImageSelection(args.build_id, args.source_sha))
 
     def test_wrong_architecture_is_rejected(self, tmp_path: Path) -> None:
         args = _args(architecture="aarch64", bucket="homelab-ci-arm-images-eu-central-1", region="eu-central-1")
@@ -242,24 +291,24 @@ class TestManifest:
         with pytest.raises(SystemExit, match="manifest architecture mismatch"):
             hydrate.read_manifest(manifest_path, args, hydrate.ImageSelection(args.build_id, None))
 
-    def test_local_cache_uses_manifest_build_id_and_files(self, tmp_path: Path) -> None:
+    def test_legacy_member_hash_mismatch_is_rejected(self, tmp_path: Path) -> None:
+        disk = tmp_path / "disk.raw"
+        disk.write_bytes(b"corrupt")
+        with pytest.raises(SystemExit, match="sha256 mismatch"):
+            hydrate.verify_files(tmp_path, [hydrate.ManifestFile(disk.name, None, "0" * 64)])
+
+    def test_hashless_legacy_member_is_accepted(self, tmp_path: Path) -> None:
         disk = tmp_path / "disk.raw"
         disk.write_bytes(b"disk")
-        args = _args(build_id="build-1")
-        manifest = {
-            "architecture": args.architecture,
-            "build_id": args.build_id,
-            "files": [{"name": disk.name}],
-            "machine": args.machine,
-            "source_sha": args.source_sha,
-            "ubuntu": args.ubuntu,
-        }
-        (tmp_path / hydrate.LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest))
 
-        assert hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-1", args.source_sha))
-        assert not hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-2", args.source_sha))
-        disk.unlink()
-        assert not hydrate.local_cache_complete(tmp_path, args, hydrate.ImageSelection("build-1", args.source_sha))
+        hydrate.verify_files(tmp_path, [hydrate.ManifestFile(disk.name, None, None)])
+
+    def test_archive_hash_mismatch_is_rejected(self) -> None:
+        archive = hydrate.DigestReader(io.BytesIO(b"archive"))
+        archive.drain()
+
+        with pytest.raises(SystemExit, match="bundle sha256 mismatch"):
+            hydrate.verify_archive(archive, "0" * 64)
 
 
 def _zstd_bundle(path: Path, members: list[tarfile.TarInfo | tuple[str, bytes]]) -> Path:
@@ -275,6 +324,10 @@ def _zstd_bundle(path: Path, members: list[tarfile.TarInfo | tuple[str, bytes]])
     return path
 
 
+def _manifest_files(*members: tuple[str, int]) -> list[Any]:
+    return [hydrate.ManifestFile(name, size, None) for name, size in members]
+
+
 def _gnu_tar_with_zstd() -> str | None:
     tar = shutil.which("gtar") or shutil.which("tar")
     if tar is None or shutil.which("zstd") is None:
@@ -284,13 +337,29 @@ def _gnu_tar_with_zstd() -> str | None:
 
 
 class TestExtractBundle:
+    def test_hashes_the_complete_compressed_archive(self, tmp_path: Path) -> None:
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("disk.raw", b"disk")])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        with bundle.open("rb") as stream:
+            archive = hydrate.DigestReader(stream)
+            hydrate.extract_bundle(archive, staged, _manifest_files(("disk.raw", 4)))
+            archive.drain()
+
+        assert archive.hexdigest() == hashlib.sha256(bundle.read_bytes()).hexdigest()
+
     def test_extracts_exactly_the_manifest_members(self, tmp_path: Path) -> None:
         bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("disk.raw", b"disk"), ("efivars.fd", b"efi")])
         staged = tmp_path / "image"
         staged.mkdir()
 
         with bundle.open("rb") as stream:
-            hydrate.extract_bundle(stream, staged, ["disk.raw", "efivars.fd"])
+            hydrate.extract_bundle(
+                hydrate.DigestReader(stream),
+                staged,
+                _manifest_files(("disk.raw", 4), ("efivars.fd", 3)),
+            )
 
         assert (staged / "disk.raw").read_bytes() == b"disk"
         assert (staged / "efivars.fd").read_bytes() == b"efi"
@@ -304,7 +373,11 @@ class TestExtractBundle:
         staged.mkdir()
 
         with bundle.open("rb") as stream, pytest.raises(SystemExit, match="not a regular file"):
-            hydrate.extract_bundle(stream, staged, ["disk.raw", "efivars.fd"])
+            hydrate.extract_bundle(
+                hydrate.DigestReader(stream),
+                staged,
+                _manifest_files(("disk.raw", 0), ("efivars.fd", 3)),
+            )
         assert not (staged / "disk.raw").exists()
 
     def test_traversal_is_refused_before_writing(self, tmp_path: Path) -> None:
@@ -313,7 +386,7 @@ class TestExtractBundle:
         staged.mkdir()
 
         with bundle.open("rb") as stream, pytest.raises(SystemExit, match="unsafe archive member"):
-            hydrate.extract_bundle(stream, staged, ["../escaped"])
+            hydrate.extract_bundle(hydrate.DigestReader(stream), staged, _manifest_files(("../escaped", 1)))
         assert not (tmp_path / "escaped").exists()
 
     def test_unlisted_members_are_refused(self, tmp_path: Path) -> None:
@@ -322,7 +395,7 @@ class TestExtractBundle:
         staged.mkdir()
 
         with bundle.open("rb") as stream, pytest.raises(SystemExit, match="not in the manifest: 'extra'"):
-            hydrate.extract_bundle(stream, staged, ["disk.raw"])
+            hydrate.extract_bundle(hydrate.DigestReader(stream), staged, _manifest_files(("disk.raw", 4)))
         assert not (staged / "extra").exists()
 
     def test_missing_members_are_reported(self, tmp_path: Path) -> None:
@@ -331,7 +404,27 @@ class TestExtractBundle:
         staged.mkdir()
 
         with bundle.open("rb") as stream, pytest.raises(SystemExit, match=r"missing manifest members: efivars\.fd"):
-            hydrate.extract_bundle(stream, staged, ["disk.raw", "efivars.fd"])
+            hydrate.extract_bundle(
+                hydrate.DigestReader(stream),
+                staged,
+                _manifest_files(("disk.raw", 4), ("efivars.fd", 3)),
+            )
+
+    def test_duplicate_members_are_refused(self, tmp_path: Path) -> None:
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("disk.raw", b"disk"), ("disk.raw", b"dusk")])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        with bundle.open("rb") as stream, pytest.raises(SystemExit, match="archive member is duplicated"):
+            hydrate.extract_bundle(hydrate.DigestReader(stream), staged, _manifest_files(("disk.raw", 4)))
+
+    def test_member_size_must_match_the_manifest(self, tmp_path: Path) -> None:
+        bundle = _zstd_bundle(tmp_path / "disks.tar.zst", [("disk.raw", b"disk")])
+        staged = tmp_path / "image"
+        staged.mkdir()
+
+        with bundle.open("rb") as stream, pytest.raises(SystemExit, match="size mismatch"):
+            hydrate.extract_bundle(hydrate.DigestReader(stream), staged, _manifest_files(("disk.raw", 5)))
 
     @pytest.mark.skipif(_gnu_tar_with_zstd() is None, reason="needs GNU tar with zstd, as upload-s3 uses")
     def test_restores_gnu_sparse_bundles_from_upload(self, tmp_path: Path) -> None:
@@ -353,11 +446,18 @@ class TestExtractBundle:
         staged.mkdir()
 
         with bundle.open("rb") as stream:
-            hydrate.extract_bundle(stream, staged, [disk.name, "efivars.fd"])
+            hydrate.extract_bundle(
+                hydrate.DigestReader(stream),
+                staged,
+                _manifest_files((disk.name, disk.stat().st_size), ("efivars.fd", 3)),
+            )
 
         restored = (staged / disk.name).stat()
         with (staged / disk.name).open("rb") as restored_file, disk.open("rb") as source_file:
-            assert hashlib.file_digest(restored_file, "sha256").digest() == hashlib.file_digest(source_file, "sha256").digest()
+            assert (
+                hashlib.file_digest(restored_file, "sha256").digest()
+                == hashlib.file_digest(source_file, "sha256").digest()
+            )
         # Filesystems round data extents differently (APFS reports 16 MiB), so
         # only require that the 48 MiB hole was not written out.
         assert restored.st_blocks * 512 < restored.st_size // 2
@@ -411,6 +511,82 @@ class TestDownloadStream:
             raise RuntimeError("stop")
 
         assert process.terminated
+
+
+class TestLocalCache:
+    def _hydrated_tree(self, tmp_path: Path) -> tuple[Path, argparse.Namespace, object]:
+        target = tmp_path / "noble" / "box"
+        target.mkdir(parents=True)
+        disk = target / "packer-ubuntu-1.raw"
+        efivars = target / "efivars.fd"
+        disk.write_bytes(b"disk")
+        efivars.write_bytes(b"efi")
+        args = _args()
+        manifest = upload.build_manifest(
+            args=args,
+            disks=[disk],
+            efivars=efivars,
+            bundle_sha256="a" * 64,
+        )
+        manifest[hydrate.LOCAL_FILES_KEY] = hydrate.cache_file_fingerprints(
+            target,
+            hydrate.manifest_files(manifest),
+        )
+        (target / hydrate.LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest))
+        (target / hydrate.MARKER_NAME).write_text(f"{args.build_id}\n")
+        return target, args, hydrate.ImageSelection(args.build_id, args.source_sha)
+
+    def test_untouched_cache_is_reused(self, tmp_path: Path) -> None:
+        target, args, selection = self._hydrated_tree(tmp_path)
+
+        assert hydrate.local_cache_complete(target, args, selection)
+
+    def test_cache_hit_does_not_reread_members(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        target, args, selection = self._hydrated_tree(tmp_path)
+        monkeypatch.setattr(hydrate, "sha256", lambda _path: pytest.fail("cache member hashed"))
+
+        assert hydrate.local_cache_complete(target, args, selection)
+
+    def test_modified_member_with_intact_marker_is_rehydrated(self, tmp_path: Path) -> None:
+        target, args, selection = self._hydrated_tree(tmp_path)
+        (target / "packer-ubuntu-1.raw").write_bytes(b"dusk")
+
+        assert not hydrate.local_cache_complete(target, args, selection)
+
+    def test_added_member_with_intact_marker_is_rehydrated(self, tmp_path: Path) -> None:
+        target, args, selection = self._hydrated_tree(tmp_path)
+        (target / "packer-ubuntu-3.raw").write_bytes(b"extra")
+
+        assert not hydrate.local_cache_complete(target, args, selection)
+
+    def test_legacy_cache_without_fingerprints_is_rehashed(self, tmp_path: Path) -> None:
+        target = tmp_path / "noble" / "box"
+        target.mkdir(parents=True)
+        disk = target / "packer-ubuntu-1.raw"
+        efivars = target / "efivars.fd"
+        disk.write_bytes(b"disk")
+        efivars.write_bytes(b"efi")
+        args = _args()
+        manifest = {
+            "architecture": args.architecture,
+            "build_id": args.build_id,
+            "bundle_name": "disks.tar.zst",
+            "files": [
+                {"name": disk.name, "sha256": hydrate.sha256(disk)},
+                {"name": efivars.name, "sha256": hydrate.sha256(efivars)},
+            ],
+            "machine": args.machine,
+            "source_sha": args.source_sha,
+            "ubuntu": args.ubuntu,
+        }
+        (target / hydrate.LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest))
+        (target / hydrate.MARKER_NAME).write_text(f"{args.build_id}\n")
+
+        assert hydrate.local_cache_complete(
+            target,
+            args,
+            hydrate.ImageSelection(args.build_id, args.source_sha),
+        )
 
 
 class TestRetention:

@@ -31,6 +31,7 @@ import argparse
 import contextlib
 import dataclasses
 import fcntl
+import hashlib
 import json
 import os
 import shutil
@@ -40,6 +41,7 @@ import tarfile
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from io import BufferedIOBase
 from pathlib import Path
 from typing import Any, BinaryIO, cast
 
@@ -47,25 +49,52 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from qemu_image_store import (
-    BUNDLE_NAME,
     MANIFEST_NAME,
     POINTER_NAME,
     VALID_ARCHITECTURES,
     VALID_MACHINES,
+    ManifestFile,
     host_architecture,
     image_store,
+    manifest_bundle,
     manifest_files,
     output,
     run,
+    sha256,
 )
 
+MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
+LOCAL_FILES_KEY = "_local_files"
 
 
 @dataclasses.dataclass(frozen=True)
 class ImageSelection:
     build_id: str
     source_sha: str | None
+
+
+class DigestReader(BufferedIOBase):
+    """Hash bytes as a streaming archive consumer reads them."""
+
+    def __init__(self, stream: BinaryIO) -> None:
+        self.stream = stream
+        self.digest = hashlib.sha256()
+
+    def read(self, size: int | None = -1) -> bytes:
+        data = self.stream.read(-1 if size is None else size)
+        self.digest.update(data)
+        return data
+
+    def readable(self) -> bool:
+        return True
+
+    def drain(self) -> None:
+        for _chunk in iter(lambda: self.read(1024 * 1024), b""):
+            pass
+
+    def hexdigest(self) -> str:
+        return self.digest.hexdigest()
 
 
 def parse_args() -> argparse.Namespace:
@@ -214,13 +243,14 @@ def read_manifest(path: Path, args: argparse.Namespace, selection: ImageSelectio
     if selection.source_sha is not None and manifest_source_sha != selection.source_sha:
         sys.exit(f"manifest source_sha mismatch: expected {selection.source_sha!r}, got {manifest_source_sha!r}")
     try:
+        manifest_bundle(manifest)
         manifest_files(manifest)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     return manifest
 
 
-def extract_bundle(bundle: BinaryIO, staged: Path, expected_members: list[str]) -> None:
+def extract_bundle(bundle: DigestReader, staged: Path, files: list[ManifestFile]) -> None:
     """Extract a zstd bundle in one pass, admitting only the manifest's regular files.
 
     tarfile's data filter refuses absolute paths, parent traversal, and links
@@ -228,7 +258,7 @@ def extract_bundle(bundle: BinaryIO, staged: Path, expected_members: list[str]) 
     any other member type, or a name the manifest does not list, aborts before
     that member is written. GNU sparse members keep their holes.
     """
-    expected = set(expected_members)
+    expected = {entry.name: entry for entry in files}
     extracted: set[str] = set()
 
     def admit(member: tarfile.TarInfo, path: str) -> tarfile.TarInfo:
@@ -237,6 +267,11 @@ def extract_bundle(bundle: BinaryIO, staged: Path, expected_members: list[str]) 
             sys.exit(f"archive member is not a regular file: {member.name!r}")
         if member.name not in expected:
             sys.exit(f"archive member is not in the manifest: {member.name!r}")
+        if member.name in extracted:
+            sys.exit(f"archive member is duplicated: {member.name!r}")
+        expected_size = expected[member.name].size
+        if expected_size is not None and member.size != expected_size:
+            sys.exit(f"archive member size mismatch for {member.name!r}: expected {expected_size}, got {member.size}")
         extracted.add(member.name)
         return member
 
@@ -245,13 +280,58 @@ def extract_bundle(bundle: BinaryIO, staged: Path, expected_members: list[str]) 
             tar.extractall(staged, filter=admit)
     except tarfile.FilterError as exc:
         raise SystemExit(f"unsafe archive member: {exc}") from exc
-    if missing := sorted(expected - extracted):
+    if missing := sorted(set(expected) - extracted):
         sys.exit(f"archive is missing manifest members: {' '.join(missing)}")
 
 
+def verify_files(root: Path, files: list[ManifestFile]) -> None:
+    """Verify legacy members with hashes when available."""
+    for entry in files:
+        path = root / entry.name
+        if not path.is_file():
+            sys.exit(f"bundle did not extract expected member: {entry.name}")
+        if entry.sha256 is not None:
+            actual = sha256(path)
+            if actual != entry.sha256:
+                sys.exit(f"bundle sha256 mismatch for {entry.name}: expected {entry.sha256}, got {actual}")
+
+
+def verify_archive(archive: DigestReader, expected_sha256: str) -> None:
+    actual = archive.hexdigest()
+    if actual != expected_sha256:
+        sys.exit(f"bundle sha256 mismatch: expected {expected_sha256}, got {actual}")
+
+
+def cache_file_fingerprint(path: Path) -> dict[str, int]:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"cache member is not a regular file: {path.name}")
+    info = path.stat()
+    return {
+        "device": info.st_dev,
+        "inode": info.st_ino,
+        "size": info.st_size,
+        "mtime_ns": info.st_mtime_ns,
+        "ctime_ns": info.st_ctime_ns,
+    }
+
+
+def cache_file_fingerprints(root: Path, files: list[ManifestFile]) -> dict[str, dict[str, int]]:
+    return {entry.name: cache_file_fingerprint(root / entry.name) for entry in files}
+
+
 def local_cache_complete(target: Path, args: argparse.Namespace, selection: ImageSelection) -> bool:
+    """Return whether *target* still holds the selected installed build.
+
+    The cache lives in a host-wide scratch tree that earlier jobs on a reused
+    runner host can write. New hydrations record file identity and timestamps,
+    which catch accidental replacement or modification without rereading every
+    multi-GiB member. Older caches fall back to their per-file hashes once.
+    """
+    marker = target / MARKER_NAME
     manifest_path = target / LOCAL_MANIFEST_NAME
-    if not manifest_path.is_file():
+    if not marker.is_file() or not manifest_path.is_file():
+        return False
+    if marker.read_text().strip() != selection.build_id:
         return False
     try:
         manifest = json.loads(manifest_path.read_text())
@@ -268,7 +348,31 @@ def local_cache_complete(target: Path, args: argparse.Namespace, selection: Imag
         files = manifest_files(manifest)
     except json.JSONDecodeError, ValueError, SystemExit:
         return False
-    return all((target / entry["name"]).is_file() for entry in files)
+    expected_names = {entry.name for entry in files} | {LOCAL_MANIFEST_NAME, MARKER_NAME}
+    if {path.name for path in target.iterdir()} != expected_names:
+        print("==> cached image directory members changed; re-hydrating")
+        return False
+    fingerprints = manifest.get(LOCAL_FILES_KEY)
+    if fingerprints is None:
+        if any(entry.sha256 is None for entry in files):
+            return False
+        for entry in files:
+            path = target / entry.name
+            if not path.is_file() or sha256(path) != entry.sha256:
+                print(f"==> cached {entry.name} does not match its manifest; re-hydrating")
+                return False
+        return True
+    if not isinstance(fingerprints, dict) or set(fingerprints) != {entry.name for entry in files}:
+        return False
+    for entry in files:
+        try:
+            actual = cache_file_fingerprint(target / entry.name)
+        except ValueError:
+            return False
+        if fingerprints[entry.name] != actual:
+            print(f"==> cached {entry.name} changed after hydration; re-hydrating")
+            return False
+    return True
 
 
 def remove_path(path: Path) -> None:
@@ -324,12 +428,22 @@ def main() -> int:
             download_s3(args, f"{prefix}/{MANIFEST_NAME}", manifest_path)
             manifest = read_manifest(manifest_path, args, selection)
             files = manifest_files(manifest)
-            members = [entry["name"] for entry in files]
-            print(f"==> extracting {BUNDLE_NAME}")
-            with download_s3_stream(args, f"{prefix}/{BUNDLE_NAME}") as bundle:
-                extract_bundle(bundle, staged, members)
+            bundle_info = manifest_bundle(manifest)
 
-            (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            print(f"==> extracting {bundle_info.name}")
+            archive: DigestReader
+            with download_s3_stream(args, f"{prefix}/{bundle_info.name}") as bundle:
+                archive = DigestReader(bundle)
+                extract_bundle(archive, staged, files)
+                archive.drain()
+            if bundle_info.sha256 is None:
+                verify_files(staged, files)
+            else:
+                verify_archive(archive, bundle_info.sha256)
+
+            local_manifest = {**manifest, LOCAL_FILES_KEY: cache_file_fingerprints(staged, files)}
+            (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(local_manifest, indent=2, sort_keys=True) + "\n")
+            (staged / MARKER_NAME).write_text(f"{selection.build_id}\n")
             replace_target(staged, target)
             print(f"==> hydrated {target} for {selection.build_id}")
     return 0

@@ -23,8 +23,8 @@ selected from data/architectures.yml:
 
 The tarball contains the packer-ubuntu-N.{raw,qcow2} disks plus efivars.fd,
 because the qemu harness copies efivars.fd from the same artifact directory
-before booting ZFS-root variants. S3 verifies the archive checksum on upload
-and download before hydration makes its members live.
+before booting ZFS-root variants. The manifest records one SHA-256 for the
+immutable archive so hydration can verify the download while extracting it.
 
 The live build for each machine/release pair is selected by a pointer object
 (not SSM) stored inside the bucket itself:
@@ -67,6 +67,7 @@ from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
 from qemu_image_store import (  # noqa: E402
     BUNDLE_NAME,
     MANIFEST_NAME,
+    MANIFEST_VERSION,
     POINTER_NAME,
     VALID_ARCHITECTURES,
     VALID_MACHINES,
@@ -75,6 +76,7 @@ from qemu_image_store import (  # noqa: E402
     image_store,
     output,
     run,
+    sha256,
 )
 
 
@@ -188,15 +190,18 @@ def build_manifest(
     args: argparse.Namespace,
     disks: list[Path],
     efivars: Path,
+    bundle_sha256: str | None,
 ) -> dict[str, Any]:
     files = [*disks, efivars]
     return {
+        "format_version": MANIFEST_VERSION,
+        "bundle": {"name": BUNDLE_NAME, "sha256": bundle_sha256},
         "machine": args.machine,
         "ubuntu": args.ubuntu,
         "build_id": args.build_id,
         "architecture": args.architecture,
         "source_sha": args.source_sha,
-        "files": [{"name": path.name} for path in files],
+        "files": [{"name": path.name, "size": path.stat().st_size} for path in files],
     }
 
 
@@ -448,9 +453,8 @@ def main() -> int:
 
     print(f"artifact: {root}")
     print(f"target:   s3://{args.bucket}/{s3_prefix}/")
-    manifest = build_manifest(args=args, disks=disks, efivars=efivars)
-
     if args.dry_run:
+        manifest = build_manifest(args=args, disks=disks, efivars=efivars, bundle_sha256=None)
         print(json.dumps(manifest, indent=2, sort_keys=True))
         if args.promote:
             print(f"DRY RUN: would write pointer {pointer_key} -> {args.build_id}")
@@ -475,8 +479,9 @@ def main() -> int:
         tmpdir = Path(tmp)
         bundle = tmpdir / BUNDLE_NAME
         manifest_path = tmpdir / MANIFEST_NAME
+        create_bundle(tar, root, [path.name for path in (*disks, efivars)], bundle)
+        manifest = build_manifest(args=args, disks=disks, efivars=efivars, bundle_sha256=sha256(bundle))
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-        create_bundle(tar, root, [entry["name"] for entry in manifest["files"]], bundle)
 
         upload_file(args.bucket, bundle, bundle_key, args.region, "application/zstd")
         tag_object(args.bucket, bundle_key, CANDIDATE_STATE, args.region)
