@@ -7,3 +7,5 @@ machines:
   minimal:
 ubuntu:
   - resolute
+skip:
+  "minimal:resolute": The Noble Minimal and Resolute Box cells cover the independent peer-list and release axes.
