@@ -3,8 +3,7 @@
 #MISE interactive=true
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-#USAGE flag "--architecture <architecture>" help="Target architecture (x86_64 or aarch64)" default="x86_64"
-#USAGE flag "--region <region>" help="AWS region" default="eu-central-1"
+#USAGE flag "--architecture <architecture>" help="Target architecture (x86_64 or aarch64); selects the region from data/architectures.yml" default="x86_64"
 #USAGE flag "--promote" help="After a successful bake, update the architecture-specific qemu-host AMI pointer"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
@@ -17,21 +16,18 @@ architecture="${usage_architecture:-x86_64}"
 build_id="${CI_PIPELINE_ID:-local}"
 repo_root=$(git rev-parse --show-toplevel)
 
-case "$architecture" in
-x86_64)
-  name_prefix=homelab-ci-qemu-host
-  param="/homelab-ci/ami/qemu-host/${ubuntu}"
-  ;;
-aarch64)
-  name_prefix=homelab-ci-qemu-host-aarch64
-  param="/homelab-ci/ami/qemu-host/aarch64/${ubuntu}"
-  ;;
-*)
+architectures="${repo_root}/data/architectures.yml"
+if ! ARCH="$architecture" yq -e '.[strenv(ARCH)].ci' "$architectures" >/dev/null 2>&1; then
   echo "qemu-host-ami: unsupported architecture ${architecture}" >&2
   exit 2
-  ;;
-esac
-region="${usage_region:-eu-central-1}"
+fi
+ci_value() {
+  ARCH="$architecture" yq -r ".[strenv(ARCH)].ci.$1" "$architectures"
+}
+region=$(ci_value aws_region)
+name_prefix=$(ci_value ami_name_prefix)
+param_template=$(ci_value ami_parameter)
+param=${param_template//\{ubuntu\}/$ubuntu}
 
 # CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
 # schedule for the build instance, then disarm it on normal exit.
@@ -195,7 +191,6 @@ packer build \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
   -only="amazon-ebs.qemu_host" \
-  -var "aws_region=${region}" \
   -var "architecture=${architecture}" \
   -var "ubuntu_name=${ubuntu}" \
   -var "qemu_host_build_id=${build_id}" \

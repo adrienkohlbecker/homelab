@@ -111,7 +111,7 @@ def test_publish_qemu_builds_and_uploads_lab(tmp_path: Path) -> None:
     result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
-    upload = "run packer:upload-s3 lab --ubuntu noble --bucket homelab-ci-images --region eu-central-1 --architecture x86_64 --promote"
+    upload = "run packer:upload-s3 lab --ubuntu noble --architecture x86_64 --promote"
     assert log.read_text().splitlines() == [
         f"{upload} --preflight",
         "run packer:init",
@@ -132,9 +132,7 @@ def test_publish_qemu_defaults_to_the_normalized_build_host_architecture(tmp_pat
     env.update(
         MISE_TEST_LOG=str(log),
         PATH=f"{fake_bin}:{env['PATH']}",
-        usage_bucket="homelab-ci-arm-images-eu-central-1",
         usage_machine="box",
-        usage_region="eu-central-1",
         usage_ubuntu="noble",
     )
     env.pop("usage_architecture", None)
@@ -142,10 +140,7 @@ def test_publish_qemu_defaults_to_the_normalized_build_host_architecture(tmp_pat
     result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
-    assert log.read_text().splitlines()[-1] == (
-        "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
-        "--region eu-central-1 --architecture aarch64"
-    )
+    assert log.read_text().splitlines()[-1] == "run packer:upload-s3 box --ubuntu noble --architecture aarch64"
 
 
 def test_publish_qemu_stops_before_building_when_preflight_fails(tmp_path: Path) -> None:
@@ -182,20 +177,15 @@ def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
         MISE_TEST_LOG=str(log),
         PATH=f"{fake_bin}:{env['PATH']}",
         usage_architecture="aarch64",
-        usage_bucket="homelab-ci-arm-images-eu-central-1",
         usage_machine="box",
         usage_promote="true",
-        usage_region="eu-central-1",
         usage_ubuntu="noble",
     )
 
     result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
-    upload = (
-        "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
-        "--region eu-central-1 --architecture aarch64 --promote"
-    )
+    upload = "run packer:upload-s3 box --ubuntu noble --architecture aarch64 --promote"
     assert log.read_text().splitlines() == [
         f"{upload} --preflight",
         "run packer:init",
@@ -229,11 +219,9 @@ def test_publish_qemu_hydrates_exact_arm_box_before_box_deps(tmp_path: Path) -> 
         PATH=f"{fake_bin}:{env['PATH']}",
         usage_architecture="aarch64",
         usage_base_build_id="123.arm-box-noble",
-        usage_bucket="homelab-ci-arm-images-eu-central-1",
         usage_build_id="123.arm-box-deps-noble",
         usage_machine="box_deps",
         usage_promote="true",
-        usage_region="eu-central-1",
         usage_ubuntu="noble",
     )
 
@@ -241,14 +229,13 @@ def test_publish_qemu_hydrates_exact_arm_box_before_box_deps(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stderr
     upload = (
-        "run packer:upload-s3 box_deps --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
-        "--region eu-central-1 --architecture aarch64 --build-id 123.arm-box-deps-noble --promote"
+        "run packer:upload-s3 box_deps --ubuntu noble --architecture aarch64 "
+        "--build-id 123.arm-box-deps-noble --promote"
     )
     assert log.read_text().splitlines() == [
         f"{upload} --preflight",
         (
-            "run ci:hydrate-qemu-images box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
-            "--region eu-central-1 --architecture aarch64 --build-id 123.arm-box-noble"
+            "run ci:hydrate-qemu-images box --ubuntu noble --architecture aarch64 --build-id 123.arm-box-noble"
         ),
         "run test:build_box_deps --ubuntu noble",
         upload,
@@ -312,10 +299,6 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
         str(artifacts),
         "--build-id",
         "test-build",
-        # The architecture defaults to this host; a non-x86 test host may
-        # not publish into the default x86_64 bucket.
-        "--bucket",
-        "homelab-ci-test-images",
     ]
     return argv, env, artifacts, tar_log
 
@@ -354,8 +337,6 @@ def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(
             "box",
             "--architecture",
             foreign,
-            "--bucket",
-            "homelab-ci-test-images",
             "--preflight",
         ],
         cwd=REPO_ROOT,
@@ -635,7 +616,7 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
 
     assert result.returncode == 0, result.stderr
     call = packer_log.read_text()
-    assert "aws_region=eu-central-1" in call
+    assert "aws_region=" not in call
     assert "architecture=aarch64" in call
     assert "Candidate AMI: ami-1234abcd" in result.stdout
     assert "/homelab-ci/ami/qemu-host/aarch64/noble" in result.stdout
@@ -643,7 +624,7 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
     # the newest builds, so unpromoted candidates cannot accumulate.
     assert "Prune: nothing to remove" in result.stdout
     describe = next(line for line in aws_log.read_text().splitlines() if "ec2 describe-images" in line)
-    assert "--region eu-west-1" in describe
+    assert "--region eu-central-1" in describe
     assert "Name=tag:architecture,Values=aarch64" in describe
 
 

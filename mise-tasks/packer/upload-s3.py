@@ -5,9 +5,7 @@
 #USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-#USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
-#USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default"
+#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default, and selects the image store"
 #USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"
 #USAGE flag "--artifact-dir <path>" help="Artifact dir to bundle; default is $HOMELAB_CI_DIR/<ubuntu>/<machine>"
 #USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build id"
@@ -17,10 +15,11 @@
 """Upload qemu packer artifacts to the nested-CI S3 bundle layout.
 
 The nested-qemu runner design uses S3 as the source of truth for qemu fixture
-images for the aws_qemu target:
+images for the aws_qemu target. Each architecture has its own regional bucket,
+selected from data/architectures.yml:
 
-    s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/manifest.json
-    s3://homelab-ci-images/<ubuntu>/<machine>/<build-id>/disks.tar.zst
+    s3://<bucket>/<ubuntu>/<machine>/<build-id>/manifest.json
+    s3://<bucket>/<ubuntu>/<machine>/<build-id>/disks.tar.zst
 
 The tarball contains the packer-ubuntu-N.{raw,qcow2} disks plus efivars.fd,
 because the qemu harness copies efivars.fd from the same artifact directory
@@ -47,7 +46,6 @@ import argparse
 import datetime as dt
 import json
 import os
-import platform
 import shutil
 import signal
 import subprocess
@@ -57,7 +55,6 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-X86_64_BUCKET = "homelab-ci-images"
 S3_CHECKSUM_ALGORITHM = "SHA256"
 IMAGE_STATE_TAG = "qemu_image_state"
 CANDIDATE_STATE = "candidate"
@@ -74,6 +71,8 @@ from qemu_image_store import (  # noqa: E402
     VALID_ARCHITECTURES,
     VALID_MACHINES,
     find_tar,
+    host_architecture,
+    image_store,
     output,
     run,
 )
@@ -113,23 +112,16 @@ def source_sha() -> str:
     return sha
 
 
-def host_architecture() -> str:
-    machine = platform.machine()
-    return "aarch64" if machine == "arm64" else machine
-
-
 def validate_target(args: argparse.Namespace) -> None:
-    """Refuse provenance labels and stores that cannot match the artifact.
+    """Refuse an architecture label that cannot match the artifact.
 
     Qemu fixtures are built natively, so the upload host's architecture is the
-    artifact's. Hydration trusts the recorded label, and the default bucket is
-    the x86_64 store whose hydration still accepts unlabelled legacy builds.
+    artifact's. Hydration trusts the recorded label, and the label also selects
+    which architecture's bucket receives the bundle.
     """
     host = host_architecture()
     if args.architecture != host:
         sys.exit(f"refusing to label an artifact built on this {host} host as {args.architecture}")
-    if args.architecture != "x86_64" and args.bucket == X86_64_BUCKET:
-        sys.exit(f"refusing to publish {args.architecture} images into the x86_64 bucket {X86_64_BUCKET}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -142,8 +134,6 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(UBUNTU_RELEASES),
         default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
     )
-    parser.add_argument("--bucket", default=os.environ.get("usage_bucket", X86_64_BUCKET))
-    parser.add_argument("--region", default=os.environ.get("usage_region", "eu-central-1"))
     parser.add_argument(
         "--architecture",
         choices=sorted(VALID_ARCHITECTURES),
@@ -166,7 +156,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         default=os.environ.get("usage_preflight") == "true",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    store = image_store(args.architecture)
+    args.bucket, args.region = store.bucket, store.region
+    return args
 
 
 def artifact_dir(args: argparse.Namespace) -> Path:

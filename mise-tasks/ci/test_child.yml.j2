@@ -81,7 +81,7 @@ stages:
     - test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }
     - mise run ci:bootstrap
     - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "aws_qemu-arm-cell-$CI_JOB_ID" --cache-dir
-    - mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU" --bucket {{ arm_image_bucket }} --architecture aarch64
+    - mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU" --architecture aarch64
   after_script:
     - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
   artifacts:

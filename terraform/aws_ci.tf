@@ -11,20 +11,21 @@
 # notes/archive/ci_aws_test_cells.md, "Bootstrap".
 
 locals {
-  ci_aws_region = "eu-central-1"
+  ci_architectures = yamldecode(file("${path.module}/../data/architectures.yml"))
+  ci_aws_region    = local.ci_architectures.x86_64.ci.aws_region
   # GitLab project whose OIDC tokens may assume the CI roles. The sub claim
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
   ci_gitlab_project             = "akohlbecker/homelab"
   ci_account_id                 = "000390721279"
-  ci_qemu_image_bucket_name     = "homelab-ci-images"
-  ci_qemu_arm_image_bucket_name = "homelab-ci-arm-images-eu-central-1"
+  ci_qemu_image_bucket_name     = local.ci_architectures.x86_64.ci.image_bucket
+  ci_qemu_arm_image_bucket_name = local.ci_architectures.aarch64.ci.image_bucket
   # Removing a release from test/matrix.py does not enumerate its S3 prefix.
   # Add its codename here so lifecycle explicitly retires every remaining object.
   ci_qemu_retired_releases       = toset([])
-  ci_qemu_host_ami_parameter     = "/homelab-ci/ami/qemu-host/noble"
-  ci_qemu_arm_host_ami_parameter = "/homelab-ci/ami/qemu-host/aarch64/noble"
+  ci_qemu_host_ami_parameter     = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", "noble")
+  ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", "noble")
   ci_qemu_arm_pool = {
     name             = "homelab-ci-qemu-arm"
     instance_types   = ["c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"]

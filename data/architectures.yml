@@ -1,0 +1,17 @@
+# Per-architecture facts shared by the CI image tasks, Packer, the AWS audit,
+# and Terraform. Keys are uname-style architecture names.
+#
+# ci.ami_parameter is an SSM parameter name template; `{ubuntu}` is replaced by
+# the Ubuntu codename.
+x86_64:
+  ci:
+    aws_region: eu-central-1
+    image_bucket: homelab-ci-images
+    ami_name_prefix: homelab-ci-qemu-host
+    ami_parameter: /homelab-ci/ami/qemu-host/{ubuntu}
+aarch64:
+  ci:
+    aws_region: eu-central-1
+    image_bucket: homelab-ci-arm-images-eu-central-1
+    ami_name_prefix: homelab-ci-qemu-host-aarch64
+    ami_parameter: /homelab-ci/ami/qemu-host/aarch64/{ubuntu}

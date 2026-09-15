@@ -30,6 +30,7 @@ from typing import NamedTuple
 import jinja2
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from matrix import (
     TestCell,
@@ -55,6 +56,8 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"pyproject\.toml",
     r"uv\.lock",
     r"data/network_topology\.(yml|schema\.json)",
+    # Selects the image store every AWS cell hydrates from.
+    r"data/architectures\.yml",
     r"\.gitlab-ci\.yml",
     r"mise-tasks/ci/.+",
 ]
@@ -541,7 +544,6 @@ ARM_CELL_SPECS = (
     "zfsbootmenu:box",
 )
 ARM_MODES = ("off", "auto")
-ARM_IMAGE_BUCKET = "homelab-ci-arm-images-eu-central-1"
 ARM_RUNNER_TAG = "aws-shell-qemu-arm"
 
 TARGETS = {
@@ -630,7 +632,6 @@ def render_child_pipeline(
         baked_toolchain=target_config["baked_toolchain"],
         image_oidc=target_config["image_oidc"],
         cell_role_arn=CELL_ROLE_ARN,
-        arm_image_bucket=ARM_IMAGE_BUCKET,
         arm_runner_tag=ARM_RUNNER_TAG,
     )
 

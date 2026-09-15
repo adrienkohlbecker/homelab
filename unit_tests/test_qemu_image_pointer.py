@@ -36,31 +36,36 @@ def _args(**overrides: object) -> argparse.Namespace:
     return argparse.Namespace(**base)
 
 
-class TestValidateTarget:
+class TestImageStore:
     @pytest.mark.parametrize(("machine", "architecture"), [("x86_64", "x86_64"), ("arm64", "aarch64")])
     def test_host_architecture_normalizes_platform_names(
         self, monkeypatch: pytest.MonkeyPatch, machine: str, architecture: str
     ) -> None:
-        monkeypatch.setattr(upload.platform, "machine", lambda: machine)
+        monkeypatch.setattr("platform.machine", lambda: machine)
 
         assert upload.host_architecture() == architecture
 
-    def test_matching_architecture_and_store_are_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(upload.platform, "machine", lambda: "aarch64")
+    def test_each_architecture_resolves_its_regional_store(self) -> None:
+        assert upload.image_store("x86_64") == ("homelab-ci-images", "eu-central-1")
+        assert upload.image_store("aarch64") == ("homelab-ci-arm-images-eu-central-1", "eu-central-1")
+        assert {"aarch64", "x86_64"} == upload.VALID_ARCHITECTURES
 
-        upload.validate_target(_args(architecture="aarch64", bucket="homelab-ci-arm-images-eu-west-1"))
+    def test_unknown_architecture_is_rejected(self) -> None:
+        with pytest.raises(KeyError):
+            upload.image_store("sparc")
+
+
+class TestValidateTarget:
+    def test_matching_architecture_is_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(upload, "host_architecture", lambda: "aarch64")
+
+        upload.validate_target(_args(architecture="aarch64"))
 
     def test_label_must_match_the_build_host(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(upload.platform, "machine", lambda: "aarch64")
+        monkeypatch.setattr(upload, "host_architecture", lambda: "aarch64")
 
         with pytest.raises(SystemExit, match="built on this aarch64 host as x86_64"):
             upload.validate_target(_args(architecture="x86_64"))
-
-    def test_arm_images_cannot_replace_the_x86_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(upload.platform, "machine", lambda: "aarch64")
-
-        with pytest.raises(SystemExit, match="into the x86_64 bucket homelab-ci-images"):
-            upload.validate_target(_args(architecture="aarch64"))
 
 
 class TestSourceSha:

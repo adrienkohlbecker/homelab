@@ -55,6 +55,7 @@ class TestClassifyChangedFiles:
             ("uv.lock", True),
             ("data/network_topology.yml", True),
             ("data/network_topology.schema.json", True),
+            ("data/architectures.yml", True),
             ("mise-tasks/ci/detect.py", True),
             ("host_vars/lab.yml", False),
             ("host_vars/pug.yml", False),
@@ -1128,7 +1129,7 @@ class TestRenderChildPipeline:
         assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
         assert scaffold["variables"]["HOMELAB_AARCH64_FIRMWARE_DIR"] == ("/opt/homelab-ci/qemu-firmware/aarch64")
         assert "--region" not in before_script
-        assert f"--bucket {detect.ARM_IMAGE_BUCKET}" in before_script
+        assert "--bucket" not in before_script
         assert "--architecture aarch64" in before_script
         assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
         assert scaffold["artifacts"]["paths"] == ["test/out/"]

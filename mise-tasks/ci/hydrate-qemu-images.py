@@ -5,9 +5,7 @@
 #USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-#USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
-#USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64)" default="x86_64"
+#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); defaults to this host and selects the image store"
 #USAGE flag "--build-id <build_id>" help="Hydrate an immutable build directly instead of reading promoted.json"
 #USAGE flag "--force" help="Re-download even when the local manifest already matches"
 # fmt: on
@@ -51,6 +49,8 @@ from qemu_image_store import (
     VALID_ARCHITECTURES,
     VALID_MACHINES,
     find_tar,
+    host_architecture,
+    image_store,
     manifest_files,
     output,
     run,
@@ -58,8 +58,6 @@ from qemu_image_store import (
 )
 
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
-S3_BUCKET = "homelab-ci-images"
-AWS_REGION = "eu-central-1"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -78,12 +76,10 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(UBUNTU_RELEASES),
         default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
     )
-    parser.add_argument("--bucket", default=os.environ.get("usage_bucket", S3_BUCKET))
-    parser.add_argument("--region", default=os.environ.get("usage_region", AWS_REGION))
     parser.add_argument(
         "--architecture",
         choices=sorted(VALID_ARCHITECTURES),
-        default=os.environ.get("usage_architecture", "x86_64"),
+        default=os.environ.get("usage_architecture") or host_architecture(),
     )
     parser.add_argument("--build-id", default=os.environ.get("usage_build_id"))
     parser.add_argument(
@@ -91,7 +87,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         default=os.environ.get("usage_force") == "true",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    store = image_store(args.architecture)
+    args.bucket, args.region = store.bucket, store.region
+    return args
 
 
 def aws_base(args: argparse.Namespace) -> list[str]:
@@ -112,7 +111,7 @@ def dest_root() -> Path:
 
 
 def allows_legacy_provenance(args: argparse.Namespace) -> bool:
-    return args.architecture == "x86_64" and args.bucket == S3_BUCKET and args.region == AWS_REGION
+    return args.architecture == "x86_64"
 
 
 def validated_source_sha(document: dict[str, Any], args: argparse.Namespace, label: str) -> str | None:

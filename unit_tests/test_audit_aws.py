@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import yaml
 from botocore.exceptions import EndpointConnectionError
 from conftest import load_repo_module
 
@@ -145,6 +146,19 @@ def test_supported_qemu_images_share_region_and_keep_architecture_specific_tags(
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", x86)
+
+
+def test_region_contracts_follow_the_shared_architecture_table():
+    architecture_table = yaml.safe_load((Path(__file__).parents[1] / "data/architectures.yml").read_text())
+    assert {entry["ci"]["aws_region"] for entry in architecture_table.values()} == {"eu-central-1"}
+    contract = audit_aws.CI_REGIONS["eu-central-1"]
+    assert contract["buckets"] == {entry["ci"]["image_bucket"] for entry in architecture_table.values()}
+    for architecture, ec2_architecture in (("x86_64", "x86_64"), ("aarch64", "arm64")):
+        ci = architecture_table[architecture]["ci"]
+        assert contract["amis"][ec2_architecture] == {
+            "name": f"{ci['ami_name_prefix']}-noble",
+            "parameter": ci["ami_parameter"],
+        }
 
 
 def _spot_asg(name: str, maximum: int) -> dict:

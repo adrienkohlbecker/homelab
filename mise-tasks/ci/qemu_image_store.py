@@ -2,17 +2,41 @@
 
 from __future__ import annotations
 
+import platform
 import shutil
 import subprocess
 import sys
-from pathlib import PurePosixPath
-from typing import Any
+from pathlib import Path, PurePosixPath
+from typing import Any, NamedTuple
+
+import yaml
 
 BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
 POINTER_NAME = "promoted.json"
 VALID_MACHINES = {"box", "box_deps", "lab"}
-VALID_ARCHITECTURES = {"aarch64", "x86_64"}
+ARCHITECTURES: dict[str, Any] = yaml.safe_load(
+    (Path(__file__).resolve().parents[2] / "data" / "architectures.yml").read_text()
+)
+VALID_ARCHITECTURES = set(ARCHITECTURES)
+
+
+class ImageStore(NamedTuple):
+    """The regional S3 bucket that holds one architecture's image bundles."""
+
+    bucket: str
+    region: str
+
+
+def image_store(architecture: str) -> ImageStore:
+    ci = ARCHITECTURES[architecture]["ci"]
+    return ImageStore(bucket=ci["image_bucket"], region=ci["aws_region"])
+
+
+def host_architecture() -> str:
+    """Return this host's architecture in the uname-style names the stores use."""
+    machine = platform.machine()
+    return "aarch64" if machine == "arm64" else machine
 
 
 def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:

@@ -4,9 +4,7 @@
 #USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-#USAGE flag "--bucket <bucket>" help="S3 bucket for qemu image bundles" default="homelab-ci-images"
-#USAGE flag "--region <region>" help="AWS region for S3" default="eu-central-1"
-#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default"
+#USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default, and selects the image store"
 #USAGE flag "--build-id <build_id>" help="Immutable S3 build id; defaults inside upload-s3.py"
 #USAGE flag "--base-build-id <base_build_id>" help="Exact box build to hydrate before an aarch64 box_deps build"
 #USAGE flag "--promote" help="After upload, write the promoted.json pointer to this build"
@@ -16,8 +14,6 @@ set -euo pipefail
 
 machine=$usage_machine
 ubuntu=$usage_ubuntu
-bucket=${usage_bucket:-homelab-ci-images}
-region=${usage_region:-eu-central-1}
 architecture=${usage_architecture:-$(uname -m)}
 build_id=${usage_build_id:-}
 base_build_id=${usage_base_build_id:-}
@@ -54,8 +50,6 @@ esac
 upload_args=(
   "$machine"
   --ubuntu "$ubuntu"
-  --bucket "$bucket"
-  --region "$region"
   --architecture "$architecture"
 )
 if [ -n "$build_id" ]; then
@@ -68,7 +62,7 @@ if [ "${usage_dry_run:-false}" = "true" ]; then
   upload_args+=(--dry-run)
 fi
 
-# Reject a mismatched architecture or bucket before spending a build on it.
+# Reject a mismatched architecture before spending a build on it.
 mise run packer:upload-s3 "${upload_args[@]}" --preflight
 
 case "$machine" in
@@ -84,8 +78,6 @@ box_deps)
   if [ "$architecture" = aarch64 ]; then
     mise run ci:hydrate-qemu-images box \
       --ubuntu "$ubuntu" \
-      --bucket "$bucket" \
-      --region "$region" \
       --architecture "$architecture" \
       --build-id "$base_build_id"
     export HOMELAB_BOX_BASE_BUILD_ID="$base_build_id"

@@ -186,7 +186,7 @@ qemu_host_ami:
   script:
     - mise run packer:init
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"
-    - mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" --region "$AWS_REGION" --promote
+    - mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" --promote
 
 # Build protected QEMU fixtures on lab's KVM runner, retain them locally for lab,
 # and promote versioned bundles plus promoted.json pointers to S3 for AWS cells.
@@ -295,7 +295,7 @@ qemu_host_ami:
       allow_failure: false
   resource_group: qemu_image_box_aarch64_$UBUNTU
   script:
-    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-central-1 --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --promote
+    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --promote
 
 "qemu_image:box_deps:arm":
   extends: .qemu_image_arm
@@ -303,7 +303,7 @@ qemu_host_ami:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_aarch64_$UBUNTU
   script:
-    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-central-1 --architecture aarch64 --base-build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU" --promote
+    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --architecture aarch64 --base-build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU" --promote
   needs:
     - job: "qemu_image:box:arm"
       artifacts: false
