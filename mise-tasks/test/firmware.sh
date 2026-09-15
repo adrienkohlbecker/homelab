@@ -60,21 +60,16 @@ PY
 code_dest="${firmware_dir}/${code_name}"
 vars_dest="${firmware_dir}/${vars_name}"
 
-# shasum is the macOS builtin (the aarch64 fixture is the local Mac); fall back
-# to sha256sum on Linux so a Linux-aarch64 dev can run this too.
-sha256() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    sha256sum "$1" | awk '{print $1}'
-  fi
-}
-
+# shasum is the macOS builtin (the aarch64 fixture is the local Mac); Linux
+# hosts may only have coreutils' sha256sum. Both check GNU checksum lines.
 verify_sha256() {
-  local expected=$1 file=$2 got
-  got=$(sha256 "${file}")
-  if [ "${got}" != "${expected}" ]; then
-    echo "ERROR: $(basename "${file}") sha256 mismatch: expected ${expected}, got ${got}" >&2
+  local expected=$1 file=$2
+  local -a checker=(sha256sum)
+  if command -v shasum >/dev/null 2>&1; then
+    checker=(shasum -a 256)
+  fi
+  if ! printf '%s  %s\n' "${expected}" "${file}" | "${checker[@]}" -c - >/dev/null; then
+    echo "ERROR: $(basename "${file}") sha256 mismatch: expected ${expected}" >&2
     exit 1
   fi
 }
@@ -96,7 +91,8 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 
 echo "==> Fetching edk2 ${deb_version} firmware (${deb_url})"
-curl -fsSL -o "${tmp}/edk2.deb" "${deb_url}"
+# snapshot.debian.org throttles bursts; retry transient failures.
+curl -fsSL --retry 5 --retry-all-errors --retry-connrefused -o "${tmp}/edk2.deb" "${deb_url}"
 verify_sha256 "${deb_sha256}" "${tmp}/edk2.deb"
 
 # A .deb is an ar archive; the firmware lives in its data tarball. BSD ar

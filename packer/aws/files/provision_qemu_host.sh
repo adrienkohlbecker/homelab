@@ -63,7 +63,7 @@ if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
   rm -rf "$firmware_tree"
 fi
 
-curl -fsSL https://mise.en.dev/gpg-key.pub |
+curl -fsSL --retry 5 --retry-all-errors --retry-connrefused https://mise.en.dev/gpg-key.pub |
   gpg --dearmor |
   sudo tee /etc/apt/keyrings/mise-archive-keyring.gpg >/dev/null
 echo 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.en.dev/deb stable main' |
@@ -71,7 +71,7 @@ echo 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.en
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends mise
 
-curl -fsSL -o /tmp/gitlab-runner "$GITLAB_RUNNER_URL"
+curl -fsSL --retry 5 --retry-all-errors --retry-connrefused -o /tmp/gitlab-runner "$GITLAB_RUNNER_URL"
 echo "${GITLAB_RUNNER_SHA256}  /tmp/gitlab-runner" | sha256sum -c -
 sudo install -m 0755 -o root -g root /tmp/gitlab-runner /usr/local/bin/gitlab-runner
 sudo ln -sf /usr/local/bin/gitlab-runner /usr/bin/gitlab-runner
