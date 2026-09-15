@@ -65,6 +65,12 @@ storage tiers = 2
 [ml]
 enabled = no
 
+# The shared nginx access-log chart includes bulk uploads, downloads, and
+# long-lived requests, so its latency threshold reports expected transfer time
+# rather than an actionable web-server failure. Keep every other stock alert.
+[health]
+enabled alarms = !web_log_web_slow *
+
 # ebpf.plugin loads syscall/process eBPF programs and runs as its own ~300 MiB
 # process. Useful for syscall-level forensics, dead weight if nobody looks at it.
 #

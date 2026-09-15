@@ -138,6 +138,7 @@
     _charts: "{{ (_netdata_charts.json | default({})).charts | default({}) }}"
   until: >-
     _netdata_charts.status == 200
+    and 'web_log_nginx.request_processing_time' in _charts
     and 'netdata_presence.context_system_cpu' in _charts
     and 'netdata_presence.context_foo_does_not_exist' in _charts
     and 'netdata_presence.collector_go_d_collector_systemdunits_service_units' in _charts
@@ -322,6 +323,20 @@
     and _collector_failure_alerts | length > 0
     and _silenced_disk_alerts | length == netdata_diskspace_blocklist | length
     and _runner_alerts | length == 4
+
+- name: _verify | Slow web alarm remains disabled
+  vars:
+    _web_slow_alerts: >-
+      {{
+        _netdata_alarms.json.alarms.values()
+        | selectattr('name', 'equalto', 'web_log_web_slow')
+        | list
+      }}
+  assert:
+    that: _web_slow_alerts | length == 0
+    fail_msg: >-
+      Expected web_log_web_slow to stay excluded after its nginx chart loaded.
+      Got: {{ _web_slow_alerts }}
 
 - name: _verify | Predictive disk-fill alarms remain silent
   vars:
