@@ -246,29 +246,13 @@
 # via the HACS UI inside HA -- adding it twice double-loads its frontend
 # resources. Examples currently managed via HACS: thermal_comfort,
 # thermal_comfort_icons. The version, URL, and sha256 stay together so a
-# bump touches one place; the `creates:` sentinel + checksum-pinned
-# download give content-pinning without an on-disk version file.
-- name: Create HACS download cache dir
-  file:
-    path: /var/cache/homeassistant
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
-  register: homeassistant_hacs_dir
-  become: true
-  tags:
-    - homeassistant
-
+# bump touches one place; the `creates:` sentinel + checksum-pinned download
+# give content-pinning without an on-disk version file.
 - name: Download HACS archive
-  # In check mode the cache dir creation above is would-only, so
-  # get_url's destination dir doesn't exist and it errors with
-  # "Destination /var/cache/homeassistant does not exist".
-  when: not (ansible_check_mode and homeassistant_hacs_dir.changed)
   get_url:
     url: "{{ homeassistant_hacs_archive.url }}"
     checksum: "sha256:{{ homeassistant_hacs_archive.sha256 }}"
-    dest: /var/cache/homeassistant/hacs.zip
+    dest: /var/cache/homeassistant_hacs.zip
     mode: "0644"
     owner: root
     group: root
@@ -280,12 +264,9 @@
 - name: Unpack HACS
   when:
     - not ansible_check_mode or homeassistant_user.uid is defined
-    - >-
-      not (ansible_check_mode and
-           (homeassistant_hacs_dir.changed
-            or homeassistant_hacs_download.changed | default(false)))
+    - not (ansible_check_mode and homeassistant_hacs_download.changed)
   unarchive:
-    src: /var/cache/homeassistant/hacs.zip
+    src: /var/cache/homeassistant_hacs.zip
     remote_src: true
     dest: /mnt/services/homeassistant/custom_components/hacs
     creates: /mnt/services/homeassistant/custom_components/hacs/manifest.json
