@@ -47,7 +47,6 @@
           - --json
       register: _influxdb_bucket_user_query
       changed_when: false
-      check_mode: false
       failed_when: >-
         _influxdb_bucket_user_query.rc != 0
         and '404 Not Found: user not found' not in _influxdb_bucket_user_query.stderr
@@ -87,7 +86,6 @@
           - --json
       register: _influxdb_bucket_bucket_query
       changed_when: false
-      check_mode: false
       failed_when: >-
         _influxdb_bucket_bucket_query.rc != 0
         and not (
@@ -130,7 +128,6 @@
           - --json
       register: _influxdb_bucket_bucket_id_query
       changed_when: false
-      check_mode: false
       failed_when: >-
         _influxdb_bucket_bucket_id_query.rc != 0
         or (_influxdb_bucket_bucket_id_query.stdout
@@ -154,7 +151,6 @@
           - --json
       register: _influxdb_bucket_auth_query
       changed_when: false
-      check_mode: false
       become: true
 
     # Match the CLI's exact write permission string on both org and bucket IDs.
