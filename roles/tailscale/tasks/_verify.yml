@@ -185,18 +185,12 @@
         fail_msg: >-
           Registration did not reach the failed-login cleanup path
 
-    - name: _verify failure cleanup | Inspect the staged auth-key file
+    - name: _verify failure cleanup | Staged auth key was removed
       stat:
         path: "{{ tailscale_authkey_temp.path }}"
       register: tailscale_authkey_after_failed_login
+      failed_when: tailscale_authkey_after_failed_login.stat.exists
       become: true
-
-    - name: _verify failure cleanup | Confirm the staged auth key was removed
-      assert:
-        that:
-          - not tailscale_authkey_after_failed_login.stat.exists
-        fail_msg: >-
-          Failed login left the staged auth-key file on disk
 
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the add-wants link brings it back with the target's start.
