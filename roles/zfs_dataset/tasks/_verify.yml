@@ -67,12 +67,6 @@
   changed_when: true
   failed_when: _zfs_dataset_verify_fallback.stdout != 'fallback works'
 
-- name: _verify | Remove the plain-directory write probe
-  when: not zfs_root
-  file:
-    path: /mnt/_verify_probe/operator-write
-    state: absent
-
 - name: _verify | Remove probe mountpoint
   file:
     path: /mnt/_verify_probe
