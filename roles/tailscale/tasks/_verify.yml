@@ -109,8 +109,6 @@
         status)
           printf '%s\n' '{"BackendState":"Running"}'
           ;;
-        set)
-          ;;
       esac
     mode: "0755"
   become: true
