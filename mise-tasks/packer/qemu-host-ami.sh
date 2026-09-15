@@ -58,10 +58,8 @@ prune_old_amis() {
     "Name=tag:role,Values=ci-ami"
     "Name=tag:machine,Values=qemu_host"
     "Name=tag:ubuntu,Values=${ubuntu}"
+    "Name=tag:architecture,Values=${architecture}"
   )
-  if [ "$architecture" = aarch64 ]; then
-    image_filters+=("Name=tag:architecture,Values=${architecture}")
-  fi
   promoted=$(promoted_ami)
   if [ -n "$promoted" ]; then
     retention_args+=(--protected "$promoted")

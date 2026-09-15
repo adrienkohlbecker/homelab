@@ -119,16 +119,19 @@ def test_retry_budget_counts_total_attempts():
     assert audit_aws.CFG.retries == {"total_max_attempts": 10, "mode": "adaptive"}
 
 
-def test_supported_qemu_images_share_region_and_keep_architecture_specific_tags():
-    x86 = image(
-        "ami-x86",
-        tags={
-            "Name": "homelab-ci-qemu-host-noble",
-            "machine": "qemu_host",
-            "role": "ci-ami",
-            "ubuntu": "noble",
-        },
-        snapshot_id="snap-x86",
+def test_supported_qemu_images_are_region_and_architecture_specific():
+    x86_tags = {
+        "Name": "homelab-ci-qemu-host-noble",
+        "architecture": "x86_64",
+        "machine": "qemu_host",
+        "role": "ci-ami",
+        "ubuntu": "noble",
+    }
+    x86 = image("ami-x86", tags=x86_tags, snapshot_id="snap-x86")
+    unlabelled_x86 = image(
+        "ami-x86-unlabelled",
+        tags={key: value for key, value in x86_tags.items() if key != "architecture"},
+        snapshot_id="snap-x86-unlabelled",
     )
     arm = image(
         "ami-arm",
@@ -146,6 +149,8 @@ def test_supported_qemu_images_share_region_and_keep_architecture_specific_tags(
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", x86)
+    # Every retention-managed AMI carries its architecture tag.
+    assert not audit_aws.is_supported_qemu_host_image("eu-central-1", unlabelled_x86)
 
 
 def test_region_contracts_follow_the_shared_architecture_table():

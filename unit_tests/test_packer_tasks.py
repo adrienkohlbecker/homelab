@@ -712,15 +712,6 @@ def test_qemu_host_rejects_unknown_architecture() -> None:
     assert "unsupported architecture sparc" in result.stderr
 
 
-def test_qemu_host_retention_keeps_legacy_x86_images_in_scope() -> None:
-    script = QEMU_HOST_AMI_SH.read_text()
-
-    assert (
-        'if [ "$architecture" = aarch64 ]; then\n    image_filters+=("Name=tag:architecture,Values=${architecture}")'
-        in script
-    )
-
-
 def test_qemu_cloud_images_use_immutable_release_builds() -> None:
     catalog = yaml.safe_load(UBUNTU_CATALOG.read_text())
     template = QEMU_TEMPLATE.read_text()

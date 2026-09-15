@@ -133,9 +133,7 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
         return False
     return any(
         tags.get("Name") == ami["name"]
-        and (
-            tags.get("architecture") in (None, "x86_64") if arch == "x86_64" else tags.get("architecture") == "aarch64"
-        )
+        and tags.get("architecture") == ("aarch64" if arch == "arm64" else arch)
         for arch, ami in contract["amis"].items()
     )
 

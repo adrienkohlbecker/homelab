@@ -153,7 +153,9 @@ class TestManifest:
 
     def test_manifest_without_files_is_rejected(self, tmp_path: Path) -> None:
         manifest = {
+            "architecture": "x86_64",
             "machine": "box",
+            "source_sha": "d" * 40,
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
         }
@@ -169,7 +171,9 @@ class TestManifest:
 
     def test_legacy_hash_is_ignored(self, tmp_path: Path) -> None:
         manifest = {
+            "architecture": "x86_64",
             "machine": "box",
+            "source_sha": "d" * 40,
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
             "files": [{"name": "disk.raw", "sha256": "0" * 64}],
@@ -219,7 +223,7 @@ class TestManifest:
                 hydrate.ImageSelection(args.build_id, args.source_sha),
             )
 
-    def test_legacy_x86_manifest_remains_readable(self, tmp_path: Path) -> None:
+    def test_unlabelled_x86_manifest_is_rejected(self, tmp_path: Path) -> None:
         args = _args()
         manifest = {
             "build_id": args.build_id,
@@ -230,14 +234,8 @@ class TestManifest:
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert (
-            hydrate.read_manifest(
-                manifest_path,
-                args,
-                hydrate.ImageSelection(args.build_id, None),
-            )
-            == manifest
-        )
+        with pytest.raises(SystemExit, match="manifest architecture mismatch"):
+            hydrate.read_manifest(manifest_path, args, hydrate.ImageSelection(args.build_id, None))
 
     def test_local_cache_uses_manifest_build_id_and_files(self, tmp_path: Path) -> None:
         disk = tmp_path / "disk.raw"
@@ -367,22 +365,12 @@ class TestResolveImage:
 
         assert self._resolve(monkeypatch, "", build_id="selected") == hydrate.ImageSelection("selected", None)
 
-    def test_legacy_x86_pointer_remains_readable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        body = json.dumps({"build_id": "legacy", "machine": "box", "ubuntu": "noble"})
-
-        assert self._resolve(monkeypatch, body) == hydrate.ImageSelection("legacy", None)
-
-    def test_arm_pointer_requires_architecture(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("architecture", ["x86_64", "aarch64"])
+    def test_unlabelled_pointer_is_rejected(self, monkeypatch: pytest.MonkeyPatch, architecture: str) -> None:
         body = json.dumps({"build_id": "legacy", "machine": "box", "ubuntu": "noble"})
 
         with pytest.raises(SystemExit, match="architecture mismatch"):
-            self._resolve(
-                monkeypatch,
-                body,
-                architecture="aarch64",
-                bucket="homelab-ci-arm-images-eu-central-1",
-                region="eu-central-1",
-            )
+            self._resolve(monkeypatch, body, architecture=architecture)
 
     @pytest.mark.parametrize(("field", "value"), [("machine", "box_deps"), ("ubuntu", "resolute")])
     def test_mismatch_raises(self, monkeypatch: pytest.MonkeyPatch, field: str, value: str) -> None:

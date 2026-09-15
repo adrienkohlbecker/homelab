@@ -110,17 +110,10 @@ def dest_root() -> Path:
     return Path(root).expanduser().resolve()
 
 
-def allows_legacy_provenance(args: argparse.Namespace) -> bool:
-    return args.architecture == "x86_64"
-
-
-def validated_source_sha(document: dict[str, Any], args: argparse.Namespace, label: str) -> str | None:
+def validated_source_sha(document: dict[str, Any], args: argparse.Namespace, label: str) -> str:
+    """Return the document's commit after checking it describes this architecture."""
     architecture = document.get("architecture")
     source_sha = document.get("source_sha")
-    if architecture is None and allows_legacy_provenance(args):
-        if source_sha is not None:
-            sys.exit(f"{label} source_sha is present without architecture")
-        return None
     if architecture != args.architecture:
         sys.exit(f"{label} architecture mismatch: expected {args.architecture!r}, got {architecture!r}")
     if (
