@@ -48,7 +48,7 @@
 # render_html stripping the err branch) would pass the "host name in content"
 # check above (because the <h2> still renders) but fail this one.
 - name: _verify | Per-host error path renders on designated fixture
-  when: homepage_verify_netdata_error
+  when: homepage_verify_netdata_error | default(false)
   assert:
     that:
       - '"<div class=\"err\">" in _homepage_alerts_html.content'
