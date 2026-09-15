@@ -211,12 +211,15 @@
       become: true
 
     - name: _verify | The wake run sent its magic packets
-      shell: |
-        set -euo pipefail
-        journalctl -u nut_wake_peers.service --no-pager | grep -F "Sending magic packet"
-      args:
-        executable: /bin/bash
+      command:
+        argv:
+          - journalctl
+          - -u
+          - nut_wake_peers.service
+          - --no-pager
+      register: nut_wake_journal
       changed_when: false
+      failed_when: "'Sending magic packet' not in nut_wake_journal.stdout"
       become: true
 
     # RemainAfterExit must hold the unit active after the run -- converge
