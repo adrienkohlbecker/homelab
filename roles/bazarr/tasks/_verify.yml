@@ -81,7 +81,7 @@
     _storage_service: bazarr
     _storage_group: media
     _storage_template: "{{ role_path }}/templates/bazarr.service.j2"
-    _storage_mounts: [services, media]
+    _storage_mounts: [ services, media ]
 
 - name: _verify | Render the production config for a physical host
   template:

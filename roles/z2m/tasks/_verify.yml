@@ -64,4 +64,4 @@
   vars:
     _storage_service: z2m
     _storage_template: "{{ role_path }}/templates/z2m.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]

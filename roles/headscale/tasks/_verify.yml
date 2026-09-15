@@ -117,7 +117,7 @@
   vars:
     _storage_service: headscale
     _storage_template: "{{ role_path }}/templates/headscale.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]
 
 - name: _verify | Render production config with pinned DERP addresses
   template:

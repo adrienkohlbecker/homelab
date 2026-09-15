@@ -44,7 +44,7 @@
       - go.d:collector:prometheus:kuma
       - go.d:collector:prometheus:headscale
     netdata_zfspool_thresholds:
-      verify_pool: [70, 80, 90]
+      verify_pool: [ 70, 80, 90 ]
   loop:
     - src: charts_d_keepalived_vrrp.conf.j2
       dest: netdata-keepalived.conf

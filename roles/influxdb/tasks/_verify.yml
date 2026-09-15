@@ -108,4 +108,4 @@
   vars:
     _storage_service: influxdb
     _storage_template: "{{ role_path }}/templates/influxdb.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]

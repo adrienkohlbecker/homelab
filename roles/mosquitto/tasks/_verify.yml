@@ -127,4 +127,4 @@
   vars:
     _storage_service: mosquitto
     _storage_template: "{{ role_path }}/templates/mosquitto.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]

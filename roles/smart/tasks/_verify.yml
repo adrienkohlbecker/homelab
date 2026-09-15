@@ -8,19 +8,19 @@
       nvme0n1:
         removable: "0"
         links:
-          ids: [nvme-verify]
+          ids: [ nvme-verify ]
       sda:
         removable: "0"
         links:
-          ids: [ata-CT1000MX500SSD1]
+          ids: [ ata-CT1000MX500SSD1 ]
       sdb:
         removable: "0"
         links:
-          ids: [ata-verify-rotational]
+          ids: [ ata-verify-rotational ]
       sdc:
         removable: "0"
         links:
-          ids: [ata-unsafe/device]
+          ids: [ ata-unsafe/device ]
     rotational_disks_by_id:
       - ata-verify-rotational
     _unsafe_device_id: unsafe-device-id-was-rejected
@@ -61,7 +61,7 @@
       nvme0n1:
         removable: "0"
         links:
-          ids: [nvme-reload-fixture]
+          ids: [ nvme-reload-fixture ]
   block:
     - name: _verify | Check a changed smartd configuration
       import_role:

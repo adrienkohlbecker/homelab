@@ -160,7 +160,7 @@
     _storage_service: gitea
     _storage_user: git
     _storage_template: "{{ role_path }}/templates/gitea.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]
 
 - name: _verify | Render production configs for alternate SMTP modes
   template:

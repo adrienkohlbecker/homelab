@@ -334,4 +334,4 @@
   vars:
     _storage_service: homeassistant
     _storage_template: "{{ role_path }}/templates/homeassistant.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]

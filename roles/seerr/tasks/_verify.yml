@@ -310,4 +310,4 @@
   vars:
     _storage_service: seerr
     _storage_template: "{{ role_path }}/templates/seerr.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]

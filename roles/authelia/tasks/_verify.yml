@@ -191,7 +191,7 @@
   vars:
     _storage_service: authelia
     _storage_template: "{{ role_path }}/templates/authelia.service.j2"
-    _storage_mounts: [services]
+    _storage_mounts: [ services ]
 
 - name: _verify | Render the production config for a physical host
   template:

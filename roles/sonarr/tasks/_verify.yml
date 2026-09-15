@@ -194,4 +194,4 @@
     _storage_service: sonarr
     _storage_group: media
     _storage_template: "{{ role_path }}/templates/sonarr.service.j2"
-    _storage_mounts: [services, scratch, media]
+    _storage_mounts: [ services, scratch, media ]
