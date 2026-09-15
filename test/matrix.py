@@ -6,7 +6,7 @@ that both test/testall.py and mise-tasks/ci/detect.py consume.
 
 import functools
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
@@ -40,6 +40,9 @@ class RoleTestConfig:
     ubuntu: tuple[str, ...]
     skip: frozenset[tuple[str, str]]
     arm_machines: tuple[str, ...]
+    # Guest RAM overrides in MiB, keyed by machine; unlisted machines keep
+    # their QemuMachineSpec default.
+    memory_mb: dict[str, int] = field(default_factory=dict)
 
 
 class RoleTestConfigError(ValueError):
@@ -96,6 +99,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
 
     raw_machines = data.get("machines")
     machines: list[str] = []
+    memory_mb: dict[str, int] = {}
     if raw_machines is None:
         pass
     elif not isinstance(raw_machines, dict):
@@ -107,8 +111,14 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 continue
             if machine_names and name not in machine_names:
                 errors.append(f"machines key {name!r} not in {list(machine_names)}")
-            if machine_config not in (None, {}):
-                errors.append(f"machines.{name} must be empty")
+            if isinstance(machine_config, dict) and set(machine_config) == {"memory_mb"}:
+                value = machine_config["memory_mb"]
+                if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                    errors.append(f"machines.{name}.memory_mb must be a positive integer, got {value!r}")
+                    continue
+                memory_mb[name] = value
+            elif machine_config not in (None, {}):
+                errors.append(f"machines.{name} accepts only memory_mb")
                 continue
             machines.append(name)
     if not machines:
@@ -179,7 +189,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     if errors:
         raise RoleTestConfigError(meta_path, errors)
 
-    return RoleTestConfig(base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip), tuple(arm_machines))
+    return RoleTestConfig(base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip), tuple(arm_machines), memory_mb)
 
 
 def build_role_cells(role: str) -> list[TestCell]:

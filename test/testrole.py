@@ -17,6 +17,7 @@ from pathlib import Path
 from machine import (
     MACHINE_CHOICES,
     Machine,
+    MachineRunOptions,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
@@ -232,6 +233,7 @@ def main() -> int:
         machine_timeout=parsed_args.timeout,
         upstream_mirrors=parsed_args.upstream_mirrors,
         workdir_parent=parsed_args.workdir_parent,
+        run_options=MachineRunOptions(memory_mb=role_config.memory_mb.get(parsed_args.machine)),
     )
 
     rc = 0

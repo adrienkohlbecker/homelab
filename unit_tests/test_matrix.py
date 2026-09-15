@@ -67,9 +67,16 @@ class TestRoleMeta:
         _make_role("fancy", {"machines": {"pug": None}})
         assert next(iter(matrix.load_role_test_config("fancy").machines)) == "pug"
 
-    def test_machine_payload_is_rejected(self) -> None:
-        _make_role("configured", {"machines": {"lab": {"memory_mb": 8192}}})
-        with pytest.raises(matrix.RoleTestConfigError, match=r"machines\.lab must be empty"):
+    def test_machine_memory_override_is_read(self) -> None:
+        _make_role("configured", {"machines": {"lab": {"memory_mb": 8192}, "minimal": None}})
+        config = matrix.load_role_test_config("configured")
+        assert config.machines == ("lab", "minimal")
+        assert config.memory_mb == {"lab": 8192}
+
+    @pytest.mark.parametrize("payload", [{"vcpus": 8}, {"memory_mb": 0}, {"memory_mb": "5G"}, "lab"])
+    def test_invalid_machine_payload_is_rejected(self, payload: object) -> None:
+        _make_role("configured", {"machines": {"lab": payload}})
+        with pytest.raises(matrix.RoleTestConfigError, match=r"machines\.lab"):
             matrix.load_role_test_config("configured")
 
     def test_base_prerequisites_defaults_to_true(self) -> None:
