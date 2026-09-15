@@ -289,7 +289,8 @@ class TestExtractBundle:
         staged = tmp_path / "image"
         staged.mkdir()
 
-        hydrate.extract_bundle(bundle, staged, ["disk.raw", "efivars.fd"])
+        with bundle.open("rb") as stream:
+            hydrate.extract_bundle(stream, staged, ["disk.raw", "efivars.fd"])
 
         assert (staged / "disk.raw").read_bytes() == b"disk"
         assert (staged / "efivars.fd").read_bytes() == b"efi"
@@ -302,8 +303,8 @@ class TestExtractBundle:
         staged = tmp_path / "image"
         staged.mkdir()
 
-        with pytest.raises(SystemExit, match="not a regular file"):
-            hydrate.extract_bundle(bundle, staged, ["disk.raw", "efivars.fd"])
+        with bundle.open("rb") as stream, pytest.raises(SystemExit, match="not a regular file"):
+            hydrate.extract_bundle(stream, staged, ["disk.raw", "efivars.fd"])
         assert not (staged / "disk.raw").exists()
 
     def test_traversal_is_refused_before_writing(self, tmp_path: Path) -> None:
@@ -311,8 +312,8 @@ class TestExtractBundle:
         staged = tmp_path / "image"
         staged.mkdir()
 
-        with pytest.raises(SystemExit, match="unsafe archive member"):
-            hydrate.extract_bundle(bundle, staged, ["../escaped"])
+        with bundle.open("rb") as stream, pytest.raises(SystemExit, match="unsafe archive member"):
+            hydrate.extract_bundle(stream, staged, ["../escaped"])
         assert not (tmp_path / "escaped").exists()
 
     def test_unlisted_members_are_refused(self, tmp_path: Path) -> None:
@@ -320,8 +321,8 @@ class TestExtractBundle:
         staged = tmp_path / "image"
         staged.mkdir()
 
-        with pytest.raises(SystemExit, match="not in the manifest: 'extra'"):
-            hydrate.extract_bundle(bundle, staged, ["disk.raw"])
+        with bundle.open("rb") as stream, pytest.raises(SystemExit, match="not in the manifest: 'extra'"):
+            hydrate.extract_bundle(stream, staged, ["disk.raw"])
         assert not (staged / "extra").exists()
 
     def test_missing_members_are_reported(self, tmp_path: Path) -> None:
@@ -329,8 +330,8 @@ class TestExtractBundle:
         staged = tmp_path / "image"
         staged.mkdir()
 
-        with pytest.raises(SystemExit, match=r"missing manifest members: efivars\.fd"):
-            hydrate.extract_bundle(bundle, staged, ["disk.raw", "efivars.fd"])
+        with bundle.open("rb") as stream, pytest.raises(SystemExit, match=r"missing manifest members: efivars\.fd"):
+            hydrate.extract_bundle(stream, staged, ["disk.raw", "efivars.fd"])
 
     @pytest.mark.skipif(_gnu_tar_with_zstd() is None, reason="needs GNU tar with zstd, as upload-s3 uses")
     def test_restores_gnu_sparse_bundles_from_upload(self, tmp_path: Path) -> None:
@@ -351,7 +352,8 @@ class TestExtractBundle:
         staged = tmp_path / "image"
         staged.mkdir()
 
-        hydrate.extract_bundle(bundle, staged, [disk.name, "efivars.fd"])
+        with bundle.open("rb") as stream:
+            hydrate.extract_bundle(stream, staged, [disk.name, "efivars.fd"])
 
         restored = (staged / disk.name).stat()
         with (staged / disk.name).open("rb") as restored_file, disk.open("rb") as source_file:
@@ -359,6 +361,56 @@ class TestExtractBundle:
         # Filesystems round data extents differently (APFS reports 16 MiB), so
         # only require that the 48 MiB hole was not written out.
         assert restored.st_blocks * 512 < restored.st_size // 2
+
+
+class TestDownloadStream:
+    class FakeProcess:
+        def __init__(self, argv: list[str], *, stdout: int) -> None:
+            assert stdout == subprocess.PIPE
+            self.args = argv
+            self.stdout = io.BytesIO(b"bundle")
+            self.returncode = 0
+            self.terminated = False
+
+        def wait(self) -> int:
+            return self.returncode
+
+        def terminate(self) -> None:
+            self.terminated = True
+
+    def test_streams_s3_object_to_stdout_with_checksum_validation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        process: TestDownloadStream.FakeProcess | None = None
+
+        def popen(argv: list[str], *, stdout: int) -> TestDownloadStream.FakeProcess:
+            nonlocal process
+            process = self.FakeProcess(argv, stdout=stdout)
+            return process
+
+        monkeypatch.setattr(hydrate.subprocess, "Popen", popen)
+
+        with hydrate.download_s3_stream(_args(), "noble/box/build/disks.tar.zst") as stream:
+            assert stream.read() == b"bundle"
+
+        assert process is not None
+        assert process.args[-4:] == ["-", "--only-show-errors", "--checksum-mode", "ENABLED"]
+        assert "s3://homelab-ci-images/noble/box/build/disks.tar.zst" in process.args
+
+    def test_failed_download_is_not_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        process = self.FakeProcess([], stdout=subprocess.PIPE)
+        process.returncode = 1
+        monkeypatch.setattr(hydrate.subprocess, "Popen", lambda *_args, **_kwargs: process)
+
+        with pytest.raises(subprocess.CalledProcessError), hydrate.download_s3_stream(_args(), "bundle") as stream:
+            stream.read()
+
+    def test_consumer_failure_terminates_download(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        process = self.FakeProcess([], stdout=subprocess.PIPE)
+        monkeypatch.setattr(hydrate.subprocess, "Popen", lambda *_args, **_kwargs: process)
+
+        with pytest.raises(RuntimeError, match="stop"), hydrate.download_s3_stream(_args(), "bundle"):
+            raise RuntimeError("stop")
+
+        assert process.terminated
 
 
 class TestRetention:

@@ -34,11 +34,14 @@ import fcntl
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
@@ -165,6 +168,40 @@ def download_s3(args: argparse.Namespace, key: str, dest: Path) -> None:
     )
 
 
+@contextmanager
+def download_s3_stream(args: argparse.Namespace, key: str) -> Iterator[BinaryIO]:
+    """Yield an S3 object's bytes without staging them on the local disk."""
+    uri = f"s3://{args.bucket}/{key}"
+    print(f"==> streaming {uri}")
+    process = subprocess.Popen(
+        [
+            *aws_base(args),
+            "s3",
+            "cp",
+            uri,
+            "-",
+            "--only-show-errors",
+            "--checksum-mode",
+            "ENABLED",
+        ],
+        stdout=subprocess.PIPE,
+    )
+    assert process.stdout is not None
+    stream = cast(BinaryIO, process.stdout)
+    try:
+        yield stream
+    except BaseException:
+        process.stdout.close()
+        process.terminate()
+        process.wait()
+        raise
+    else:
+        process.stdout.close()
+        returncode = process.wait()
+        if returncode != 0:
+            raise subprocess.CalledProcessError(returncode, process.args)
+
+
 def read_manifest(path: Path, args: argparse.Namespace, selection: ImageSelection) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text())
@@ -183,7 +220,7 @@ def read_manifest(path: Path, args: argparse.Namespace, selection: ImageSelectio
     return manifest
 
 
-def extract_bundle(bundle: Path, staged: Path, expected_members: list[str]) -> None:
+def extract_bundle(bundle: BinaryIO, staged: Path, expected_members: list[str]) -> None:
     """Extract a zstd bundle in one pass, admitting only the manifest's regular files.
 
     tarfile's data filter refuses absolute paths, parent traversal, and links
@@ -204,7 +241,7 @@ def extract_bundle(bundle: Path, staged: Path, expected_members: list[str]) -> N
         return member
 
     try:
-        with tarfile.open(bundle, "r:zst") as tar:
+        with tarfile.open(fileobj=bundle, mode="r|zst") as tar:
             tar.extractall(staged, filter=admit)
     except tarfile.FilterError as exc:
         raise SystemExit(f"unsafe archive member: {exc}") from exc
@@ -281,7 +318,6 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix=f".hydrate-{args.ubuntu}-{args.machine}-", dir=root) as tmp:
             tmpdir = Path(tmp)
             manifest_path = tmpdir / MANIFEST_NAME
-            bundle_path = tmpdir / BUNDLE_NAME
             staged = tmpdir / "image"
             staged.mkdir()
 
@@ -289,10 +325,9 @@ def main() -> int:
             manifest = read_manifest(manifest_path, args, selection)
             files = manifest_files(manifest)
             members = [entry["name"] for entry in files]
-            download_s3(args, f"{prefix}/{BUNDLE_NAME}", bundle_path)
-
             print(f"==> extracting {BUNDLE_NAME}")
-            extract_bundle(bundle_path, staged, members)
+            with download_s3_stream(args, f"{prefix}/{BUNDLE_NAME}") as bundle:
+                extract_bundle(bundle, staged, members)
 
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             replace_target(staged, target)
