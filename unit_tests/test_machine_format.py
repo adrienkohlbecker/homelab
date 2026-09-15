@@ -98,12 +98,12 @@ def test_format_ansible_cmd_default_envelope(
     # Trailing positional
     assert cmd[-1] == "site.yml"
 
-    # Default: no upstream-mirrors override
+    # Default: the harness selects Nexus through its test-only input.
     assert "nexus_url=" not in cmd
 
-    # Cloud-environment discriminator. With HOMELAB_TEST_IN_AWS unset, the
-    # guest is not in AWS.
-    assert '{"test_in_aws": false}' in cmd
+    # Harness inputs are indirect so Ansible task vars can override the public
+    # environment variables during fixture coverage.
+    assert '{"_test_in_aws":false,"_test_nexus_url":"nexus.lab.fahm.fr"}' in cmd
     assert not any("tailscale_wan_direct" in part for part in cmd)
 
 
@@ -119,9 +119,8 @@ def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
     m = machine_factory()
     cmd = m.format_ansible_cmd("site.yml")
 
-    assert '{"test_in_aws": true}' in cmd
-    assert "nexus_url=" in cmd
-    assert cmd.index("nexus_url=") < cmd.index("site.yml")
+    assert '{"_test_in_aws":true,"_test_nexus_url":""}' in cmd
+    assert "nexus_url=" not in cmd
 
 
 def test_ansible_env_default_envelope(
@@ -161,10 +160,8 @@ def test_format_ansible_cmd_upstream_mirrors_clears_nexus(
     m = machine_factory(upstream_mirrors=True)
     cmd = m.format_ansible_cmd("site.yml")
 
-    assert "nexus_url=" in cmd
-    # The override must come before the trailing positional so ansible
-    # parses it as a -e var, not as a playbook path.
-    assert cmd.index("nexus_url=") < cmd.index("site.yml")
+    assert any('"_test_nexus_url":""' in part for part in cmd)
+    assert "nexus_url=" not in cmd
 
 
 def test_format_ansible_cmd_no_positional(

@@ -769,12 +769,18 @@ class Machine:
             # stays role-agnostic on disk.
             "-e",
             f"_role_under_test={self.role}",
-            # Cloud-environment discriminator (see in_aws): true whenever the
-            # guest egresses through AWS, so roles pick the in-region EC2
-            # mirrors + public DNS over the LAN Nexus / AdGuard VIP. JSON form
-            # so it lands as a real bool for `| bool`.
+            # Internal harness inputs map to public vars in group_vars/test.yml.
+            # Keeping them indirect lets task-scoped fixtures exercise alternate
+            # environments without losing to extra-vars precedence.
             "-e",
-            json.dumps({"test_in_aws": self.in_aws}),
+            json.dumps(
+                {
+                    "_test_in_aws": self.in_aws,
+                    "_test_nexus_url": "" if self.upstream_mirrors or self.in_aws else "nexus.lab.fahm.fr",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
             # Controller-side WAN probe endpoint for verify probes that
             # delegate_to: localhost (see the wan_* field comment).
             "-e",
@@ -794,12 +800,6 @@ class Machine:
             "test/inventory.ini",
             *self.ansible_args,
         ]
-        # --upstream-mirrors clears nexus_url so all mirror_* Jinja in
-        # group_vars/all/main.yml resolves to upstream URLs even though
-        # group_vars/test.yml sets nexus_url. An AWS guest can't reach the LAN
-        # Nexus at all, so in_aws clears it too (covers the aws_qemu cell).
-        if self.upstream_mirrors or self.in_aws:
-            parts += ["-e", "nexus_url="]
         if cmd:
             parts += cmd
         return parts

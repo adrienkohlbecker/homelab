@@ -1,6 +1,113 @@
 - name: Prepare the test environment
   hosts: all
   tasks:
+    # Exercise lazy production variables through Ansible under the environment
+    # variants that one physical QEMU cell cannot represent simultaneously.
+    - name: Verify physical console rendering without a serial console
+      vars:
+        qemu_test: false
+        boot_serial_console: ""
+      assert:
+        that:
+          - _console_serial | trim == ''
+          - _console_cmdline == 'console=tty0'
+
+    - name: Verify ARM QEMU console rendering
+      vars:
+        qemu_test: true
+        ansible_architecture: aarch64
+      assert:
+        that:
+          - _console_serial | trim == 'earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200'
+          - _console_cmdline == 'console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200'
+
+    - name: Verify x86 QEMU console rendering
+      vars:
+        qemu_test: true
+        ansible_architecture: x86_64
+      assert:
+        that:
+          - _console_serial | trim == 'earlycon=uart8250,io,0x3f8 console=ttyS0,115200'
+          - _console_cmdline == 'console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200'
+
+    - name: Verify x86 Nexus mirror rendering
+      vars:
+        ansible_architecture: x86_64
+        nexus_url: nexus.fixture.invalid
+        test_in_aws: false
+      assert:
+        that:
+          - mirror_apt_ubuntu_archive == 'http://nexus.fixture.invalid/repository/ubuntu-archive'
+          - mirror_apt_ubuntu_security == 'http://nexus.fixture.invalid/repository/ubuntu-security'
+          - mirror_apt_ubuntu_ports == 'http://nexus.fixture.invalid/repository/ubuntu-ports'
+          - mirror_apt_netdata == 'https://nexus.fixture.invalid/repository/netdata'
+          - mirror_apt_fluentbit == 'https://nexus.fixture.invalid/repository/fluentbit'
+          - mirror_apt_docker == 'https://nexus.fixture.invalid/repository/docker-ce'
+          - mirror_apt_tailscale == 'https://nexus.fixture.invalid/repository/tailscale'
+          - mirror_apt_mise == 'https://nexus.fixture.invalid/repository/mise'
+          - mirror_apt_1password == 'https://nexus.fixture.invalid/repository/1password'
+          - mirror_github == 'https://nexus.fixture.invalid/repository/github'
+          - mirror_gitlab == 'https://nexus.fixture.invalid/repository/gitlab'
+          - mirror_raw_githubusercontent == 'https://nexus.fixture.invalid/repository/raw-githubusercontent'
+          - mirror_gitea_dl == 'https://nexus.fixture.invalid/repository/gitea-dl'
+          - ubuntu_mirror == 'http://nexus.fixture.invalid/repository/ubuntu-archive/'
+          - ubuntu_mirror_security == 'http://nexus.fixture.invalid/repository/ubuntu-security/'
+          - test_registry_mirrors['docker.io'] == 'nexus.fixture.invalid/docker.io'
+          - test_dot_servers == [prod_network.virtual_ips.dns ~ '#dns.fahm.fr']
+
+    - name: Verify ARM Nexus mirror rendering
+      vars:
+        ansible_architecture: aarch64
+        nexus_url: nexus.fixture.invalid
+        test_in_aws: false
+      assert:
+        that:
+          - mirror_apt_1password == 'https://downloads.1password.com/linux/debian/arm64'
+          - ubuntu_mirror == 'http://nexus.fixture.invalid/repository/ubuntu-ports/'
+          - ubuntu_mirror_security == 'http://nexus.fixture.invalid/repository/ubuntu-ports/'
+
+    - name: Verify AWS upstream mirror rendering
+      vars:
+        ansible_architecture: x86_64
+        bootstrap_dns_resolver: [ 1.1.1.1, 1.0.0.1 ]
+        nexus_url: ""
+        test_aws_region: eu-test-1
+        test_ecr_registry: registry.fixture.invalid
+        test_in_aws: true
+      assert:
+        that:
+          - mirror_apt_ubuntu_archive == 'http://eu-test-1.ec2.archive.ubuntu.com/ubuntu'
+          - mirror_apt_ubuntu_security == 'http://eu-test-1.ec2.archive.ubuntu.com/ubuntu'
+          - mirror_apt_ubuntu_ports == 'http://eu-test-1.ec2.ports.ubuntu.com/ubuntu-ports'
+          - mirror_apt_netdata == 'https://repo.netdata.cloud/repos/stable/ubuntu'
+          - mirror_apt_fluentbit == 'https://packages.fluentbit.io/ubuntu'
+          - mirror_apt_docker == 'https://download.docker.com/linux/ubuntu'
+          - mirror_apt_tailscale == 'https://pkgs.tailscale.com/stable/ubuntu'
+          - mirror_apt_mise == 'https://mise.en.dev/deb'
+          - mirror_apt_1password == 'https://downloads.1password.com/linux/debian/amd64'
+          - mirror_github == 'https://github.com'
+          - mirror_gitlab == 'https://gitlab.com'
+          - mirror_raw_githubusercontent == 'https://raw.githubusercontent.com'
+          - mirror_gitea_dl == 'https://dl.gitea.com'
+          - test_dot_servers == bootstrap_dns_resolver
+          - test_registry_mirrors['docker.io'] == 'registry.fixture.invalid/docker-hub'
+          - test_registry_mirrors['ghcr.io'] == 'registry.fixture.invalid/github'
+          - test_registry_mirrors['registry.gitlab.com'] == 'registry.fixture.invalid/gitlab'
+          - test_registry_mirrors['quay.io'] == 'registry.fixture.invalid/quay'
+
+    - name: Verify local upstream mirror rendering
+      vars:
+        ansible_architecture: x86_64
+        nexus_url: ""
+        test_in_aws: false
+      assert:
+        that:
+          - mirror_apt_ubuntu_archive == 'http://archive.ubuntu.com/ubuntu'
+          - mirror_apt_ubuntu_security == 'http://security.ubuntu.com/ubuntu'
+          - mirror_apt_ubuntu_ports == 'http://ports.ubuntu.com/ubuntu-ports'
+          - test_registry_mirrors == {}
+          - test_dot_servers == [prod_network.virtual_ips.dns ~ '#dns.fahm.fr']
+
     - name: Configure test-only connectivity and credentials
       become: true
       block:

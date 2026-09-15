@@ -27,7 +27,10 @@ qemu_netplan:
 netplan: "{{ qemu_netplan }}"
 
 domain: mhaf.fr
-nexus_url: nexus.lab.fahm.fr
+# Harness inputs stay behind test-only indirection so task-scoped fixtures can
+# exercise the public environment variables at normal Ansible precedence.
+nexus_url: "{{ _test_nexus_url | default('nexus.lab.fahm.fr') }}"
+test_in_aws: "{{ _test_in_aws | default(false) | bool }}"
 # DoT servers for the qemu test fixture. Local fixtures use the household
 # AdGuard VIP even when --upstream-mirrors bypasses Nexus; Internet-bound 853
 # is blocked there. AWS cells can reach the public anycast resolvers directly.
