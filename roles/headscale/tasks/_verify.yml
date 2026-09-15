@@ -118,3 +118,63 @@
     _storage_service: headscale
     _storage_template: "{{ role_path }}/templates/headscale.service.j2"
     _storage_mounts: [services]
+
+- name: _verify | Render production config with pinned DERP addresses
+  template:
+    src: config.yaml.j2
+    dest: /tmp/headscale-dual-stack.yaml
+    mode: "0640"
+  vars:
+    headscale_derp_ipv4: 192.0.2.1
+    headscale_derp_ipv6: 2001:db8::1
+  diff: false
+  become: true
+
+- name: _verify | Verify pinned DERP addresses and DNS records
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        config = pathlib.Path(sys.argv[1]).read_text()
+        assert config.count("192.0.2.1") == 2
+        assert config.count("2001:db8::1") == 2
+        assert "type: A" in config
+        assert "type: AAAA" in config
+      - /tmp/headscale-dual-stack.yaml
+  changed_when: false
+  become: true
+
+- name: _verify | Render the production unit for a physical host
+  template:
+    src: headscale.service.j2
+    dest: /tmp/headscale-physical.service
+    mode: "0644"
+  vars:
+    qemu_test: false
+    zfs_root: false
+    zfs_has_services_mount: false
+  become: true
+
+- name: _verify | Verify the physical unit waits for WireGuard
+  command:
+    argv:
+      - grep
+      - --fixed-strings
+      - --line-regexp
+      - After=wg-quick@wg0.service
+      - /tmp/headscale-physical.service
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate Headscale files
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop:
+    - headscale-dual-stack.yaml
+    - headscale-physical.service
+  become: true

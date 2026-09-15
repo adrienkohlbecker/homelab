@@ -192,3 +192,35 @@
     _storage_service: authelia
     _storage_template: "{{ role_path }}/templates/authelia.service.j2"
     _storage_mounts: [services]
+
+- name: _verify | Render the production config for a physical host
+  template:
+    src: configuration.yml.j2
+    dest: /tmp/authelia-physical.yml
+    mode: "0600"
+  vars:
+    qemu_test: false
+  diff: false
+  become: true
+
+- name: _verify | Verify physical-host time and access settings
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        config = pathlib.Path(sys.argv[1]).read_text()
+        assert "127.0.0.1/32" not in config
+        assert "disable_startup_check: false" in config
+      - /tmp/authelia-physical.yml
+  changed_when: false
+  become: true
+
+- name: _verify | Remove the physical-host config
+  file:
+    path: /tmp/authelia-physical.yml
+    state: absent
+  become: true

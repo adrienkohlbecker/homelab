@@ -172,3 +172,37 @@
     _storage_service: jellyfin
     _storage_template: "{{ role_path }}/templates/jellyfin.service.j2"
     _storage_mounts: [services, scratch, media]
+
+- name: _verify | Render the production unit without hardware transcoding
+  template:
+    src: jellyfin.service.j2
+    dest: /tmp/jellyfin-software.service
+    mode: "0644"
+  vars:
+    jellyfin_transcoding_backend: software
+    zfs_root: false
+    zfs_has_services_mount: false
+    zfs_has_scratch_mount: false
+    zfs_has_media_mount: false
+  become: true
+
+- name: _verify | Verify the software unit omits render-device access
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        unit = pathlib.Path(sys.argv[1]).read_text()
+        assert "/dev/dri/renderD128" not in unit
+      - /tmp/jellyfin-software.service
+  changed_when: false
+  become: true
+
+- name: _verify | Remove the software-transcoding unit
+  file:
+    path: /tmp/jellyfin-software.service
+    state: absent
+  become: true

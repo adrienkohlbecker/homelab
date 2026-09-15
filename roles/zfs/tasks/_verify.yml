@@ -1,6 +1,32 @@
 # ZFS role _verify: assert the role's converged state is live.
 # testrole.py / testall.py only (qemu); never site.yml or --tags zfs against prod.
 
+- name: _verify | Render the production module config with an ARC limit
+  template:
+    src: zfs.conf.j2
+    dest: /tmp/zfs-arc-limit.conf
+    mode: "0644"
+  vars:
+    zfs_arc_max: 1073741824
+  become: true
+
+- name: _verify | Verify the alternate ARC limit
+  command:
+    argv:
+      - grep
+      - --fixed-strings
+      - --line-regexp
+      - options zfs zfs_arc_max=1073741824
+      - /tmp/zfs-arc-limit.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Remove the alternate ARC config
+  file:
+    path: /tmp/zfs-arc-limit.conf
+    state: absent
+  become: true
+
 # --- Pool properties ---
 
 - name: _verify | Read managed pool properties

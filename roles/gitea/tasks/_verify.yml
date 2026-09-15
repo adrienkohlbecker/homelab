@@ -160,3 +160,44 @@
     _storage_service: gitea
     _storage_template: "{{ role_path }}/templates/gitea.service.j2"
     _storage_mounts: [services]
+
+- name: _verify | Render production configs for alternate SMTP modes
+  template:
+    src: app.ini.j2
+    dest: "/tmp/gitea-{{ item.name }}.ini"
+    mode: "0600"
+  vars:
+    smtp_use_ssl: "{{ item.ssl }}"
+    smtp_use_tls: "{{ item.tls }}"
+  loop:
+    - name: smtps
+      ssl: true
+      tls: false
+    - name: smtp
+      ssl: false
+      tls: false
+  diff: false
+  become: true
+
+- name: _verify | Verify alternate SMTP protocols
+  command:
+    argv:
+      - grep
+      - --fixed-strings
+      - --line-regexp
+      - "PROTOCOL = {{ item }}"
+      - "/tmp/gitea-{{ item }}.ini"
+  loop:
+    - smtps
+    - smtp
+  changed_when: false
+  become: true
+
+- name: _verify | Remove alternate SMTP configs
+  file:
+    path: "/tmp/gitea-{{ item }}.ini"
+    state: absent
+  loop:
+    - smtps
+    - smtp
+  become: true

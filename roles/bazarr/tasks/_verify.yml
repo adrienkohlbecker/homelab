@@ -81,3 +81,35 @@
     _storage_service: bazarr
     _storage_template: "{{ role_path }}/templates/bazarr.service.j2"
     _storage_mounts: [services, media]
+
+- name: _verify | Render the production config for a physical host
+  template:
+    src: config.yaml.j2
+    dest: /tmp/bazarr-physical.yaml
+    mode: "0600"
+  vars:
+    qemu_test: false
+  diff: false
+  become: true
+
+- name: _verify | Verify physical-host integration settings
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        config = pathlib.Path(sys.argv[1]).read_text()
+        assert "use_radarr: true" in config
+        assert "use_sonarr: true" in config
+      - /tmp/bazarr-physical.yaml
+  changed_when: false
+  become: true
+
+- name: _verify | Remove the physical-host config
+  file:
+    path: /tmp/bazarr-physical.yaml
+    state: absent
+  become: true

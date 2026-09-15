@@ -758,3 +758,41 @@
         fail_msg: >-
           Expected the enable_http/auth incompatibility assert to fail, but a
           different task failed: {{ ansible_failed_task.name | default('<unknown>') }}.
+- name: _verify | Render the production config with IPv6 listeners
+  template:
+    src: nginx.conf.j2
+    dest: /tmp/nginx-ipv6.conf
+    mode: "0644"
+  vars:
+    nginx_ipv6: true
+  become: true
+
+- name: _verify | Verify both IPv6 default listeners
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pathlib
+        import sys
+
+        config = pathlib.Path(sys.argv[1]).read_text()
+        assert "listen              [::]:80 default_server;" in config
+        assert "listen              [::]:443 default_server ssl" in config
+      - /tmp/nginx-ipv6.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Verify remote Authelia routing
+  vars:
+    authelia_host: lab
+  assert:
+    that:
+      - network.hosts.lab.wireguard in nginx_authelia_internal_url
+      - "'127.0.0.1' not in nginx_authelia_internal_url"
+
+- name: _verify | Remove the IPv6 config
+  file:
+    path: /tmp/nginx-ipv6.conf
+    state: absent
+  become: true

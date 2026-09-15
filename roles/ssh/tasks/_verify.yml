@@ -2,6 +2,32 @@
 # /etc/ssh/sshd_config → sshd_config.d/00-hardening.conf. Reading the
 # drop-in alone would pass even if the Include were missing.
 
+- name: _verify | Render the production hardening config with X11 enabled
+  template:
+    src: 00-hardening.conf.j2
+    dest: /tmp/ssh-hardening-x11.conf
+    mode: "0644"
+  vars:
+    ssh_x11_forwarding: true
+  become: true
+
+- name: _verify | Verify the alternate config enables X11 forwarding
+  command:
+    argv:
+      - grep
+      - --fixed-strings
+      - --line-regexp
+      - X11Forwarding yes
+      - /tmp/ssh-hardening-x11.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Remove the alternate hardening config
+  file:
+    path: /tmp/ssh-hardening-x11.conf
+    state: absent
+  become: true
+
 # The role explicitly enables and starts ssh.service.
 - name: _verify | Sshd is active  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active ssh.service
