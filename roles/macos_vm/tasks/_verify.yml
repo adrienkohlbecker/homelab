@@ -1,3 +1,65 @@
+- name: _verify | Exercise an explicit MAC address through production resolution
+  import_tasks: resolve_mac.yml
+  vars:
+    macos_vm_mac_address: 02:00:00:00:00:02
+
+- name: _verify | Preserve the explicit MAC address
+  assert:
+    that: macos_vm_resolved_mac == '02:00:00:00:00:02'
+
+- name: _verify | Exercise unchanged service startup through production tasks
+  import_tasks: service.yml
+  vars:
+    macos_vm_disk_source: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
+    macos_vm_start_service: true
+    macos_vm_workdir_result:
+      changed: false
+  check_mode: true
+
+- name: _verify | Preserve the current OVMF vars for changed-input coverage
+  copy:
+    src: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+    dest: /tmp/macos_vm_ovmf_vars_backup
+    remote_src: true
+    mode: "0644"
+  diff: false
+  become: true
+
+- name: _verify | Exercise changed firmware startup through production tasks
+  block:
+    - name: _verify | Remove the per-VM OVMF vars temporarily
+      file:
+        path: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+        state: absent
+      become: true
+
+    - name: _verify | Reconcile the missing OVMF vars in check mode
+      import_tasks: service.yml
+      vars:
+        macos_vm_disk_source: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
+        macos_vm_start_service: true
+        macos_vm_workdir_result:
+          changed: false
+      check_mode: true
+
+  always:
+    - name: _verify | Restore the per-VM OVMF vars
+      copy:
+        src: /tmp/macos_vm_ovmf_vars_backup
+        dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+        remote_src: true
+        owner: root
+        group: kvm
+        mode: "0644"
+      diff: false
+      become: true
+
+    - name: _verify | Remove the OVMF vars backup
+      file:
+        path: /tmp/macos_vm_ovmf_vars_backup
+        state: absent
+      become: true
+
 - name: _verify | Render production units for both execution modes
   template:
     src: macos_vm.service.j2
