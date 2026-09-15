@@ -252,6 +252,8 @@ qemu_host_ami:
   extends: .qemu_image
   # A failed box must block box_deps rather than seed from an older publication.
   rules:
+    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
+      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: false
@@ -261,6 +263,12 @@ qemu_host_ami:
 
 "qemu_image:lab":
   extends: .qemu_image
+  rules:
+    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
+      when: never
+    - if: $CI_COMMIT_REF_PROTECTED == "true"
+      when: manual
+      allow_failure: true
   resource_group: qemu_image_lab_$UBUNTU
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
@@ -270,6 +278,8 @@ qemu_host_ami:
 "qemu_image:box_deps":
   extends: .qemu_image
   rules:
+    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
+      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
@@ -317,6 +327,8 @@ qemu_host_ami:
 "qemu_image:box:arm":
   extends: .qemu_image_arm
   rules:
+    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
+      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: false
@@ -327,6 +339,8 @@ qemu_host_ami:
 "qemu_image:box_deps:arm":
   extends: .qemu_image_arm
   rules:
+    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
+      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_aarch64_$UBUNTU
   script:
