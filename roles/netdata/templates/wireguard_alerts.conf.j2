@@ -1,29 +1,7 @@
-# The bunk handshake alarm is disabled while bunk is unavailable -- `wg show wg0
-# latest-handshakes` reports 0 for the bunk peer while it is down. Uncomment the
-# stanza when the offsite host is back online, restoring the interpolation noted
-# on its `chart labels:` line.
-#
-# WireGuard peer handshake-age alarm, scoped to the bunk offsite-backup
-# peer. The wireguard go.d collector emits one chart per (device, peer)
-# under context `wireguard.peer_latest_handshake_ago` -- if we template
-# on the context with no filter, it fans out across every peer including
-# mobile ones (laptop, phone) whose idle handshake age is naturally
-# hours/days. Scoping via `chart labels:` to the bunk peer's public_key
-# limits the alarm to the always-on offsite link.
-#
-# The peer.keepalive_from=[lab, pug] field in group_vars/all/main.yml's bunk
-# entry causes lab+pug to send a 25s PersistentKeepalive to bunk, keeping
-# their view of bunk's handshake_ago < ~30s steady-state. Without that
-# keepalive, this alarm would have no useful threshold -- bunk only
-# handshakes during nightly zfs sends so handshake_ago would naturally
-# climb to ~24h between backups.
-#
-# Threshold 900s warn / 1200s crit directly expresses the tolerated stale
-# period, without a second notification-only delay that can outlive recovery.
-#
-# netdata normalizes chart-label values: `=` is replaced with `:` so the
-# trailing padding character on the public key shows as `:`. Apply the
-# same replacement when injecting from group_vars/prod.yml.
+# Disabled while bunk is unavailable. The 900s/1200s thresholds assume lab and
+# pug send their configured 25s keepalive. Scope the alarm to bunk because idle
+# mobile peers legitimately have old handshakes. Netdata normalizes `=` to `:`
+# in chart-label values, so normalize the public key the same way below.
 
 # template: wireguard_bunk_peer_handshake_stale
 #       on: wireguard.peer_latest_handshake_ago
