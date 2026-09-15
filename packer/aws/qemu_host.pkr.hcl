@@ -49,7 +49,10 @@ locals {
   ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name].version
   # Region and AMI naming are shared with qemu-host-ami.sh, the audit, and
   # Terraform's launch templates.
-  ci_architecture = yamldecode(file("${path.cwd}/data/architectures.yml"))[var.architecture].ci
+  architecture_data = yamldecode(file("${path.cwd}/data/architectures.yml"))[var.architecture]
+  ci_architecture   = local.architecture_data.ci
+  # The image smoke test boots the harness's guest machine type.
+  guest_architecture = local.architecture_data.guest
 
   architecture_table = {
     x86_64 = {
@@ -147,6 +150,7 @@ build {
       "${path.cwd}/uv.lock",
       "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh",
       "${path.cwd}/packer/aws/files/gitlab_runner_fleeting_arm.pub",
+      "${path.cwd}/packer/aws/files/qemu_host_smoke.sh",
       # The ARM firmware installer and the pins it reads.
       "${path.cwd}/mise-tasks/test/firmware.sh",
       "${path.cwd}/group_vars/all/versions.yml",
@@ -161,6 +165,7 @@ build {
       "TARGET_ARCHITECTURE"          = var.architecture
       "QEMU_PACKAGES"                = local.architecture_config.qemu_packages
       "QEMU_SYSTEM_BINARY"           = local.architecture_config.qemu_system_binary
+      "QEMU_MACHINE_TYPE"            = local.guest_architecture.machine_type
       "GITLAB_RUNNER_URL"            = local.architecture_config.runner_artifact.url
       "GITLAB_RUNNER_SHA256"         = local.architecture_config.runner_artifact.sha256
       "MISE_DISABLE_TOOLS"           = local.architecture_config.mise_disable_tools

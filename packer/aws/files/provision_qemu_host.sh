@@ -6,6 +6,7 @@ set -euxo pipefail
 : "${TARGET_ARCHITECTURE:?target_architecture is required}"
 : "${QEMU_PACKAGES:?qemu_packages is required}"
 : "${QEMU_SYSTEM_BINARY:?qemu_system_binary is required}"
+: "${QEMU_MACHINE_TYPE:?qemu_machine_type is required}"
 
 case "$TARGET_ARCHITECTURE" in
 x86_64) ;;
@@ -173,12 +174,23 @@ WantedBy=multi-user.target
 EOF
 sudo systemctl enable homelab-ci-scratch.service
 
+if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
+  firmware_code="$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-code.fd"
+  firmware_vars="$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-vars.fd"
+else
+  firmware_code=/usr/share/OVMF/OVMF_CODE_4M.fd
+  firmware_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
+fi
+bash /tmp/qemu_host_smoke.sh toolchain
+bash /tmp/qemu_host_smoke.sh firmware "$QEMU_SYSTEM_BINARY" "$QEMU_MACHINE_TYPE" "$firmware_code" "$firmware_vars"
+
 sudo apt-get clean
 sudo rm -rf \
   /var/lib/apt/lists/* \
   /tmp/gitlab-runner \
   /tmp/gitlab_runner_fleeting_arm.pub \
   /tmp/homelab_ci_prepare_scratch.sh \
+  /tmp/qemu_host_smoke.sh \
   /tmp/firmware.sh \
   /tmp/versions.yml \
   /tmp/architectures.yml \

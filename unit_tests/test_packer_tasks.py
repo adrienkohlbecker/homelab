@@ -27,6 +27,7 @@ PUBLISH_QEMU_SH = REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
 QEMU_HOST_SCRATCH_SH = REPO_ROOT / "packer" / "aws" / "files" / "homelab_ci_prepare_scratch.sh"
+QEMU_HOST_SMOKE_SH = REPO_ROOT / "packer" / "aws" / "files" / "qemu_host_smoke.sh"
 QEMU_POSTPROCESS_SH = REPO_ROOT / "packer" / "scripts" / "postprocess.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
@@ -518,6 +519,58 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert "gitlab_runner_fleeting_arm.pub" in template
     assert "/etc/ssh/authorized_keys/ubuntu" in provision
     assert "sshd -t" in provision
+
+
+@pytest.mark.skipif(
+    shutil.which("qemu-system-aarch64") is None
+    or not (REPO_ROOT / "test" / "firmware" / "edk2-aarch64-code.fd").is_file(),
+    reason="needs qemu-system-aarch64 and the fetched firmware (mise run test:firmware)",
+)
+def test_qemu_host_smoke_boots_the_pinned_firmware_to_its_boot_manager() -> None:
+    firmware = REPO_ROOT / "test" / "firmware"
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(QEMU_HOST_SMOKE_SH),
+            "firmware",
+            "qemu-system-aarch64",
+            "virt",
+            str(firmware / "edk2-aarch64-code.fd"),
+            str(firmware / "edk2-aarch64-vars.fd"),
+        ],
+        text=True,
+        capture_output=True,
+        timeout=240,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "edk2-aarch64-code.fd reached the UEFI boot manager" in result.stdout
+
+
+def test_qemu_host_smoke_fails_when_qemu_exits_before_the_boot_manager(tmp_path: Path) -> None:
+    fake_qemu = tmp_path / "qemu-system-test"
+    _executable(fake_qemu, "#!/bin/sh\nexit 1\n")
+    variables = tmp_path / "vars.fd"
+    variables.write_bytes(b"vars")
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(QEMU_HOST_SMOKE_SH),
+            "firmware",
+            str(fake_qemu),
+            "virt",
+            str(tmp_path / "code.fd"),
+            str(variables),
+        ],
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+
+    assert result.returncode == 1
+    assert "did not reach the UEFI boot manager" in result.stderr
 
 
 @pytest.mark.parametrize(
