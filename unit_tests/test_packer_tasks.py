@@ -635,9 +635,18 @@ def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
     )
 
 
-def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_path: Path) -> None:
+def _run_qemu_host_bake(
+    tmp_path: Path, *, promote: bool, resolved_ami: str = "ami-1234abcd"
+) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
+    """Run an ARM qemu-host bake against fake packer/aws/sleep binaries.
+
+    The fake SSM resolves the newly written parameter version to
+    *resolved_ami*, which lets tests model SSM's asynchronous AMI validation.
+    """
     fake_bin = tmp_path / "bin"
     packer_log = tmp_path / "packer.log"
+    aws_log = tmp_path / "aws.log"
+    sleep_log = tmp_path / "sleep.log"
     _executable(
         fake_bin / "packer",
         "#!/bin/sh\n"
@@ -653,25 +662,29 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
         "done\n"
         'printf \'{"builds":[{"artifact_id":"eu-central-1:ami-1234abcd"}]}\\n\' >"$manifest"\n',
     )
-    aws_log = tmp_path / "aws.log"
     _executable(
         fake_bin / "aws",
         "#!/bin/sh\n"
         "set -eu\n"
         'printf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n'
         'case "$*" in\n'
+        '*"ssm put-parameter"*) printf "7\\n" ;;\n'
+        '*"--name /homelab-ci/ami/qemu-host/aarch64/noble:7 "*) printf "%s\\n" "$RESOLVED_AMI" ;;\n'
         '*"ssm get-parameter"*) printf "ami-promoted\\n" ;;\n'
         '*"ec2 describe-images"*) printf "[]\\n" ;;\n'
         "esac\n",
     )
+    _executable(fake_bin / "sleep", '#!/bin/sh\nprintf "%s\\n" "$*" >>"$SLEEP_TEST_LOG"\n')
     env = dict(os.environ)
     env.pop("CI", None)
     env.update(
         AWS_TEST_LOG=str(aws_log),
         PATH=f"{fake_bin}:{env['PATH']}",
         PACKER_TEST_LOG=str(packer_log),
+        RESOLVED_AMI=resolved_ami,
+        SLEEP_TEST_LOG=str(sleep_log),
         usage_architecture="aarch64",
-        usage_promote="false",
+        usage_promote="true" if promote else "false",
         usage_ubuntu="noble",
     )
 
@@ -682,6 +695,11 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
         text=True,
         capture_output=True,
     )
+    return result, packer_log, aws_log, sleep_log
+
+
+def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_path: Path) -> None:
+    result, packer_log, aws_log, _sleep_log = _run_qemu_host_bake(tmp_path, promote=False)
 
     assert result.returncode == 0, result.stderr
     call = packer_log.read_text()
@@ -695,6 +713,25 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
     describe = next(line for line in aws_log.read_text().splitlines() if "ec2 describe-images" in line)
     assert "--region eu-central-1" in describe
     assert "Name=tag:architecture,Values=aarch64" in describe
+
+
+def test_qemu_host_promotion_waits_for_ssm_to_resolve_the_new_version(tmp_path: Path) -> None:
+    result, _packer_log, _aws_log, sleep_log = _run_qemu_host_bake(tmp_path, promote=True)
+
+    assert result.returncode == 0, result.stderr
+    assert "Promoted /homelab-ci/ami/qemu-host/aarch64/noble -> ami-1234abcd (version 7)" in result.stdout
+    # The rollback command must restore the same validated data type.
+    assert "--data-type aws:ec2:image --value ami-promoted --overwrite" in result.stdout
+    assert not sleep_log.exists()
+
+
+def test_qemu_host_promotion_fails_when_ssm_never_accepts_the_ami(tmp_path: Path) -> None:
+    result, _packer_log, _aws_log, sleep_log = _run_qemu_host_bake(tmp_path, promote=True, resolved_ami="ami-stale")
+
+    assert result.returncode == 1
+    assert "never resolved to ami-1234abcd" in result.stderr
+    assert "Promoted" not in result.stdout
+    assert len(sleep_log.read_text().splitlines()) == 24
 
 
 def test_qemu_host_rejects_unknown_architecture() -> None:

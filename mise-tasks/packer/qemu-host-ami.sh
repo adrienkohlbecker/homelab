@@ -48,6 +48,23 @@ promoted_ami() {
   return "$rc"
 }
 
+# SSM validates aws:ec2:image values after PutParameter has already returned,
+# and launch templates resolve the parameter at launch. Report promotion only
+# once the new version reads back as this AMI; give up after two minutes.
+wait_for_promotion() {
+  local version=$1 value
+  for _ in $(seq 1 24); do
+    if value=$(aws --region "$region" ssm get-parameter \
+      --name "${param}:${version}" \
+      --query Parameter.Value --output text 2>/dev/null) && [ "$value" = "$ami" ]; then
+      return 0
+    fi
+    sleep 5
+  done
+  echo "qemu-host-ami: ${param} version ${version} never resolved to ${ami}; inspect: aws --region ${region} ssm get-parameter-history --name ${param}" >&2
+  return 1
+}
+
 # Keep the promoted image plus the newest two provenance-tagged builds. The
 # shared planner also drives ci:audit-aws, so the two paths cannot disagree.
 prune_old_amis() {
@@ -131,19 +148,20 @@ print(manifest["builds"][-1]["artifact_id"].split(":")[1])
 echo "==> Baked ${ami}"
 
 if [ "${usage_promote:-false}" = "true" ]; then
-  previous=$(aws --region "$region" ssm get-parameter \
-    --name "$param" \
-    --query Parameter.Value --output text 2>/dev/null || true)
-  aws --region "$region" ssm put-parameter \
+  previous=$(promoted_ami)
+  version=$(aws --region "$region" ssm put-parameter \
     --name "$param" \
     --type String \
     --data-type aws:ec2:image \
     --value "$ami" \
-    --overwrite >/dev/null
-  echo "==> Promoted ${param} -> ${ami}"
+    --overwrite \
+    --query Version --output text)
+  wait_for_promotion "$version"
+  echo "==> Promoted ${param} -> ${ami} (version ${version})"
   if [ -n "$previous" ]; then
-    echo "    Rollback: aws --region ${region} ssm put-parameter --name ${param} --type String --value ${previous} --overwrite"
+    echo "    Rollback: aws --region ${region} ssm put-parameter --name ${param} --type String --data-type aws:ec2:image --value ${previous} --overwrite"
   fi
+  echo "    History: aws --region ${region} ssm get-parameter-history --name ${param}"
 else
   echo "==> Candidate AMI: ${ami}"
   echo "    Promote: aws --region ${region} ssm put-parameter --name ${param} --type String --data-type aws:ec2:image --value ${ami} --overwrite"
