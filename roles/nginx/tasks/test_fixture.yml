@@ -18,6 +18,4 @@
   import_tasks: _test_authelia_stub.yml
   vars:
     nginx_test_authelia_stub_args:
-      mode: >-
-        {{ (nginx_test_fixture_args | default({})).authelia_mode
-           | default('gate') }}
+      mode: "{{ nginx_test_fixture_args.authelia_mode }}"
