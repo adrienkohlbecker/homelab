@@ -17,7 +17,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 
 - **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See *Helper roles → systemd_unit*.
 - **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Healthchecks*.
-- **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* host_vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in `host_vars`/`group_vars` and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* host_vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
+- **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* inventory vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in inventory vars (see *Inventory layout*) and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* inventory vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Debugging prod hosts directly*.
 - **DO NOT add tautological checks to role `_verify.yml` files.** A check that only confirms a converge task wrote the requested file or value proves nothing beyond Ansible's own result. Exercise the consuming binary or service and assert observable behavior; if no meaningful functional assertion is possible, omit the check.
 
@@ -28,8 +28,8 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 | Path             | Purpose                                                                                 |
 |------------------|-----------------------------------------------------------------------------------------|
 | `roles/<r>/`     | role logic — `tasks/`, `templates/`, `files/`, `vars/` (no `handlers/`, per Hard Rules) |
-| `group_vars/`    | shared defaults — directory split (`group_vars/all/main.yml` etc.)                      |
-| `host_vars/`     | host-specific overrides                                                                  |
+| `group_vars/`    | shared, environment, physical-host, and storage-layout vars (see *Inventory layout*)    |
+| `host_vars/`     | only hosts absent from `test/inventory.ini` (e.g. `bunk`)                               |
 | `terraform/`     | DNS (Cloudflare), registrar (Gandi), Cloudflare Access, Mailgun, GitHub-repo, Nexus, GCP|
 | `packer/`        | QEMU image builds                                                                       |
 | `test/`          | ansible test harness, inventories, logs                                                 |
@@ -75,6 +75,16 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 **Where does a new role go?** Stop at the first layer whose guarantees you need: booted OS → host base; ZFS → after storage; podman/nginx-TLS → after platform (the base⇄service watershed); app for subset of hosts → service play. Keep dataset *producers* ahead of consumers.
 
+### Inventory layout
+
+`hosts.ini` (prod) and `test/inventory.ini` (qemu fixtures) share host names — the `lab`/`pug` fixtures take their prod host's identity — so vars are split by which inventory may load them:
+
+- `group_vars/all/`, `group_vars/{prod,test}.yml` — shared defaults and per-environment values.
+- `group_vars/physical_<host>.yml` — one prod host's hardware and service settings. Only `hosts.ini` defines these groups, so fixtures never load them.
+- `group_vars/storage_<host>.yml` — disk layout shared by a prod host and its fixture (pools, swap, podman device). Both inventories define the group.
+- `test/host_vars/<host>.yml` — fixture-only settings, loaded only through `test/inventory.ini`.
+- Root `host_vars/` — only hosts absent from the test inventory (`bunk`). The harness copies it beside every playbook, so a `host_vars/lab.yml` would leak prod settings into the Lab fixture; [unit_tests/test_inventory_layout.py](unit_tests/test_inventory_layout.py) rejects it.
+
 ### Role conventions
 
 **Load-bearing idioms** — these break silently if missed:
@@ -88,7 +98,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 - Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope.
 - Static fixture playbooks under `test/playbooks/` must set `tasks_from` on every `import_role`. Their dependencies are named role entrypoints, never an implicit `tasks/main.yml`; the dynamic `site.yml` driver is the exception because it deliberately exercises the role under test through its normal entrypoint.
 - For state-mutating tasks that should run once, gate with `args: creates: <sentinel>` not `changed_when: false`.
-- **Never branch a task `when:` on `inventory_hostname`** (no `inventory_hostname in ['lab','pug']`). Introduce a host_var instead — a `<svc>_enabled` flag set in the relevant `host_vars/` and read as `<svc>_enabled | default(false)` — so behaviour follows declared intent, not a hardcoded host list a new host silently misses. Play-level `hosts:` patterns in `site.yml` are the legitimate exception (that *is* ansible's host-targeting mechanism).
+- **Never branch a task `when:` on `inventory_hostname`** (no `inventory_hostname in ['lab','pug']`). Introduce a host-level var instead — a `<svc>_enabled` flag set in the host's inventory vars (see *Inventory layout*) and read as `<svc>_enabled | default(false)` — so behaviour follows declared intent, not a hardcoded host list a new host silently misses. Play-level `hosts:` patterns in `site.yml` are the legitimate exception (that *is* ansible's host-targeting mechanism).
 
 **Style:**
 
@@ -166,7 +176,7 @@ skipped import cannot uphold the result-variable contract for its callers.
 | `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` units |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
 | `zfs_dataset` | `tasks_from: dataset` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts |
-| `macvlan` | driven by `macvlan_blocks:` in host_vars | ifaces + optional podman networks |
+| `macvlan` | driven by `macvlan_blocks:` in inventory vars | ifaces + optional podman networks |
 
 ## Podman Service Conventions
 
@@ -256,8 +266,8 @@ Don't commit decrypted data; access secrets via `ansible-vault edit <path>`. Wir
 
 Two passwords, two scopes ([ansible.cfg](ansible.cfg): `vault_identity_list = prod@vault-client.sh, test@vault-client.sh`, `vault_id_match = True`).
 
-- `prod` — encrypts `group_vars/prod.yml` + prod host_vars. Local workstations only; never in CI.
-- `test` — encrypts `group_vars/test.yml` + test host_vars. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
+- `prod` — encrypts `group_vars/prod.yml` + `group_vars/physical_*.yml`. Local workstations only; never in CI.
+- `test` — encrypts `group_vars/test.yml` + `test/host_vars/`. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
 
 [vault-client.sh](vault-client.sh): lookup per id: env `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` (CI), then macOS keychain `homelab-vault-<id>`, then Linux `~/.config/homelab/vault-pass-<id>` (0400). Bootstrap: [notes/runbooks/vault_setup.md](notes/runbooks/vault_setup.md). New values: `encrypt_string --encrypt-vault-id prod` (or `test`).
 

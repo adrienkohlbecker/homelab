@@ -40,7 +40,8 @@ repo. Do not invent secret boundaries.
 - Cross-role wiring: `service_ports`, `site.yml`, and
   `roles/homepage/templates/bookmarks.yaml.j2`.
 
-Required service inputs belong in `host_vars` or `group_vars` plus an `assert`.
+Required service inputs belong in inventory vars (`group_vars/physical_<host>.yml`
+for a prod host, `test/host_vars/<host>.yml` for its fixture) plus an `assert`.
 Optional host-overridable values may live in `defaults/main.yml`.
 
 ## Podman Choices
@@ -66,8 +67,8 @@ Run the narrow role test first:
 test/testrole.py <svc>
 ```
 
-Use `--machine lab` or `--machine pug` only when the role needs a producer-side
-layout that the default `box` fixture cannot model.
+Lab is the default fixture. Add `pug:` or `minimal:` under `machines:` in
+`meta/test.yml` only when the role needs Pug's storage layout or a non-ZFS host.
 
 Before finishing, run the relevant lint target and inspect the diff for
 unnecessary role vars, pass-through inputs, missing backups, missing
