@@ -103,9 +103,7 @@
   assert:
     that:
       - samba_testparm_verbose.stdout is search('disable netbios = Yes')
-      - >-
-        samba_testparm_verbose.stdout is search('smb ports = 445') or
-        samba_testparm_verbose.stdout is search('server smb transports = 445')
+      - samba_testparm_verbose.stdout is search('(?:smb ports|server smb transports) = 445')
     fail_msg: >-
       testparm -v does not report `disable netbios = Yes` and a 445-only SMB
       transport -- the NetBIOS-retirement directives were dropped to their
