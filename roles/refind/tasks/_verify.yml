@@ -1,5 +1,38 @@
 # rEFInd reads its configuration and assets from the ESP at every boot, so the
 # on-disk files are the observable end state.
+
+- name: _verify | Load production rEFInd vars for x86
+  include_vars:
+    file: "{{ role_path }}/vars/main.yml"
+    name: _refind_x86_vars
+  vars:
+    ansible_architecture: x86_64
+
+- name: _verify | Resolve all x86 rEFInd artifact names
+  assert:
+    that:
+      - _refind_x86_vars.refind_efi_binary == 'refind_x64.efi'
+      - _refind_x86_vars.refind_fallback_binary == 'BOOTX64.EFI'
+      - _refind_x86_vars.refind_azerty_keymap_arch == 'x64'
+  vars:
+    ansible_architecture: x86_64
+
+- name: _verify | Load production rEFInd vars for ARM
+  include_vars:
+    file: "{{ role_path }}/vars/main.yml"
+    name: _refind_arm_vars
+  vars:
+    ansible_architecture: aarch64
+
+- name: _verify | Resolve all ARM rEFInd artifact names
+  assert:
+    that:
+      - _refind_arm_vars.refind_efi_binary == 'refind_aa64.efi'
+      - _refind_arm_vars.refind_fallback_binary == 'BOOTAA64.EFI'
+      - _refind_arm_vars.refind_azerty_keymap_arch == 'aa64'
+  vars:
+    ansible_architecture: aarch64
+
 - name: _verify | Render the production x86 ZBM-only config
   template:
     src: refind.conf.j2

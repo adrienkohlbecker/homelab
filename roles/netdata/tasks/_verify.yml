@@ -23,6 +23,15 @@
   assert:
     that: _netdata_defaults.netdata_expected_charts == {}
 
+- name: _verify | Render keepalived collector without a cadence override
+  template:
+    src: charts_d_keepalived_vrrp.conf.j2
+    dest: /tmp/netdata-keepalived-default.conf
+    mode: "0644"
+  vars:
+    netdata_keepalived_vrrp_update_every: "{{ undef() }}"
+  become: true
+
 - name: _verify | Render production configs for alternate collectors
   template:
     src: "{{ item.src }}"
@@ -59,6 +68,7 @@
         import sys
 
         root = pathlib.Path(sys.argv[1])
+        assert "keepalived_vrrp_update_every=" not in (root / "netdata-keepalived-default.conf").read_text()
         assert "keepalived_vrrp_update_every=11" in (root / "netdata-keepalived.conf").read_text()
         presence = (root / "netdata-presence.conf").read_text()
         assert "netdata_presence_update_every=60" in presence
@@ -81,6 +91,7 @@
     path: "/tmp/{{ item }}"
     state: absent
   loop:
+    - netdata-keepalived-default.conf
     - netdata-keepalived.conf
     - netdata-presence.conf
     - netdata-gitlab-runner-alerts.conf

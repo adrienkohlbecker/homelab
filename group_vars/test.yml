@@ -1,4 +1,5 @@
 qemu_test: true
+_role_under_test: "{{ _test_role_under_test }}"
 
 # EFI-stub fixtures stage their command line outside the role under test, so
 # role-local boot changes cannot reach the running kernel after a reboot.

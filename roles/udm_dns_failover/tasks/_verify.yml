@@ -12,6 +12,19 @@
 # MASTER — unlike the real UDM, which sits BACKUP behind them. That's the
 # point: the box test drives the VIP-claim mechanism this role exists for.
 
+- name: _verify | Load production defaults for a physical UDM
+  include_vars:
+    file: "{{ role_path }}/defaults/main.yml"
+    name: _udm_dns_failover_physical_defaults
+  vars:
+    qemu_test: false
+
+- name: _verify | Physical UDM defaults to the firmware bridge
+  assert:
+    that: _udm_dns_failover_physical_defaults.udm_dns_failover_interface == 'br0'
+  vars:
+    qemu_test: false
+
 - name: _verify | Keepalived is active and enabled
   systemd:
     name: keepalived.service

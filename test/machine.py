@@ -765,10 +765,11 @@ class Machine:
             # the inventory host we actually provisioned.
             "--limit",
             self.inventory_host,
-            # The static role dispatcher references `_role_under_test` so it
-            # stays role-agnostic on disk.
+            # The static role dispatcher consumes the internal input directly;
+            # group_vars/test.yml exposes the public fixture variable at normal
+            # inventory precedence so task-scoped checks can vary it.
             "-e",
-            f"_role_under_test={self.role}",
+            f"_test_role_under_test={self.role}",
             # Internal harness inputs map to public vars in group_vars/test.yml.
             # Keeping them indirect lets task-scoped fixtures exercise alternate
             # environments without losing to extra-vars precedence.

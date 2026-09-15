@@ -1,6 +1,21 @@
 # Exercise the issued certificate and renewal path. Netdata verifies the
 # cross-role x509check configuration on its consumer side.
 
+- name: _verify | Load production Certbot vars for a physical host
+  include_vars:
+    file: "{{ role_path }}/vars/main.yml"
+    name: _certbot_physical_vars
+  vars:
+    qemu_test: false
+
+- name: _verify | Physical hosts use the unprefixed requested domain
+  assert:
+    that:
+      - _certbot_physical_vars.certbot_test_domain_label == ''
+      - _certbot_physical_vars.certbot_requested_domain == inventory_hostname ~ '.' ~ domain
+  vars:
+    qemu_test: false
+
 - name: _verify | Verify certbot
   become: true
   block:

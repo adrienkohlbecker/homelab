@@ -91,9 +91,9 @@ def test_format_ansible_cmd_default_envelope(
     # --limit pins the static `hosts: all` playbook to the inventory host
     assert "--limit" in cmd
     assert cmd[cmd.index("--limit") + 1] == m.inventory_host
-    # _role_under_test injects the role name into the static playbooks'
-    # `import_role: name: "{{ _role_under_test }}"` references.
-    assert f"_role_under_test={m.role}" in cmd
+    # The internal input injects the immutable role name into the static
+    # dispatcher; group_vars publishes _role_under_test at normal precedence.
+    assert f"_test_role_under_test={m.role}" in cmd
 
     # Trailing positional
     assert cmd[-1] == "site.yml"

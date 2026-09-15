@@ -1,5 +1,12 @@
-- hosts: all
+- name: Run the selected role task file
+  hosts: all
+  vars:
+    # Real harness runs override this internal dispatcher input. The fallback
+    # keeps standalone syntax checks resolvable without fixing the public
+    # _role_under_test fixture variable at extra-vars precedence.
+    _test_role_under_test: apt
   tasks:
-    - import_role:
-        name: "{{ _role_under_test }}"
+    - name: Import the selected role task file
+      import_role:
+        name: "{{ _test_role_under_test }}"
         tasks_from: "{{ _role_tasks_from | default('main') }}"

@@ -2,6 +2,21 @@
 # The arm64 QEMU fixture has no hwmon chips, so live sensor charts and chip
 # limit application require hardware verification.
 
+- name: _verify | Load production defaults outside the role-under-test fixture
+  include_vars:
+    file: "{{ role_path }}/defaults/main.yml"
+    name: _lm_sensors_inactive_defaults
+  vars:
+    _role_under_test: another_role
+
+- name: _verify | Inactive fixture defaults provide no synthetic sensor inputs
+  assert:
+    that:
+      - _lm_sensors_inactive_defaults.lm_sensors_qemu_test_modules == []
+      - _lm_sensors_inactive_defaults.lm_sensors_qemu_test_config is none
+  vars:
+    _role_under_test: another_role
+
 - name: _verify | Resolve physical sensor inputs
   vars:
     qemu_test: false

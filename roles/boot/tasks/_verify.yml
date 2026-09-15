@@ -4,6 +4,33 @@
 # Reboot first so /proc/cmdline reflects the role's writes. Same pattern as
 # console/_verify.yml. The non-GRUB aarch64 box bypasses ZBM, so the command
 # line staged outside this role cannot reflect its writes yet.
+
+- name: _verify | Load production boot defaults for x86
+  include_vars:
+    file: "{{ role_path }}/defaults/main.yml"
+    name: _boot_defaults_x86
+  vars:
+    ansible_architecture: x86_64
+
+- name: _verify | Resolve the x86 rEFInd loader default
+  assert:
+    that: _boot_defaults_x86.boot_efi_entries[0].loader == '\\EFI\\refind\\refind_x64.efi'
+  vars:
+    ansible_architecture: x86_64
+
+- name: _verify | Load production boot defaults for ARM
+  include_vars:
+    file: "{{ role_path }}/defaults/main.yml"
+    name: _boot_defaults_arm
+  vars:
+    ansible_architecture: aarch64
+
+- name: _verify | Resolve the ARM rEFInd loader default
+  assert:
+    that: _boot_defaults_arm.boot_efi_entries[0].loader == '\\EFI\\refind\\refind_aa64.efi'
+  vars:
+    ansible_architecture: aarch64
+
 - name: _verify | Reboot to apply boot-chain changes
   when: qemu_boot_changes_reachable
   import_role:

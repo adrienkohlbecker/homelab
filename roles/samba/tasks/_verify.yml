@@ -13,6 +13,9 @@
     samba_shares:
       - name: fixture
         path: /srv/fixture
+      - name: read_only_fixture
+        path: /srv/read_only_fixture
+        "read only": "yes"
   diff: false
   become: true
 
@@ -22,13 +25,20 @@
       - testparm
       - --suppress-prompt
       - --parameter-name=read only
-      - --section-name=fixture
+      - "--section-name={{ item.section }}"
       - /tmp/samba-default-writable.conf
   register: _samba_default_writable
+  loop:
+    - section: fixture
+      expected: "No"
+    - section: read_only_fixture
+      expected: "Yes"
+  loop_control:
+    label: "{{ item.section }}"
   changed_when: false
   failed_when: >-
     _samba_default_writable.rc != 0 or
-    _samba_default_writable.stdout | trim != 'No'
+    _samba_default_writable.stdout | trim != item.expected
   become: true
 
 - name: _verify | Render production ZFS dependencies with repeated mounts
