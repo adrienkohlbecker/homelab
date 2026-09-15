@@ -104,14 +104,8 @@
       changed_when: false
       failed_when: netplan_verify_cancelled_object.rc == 0
 
-    - name: _verify staging failure | Stat the cancelled transaction state
+    - name: _verify staging failure | Cancelled transaction state was removed
       stat:
         path: "/run/netplan/config-{{ netplan_dbus_path | basename }}"
       register: netplan_verify_cancelled_state
-
-    - name: _verify staging failure | Cancelled transaction state was removed
-      assert:
-        that:
-          - not netplan_verify_cancelled_state.stat.exists
-        fail_msg: >-
-          Cancel left /run/netplan/config-{{ netplan_dbus_path | basename }} behind
+      failed_when: netplan_verify_cancelled_state.stat.exists
