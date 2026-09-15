@@ -106,6 +106,8 @@
 # for root provisioning and inspection. The fixture certificate is self-signed.
 - name: _verify | Data-plane checks
   become: true
+  vars:
+    minio_verify_drift_access_key: "{{ (minio_users | first).access_key }}"
   block:
 
     # Aliases are named after the access key rather than the loop index, so the
@@ -146,11 +148,11 @@
           changed_when: true
 
         - name: _verify | Drift the user assignment to admins
-          command: mcli admin policy set default admins user={{ minio_users[0].access_key }}
+          command: mcli admin policy set default admins user={{ minio_verify_drift_access_key }}
           changed_when: true
 
         - name: _verify | Drift denies access to the own bucket
-          command: mcli --insecure ls scoped_{{ minio_users[0].access_key }}/{{ minio_users[0].access_key }}
+          command: mcli --insecure ls scoped_{{ minio_verify_drift_access_key }}/{{ minio_verify_drift_access_key }}
           register: minio_verify_denied
           changed_when: false
           failed_when: minio_verify_denied.rc == 0 or 'access denied' not in minio_verify_denied.stderr | lower
@@ -159,11 +161,11 @@
           import_tasks: data.yml
 
     - name: _verify | Repaired user can list its own bucket
-      command: mcli --insecure ls scoped_{{ minio_users[0].access_key }}/{{ minio_users[0].access_key }}
+      command: mcli --insecure ls scoped_{{ minio_verify_drift_access_key }}/{{ minio_verify_drift_access_key }}
       changed_when: false
 
     - name: _verify | Repaired user does not retain admin access
-      command: mcli --insecure admin user list scoped_{{ minio_users[0].access_key }}
+      command: mcli --insecure admin user list scoped_{{ minio_verify_drift_access_key }}
       register: minio_verify_admin_denied
       changed_when: false
       failed_when: minio_verify_admin_denied.rc == 0 or 'access denied' not in minio_verify_admin_denied.stderr | lower
