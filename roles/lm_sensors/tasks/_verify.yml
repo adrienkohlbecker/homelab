@@ -2,6 +2,17 @@
 # The arm64 QEMU fixture has no hwmon chips, so live sensor charts and chip
 # limit application require hardware verification.
 
+- name: _verify | Resolve physical sensor inputs
+  vars:
+    qemu_test: false
+    lm_sensors_modules:
+      - verify_physical
+    lm_sensors_config: verify physical config
+  assert:
+    that:
+      - lm_sensors_effective_modules == ['verify_physical']
+      - lm_sensors_effective_config == 'verify physical config'
+
 - name: _verify | Read the modules-load.d file
   slurp:
     path: /etc/modules-load.d/lm_sensors.conf
