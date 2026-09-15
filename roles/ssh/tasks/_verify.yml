@@ -14,12 +14,15 @@
 - name: _verify | Verify the alternate config enables X11 forwarding
   command:
     argv:
-      - grep
-      - --fixed-strings
-      - --line-regexp
-      - X11Forwarding yes
+      - sshd
+      - -T
+      - -f
       - /tmp/ssh-hardening-x11.conf
+      - -C
+      - "user={{ operator_user }},host={{ inventory_hostname }},addr=127.0.0.1"
+  register: _ssh_x11_effective
   changed_when: false
+  failed_when: _ssh_x11_effective.stdout is not search('(?m)^x11forwarding yes$')
   become: true
 
 - name: _verify | Remove the alternate hardening config

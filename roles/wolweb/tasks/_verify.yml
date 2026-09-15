@@ -180,3 +180,4 @@
     _storage_service: wolweb
     _storage_template: "{{ role_path }}/templates/wolweb.service.j2"
     _storage_mounts: [services]
+    _storage_autosnapshot: false

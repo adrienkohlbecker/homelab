@@ -142,8 +142,8 @@
         config = pathlib.Path(sys.argv[1]).read_text()
         assert config.count("192.0.2.1") == 2
         assert config.count("2001:db8::1") == 2
-        assert "type: A" in config
-        assert "type: AAAA" in config
+        assert 'type: "A"' in config
+        assert 'type: "AAAA"' in config
       - /tmp/headscale-dual-stack.yaml
   changed_when: false
   become: true

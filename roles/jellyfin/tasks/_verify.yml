@@ -170,8 +170,10 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: jellyfin
+    _storage_group: media
     _storage_template: "{{ role_path }}/templates/jellyfin.service.j2"
     _storage_mounts: [services, scratch, media]
+    jellyfin_transcoding_backend: software
 
 - name: _verify | Render the production unit without hardware transcoding
   template:

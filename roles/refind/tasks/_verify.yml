@@ -8,6 +8,8 @@
   vars:
     ansible_architecture: x86_64
     boot_via_efi_stub: false
+    refind_zbm_cmdline_content:
+      content: "{{ 'quiet splash' | b64encode }}"
   become: true
 
 - name: _verify | Verify the x86 ZBM-only config

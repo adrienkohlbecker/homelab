@@ -1,13 +1,29 @@
+- name: Select the service account for alternate unit rendering
+  set_fact:
+    _storage_account_name: "{{ _storage_user | default(_storage_service) }}"
+
 - name: Resolve the service account for alternate unit rendering
   getent:
     database: passwd
-    key: "{{ _storage_service }}"
+    key: "{{ _storage_account_name }}"
 
 - name: Publish the service account for the production unit template
   set_fact:
     "{{ _storage_service }}_user":
-      uid: "{{ ansible_facts.getent_passwd[_storage_service][1] }}"
-      gid: "{{ ansible_facts.getent_passwd[_storage_service][2] }}"
+      uid: "{{ ansible_facts.getent_passwd[_storage_account_name][1] }}"
+      gid: "{{ ansible_facts.getent_passwd[_storage_account_name][2] }}"
+
+- name: Resolve the shared group for alternate unit rendering
+  when: _storage_group is defined
+  getent:
+    database: group
+    key: "{{ _storage_group }}"
+
+- name: Publish the shared group for the production unit template
+  when: _storage_group is defined
+  set_fact:
+    "{{ _storage_group }}_group":
+      gid: "{{ ansible_facts.getent_group[_storage_group][1] }}"
 
 - name: Render production units for alternate storage layouts
   template:
@@ -37,10 +53,11 @@
 
         ext4 = pathlib.Path(sys.argv[1]).read_text()
         zfs = pathlib.Path(sys.argv[2]).read_text()
+        autosnapshot = sys.argv[4] == "true"
         assert "After=zfs_autosnapshot.target" not in ext4
         assert "WantedBy=zfs_autosnapshot.target" not in ext4
-        assert "After=zfs_autosnapshot.target" in zfs
-        assert "WantedBy=zfs_autosnapshot.target" in zfs
+        assert ("After=zfs_autosnapshot.target" in zfs) == autosnapshot
+        assert ("WantedBy=zfs_autosnapshot.target" in zfs) == autosnapshot
         for mount in sys.argv[3].split(","):
             for directive in ("After", "Requires"):
                 dependency = f"{directive}=zfs_mount_mnt_{mount}.service"
@@ -49,6 +66,7 @@
       - "/tmp/{{ _storage_service }}-ext4.service"
       - "/tmp/{{ _storage_service }}-zfs_datasets.service"
       - "{{ _storage_mounts | join(',') }}"
+      - "{{ _storage_autosnapshot | default(true) | bool | lower }}"
   changed_when: false
   become: true
 

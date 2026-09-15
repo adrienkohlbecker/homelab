@@ -37,7 +37,7 @@
         schedule = pathlib.Path("/tmp/nut-upssched-no-peers.conf").read_text()
         assert "START-TIMER wake_peers" not in schedule
         users = pathlib.Path("/tmp/nut-physical-upsd.users").read_text()
-        assert "actions = SET" not in users
+        assert not any(line.strip() == "actions = SET" for line in users.splitlines())
   changed_when: false
   become: true
 

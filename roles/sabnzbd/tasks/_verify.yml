@@ -196,5 +196,6 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: sabnzbd
+    _storage_group: media
     _storage_template: "{{ role_path }}/templates/sabnzbd.service.j2"
     _storage_mounts: [services, scratch, media]

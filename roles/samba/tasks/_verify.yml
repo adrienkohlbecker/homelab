@@ -21,12 +21,14 @@
     argv:
       - testparm
       - --suppress-prompt
+      - --parameter-name=read only
+      - --section-name=fixture
       - /tmp/samba-default-writable.conf
   register: _samba_default_writable
   changed_when: false
   failed_when: >-
     _samba_default_writable.rc != 0 or
-    _samba_default_writable.stdout is not search('(?m)^\s*writeable = Yes$')
+    _samba_default_writable.stdout | trim != 'No'
   become: true
 
 - name: _verify | Render production ZFS dependencies with repeated mounts

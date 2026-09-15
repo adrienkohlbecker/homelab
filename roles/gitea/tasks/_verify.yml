@@ -158,6 +158,7 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: gitea
+    _storage_user: git
     _storage_template: "{{ role_path }}/templates/gitea.service.j2"
     _storage_mounts: [services]
 
