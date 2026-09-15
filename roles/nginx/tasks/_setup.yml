@@ -3,38 +3,35 @@
     name: netdata
     tasks_from: install
 
-# Disabled hosts must remove proxy files left by an earlier enablement. Seed a
-# harmless stale pair so the cleanup path and its reload run in the fixture.
-- name: _setup | Create static proxy fixture directories
+# Seed stale proxy files so disabled hosts exercise cleanup and reload.
+- name: _setup | Seed the disabled static proxy fixture
   when: not (nginx_static_proxies_enabled | bool)
-  file:
-    path: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/nginx/sites-available
-    - /etc/nginx/sites-enabled
   become: true
+  block:
+    - name: _setup | Create static proxy fixture directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /etc/nginx/sites-available
+        - /etc/nginx/sites-enabled
 
-- name: _setup | Seed a stale static proxy config on disabled hosts
-  when: not (nginx_static_proxies_enabled | bool)
-  copy:
-    dest: /etc/nginx/sites-available/marantz
-    content: "# stale static proxy fixture\n"
-    owner: root
-    group: root
-    mode: "0640"
-  become: true
+    - name: _setup | Seed a stale static proxy config
+      copy:
+        dest: /etc/nginx/sites-available/marantz
+        content: "# stale static proxy fixture\n"
+        owner: root
+        group: root
+        mode: "0640"
 
-- name: _setup | Enable the stale static proxy fixture
-  when: not (nginx_static_proxies_enabled | bool)
-  file:
-    src: /etc/nginx/sites-available/marantz
-    dest: /etc/nginx/sites-enabled/marantz
-    state: link
-  become: true
+    - name: _setup | Enable the stale static proxy fixture
+      file:
+        src: /etc/nginx/sites-available/marantz
+        dest: /etc/nginx/sites-enabled/marantz
+        state: link
 
 # Lay snakeoil at the letsencrypt paths nginx.conf.j2 references before the
 # role validates and starts nginx.
