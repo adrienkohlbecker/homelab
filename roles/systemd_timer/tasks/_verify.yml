@@ -44,8 +44,9 @@
   user:
     name: _verify_runas
     system: true
-    create_home: false
+    create_home: true
     shell: /usr/sbin/nologin
+  register: _systemd_timer_runas_user
   become: true
 
 - name: _verify | Remove stale combined fixture files
@@ -222,50 +223,6 @@
       - _systemd_timer_failed_stamp.stat.mtime | int >= _systemd_timer_failed_started_at.stdout | int
     fail_msg: The combined fixture did not preserve its failure or refresh its trigger stamp.
 
-- name: _verify | Remove the combined fixture timer
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: _verify_timer
-
-- name: _verify | Read removed unit statuses  # noqa: command-instead-of-module
-  command: systemctl status _verify_timer.{{ item }}
-  loop:
-    - service
-    - timer
-  register: _systemd_timer_timer_statuses
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Assert fixture removal
-  assert:
-    that:
-      - _systemd_timer_timer_statuses.results | map(attribute='rc') | select('equalto', 0) | list | length == 0
-
-- name: _verify | Cleanup combined fixture
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /tmp/_verify_timer.out
-    - /tmp/_verify_timer.fail
-  become: true
-
-- name: _verify | Remove the run_as fixture user
-  user:
-    name: _verify_runas
-    state: absent
-  become: true
-
-# Contracts 3+4 exercise the netdata charts.d collector. netdata installs
-# from repo.netdata.cloud's multi-arch 2.x series (see roles/netdata), so
-# netdata-plugin-chartsd resolves on arm64 as well as x86_64 -- no arch gate.
-- name: _verify | Monitored-timer + overdue netdata contracts
-  import_tasks: _verify_monitored.yml
-
 # ============================================================
 # Contract 6: removal is scope-isolated. System- and user-scope managers keep
 # their units, trigger stamps and monitoring metadata in separate trees, so a
@@ -273,15 +230,6 @@
 # deliberately share a name -- that is the only case where the scopes can be
 # confused.
 # ============================================================
-- name: _verify | Create a lingered user for the scope-isolation fixture
-  user:
-    name: _verify_timeruser
-    system: true
-    create_home: true
-    shell: /usr/sbin/nologin
-  register: _systemd_timer_scope_user
-  become: true
-
 # A user manager must be lingered before user-scope units can be enabled.
 - name: _verify | Enable linger for the scope-isolation fixture
   import_role:
@@ -289,19 +237,8 @@
     tasks_from: linger
   vars:
     linger_args:
-      name: _verify_timeruser
-      uid: "{{ _systemd_timer_scope_user.uid }}"
-
-- name: _verify | Install the system-scope half of the scope-isolation fixture
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: _verify_scope
-      description: System-scope half of the scope-isolation fixture
-      exec_start: /bin/true
-      on_calendar: "*-*-* *:00:00"
+      name: _verify_runas
+      uid: "{{ _systemd_timer_runas_user.uid }}"
 
 - name: _verify | Install the user-scope half of the scope-isolation fixture
   import_role:
@@ -309,41 +246,29 @@
     tasks_from: install
   vars:
     systemd_timer_args:
-      name: _verify_scope
+      name: _verify_timer
       description: User-scope half of the scope-isolation fixture
       exec_start: /bin/true
       on_calendar: "*-*-* *:00:00"
-      user: _verify_timeruser
-
-# Seed both trigger stamps rather than waiting for an hourly timer to fire:
-# the contract under test is which stamp removal deletes, not how systemd
-# writes them.
-- name: _verify | Seed the system-scope trigger stamp
-  file:
-    path: /var/lib/systemd/timers/stamp-_verify_scope.timer
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+      user: _verify_runas
 
 # The user manager creates this tree on its first persistent trigger, which
 # an hourly fixture timer never reaches during the test.
 - name: _verify | Create the user-scope stamp directory
   file:
-    path: "{{ _systemd_timer_scope_user.home }}/.local/share/systemd/timers"
+    path: "{{ _systemd_timer_runas_user.home }}/.local/share/systemd/timers"
     state: directory
-    owner: _verify_timeruser
-    group: _verify_timeruser
+    owner: _verify_runas
+    group: _verify_runas
     mode: "0755"
   become: true
 
 - name: _verify | Seed the user-scope trigger stamp
   file:
-    path: "{{ _systemd_timer_scope_user.home }}/.local/share/systemd/timers/stamp-_verify_scope.timer"
+    path: "{{ _systemd_timer_runas_user.home }}/.local/share/systemd/timers/stamp-_verify_timer.timer"
     state: touch
-    owner: _verify_timeruser
-    group: _verify_timeruser
+    owner: _verify_runas
+    group: _verify_runas
     mode: "0644"
   become: true
 
@@ -353,26 +278,26 @@
     tasks_from: remove
   vars:
     systemd_timer_args:
-      name: _verify_scope
-      user: _verify_timeruser
+      name: _verify_timer
+      user: _verify_runas
 
 - name: _verify | Stat scope-isolation artifacts after the user-scope removal
   stat:
     path: "{{ item.path }}"
   loop:
-    - path: /etc/systemd/user/_verify_scope.timer
+    - path: /etc/systemd/user/_verify_timer.timer
       exists: false
-    - path: /etc/systemd/user/_verify_scope.service
+    - path: /etc/systemd/user/_verify_timer.service
       exists: false
-    - path: "{{ _systemd_timer_scope_user.home }}/.local/share/systemd/timers/stamp-_verify_scope.timer"
+    - path: "{{ _systemd_timer_runas_user.home }}/.local/share/systemd/timers/stamp-_verify_timer.timer"
       exists: false
-    - path: /etc/systemd/system/_verify_scope.timer
+    - path: /etc/systemd/system/_verify_timer.timer
       exists: true
-    - path: /etc/systemd/system/_verify_scope.service
+    - path: /etc/systemd/system/_verify_timer.service
       exists: true
-    - path: /var/lib/systemd/timers/stamp-_verify_scope.timer
+    - path: /var/lib/systemd/timers/stamp-_verify_timer.timer
       exists: true
-    - path: /etc/netdata/charts.d/systemd_timers.d/_verify_scope.conf
+    - path: /etc/netdata/charts.d/systemd_timers.d/_verify_timer.conf
       exists: true
   loop_control:
     label: "{{ item.path }}"
@@ -397,7 +322,22 @@
     tasks_from: remove
   vars:
     systemd_timer_args:
-      name: _verify_scope
+      name: _verify_timer
+
+- name: _verify | Read removed unit statuses  # noqa: command-instead-of-module
+  command: systemctl status _verify_timer.{{ item }}
+  loop:
+    - service
+    - timer
+  register: _systemd_timer_timer_statuses
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Assert fixture removal
+  assert:
+    that:
+      - _systemd_timer_timer_statuses.results | map(attribute='rc') | select('equalto', 0) | list | length == 0
 
 - name: _verify | Disable linger for the scope-isolation fixture
   import_role:
@@ -405,12 +345,12 @@
     tasks_from: disable
   vars:
     linger_args:
-      name: _verify_timeruser
-      uid: "{{ _systemd_timer_scope_user.uid }}"
+      name: _verify_runas
+      uid: "{{ _systemd_timer_runas_user.uid }}"
 
 # systemd is finished with the account by now -- user@<uid>.service is
 # inactive and loginctl reports no session -- but ansible's own become_user
-# context is not: mitogen keeps a persistent `sudo -u _verify_timeruser
+# context is not: mitogen keeps a persistent `sudo -u _verify_runas
 # python3` child alive per become_user, and userdel refuses while any process
 # belongs to the account. Drop the host connection so those children exit.
 - name: _verify | Drop the become_user context holding the fixture account
@@ -418,7 +358,22 @@
 
 - name: _verify | Remove the scope-isolation fixture user
   user:
-    name: _verify_timeruser
+    name: _verify_runas
     state: absent
     remove: true
   become: true
+
+- name: _verify | Cleanup combined fixture
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/_verify_timer.out
+    - /tmp/_verify_timer.fail
+  become: true
+
+# Contracts 3+4 exercise the netdata charts.d collector. netdata installs
+# from repo.netdata.cloud's multi-arch 2.x series (see roles/netdata), so
+# netdata-plugin-chartsd resolves on arm64 as well as x86_64 -- no arch gate.
+- name: _verify | Monitored-timer + overdue netdata contracts
+  import_tasks: _verify_monitored.yml
