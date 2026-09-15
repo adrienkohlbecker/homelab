@@ -1,4 +1,5 @@
 netdata_intelgpu_enabled: false
+netdata_packer_process_group_enabled: false
 netdata_keepalived_lost_master_alert: >-
   {{ (dns_keepalived_priority | default(0) | int)
      == (dns_keepalived_priorities.values() | max) }}

@@ -54,8 +54,6 @@ etc_hosts_entries:
   # VIP load and lets fox resolve Headscale OIDC over wg0 before its tailnet exists.
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
 jellyfin_transcoding_backend: none
-netdata_packer_process_group_enabled: false
-podman_storage_raid: false
 minio_root_user: minio
 ssh_public_keys_additional: ""
 # Whether cloud-init owns bootstrap and networking on this host. The cleanup

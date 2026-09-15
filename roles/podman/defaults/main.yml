@@ -1,2 +1,3 @@
 ---
 podman_operator_prune_enabled: false
+podman_storage_raid: false
