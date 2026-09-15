@@ -25,8 +25,8 @@ if [ -n "${CODEX_WORKTREE_PATH:-}" ] && ! git -C "$wt" symbolic-ref --quiet HEAD
 
   codex_branch="codex/$(basename "$(dirname "$wt")")"
   codex_branch_ref="refs/heads/$codex_branch"
-  if git -C "$repo" show-ref --verify --quiet "$codex_branch_ref"; then
-    [ "$(git -C "$repo" rev-parse "$codex_branch_ref")" = "$(git -C "$wt" rev-parse HEAD)" ] || {
+  if codex_branch_head=$(git -C "$repo" rev-parse --verify "$codex_branch_ref" 2>/dev/null); then
+    [ "$codex_branch_head" = "$(git -C "$wt" rev-parse HEAD)" ] || {
       echo "worktree:populate: branch '$codex_branch' already points at another commit" >&2
       exit 1
     }
