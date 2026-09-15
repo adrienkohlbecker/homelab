@@ -726,7 +726,7 @@ menuentry "Ubuntu (ZBM)" {
     # known-good into the backup slot) stays a SOMEDAY item.
     submenuentry "Show ZFSBootMenu (backup)" {
       loader /EFI/ZBM/VMLINUZ-BACKUP.EFI
-      options "{{ _zbm_cmdline }} {{ _console_cmdline }} zbm.show"
+      options "{{ _zbm_launch_cmdline }} zbm.show"
     }
 }
 
