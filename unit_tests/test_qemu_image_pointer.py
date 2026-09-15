@@ -13,6 +13,7 @@ side-effect-free: both modules do their work under ``if __name__ == "__main__"``
 import argparse
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -299,6 +300,80 @@ class TestRetention:
             ("bucket", "b2/manifest", "retained", "region"),
             ("bucket", "b2/bundle", "retained", "region"),
         ]
+
+
+class TestConditionalWrites:
+    @staticmethod
+    def _fake_aws(
+        monkeypatch: pytest.MonkeyPatch, *, returncode: int = 0, stderr: str = "", stdout: str = ""
+    ) -> list[list[str]]:
+        calls: list[list[str]] = []
+
+        def run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append([*argv, Path(argv[argv.index("--body") + 1]).read_text()] if "--body" in argv else argv)
+            if "get-object" in argv and returncode == 0:
+                Path(argv[-1]).write_text('{"build_id": "old"}\n')
+            return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr=stderr)
+
+        monkeypatch.setattr(upload.subprocess, "run", run)
+        return calls
+
+    def test_pointer_replacement_must_match_the_etag_it_read(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = self._fake_aws(monkeypatch)
+        current = upload.CurrentPointer(body="{}", etag='"abc"')
+
+        upload.write_pointer("bucket", "noble/box/promoted.json", "new body\n", "region", current)
+
+        assert calls[0][calls[0].index("--if-match") + 1] == '"abc"'
+        assert "--if-none-match" not in calls[0]
+        assert calls[0][-1] == "new body\n"
+
+    def test_first_pointer_requires_the_key_to_be_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = self._fake_aws(monkeypatch)
+
+        upload.write_pointer("bucket", "noble/box/promoted.json", "body\n", "region", None)
+
+        assert calls[0][calls[0].index("--if-none-match") + 1] == "*"
+
+    @pytest.mark.parametrize("error", ["PreconditionFailed", "ConditionalRequestConflict"])
+    def test_concurrent_promotion_exits_cleanly(self, monkeypatch: pytest.MonkeyPatch, error: str) -> None:
+        self._fake_aws(monkeypatch, returncode=254, stderr=f"An error occurred ({error}) when calling PutObject")
+
+        with pytest.raises(SystemExit, match="changed during promotion"):
+            upload.write_pointer("bucket", "noble/box/promoted.json", "body\n", "region", None)
+
+    def test_existing_manifest_is_never_overwritten(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        calls = self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (PreconditionFailed)")
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text("{}\n")
+
+        with pytest.raises(SystemExit, match="refusing to overwrite existing object"):
+            upload.publish_manifest("bucket", manifest, "noble/box/b1/manifest.json", "region")
+        assert calls[0][calls[0].index("--if-none-match") + 1] == "*"
+
+    def test_other_write_failures_propagate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (AccessDenied)")
+
+        with pytest.raises(subprocess.CalledProcessError):
+            upload.write_pointer("bucket", "noble/box/promoted.json", "body\n", "region", None)
+
+    def test_reads_pointer_body_with_its_etag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._fake_aws(monkeypatch, stdout='{"ETag": "\\"abc\\""}')
+
+        assert upload.read_pointer("bucket", "noble/box/promoted.json", "region") == upload.CurrentPointer(
+            body='{"build_id": "old"}\n', etag='"abc"'
+        )
+
+    def test_missing_pointer_reads_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (NoSuchKey)")
+
+        assert upload.read_pointer("bucket", "noble/box/promoted.json", "region") is None
+
+    def test_unreadable_pointer_is_not_treated_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (AccessDenied)")
+
+        with pytest.raises(subprocess.CalledProcessError):
+            upload.read_pointer("bucket", "noble/box/promoted.json", "region")
 
 
 class TestResolveImage:

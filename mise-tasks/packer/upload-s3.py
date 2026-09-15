@@ -52,7 +52,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 S3_CHECKSUM_ALGORITHM = "SHA256"
@@ -221,6 +221,73 @@ def assert_new_object(bucket: str, key: str, region: str) -> None:
         sys.exit(f"refusing to overwrite existing object: s3://{bucket}/{key}")
 
 
+class CurrentPointer(NamedTuple):
+    """The promoted pointer as read, with the ETag a replacement must match."""
+
+    body: str
+    etag: str
+
+
+def conditional_put(
+    bucket: str,
+    path: Path,
+    key: str,
+    region: str,
+    *,
+    content_type: str,
+    precondition: list[str],
+    conflict: str,
+) -> None:
+    """Upload *path* only if the S3 write precondition holds.
+
+    S3 rejects a failed ``If-Match``/``If-None-Match`` with 412 (or 409 when
+    another conditional write to the key is in flight); both exit with
+    *conflict* instead of a traceback, and any other failure propagates.
+    """
+    result = subprocess.run(
+        aws_argv(
+            region,
+            "s3api",
+            "put-object",
+            "--bucket",
+            bucket,
+            "--key",
+            key,
+            "--body",
+            str(path),
+            "--content-type",
+            content_type,
+            "--checksum-algorithm",
+            S3_CHECKSUM_ALGORITHM,
+            *precondition,
+        ),
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode == 0:
+        return
+    if "PreconditionFailed" in result.stderr or "ConditionalRequestConflict" in result.stderr:
+        sys.exit(conflict)
+    sys.stderr.write(result.stderr)
+    raise subprocess.CalledProcessError(result.returncode, result.args)
+
+
+def publish_manifest(bucket: str, path: Path, key: str, region: str) -> None:
+    """Create the build's manifest, the object that makes a build visible to hydration."""
+    print(f"==> uploading s3://{bucket}/{key}")
+    conditional_put(
+        bucket,
+        path,
+        key,
+        region,
+        content_type="application/json",
+        precondition=["--if-none-match", "*"],
+        conflict=f"refusing to overwrite existing object: s3://{bucket}/{key}",
+    )
+
+
 def upload_file(bucket: str, path: Path, key: str, region: str, content_type: str | None = None) -> None:
     args = [
         "s3",
@@ -307,25 +374,44 @@ def tag_builds(
             tag_object(bucket, key, state, region)
 
 
-def write_pointer(bucket: str, key: str, body: str, region: str) -> None:
+def read_pointer(bucket: str, key: str, region: str) -> CurrentPointer | None:
+    """Return the current pointer and its ETag, or None when it does not exist.
+
+    Any other read failure propagates: promotion compares against this ETag,
+    so an unreadable pointer must not be mistaken for an absent one.
+    """
+    with tempfile.TemporaryDirectory(prefix=".pointer-") as tmp:
+        body_path = Path(tmp) / POINTER_NAME
+        result = subprocess.run(
+            aws_argv(region, "s3api", "get-object", "--bucket", bucket, "--key", key, str(body_path)),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            if "NoSuchKey" in result.stderr:
+                return None
+            sys.stderr.write(result.stderr)
+            raise subprocess.CalledProcessError(result.returncode, result.args)
+        return CurrentPointer(body=body_path.read_text(), etag=json.loads(result.stdout)["ETag"])
+
+
+def write_pointer(bucket: str, key: str, body: str, region: str, current: CurrentPointer | None) -> None:
+    """Replace the pointer only if it is still *current* (or still absent)."""
     print(f"==> writing pointer s3://{bucket}/{key}")
-    run(
-        [
-            *aws_argv(
-                region,
-                "s3",
-                "cp",
-                "-",
-                f"s3://{bucket}/{key}",
-                "--only-show-errors",
-                "--content-type",
-                "application/json",
-            ),
-            "--checksum-algorithm",
-            S3_CHECKSUM_ALGORITHM,
-        ],
-        input=body,
-    )
+    precondition = ["--if-match", current.etag] if current is not None else ["--if-none-match", "*"]
+    with tempfile.TemporaryDirectory(prefix=".pointer-") as tmp:
+        body_path = Path(tmp) / POINTER_NAME
+        body_path.write_text(body)
+        conditional_put(
+            bucket,
+            body_path,
+            key,
+            region,
+            content_type="application/json",
+            precondition=precondition,
+            conflict=f"promoted pointer s3://{bucket}/{key} changed during promotion; re-run to promote against it",
+        )
 
 
 def pointer_body(args: argparse.Namespace, retained_build_ids: list[str]) -> str:
@@ -374,7 +460,9 @@ def main() -> int:
         sys.exit("required tool not found on PATH: aws")
     tar = find_tar()
 
-    # Immutability: never overwrite a published build.
+    # Immutability: never overwrite a published build. These checks fail fast
+    # before a multi-GB bundle upload; the manifest's conditional create below
+    # is what actually guarantees it.
     assert_new_object(args.bucket, bundle_key, args.region)
     assert_new_object(args.bucket, manifest_key, args.region)
 
@@ -392,10 +480,11 @@ def main() -> int:
 
         upload_file(args.bucket, bundle, bundle_key, args.region, "application/zstd")
         tag_object(args.bucket, bundle_key, CANDIDATE_STATE, args.region)
-        upload_file(args.bucket, manifest_path, manifest_key, args.region, "application/json")
+        publish_manifest(args.bucket, manifest_path, manifest_key, args.region)
         tag_object(args.bucket, manifest_key, CANDIDATE_STATE, args.region)
 
     if args.promote:
+        prev = read_pointer(args.bucket, pointer_key, args.region)
         builds = list_build_objects(args.bucket, args.machine, args.ubuntu, args.region)
         retained = select_retained_builds(builds, args.build_id)
         tag_builds(
@@ -405,7 +494,7 @@ def main() -> int:
             args.region,
             state=RETAINED_STATE,
         )
-        write_pointer(args.bucket, pointer_key, pointer_body(args, retained), args.region)
+        write_pointer(args.bucket, pointer_key, pointer_body(args, retained), args.region, prev)
         expirable = [build_id for build_id in builds if build_id not in retained]
         tag_builds(
             args.bucket,
