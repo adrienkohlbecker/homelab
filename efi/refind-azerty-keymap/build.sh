@@ -50,15 +50,6 @@ sha256_file() {
   fi
 }
 
-pad_for_refind() {
-  local file=$1
-
-  # rEFInd 0.14.2 rejects EFI images shorter than its 4096-byte probe read.
-  if [ "$(wc -c <"$file")" -lt 4096 ]; then
-    truncate -s 4096 "$file"
-  fi
-}
-
 build_arch() {
   local arch=$1
   local target boot_name driver_name out_dir red_zone_flags=()
@@ -131,7 +122,10 @@ build_arch() {
     "/out:${out_dir}/${driver_name}" \
     "${out_dir}/homelab_fr_azerty.obj"
 
-  pad_for_refind "${out_dir}/${driver_name}"
+  # rEFInd 0.14.2 rejects EFI images shorter than its 4096-byte probe read.
+  if [ "$(wc -c <"${out_dir}/${driver_name}")" -lt 4096 ]; then
+    truncate -s 4096 "${out_dir}/${driver_name}"
+  fi
   sha256_file "${out_dir}/${boot_name}"
   sha256_file "${out_dir}/${driver_name}"
 
