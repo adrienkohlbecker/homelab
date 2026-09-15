@@ -5,35 +5,8 @@
 # notes/ups_shutdown_ladder.md); the wake_peers hooks cover the hosts an
 # outage strands shut-down-but-still-powered.
 
-# upsmon.conf/upssched.conf carry no validate: -- NUT ships no offline config
-# checker (the daemons only parse at startup) and the whitespace-directive
-# format isn't INI, so there's no real parser to invent. nut_notify below
-# validates with `bash -n` since it is a script.
-- name: Configure nut upsmon.conf  # noqa: require-validate
-  when: not (ansible_check_mode and nut_apt.changed)
-  template:
-    src: upsmon.conf.j2
-    dest: /etc/nut/upsmon.conf
-    backup: true
-    owner: root
-    group: nut
-    mode: "0640"
-  become: true
-  register: nut_upsmon_conf
-  tags:
-    - nut
-
-- name: Configure nut upssched.conf  # noqa: require-validate
-  when: not (ansible_check_mode and nut_apt.changed)
-  template:
-    src: upssched.conf.j2
-    dest: /etc/nut/upssched.conf
-    backup: true
-    owner: root
-    group: nut
-    mode: "0640"
-  become: true
-  register: nut_upssched_conf
+- name: Configure NUT monitor files
+  import_tasks: monitor_config.yml
   tags:
     - nut
 
@@ -95,15 +68,7 @@
 # event.
 # nut_notify is never a trigger -- upssched exec's it fresh per event, so a
 # script-only change needs nothing.
-- name: Enable NUT monitor service
-  when: not (ansible_check_mode and nut_apt.changed)
-  systemd:
-    # nut-client.service is a symlink to nut-monitor.service (the upsmon unit).
-    name: nut-client.service
-    enabled: true
-    state: >-
-      {{ ('restarted' if nut_upsmon_conf.changed or nut_upssched_conf.changed else 'started')
-         if not qemu_test else omit }}
-  become: true
+- name: Configure NUT monitor service lifecycle
+  import_tasks: monitor_state.yml
   tags:
     - nut

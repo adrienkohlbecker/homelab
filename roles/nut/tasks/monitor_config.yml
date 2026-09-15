@@ -1,0 +1,30 @@
+# NUT ships no offline checker for these whitespace-directive files: the
+# daemons only parse them at startup, so there is no real validate command.
+- name: monitor_config | Configure nut upsmon.conf  # noqa: require-validate
+  when: not (ansible_check_mode and nut_apt.changed)
+  template:
+    src: upsmon.conf.j2
+    dest: /etc/nut/upsmon.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  diff: false
+  become: true
+  register: nut_upsmon_conf
+  tags:
+    - nut
+
+- name: monitor_config | Configure nut upssched.conf  # noqa: require-validate
+  when: not (ansible_check_mode and nut_apt.changed)
+  template:
+    src: upssched.conf.j2
+    dest: /etc/nut/upssched.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  become: true
+  register: nut_upssched_conf
+  tags:
+    - nut

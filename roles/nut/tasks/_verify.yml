@@ -46,6 +46,78 @@
   changed_when: false
   become: true
 
+- name: _verify | Exercise changed physical monitor config in check mode
+  import_tasks: monitor_config.yml
+  vars:
+    qemu_test: false
+    nut_wake_peers: []
+  check_mode: true
+
+- name: _verify | Exercise physical monitor restart through production tasks
+  import_tasks: monitor_state.yml
+  vars:
+    qemu_test: false
+    nut_wake_peers: []
+  check_mode: true
+
+- name: _verify | Preserve the active QEMU monitor configs
+  copy:
+    src: "/etc/nut/{{ item }}"
+    dest: "/tmp/nut-{{ item }}.qemu"
+    remote_src: true
+    mode: "0600"
+  loop:
+    - upsmon.conf
+    - upssched.conf
+  diff: false
+  become: true
+
+- name: _verify | Exercise unchanged physical monitor config
+  block:
+    - name: _verify | Apply physical monitor config through production tasks
+      import_tasks: monitor_config.yml
+      vars:
+        qemu_test: false
+        nut_wake_peers: []
+
+    - name: _verify | Recheck physical monitor config through production tasks
+      import_tasks: monitor_config.yml
+      vars:
+        qemu_test: false
+        nut_wake_peers: []
+      check_mode: true
+
+    - name: _verify | Exercise physical monitor startup through production tasks
+      import_tasks: monitor_state.yml
+      vars:
+        qemu_test: false
+        nut_wake_peers: []
+      check_mode: true
+
+  always:
+    - name: _verify | Restore active QEMU monitor configs
+      copy:
+        src: "/tmp/nut-{{ item }}.qemu"
+        dest: "/etc/nut/{{ item }}"
+        remote_src: true
+        owner: root
+        group: nut
+        mode: "0640"
+      loop:
+        - upsmon.conf
+        - upssched.conf
+      diff: false
+      become: true
+
+    - name: _verify | Remove QEMU monitor config backups
+      file:
+        path: "/tmp/nut-{{ item }}.qemu"
+        state: absent
+      loop:
+        - upsmon.conf
+        - upssched.conf
+      become: true
+
 - name: _verify | Remove alternate NUT configs
   file:
     path: "/tmp/{{ item }}"

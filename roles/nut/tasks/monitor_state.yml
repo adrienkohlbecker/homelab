@@ -1,0 +1,12 @@
+- name: monitor_state | Enable NUT monitor service
+  when: not (ansible_check_mode and nut_apt.changed)
+  systemd:
+    # nut-client.service is a symlink to nut-monitor.service (the upsmon unit).
+    name: nut-client.service
+    enabled: true
+    state: >-
+      {{ ('restarted' if nut_upsmon_conf.changed or nut_upssched_conf.changed else 'started')
+         if not qemu_test else omit }}
+  become: true
+  tags:
+    - nut
