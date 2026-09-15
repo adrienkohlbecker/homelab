@@ -113,59 +113,43 @@
   register: boot_cmdline_zbm_absent
   become: true
 
-- name: cmdline | Record ZFSBootMenu fragment readiness
-  set_fact:
-    boot_cmdline_zbm_fragments_ready: >-
-      {{ not (ansible_check_mode and
-              (boot_cmdline_zbm_directory.changed | default(false)
-               or boot_cmdline_zbm_present.changed | default(false)
-               or boot_cmdline_zbm_absent.changed | default(false))) }}
-
-- name: cmdline | Get fragments
+- name: cmdline | Assemble ZFSBootMenu command line
   when:
     - not grub_bootloader
-    - boot_cmdline_zbm_fragments_ready
-  find:
-    paths: /etc/zfsbootmenu
-    file_type: file
-    patterns: '^[a-z][a-z0-9_-]*$'
-    use_regex: true
-  register: boot_cmdline_files
+    - >-
+      not (ansible_check_mode and
+           (boot_cmdline_zbm_directory.changed | default(false)
+            or boot_cmdline_zbm_present.changed | default(false)
+            or boot_cmdline_zbm_absent.changed | default(false)))
   become: true
+  block:
+    - name: cmdline | Get fragments
+      find:
+        paths: /etc/zfsbootmenu
+        file_type: file
+        patterns: '^[a-z][a-z0-9_-]*$'
+        use_regex: true
+      register: boot_cmdline_files
 
-- name: cmdline | Read fragments
-  when:
-    - not grub_bootloader
-    - boot_cmdline_zbm_fragments_ready
-  slurp:
-    src: "{{ item }}"
-  loop: "{{ boot_cmdline_files.files | default([]) | sort(attribute='path') | map(attribute='path') }}"
-  register: boot_cmdline_slurped
-  become: true
+    - name: cmdline | Read fragments
+      slurp:
+        src: "{{ item }}"
+      loop: "{{ boot_cmdline_files.files | sort(attribute='path') | map(attribute='path') }}"
+      register: boot_cmdline_slurped
 
-# No zfs_root gate: ZFSBootMenu boots from rpool by definition, so every
-# `not grub_bootloader` host has rpool/ROOT. The invariant holds in the fixtures
-# too -- `minimal` is the only zfs_root: false machine and it is also the only
-# grub_bootloader: true one. A future non-GRUB ext4 host would break it and this
-# would set a property on a pool that does not exist.
-- name: cmdline | Assemble commandline
-  when:
-    - not grub_bootloader
-    - boot_cmdline_zbm_fragments_ready
-  set_fact:
-    _boot_assembled_cmdline: "{% for f in boot_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
+    - name: cmdline | Join fragments
+      set_fact:
+        _boot_assembled_cmdline: "{% for f in boot_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
 
-- name: cmdline | Set commandline
-  when:
-    - not grub_bootloader
-    - boot_cmdline_zbm_fragments_ready
-  zfs:
-    name: rpool/ROOT
-    state: present
-    extra_zfs_properties:
-      'org.zfsbootmenu:commandline': "{{ _boot_assembled_cmdline }}"
-  become: true
-  register: boot_cmdline_properties
+    # No zfs_root gate: ZFSBootMenu implies an rpool/ROOT dataset. Minimal is
+    # the only non-ZFS fixture and uses GRUB.
+    - name: cmdline | Set commandline
+      zfs:
+        name: rpool/ROOT
+        state: present
+        extra_zfs_properties:
+          'org.zfsbootmenu:commandline': "{{ _boot_assembled_cmdline }}"
+      register: boot_cmdline_properties
 
 - name: cmdline | Ask to reboot ({{ boot_cmdline_args.name }})
   when: >-
