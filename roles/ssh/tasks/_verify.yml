@@ -56,9 +56,10 @@
     - name: _verify | Import the role (must fail on the divergence guard)
       import_role:
         name: ssh
-    - name: _verify | Unreachable when the guard fires
-      set_fact:
-        ssh_verify_guard_tripped: false
+
+    - name: _verify | Divergence guard must halt the converge
+      fail:
+        msg: The role accepted a divergent persisted host identity.
   rescue:
     - name: _verify | The expected divergence guard failed
       assert:
@@ -68,10 +69,6 @@
         fail_msg: >-
           The nested role failed in {{ ansible_failed_task.name | default('<unknown>') }},
           not in the expected host-identity divergence guard.
-
-    - name: _verify | Record the guard firing
-      set_fact:
-        ssh_verify_guard_tripped: true
 
   always:
     - name: _verify | Repair the persisted host identity
@@ -83,13 +80,3 @@
         group: root
         mode: preserve
       become: true
-
-- name: _verify | The divergence guard halted the converge
-  when: zfs_root
-  assert:
-    that:
-      - ssh_verify_guard_tripped
-    fail_msg: >-
-      re-running the role with a divergent persisted host identity did not
-      fail -- a rebuilt host would silently overwrite the old identity and
-      strand every known_hosts pin.
