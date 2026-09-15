@@ -29,8 +29,6 @@
           | from_json
           | selectattr('name', 'eq', influxdb_bucket_args.bucket)
           | first }}
-    _influxdb_org_id: >-
-      {{ _influxdb_bucket_record.orgID }}
     _influxdb_bucket_id: "{{ _influxdb_bucket_record.id }}"
   block:
     - name: bucket | Query user {{ influxdb_bucket_args.user }}
@@ -160,7 +158,7 @@
         ((_influxdb_bucket_auth_query.stdout | from_json)
          | selectattr('permissions', 'defined')
          | selectattr('permissions', 'contains',
-             'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
+             'write:orgs/' ~ _influxdb_bucket_record.orgID ~ '/buckets/' ~ _influxdb_bucket_id)
          | list | length) == 0
       command:
         argv:
