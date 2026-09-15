@@ -1,7 +1,9 @@
 """Per-architecture data driving the QEMU test harness.
 
-Each supported host arch has a frozen profile consumed by machine.py. Adding
-an arch means adding one profile constant plus a platform.machine() mapping.
+Each supported host arch has a frozen profile consumed by machine.py. Guest
+facts the Packer fixture build also needs come from data/architectures.yml.
+Adding an arch means adding its data entry, one profile constant, and a
+platform.machine() mapping.
 """
 
 from __future__ import annotations
@@ -11,6 +13,11 @@ import os
 import platform
 from pathlib import Path
 
+import yaml
+
+_ARCHITECTURES = yaml.safe_load((Path(__file__).resolve().parents[1] / "data" / "architectures.yml").read_text())
+_X86_64_GUEST = _ARCHITECTURES["x86_64"]["guest"]
+_AARCH64_GUEST = _ARCHITECTURES["aarch64"]["guest"]
 _AARCH64_FIRMWARE_ENV = "HOMELAB_AARCH64_FIRMWARE_DIR"
 _AARCH64_FIRMWARE_DIR = Path(__file__).resolve().parent / "firmware"
 
@@ -66,9 +73,9 @@ class ArchProfile:
 X86_64 = ArchProfile(
     name="x86_64",
     qemu_binary="qemu-system-x86_64",
-    machine_type="q35",
-    net_device="virtio-net",
-    cloud_image_suffix="amd64",
+    machine_type=_X86_64_GUEST["machine_type"],
+    net_device=_X86_64_GUEST["net_device"],
+    cloud_image_suffix=_X86_64_GUEST["cloud_image_suffix"],
     serial_console_token="console=ttyS",
     serial_console_default="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200",
     keep_vm_extra_devices=("-device", "usb-tablet"),
@@ -92,11 +99,9 @@ X86_64 = ArchProfile(
 AARCH64 = ArchProfile(
     name="aarch64",
     qemu_binary="qemu-system-aarch64",
-    machine_type="virt",
-    # Ubuntu's ARM qemu package omits the optional virtio EFI ROM. The guest
-    # firmware discovers PCI devices directly, so no ROM is needed.
-    net_device="virtio-net,romfile=",
-    cloud_image_suffix="arm64",
+    machine_type=_AARCH64_GUEST["machine_type"],
+    net_device=_AARCH64_GUEST["net_device"],
+    cloud_image_suffix=_AARCH64_GUEST["cloud_image_suffix"],
     serial_console_token="console=ttyAMA",
     serial_console_default="console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200",
     keep_vm_extra_devices=(
@@ -117,8 +122,8 @@ AARCH64 = ArchProfile(
     required_firmware=FirmwareRequirement(
         default_dir=_AARCH64_FIRMWARE_DIR,
         directory_env=_AARCH64_FIRMWARE_ENV,
-        code_name="edk2-aarch64-code.fd",
-        vars_name="edk2-aarch64-vars.fd",
+        code_name=_AARCH64_GUEST["firmware"]["code_name"],
+        vars_name=_AARCH64_GUEST["firmware"]["vars_name"],
     ),
 )
 

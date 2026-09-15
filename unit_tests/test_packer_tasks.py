@@ -380,10 +380,7 @@ def test_qemu_build_separates_host_os_from_architecture() -> None:
     assert 'data "external-raw" "host_os"' in template
     assert re.search(r"accelerator\s+= local\.host_os_cfg\.accelerator", template)
     assert re.search(r"format\s+= local\.host_os_cfg\.image_format", template)
-    assert re.search(r"net_device\s+= local\.arch_cfg\.net_device", template)
-    assert 'cloud_image_suffix = "arm64"' in template
-    assert 'net_device  = "virtio-net,romfile="' in template
-    assert 'upstream_archive   = "http://ports.ubuntu.com/ubuntu-ports"' in template
+    assert re.search(r'upstream_archive\s+= "http://ports\.ubuntu\.com/ubuntu-ports"', template)
 
 
 def test_qemu_build_passes_shared_aarch64_firmware_override() -> None:
@@ -391,8 +388,6 @@ def test_qemu_build_passes_shared_aarch64_firmware_override() -> None:
     build = BUILD_SH.read_text()
 
     assert 'variable "aarch64_firmware_dir"' in template
-    assert 'code = "${local.aarch64_firmware_dir}/edk2-aarch64-code.fd"' in template
-    assert 'vars = "${local.aarch64_firmware_dir}/edk2-aarch64-vars.fd"' in template
     assert '"HOMELAB_AARCH64_FIRMWARE_DIR=${local.aarch64_firmware_dir}"' in template
     assert 'aarch64_firmware_dir="${HOMELAB_AARCH64_FIRMWARE_DIR:-${repo_root}/test/firmware}"' in build
     assert '-var "aarch64_firmware_dir=${aarch64_firmware_dir}"' in build

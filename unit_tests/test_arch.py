@@ -27,6 +27,17 @@ class TestProfiles:
     def test_aarch64_has_more_keep_vm_devices(self) -> None:
         assert len(arch.AARCH64.keep_vm_extra_devices) > len(arch.X86_64.keep_vm_extra_devices)
 
+    def test_aarch64_requires_the_pinned_firmware_pair(self) -> None:
+        requirement = arch.AARCH64.required_firmware
+        assert requirement is not None
+        assert (requirement.code_name, requirement.vars_name) == ("edk2-aarch64-code.fd", "edk2-aarch64-vars.fd")
+        assert arch.AARCH64.net_device == "virtio-net,romfile="
+
+    def test_every_shared_architecture_has_a_harness_profile(self) -> None:
+        # Packer and the CI stores accept any architecture in the data file; the
+        # harness must be able to boot each one.
+        assert set(arch._ARCHITECTURES) == {profile.name for profile in arch._BY_PLATFORM_MACHINE.values()}
+
     def test_profiles_are_frozen(self) -> None:
         with pytest.raises(AttributeError):
             arch.X86_64.name = "changed"  # type: ignore[misc]

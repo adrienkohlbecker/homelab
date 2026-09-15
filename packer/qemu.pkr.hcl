@@ -71,34 +71,30 @@ locals {
   ubuntu_release = local.ubuntu_catalog.releases[local.ubuntu_name]
   ubuntu_version = local.ubuntu_release.version
 
-  # Architecture controls the guest machine, artifacts, and mirrors. Host OS
+  # Guest machine, NIC, cloud-image token, and pinned firmware names are shared
+  # with the qemu harness.
+  architectures = yamldecode(file("${path.cwd}/data/architectures.yml"))
+  guest         = local.architectures[local.arch].guest
+
+  # Architecture also controls the build-only guest devices and mirrors. Host OS
   # independently controls the accelerator and image format.
   #
   # Field notes:
   # - qemuargs: aarch64's `virt` machine ships no default graphics or
   #   input devices so VNC would be blank without these. q35 already
   #   has std VGA + PS/2 keyboard, so the x86_64 list is empty.
-  # - cloud_image_suffix: filename token in the upstream cloud-image
-  #   tarball naming.
   # - upstream/nexus_archive/security: APT mirror URLs
   nexus_base = "http://nexus.lab.fahm.fr/repository"
   arch_table = {
     x86_64 = {
-      machine_type       = "q35"
-      net_device         = "virtio-net"
-      zbm_version        = local.versions.zfsbootmenu_release.x86_64.version
-      qemuargs           = []
-      cloud_image_suffix = "amd64"
-      upstream_archive   = "http://archive.ubuntu.com/ubuntu"
-      upstream_security  = "http://security.ubuntu.com/ubuntu"
-      nexus_archive      = "${local.nexus_base}/ubuntu-archive"
-      nexus_security     = "${local.nexus_base}/ubuntu-security"
+      zbm_version       = local.versions.zfsbootmenu_release.x86_64.version
+      qemuargs          = []
+      upstream_archive  = "http://archive.ubuntu.com/ubuntu"
+      upstream_security = "http://security.ubuntu.com/ubuntu"
+      nexus_archive     = "${local.nexus_base}/ubuntu-archive"
+      nexus_security    = "${local.nexus_base}/ubuntu-security"
     }
     aarch64 = {
-      machine_type = "virt"
-      # Ubuntu's ARM qemu package does not ship efi-virtio.rom. UEFI already
-      # discovers the virtio NIC, so suppress its optional PCI ROM lookup.
-      net_device  = "virtio-net,romfile="
       zbm_version = local.versions.zfsbootmenu_release.aarch64.version
       qemuargs = [
         ["-device", "virtio-gpu-pci"],
@@ -106,11 +102,10 @@ locals {
         ["-device", "usb-kbd"],
         ["-device", "usb-tablet"],
       ]
-      cloud_image_suffix = "arm64"
-      upstream_archive   = "http://ports.ubuntu.com/ubuntu-ports"
-      upstream_security  = "http://ports.ubuntu.com/ubuntu-ports"
-      nexus_archive      = "${local.nexus_base}/ubuntu-ports"
-      nexus_security     = "${local.nexus_base}/ubuntu-ports"
+      upstream_archive  = "http://ports.ubuntu.com/ubuntu-ports"
+      upstream_security = "http://ports.ubuntu.com/ubuntu-ports"
+      nexus_archive     = "${local.nexus_base}/ubuntu-ports"
+      nexus_security    = "${local.nexus_base}/ubuntu-ports"
     }
   }
   arch_cfg = local.arch_table[local.arch]
@@ -139,8 +134,8 @@ locals {
       vars = "/usr/share/OVMF/OVMF_VARS_4M.fd"
     }
     aarch64 = {
-      code = "${local.aarch64_firmware_dir}/edk2-aarch64-code.fd"
-      vars = "${local.aarch64_firmware_dir}/edk2-aarch64-vars.fd"
+      code = "${local.aarch64_firmware_dir}/${local.architectures.aarch64.guest.firmware.code_name}"
+      vars = "${local.aarch64_firmware_dir}/${local.architectures.aarch64.guest.firmware.vars_name}"
     }
   }
   firmware_cfg = local.firmware_table[local.arch]
@@ -231,7 +226,7 @@ locals {
   nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/${local.cloud_release_path}"
   cloud_base          = var.upstream_mirrors ? local.upstream_cloud_base : local.nexus_cloud_base
   cloud_checksum      = "file:${local.cloud_base}/SHA256SUMS"
-  cloud_url           = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.arch_cfg.cloud_image_suffix}.img"
+  cloud_url           = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.guest.cloud_image_suffix}.img"
 
   # Apt mirrors. By default the build pulls through the lab Nexus proxy
   # (`group_vars/all/main.yml` uses the same `repository/ubuntu-*` layout); set
@@ -280,9 +275,9 @@ source "qemu" "ubuntu" {
     })
     "meta-data" = ""
   }
-  machine_type = local.arch_cfg.machine_type
+  machine_type = local.guest.machine_type
   memory       = 4096
-  net_device   = local.arch_cfg.net_device
+  net_device   = local.guest.net_device
   # Shim over the arch's real emulator (which it resolves from PATH): on a
   # host with passt + qemu's `-netdev stream` (the lab CI shell runner) it
   # backs the build-VM NIC with passt instead of libslirp, whose UDP drops
