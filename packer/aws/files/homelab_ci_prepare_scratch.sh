@@ -44,7 +44,7 @@ if ! mountpoint -q "$mountpoint"; then
   )
   if [ "${#devs[@]}" -eq 0 ]; then
     root_source=$(findmnt -n -o SOURCE /)
-    root_disk=$(lsblk -sdpno NAME,TYPE "$root_source" | awk '$2 == "disk" { print $1; exit }')
+    root_disk=$(lsblk -srdpno NAME,TYPE "$root_source" | awk '$2 == "disk" { print $1; exit }')
     mapfile -t ebs_devs < <(
       lsblk -dpno NAME,TYPE,MODEL | awk '$2 == "disk" && /Elastic Block Store/ { print $1 }'
     )

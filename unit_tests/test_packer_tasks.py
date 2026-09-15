@@ -442,7 +442,7 @@ def test_qemu_host_scratch_uses_one_non_root_ebs_disk() -> None:
     script = QEMU_HOST_SCRATCH_SH.read_text()
 
     assert "findmnt -n -o SOURCE /" in script
-    assert 'lsblk -sdpno NAME,TYPE "$root_source"' in script
+    assert 'lsblk -srdpno NAME,TYPE "$root_source"' in script
     assert "/Elastic Block Store/" in script
     assert 'if [ "$dev" != "$root_disk" ]' in script
     assert "multiple non-root EBS disks are ambiguous" in script
