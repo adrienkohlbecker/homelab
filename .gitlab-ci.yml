@@ -213,6 +213,9 @@ qemu_host_ami:
   before_script:
     - mise run ci:bootstrap
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-$CI_JOB_ID"
+  # lab's shell runner keeps checkouts; do not leave the bake token behind.
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
 
 "qemu_image:box":
   extends: .qemu_image

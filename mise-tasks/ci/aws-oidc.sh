@@ -43,9 +43,13 @@ if [ -z "${GITLAB_OIDC_TOKEN:-}" ]; then
   exit 1
 fi
 
+# Job after_script runs in a fresh shell, so cleanup needs this fixed checkout
+# path rather than a mktemp name. Recreate it under umask 077: shell runners
+# are shared, and a redirect into an existing file would keep its old mode.
 export AWS_WEB_IDENTITY_TOKEN_FILE
 AWS_WEB_IDENTITY_TOKEN_FILE="$(pwd -P)/.aws_web_identity_token"
-printf '%s' "$GITLAB_OIDC_TOKEN" >"$AWS_WEB_IDENTITY_TOKEN_FILE"
+rm -f "$AWS_WEB_IDENTITY_TOKEN_FILE"
+(umask 077 && printf '%s' "$GITLAB_OIDC_TOKEN" >"$AWS_WEB_IDENTITY_TOKEN_FILE")
 export AWS_ROLE_ARN="$role_arn"
 export AWS_ROLE_SESSION_NAME="$session_name"
 

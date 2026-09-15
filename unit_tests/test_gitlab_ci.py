@@ -17,6 +17,8 @@ def test_child_pipeline_forwards_pipeline_variables() -> None:
 
 def test_lab_qemu_image_is_published_for_supported_releases() -> None:
     assert PIPELINE[".qemu_image"]["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
+    # lab's persistent shell runner must not keep the bake role's token.
+    assert PIPELINE[".qemu_image"]["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
     assert PIPELINE["qemu_image:lab"] == {
         "extends": ".qemu_image",
         "rules": [{"if": '$CI_COMMIT_REF_PROTECTED == "true"', "when": "manual", "allow_failure": True}],
