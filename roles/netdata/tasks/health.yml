@@ -18,17 +18,14 @@
 # Accepts `condition` to gate the whole call. Health changes hot-load through
 # `netdatacli reload-health`; unlike a go.d config, there is no stock
 # health.d/<dest> worth seeding before the overwrite.
-- name: health | Ensure netdata directory exists
+- name: health | Ensure alert directory exists
   when: netdata_args.condition | default(true)
   file:
-    dest: "{{ item }}"
+    dest: /etc/netdata/health.d
     state: directory
     owner: root
     group: root
     mode: "0755"
-  loop:
-    - /etc/netdata/
-    - /etc/netdata/health.d/
   register: netdata_health_directories
   become: true
 
