@@ -1,13 +1,13 @@
 # QEMU has no GPU, so create the render-group/device shape consumed by Jellyfin.
-# The phantom device has no driver bound: it exercises Ansible and
-# container wiring, not runtime codec acceleration.
+# The phantom device has no driver bound: it exercises Ansible and container
+# wiring, not runtime codec acceleration.
 - name: fake_render_device | Create render group
   group:
     name: render
     system: true
   become: true
   tags:
-    - media
+    - jellyfin
 
 - name: fake_render_device | Create fake renderD128 char device
   command: systemd-tmpfiles --create -
@@ -18,4 +18,4 @@
     creates: /dev/dri/renderD128
   become: true
   tags:
-    - media
+    - jellyfin

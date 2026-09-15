@@ -20,6 +20,15 @@
   tags:
     - jellyfin
 
+# QEMU has no GPU, so reproduce the render-device shape consumed below.
+- name: Create the QEMU render-device fixture
+  when:
+    - qemu_test
+    - jellyfin_transcoding_backend == 'intel_qsv'
+  import_tasks: fake_render_device.yml
+  tags:
+    - jellyfin
+
 # Use the package-owned render GID so --group-add matches the GPU device.
 - name: Lookup render group gid (HW transcoding hosts only)
   getent:
