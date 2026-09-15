@@ -17,9 +17,8 @@
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
 #
-# Exposes apt_source_<name>_changed (true when the repo or signing key changed,
-# or when a fresh check-mode run cannot configure the repo yet) so callers can
-# gate dependent installs out of check mode.
+# Exposes apt_source_<name>_changed so callers can gate dependent installs until
+# the repository and signing key are ready.
 # The apt role publishes apt_deb822_available=false when a fresh check-mode run
 # can only predict installation of deb822_repository's Python dependency.
 
@@ -89,4 +88,4 @@
     "apt_source_{{ apt_source_args.name }}_changed": >-
       {{ apt_source_repo is changed
          or apt_source_key is changed
-         or not (apt_deb822_available | default(true)) }}
+         or apt_source_repo is skipped }}
