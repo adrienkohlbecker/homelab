@@ -10,3 +10,10 @@ machines:
   lab:
 ubuntu:
   - resolute
+skip:
+  "minimal:resolute": >-
+    Box covers the release-divergent install path; Minimal Noble covers
+    root-filesystem storage.
+  "lab:resolute": >-
+    Box covers the release-divergent install path; Lab Noble covers mdadm
+    storage and operator pruning.

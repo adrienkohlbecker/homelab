@@ -10,10 +10,12 @@
       name: "{{ ansible_user_id }}"
       uid: "{{ ansible_user_uid }}"
 
-# Full fixtures prestart the API daemon to exercise restart; Minimal covers the
-# fresh-install path.
+# Box Noble prestarts the API daemon to exercise the existing-service restart.
 - name: _setup | Prepare the running-service restart exercise
-  when: not (qemu_test_minimal | default(false))
+  when:
+    - not qemu_test_minimal
+    - not podman_storage_raid
+    - ansible_distribution_release == 'noble'
   block:
     - name: _setup | Install the podman runtime before the restart exercise
       import_tasks: install.yml

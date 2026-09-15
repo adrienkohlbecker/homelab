@@ -1193,7 +1193,6 @@ class TestEmitGitlab:
             "nginx:lab",
             "nginx:lab:resolute",
             "podman:lab",
-            "podman:lab:resolute",
             "swap:lab",
             "zfs:lab",
         }

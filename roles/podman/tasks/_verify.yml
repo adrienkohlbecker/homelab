@@ -235,9 +235,12 @@
   changed_when: false
   failed_when: "'--log-level=warn' not in (podman_service_unit.status.Environment | default(''))"
 
-# Full fixtures prestart the daemon, so live argv proves more than daemon-reload.
+# Box Noble prestarts the daemon, so live argv proves more than daemon-reload.
 - name: _verify | The running podman.service was restarted onto the drop-in
-  when: not qemu_test_minimal
+  when:
+    - not qemu_test_minimal
+    - not podman_storage_raid
+    - ansible_distribution_release == 'noble'
   command: ps -o args= -p {{ podman_service_unit.status.MainPID }}
   register: podman_service_args
   changed_when: false
