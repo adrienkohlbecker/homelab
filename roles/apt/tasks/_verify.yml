@@ -46,17 +46,11 @@
         mode: "0600"
       become: true
 
-    - name: _verify | Write expected SHA-256 manifest
-      copy:
-        content: "46095a89c3c66bc71e59294085e4bee2c94d242929b6d1f65cfa4345c09d9dc5  probe\n"
-        dest: "{{ _apt_verify_coreutils_dir.path }}/SHA256SUMS"
-        mode: "0600"
-      become: true
-
     - name: _verify | Verify SHA-256 manifest
-      command: sha256sum -c SHA256SUMS
+      command: sha256sum -c -
       args:
         chdir: "{{ _apt_verify_coreutils_dir.path }}"
+        stdin: "46095a89c3c66bc71e59294085e4bee2c94d242929b6d1f65cfa4345c09d9dc5  probe"
       changed_when: false
       become: true
 
