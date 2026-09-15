@@ -6,3 +6,7 @@ machines:
   minimal:
 ubuntu:
   - resolute
+skip:
+  "minimal:resolute": >-
+    Box covers the Resolute-only iptables removal; Minimal covers first-install
+    and disabled optional policies on Noble.
