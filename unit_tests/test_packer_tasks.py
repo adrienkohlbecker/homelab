@@ -656,7 +656,7 @@ def test_qemu_host_scratch_uses_every_instance_store_device_in_raid0() -> None:
     script = QEMU_HOST_SCRATCH_SH.read_text()
 
     assert "mapfile -t devs" in script
-    assert "lsblk -dn -o NAME,MODEL" in script
+    assert "lsblk -dn -o PATH,MODEL" in script
     assert "'/Instance Storage/" in script
     assert "--level=0" in script
     assert '--raid-devices="${#devs[@]}" "${devs[@]}"' in script

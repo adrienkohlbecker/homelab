@@ -40,7 +40,7 @@ fi
 
 if ! mountpoint -q "$mountpoint"; then
   mapfile -t devs < <(
-    lsblk -dn -o NAME,MODEL | awk '/Instance Storage/ { print "/dev/" $1 }'
+    lsblk -dn -o PATH,MODEL | awk '/Instance Storage/ { print $1 }'
   )
   if [ "${#devs[@]}" -eq 0 ]; then
     root_source=$(findmnt -n -o SOURCE /)
@@ -66,7 +66,9 @@ if ! mountpoint -q "$mountpoint"; then
     else
       target="${devs[0]}"
     fi
-    mkfs.ext4 -F -L homelab_ci_scratch "$target"
+    # EC2 hands out instance store already trimmed; a whole-device discard only
+    # delays the readiness directories the fleeting health check waits on.
+    mkfs.ext4 -F -E nodiscard -L homelab_ci_scratch "$target"
     mkdir -p "$mountpoint"
     mount -o noatime "$target" "$mountpoint"
   else
