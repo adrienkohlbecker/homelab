@@ -69,18 +69,15 @@
       changed_when: true
       become: true
 
-    - name: _verify | Read installed directory ownership and mode
+    - name: _verify | Install preserves requested ownership and mode
       stat:
         path: "{{ _apt_verify_coreutils_dir.path }}/installed"
       register: _apt_verify_installed_dir
+      failed_when: >-
+        _apt_verify_installed_dir.stat.pw_name != 'root'
+        or _apt_verify_installed_dir.stat.gr_name != 'root'
+        or _apt_verify_installed_dir.stat.mode != '0750'
       become: true
-
-    - name: _verify | Install preserves requested ownership and mode
-      assert:
-        that:
-          - _apt_verify_installed_dir.stat.pw_name == 'root'
-          - _apt_verify_installed_dir.stat.gr_name == 'root'
-          - _apt_verify_installed_dir.stat.mode == '0750'
 
     # GNU timeout may die with its process group (-9) or reap the child (137).
     - name: _verify | Exercise timeout TERM-to-KILL escalation
