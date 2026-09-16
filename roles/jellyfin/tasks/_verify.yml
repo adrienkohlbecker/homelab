@@ -173,7 +173,6 @@
     _storage_group: media
     _storage_template: "{{ role_path }}/templates/jellyfin.service.j2"
     _storage_mounts: [ services, scratch, media ]
-    jellyfin_transcoding_backend: software
 
 - name: _verify | Render the production unit without hardware transcoding
   template:
@@ -181,7 +180,7 @@
     dest: /tmp/jellyfin-software.service
     mode: "0644"
   vars:
-    jellyfin_transcoding_backend: software
+    jellyfin_intel_qsv_enabled: false
     zfs_root: false
     zfs_has_services_mount: false
     zfs_has_scratch_mount: false
