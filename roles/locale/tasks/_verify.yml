@@ -1,3 +1,33 @@
+# Exercise the production repair path after the normal idempotence pass has
+# already covered an unchanged locale file.
+- name: _verify | Remove any existing reboot marker
+  file:
+    path: /var/run/reboot-required
+    state: absent
+  become: true
+
+- name: _verify | Drift the default locale
+  copy:
+    content: "LANG=C.UTF-8\n"
+    dest: /etc/locale.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Reconcile the locale through the production tasks
+  import_tasks: main.yml
+
+- name: _verify | Inspect the reboot marker
+  stat:
+    path: /var/run/reboot-required
+  register: locale_verify_reboot_marker
+
+- name: _verify | Locale repair requested a reboot
+  assert:
+    that: locale_verify_reboot_marker.stat.exists
+
 # Load the file PAM reads, without inherited locale overrides masking it.
 # An unavailable locale can return zero, so reject warnings and non-UTF-8 output.
 - name: _verify | Configured default is unmasked UTF-8
