@@ -29,6 +29,6 @@ aarch64:
       vars_name: edk2-aarch64-vars.fd
   ci:
     aws_region: eu-central-1
-    image_bucket: homelab-ci-arm-images-eu-central-1
+    image_bucket: homelab-ci-images
     ami_name_prefix: homelab-ci-qemu-host-aarch64
     ami_parameter: /homelab-ci/ami/qemu-host/aarch64/{ubuntu}

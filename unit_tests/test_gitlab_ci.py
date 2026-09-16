@@ -82,9 +82,10 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     ]
 
 
-def test_bake_role_covers_both_qemu_image_buckets() -> None:
+def test_bake_role_uses_shared_qemu_image_bucket() -> None:
     terraform = (ROOT / "terraform" / "aws_ci.tf").read_text()
 
     assert '"aws:RequestedRegion" = local.ci_aws_region' in terraform
-    assert "aws_s3_bucket.ci_qemu_arm_images.arn" in terraform
-    assert '"${aws_s3_bucket.ci_qemu_arm_images.arn}/*"' in terraform
+    assert "aws_s3_bucket.ci_qemu_images.arn" in terraform
+    assert '"${aws_s3_bucket.ci_qemu_images.arn}/*"' in terraform
+    assert "ci_qemu_arm_images" not in terraform

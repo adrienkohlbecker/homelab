@@ -15,8 +15,8 @@ The aws_qemu cells populate their qemu harness images from the S3 bundles
 selected by a pointer object, or by an explicit immutable build id when deriving
 one image from another:
 
-    s3://<bucket>/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
-    s3://<bucket>/<ubuntu>/<machine>/<build-id>/{manifest.json,disks.tar.zst}
+    s3://<bucket>/<arch-prefix>/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
+    s3://<bucket>/<arch-prefix>/<ubuntu>/<machine>/<build-id>/{manifest.json,disks.tar.zst}
 
 The lab target does not call this: lab bakes write the artifacts into lab's
 local /mnt/scratch/homelab_ci and its cells boot them in place.
@@ -55,6 +55,7 @@ from qemu_image_store import (
     VALID_MACHINES,
     ManifestFile,
     host_architecture,
+    image_prefix,
     image_store,
     manifest_bundle,
     manifest_files,
@@ -157,7 +158,7 @@ def validated_source_sha(document: dict[str, Any], args: argparse.Namespace, lab
 def resolve_image(args: argparse.Namespace) -> ImageSelection:
     if args.build_id:
         return ImageSelection(build_id=args.build_id, source_sha=None)
-    key = f"{args.ubuntu}/{args.machine}/{POINTER_NAME}"
+    key = f"{image_prefix(args.architecture, args.ubuntu, args.machine)}/{POINTER_NAME}"
     uri = f"s3://{args.bucket}/{key}"
     body = output([*aws_base(args), "s3", "cp", uri, "-"])
     if not body:
@@ -392,7 +393,7 @@ def main() -> int:
             print(f"==> {target} already hydrated for {selection.build_id}")
             return 0
 
-        prefix = f"{args.ubuntu}/{args.machine}/{selection.build_id}"
+        prefix = f"{image_prefix(args.architecture, args.ubuntu, args.machine)}/{selection.build_id}"
         print(f"==> hydrating {target} from s3://{args.bucket}/{prefix}/")
         with tempfile.TemporaryDirectory(prefix=f".hydrate-{args.ubuntu}-{args.machine}-", dir=root) as tmp:
             tmpdir = Path(tmp)

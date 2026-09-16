@@ -15,11 +15,11 @@
 """Upload qemu packer artifacts to the nested-CI S3 bundle layout.
 
 The nested-qemu runner design uses S3 as the source of truth for qemu fixture
-images for the aws_qemu target. Each architecture has its own regional bucket,
-selected from data/architectures.yml:
+images for the aws_qemu target. Both architectures use one regional bucket,
+with separate key prefixes:
 
-    s3://<bucket>/<ubuntu>/<machine>/<build-id>/manifest.json
-    s3://<bucket>/<ubuntu>/<machine>/<build-id>/disks.tar.zst
+    s3://<bucket>/<arch-prefix>/<ubuntu>/<machine>/<build-id>/manifest.json
+    s3://<bucket>/<arch-prefix>/<ubuntu>/<machine>/<build-id>/disks.tar.zst
 
 The tarball contains the packer-ubuntu-N.{raw,qcow2} disks plus efivars.fd,
 because the qemu harness copies efivars.fd from the same artifact directory
@@ -75,6 +75,7 @@ from qemu_image_store import (  # noqa: E402
     VALID_MACHINES,
     find_tar,
     host_architecture,
+    image_prefix,
     image_store,
     output,
     run,
@@ -120,7 +121,7 @@ def validate_target(args: argparse.Namespace) -> None:
 
     Qemu fixtures are built natively, so the upload host's architecture is the
     artifact's. Hydration trusts the recorded label, and the label also selects
-    which architecture's bucket receives the bundle.
+    the S3 key prefix.
     """
     host = host_architecture()
     if args.architecture != host:
@@ -351,9 +352,9 @@ def tag_object(bucket: str, key: str, state: str, region: str) -> None:
     )
 
 
-def list_build_objects(bucket: str, machine: str, ubuntu: str, region: str) -> dict[str, dict[str, Any]]:
+def list_build_objects(bucket: str, prefix: str, region: str) -> dict[str, dict[str, Any]]:
     """Return objects grouped by immutable build id under one image prefix."""
-    prefix = f"{ubuntu}/{machine}/"
+    prefix = f"{prefix}/"
     response = json.loads(
         output(
             aws_argv(
@@ -469,10 +470,11 @@ def main() -> int:
         return 0
     root = artifact_dir(args)
     disks, efivars = collect_artifact_files(root)
-    s3_prefix = f"{args.ubuntu}/{args.machine}/{args.build_id}"
+    image_key = image_prefix(args.architecture, args.ubuntu, args.machine)
+    s3_prefix = f"{image_key}/{args.build_id}"
     bundle_key = f"{s3_prefix}/{BUNDLE_NAME}"
     manifest_key = f"{s3_prefix}/{MANIFEST_NAME}"
-    pointer_key = f"{args.ubuntu}/{args.machine}/{POINTER_NAME}"
+    pointer_key = f"{image_key}/{POINTER_NAME}"
 
     print(f"artifact: {root}")
     print(f"target:   s3://{args.bucket}/{s3_prefix}/")
@@ -509,7 +511,7 @@ def main() -> int:
 
     if args.promote:
         prev = read_pointer(args.bucket, pointer_key, args.region)
-        builds = list_build_objects(args.bucket, args.machine, args.ubuntu, args.region)
+        builds = list_build_objects(args.bucket, image_key, args.region)
         retained = select_retained_builds(builds, args.build_id)
         tag_builds(
             args.bucket,

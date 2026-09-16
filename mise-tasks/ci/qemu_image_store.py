@@ -23,7 +23,7 @@ VALID_ARCHITECTURES = set(ARCHITECTURES)
 
 
 class ImageStore(NamedTuple):
-    """The regional S3 bucket that holds one architecture's image bundles."""
+    """The regional S3 bucket that holds QEMU image bundles."""
 
     bucket: str
     region: str
@@ -46,6 +46,12 @@ class ManifestFile(NamedTuple):
 def image_store(architecture: str) -> ImageStore:
     ci = ARCHITECTURES[architecture]["ci"]
     return ImageStore(bucket=ci["image_bucket"], region=ci["aws_region"])
+
+
+def image_prefix(architecture: str, ubuntu: str, machine: str) -> str:
+    """Keep each architecture's pointers and builds under its own prefix."""
+    prefix = {"x86_64": "x86", "aarch64": "aarch64"}[architecture]
+    return f"{prefix}/{ubuntu}/{machine}"
 
 
 def host_architecture() -> str:

@@ -16,13 +16,15 @@ locals {
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
   # re-registered username could recreate the project and mint valid tokens.
-  ci_gitlab_project             = "akohlbecker/homelab"
-  ci_account_id                 = "000390721279"
-  ci_qemu_image_bucket_name     = local.ci_architectures.x86_64.ci.image_bucket
-  ci_qemu_arm_image_bucket_name = local.ci_architectures.aarch64.ci.image_bucket
+  ci_gitlab_project         = "akohlbecker/homelab"
+  ci_account_id             = "000390721279"
+  ci_qemu_image_bucket_name = local.ci_architectures.x86_64.ci.image_bucket
   # Removing a release from test/matrix.py does not enumerate its S3 prefix.
   # Add its codename here so lifecycle explicitly retires every remaining object.
-  ci_qemu_retired_releases       = toset([])
+  ci_qemu_retired_releases = toset([])
+  ci_qemu_retired_prefixes = toset(flatten([
+    for release in local.ci_qemu_retired_releases : [for architecture in ["x86", "aarch64"] : "${architecture}/${release}/"]
+  ]))
   ci_qemu_host_ami_parameter     = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", "noble")
   ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", "noble")
   ci_qemu_arm_pool = {
@@ -73,20 +75,6 @@ locals {
       Effect   = "Allow"
       Action   = "s3:GetObject"
       Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
-    },
-  ]
-  ci_qemu_arm_image_read_statements = [
-    {
-      Sid      = "LocateArmQemuImages"
-      Effect   = "Allow"
-      Action   = "s3:GetBucketLocation"
-      Resource = aws_s3_bucket.ci_qemu_arm_images.arn
-    },
-    {
-      Sid      = "ReadArmQemuImages"
-      Effect   = "Allow"
-      Action   = "s3:GetObject"
-      Resource = "${aws_s3_bucket.ci_qemu_arm_images.arn}/*"
     },
   ]
   ci_ecr_registries = {
@@ -153,8 +141,9 @@ variable "ci_ecr_gitlab_access_token" {
 
 # ─── QEMU image bundle bucket ────────────────────────────────────────────────
 # Source of truth for nested-qemu cell images. Builds publish immutable
-# <ubuntu>/<machine>/<build-id>/ prefixes containing manifest.json and the
-# compressed disk bundle; a <ubuntu>/<machine>/promoted.json pointer object in
+# <arch-prefix>/<ubuntu>/<machine>/<build-id>/ prefixes containing
+# manifest.json and the compressed disk bundle; a
+# <arch-prefix>/<ubuntu>/<machine>/promoted.json pointer object in
 # the bucket points consumers at the current build.
 
 resource "aws_s3_bucket" "ci_qemu_images" {
@@ -239,14 +228,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_images" {
   }
 
   dynamic "rule" {
-    for_each = local.ci_qemu_retired_releases
+    for_each = local.ci_qemu_retired_prefixes
 
     content {
-      id     = "expire-retired-${rule.value}"
+      id     = "expire-retired-${replace(trimsuffix(rule.value, "/"), "/", "-")}"
       status = "Enabled"
 
       filter {
-        prefix = "${rule.value}/"
+        prefix = rule.value
       }
 
       expiration {
@@ -298,158 +287,6 @@ resource "aws_s3_bucket_policy" "ci_qemu_images" {
         Resource = [
           aws_s3_bucket.ci_qemu_images.arn,
           "${aws_s3_bucket.ci_qemu_images.arn}/*",
-        ]
-        Condition = {
-          StringNotEquals = { "aws:PrincipalAccount" = local.ci_account_id }
-        }
-      },
-    ]
-  })
-}
-
-# ARM and x86 bundles have separate promotion pointers and retention policies.
-resource "aws_s3_bucket" "ci_qemu_arm_images" {
-  bucket = local.ci_qemu_arm_image_bucket_name
-
-  tags = {
-    Name         = local.ci_qemu_arm_image_bucket_name
-    architecture = "aarch64"
-    role         = "ci"
-    purpose      = "qemu-images"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "ci_qemu_arm_images" {
-  bucket = aws_s3_bucket.ci_qemu_arm_images.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_ownership_controls" "ci_qemu_arm_images" {
-  bucket = aws_s3_bucket.ci_qemu_arm_images.id
-
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
-}
-
-resource "aws_s3_bucket_versioning" "ci_qemu_arm_images" {
-  bucket = aws_s3_bucket.ci_qemu_arm_images.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_arm_images" {
-  bucket = aws_s3_bucket.ci_qemu_arm_images.id
-
-  rule {
-    id     = "abort-incomplete-uploads"
-    status = "Enabled"
-
-    filter {}
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 1
-    }
-  }
-
-  rule {
-    id     = "expire-abandoned-qemu-builds"
-    status = "Enabled"
-
-    filter {
-      tag {
-        key   = "qemu_image_state"
-        value = "candidate"
-      }
-    }
-
-    expiration {
-      days = 7
-    }
-  }
-
-  rule {
-    id     = "expire-superseded-qemu-builds"
-    status = "Enabled"
-
-    filter {
-      tag {
-        key   = "qemu_image_state"
-        value = "expirable"
-      }
-    }
-
-    expiration {
-      days = 7
-    }
-  }
-
-  dynamic "rule" {
-    for_each = local.ci_qemu_retired_releases
-
-    content {
-      id     = "expire-retired-${rule.value}"
-      status = "Enabled"
-
-      filter {
-        prefix = "${rule.value}/"
-      }
-
-      expiration {
-        days = 1
-      }
-    }
-  }
-
-  rule {
-    id     = "prune-old-versions"
-    status = "Enabled"
-
-    filter {}
-
-    expiration {
-      expired_object_delete_marker = true
-    }
-
-    noncurrent_version_expiration {
-      noncurrent_days = 14
-    }
-  }
-}
-
-resource "aws_s3_bucket_policy" "ci_qemu_arm_images" {
-  bucket = aws_s3_bucket.ci_qemu_arm_images.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          aws_s3_bucket.ci_qemu_arm_images.arn,
-          "${aws_s3_bucket.ci_qemu_arm_images.arn}/*",
-        ]
-        Condition = {
-          Bool = { "aws:SecureTransport" = "false" }
-        }
-      },
-      {
-        Sid       = "DenyCrossAccountAccess"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          aws_s3_bucket.ci_qemu_arm_images.arn,
-          "${aws_s3_bucket.ci_qemu_arm_images.arn}/*",
         ]
         Condition = {
           StringNotEquals = { "aws:PrincipalAccount" = local.ci_account_id }
@@ -681,7 +518,7 @@ resource "aws_iam_role_policy" "ci_cell" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat(local.ci_qemu_image_read_statements, local.ci_qemu_arm_image_read_statements, [
+    Statement = concat(local.ci_qemu_image_read_statements, [
       # test/playbooks/_environment.yml mints an ECR login token on the cell (the
       # controller) and the qemu guest then pulls container layers through the
       # pull-through cache as this same identity. GetAuthorizationToken is only
@@ -744,7 +581,7 @@ resource "aws_iam_role_policy" "ci_qemu_host" {
 
   policy = jsonencode({
     Version   = "2012-10-17"
-    Statement = concat(local.ci_qemu_image_read_statements, local.ci_qemu_arm_image_read_statements)
+    Statement = local.ci_qemu_image_read_statements
   })
 }
 
@@ -906,10 +743,7 @@ resource "aws_iam_role_policy" "ci_bake" {
           "s3:GetBucketLocation", "s3:ListBucket",
           "s3:ListBucketMultipartUploads",
         ]
-        Resource = [
-          aws_s3_bucket.ci_qemu_images.arn,
-          aws_s3_bucket.ci_qemu_arm_images.arn,
-        ]
+        Resource = aws_s3_bucket.ci_qemu_images.arn
       },
       # Writes and tags immutable builds, then updates the promoted pointer.
       # S3 lifecycle expires candidate and superseded objects by tag.
@@ -920,10 +754,7 @@ resource "aws_iam_role_policy" "ci_bake" {
           "s3:GetObject", "s3:PutObject", "s3:PutObjectTagging",
           "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
         ]
-        Resource = [
-          "${aws_s3_bucket.ci_qemu_images.arn}/*",
-          "${aws_s3_bucket.ci_qemu_arm_images.arn}/*",
-        ]
+        Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
       },
     ]
   })
