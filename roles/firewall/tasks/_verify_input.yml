@@ -72,18 +72,19 @@
       - "{{ wan_probe_host }}"
       - "{{ item.port }}"
     stdin: .
-  loop: >-
-    {{
-      [
-        {'label': 'wireguard accept', 'port': wan_forward_ports.udp['51820']},
-        {'label': 'transmission accept', 'port': wan_forward_ports.udp[service_ports.transmission_bt | string]},
-        {'label': 'mDNS non-home-source reject', 'port': wan_forward_ports.udp['5353']},
-      ]
-      + ([{'label': 'tailscale underlay accept', 'port': wan_forward_ports.udp[tailscale_port | string]}]
-         if tailscale_wan_direct | default(false) else [])
-    }}
+  loop:
+    - label: wireguard accept
+      port: "{{ wan_forward_ports.udp['51820'] }}"
+    - label: transmission accept
+      port: "{{ wan_forward_ports.udp[service_ports.transmission_bt | string] }}"
+    - label: tailscale underlay accept
+      port: "{{ wan_forward_ports.udp[tailscale_port | default(0) | string] | default(0) }}"
+      enabled: "{{ tailscale_wan_direct | default(false) }}"
+    - label: mDNS non-home-source reject
+      port: "{{ wan_forward_ports.udp['5353'] }}"
   loop_control:
     label: "{{ item.label }}"
+  when: item.enabled | default(true) | bool
   changed_when: false
   failed_when: false
 
@@ -119,17 +120,17 @@
       - 192.0.2.1
       - "{{ item.port }}"
     stdin: .
-  loop: >-
-    {{
-      [
-        {'label': 'mosh accept', 'port': '60000'},
-        {'label': 'mDNS source reject', 'port': '5353'},
-      ]
-      + ([{'label': 'tailscale LAN-direct accept', 'port': tailscale_port}]
-         if tailscale_wan_direct | default(false) else [])
-    }}
+  loop:
+    - label: mosh accept
+      port: "60000"
+    - label: tailscale LAN-direct accept
+      port: "{{ tailscale_port | default(0) }}"
+      enabled: "{{ tailscale_wan_direct | default(false) }}"
+    - label: mDNS source reject
+      port: "5353"
   loop_control:
     label: "{{ item.label }}"
+  when: item.enabled | default(true) | bool
   changed_when: false
   become: true
 
