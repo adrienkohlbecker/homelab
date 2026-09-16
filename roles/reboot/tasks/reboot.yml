@@ -1,13 +1,6 @@
 # Mitogen can retain a severed sudo.root context when a become-elevated reboot
 # severs SSH. Elevate only systemctl so Ansible polls through the base context.
-- name: Reboot QEMU host and wait for it to return
-  when: qemu_test | default(false)
+- name: Reboot and wait for the host to return
   reboot:
-    reboot_command: /usr/bin/sudo -n /usr/bin/systemctl --check-inhibitors=no reboot
-    reboot_timeout: 240
-
-- name: Reboot host and wait for it to return
-  when: not (qemu_test | default(false))
-  reboot:
-    reboot_command: /usr/bin/sudo -n /usr/bin/systemctl reboot
+    reboot_command: "/usr/bin/sudo -n /usr/bin/systemctl{{ ' --check-inhibitors=no' if qemu_test | default(false) else '' }} reboot"
     reboot_timeout: 240
