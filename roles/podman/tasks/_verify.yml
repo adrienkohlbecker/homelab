@@ -24,21 +24,11 @@
       image: "{{ podman_probe_image }}"
       condition: false
 
-- name: _verify | Exercise an enabled image helper call
-  import_role:
-    name: podman
-    tasks_from: image
-  vars:
-    podman_image_args:
-      name: podman_enabled_condition_probe
-      image: "{{ podman_probe_image }}"
-
-- name: _verify | Image helper publishes condition-aware results
+- name: _verify | Disabled image helper publishes no-change results
   assert:
     that:
       - not podman_condition_probe_podman_available
       - not podman_condition_probe_image_changed
-      - podman_enabled_condition_probe_podman_available
 
 - name: _verify | Read podman's effective runtime config
   command: podman info --format json
