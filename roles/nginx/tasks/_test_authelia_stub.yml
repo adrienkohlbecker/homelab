@@ -18,13 +18,13 @@
       nginx_test_authelia_stub_args.mode must be one of gate/authed/basic; got
       '{{ _nginx_test_authelia_stub_mode }}'.
 
-- name: Test authelia stub | Install fixture for /api/authz/auth-request  # noqa: require-validate
+# The mode-switching test stub is disposable and needs no backup history.
+- name: Test authelia stub | Install fixture for /api/authz/auth-request  # noqa: require-backup require-validate
   copy:
     dest: /etc/nginx/conf.d/test_authelia_stub.conf
     owner: root
     group: root
     mode: "0644"
-    backup: true
     content: |
       server {
         listen 127.0.0.1:{{ service_ports.authelia }};
