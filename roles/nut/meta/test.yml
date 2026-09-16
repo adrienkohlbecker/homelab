@@ -3,9 +3,5 @@
 # the newer nut runtime the next prod release will carry.
 machines:
   box:
-  # Minimal has no wake peers and exercises the empty peer-list path.
-  minimal:
 ubuntu:
   - resolute
-skip:
-  "minimal:resolute": The Noble Minimal and Resolute Box cells cover the independent peer-list and release axes.

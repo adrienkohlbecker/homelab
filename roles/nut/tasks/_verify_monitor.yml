@@ -202,7 +202,6 @@
 # ---- Wake leg -------------------------------------------------------------
 # Exercise the boot leg and its real three-round wakeonlan dispatch.
 - name: _verify | Exercise boot-time peer wake
-  when: nut_wake_peers | length > 0
   block:
     - name: _verify | Run the boot-time peer wake unit
       systemd:

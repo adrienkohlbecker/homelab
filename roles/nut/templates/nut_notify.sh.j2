@@ -38,7 +38,6 @@ replbatt)
 noparent)
   MSG="upsmon parent process died - shutdown impossible"
   ;;
-{% if nut_wake_peers %}
 # Both recovery legs wake peers three times; a failed round must not prevent
 # later packets from landing after the network recovers.
 wake_peers)
@@ -48,7 +47,6 @@ wake_peers)
   done
   exit 0
   ;;
-{% endif %}
 # Any name upssched dispatches without a bespoke sentence above -- the nut
 # 2.8+ device-status events (bypass/over/cal/off/notoff), a future timer, a
 # typo'd AT line -- still mails, with the raw event name carrying the news.
