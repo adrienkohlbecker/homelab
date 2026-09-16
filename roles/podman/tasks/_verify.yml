@@ -1,14 +1,7 @@
-# podman is the foundational base role -- it runs no service of its own --
-# so this exercises the runtime config it installs by spinning up throwaway
-# containers and reading `podman info`, rather than stat-checking the files
-# it wrote. Two halves: rootful checks (become: true) cover the storage
-# stack, netavark + aardvark-dns, the rendered containers.conf + seccomp
-# profile and the rootful prune timer; a rootless pass as
-# the box login user then proves the pasta network connector actually backs
-# a container's egress. Only the test harness invokes it, against the selected
-# --machine (box by default: zfs_root with the native overlay storage
-# path), never prod -- so the group-membership tweak and probe containers below
-# are safe.
+# Exercise Podman's runtime configuration with throwaway containers and
+# `podman info`. Rootful checks cover storage, netavark DNS, seccomp, and the
+# prune timer; a rootless pass proves pasta backs container egress. The test
+# harness invokes this only against QEMU fixtures, never production hosts.
 
 - name: _verify | Resolve a tiny probe image
   set_fact:
