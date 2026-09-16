@@ -13,7 +13,7 @@
 - name: Read the stock apps_groups.conf
   when:
     - netdata_packer_process_group_enabled
-    - not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
+    - netdata_package_ready
   slurp:
     src: /usr/lib/netdata/conf.d/apps_groups.conf
   register: netdata_apps_groups_stock
@@ -22,7 +22,7 @@
 - name: Install apps_groups.conf with homelab process groups  # noqa: require-validate
   when:
     - netdata_packer_process_group_enabled
-    - not (ansible_check_mode and (netdata_apt.changed or netdata_apt_source_changed))
+    - netdata_package_ready
   copy:
     dest: /etc/netdata/apps_groups.conf
     content: |-
