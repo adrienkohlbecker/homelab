@@ -37,7 +37,6 @@ from matrix import (
     cell_to_ci_spec,
     cells_to_ci_specs,
     ci_spec_to_cell,
-    drop_on_demand_cells,
     list_testable_roles,
     load_role_test_config,
 )
@@ -593,6 +592,18 @@ def render_child_pipeline(specs: list[str], site_test: bool, target: str = "aws_
     )
 
 
+def _split_pug_cells(specs: list[str]) -> tuple[list[str], list[str]]:
+    """Keep Pug local: its QEMU image is not promoted to either CI target."""
+    kept: list[str] = []
+    dropped: list[str] = []
+    for spec in specs:
+        if ci_spec_to_cell(spec).machine == "pug":
+            dropped.append(spec)
+        else:
+            kept.append(spec)
+    return kept, dropped
+
+
 def _emit_gitlab(
     specs: list[str],
     site_test: bool,
@@ -614,7 +625,7 @@ def _emit_gitlab(
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
     # Pug runs only on demand and has no CI image source.
-    specs, on_demand = drop_on_demand_cells(specs)
+    specs, on_demand = _split_pug_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))

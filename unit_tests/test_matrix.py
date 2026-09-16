@@ -262,11 +262,3 @@ class TestDispatchMatrix:
         _make_role("alpha")
         cells = matrix.build_dispatch_matrix("alpha,,")
         assert len(cells) == 1
-
-
-class TestOnDemandMachines:
-    def test_drops_pug_and_keeps_lab(self) -> None:
-        specs = ["zfs:box", "zfs:lab", "zfs:pug", "swap:lab:noble", "nginx:box"]
-        kept, dropped = matrix.drop_on_demand_cells(specs)
-        assert kept == ["zfs:box", "zfs:lab", "swap:lab:noble", "nginx:box"]
-        assert dropped == ["zfs:pug"]

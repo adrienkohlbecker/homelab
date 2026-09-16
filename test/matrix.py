@@ -20,12 +20,6 @@ UBUNTU_RELEASES: dict[str, str] = {
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
 DEFAULT_MACHINES = ("box",)
 
-# Machines that only run on demand (`testrole.py --machine`) and the nightly
-# on-lab packer regression -- never in a CI-generated matrix. Pug's multi-disk
-# prod-faithful qemu image is not promoted to S3, so the qemu CI cells cannot
-# boot it. detect drops it from every generated pipeline; local testall.py
-# keeps it.
-ON_DEMAND_MACHINES = frozenset({"pug"})
 _ROLE_META_KEYS = {"base_prerequisites", "machines", "skip", "ubuntu"}
 
 
@@ -168,25 +162,6 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
         raise RoleTestConfigError(meta_path, errors)
 
     return RoleTestConfig(base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip))
-
-
-def drop_on_demand_cells(specs: list[str]) -> tuple[list[str], list[str]]:
-    """Partition CI specs into (kept, dropped) by ON_DEMAND_MACHINES.
-
-    Called only by the CI child-pipeline generator (detect._emit_gitlab); local
-    testall.py keeps every machine. Pug cells cannot run on either qemu CI
-    target because their image is not promoted to S3, so they are dropped from
-    every generated pipeline -- the caller logs the drop so it never reads as
-    "covered". Exercise them with `testrole.py <role> --machine pug`.
-    """
-    kept: list[str] = []
-    dropped: list[str] = []
-    for spec in specs:
-        if ci_spec_to_cell(spec).machine in ON_DEMAND_MACHINES:
-            dropped.append(spec)
-        else:
-            kept.append(spec)
-    return kept, dropped
 
 
 def build_role_cells(role: str) -> list[TestCell]:
