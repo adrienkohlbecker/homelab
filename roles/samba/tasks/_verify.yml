@@ -50,8 +50,9 @@
 
 # Proves the critical per-share-key fix: the smbtest share renders, and its
 # `valid users` restriction is present (the regression that silently dropped it
-# would leave the share world-accessible with this line absent).
-- name: _verify | Config exposes the share with its valid-users restriction
+# would leave the share world-accessible with this line absent). Samba 4.23
+# reports `smb ports` as `server smb transports`, so accept either label.
+- name: _verify | Effective Samba config preserves share and hardening policy
   assert:
     that:
       - "'[smbtest]' in samba_testparm_verbose.stdout"
@@ -59,28 +60,14 @@
       - samba_testparm_verbose.stdout is search('valid users = ' ~ ansible_user_id)
       - samba_testparm_verbose.stdout is search('fruit:time machine = yes')
       - samba_testparm_verbose.stdout is search('fruit:time machine max size = 1T')
-    fail_msg: >-
-      testparm output is missing the smbtest share, its valid-users line, or a
-      Time Machine directive (enabled / max size) -- per-share key rendering is
-      broken.
-
-- name: _verify | Mandatory SMB3 encryption is in force
-  assert:
-    that:
       - samba_testparm_verbose.stdout is search('server smb encrypt = required')
-    fail_msg: >-
-      testparm -v does not report `server smb encrypt = required` -- mandatory
-      encryption was silently dropped to its default.
-
-- name: _verify | Printing subsystem is disabled
-  assert:
-    that:
       - samba_testparm_verbose.stdout is search('disable spoolss = Yes')
       - samba_testparm_verbose.stdout is search('load printers = No')
+      - samba_testparm_verbose.stdout is search('disable netbios = Yes')
+      - samba_testparm_verbose.stdout is search('(?:smb ports|server smb transports) = 445')
     fail_msg: >-
-      testparm -v does not report `disable spoolss = Yes` / `load printers = No`
-      -- the unused printing subsystem could spawn samba-bgqd and write outside
-      journald.
+      testparm -v does not report the expected share, Time Machine, encryption,
+      printing, or NetBIOS policy.
 
 - name: _verify | Printing helper is not running
   command: pgrep -x samba-bgqd
@@ -88,19 +75,6 @@
   changed_when: false
   failed_when: samba_bgqd_process.rc != 1
   become: true
-
-# NetBIOS is retired: smbd must not announce over NetBIOS and must serve only
-# 445 (no legacy 139 session port). Samba 4.23 reports `smb ports` under its
-# canonical `server smb transports` name, so accept either resolved label.
-- name: _verify | NetBIOS is disabled and only port 445 is served
-  assert:
-    that:
-      - samba_testparm_verbose.stdout is search('disable netbios = Yes')
-      - samba_testparm_verbose.stdout is search('(?:smb ports|server smb transports) = 445')
-    fail_msg: >-
-      testparm -v does not report `disable netbios = Yes` and a 445-only SMB
-      transport -- the NetBIOS-retirement directives were dropped to their
-      defaults.
 
 # A read-only `ls` against a freshly-created empty dir proves little; the share
 # exists to be written to (the Time Machine path). argv form keeps the
