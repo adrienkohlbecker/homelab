@@ -10,16 +10,14 @@
 # Reverse-proxy chain probe -- a typo'd subdomain or broken nginx_site_args
 # would otherwise pass the direct anonymous API probe above silently.
 #
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
 - name: _verify | Map the gitea vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 gitea.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "gitea.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Gitea reachable via nginx vhost
   uri:

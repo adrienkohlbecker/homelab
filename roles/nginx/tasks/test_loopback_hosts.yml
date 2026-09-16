@@ -1,0 +1,10 @@
+# Local TLS probes must use the vhost FQDN in the URL: a Host header on
+# https://localhost leaves SNI=localhost and nginx rejects the handshake.
+- name: test_loopback_hosts | Resolve test vhosts on loopback
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 {{ item }}"
+    regexp: "{{ nginx_test_loopback_hosts_args.regexp | default(omit) }}"
+    backup: true
+  loop: "{{ nginx_test_loopback_hosts_args.hostnames }}"
+  become: true

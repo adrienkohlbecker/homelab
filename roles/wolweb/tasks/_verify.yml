@@ -109,10 +109,13 @@
     status_code: 404
 
 - name: _verify | Map the wolweb vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 wolweb.{{ inventory_hostname }}.{{ domain }}"
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "wolweb.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Unauthenticated hit redirects to Authelia
   uri:

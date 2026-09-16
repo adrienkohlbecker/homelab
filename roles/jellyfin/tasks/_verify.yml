@@ -1,14 +1,11 @@
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x rejects this as a fatal unrecognized_name alert (status -1).
-# Hitting the FQDN directly keeps SNI correct on every release. Test-only
-# mutation; box is torn down.
 - name: _verify | Map the jellyfin vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 jellyfin.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "jellyfin.{{ inventory_hostname }}.{{ domain }}"
 
 # Exercise both the published host port and nginx vhost. Together they verify
 # valid Jellyfin JSON and catch proxy routing regressions that the container

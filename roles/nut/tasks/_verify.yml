@@ -24,19 +24,14 @@
       - "'upsmon secondary' in (nut_upsd_users_file.content | b64decode)"
     quiet: true
 
-# The CGI probe must hit the vhost by its real FQDN, not https://localhost/
-# with a Host header: TLS SNI follows the URL host, so a localhost SNI matches
-# no server_name and nginx answers with an unrecognized_name TLS alert. OpenSSL
-# 3.x treats it as fatal, so the probe then fails with status -1
-# (TLSV1_UNRECOGNIZED_NAME).
-# Mapping the FQDN to loopback makes SNI match the served vhost on every release.
-# Test-only mutation; the box is torn down after.
 - name: _verify | Map the nut vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 nut.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "nut.{{ inventory_hostname }}.{{ domain }}"
 
 # The CGI status page: nginx 301s / -> /upsstats.cgi, proxied to nut-cgi over
 # the role-managed fcgiwrap socket. The site has auth enabled,

@@ -1,13 +1,11 @@
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
 - name: _verify | Map the authelia vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 auth.{{ authelia_cookie_domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "auth.{{ authelia_cookie_domain }}"
 
 - name: _verify | Authelia runs as a non-root container user
   command:

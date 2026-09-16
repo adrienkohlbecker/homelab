@@ -1,13 +1,12 @@
-# Use the real vhost names so both TLS SNI and the Host header match nginx.
 - name: _verify | Map the MinIO vhosts to loopback
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 {{ item }}.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  loop:
-    - minio-api
-    - minio
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "minio-api.{{ inventory_hostname }}.{{ domain }}"
+        - "minio.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Wait for normalized minio record in lnav store
   command:

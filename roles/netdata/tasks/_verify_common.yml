@@ -38,14 +38,15 @@
       {{ mirror_apt_netdata }}; got policy:
       {{ _netdata_apt_policy.stdout | default('') }}
 
-# Map the netdata vhost FQDN to loopback for SNI-correct probing: noble/resolute
-# OpenSSL 3.x rejects SNI=localhost with TLSV1_UNRECOGNIZED_NAME.
 - name: _verify | Map the netdata vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    regexp: '^127\.0\.0\.1\s+netdata\.'
-    line: "127.0.0.1 netdata.{{ inventory_hostname }}.{{ domain }}"
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "netdata.{{ inventory_hostname }}.{{ domain }}"
+      regexp: '^127\.0\.0\.1\s+netdata\.'
 
 # --- nginx Authelia gate ---
 # Browser path through `https://netdata.<host>.<domain>` is gated by Authelia

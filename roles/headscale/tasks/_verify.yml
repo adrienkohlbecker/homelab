@@ -11,14 +11,14 @@
   until: _headscale_metrics.status | default(0) == 200
   become: true
 
-# Use the real FQDN so SNI matches; a Host header on https://localhost does not
-# alter SNI and OpenSSL rejects it before the public vhost can answer.
 - name: _verify | Map the headscale vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 headscale.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "headscale.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Headscale /health is reachable through the nginx TLS vhost
   uri:

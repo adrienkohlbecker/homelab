@@ -1,13 +1,11 @@
-# SNI follows the URL host, not the Host header, so probing https://localhost/
-# with a Host: override trips TLSV1_UNRECOGNIZED_NAME on openssl 3.x. Map the
-# vhost FQDN to loopback and probe it directly so SNI and Host both carry z2m's
-# server_name.
 - name: _verify | Map the z2m vhost to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 z2m.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "z2m.{{ inventory_hostname }}.{{ domain }}"
 
 # The vhost has `auth: true`, so the browser path goes through Authelia.
 # A cookieless GET must redirect to the portal -- the only probe that fails if

@@ -1,12 +1,11 @@
-# The test Authelia stub admits the auth_request subrequest, so /ping exercises
-# Profilarr through its published loopback port and nginx proxy. Resolve the
-# FQDN to loopback so SNI matches the served certificate.
 - name: _verify | Map the profilarr vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 profilarr.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "profilarr.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Profilarr answers /ping through the nginx vhost
   uri:

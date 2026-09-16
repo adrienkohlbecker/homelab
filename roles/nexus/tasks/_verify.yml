@@ -215,20 +215,16 @@
   become: true
 
 # End-to-end through the nginx vhost -- the production ingress every fleet
-# host's apt/docker pulls traverse. The /etc/hosts mapping + validate_certs=false
-# hits local nginx without real DNS; a jinja typo in proxy_pass, a missing
-# proxy_set_header, or a dropped site would surface here.
-#
-# Map the vhost FQDN to loopback so SNI matches the served certificate.
-# Probing https://localhost with a Host: header leaves SNI=localhost, which
-# OpenSSL 3.x (noble/resolute) rejects as a fatal unrecognized_name alert
-# (status -1); hitting the FQDN directly keeps SNI correct on every release.
+# host's apt/docker pulls traverse. A typo in proxy_pass, a missing
+# proxy_set_header, or a dropped site surfaces here.
 - name: _verify | Map the nexus vhost FQDN to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    line: "127.0.0.1 nexus.{{ inventory_hostname }}.{{ domain }}"
-    state: present
-  become: true
+  import_role:
+    name: nginx
+    tasks_from: test_loopback_hosts
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "nexus.{{ inventory_hostname }}.{{ domain }}"
 
 # Auth uses the bootstrap admin password Nexus writes on first boot -- the
 # setup wizard never runs under test, so the file persists. Test-only.
