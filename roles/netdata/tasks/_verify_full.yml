@@ -32,42 +32,6 @@
     fail_msg: >-
       Expected minio_buckets to enable the MinIO job in prometheus.conf.
 
-- name: _verify | Read Fluent Bit health configuration
-  slurp:
-    src: /etc/netdata/health.d/fluentbit.conf
-  register: _netdata_fluentbit_health
-  become: true
-
-- name: _verify | Fluent Bit alert uses sustained record drops
-  vars:
-    _health: "{{ _netdata_fluentbit_health.content | b64decode }}"
-  assert:
-    that:
-      - '"lookup: min -5m unaligned of fluentbit_output_dropped_records_total" in _health'
-      - '"delay: up" not in _health'
-      - '"delay: down 1h" in _health'
-    fail_msg: >-
-      Expected the Fluent Bit alarm to require a sustained positive drop rate
-      and retain only recovery hysteresis.
-
-- name: _verify | Read Postfix health configuration
-  slurp:
-    src: /etc/netdata/health.d/postfix.conf
-  register: _netdata_postfix_health
-  become: true
-
-- name: _verify | Postfix alert uses sustained queue depth
-  vars:
-    _health: "{{ _netdata_postfix_health.content | b64decode }}"
-  assert:
-    that:
-      - '"lookup: min -10m unaligned of emails" in _health'
-      - '"delay: up" not in _health'
-      - '"delay: down 30m" in _health'
-    fail_msg: >-
-      Expected the Postfix alarm to require a sustained queue depth and retain
-      only recovery hysteresis.
-
 # allmetrics reports the last collected sample directly, so no query-window
 # bucketing can leave the newest value invisible.
 - name: _verify | Keepalived_vrrp fixture reports holds_vip=1
@@ -293,6 +257,39 @@
     and _collector_failure_alerts | length > 0
     and _silenced_disk_alerts | length == netdata_diskspace_blocklist | length
     and _runner_alerts | length == 4
+    and _alarms.values() | selectattr('name', 'equalto', 'fluentbit_output_records_dropped') | list | length > 0
+    and _alarms.values() | selectattr('name', 'equalto', 'postfix_queue_depth') | list | length > 0
+
+- name: _verify | Fluent Bit and Postfix alert policies are active
+  vars:
+    _alarm: >-
+      {{
+        (_netdata_alarms.json.alarms.values()
+         | selectattr('name', 'equalto', item.name) | first)
+        | default({})
+      }}
+  assert:
+    that:
+      - _alarm.recipient | default('') == 'sysadmin'
+      - _alarm.lookup_method | default('') == 'min'
+      - _alarm.lookup_after | default(0) == item.lookup_after
+      - _alarm.lookup_before | default(-1) == 0
+      - _alarm.lookup_options | default('') == 'unaligned'
+      - _alarm.lookup_dimensions | default('') == item.dimension
+      - _alarm.delay_up_duration | default(-1) == 0
+      - _alarm.delay_down_duration | default(0) == item.recovery_delay
+    fail_msg: "{{ item.name }} has unexpected runtime alert policy: {{ _alarm }}"
+  loop:
+    - name: fluentbit_output_records_dropped
+      lookup_after: -300
+      dimension: fluentbit_output_dropped_records_total
+      recovery_delay: 3600
+    - name: postfix_queue_depth
+      lookup_after: -600
+      dimension: emails
+      recovery_delay: 1800
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: _verify | Slow web alarm remains disabled
   vars:
