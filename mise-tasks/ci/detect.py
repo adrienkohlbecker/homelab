@@ -2,7 +2,6 @@
 # [MISE] description="Render the GitLab role-test child pipeline"
 # [USAGE] flag "--target <target>" help="Qemu target to render: aws_qemu or lab"
 # [USAGE] flag "--arm-mode <arm_mode>" help="ARM lane mode: off, manual, or auto"
-# [USAGE] flag "--arm-density-index <index>" help="Print the representative ARM spec for a density job"
 # [USAGE] flag "--child-path <child_path>" help="Generated child pipeline path" default="test-child.yml"
 # [USAGE] flag "--all" help="Force the full test universe"
 """CI change-detection pipeline (GitLab).
@@ -542,9 +541,6 @@ ARM_CELL_SPECS = (
     "refind:box",
     "zfsbootmenu:box",
 )
-# Direct GitHub download roles turn synchronized waves into upstream egress
-# tests rather than host-capacity tests.
-ARM_DENSITY_CELL_SPECS = tuple(spec for spec in ARM_CELL_SPECS if spec not in {"lnav:box", "user:box"})
 ARM_MODES = ("off", "manual", "auto")
 ARM_IMAGE_BUCKET = "homelab-ci-arm-images-eu-west-1"
 ARM_REGION = "eu-west-1"
@@ -582,24 +578,6 @@ def _arm_specs(specs: list[str], target: str, arm_mode: str) -> list[str]:
 
     selected_pairs = {":".join(spec.split(":")[:2]) for spec in specs}
     return [spec for spec in ARM_CELL_SPECS if spec in selected_pairs]
-
-
-def arm_density_spec(index: int) -> str:
-    """Cycle a one-based density-job index through the ARM burn-in cells."""
-    if index < 1:
-        raise ValueError("ARM density index must be at least 1")
-    return ARM_DENSITY_CELL_SPECS[(index - 1) % len(ARM_DENSITY_CELL_SPECS)]
-
-
-def arm_benchmark_spec(index: int) -> str:
-    """Map one full-universe cell onto an existing Noble ARM fixture."""
-    specs = _full_universe_specs()
-    if index < 1 or index > len(specs):
-        raise ValueError(f"ARM benchmark index must be between 1 and {len(specs)}")
-
-    cell = ci_spec_to_cell(specs[index - 1])
-    machine = "box_deps" if cell.machine == "box_deps" else "box"
-    return f"{cell.role}:{machine}"
 
 
 def render_child_pipeline(
@@ -807,8 +785,6 @@ def _cmd_gitlab(args: list[str]) -> int:
     p = ArgumentParser(prog="ci:detect")
     p.add_argument("--child-path", default="test-child.yml")
     p.add_argument("--all", action="store_true", help="Force the full universe (debug)")
-    p.add_argument("--arm-density-index", type=int, help="Print one density job's representative ARM spec")
-    p.add_argument("--arm-benchmark-index", type=int, help="Print one full-universe spec on an existing ARM image")
     p.add_argument(
         "--target",
         default=os.environ.get("HOMELAB_CI_TARGET", "aws_qemu"),
@@ -826,12 +802,6 @@ def _cmd_gitlab(args: list[str]) -> int:
     def log(msg):
         print(f"[detect] {msg}", file=sys.stderr)
 
-    if opts.arm_density_index is not None:
-        print(arm_density_spec(opts.arm_density_index))
-        return 0
-    if opts.arm_benchmark_index is not None:
-        print(arm_benchmark_spec(opts.arm_benchmark_index))
-        return 0
     if opts.arm_mode not in ARM_MODES:
         p.error(f"argument --arm-mode: invalid choice: {opts.arm_mode!r} (choose from {', '.join(ARM_MODES)})")
 

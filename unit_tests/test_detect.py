@@ -1309,40 +1309,6 @@ class TestEmitGitlab:
         assert expected <= set(detect._full_universe_specs())
 
 
-class TestArmDensitySpec:
-    def test_cycles_cells_without_direct_github_downloads(self) -> None:
-        first_cycle = [detect.arm_density_spec(index) for index in range(1, len(detect.ARM_DENSITY_CELL_SPECS) + 1)]
-
-        assert first_cycle == list(detect.ARM_DENSITY_CELL_SPECS)
-        assert set(first_cycle) < set(detect.ARM_CELL_SPECS)
-        assert "lnav:box" not in first_cycle
-        assert "user:box" not in first_cycle
-        assert detect.arm_density_spec(len(first_cycle) + 1) == first_cycle[0]
-        assert "fan2go:box" not in first_cycle
-
-    def test_rejects_nonpositive_index(self) -> None:
-        with pytest.raises(ValueError, match="at least 1"):
-            detect.arm_density_spec(0)
-
-
-class TestArmBenchmarkSpec:
-    def test_maps_full_universe_onto_existing_noble_images(self) -> None:
-        specs = detect._full_universe_specs()
-        mapped = [detect.arm_benchmark_spec(index) for index in range(1, len(specs) + 1)]
-
-        assert len(mapped) == 130
-        assert detect.arm_benchmark_spec(specs.index("homeassistant:box_deps:resolute") + 1) == (
-            "homeassistant:box_deps"
-        )
-        assert detect.arm_benchmark_spec(specs.index("zfs:lab") + 1) == "zfs:box"
-        assert detect.arm_benchmark_spec(specs.index("cleanup:minimal") + 1) == "cleanup:box"
-
-    @pytest.mark.parametrize("index", [0, 131])
-    def test_rejects_out_of_range_index(self, index: int) -> None:
-        with pytest.raises(ValueError, match="between 1 and 130"):
-            detect.arm_benchmark_spec(index)
-
-
 class TestCmdGitlab:
     @pytest.fixture(autouse=True)
     def _offline_full_universe(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1431,10 +1397,6 @@ class TestCmdGitlab:
         monkeypatch.setattr("sys.argv", ["detect.py", "--all"])
 
         assert detect.main() == 2
-
-    def test_density_index_prints_selected_spec(self, capsys: pytest.CaptureFixture[str]) -> None:
-        assert detect._cmd_gitlab(["--arm-density-index", "13"]) == 0
-        assert capsys.readouterr().out == f"{detect.arm_density_spec(13)}\n"
 
     def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         child = tmp_path / "child.yml"

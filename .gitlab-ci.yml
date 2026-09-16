@@ -16,8 +16,6 @@ variables:
   HOMELAB_CI_TARGET: aws_qemu
   # Generate change-selected ARM cells on the AWS qemu lane.
   HOMELAB_CI_ARM: "auto"
-  # Benchmark dispatches skip the regular x86 and ARM child matrix.
-  HOMELAB_CI_BENCHMARK_ONLY: "false"
   # Ansible ignores cwd config under world-writable /builds unless pinned.
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
 
@@ -67,8 +65,6 @@ detect:
   tags:
     - $DETECT_RUNNER_TAG
   rules:
-    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
-      when: never
     # The lab rule must precede source rules because lab uses host tools rather
     # than /opt caches.
     - if: $HOMELAB_CI_TARGET == "lab"
@@ -98,38 +94,11 @@ test_cells:
     - job: detect
       artifacts: true
   rules:
-    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
-      when: never
     - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
   trigger:
     include:
       - artifact: test-child.yml
         job: detect
-    forward:
-      pipeline_variables: true
-    strategy: depend
-
-# Protected, explicit concurrency burn-in. Jobs inside each fixed wave start
-# automatically; stage ordering prevents the next density from overlapping it.
-arm_density:
-  stage: test
-  extends: .protected_manual_job
-  trigger:
-    include:
-      - local: mise-tasks/ci/arm_density.yml
-    forward:
-      pipeline_variables: true
-    strategy: depend
-
-# Protected full-universe performance benchmark. The child repeats every
-# declared cell three times on the existing Noble ARM fixtures.
-arm_benchmark:
-  stage: test
-  extends: .protected_manual_job
-  needs: []
-  trigger:
-    include:
-      - local: mise-tasks/ci/arm_benchmark.yml
     forward:
       pipeline_variables: true
     strategy: depend
@@ -252,8 +221,6 @@ qemu_host_ami:
   extends: .qemu_image
   # A failed box must block box_deps rather than seed from an older publication.
   rules:
-    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: false
@@ -264,8 +231,6 @@ qemu_host_ami:
 "qemu_image:lab":
   extends: .qemu_image
   rules:
-    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: true
@@ -278,8 +243,6 @@ qemu_host_ami:
 "qemu_image:box_deps":
   extends: .qemu_image
   rules:
-    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_$UBUNTU
   script:
@@ -327,8 +290,6 @@ qemu_host_ami:
 "qemu_image:box:arm":
   extends: .qemu_image_arm
   rules:
-    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
       when: manual
       allow_failure: false
@@ -339,8 +300,6 @@ qemu_host_ami:
 "qemu_image:box_deps:arm":
   extends: .qemu_image_arm
   rules:
-    - if: '$HOMELAB_CI_BENCHMARK_ONLY == "true"'
-      when: never
     - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_aarch64_$UBUNTU
   script:
