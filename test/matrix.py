@@ -178,10 +178,6 @@ def build_role_cells(role: str) -> list[TestCell]:
     skip = config.skip
     cells = [TestCell(m, DEFAULT_UBUNTU, role) for m in machines if (m, DEFAULT_UBUNTU) not in skip]
     for codename in config.ubuntu:
-        # Already emitted as a base cell above; load_role_test_config rejects
-        # entry outright, this just keeps the expansion duplicate-free.
-        if codename == DEFAULT_UBUNTU:
-            continue
         cells.extend(TestCell(m, codename, role) for m in machines if (m, codename) not in skip)
     return cells
 
