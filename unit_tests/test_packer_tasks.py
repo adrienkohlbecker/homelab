@@ -241,9 +241,7 @@ def test_publish_qemu_hydrates_exact_arm_box_before_box_deps(tmp_path: Path) -> 
     )
     assert log.read_text().splitlines() == [
         f"{upload} --preflight",
-        (
-            "run ci:hydrate-qemu-images box --ubuntu noble --architecture aarch64 --build-id 123.arm-box-noble"
-        ),
+        "run ci:hydrate-qemu-images box --ubuntu noble --architecture aarch64 --build-id 123.arm-box-noble",
         "run test:build_box_deps --ubuntu noble",
         upload,
     ]

@@ -277,7 +277,6 @@ def test_frankfurt_contract_documents_are_accepted():
         },
     )
 
-
     assert audit_aws.anomalies == []
 
 

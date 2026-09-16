@@ -15,7 +15,6 @@ def test_child_pipeline_forwards_pipeline_variables() -> None:
     assert PIPELINE["test_cells"]["trigger"]["forward"]["pipeline_variables"] is True
 
 
-
 def test_lab_qemu_image_is_published_for_supported_releases() -> None:
     assert PIPELINE[".qemu_image"]["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
     # lab's persistent shell runner must not keep the bake role's token.

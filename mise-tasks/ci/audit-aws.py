@@ -132,8 +132,7 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     ):
         return False
     return any(
-        tags.get("Name") == ami["name"]
-        and tags.get("architecture") == ("aarch64" if arch == "arm64" else arch)
+        tags.get("Name") == ami["name"] and tags.get("architecture") == ("aarch64" if arch == "arm64" else arch)
         for arch, ami in contract["amis"].items()
     )
 
@@ -380,7 +379,6 @@ def audit_bucket_documents(
         anomalies.append(f"[{region}] bucket {bucket} does not deny cross-account access")
     if len(anomalies) == anomaly_count:
         expected.append(f"[{region}] secure versioned image bucket {bucket}")
-
 
 
 def audit_region_contract(region: str, ec2) -> None:
