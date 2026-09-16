@@ -31,8 +31,10 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from matrix import (
+    TestCell,
     build_dispatch_matrix,
     build_test_matrix,
+    cell_to_ci_spec,
     cells_to_ci_specs,
     ci_spec_to_cell,
     drop_on_demand_cells,
@@ -115,20 +117,18 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
 def propagate_release_cells(
     direct_roles: list[str],
     consumers: dict[str, list[str]],
-    role_machines: dict[str, list[str]],
-    role_releases: dict[str, list[str]],
     universe: set[str],
-) -> list[str]:
+) -> list[TestCell]:
     """Propagate release + machine cells from changed roles onto their consumers.
 
     For each direct role that declares ubuntu releases in meta/test.yml,
-    emit ``consumer:machine:codename`` specs for every consumer that
+    emit cells for every consumer that
     imports it and is in the testable universe.  The consumer's own
     machines: dict determines which machines get release cells.
     """
-    extra: set[str] = set()
+    extra: set[TestCell] = set()
     for role in direct_roles:
-        releases = role_releases.get(role, [])
+        releases = load_role_test_config(role).ubuntu
         if not releases:
             continue
         role_consumers = consumers.get(role, [])
@@ -137,10 +137,10 @@ def propagate_release_cells(
         for consumer in role_consumers:
             if consumer not in universe:
                 continue
-            machines = role_machines.get(consumer, ["box"])
+            machines = load_role_test_config(consumer).machines
             for machine in machines:
                 for codename in releases:
-                    extra.add(f"{consumer}:{machine}:{codename}")
+                    extra.add(TestCell(machine, codename, consumer))
 
     return sorted(extra)
 
@@ -702,14 +702,9 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
             if consumer in universe:
                 roles.add(consumer)
 
-    role_releases = {r: list(load_role_test_config(r).ubuntu) for r in classification.direct_roles}
-    all_consumers = {c for r in classification.direct_roles for c in deps_map.get(r, []) if c in universe}
-    role_machines_map = {c: list(load_role_test_config(c).machines) for c in all_consumers}
-    release_cells = propagate_release_cells(
-        classification.direct_roles, deps_map, role_machines_map, role_releases, universe
-    )
+    release_cells = propagate_release_cells(classification.direct_roles, deps_map, universe)
     if release_cells:
-        log(f"  propagated release cells: {' '.join(release_cells)}")
+        log(f"  propagated release cells: {' '.join(cell_to_ci_spec(cell) for cell in release_cells)}")
 
     roles_sorted = sorted(roles)
     if roles_sorted:
@@ -717,8 +712,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     else:
         log("no role-relevant changes; matrix will be empty")
 
-    extra = [ci_spec_to_cell(s) for s in release_cells] if release_cells else None
-    return cells_to_ci_specs(build_test_matrix(roles_sorted, extra)), False
+    return cells_to_ci_specs(build_test_matrix(roles_sorted, release_cells)), False
 
 
 def _cmd_gitlab(args: list[str]) -> int:

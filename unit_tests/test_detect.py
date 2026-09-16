@@ -11,6 +11,7 @@ import subprocess
 import urllib.error
 from collections import defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from conftest import load_repo_module
@@ -150,90 +151,108 @@ class TestClassifyChangedFiles:
 
 
 class TestPropagateReleaseCells:
-    def test_basic_propagation(self) -> None:
+    @staticmethod
+    def _stub_configs(
+        monkeypatch: pytest.MonkeyPatch,
+        role_releases: dict[str, list[str]],
+        role_machines: dict[str, list[str]],
+    ) -> None:
+        monkeypatch.setattr(
+            detect,
+            "load_role_test_config",
+            lambda role: SimpleNamespace(
+                ubuntu=role_releases.get(role, []),
+                machines=role_machines.get(role, ["box"]),
+            ),
+        )
+
+    def test_basic_propagation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_configs(
+            monkeypatch,
+            {"apt_source": ["noble", "resolute"]},
+            {"nginx": ["box"], "podman": ["box_deps"]},
+        )
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["nginx", "podman"]},
-            role_machines={"nginx": ["box"], "podman": ["box_deps"]},
-            role_releases={"apt_source": ["noble", "resolute"]},
             universe={"nginx", "podman"},
         )
         assert result == [
-            "nginx:box:noble",
-            "nginx:box:resolute",
-            "podman:box_deps:noble",
-            "podman:box_deps:resolute",
+            detect.TestCell("box", "noble", "nginx"),
+            detect.TestCell("box", "resolute", "nginx"),
+            detect.TestCell("box_deps", "noble", "podman"),
+            detect.TestCell("box_deps", "resolute", "podman"),
         ]
 
     @pytest.mark.parametrize(
         "overrides",
         [
-            {"role_releases": {}},
-            {"role_releases": {"apt_source": []}},
+            {"releases": {}},
+            {"releases": {"apt_source": []}},
             {"consumers": {}},
             {"universe": set()},
             {"direct_roles": []},
         ],
         ids=["missing-releases", "empty-releases", "no-consumers", "outside-universe", "no-direct-roles"],
     )
-    def test_missing_relationships_return_no_cells(self, overrides) -> None:
+    def test_missing_relationships_return_no_cells(self, monkeypatch: pytest.MonkeyPatch, overrides) -> None:
         arguments = {
             "direct_roles": ["apt_source"],
             "consumers": {"apt_source": ["nginx"]},
-            "role_machines": {"nginx": ["box"]},
-            "role_releases": {"apt_source": ["noble"]},
+            "releases": {"apt_source": ["noble"]},
             "universe": {"nginx"},
         }
         arguments.update(overrides)
+        self._stub_configs(monkeypatch, arguments.pop("releases"), {"nginx": ["box"]})
 
         assert detect.propagate_release_cells(**arguments) == []
 
-    def test_default_machine_fallback(self) -> None:
+    def test_default_machine_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_configs(monkeypatch, {"apt_source": ["noble"]}, {})
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["newrole"]},
-            role_machines={},
-            role_releases={"apt_source": ["noble"]},
             universe={"newrole"},
         )
-        assert result == ["newrole:box:noble"]
+        assert result == [detect.TestCell("box", "noble", "newrole")]
 
-    def test_deduplicates_across_helpers(self) -> None:
+    def test_deduplicates_across_helpers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_configs(monkeypatch, {"helper_a": ["noble"], "helper_b": ["noble"]}, {"consumer": ["box"]})
         result = detect.propagate_release_cells(
             direct_roles=["helper_a", "helper_b"],
             consumers={"helper_a": ["consumer"], "helper_b": ["consumer"]},
-            role_machines={"consumer": ["box"]},
-            role_releases={"helper_a": ["noble"], "helper_b": ["noble"]},
             universe={"consumer"},
         )
-        assert result == ["consumer:box:noble"]
+        assert result == [detect.TestCell("box", "noble", "consumer")]
 
-    def test_multiple_roles_multiple_releases(self) -> None:
+    def test_multiple_roles_multiple_releases(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_configs(
+            monkeypatch,
+            {"apt_source": ["noble", "resolute"], "podman": ["noble"]},
+            {"nginx": ["box"], "redis": ["box_deps"]},
+        )
         result = detect.propagate_release_cells(
             direct_roles=["apt_source", "podman"],
             consumers={"apt_source": ["nginx", "redis"], "podman": ["redis"]},
-            role_machines={"nginx": ["box"], "redis": ["box_deps"]},
-            role_releases={"apt_source": ["noble", "resolute"], "podman": ["noble"]},
             universe={"nginx", "redis"},
         )
         assert result == [
-            "nginx:box:noble",
-            "nginx:box:resolute",
-            "redis:box_deps:noble",
-            "redis:box_deps:resolute",
+            detect.TestCell("box", "noble", "nginx"),
+            detect.TestCell("box", "resolute", "nginx"),
+            detect.TestCell("box_deps", "noble", "redis"),
+            detect.TestCell("box_deps", "resolute", "redis"),
         ]
 
-    def test_multi_machine_propagation(self) -> None:
+    def test_multi_machine_propagation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._stub_configs(monkeypatch, {"apt_source": ["noble"]}, {"cleanup": ["box", "minimal"]})
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["cleanup"]},
-            role_machines={"cleanup": ["box", "minimal"]},
-            role_releases={"apt_source": ["noble"]},
             universe={"cleanup"},
         )
         assert result == [
-            "cleanup:box:noble",
-            "cleanup:minimal:noble",
+            detect.TestCell("box", "noble", "cleanup"),
+            detect.TestCell("minimal", "noble", "cleanup"),
         ]
 
 
