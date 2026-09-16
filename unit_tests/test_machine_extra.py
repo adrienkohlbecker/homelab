@@ -306,6 +306,7 @@ class TestMachineArtifactOwnership:
 
         assert instance.output_file.parent == output_dir
 
+
 class TestSystemReadiness:
     def test_accepts_running_state(
         self,
