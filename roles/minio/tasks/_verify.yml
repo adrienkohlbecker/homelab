@@ -227,7 +227,6 @@
                 target = pathlib.Path(directory, "download")
                 for protocol, flags in [
                     ("1.1", ["--http1.1"]),
-                    ("1.1", ["--http1.1", "--limit-rate", "4M"]),
                     ("2", ["--http2"]),
                 ]:
                     url = config["url"] + "/" + config["access_key"] + "/verify_" + uuid.uuid4().hex
