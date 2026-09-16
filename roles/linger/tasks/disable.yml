@@ -1,7 +1,6 @@
 # Inputs: replace the whole `linger_args` dict on each call.
 #   name  required; account name whose linger marker should be removed.
-#   uid   optional; stop its manager first when the marker exists. Omit to
-#         preserve a login session or clean up a potentially absent account.
+#   uid   required; stop its manager first when the marker exists.
 #
 # The removes guard makes an absent marker a no-op, even without an account.
 - name: disable | Validate inputs for {{ linger_args.name | default('<unset>') }}
@@ -10,11 +9,12 @@
       - linger_args.name is defined
       - linger_args.name is string
       - linger_args.name is match('^[a-z_][a-z0-9_-]*$')
-      - linger_args.uid is not defined or (linger_args.uid | string is match('^[0-9]+$'))
+      - linger_args.uid is defined
+      - linger_args.uid | default('') | string is match('^[0-9]+$')
     quiet: true
     fail_msg: >-
       linger_args needs name (a valid username matching [a-z_][a-z0-9_-]*)
-      and an optional numeric uid; got name={{ linger_args.name | default('<unset>') }}
+      and a numeric uid; got name={{ linger_args.name | default('<unset>') }}
       uid={{ linger_args.uid | default('<unset>') }}.
 
 - name: disable | Check whether linger was enabled for {{ linger_args.name }}
@@ -25,7 +25,7 @@
 
 - name: disable | Stop the user manager for {{ linger_args.name }}
   # Without a linger marker, the manager may belong to a live login session.
-  when: linger_args.uid is defined and _linger_marker.stat.exists
+  when: _linger_marker.stat.exists
   systemd:
     name: user@{{ linger_args.uid }}.service
     state: stopped
