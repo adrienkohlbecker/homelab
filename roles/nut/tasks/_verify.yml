@@ -1,27 +1,22 @@
 # Qemu convergence runs the packaged driver and server units against a static
 # dummy-ups frame. Reaching OL through upsc therefore exercises the normal
 # systemd lifecycle as well as the driver -> upsd path.
-- name: _verify | Render physical UPS and no-peer notification configs
+- name: _verify | Render physical UPS configs
   template:
     src: "{{ item.src }}"
     dest: "/tmp/{{ item.dest }}"
     mode: "0755"
   vars:
     qemu_test: false
-    nut_wake_peers: []
   loop:
     - src: ups.conf.j2
       dest: nut-physical-ups.conf
-    - src: nut_notify.sh.j2
-      dest: nut-notify-no-peers.sh
-    - src: upssched.conf.j2
-      dest: nut-upssched-no-peers.conf
     - src: upsd.users.j2
       dest: nut-physical-upsd.users
   diff: false
   become: true
 
-- name: _verify | Verify physical UPS and no-peer notification configs
+- name: _verify | Verify physical UPS configs
   command:
     argv:
       - python3
@@ -32,17 +27,8 @@
         ups = pathlib.Path("/tmp/nut-physical-ups.conf").read_text()
         assert "driver = snmp-ups" in ups
         assert "driver = dummy-ups" not in ups
-        notify = pathlib.Path("/tmp/nut-notify-no-peers.sh").read_text()
-        assert "wake_peers)" not in notify
-        schedule = pathlib.Path("/tmp/nut-upssched-no-peers.conf").read_text()
-        assert "START-TIMER wake_peers" not in schedule
         users = pathlib.Path("/tmp/nut-physical-upsd.users").read_text()
         assert not any(line.strip() == "actions = SET" for line in users.splitlines())
-  changed_when: false
-  become: true
-
-- name: _verify | Parse the no-peer notification script
-  command: bash -n /tmp/nut-notify-no-peers.sh
   changed_when: false
   become: true
 
@@ -50,14 +36,12 @@
   import_tasks: monitor_config.yml
   vars:
     qemu_test: false
-    nut_wake_peers: []
   check_mode: true
 
 - name: _verify | Exercise physical monitor restart through production tasks
   import_tasks: monitor_state.yml
   vars:
     qemu_test: false
-    nut_wake_peers: []
   check_mode: true
 
 - name: _verify | Preserve the active QEMU monitor configs
@@ -78,20 +62,17 @@
       import_tasks: monitor_config.yml
       vars:
         qemu_test: false
-        nut_wake_peers: []
 
     - name: _verify | Recheck physical monitor config through production tasks
       import_tasks: monitor_config.yml
       vars:
         qemu_test: false
-        nut_wake_peers: []
       check_mode: true
 
     - name: _verify | Exercise physical monitor startup through production tasks
       import_tasks: monitor_state.yml
       vars:
         qemu_test: false
-        nut_wake_peers: []
       check_mode: true
 
   always:
@@ -124,8 +105,6 @@
     state: absent
   loop:
     - nut-physical-ups.conf
-    - nut-notify-no-peers.sh
-    - nut-upssched-no-peers.conf
     - nut-physical-upsd.users
   become: true
 
