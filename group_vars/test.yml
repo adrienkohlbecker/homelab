@@ -4,14 +4,6 @@ qemu_test: true
 # role-local boot changes cannot reach the running kernel after a reboot.
 qemu_boot_changes_reachable: "{{ not boot_via_efi_stub }}"
 
-# Noble's archive has enough kernel history to exercise Packer's aarch64
-# kernel-update path. Resolute remains waived while its development archive
-# carries only the image's running ABI; adding a release requires an explicit
-# expectation instead of silently skipping the test.
-packer_kernel_swap_expected_by_release:
-  noble: true
-  resolute: false
-
 # Shared single-NIC profile for every QEMU fixture. Lab and Pug rebind netplan
 # to this value from their extra-vars overlays so it outranks prod host_vars.
 qemu_netplan:
