@@ -110,8 +110,8 @@
   shell: |
     set -euo pipefail
     out=$(LC_ALL=C systemd-analyze calendar --iterations=2 "$ON_CALENDAR")
-    e1=$(printf '%s\n' "$out" | awk '/Next elapse:/{sub(/^[^:]*: /, ""); print; exit}')
-    e2=$(printf '%s\n' "$out" | awk '/#2:/{sub(/^[^:]*: /, ""); print; exit}')
+    e1=$(awk '/Next elapse:/{sub(/^[^:]*: /, ""); print; exit}' <<< "$out")
+    e2=$(awk '/#2:/{sub(/^[^:]*: /, ""); print; exit}' <<< "$out")
     if [ -z "$e2" ]; then
       printf 'systemd-analyze output:\n%s\n' "$out" >&2
       echo "on_calendar=$ON_CALENDAR does not repeat; system-scope timers require a repeating schedule" >&2
