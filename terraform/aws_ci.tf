@@ -27,12 +27,6 @@ locals {
   ]))
   ci_qemu_host_ami_parameter     = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", "noble")
   ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", "noble")
-  ci_qemu_arm_pool = {
-    name             = "homelab-ci-qemu-arm"
-    instance_types   = ["c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"]
-    max_size         = 1
-    root_volume_size = 40
-  }
   ci_qemu_pools = {
     role = {
       # Instance-type-agnostic name: aws_autoscaling_group.name and
@@ -43,22 +37,31 @@ locals {
       # separate 8-vCPU site host and one 64-vCPU ARM metal host fit inside the
       # 160-vCPU Spot quota (152 total). max_size must match
       # gitlab_runner_aws_qemu_max_instances in host_vars/fox.yml.
-      instance_type          = "c8id.4xlarge"
-      instance_type_override = null
-      max_size               = 5
+      instance_type           = "c8id.4xlarge"
+      instance_type_overrides = []
+      max_size                = 5
       # Heavy CI I/O lands on the "d" family's local NVMe. The EBS root holds
       # only the OS and baked toolchain on the gp3 free baseline.
       root_volume_size       = 40
       root_volume_iops       = 3000
       root_volume_throughput = 125
+      extra_tags             = {}
     }
     # Dedicated single-host pool for _site_test. Its 8-vCPU c8id.2xlarge hosts
     # the 6-vCPU / 12-GiB guest without contending with the role-cell burst.
     # It reuses the role pool's launch template and overrides only instance type.
     site = {
-      name                   = "homelab-ci-qemu-site"
-      instance_type_override = "c8id.2xlarge"
-      max_size               = 1
+      name                    = "homelab-ci-qemu-site"
+      instance_type_overrides = ["c8id.2xlarge"]
+      max_size                = 1
+      extra_tags              = {}
+    }
+    arm = {
+      name                    = "homelab-ci-qemu-arm"
+      instance_type_overrides = ["c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"]
+      max_size                = 1
+      root_volume_size        = 40
+      extra_tags              = { architecture = "aarch64" }
     }
   }
   ci_qemu_image_read_statements = [
@@ -611,10 +614,7 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
           "autoscaling:SetInstanceProtection",
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
-        Resource = concat(
-          [for pool in aws_autoscaling_group.ci_qemu : pool.arn],
-          [aws_autoscaling_group.ci_qemu_arm.arn],
-        )
+        Resource = [for pool in aws_autoscaling_group.ci_qemu : pool.arn]
       },
       {
         Sid    = "DescribeQemuHostFleet"
@@ -635,10 +635,7 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
         Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
         Condition = {
           StringEquals = {
-            "ec2:ResourceTag/aws:autoscaling:groupName" = concat(
-              [for pool in local.ci_qemu_pools : pool.name],
-              [local.ci_qemu_arm_pool.name],
-            )
+            "ec2:ResourceTag/aws:autoscaling:groupName" = [for pool in local.ci_qemu_pools : pool.name]
           }
         }
       },
@@ -874,6 +871,11 @@ resource "aws_launch_template" "ci_qemu_host" {
   }
 }
 
+moved {
+  from = aws_autoscaling_group.ci_qemu_arm
+  to   = aws_autoscaling_group.ci_qemu["arm"]
+}
+
 resource "aws_autoscaling_group" "ci_qemu" {
   for_each = local.ci_qemu_pools
 
@@ -895,13 +897,13 @@ resource "aws_autoscaling_group" "ci_qemu" {
 
     launch_template {
       launch_template_specification {
-        launch_template_id = aws_launch_template.ci_qemu_host.id
+        launch_template_id = each.key == "arm" ? aws_launch_template.ci_qemu_arm_host.id : aws_launch_template.ci_qemu_host.id
         version            = "$Latest"
       }
 
-      # The site pool overrides the role pool's launch-template instance type.
+      # Site and ARM pools override their launch-template instance types.
       dynamic "override" {
-        for_each = each.value.instance_type_override == null ? [] : [each.value.instance_type_override]
+        for_each = each.value.instance_type_overrides
 
         content {
           instance_type = override.value
@@ -911,11 +913,11 @@ resource "aws_autoscaling_group" "ci_qemu" {
   }
 
   dynamic "tag" {
-    for_each = {
+    for_each = merge({
       Name = each.value.name
       role = "ci-qemu-host"
       pool = each.value.name
-    }
+    }, each.value.extra_tags)
     iterator = asg_tag
 
     content {
@@ -933,12 +935,12 @@ resource "aws_autoscaling_group" "ci_qemu" {
 # ARM bare metal exposes KVM directly, so unlike the virtualized x86_64 hosts
 # this template deliberately has no nested-virtualization cpu_options block.
 resource "aws_launch_template" "ci_qemu_arm_host" {
-  name                   = local.ci_qemu_arm_pool.name
+  name                   = local.ci_qemu_pools.arm.name
   description            = "homelab CI ARM nested-qemu host"
   update_default_version = true
 
   image_id      = "resolve:ssm:${local.ci_qemu_arm_host_ami_parameter}"
-  instance_type = local.ci_qemu_arm_pool.instance_types[0]
+  instance_type = local.ci_qemu_pools.arm.instance_type_overrides[0]
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -957,7 +959,7 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
     device_name = "/dev/sda1"
 
     ebs {
-      volume_size           = local.ci_qemu_arm_pool.root_volume_size
+      volume_size           = local.ci_qemu_pools.arm.root_volume_size
       volume_type           = "gp3"
       iops                  = 3000
       throughput            = 125
@@ -978,70 +980,16 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
       tags = {
         architecture = "aarch64"
         role         = "ci-qemu-host"
-        pool         = local.ci_qemu_arm_pool.name
+        pool         = local.ci_qemu_pools.arm.name
       }
     }
   }
 
   tags = {
-    Name         = local.ci_qemu_arm_pool.name
+    Name         = local.ci_qemu_pools.arm.name
     architecture = "aarch64"
     role         = "ci"
-    pool         = local.ci_qemu_arm_pool.name
-  }
-}
-
-resource "aws_autoscaling_group" "ci_qemu_arm" {
-  name                  = local.ci_qemu_arm_pool.name
-  min_size              = 0
-  max_size              = local.ci_qemu_arm_pool.max_size
-  desired_capacity      = 0
-  protect_from_scale_in = true
-  health_check_type     = "EC2"
-  suspended_processes   = ["AZRebalance"]
-  vpc_zone_identifier   = [for subnet in aws_subnet.ci : subnet.id]
-
-  mixed_instances_policy {
-    instances_distribution {
-      on_demand_base_capacity                  = 0
-      on_demand_percentage_above_base_capacity = 0
-      spot_allocation_strategy                 = "price-capacity-optimized"
-    }
-
-    launch_template {
-      launch_template_specification {
-        launch_template_id = aws_launch_template.ci_qemu_arm_host.id
-        version            = "$Latest"
-      }
-
-      dynamic "override" {
-        for_each = toset(local.ci_qemu_arm_pool.instance_types)
-
-        content {
-          instance_type = override.value
-        }
-      }
-    }
-  }
-
-  dynamic "tag" {
-    for_each = {
-      Name         = local.ci_qemu_arm_pool.name
-      architecture = "aarch64"
-      role         = "ci-qemu-host"
-      pool         = local.ci_qemu_arm_pool.name
-    }
-    iterator = asg_tag
-
-    content {
-      key                 = asg_tag.key
-      value               = asg_tag.value
-      propagate_at_launch = true
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [desired_capacity]
+    pool         = local.ci_qemu_pools.arm.name
   }
 }
 
