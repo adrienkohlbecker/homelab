@@ -633,8 +633,6 @@ class TestConditionalWrites:
 
         def run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
             calls.append([*argv, Path(argv[argv.index("--body") + 1]).read_text()] if "--body" in argv else argv)
-            if "get-object" in argv and returncode == 0:
-                Path(argv[-1]).write_text('{"build_id": "old"}\n')
             return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr=stderr)
 
         monkeypatch.setattr(upload.subprocess, "run", run)
@@ -642,7 +640,7 @@ class TestConditionalWrites:
 
     def test_pointer_replacement_must_match_the_etag_it_read(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls = self._fake_aws(monkeypatch)
-        current = upload.CurrentPointer(body="{}", etag='"abc"')
+        current = '"abc"'
 
         upload.write_pointer("bucket", "noble/box/promoted.json", "new body\n", "region", current)
 
@@ -679,15 +677,13 @@ class TestConditionalWrites:
         with pytest.raises(subprocess.CalledProcessError):
             upload.write_pointer("bucket", "noble/box/promoted.json", "body\n", "region", None)
 
-    def test_reads_pointer_body_with_its_etag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reads_pointer_etag_without_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._fake_aws(monkeypatch, stdout='{"ETag": "\\"abc\\""}')
 
-        assert upload.read_pointer("bucket", "noble/box/promoted.json", "region") == upload.CurrentPointer(
-            body='{"build_id": "old"}\n', etag='"abc"'
-        )
+        assert upload.read_pointer("bucket", "noble/box/promoted.json", "region") == '"abc"'
 
     def test_missing_pointer_reads_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (NoSuchKey)")
+        self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (404) when calling the HeadObject operation")
 
         assert upload.read_pointer("bucket", "noble/box/promoted.json", "region") is None
 

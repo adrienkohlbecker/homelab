@@ -54,7 +54,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 S3_CHECKSUM_ALGORITHM = "SHA256"
@@ -274,13 +274,6 @@ def assert_new_object(bucket: str, key: str, region: str) -> None:
         sys.exit(f"refusing to overwrite existing object: s3://{bucket}/{key}")
 
 
-class CurrentPointer(NamedTuple):
-    """The promoted pointer as read, with the ETag a replacement must match."""
-
-    body: str
-    etag: str
-
-
 def conditional_put(
     bucket: str,
     path: Path,
@@ -411,32 +404,30 @@ def tag_builds(
             tag_object(bucket, key, state, region)
 
 
-def read_pointer(bucket: str, key: str, region: str) -> CurrentPointer | None:
-    """Return the current pointer and its ETag, or None when it does not exist.
+def read_pointer(bucket: str, key: str, region: str) -> str | None:
+    """Return the current pointer ETag, or None when it does not exist.
 
     Any other read failure propagates: promotion compares against this ETag,
     so an unreadable pointer must not be mistaken for an absent one.
     """
-    with tempfile.TemporaryDirectory(prefix=".pointer-") as tmp:
-        body_path = Path(tmp) / POINTER_NAME
-        result = subprocess.run(
-            aws_argv(region, "s3api", "get-object", "--bucket", bucket, "--key", key, str(body_path)),
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            if "NoSuchKey" in result.stderr:
-                return None
-            sys.stderr.write(result.stderr)
-            raise subprocess.CalledProcessError(result.returncode, result.args)
-        return CurrentPointer(body=body_path.read_text(), etag=json.loads(result.stdout)["ETag"])
+    result = subprocess.run(
+        aws_argv(region, "s3api", "head-object", "--bucket", bucket, "--key", key),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        if "An error occurred (404)" in result.stderr:
+            return None
+        sys.stderr.write(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+    return json.loads(result.stdout)["ETag"]
 
 
-def write_pointer(bucket: str, key: str, body: str, region: str, current: CurrentPointer | None) -> None:
+def write_pointer(bucket: str, key: str, body: str, region: str, current: str | None) -> None:
     """Replace the pointer only if it is still *current* (or still absent)."""
     print(f"==> writing pointer s3://{bucket}/{key}")
-    precondition = ["--if-match", current.etag] if current is not None else ["--if-none-match", "*"]
+    precondition = ["--if-match", current] if current is not None else ["--if-none-match", "*"]
     with tempfile.TemporaryDirectory(prefix=".pointer-") as tmp:
         body_path = Path(tmp) / POINTER_NAME
         body_path.write_text(body)
