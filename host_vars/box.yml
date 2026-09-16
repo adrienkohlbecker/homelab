@@ -154,7 +154,6 @@ tailscale_accept_routes: true
 # model the home-router tailscale DNAT directly instead of receiving a
 # role-specific harness override.
 tailscale_port: 41641
-tailscale_wan_direct: true
 
 # roles/nut wake-leg fixture: one MAC (the test-vault twin of prod's
 # lab NIC, group_vars/test.yml) so the wakeonlan arm in nut_notify, the

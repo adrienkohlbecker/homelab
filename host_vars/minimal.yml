@@ -19,6 +19,7 @@ journald_storage: volatile
 # Inherits empty macvlan_blocks: minimal doesn't trunk any VLANs and doesn't
 # need an L2-on-LAN presence for containers.
 grub_bootloader: true
+tailscale_port: 41641
 
 # The role installs the optional kernel-module package omitted by this trimmed
 # cloud image, making minimal the zram-only fixture.

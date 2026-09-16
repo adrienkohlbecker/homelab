@@ -270,7 +270,6 @@ tailscale_advertise_routes:
 # Dedicated shared-WAN endpoint for direct roaming-client traffic; the firewall
 # opens it, but the UniFi router still needs UDP 41644 forwarded 1:1 to lab.
 tailscale_port: 41644
-tailscale_wan_direct: true
 
 nginx_static_proxies_enabled: true
 

@@ -192,7 +192,6 @@
 # Tailscale disco silenced-noise — UDP from a representative untrusted zone
 # must land on the Tailscale silence rule rather than the catch-all.
 - name: _verify_drops | Input — UDP to tailscale port from untrusted zone hits the tailscale silenced-noise drop
-  when: tailscale_wan_direct | default(false)
   command:
     argv:
       - ip
