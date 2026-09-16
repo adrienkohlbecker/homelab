@@ -3,14 +3,17 @@
 import asyncio
 import contextlib
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
+import jinja2
 import pytest
 import site_test
+import yaml
 from machine import Machine
 
 
-class CheckModeMachine:
+class SiteTestMachine:
     def __init__(self, workdir_path: Path) -> None:
         self.workdir_path = workdir_path
         self.keep_vm = False
@@ -18,7 +21,7 @@ class CheckModeMachine:
         self.ssh_calls: list[tuple[str, ...]] = []
         self.system_running_calls = 0
 
-    async def __aenter__(self) -> CheckModeMachine:
+    async def __aenter__(self) -> SiteTestMachine:
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -39,8 +42,12 @@ class CheckModeMachine:
     async def ansible_command(self, *args: str) -> None:
         self.ansible_calls.append(args)
 
-    async def ssh_command(self, *args: str, check: bool = True) -> None:
+    async def ssh_command(self, *args: str, check: bool = True) -> SimpleNamespace:
         self.ssh_calls.append(args)
+        return SimpleNamespace(stdout=["running"])
+
+    async def wait(self) -> None:
+        return None
 
 
 def test_check_mode_forwards_flag_and_skips_poweroff(
@@ -48,7 +55,7 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
-    machine = CheckModeMachine(tmp_path)
+    machine = SiteTestMachine(tmp_path)
 
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10, check_mode=True))
 
@@ -59,3 +66,23 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     ]
     assert machine.system_running_calls == 1
     assert machine.ssh_calls == []
+
+
+def test_converge_poweroff_ignores_fixture_inhibitor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
+    machine = SiteTestMachine(tmp_path)
+
+    asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
+
+    assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") in machine.ssh_calls
+
+
+def test_reboot_bypasses_inhibitor_only_in_qemu() -> None:
+    task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())[0]
+    command = jinja2.Template(task["reboot"]["reboot_command"])
+
+    assert command.render(qemu_test=True) == "/usr/bin/sudo -n /usr/bin/systemctl --check-inhibitors=no reboot"
+    assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"

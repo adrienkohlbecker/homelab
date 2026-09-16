@@ -164,7 +164,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                 failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
                 print_line(f"Fleet settled as {settle_state!r}; failed units:\n{failed_units}")
 
-            await m.ssh_command("sudo", "systemctl", "poweroff", check=False)
+            await m.ssh_command("sudo", "systemctl", "--check-inhibitors=no", "poweroff", check=False)
             # Bound the shutdown wait separately from the converge
             # budget: a wedged stop job must surface as a failure,
             # not eat the remaining --timeout. collect_failure_

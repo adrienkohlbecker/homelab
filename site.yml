@@ -292,31 +292,6 @@
               VIP drain failed — keepalived has been restarted on this host.
               Investigate the peer before retrying the reboot.
 
-    # The single-host integration fixture has no DNS peer, so the AdGuard guard
-    # deliberately holds its inhibitor forever. Its role test covers that lock;
-    # disable it here so the integration test can exercise both the reboot and
-    # its final poweroff without the guard returning after boot. Stat first: the
-    # unit rides the adguard role, so a tag-scoped or --start-at-task converge
-    # that never reached that role leaves nothing for `state: stopped` to find.
-    - name: Stat the DNS reboot guard unit in QEMU
-      stat:
-        path: /etc/systemd/system/adguard_reboot_guard.service
-      register: qemu_dns_reboot_guard_unit
-      when:
-        - reboot_required.stat.exists
-        - qemu_test
-
-    - name: Disable DNS reboot guard in QEMU
-      systemd:
-        name: adguard_reboot_guard.service
-        state: stopped
-        enabled: false
-      when:
-        - reboot_required.stat.exists
-        - qemu_test
-        - qemu_dns_reboot_guard_unit.stat.exists
-      become: true
-
     - name: Restart machine
       import_role:
         name: reboot
