@@ -571,6 +571,25 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert "sshd -t" in provision
 
 
+@pytest.mark.parametrize("architecture,installs_key", [("x86_64", False), ("aarch64", True)])
+def test_qemu_host_static_key_is_arm_only(tmp_path: Path, architecture: str, installs_key: bool) -> None:
+    provision = QEMU_HOST_PROVISION_SH.read_text()
+    key_section = provision.split("# connector; x86 continues to use EC2 Instance Connect.\n", 1)[1].split(
+        "\nsudo install -dm 0755 /opt/mise", 1
+    )[0]
+    commands = tmp_path / "commands"
+    script = f'''set -euo pipefail
+sudo() {{ printf '%s\\n' "$*" >> "$COMMANDS"; }}
+{key_section}
+'''
+    subprocess.run(
+        ["bash", "-c", script],
+        check=True,
+        env={**os.environ, "TARGET_ARCHITECTURE": architecture, "COMMANDS": str(commands)},
+    )
+    assert ("/etc/ssh/authorized_keys/ubuntu" in commands.read_text() if commands.exists() else False) is installs_key
+
+
 @pytest.mark.skipif(
     shutil.which("qemu-system-aarch64") is None
     or not (REPO_ROOT / "test" / "firmware" / "edk2-aarch64-code.fd").is_file(),
