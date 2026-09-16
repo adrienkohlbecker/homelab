@@ -1,15 +1,4 @@
 ---
-# Seed enabled linger outside Lab so converge proves the policy disables it.
-- name: _setup | Enable operator linger outside Lab
-  when: not podman_operator_prune_enabled
-  import_role:
-    name: linger
-    tasks_from: linger
-  vars:
-    linger_args:
-      name: "{{ ansible_user_id }}"
-      uid: "{{ ansible_user_uid }}"
-
 # Box Noble prestarts the API daemon to exercise the existing-service restart.
 - name: _setup | Prepare the running-service restart exercise
   when:

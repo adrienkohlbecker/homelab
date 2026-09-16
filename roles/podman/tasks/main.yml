@@ -70,19 +70,6 @@
   tags:
     - podman
 
-- name: Disable operator linger outside Lab
-  when: not podman_operator_prune_enabled
-  import_role:
-    name: linger
-    tasks_from: disable
-  vars:
-    # Keep the manager serving the current login; it stops after logout once
-    # the persistence marker is gone.
-    linger_args:
-      name: "{{ ansible_user_id }}"
-  tags:
-    - podman
-
 - name: Install rootful podman prune timer
   import_tasks: prune.yml
   vars:
