@@ -44,63 +44,35 @@
         path: "{{ macos_vm_missing_firmware_fixture.path }}"
         state: absent
 
-- name: _verify | Render production units for both execution modes
-  template:
-    src: macos_vm.service.j2
-    dest: "/tmp/macos-vm-{{ item.label }}.service"
-    mode: "0644"
+- name: _verify | Verify both macOS VM execution modes
   vars:
     macos_vm_name: verify
     macos_vm_workdir: /mnt/services/macos_vm
     macos_vm_disk_source: /dev/zvol/tank/macos_vm
-    macos_vm_memory_mib: 4096
-    macos_vm_vcpus: 2
-    macos_vm_resolved_mac: 02:00:00:00:00:01
-    macos_vm_ssh_host_listen: 127.0.0.1
-    macos_vm_ssh_host_port: 2222
-    macos_vm_vnc_keymap: en-us
-    macos_vm_vnc_listen: 127.0.0.1
-    macos_vm_install_mode: "{{ item.install_mode }}"
-    macos_vm_cpu_pinset: "{{ item.cpu_pinset }}"
-    macos_vm_domain_type: "{{ item.domain_type }}"
-  loop:
-    - label: install_kvm
-      install_mode: true
-      cpu_pinset: 0,1
-      domain_type: kvm
-    - label: running_tcg
-      install_mode: false
-      cpu_pinset: ""
-      domain_type: qemu
-  become: true
+  block:
+    - name: _verify | Verify install-mode KVM unit
+      vars:
+        macos_vm_install_mode: true
+        macos_vm_cpu_pinset: 0,1
+        macos_vm_domain_type: kvm
+        _macos_vm_unit: "{{ lookup('template', role_path ~ '/templates/macos_vm.service.j2') }}"
+      assert:
+        that:
+          - "'ConditionPathExists=/mnt/services/macos_vm/BaseSystem.img' in _macos_vm_unit"
+          - "'ExecStart=/usr/bin/taskset -c 0,1 /usr/bin/qemu-system-x86_64' in _macos_vm_unit"
+          - "'-enable-kvm' in _macos_vm_unit"
 
-- name: _verify | Verify both macOS VM execution modes
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-
-        install = pathlib.Path("/tmp/macos-vm-install_kvm.service").read_text()
-        assert "ConditionPathExists=/mnt/services/macos_vm/BaseSystem.img" in install
-        assert "ExecStart=/usr/bin/taskset -c 0,1 /usr/bin/qemu-system-x86_64" in install
-        assert "-enable-kvm" in install
-        running = pathlib.Path("/tmp/macos-vm-running_tcg.service").read_text()
-        assert "BaseSystem.img" not in running
-        assert "taskset" not in running
-        assert "-enable-kvm" not in running
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate macOS VM units
-  file:
-    path: "/tmp/macos-vm-{{ item }}.service"
-    state: absent
-  loop:
-    - install_kvm
-    - running_tcg
-  become: true
+    - name: _verify | Verify running TCG unit
+      vars:
+        macos_vm_install_mode: false
+        macos_vm_cpu_pinset: ""
+        macos_vm_domain_type: qemu
+        _macos_vm_unit: "{{ lookup('template', role_path ~ '/templates/macos_vm.service.j2') }}"
+      assert:
+        that:
+          - "'BaseSystem.img' not in _macos_vm_unit"
+          - "'taskset' not in _macos_vm_unit"
+          - "'-enable-kvm' not in _macos_vm_unit"
 
 - name: _verify | Create firmware guard fixture
   tempfile:
