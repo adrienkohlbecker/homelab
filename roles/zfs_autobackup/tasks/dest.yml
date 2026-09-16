@@ -1,38 +1,69 @@
 # zfs-autobackup pulls each peer's snapshots into its dest_dataset but refuses
 # to create the top-level target itself ("Target path '<ds>' does not exist.
 # Please create this dataset first."), so a source added to host_vars without a
-# hand-created target fails silently every night. Create the parent as a pure
-# container (canmount=off/mountpoint=none, matching the existing receive roots);
+# hand-created target fails silently every night. Keep the parent as a pure
+# container (canmount=off/mountpoint=none);
 # the received children carry their own readonly=on/mountpoint=none from the
 # onsite pull's --set-properties.
-#
-# Gated on non-existence rather than letting community.general.zfs reconcile
-# properties every run: an existing receive root is already populated and may
-# carry properties set by zfs receive over time, so we create-if-missing and
-# never touch it again.
-- name: dest | List existing datasets
-  command: zfs list -H -o name
+- name: dest | Read backup receive-root properties
+  when: zfs_root
+  command: zfs get -H -o value canmount,mountpoint {{ item.dest_dataset }}
   check_mode: false
   changed_when: false
-  register: _zfs_autobackup_existing_datasets
-  when: zfs_root
+  failed_when: false
+  loop: "{{ zfs_autobackup_sources }}"
+  loop_control:
+    label: "{{ item.dest_dataset }}"
+  register: zfs_autobackup_receive_roots
   become: true
   tags:
     - zfs_autobackup
 
-- name: dest | Ensure backup receive-target datasets exist
+- name: dest | Create missing backup receive roots
   when:
     - zfs_root
-    - item.dest_dataset not in (_zfs_autobackup_existing_datasets.stdout_lines | default([]))
+    - item.rc != 0
   community.general.zfs:
-    name: "{{ item.dest_dataset }}"
+    name: "{{ item.item.dest_dataset }}"
     state: present
     extra_zfs_properties:
       canmount: "off"
       mountpoint: none
-  loop: "{{ zfs_autobackup_sources }}"
+  loop: "{{ zfs_autobackup_receive_roots.results | default([]) }}"
   loop_control:
-    label: "{{ item.dest_dataset }}"
+    label: "{{ item.item.dest_dataset }}"
+  become: true
+  tags:
+    - zfs_autobackup
+
+# The ZFS module treats mountpoint=none as null on existing datasets and would
+# report a change every run, so compare the live values before issuing zfs set.
+- name: dest | Preview backup receive-root repairs
+  when:
+    - zfs_root
+    - item.rc == 0
+    - item.stdout_lines != ['off', 'none']
+    - ansible_check_mode
+  debug:
+    msg: "{{ item.item.dest_dataset }}: {{ item.stdout_lines }} -> ['off', 'none']"
+  changed_when: true
+  loop: "{{ zfs_autobackup_receive_roots.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.dest_dataset }}"
+  tags:
+    - zfs_autobackup
+
+- name: dest | Reconcile existing backup receive roots
+  when:
+    - zfs_root
+    - item.rc == 0
+    - item.stdout_lines != ['off', 'none']
+    - not ansible_check_mode
+  command: zfs set canmount=off mountpoint=none {{ item.item.dest_dataset }}
+  changed_when: true
+  loop: "{{ zfs_autobackup_receive_roots.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.dest_dataset }}"
   become: true
   tags:
     - zfs_autobackup

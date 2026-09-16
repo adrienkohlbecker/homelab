@@ -74,6 +74,21 @@
       Expected canmount=off and mountpoint=none on the receive root, got
       {{ zfs_autobackup_verify_receive_root.stdout_lines }}
 
+- name: _verify | Drift the receive root canmount policy
+  command: zfs set canmount=on rpool/zfs_autobackup_receive_test
+  changed_when: true
+  become: true
+
+- name: _verify | Reconcile the receive root
+  import_tasks: dest.yml
+
+- name: _verify | Read the repaired receive root policy
+  command: zfs get -H -o value canmount rpool/zfs_autobackup_receive_test
+  register: zfs_autobackup_verify_repaired_receive_root
+  changed_when: false
+  failed_when: zfs_autobackup_verify_repaired_receive_root.stdout != 'off'
+  become: true
+
 - name: _verify | Exercise backup identity migration and persistence
   import_tasks: _verify_identity.yml
 
