@@ -48,11 +48,6 @@
   tags:
     - macos_vm
 
-- name: Resolve VM MAC address
-  import_tasks: resolve_mac.yml
-  tags:
-    - macos_vm
-
 - name: Fetch and stage upstream artifacts
   import_tasks: artifacts.yml
   tags:

@@ -1,9 +1,6 @@
-- name: _verify | Exercise an explicit MAC address through production resolution
-  import_tasks: resolve_mac.yml
+- name: _verify | Preserve the explicit MAC address
   vars:
     macos_vm_mac_address: 02:00:00:00:00:02
-
-- name: _verify | Preserve the explicit MAC address
   assert:
     that: macos_vm_resolved_mac == '02:00:00:00:00:02'
 

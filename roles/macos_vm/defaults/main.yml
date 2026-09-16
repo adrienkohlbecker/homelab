@@ -31,6 +31,9 @@ macos_vm_network_mode: nat
 macos_vm_ssh_host_listen: "127.0.0.1"
 macos_vm_ssh_host_port: 2222
 macos_vm_mac_address: ""                # auto-generated from inventory_hostname+name if empty
+macos_vm_resolved_mac: >-
+  {{ macos_vm_mac_address if (macos_vm_mac_address | length > 0)
+     else ('52:54:00' | random_mac(seed=inventory_hostname ~ '/' ~ macos_vm_name)) }}
 
 # Display & input.
 # Tunnel via SSH; change only when remote VNC is intentional.

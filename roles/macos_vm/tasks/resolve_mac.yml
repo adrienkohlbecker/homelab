@@ -1,7 +1,0 @@
-- name: resolve_mac | Compute MAC address
-  set_fact:
-    macos_vm_resolved_mac: >-
-      {{ macos_vm_mac_address if (macos_vm_mac_address | length > 0)
-         else ('52:54:00' | random_mac(seed=inventory_hostname ~ '/' ~ macos_vm_name)) }}
-  tags:
-    - macos_vm
