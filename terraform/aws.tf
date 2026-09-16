@@ -18,15 +18,6 @@ provider "aws" {
   profile = "default"
 }
 
-# Ireland resources remain in Terraform state until the Frankfurt ARM lane
-# passes; the provider is required to retire them safely after cutover.
-# tflint-ignore: terraform_unused_declarations
-provider "aws" {
-  alias   = "ireland"
-  region  = "eu-west-1"
-  profile = "default"
-}
-
 # The single human admin. Not managing the access key, virtual MFA device, or
 # console login profile attached to it: their secrets/passwords can't be read
 # back via the API (they live in 1Password), and adopting the bootstrap access
