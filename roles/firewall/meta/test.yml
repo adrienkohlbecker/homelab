@@ -1,12 +1,4 @@
-# Release-divergent: resolute+ removes the iptables-nft compat package (no
-# users left there); noble keeps it. resolute is the only release that
-# exercises the removal path.
+# Box exercises the full LAN/VIP fixture; Minimal covers the cloud-image base.
 machines:
   box:
   minimal:
-ubuntu:
-  - resolute
-skip:
-  "minimal:resolute": >-
-    Box covers the Resolute-only iptables removal; Minimal covers first-install
-    and disabled optional policies on Noble.

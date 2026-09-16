@@ -439,18 +439,3 @@
   become: true
   tags:
     - firewall
-
-# On resolute+ the compat layer has no users — drop the package so
-# `iptables -L` doesn't quietly resurrect empty `ip filter` chains
-# (and so an operator looking for the ruleset doesn't get a confusing
-# half-answer). apt resolves dependents; if anything still hard-
-# Depends on iptables on a future release, this fails loudly.
-- name: Remove iptables-nft compat layer (resolute+)
-  when: ansible_distribution_release != "noble"
-  apt:
-    pkg:
-      - iptables
-    state: absent
-  become: true
-  tags:
-    - firewall
