@@ -41,11 +41,7 @@
     _samba_default_writable.stdout | trim != item.expected
   become: true
 
-- name: _verify | Render production ZFS dependencies with repeated mounts
-  template:
-    src: smbd_zfs_mounts_override.conf.j2
-    dest: /tmp/samba-zfs-mounts.conf
-    mode: "0644"
+- name: _verify | Each ZFS mount dependency is emitted once
   vars:
     samba_shares:
       - name: first_data
@@ -56,32 +52,17 @@
         path: /mnt/media
       - name: ignored
         path: /srv/ignored
-  become: true
+    _samba_zfs_override: "{{ lookup('template', 'smbd_zfs_mounts_override.conf.j2') }}"
+  assert:
+    that:
+      - _samba_zfs_override.count('Requires=zfs_mount_mnt_data.service') == 1
+      - _samba_zfs_override.count('Requires=zfs_mount_mnt_media.service') == 1
+      - "'/srv/ignored' not in _samba_zfs_override"
 
-- name: _verify | Verify each ZFS mount dependency is emitted once
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-        import sys
-
-        override = pathlib.Path(sys.argv[1]).read_text()
-        assert override.count("Requires=zfs_mount_mnt_data.service") == 1
-        assert override.count("Requires=zfs_mount_mnt_media.service") == 1
-        assert "/srv/ignored" not in override
-      - /tmp/samba-zfs-mounts.conf
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate Samba configs
+- name: _verify | Remove alternate Samba config
   file:
-    path: "/tmp/{{ item }}"
+    path: /tmp/samba-default-writable.conf
     state: absent
-  loop:
-    - samba-default-writable.conf
-    - samba-zfs-mounts.conf
   become: true
 
 # nmbd is masked (NetBIOS retired) -- prove it can't be started, not merely
