@@ -18,56 +18,13 @@
   until: _homepage_http.status == 200
   become: true
 
-- name: _verify | Resolve the installed Homepage account
-  getent:
-    database: passwd
-    key: homepage
-
-- name: _verify | Render Homepage units for alternate storage layouts
-  template:
-    src: homepage.service.j2
-    dest: "/tmp/homepage-{{ item.name }}.service"
-    mode: "0644"
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
-    homepage_user:
-      uid: "{{ ansible_facts.getent_passwd.homepage[1] }}"
-      gid: "{{ ansible_facts.getent_passwd.homepage[2] }}"
-    zfs_root: "{{ item.zfs_root }}"
-    zfs_has_services_mount: "{{ item.zfs_has_services_mount }}"
-  loop:
-    - name: ext4
-      zfs_root: false
-      zfs_has_services_mount: false
-    - name: zfs_services
-      zfs_root: true
-      zfs_has_services_mount: true
-  become: true
-
-- name: _verify | Read alternate-storage Homepage units
-  slurp:
-    src: "/tmp/homepage-{{ item }}.service"
-  loop:
-    - ext4
-    - zfs_services
-  register: _homepage_storage_units
-  become: true
-
-- name: _verify | Assert storage dependencies match the rendered layout
-  assert:
-    that:
-      - '"Requires=zfs_mount_mnt_services.service" not in (_homepage_storage_units.results[0].content | b64decode)'
-      - '"After=zfs_mount_mnt_services.service" not in (_homepage_storage_units.results[0].content | b64decode)'
-      - '"Requires=zfs_mount_mnt_services.service" in (_homepage_storage_units.results[1].content | b64decode)'
-      - '"After=zfs_mount_mnt_services.service" in (_homepage_storage_units.results[1].content | b64decode)'
-
-- name: _verify | Remove alternate-storage Homepage units
-  file:
-    path: "/tmp/homepage-{{ item }}.service"
-    state: absent
-  loop:
-    - ext4
-    - zfs_services
-  become: true
+    _storage_service: homepage
+    _storage_template: "{{ role_path }}/templates/homepage.service.j2"
+    _storage_mounts: [ services ]
+    _storage_autosnapshot: false
 
 # Wait + assert split: the post-install service start renders index.html, but
 # ansible may race that first run. Combining retry-until with a content check
