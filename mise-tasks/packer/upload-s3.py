@@ -43,7 +43,9 @@ the eventual deletion after the seven-day recovery window.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
+import hashlib
 import json
 import os
 import shutil
@@ -76,7 +78,6 @@ from qemu_image_store import (  # noqa: E402
     image_store,
     output,
     run,
-    sha256,
 )
 
 
@@ -205,9 +206,56 @@ def build_manifest(
     }
 
 
-def create_bundle(tar: str, root: Path, members: list[str], bundle: Path) -> None:
-    print(f"==> creating {bundle}")
-    run([tar, "--sparse", "--zstd", "-cf", str(bundle), "-C", str(root), *members])
+def upload_bundle(tar: str, root: Path, files: list[Path], bucket: str, key: str, region: str) -> str:
+    """Hash the compressed tar stream while uploading it, without staging an archive."""
+    uri = f"s3://{bucket}/{key}"
+    print(f"==> streaming bundle to {uri}")
+    upload_args = [
+        *aws_argv(region, "s3", "cp", "-", uri),
+        "--only-show-errors",
+        "--checksum-algorithm",
+        S3_CHECKSUM_ALGORITHM,
+        "--content-type",
+        "application/zstd",
+    ]
+    source_size = sum(path.stat().st_size for path in files)
+    # A conservative size hint avoids S3's 10,000-part limit near 50 GiB.
+    if source_size > 45 * 1024**3:
+        upload_args += ["--expected-size", str(source_size + 1024**3)]
+    tar_args = [tar, "--sparse", "--zstd", "-cf", "-", "-C", str(root), *(path.name for path in files)]
+    producer = subprocess.Popen(tar_args, stdout=subprocess.PIPE)
+    consumer: subprocess.Popen[bytes] | None = None
+    completed = False
+    try:
+        consumer = subprocess.Popen(upload_args, stdin=subprocess.PIPE)
+        assert producer.stdout is not None
+        assert consumer.stdin is not None
+        digest = hashlib.sha256()
+        while chunk := producer.stdout.read(1024 * 1024):
+            consumer.stdin.write(chunk)
+            digest.update(chunk)
+        if producer.wait() != 0:
+            raise subprocess.CalledProcessError(producer.returncode, tar_args)
+        consumer.stdin.close()
+        if consumer.wait() != 0:
+            raise subprocess.CalledProcessError(consumer.returncode, upload_args)
+        completed = True
+        return digest.hexdigest()
+    finally:
+        if producer.stdout is not None:
+            producer.stdout.close()
+        if consumer is not None:
+            if not completed and consumer.poll() is None:
+                consumer.terminate()
+            if consumer.stdin is not None and not consumer.stdin.closed:
+                # A failed upload may close its pipe before buffered bytes flush.
+                with contextlib.suppress(BrokenPipeError):
+                    consumer.stdin.close()
+            if consumer.poll() is None:
+                consumer.wait()
+        if producer.poll() is None:
+            producer.terminate()
+            producer.wait()
 
 
 def aws_argv(region: str, *args: str) -> list[str]:
@@ -291,22 +339,6 @@ def publish_manifest(bucket: str, path: Path, key: str, region: str) -> None:
         precondition=["--if-none-match", "*"],
         conflict=f"refusing to overwrite existing object: s3://{bucket}/{key}",
     )
-
-
-def upload_file(bucket: str, path: Path, key: str, region: str, content_type: str | None = None) -> None:
-    args = [
-        "s3",
-        "cp",
-        str(path),
-        f"s3://{bucket}/{key}",
-        "--only-show-errors",
-        "--checksum-algorithm",
-        S3_CHECKSUM_ALGORITHM,
-    ]
-    if content_type:
-        args += ["--content-type", content_type]
-    print(f"==> uploading s3://{bucket}/{key}")
-    run(aws_argv(region, *args))
 
 
 def tag_object(bucket: str, key: str, state: str, region: str) -> None:
@@ -470,20 +502,16 @@ def main() -> int:
     assert_new_object(args.bucket, bundle_key, args.region)
     assert_new_object(args.bucket, manifest_key, args.region)
 
-    # Bundles can be larger than the runner's memory-backed /tmp. Stage beside
-    # the source artifacts so they stay on the same scratch filesystem. GitLab
-    # sends SIGTERM on job timeout or cancel, and Python's default handler exits
-    # without unwinding, which would strand the bundle on persistent scratch.
+    # GitLab sends SIGTERM on job timeout or cancel; unwind so both subprocesses
+    # stop before a partially streamed archive can be published as a build.
     signal.signal(signal.SIGTERM, lambda signum, _frame: sys.exit(128 + signum))
-    with tempfile.TemporaryDirectory(prefix=".packer-s3-", dir=root.parent) as tmp:
+    with tempfile.TemporaryDirectory(prefix=".packer-s3-") as tmp:
         tmpdir = Path(tmp)
-        bundle = tmpdir / BUNDLE_NAME
         manifest_path = tmpdir / MANIFEST_NAME
-        create_bundle(tar, root, [path.name for path in (*disks, efivars)], bundle)
-        manifest = build_manifest(args=args, disks=disks, efivars=efivars, bundle_sha256=sha256(bundle))
+        digest = upload_bundle(tar, root, [*disks, efivars], args.bucket, bundle_key, args.region)
+        manifest = build_manifest(args=args, disks=disks, efivars=efivars, bundle_sha256=digest)
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
-        upload_file(args.bucket, bundle, bundle_key, args.region, "application/zstd")
         tag_object(args.bucket, bundle_key, CANDIDATE_STATE, args.region)
         publish_manifest(args.bucket, manifest_path, manifest_key, args.region)
         tag_object(args.bucket, manifest_key, CANDIDATE_STATE, args.region)

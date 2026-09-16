@@ -266,10 +266,13 @@ def test_publish_qemu_refuses_arm_box_deps_without_exact_base(tmp_path: Path) ->
     assert "--base-build-id is required" in result.stderr
 
 
-def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict[str, str], Path, Path]:
-    """Fake tar/aws around a lab artifact dir; tar logs the bundle path it wrote."""
+def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict[str, str], Path, Path, Path]:
+    """Fake tar/aws around a lab artifact dir and capture the uploaded stream."""
     fake_bin = tmp_path / "bin"
     tar_log = tmp_path / "tar.log"
+    stream_log = tmp_path / "stream.log"
+    manifest_log = tmp_path / "manifest.json"
+    aws_calls = tmp_path / "aws.calls"
     artifacts = tmp_path / "scratch" / "noble" / "lab"
     artifacts.mkdir(parents=True)
     (artifacts / "packer-ubuntu-1.raw").write_bytes(b"disk")
@@ -279,14 +282,23 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
         "#!/bin/sh\n"
         "set -eu\n"
         'if [ "${1:-}" = "--help" ]; then printf "%s\\n" "--sparse --zstd"; exit 0; fi\n'
-        'while [ "$1" != "-cf" ]; do shift; done\n'
-        "shift\n"
-        'printf bundle >"$1"\n'
-        'printf "%s\\n" "$1" >"$TAR_TEST_LOG"\n' + tar_tail,
+        'printf "%s\\n" "$*" >"$TAR_TEST_LOG"\n'
+        "printf bundle\n" + tar_tail,
     )
     _executable(
         fake_bin / "aws",
-        '#!/bin/sh\nset -eu\ncase "$*" in *"s3api head-object"*) exit 1 ;; esac\n',
+        '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$AWS_CALL_LOG"\ncase "$*" in\n'
+        '  *"s3api head-object"*) exit 1 ;;\n'
+        '  *"s3 cp - "*)\n'
+        '    if [ "${AWS_STREAM_FAIL:-}" = "1" ]; then exit 9; fi\n'
+        '    cat >"$AWS_STREAM_LOG" ;;\n'
+        '  *"s3api put-object"*)\n'
+        '    previous=""\n'
+        '    for argument in "$@"; do\n'
+        '      if [ "$previous" = "--body" ]; then cp "$argument" "$AWS_MANIFEST_LOG"; fi\n'
+        '      previous="$argument"\n'
+        "    done ;;\n"
+        "esac\n",
     )
     env = dict(os.environ)
     env.update(
@@ -294,6 +306,9 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
         CI_COMMIT_SHA="d" * 40,
         PATH=f"{fake_bin}:{env['PATH']}",
         TAR_TEST_LOG=str(tar_log),
+        AWS_STREAM_LOG=str(stream_log),
+        AWS_MANIFEST_LOG=str(manifest_log),
+        AWS_CALL_LOG=str(aws_calls),
     )
     argv = [
         str(REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"),
@@ -305,28 +320,51 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
         "--build-id",
         "test-build",
     ]
-    return argv, env, artifacts, tar_log
+    return argv, env, artifacts, tar_log, stream_log
 
 
-def test_upload_qemu_stages_bundle_beside_artifacts(tmp_path: Path) -> None:
-    argv, env, artifacts, tar_log = _upload_fixture(tmp_path)
+def test_upload_qemu_streams_bundle_without_staging(tmp_path: Path) -> None:
+    argv, env, artifacts, tar_log, stream_log = _upload_fixture(tmp_path)
 
     result = subprocess.run(argv, cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 0, result.stderr
-    bundle = Path(tar_log.read_text().strip())
-    assert bundle.parent.parent == artifacts.parent
-    assert not bundle.exists()
+    assert "-cf - -C" in tar_log.read_text()
+    assert stream_log.read_bytes() == b"bundle"
+    assert (
+        json.loads(Path(env["AWS_MANIFEST_LOG"]).read_text())["bundle"]["sha256"]
+        == hashlib.sha256(b"bundle").hexdigest()
+    )
+    assert [p.name for p in artifacts.parent.iterdir()] == ["lab"]
 
 
-def test_upload_qemu_removes_staged_bundle_on_sigterm(tmp_path: Path) -> None:
-    argv, env, artifacts, tar_log = _upload_fixture(tmp_path, tar_tail='kill -TERM "$PPID"\n')
+def test_upload_qemu_stops_stream_on_sigterm(tmp_path: Path) -> None:
+    argv, env, artifacts, _tar_log, _stream_log = _upload_fixture(tmp_path, tar_tail='kill -TERM "$PPID"\n')
 
     result = subprocess.run(argv, cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 143
-    assert not Path(tar_log.read_text().strip()).parent.exists()
     assert [p.name for p in artifacts.parent.iterdir()] == ["lab"]
+
+
+def test_upload_qemu_does_not_publish_manifest_after_tar_failure(tmp_path: Path) -> None:
+    argv, env, artifacts, _tar_log, _stream_log = _upload_fixture(tmp_path, tar_tail="exit 7\n")
+
+    result = subprocess.run(argv, cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode != 0
+    assert "s3api put-object" not in Path(env["AWS_CALL_LOG"]).read_text()
+    assert [p.name for p in artifacts.parent.iterdir()] == ["lab"]
+
+
+def test_upload_qemu_does_not_publish_manifest_after_upload_failure(tmp_path: Path) -> None:
+    argv, env, _artifacts, _tar_log, _stream_log = _upload_fixture(tmp_path)
+    env["AWS_STREAM_FAIL"] = "1"
+
+    result = subprocess.run(argv, cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode != 0
+    assert "s3api put-object" not in Path(env["AWS_CALL_LOG"]).read_text()
 
 
 def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(tmp_path: Path) -> None:
