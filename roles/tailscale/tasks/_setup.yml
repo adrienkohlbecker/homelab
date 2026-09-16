@@ -52,6 +52,7 @@
 - name: _setup | Stand up headscale control plane
   import_role:
     name: headscale
+    tasks_from: main
   vars:
     headscale_server_url: "http://localhost:{{ service_ports.headscale }}"
 
