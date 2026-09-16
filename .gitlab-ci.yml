@@ -38,9 +38,9 @@ workflow:
   before_script:
     - mise run ci:bootstrap
 
-.push_or_web:
+.standard_pipeline:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "api"'
 
 .manual_job:
   rules:
@@ -67,7 +67,7 @@ detect:
     # The lab rule must precede source rules because lab uses host tools rather
     # than /opt caches.
     - if: $HOMELAB_CI_TARGET == "lab"
-    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "api"'
       variables:
         MISE_DATA_DIR: /opt/mise
         UV_CACHE_DIR: /opt/uv-cache
@@ -93,7 +93,7 @@ test_cells:
     - job: detect
       artifacts: true
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "api"'
   trigger:
     include:
       - artifact: test-child.yml
@@ -106,7 +106,7 @@ lint:
   stage: prepare
   extends:
     - .hosted
-    - .push_or_web
+    - .standard_pipeline
   tags:
     - saas-linux-medium-amd64
   timeout: 30m
@@ -121,7 +121,7 @@ unit_tests:
   stage: prepare
   extends:
     - .hosted
-    - .push_or_web
+    - .standard_pipeline
   timeout: 15m
   script:
     - mise run test

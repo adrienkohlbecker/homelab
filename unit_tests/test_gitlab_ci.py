@@ -16,6 +16,16 @@ def test_child_pipeline_forwards_pipeline_variables() -> None:
     assert PIPELINE["test_cells"]["trigger"]["forward"]["pipeline_variables"] is True
 
 
+def test_api_pipelines_run_regular_jobs() -> None:
+    source_rule = '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "api"'
+
+    assert PIPELINE[".standard_pipeline"]["rules"] == [{"if": source_rule}]
+    assert PIPELINE["detect"]["rules"][1]["if"] == source_rule
+    assert PIPELINE["test_cells"]["rules"] == [{"if": source_rule}]
+    for job in ("lint", "unit_tests"):
+        assert ".standard_pipeline" in PIPELINE[job]["extends"]
+
+
 def test_lab_qemu_image_is_published_for_supported_releases() -> None:
     assert PIPELINE[".qemu_image"]["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
     # lab's persistent shell runner must not keep the bake role's token.
