@@ -103,19 +103,17 @@
             protocol_version = "HTTP/1.1"
 
             def do_GET(self):
-                # Echo the received request line, Authorization and Authelia
-                # identity header to the journal so the identity-forwarding
-                # assertions can confirm exactly what reached the upstream.
-                print("upstream-saw " + self.path, flush=True)
-                print("upstream-auth " + self.headers.get("Authorization", "<none>"), flush=True)
+                # Keep each request's path and forwarded headers together so
+                # the auth assertions cannot match separate requests.
                 print(
                     "upstream-request "
                     + self.path
                     + " auth="
-                    + self.headers.get("Authorization", "<none>"),
+                    + self.headers.get("Authorization", "<none>")
+                    + " fwduser="
+                    + self.headers.get("X-Forwarded-User", "<none>"),
                     flush=True,
                 )
-                print("upstream-fwduser " + self.headers.get("X-Forwarded-User", "<none>"), flush=True)
                 body = b"nginx_verify_upstream_ok"
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(body)))
@@ -292,7 +290,7 @@
   register: nginx_verify_inj_journal
   changed_when: false
   become: true
-  until: "'upstream-fwduser nginxverifyuser' in nginx_verify_inj_journal.stdout"
+  until: "'upstream-request / auth=<none> fwduser=nginxverifyuser' in nginx_verify_inj_journal.stdout"
   retries: 10
   delay: 1
 
@@ -333,7 +331,7 @@
   register: nginx_verify_basic_journal
   changed_when: false
   become: true
-  until: "'upstream-request /basic-probe auth=<none>' in nginx_verify_basic_journal.stdout"
+  until: "'upstream-request /basic-probe auth=<none> fwduser=nginxverifyuser' in nginx_verify_basic_journal.stdout"
   retries: 10
   delay: 1
 
