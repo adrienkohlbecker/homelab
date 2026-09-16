@@ -196,8 +196,10 @@ def test_frankfurt_contract_documents_are_accepted():
         [
             {"InstanceType": "c6gd.metal", "Location": "eu-central-1a"},
             {"InstanceType": "c7gd.metal", "Location": "eu-central-1b"},
+            {"InstanceType": "m6gd.metal", "Location": "eu-central-1c"},
+            {"InstanceType": "m7gd.metal", "Location": "eu-central-1a"},
         ],
-        [_arm_instance_type("c6gd.metal"), _arm_instance_type("c7gd.metal")],
+        [_arm_instance_type(instance_type) for instance_type in sorted(audit_aws.ARM_INSTANCE_TYPES)],
     )
     audit_aws.audit_promoted_image_document(
         "eu-central-1",
@@ -317,6 +319,8 @@ def test_frankfurt_contract_mismatches_are_reported():
         "Standard Spot quota",
         "c6gd.metal is unavailable",
         "c7gd.metal is unavailable",
+        "m6gd.metal is unavailable",
+        "m7gd.metal is unavailable",
         "promoted qemu-host AMI ami-wrong architecture",
         "AMI public-access block",
         "ECR pull-through rules differ",

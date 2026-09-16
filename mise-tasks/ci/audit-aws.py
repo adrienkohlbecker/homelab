@@ -77,7 +77,7 @@ ECR_UPSTREAMS = {
     "gitlab": "registry.gitlab.com",
     "quay": "quay.io",
 }
-ARM_INSTANCE_TYPES = {"c6gd.metal", "c7gd.metal"}
+ARM_INSTANCE_TYPES = {"c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"}
 ARM_AVAILABILITY_ZONES = {"eu-central-1a", "eu-central-1b", "eu-central-1c"}
 STANDARD_SPOT_QUOTA_CODE = "L-34B43A08"
 ARM_REQUIRED_SPOT_VCPUS = 152

@@ -27,7 +27,7 @@ locals {
   ci_qemu_arm_host_ami_parameter = "/homelab-ci/ami/qemu-host/aarch64/noble"
   ci_qemu_arm_pool = {
     name             = "homelab-ci-qemu-arm"
-    instance_types   = ["c6gd.metal", "c7gd.metal"]
+    instance_types   = ["c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"]
     max_size         = 1
     root_volume_size = 40
   }
