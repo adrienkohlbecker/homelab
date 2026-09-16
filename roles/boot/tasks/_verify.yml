@@ -83,26 +83,12 @@
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: _boot_verify_cmdline
   changed_when: false
+  failed_when: >-
+    _boot_verify_cmdline.rc != 0
+    or 'console=tty0' not in _boot_verify_cmdline.stdout
+    or (_console_serial | trim | length > 0
+        and _console_serial | trim not in _boot_verify_cmdline.stdout)
   become: true
-
-- name: _verify | Commandline carries console=tty0
-  when: not grub_bootloader
-  assert:
-    that:
-      - "'console=tty0' in _boot_verify_cmdline.stdout"
-    fail_msg: >-
-      org.zfsbootmenu:commandline is missing console=tty0 from the 'default'
-      fragment: {{ _boot_verify_cmdline.stdout }}
-
-- name: _verify | Commandline carries serial args (when configured)
-  when: not grub_bootloader and (_console_serial | trim | length > 0)
-  assert:
-    that:
-      - "_console_serial | trim in _boot_verify_cmdline.stdout"
-    fail_msg: >-
-      Expected serial args not found in org.zfsbootmenu:commandline.
-      Expected: {{ _console_serial | trim }}
-      Got: {{ _boot_verify_cmdline.stdout }}
 
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
@@ -113,19 +99,11 @@
   slurp:
     src: /proc/cmdline
   register: _boot_verify_proc_cmdline
+  failed_when: >-
+    _boot_verify_proc_cmdline is failed
+    or 'console=tty0' not in (_boot_verify_proc_cmdline.content | b64decode)
+    or 'earlycon=' not in (_boot_verify_proc_cmdline.content | b64decode)
   become: true
-
-- name: _verify | Running kernel booted with expected command line
-  when: qemu_boot_changes_reachable and not grub_bootloader
-  vars:
-    _cmdline: "{{ _boot_verify_proc_cmdline.content | b64decode }}"
-  assert:
-    that:
-      - "'console=tty0' in _cmdline"
-      - "'earlycon=' in _cmdline"
-    fail_msg: >-
-      /proc/cmdline does not carry the expected console arguments after
-      reboot; the ZBM property may not have propagated: {{ _cmdline }}
 
 # --- EFI NVRAM boot entries ---
 
@@ -171,11 +149,6 @@
   changed_when: false
   become: true
   register: _boot_verify_tmp_fstype
-
-- name: _verify | /tmp is mounted as tmpfs
-  when: qemu_boot_changes_reachable
-  assert:
-    that: _boot_verify_tmp_fstype.stdout | trim == 'tmpfs'
-    fail_msg: >-
-      /tmp is '{{ _boot_verify_tmp_fstype.stdout | trim }}', expected tmpfs
-      after the tmp.mount enable + reboot.
+  failed_when: >-
+    _boot_verify_tmp_fstype.rc != 0
+    or _boot_verify_tmp_fstype.stdout | trim != 'tmpfs'
