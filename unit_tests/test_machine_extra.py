@@ -293,19 +293,6 @@ class TestMachineArtifactOwnership:
         instance.cleanup_logs()
         assert all(not artifact.exists() for artifact in artifacts)
 
-    def test_job_can_isolate_artifacts_in_a_distinct_output_directory(
-        self,
-        machine_factory: Callable[..., machine.Machine],
-        monkeypatch: pytest.MonkeyPatch,
-        tmp_path: Path,
-    ) -> None:
-        output_dir = tmp_path / "density" / "wave13-1"
-        monkeypatch.setenv("HOMELAB_TEST_OUT_DIR", str(output_dir))
-
-        instance = machine_factory(host_arch="aarch64")
-
-        assert instance.output_file.parent == output_dir
-
 
 class TestSystemReadiness:
     def test_accepts_running_state(

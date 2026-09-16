@@ -521,7 +521,7 @@ class Machine:
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
-        output_dir = Path(os.environ.get("HOMELAB_TEST_OUT_DIR", OUT_DIR))
+        output_dir = OUT_DIR
         output_dir.mkdir(parents=True, exist_ok=True)
         self.output_file = output_dir / f"{prefix}.output.ansi"
         self.journal_file = output_dir / f"{prefix}.journal.ansi"
