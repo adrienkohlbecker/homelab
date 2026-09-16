@@ -457,6 +457,45 @@
     shell: /usr/sbin/nologin
   become: true
 
+- name: _verify | Reject user-scope install without linger
+  block:
+    - name: _verify | Attempt user-scope install without linger
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: systemd_unit_verify_ok.service.j2
+          dest: systemd_unit_no_linger.service
+          user: systemd_unit_verify
+
+    - name: _verify | Reject an unexpectedly successful install without linger
+      fail:
+        msg: user-scope install without linger should have failed
+  rescue:
+    - name: _verify | Install failed at the production linger guard
+      assert:
+        that: ansible_failed_task.name is search('Verify user-scope linger marker')
+
+- name: _verify | Reject user-scope removal without linger
+  block:
+    - name: _verify | Attempt user-scope removal without linger
+      import_role:
+        name: systemd_unit
+        tasks_from: remove
+      vars:
+        systemd_unit_args:
+          dest: systemd_unit_no_linger.service
+          user: systemd_unit_verify
+
+    - name: _verify | Reject an unexpectedly successful removal without linger
+      fail:
+        msg: user-scope removal without linger should have failed
+  rescue:
+    - name: _verify | Removal failed at the production linger guard
+      assert:
+        that: ansible_failed_task.name is search('Verify user-scope linger marker')
+
 - name: _verify | Create the fixture linger marker
   file:
     path: /var/lib/systemd/linger/systemd_unit_verify
