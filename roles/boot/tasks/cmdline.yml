@@ -137,10 +137,6 @@
       loop: "{{ boot_cmdline_files.files | sort(attribute='path') | map(attribute='path') }}"
       register: boot_cmdline_slurped
 
-    - name: cmdline | Join fragments
-      set_fact:
-        _boot_assembled_cmdline: "{% for f in boot_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
-
     # No zfs_root gate: ZFSBootMenu implies an rpool/ROOT dataset. Minimal is
     # the only non-ZFS fixture and uses GRUB.
     - name: cmdline | Set commandline
@@ -148,7 +144,7 @@
         name: rpool/ROOT
         state: present
         extra_zfs_properties:
-          'org.zfsbootmenu:commandline': "{{ _boot_assembled_cmdline }}"
+          'org.zfsbootmenu:commandline': "{% for f in boot_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
       register: boot_cmdline_properties
 
 - name: cmdline | Ask to reboot ({{ boot_cmdline_args.name }})
