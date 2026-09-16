@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import platform
 import shutil
 import subprocess
@@ -31,18 +30,17 @@ class ImageStore(NamedTuple):
 
 
 class ManifestBundle(NamedTuple):
-    """The compressed bundle named and optionally hashed by a manifest."""
+    """The compressed bundle named and hashed by a manifest."""
 
     name: str
-    sha256: str | None
+    sha256: str
 
 
 class ManifestFile(NamedTuple):
-    """One extracted bundle member from either manifest generation."""
+    """One extracted bundle member and its expected size."""
 
     name: str
-    size: int | None
-    sha256: str | None
+    size: int
 
 
 def image_store(architecture: str) -> ImageStore:
@@ -81,11 +79,6 @@ def find_tar() -> str:
     sys.exit("required tar support missing: need GNU tar/bsdtar with --zstd and --sparse")
 
 
-def sha256(path: Path) -> str:
-    with path.open("rb") as file:
-        return hashlib.file_digest(file, "sha256").hexdigest()
-
-
 def validate_member_name(member: str) -> None:
     path = PurePosixPath(member)
     if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
@@ -103,19 +96,14 @@ def _sha256(value: Any, label: str) -> str:
 
 
 def manifest_version(manifest: dict[str, Any]) -> int:
-    version = manifest.get("format_version", 1)
-    if isinstance(version, bool) or not isinstance(version, int) or version not in (1, MANIFEST_VERSION):
+    version = manifest.get("format_version")
+    if isinstance(version, bool) or not isinstance(version, int) or version != MANIFEST_VERSION:
         raise ValueError(f"unsupported manifest format_version: {version!r}")
     return version
 
 
 def manifest_bundle(manifest: dict[str, Any]) -> ManifestBundle:
-    if manifest_version(manifest) == 1:
-        name = manifest.get("bundle_name", BUNDLE_NAME)
-        if not isinstance(name, str) or not name:
-            raise ValueError("manifest bundle_name must be a non-empty string")
-        return ManifestBundle(name=name, sha256=None)
-
+    manifest_version(manifest)
     bundle = manifest.get("bundle")
     if not isinstance(bundle, dict):
         raise ValueError("manifest bundle must be an object")
@@ -130,7 +118,7 @@ def manifest_files(manifest: dict[str, Any]) -> list[ManifestFile]:
     if not isinstance(files, list) or not files:
         raise ValueError("manifest files must be a non-empty list")
 
-    version = manifest_version(manifest)
+    manifest_version(manifest)
     normalized: list[ManifestFile] = []
     for entry in files:
         if not isinstance(entry, dict):
@@ -139,20 +127,10 @@ def manifest_files(manifest: dict[str, Any]) -> list[ManifestFile]:
         if not isinstance(name, str) or not name:
             raise ValueError("manifest file name must be a non-empty string")
         validate_member_name(name)
-        if version == 1:
-            digest = entry.get("sha256")
-            normalized.append(
-                ManifestFile(
-                    name=name,
-                    size=None,
-                    sha256=_sha256(digest, f"manifest file {name!r}") if digest is not None else None,
-                )
-            )
-            continue
         size = entry.get("size")
         if isinstance(size, bool) or not isinstance(size, int) or size < 0:
             raise ValueError(f"manifest file size is invalid for {name!r}")
-        normalized.append(ManifestFile(name=name, size=size, sha256=None))
+        normalized.append(ManifestFile(name=name, size=size))
 
     names = [entry.name for entry in normalized]
     if len(names) != len(set(names)):

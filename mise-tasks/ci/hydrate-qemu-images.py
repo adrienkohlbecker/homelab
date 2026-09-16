@@ -60,7 +60,6 @@ from qemu_image_store import (
     manifest_files,
     output,
     run,
-    sha256,
 )
 
 MARKER_NAME = ".homelab_s3_build_id"
@@ -270,7 +269,7 @@ def extract_bundle(bundle: DigestReader, staged: Path, files: list[ManifestFile]
         if member.name in extracted:
             sys.exit(f"archive member is duplicated: {member.name!r}")
         expected_size = expected[member.name].size
-        if expected_size is not None and member.size != expected_size:
+        if member.size != expected_size:
             sys.exit(f"archive member size mismatch for {member.name!r}: expected {expected_size}, got {member.size}")
         extracted.add(member.name)
         return member
@@ -282,18 +281,6 @@ def extract_bundle(bundle: DigestReader, staged: Path, files: list[ManifestFile]
         raise SystemExit(f"unsafe archive member: {exc}") from exc
     if missing := sorted(set(expected) - extracted):
         sys.exit(f"archive is missing manifest members: {' '.join(missing)}")
-
-
-def verify_files(root: Path, files: list[ManifestFile]) -> None:
-    """Verify legacy members with hashes when available."""
-    for entry in files:
-        path = root / entry.name
-        if not path.is_file():
-            sys.exit(f"bundle did not extract expected member: {entry.name}")
-        if entry.sha256 is not None:
-            actual = sha256(path)
-            if actual != entry.sha256:
-                sys.exit(f"bundle sha256 mismatch for {entry.name}: expected {entry.sha256}, got {actual}")
 
 
 def verify_archive(archive: DigestReader, expected_sha256: str) -> None:
@@ -323,9 +310,8 @@ def local_cache_complete(target: Path, args: argparse.Namespace, selection: Imag
     """Return whether *target* still holds the selected installed build.
 
     The cache lives in a host-wide scratch tree that earlier jobs on a reused
-    runner host can write. New hydrations record file identity and timestamps,
-    which catch accidental replacement or modification without rereading every
-    multi-GiB member. Older caches fall back to their per-file hashes once.
+    runner host can write. File identity and timestamps catch accidental
+    replacement or modification without rereading every multi-GiB member.
     """
     marker = target / MARKER_NAME
     manifest_path = target / LOCAL_MANIFEST_NAME
@@ -354,14 +340,7 @@ def local_cache_complete(target: Path, args: argparse.Namespace, selection: Imag
         return False
     fingerprints = manifest.get(LOCAL_FILES_KEY)
     if fingerprints is None:
-        if any(entry.sha256 is None for entry in files):
-            return False
-        for entry in files:
-            path = target / entry.name
-            if not path.is_file() or sha256(path) != entry.sha256:
-                print(f"==> cached {entry.name} does not match its manifest; re-hydrating")
-                return False
-        return True
+        return False
     if not isinstance(fingerprints, dict) or set(fingerprints) != {entry.name for entry in files}:
         return False
     for entry in files:
@@ -436,10 +415,7 @@ def main() -> int:
                 archive = DigestReader(bundle)
                 extract_bundle(archive, staged, files)
                 archive.drain()
-            if bundle_info.sha256 is None:
-                verify_files(staged, files)
-            else:
-                verify_archive(archive, bundle_info.sha256)
+            verify_archive(archive, bundle_info.sha256)
 
             local_manifest = {**manifest, LOCAL_FILES_KEY: cache_file_fingerprints(staged, files)}
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(local_manifest, indent=2, sort_keys=True) + "\n")

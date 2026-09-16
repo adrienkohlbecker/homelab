@@ -168,7 +168,9 @@ class TestManifest:
     def test_manifest_without_files_is_rejected(self, tmp_path: Path) -> None:
         manifest = {
             "architecture": "x86_64",
+            "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
             "machine": "box",
+            "format_version": 2,
             "source_sha": "d" * 40,
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
@@ -183,25 +185,28 @@ class TestManifest:
                 hydrate.ImageSelection(manifest["build_id"], None),
             )
 
-    def test_legacy_member_hash_is_optional(self, tmp_path: Path) -> None:
+    def test_legacy_manifest_is_rejected(self, tmp_path: Path) -> None:
         manifest = {
             "architecture": "x86_64",
+            "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
             "machine": "box",
             "source_sha": "d" * 40,
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
-            "files": [{"name": "disk.raw"}],
+            "files": [{"name": "disk.raw", "size": 4}],
         }
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert (
+        with pytest.raises(SystemExit, match="unsupported manifest format_version"):
             hydrate.read_manifest(manifest_path, _args(), hydrate.ImageSelection(manifest["build_id"], None))
-            == manifest
-        )
-        assert hydrate.manifest_files(manifest) == [hydrate.ManifestFile("disk.raw", None, None)]
 
-    def test_version_two_requires_an_archive_hash(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("version", [1, 2.0, True, 3])
+    def test_unsupported_manifest_versions_are_rejected(self, version: object) -> None:
+        with pytest.raises(ValueError, match="unsupported manifest format_version"):
+            hydrate.manifest_files({"format_version": version, "files": [{"name": "disk.raw", "size": 4}]})
+
+    def test_manifest_requires_an_archive_hash(self, tmp_path: Path) -> None:
         args = _args()
         manifest = {
             "architecture": args.architecture,
@@ -219,7 +224,7 @@ class TestManifest:
         with pytest.raises(SystemExit, match="manifest bundle sha256 is invalid"):
             hydrate.read_manifest(manifest_path, args, hydrate.ImageSelection(args.build_id, args.source_sha))
 
-    def test_version_two_requires_member_sizes(self, tmp_path: Path) -> None:
+    def test_manifest_requires_member_sizes(self, tmp_path: Path) -> None:
         args = _args()
         manifest = {
             "architecture": args.architecture,
@@ -242,7 +247,9 @@ class TestManifest:
         manifest = {
             "architecture": "x86_64",
             "build_id": args.build_id,
-            "files": [{"name": "disk.raw"}],
+            "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
+            "files": [{"name": "disk.raw", "size": 4}],
+            "format_version": 2,
             "machine": args.machine,
             "source_sha": args.source_sha,
             "ubuntu": args.ubuntu,
@@ -262,7 +269,9 @@ class TestManifest:
         manifest = {
             "architecture": args.architecture,
             "build_id": args.build_id,
-            "files": [{"name": "disk.raw"}],
+            "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
+            "files": [{"name": "disk.raw", "size": 4}],
+            "format_version": 2,
             "machine": args.machine,
             "source_sha": "e" * 40,
             "ubuntu": args.ubuntu,
@@ -281,7 +290,9 @@ class TestManifest:
         args = _args()
         manifest = {
             "build_id": args.build_id,
-            "files": [{"name": "disk.raw", "sha256": "0" * 64}],
+            "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
+            "files": [{"name": "disk.raw", "size": 4}],
+            "format_version": 2,
             "machine": args.machine,
             "ubuntu": args.ubuntu,
         }
@@ -290,18 +301,6 @@ class TestManifest:
 
         with pytest.raises(SystemExit, match="manifest architecture mismatch"):
             hydrate.read_manifest(manifest_path, args, hydrate.ImageSelection(args.build_id, None))
-
-    def test_legacy_member_hash_mismatch_is_rejected(self, tmp_path: Path) -> None:
-        disk = tmp_path / "disk.raw"
-        disk.write_bytes(b"corrupt")
-        with pytest.raises(SystemExit, match="sha256 mismatch"):
-            hydrate.verify_files(tmp_path, [hydrate.ManifestFile(disk.name, None, "0" * 64)])
-
-    def test_hashless_legacy_member_is_accepted(self, tmp_path: Path) -> None:
-        disk = tmp_path / "disk.raw"
-        disk.write_bytes(b"disk")
-
-        hydrate.verify_files(tmp_path, [hydrate.ManifestFile(disk.name, None, None)])
 
     def test_archive_hash_mismatch_is_rejected(self) -> None:
         archive = hydrate.DigestReader(io.BytesIO(b"archive"))
@@ -325,7 +324,7 @@ def _zstd_bundle(path: Path, members: list[tarfile.TarInfo | tuple[str, bytes]])
 
 
 def _manifest_files(*members: tuple[str, int]) -> list[Any]:
-    return [hydrate.ManifestFile(name, size, None) for name, size in members]
+    return [hydrate.ManifestFile(name, size) for name, size in members]
 
 
 def _gnu_tar_with_zstd() -> str | None:
@@ -543,7 +542,14 @@ class TestLocalCache:
 
     def test_cache_hit_does_not_reread_members(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         target, args, selection = self._hydrated_tree(tmp_path)
-        monkeypatch.setattr(hydrate, "sha256", lambda _path: pytest.fail("cache member hashed"))
+        original_open = Path.open
+
+        def forbid_member_open(path: Path, *open_args: Any, **open_kwargs: Any) -> Any:
+            if path.name in {"packer-ubuntu-1.raw", "efivars.fd"}:
+                pytest.fail(f"cache member reread: {path}")
+            return original_open(path, *open_args, **open_kwargs)
+
+        monkeypatch.setattr(Path, "open", forbid_member_open)
 
         assert hydrate.local_cache_complete(target, args, selection)
 
@@ -559,34 +565,14 @@ class TestLocalCache:
 
         assert not hydrate.local_cache_complete(target, args, selection)
 
-    def test_legacy_cache_without_fingerprints_is_rehashed(self, tmp_path: Path) -> None:
-        target = tmp_path / "noble" / "box"
-        target.mkdir(parents=True)
-        disk = target / "packer-ubuntu-1.raw"
-        efivars = target / "efivars.fd"
-        disk.write_bytes(b"disk")
-        efivars.write_bytes(b"efi")
-        args = _args()
-        manifest = {
-            "architecture": args.architecture,
-            "build_id": args.build_id,
-            "bundle_name": "disks.tar.zst",
-            "files": [
-                {"name": disk.name, "sha256": hydrate.sha256(disk)},
-                {"name": efivars.name, "sha256": hydrate.sha256(efivars)},
-            ],
-            "machine": args.machine,
-            "source_sha": args.source_sha,
-            "ubuntu": args.ubuntu,
-        }
+    def test_cache_without_fingerprints_is_rehydrated(self, tmp_path: Path) -> None:
+        target, args, selection = self._hydrated_tree(tmp_path)
+        manifest_path = target / hydrate.LOCAL_MANIFEST_NAME
+        manifest = json.loads(manifest_path.read_text())
+        del manifest[hydrate.LOCAL_FILES_KEY]
         (target / hydrate.LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest))
-        (target / hydrate.MARKER_NAME).write_text(f"{args.build_id}\n")
 
-        assert hydrate.local_cache_complete(
-            target,
-            args,
-            hydrate.ImageSelection(args.build_id, args.source_sha),
-        )
+        assert not hydrate.local_cache_complete(target, args, selection)
 
 
 class TestRetention:
