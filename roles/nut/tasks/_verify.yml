@@ -5,7 +5,7 @@
   template:
     src: "{{ item.src }}"
     dest: "/tmp/{{ item.dest }}"
-    mode: "0755"
+    mode: "0600"
   vars:
     qemu_test: false
   loop:
