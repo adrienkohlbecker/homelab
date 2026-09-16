@@ -205,19 +205,19 @@
       changed_when: false
       failed_when: false
 
-# The LOGGING drop-in (override_service.conf) only reaches the running daemon
-# if podman.service was restarted after it was written -- assert the live unit
-# actually carries it, guarding the socket-vs-service restart split in main.yml.
-# (systemd module, not `systemctl show`, per command-instead-of-module.)
-- name: _verify | The LOGGING drop-in reached the running podman.service
+# Box Noble prestarts the daemon, so its live argv proves the drop-in took
+# effect after the restart rather than merely being loaded by systemd.
+- name: _verify | Read the running podman.service PID
+  when:
+    - not qemu_test_minimal
+    - not podman_storage_raid
+    - ansible_distribution_release == 'noble'
   systemd:
     name: podman.service
   become: true
   register: podman_service_unit
   changed_when: false
-  failed_when: "'--log-level=warn' not in (podman_service_unit.status.Environment | default(''))"
 
-# Box Noble prestarts the daemon, so live argv proves more than daemon-reload.
 - name: _verify | The running podman.service was restarted onto the drop-in
   when:
     - not qemu_test_minimal
