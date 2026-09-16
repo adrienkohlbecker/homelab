@@ -23,9 +23,10 @@ class Sandbox:
         self.repo = root / "repo"
         self.wt = root / "codex_home" / "worktrees" / "a1b2" / "repo"
         self.env = dict(os.environ)
+        mise = shutil.which("mise")
         self.env.update(
             HOME=str(root / "home"),
-            PATH="/usr/bin:/bin",
+            PATH=f"{Path(mise).parent}:/usr/bin:/bin" if mise else "/usr/bin:/bin",
             GIT_CONFIG_GLOBAL="/dev/null",
             GIT_CONFIG_SYSTEM="/dev/null",
             GIT_AUTHOR_NAME="Test",
@@ -42,6 +43,7 @@ class Sandbox:
             path = self.repo / directory
             path.mkdir()
             (path / ".gitkeep").touch()
+        (self.repo / "mise.toml").write_text("[tools]\n")
         self.git("add", ".", cwd=self.repo)
         self.git("commit", "-q", "-m", "base", cwd=self.repo)
         self.git("worktree", "add", "-q", "--detach", str(self.wt), "HEAD", cwd=self.repo)
