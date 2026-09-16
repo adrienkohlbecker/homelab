@@ -37,6 +37,80 @@
     label: "{{ zfs_dataset_verify_mount_case.label }}"
   become: true
 
+- name: _verify | Set a property on the send-side probe
+  when: zfs_root
+  command: zfs set compression=zstd {{ zfs_tank_filesystem }}/_verify_probe
+  changed_when: true
+  become: true
+
+- name: _verify | Snapshot the send-side probe
+  when: zfs_root
+  command: zfs snapshot {{ zfs_tank_filesystem }}/_verify_probe@received_property
+  changed_when: true
+  become: true
+
+- name: _verify | Receive a dataset with inherited property sources
+  when: zfs_root
+  shell: |
+    set -euo pipefail
+    zfs send -p {{ zfs_tank_filesystem }}/_verify_probe@received_property |
+      zfs receive -u {{ zfs_tank_filesystem }}/_verify_received
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _verify | Confirm the received property starts non-local
+  when: zfs_root
+  command: zfs get -H -o property,source compression {{ zfs_tank_filesystem }}/_verify_received
+  register: _zfs_dataset_verify_received_before
+  changed_when: false
+  failed_when: _zfs_dataset_verify_received_before.stdout != "compression\treceived"
+  become: true
+
+- name: _verify | Reconcile the received dataset through the production helper
+  when: zfs_root
+  vars:
+    zfs_dataset_args:
+      dataset: tank/_verify_received
+      mountpoint: /mnt/_verify_received
+      extra_properties:
+        compression: zstd
+  import_tasks: dataset.yml
+
+- name: _verify | Confirm the production helper localized the property
+  when: zfs_root
+  command: zfs get -H -o property,source compression {{ zfs_tank_filesystem }}/_verify_received
+  register: _zfs_dataset_verify_received_after
+  changed_when: false
+  failed_when: _zfs_dataset_verify_received_after.stdout != "compression\tlocal"
+  become: true
+
+- name: _verify | Recheck the already-local received dataset
+  when: zfs_root
+  vars:
+    zfs_dataset_args:
+      dataset: tank/_verify_received
+      mountpoint: /mnt/_verify_received
+      extra_properties:
+        compression: zstd
+  import_tasks: dataset.yml
+
+- name: _verify | Remove received probe mount unit
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: zfs_mount_mnt__verify_received.service
+      condition: "{{ zfs_root }}"
+
+- name: _verify | Destroy received probe dataset
+  when: zfs_root
+  command: zfs destroy -r {{ zfs_tank_filesystem }}/_verify_received
+  changed_when: true
+  become: true
+
 - name: _verify | Remove probe mount unit
   import_role:
     name: systemd_unit
