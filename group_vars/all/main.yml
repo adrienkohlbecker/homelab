@@ -223,19 +223,14 @@ service_ports:
 nexus_url: ""
 
 # AWS test cells run with nexus_url empty (the harness clears it for any
-# in-AWS guest), so without a regional branch they would fetch packages from
-# the public canonical hosts across the internet. The in-region EC2 mirror is
-# reachable only from inside EC2, free of egress charge, and serves at LAN
-# speed; it carries the -security pocket too, so archive, security, and the arm
-# ports suite all ride it (ports via the parallel <region>.ec2.ports.ubuntu.com
-# host). (Stock AMIs leave security on security.ubuntu.com only for faster CDN
-# propagation, which doesn't matter for ephemeral cells.) Gated on test_in_aws
-# (not test_backend): the aws_qemu cell runs the qemu backend on an AWS host
-# and still egresses through EC2, so it wants the regional mirror too. AWS cells
-# include aarch64, so the ports branch serves those guests.
+# in-AWS guest). The x86 archive and security suites use the in-region EC2
+# mirror, which is reachable only from EC2 and avoids internet egress. The ARM
+# ports suite uses ports.ubuntu.com because Frankfurt has no regional EC2 ports
+# mirror. The x86 regional branch is gated on test_in_aws (not test_backend):
+# aws_qemu cells run the qemu backend on an AWS host and still egress through EC2.
 mirror_apt_ubuntu_archive: 'http://{{ nexus_url ~ "/repository/ubuntu-archive" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "archive.ubuntu.com/ubuntu") }}'
 mirror_apt_ubuntu_security: 'http://{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else (test_aws_region ~ ".ec2.archive.ubuntu.com/ubuntu" if test_in_aws | default(false) | bool else "security.ubuntu.com/ubuntu") }}'
-mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else (test_aws_region ~ ".ec2.ports.ubuntu.com/ubuntu-ports" if test_in_aws | default(false) | bool else "ports.ubuntu.com/ubuntu-ports") }}'
+mirror_apt_ubuntu_ports: 'http://{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else "ports.ubuntu.com/ubuntu-ports" }}'
 mirror_apt_netdata: 'https://{{ nexus_url ~ "/repository/netdata" if nexus_url else "repo.netdata.cloud/repos/stable/ubuntu" }}'
 mirror_apt_fluentbit: 'https://{{ nexus_url ~ "/repository/fluentbit" if nexus_url else "packages.fluentbit.io/ubuntu" }}'
 mirror_apt_docker: 'https://{{ nexus_url ~ "/repository/docker-ce" if nexus_url else "download.docker.com/linux/ubuntu" }}'

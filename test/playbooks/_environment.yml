@@ -78,7 +78,7 @@
         that:
           - mirror_apt_ubuntu_archive == 'http://eu-test-1.ec2.archive.ubuntu.com/ubuntu'
           - mirror_apt_ubuntu_security == 'http://eu-test-1.ec2.archive.ubuntu.com/ubuntu'
-          - mirror_apt_ubuntu_ports == 'http://eu-test-1.ec2.ports.ubuntu.com/ubuntu-ports'
+          - mirror_apt_ubuntu_ports == 'http://ports.ubuntu.com/ubuntu-ports'
           - mirror_apt_netdata == 'https://repo.netdata.cloud/repos/stable/ubuntu'
           - mirror_apt_fluentbit == 'https://packages.fluentbit.io/ubuntu'
           - mirror_apt_docker == 'https://download.docker.com/linux/ubuntu'
