@@ -24,6 +24,7 @@
 - name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_root_org }}
   when: not ansible_check_mode
   vars:
+    _influxdb_cli_argv: [podman, exec, influxdb, influx]
     _influxdb_bucket_record: >-
       {{ _influxdb_bucket_bucket_id_query.stdout
           | from_json
@@ -33,16 +34,7 @@
   block:
     - name: bucket | Query user {{ influxdb_bucket_args.user }}
       command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - user
-          - list
-          - --name
-          - "{{ influxdb_bucket_args.user }}"
-          - --json
+        argv: "{{ _influxdb_cli_argv + ['user', 'list', '--name', influxdb_bucket_args.user, '--json'] }}"
       register: _influxdb_bucket_user_query
       changed_when: false
       failed_when: >-
@@ -55,33 +47,12 @@
         _influxdb_bucket_user_query.rc != 0
         or (_influxdb_bucket_user_query.stdout | from_json | length) == 0
       command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - user
-          - create
-          - --org
-          - "{{ influxdb_root_org }}"
-          - --name
-          - "{{ influxdb_bucket_args.user }}"
+        argv: "{{ _influxdb_cli_argv + ['user', 'create', '--org', influxdb_root_org, '--name', influxdb_bucket_args.user] }}"
       become: true
 
     - name: bucket | Query bucket {{ influxdb_bucket_args.bucket }}
       command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - bucket
-          - list
-          - --org
-          - "{{ influxdb_root_org }}"
-          - --name
-          - "{{ influxdb_bucket_args.bucket }}"
-          - --json
+        argv: "{{ _influxdb_cli_argv + ['bucket', 'list', '--org', influxdb_root_org, '--name', influxdb_bucket_args.bucket, '--json'] }}"
       register: _influxdb_bucket_bucket_query
       changed_when: false
       failed_when: >-
@@ -96,34 +67,13 @@
         _influxdb_bucket_bucket_query.rc != 0
         or (_influxdb_bucket_bucket_query.stdout | from_json | length) == 0
       command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - bucket
-          - create
-          - --org
-          - "{{ influxdb_root_org }}"
-          - --name
-          - "{{ influxdb_bucket_args.bucket }}"
+        argv: "{{ _influxdb_cli_argv + ['bucket', 'create', '--org', influxdb_root_org, '--name', influxdb_bucket_args.bucket] }}"
       become: true
 
     # Re-query because create output does not expose a stable ID schema.
     - name: bucket | Query bucket id for {{ influxdb_bucket_args.bucket }}
       command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - bucket
-          - list
-          - --org
-          - "{{ influxdb_root_org }}"
-          - --name
-          - "{{ influxdb_bucket_args.bucket }}"
-          - --json
+        argv: "{{ _influxdb_cli_argv + ['bucket', 'list', '--org', influxdb_root_org, '--name', influxdb_bucket_args.bucket, '--json'] }}"
       register: _influxdb_bucket_bucket_id_query
       changed_when: false
       failed_when: >-
@@ -137,16 +87,7 @@
 
     - name: bucket | Query auth for {{ influxdb_bucket_args.user }}
       command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - auth
-          - list
-          - --user
-          - "{{ influxdb_bucket_args.user }}"
-          - --json
+        argv: "{{ _influxdb_cli_argv + ['auth', 'list', '--user', influxdb_bucket_args.user, '--json'] }}"
       register: _influxdb_bucket_auth_query
       changed_when: false
       become: true
@@ -161,18 +102,5 @@
              'write:orgs/' ~ _influxdb_bucket_record.orgID ~ '/buckets/' ~ _influxdb_bucket_id)
          | list | length) == 0
       command:
-        argv:
-          - podman
-          - exec
-          - influxdb
-          - influx
-          - auth
-          - create
-          - --json
-          - --org
-          - "{{ influxdb_root_org }}"
-          - --user
-          - "{{ influxdb_bucket_args.user }}"
-          - --write-bucket
-          - "{{ _influxdb_bucket_id }}"
+        argv: "{{ _influxdb_cli_argv + ['auth', 'create', '--json', '--org', influxdb_root_org, '--user', influxdb_bucket_args.user, '--write-bucket', _influxdb_bucket_id] }}"
       become: true
