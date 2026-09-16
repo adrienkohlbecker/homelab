@@ -26,29 +26,8 @@
   register: fluentbit_extension_config
   become: true
 
-- name: Find installed fluent-bit service extensions
-  find:
-    paths: /etc/fluent-bit/services
-    patterns: "*.yaml"
-    file_type: file
-  register: fluentbit_installed_extensions
-  become: true
-
-- name: Configure fluent-bit service extension manifest
-  copy:
-    content: |
-      includes:
-      {% for extension in fluentbit_installed_extensions.files | map(attribute='path') | sort %}
-        - {{ extension }}
-      {% endfor %}
-    dest: /etc/fluent-bit/services.yaml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-  register: fluentbit_extension_manifest
-  become: true
+- name: Rebuild fluent-bit service extension manifest
+  import_tasks: extension_manifest.yml
 
 - name: Validate fluent-bit service extension
   command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.yaml --dry-run

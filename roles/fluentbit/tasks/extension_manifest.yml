@@ -1,0 +1,27 @@
+- name: extension_manifest | Find installed service extensions
+  find:
+    paths: /etc/fluent-bit/services
+    patterns: "*.yaml"
+    file_type: file
+  register: fluentbit_installed_extensions
+  become: true
+  tags:
+    - fluentbit
+
+- name: extension_manifest | Rebuild service extension manifest
+  copy:
+    content: |
+      includes:{{ '' if fluentbit_installed_extensions.files else ' []' }}
+      {% for extension in fluentbit_installed_extensions.files | map(attribute='path') | sort %}
+        - {{ extension }}
+      {% endfor %}
+    dest: /etc/fluent-bit/services.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  register: fluentbit_extension_manifest
+  become: true
+  tags:
+    - fluentbit
