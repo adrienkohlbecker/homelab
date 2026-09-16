@@ -263,46 +263,11 @@
   register: nginx_verify_stub
   failed_when: "'Active connections' not in (nginx_verify_stub.content | default(''))"
 
-# --- auth-passes phase ---
-# Switch the stub to `authed` (200 + Remote-User) so the auth-identity forwarding
-# and location_conf re-emit paths run with auth SUCCEEDING, which the gate-mode
-# tests above can't reach.
-- name: _verify | Switch the Authelia stub to authed mode
-  import_tasks: _test_authelia_stub.yml
-  vars:
-    nginx_test_authelia_stub_args:
-      mode: authed
-
-# When Authelia admits a request, the same vhost forwards Remote-User from the
-# auth subrequest as X-Forwarded-User for the *arr suite's External auth mode.
-- name: _verify | Authenticated browser user is admitted and identity-forwarded
-  uri:
-    url: "https://{{ nginx_verify_host }}/"
-    validate_certs: false
-    status_code: 200
-  register: nginx_verify_auth
-  until: nginx_verify_auth.status == 200
-  retries: 10
-  delay: 1
-
-- name: _verify | Upstream received X-Forwarded-User from the auth subrequest
-  command: journalctl -u nginx_verify_upstream --no-pager
-  register: nginx_verify_inj_journal
-  changed_when: false
-  become: true
-  until: "'upstream-request / auth=<none> fwduser=nginxverifyuser' in nginx_verify_inj_journal.stdout"
-  retries: 10
-  delay: 1
-
 # HTTP Basic service accounts need their Authorization header on the Authelia
 # subrequest, while the protected application should not receive the reusable
-# credential. The helper keeps forwarding opt-in so ordinary Token/Bearer apps
-# retain the cookie-only behavior exercised above.
-- name: _verify | Switch the Authelia stub to Basic mode
-  import_tasks: _test_authelia_stub.yml
-  vars:
-    nginx_test_authelia_stub_args:
-      mode: basic
+# credential. The gate-mode stub admits only the fixed Basic credential; the
+# helper keeps forwarding opt-in so ordinary Token/Bearer apps retain the
+# cookie-only behavior exercised above.
 
 - name: _verify | Configure a Basic-auth service-account vhost
   import_tasks: site.yml
@@ -335,11 +300,35 @@
   retries: 10
   delay: 1
 
-- name: _verify | Restore the Authelia stub to authed mode
+# --- auth-passes phase ---
+# Switch the stub to `authed` (200 + Remote-User) so browser identity forwarding
+# and location_conf re-emit paths run with auth succeeding.
+- name: _verify | Switch the Authelia stub to authed mode
   import_tasks: _test_authelia_stub.yml
   vars:
     nginx_test_authelia_stub_args:
       mode: authed
+
+# When Authelia admits a request, the same vhost forwards Remote-User from the
+# auth subrequest as X-Forwarded-User for the *arr suite's External auth mode.
+- name: _verify | Authenticated browser user is admitted and identity-forwarded
+  uri:
+    url: "https://{{ nginx_verify_host }}/"
+    validate_certs: false
+    status_code: 200
+  register: nginx_verify_auth
+  until: nginx_verify_auth.status == 200
+  retries: 10
+  delay: 1
+
+- name: _verify | Upstream received X-Forwarded-User from the auth subrequest
+  command: journalctl -u nginx_verify_upstream --no-pager
+  register: nginx_verify_inj_journal
+  changed_when: false
+  become: true
+  until: "'upstream-request / auth=<none> fwduser=nginxverifyuser' in nginx_verify_inj_journal.stdout"
+  retries: 10
+  delay: 1
 
 # A location-level add_header drops nginx's inherited add_header set, so the
 # helper re-emits the security headers inside `location /`. A server_conf
