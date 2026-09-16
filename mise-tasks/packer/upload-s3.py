@@ -259,20 +259,6 @@ def tag_builds(
             tag_object(bucket, key, state, region)
 
 
-def read_pointer(bucket: str, key: str, region: str) -> str | None:
-    """Return the raw current pointer body, or None when absent/empty."""
-    result = subprocess.run(
-        aws_argv(region, "s3", "cp", f"s3://{bucket}/{key}", "-"),
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout or None
-
-
 def write_pointer(bucket: str, key: str, body: str, region: str) -> None:
     print(f"==> writing pointer s3://{bucket}/{key}")
     run(
@@ -355,7 +341,6 @@ def main() -> int:
         tag_object(args.bucket, manifest_key, CANDIDATE_STATE, args.region)
 
     if args.promote:
-        prev = read_pointer(args.bucket, pointer_key, args.region)
         builds = list_build_objects(args.bucket, args.machine, args.ubuntu, args.region)
         retained = select_retained_builds(builds, args.build_id)
         tag_builds(
@@ -374,8 +359,7 @@ def main() -> int:
             args.region,
             state=EXPIRABLE_STATE,
         )
-        if prev is not None:
-            print(f"==> previous pointer: {prev.strip()}")
+        print(f"==> rollback builds: {' '.join(retained[1:]) or '(none)'}")
     else:
         print("==> upload complete; promotion pending (re-run with --promote)")
     return 0
