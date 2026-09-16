@@ -148,21 +148,17 @@
         state: reloaded
 
   rescue:
-    - name: site | Restore previous site config  # noqa: require-backup
+    # Template backups live beside the vhost and retain its ownership/mode;
+    # rename the original back atomically before nginx can reload it.
+    - name: site | Restore previous site config  # noqa: command-instead-of-module
       when: "'backup_file' in (nginx_static_conf | default({}))"
-      copy:
-        remote_src: true
-        dest: "{{ nginx_static_conf.dest }}"
-        src: "{{ nginx_static_conf.backup_file }}"
-        owner: root
-        group: root
-        mode: "{{ nginx_static_conf.mode }}"
-
-    - name: site | Delete failed site backup
-      when: "'backup_file' in (nginx_static_conf | default({}))"
-      file:
-        path: "{{ nginx_static_conf.backup_file }}"
-        state: absent
+      command:
+        argv:
+          - mv
+          - --
+          - "{{ nginx_static_conf.backup_file }}"
+          - "{{ nginx_static_conf.dest }}"
+      changed_when: true
 
     - name: site | Restore the previous site symlink
       when:

@@ -549,6 +549,12 @@
         nginx_verify_disabled_site_restored.content | b64decode
         != '# nginx verify disabled sentinel\n'
 
+    - name: _verify | Restored disabled site keeps its mode
+      stat:
+        path: /etc/nginx/sites-available/nginxverifydisabled
+      register: nginx_verify_disabled_site_mode
+      failed_when: nginx_verify_disabled_site_mode.stat.mode != '0640'
+
     - name: _verify | Restored disabled site stays disabled
       stat:
         path: /etc/nginx/sites-enabled/nginxverifydisabled
