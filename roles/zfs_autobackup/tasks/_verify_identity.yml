@@ -1,36 +1,51 @@
-- name: _verify | Live and persisted backup identities match
-  command:
-    argv:
-      - cmp
-      - -s
-      - /root/.ssh/id_ed25519
-      - /mnt/services/zfs_autobackup/id_ed25519
-  changed_when: false
+- name: _verify | Read the persistent backup identity
+  stat:
+    path: /mnt/services/zfs_autobackup/id_ed25519
+  register: zfs_autobackup_verify_identity_before
   become: true
 
-# Simulate a rebuild: /root/.ssh is fresh while the persisted identity rides
-# the restored services dataset. Converge must restore the same key.
-- name: _verify | Remove the live keypair
+- name: _verify | Inspect live backup key links
+  stat:
+    path: "/root/.ssh/id_ed25519{{ item }}"
+  loop:
+    - ""
+    - .pub
+  register: zfs_autobackup_verify_identity_links
+  become: true
+
+- name: _verify | Live keypair points to persistent storage
+  assert:
+    that:
+      - item.stat.islnk
+      - item.stat.lnk_target == '/mnt/services/zfs_autobackup/id_ed25519' ~ item.item
+  loop: "{{ zfs_autobackup_verify_identity_links.results }}"
+  loop_control:
+    label: "{{ item.item | default('private') }}"
+
+# Simulate a rebuild: /root/.ssh is fresh while the services dataset survives.
+- name: _verify | Remove the live key links
   file:
-    path: "{{ item }}"
+    path: "/root/.ssh/id_ed25519{{ item }}"
     state: absent
   loop:
-    - /root/.ssh/id_ed25519
-    - /root/.ssh/id_ed25519.pub
+    - ""
+    - .pub
   become: true
 
-- name: _verify | Re-run identity management against the persisted identity
+- name: _verify | Re-run identity management against persistent storage
   import_tasks: identity.yml
 
-- name: _verify | Persisted identity was restored unchanged
-  command:
-    argv:
-      - cmp
-      - -s
-      - /root/.ssh/id_ed25519
-      - /mnt/services/zfs_autobackup/id_ed25519
-  changed_when: false
+- name: _verify | Read the restored backup identity
+  stat:
+    path: /mnt/services/zfs_autobackup/id_ed25519
+  register: zfs_autobackup_verify_identity_after
   become: true
+
+- name: _verify | Persistent identity survived the rebuild
+  assert:
+    that:
+      - zfs_autobackup_verify_identity_after.stat.checksum == zfs_autobackup_verify_identity_before.stat.checksum
+      - not zfs_autobackup_identity_keypair.changed
 
 - name: _verify | Re-run identity management after restoration
   import_tasks: identity.yml
@@ -40,13 +55,14 @@
     that:
       - not zfs_autobackup_identity_keypair.changed
       - not zfs_autobackup_identity_private_key.changed
+      - not zfs_autobackup_identity_links.changed
     fail_msg: >-
       backup identity still changed after restoration: keypair={{ zfs_autobackup_identity_keypair }}
-      private_key={{ zfs_autobackup_identity_private_key }}
+      private_key={{ zfs_autobackup_identity_private_key }} links={{ zfs_autobackup_identity_links }}
 
 - name: _verify | Preserve the valid backup identity for repair
   copy:
-    src: /root/.ssh/id_ed25519
+    src: /mnt/services/zfs_autobackup/id_ed25519
     remote_src: true
     dest: /root/.ssh/id_ed25519.verify-backup
     owner: root
@@ -54,23 +70,20 @@
     mode: "0600"
   become: true
 
-- name: _verify | Corrupt both backup identity copies
+- name: _verify | Corrupt the persistent backup identity
   copy:
-    dest: "{{ item }}"
+    dest: /mnt/services/zfs_autobackup/id_ed25519
     content: "not a valid private key\n"
     owner: root
     group: root
     mode: "0600"
-  loop:
-    - /root/.ssh/id_ed25519
-    - /mnt/services/zfs_autobackup/id_ed25519
   become: true
 
-- name: _verify | Stat the corrupt live identity
+- name: _verify | Stat the corrupt backup identity
   stat:
-    path: /root/.ssh/id_ed25519
-  become: true
+    path: /mnt/services/zfs_autobackup/id_ed25519
   register: zfs_autobackup_verify_identity_corrupt_before
+  become: true
 
 - name: _verify | Re-run identity management against the corrupt identity
   block:
@@ -85,17 +98,17 @@
     - name: _verify | The keypair task failed closed
       assert:
         that:
-          - ansible_failed_task.name is search('Generate an OpenSSH keypair')
+          - ansible_failed_task.name is search('Generate or validate the persistent keypair')
           - ansible_failed_result.msg is search('Unable to read the key')
         fail_msg: >-
           Identity management failed in {{ ansible_failed_task.name | default('<unknown>') }},
           not in the expected openssh_keypair validation.
 
-    - name: _verify | Stat the rejected live identity
+    - name: _verify | Stat the rejected backup identity
       stat:
-        path: /root/.ssh/id_ed25519
-      become: true
+        path: /mnt/services/zfs_autobackup/id_ed25519
       register: zfs_autobackup_verify_identity_corrupt_after
+      become: true
 
     - name: _verify | Invalid identity was rejected without replacement
       assert:
@@ -105,17 +118,14 @@
             == zfs_autobackup_verify_identity_corrupt_before.stat.checksum
 
   always:
-    - name: _verify | Restore the valid backup identity copies
+    - name: _verify | Restore the valid backup identity
       copy:
         src: /root/.ssh/id_ed25519.verify-backup
         remote_src: true
-        dest: "{{ item }}"
+        dest: /mnt/services/zfs_autobackup/id_ed25519
         owner: root
         group: root
         mode: "0600"
-      loop:
-        - /root/.ssh/id_ed25519
-        - /mnt/services/zfs_autobackup/id_ed25519
       become: true
 
     - name: _verify | Remove the identity repair copy
