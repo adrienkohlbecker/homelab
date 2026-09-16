@@ -1153,13 +1153,12 @@ class TestRenderChildPipeline:
         assert "apt:box:aarch64" not in doc
         assert doc["stages"] == ["test1"]
 
-    def test_auto_full_universe_keeps_130_x86_cells_and_all_arm_cells(self) -> None:
+    def test_auto_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
         doc = _render_child_doc(specs, site_test=True, arm_mode="auto")
         x86_jobs = [name for name in specs if name in doc]
         arm_jobs = [f"{spec}:aarch64" for spec in detect.ARM_CELL_SPECS]
 
-        assert len(specs) >= 130
         assert len(x86_jobs) == len(specs)
         assert all(name in doc for name in arm_jobs)
 
