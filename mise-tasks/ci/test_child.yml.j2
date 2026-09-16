@@ -137,7 +137,7 @@ stages:
     # GNU timeout survives a wedged event loop; 60s permits VM teardown.
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 || rc=$?
+      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}
@@ -153,7 +153,7 @@ stages:
   script:
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 || rc=$?
+      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --benchmark || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}
