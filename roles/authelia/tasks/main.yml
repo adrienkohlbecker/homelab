@@ -8,11 +8,11 @@
   tags:
     - authelia
 
-- name: Configure authelia
+- name: Configure authelia files
   when: not ansible_check_mode or authelia_user.uid is defined
   template:
-    src: configuration.yml.j2
-    dest: /mnt/services/authelia/configuration.yml
+    src: "{{ item }}.j2"
+    dest: "/mnt/services/authelia/{{ item }}"
     owner: authelia
     group: authelia
     mode: "0640"
@@ -23,22 +23,10 @@
     # disk if it can't parse the user file, which silently masks the
     # bug.
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-  register: authelia_config_result
-  become: true
-  tags:
-    - authelia
-
-- name: Configure authelia user database
-  when: not ansible_check_mode or authelia_user.uid is defined
-  template:
-    src: users.yml.j2
-    dest: /mnt/services/authelia/users.yml
-    owner: authelia
-    group: authelia
-    mode: "0640"
-    backup: true
-    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-  register: authelia_users_result
+  loop:
+    - configuration.yml
+    - users.yml
+  register: authelia_files
   become: true
   tags:
     - authelia
@@ -86,8 +74,7 @@
 # The OIDC issuer RSA private key is inlined into configuration.yml
 # rather than mounted as a podman secret: Authelia v4.39 only
 # accepts the PEM via the YAML `jwks[].key` field, not via a path
-# or *_FILE env override. Rotation rides on
-# authelia_config_result.changed.
+# or *_FILE env override. Rotation rides on authelia_files.changed.
 
 - name: Create authelia podman network
   when: not ansible_check_mode
@@ -110,8 +97,7 @@
       condition: "{{ not ansible_check_mode or authelia_user.uid is defined }}"
       restart: >-
         {{ authelia_network.changed
-           or authelia_config_result.changed
-           or authelia_users_result.changed
+           or authelia_files.changed
            or (_authelia_secrets.changed | default(false)) }}
   tags:
     - authelia
