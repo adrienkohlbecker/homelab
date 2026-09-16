@@ -57,14 +57,23 @@
     key: "{{ _systemd_timer_user }}"
   register: _systemd_timer_user_passwd
 
-# Removing a persistent timer must also remove its last-trigger timestamp so a
-# later timer with the same name does not fire an unwanted catch-up.
-- name: remove | Drop persistent trigger stamp for {{ systemd_timer_args.name }}
+# systemd records a persistent trigger timestamp at
+# /var/lib/systemd/timers/stamp-<name>.timer; its mtime is the last-fire
+# time. Removing the units orphans that stamp, and a later timer reusing
+# the name inherits it so Persistent=true fires an unwanted catch-up on
+# first enable. System- and user-scope managers store it separately.
+- name: remove | Drop system persistent trigger stamp for {{ systemd_timer_args.name }}
+  when: _systemd_timer_user == 'root'
+  file:
+    path: /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
+    state: absent
+  become: true
+
+- name: remove | Drop user persistent trigger stamp for {{ systemd_timer_args.name }}
+  when: _systemd_timer_user != 'root'
   file:
     path: >-
-      {{ '/var/lib/systemd/timers/stamp-' ~ systemd_timer_args.name ~ '.timer'
-         if _systemd_timer_user == 'root'
-         else _systemd_timer_user_passwd.ansible_facts.getent_passwd[_systemd_timer_user][4]
-              ~ '/.local/share/systemd/timers/stamp-' ~ systemd_timer_args.name ~ '.timer' }}
+      {{ _systemd_timer_user_passwd.ansible_facts.getent_passwd[_systemd_timer_user][4]
+         }}/.local/share/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
     state: absent
   become: true
