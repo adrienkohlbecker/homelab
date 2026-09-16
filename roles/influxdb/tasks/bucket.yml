@@ -24,7 +24,7 @@
 - name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_root_org }}
   when: not ansible_check_mode
   vars:
-    _influxdb_cli_argv: [podman, exec, influxdb, influx]
+    _influxdb_cli_argv: [ podman, exec, influxdb, influx ]
     _influxdb_bucket_record: >-
       {{ _influxdb_bucket_bucket_id_query.stdout
           | from_json
