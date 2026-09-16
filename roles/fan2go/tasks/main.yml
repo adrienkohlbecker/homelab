@@ -5,7 +5,6 @@
   get_url:
     url: "{{ fan2go_artifacts[ansible_architecture].url }}"
     dest: /usr/local/bin/fan2go
-    tmp_dest: /usr/local/bin
     checksum: "sha256:{{ fan2go_artifacts[ansible_architecture].sha256 }}"
     owner: root
     group: root
@@ -20,7 +19,6 @@
   get_url:
     url: "{{ fan2go_tui_artifacts[ansible_architecture].url }}"
     dest: /usr/local/bin/fan2go-tui
-    tmp_dest: /usr/local/bin
     checksum: "sha256:{{ fan2go_tui_artifacts[ansible_architecture].sha256 }}"
     owner: root
     group: root
