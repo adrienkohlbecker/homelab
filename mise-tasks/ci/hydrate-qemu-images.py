@@ -4,7 +4,7 @@
 # USAGE complete "machine" run="printf 'box\nbox_deps\nlab\n'"
 # USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 # USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-# USAGE flag "--force" help="Re-download even when the local marker already matches"
+# USAGE flag "--force" help="Re-download even when the local manifest already matches"
 """Hydrate the local qemu harness image cache from S3.
 
 The aws_qemu cells populate their qemu harness images from the S3 bundles
@@ -48,7 +48,6 @@ from qemu_image_store import (
     validate_member_name,
 )
 
-MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
 S3_BUCKET = "homelab-ci-images"
 AWS_REGION = "eu-central-1"
@@ -160,18 +159,15 @@ def validate_archive_members(tar: str, bundle: Path, expected_members: list[str]
 
 
 def local_cache_complete(target: Path, build_id: str) -> bool:
-    marker = target / MARKER_NAME
     manifest_path = target / LOCAL_MANIFEST_NAME
-    if not marker.is_file() or not manifest_path.is_file():
-        return False
-    if marker.read_text().strip() != build_id:
+    if not manifest_path.is_file():
         return False
     try:
         manifest = json.loads(manifest_path.read_text())
         files = manifest_files(manifest)
     except json.JSONDecodeError, ValueError, SystemExit:
         return False
-    return all((target / entry["name"]).is_file() for entry in files)
+    return manifest.get("build_id") == build_id and all((target / entry["name"]).is_file() for entry in files)
 
 
 def remove_path(path: Path) -> None:
@@ -240,7 +236,6 @@ def main() -> int:
                     sys.exit(f"bundle did not extract expected member: {entry['name']}")
 
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-            (staged / MARKER_NAME).write_text(f"{build_id}\n")
             replace_target(staged, target)
             print(f"==> hydrated {target} for {build_id}")
     return 0

@@ -103,6 +103,17 @@ class TestManifest:
 
         assert hydrate.read_manifest(manifest_path, _args(), manifest["build_id"]) == manifest
 
+    def test_local_cache_uses_manifest_build_id_and_files(self, tmp_path: Path) -> None:
+        disk = tmp_path / "disk.raw"
+        disk.write_bytes(b"disk")
+        manifest = {"build_id": "build-1", "files": [{"name": disk.name}]}
+        (tmp_path / hydrate.LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest))
+
+        assert hydrate.local_cache_complete(tmp_path, "build-1")
+        assert not hydrate.local_cache_complete(tmp_path, "build-2")
+        disk.unlink()
+        assert not hydrate.local_cache_complete(tmp_path, "build-1")
+
 
 class TestRetention:
     def test_lists_build_objects_and_ignores_pointer(self, monkeypatch: pytest.MonkeyPatch) -> None:
