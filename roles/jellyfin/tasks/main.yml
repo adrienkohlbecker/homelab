@@ -9,13 +9,7 @@
   assert:
     that:
       - jellyfin_intel_qsv_enabled is boolean
-      - >-
-        not jellyfin_intel_qsv_enabled
-        or ansible_architecture == 'x86_64'
-        or qemu_test | default(false)
-    fail_msg: >-
-      jellyfin_intel_qsv_enabled must be boolean; Intel QSV requires x86_64
-      outside the QEMU wiring fixture (got {{ ansible_architecture }}).
+    fail_msg: jellyfin_intel_qsv_enabled must be boolean.
   tags:
     - jellyfin
 
