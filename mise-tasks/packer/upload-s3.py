@@ -263,18 +263,6 @@ def aws_argv(region: str, *args: str) -> list[str]:
     return ["aws", "--region", region, *args]
 
 
-def assert_new_object(bucket: str, key: str, region: str) -> None:
-    result = subprocess.run(
-        aws_argv(region, "s3api", "head-object", "--bucket", bucket, "--key", key),
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        text=True,
-    )
-    if result.returncode == 0:
-        sys.exit(f"refusing to overwrite existing object: s3://{bucket}/{key}")
-
-
 def conditional_put(
     bucket: str,
     path: Path,
@@ -405,12 +393,8 @@ def tag_builds(
             tag_object(bucket, key, state, region)
 
 
-def read_pointer(bucket: str, key: str, region: str) -> str | None:
-    """Return the current pointer ETag, or None when it does not exist.
-
-    Any other read failure propagates: promotion compares against this ETag,
-    so an unreadable pointer must not be mistaken for an absent one.
-    """
+def object_etag(bucket: str, key: str, region: str) -> str | None:
+    """Return an object's ETag, or None only when the object does not exist."""
     result = subprocess.run(
         aws_argv(region, "s3api", "head-object", "--bucket", bucket, "--key", key),
         check=False,
@@ -489,11 +473,11 @@ def main() -> int:
         sys.exit("required tool not found on PATH: aws")
     tar = find_tar()
 
-    # Immutability: never overwrite a published build. These checks fail fast
-    # before a multi-GB bundle upload; the manifest's conditional create below
-    # is what actually guarantees it.
-    assert_new_object(args.bucket, bundle_key, args.region)
-    assert_new_object(args.bucket, manifest_key, args.region)
+    # Fail before a multi-GB upload if either immutable build object exists or
+    # cannot be read. The manifest's conditional create guards publication.
+    for key in (bundle_key, manifest_key):
+        if object_etag(args.bucket, key, args.region) is not None:
+            sys.exit(f"refusing to overwrite existing object: s3://{args.bucket}/{key}")
 
     # GitLab sends SIGTERM on job timeout or cancel; unwind so both subprocesses
     # stop before a partially streamed archive can be published as a build.
@@ -510,7 +494,7 @@ def main() -> int:
         tag_object(args.bucket, manifest_key, CANDIDATE_STATE, args.region)
 
     if args.promote:
-        prev = read_pointer(args.bucket, pointer_key, args.region)
+        prev = object_etag(args.bucket, pointer_key, args.region)
         builds = list_build_objects(args.bucket, image_key, args.region)
         retained = select_retained_builds(builds, args.build_id)
         tag_builds(

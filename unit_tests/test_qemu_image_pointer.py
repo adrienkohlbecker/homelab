@@ -696,23 +696,49 @@ class TestConditionalWrites:
         with pytest.raises(subprocess.CalledProcessError):
             upload.write_pointer("bucket", "x86/noble/box/promoted.json", "body\n", "region", None)
 
-    def test_reads_pointer_etag_without_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_reads_object_etag_without_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._fake_aws(monkeypatch, stdout='{"ETag": "\\"abc\\""}')
 
-        assert upload.read_pointer("bucket", "x86/noble/box/promoted.json", "region") == '"abc"'
+        assert upload.object_etag("bucket", "x86/noble/box/promoted.json", "region") == '"abc"'
 
-    def test_missing_pointer_reads_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_missing_object_reads_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._fake_aws(
             monkeypatch, returncode=254, stderr="An error occurred (404) when calling the HeadObject operation"
         )
 
-        assert upload.read_pointer("bucket", "x86/noble/box/promoted.json", "region") is None
+        assert upload.object_etag("bucket", "x86/noble/box/promoted.json", "region") is None
 
-    def test_unreadable_pointer_is_not_treated_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (AccessDenied)")
+    @pytest.mark.parametrize("error", ["AccessDenied", "InternalError"])
+    def test_unreadable_object_is_not_treated_as_absent(self, monkeypatch: pytest.MonkeyPatch, error: str) -> None:
+        self._fake_aws(monkeypatch, returncode=254, stderr=f"An error occurred ({error})")
 
         with pytest.raises(subprocess.CalledProcessError):
-            upload.read_pointer("bucket", "x86/noble/box/promoted.json", "region")
+            upload.object_etag("bucket", "x86/noble/box/promoted.json", "region")
+
+    def test_unreadable_bundle_stops_before_upload(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        (tmp_path / "packer-ubuntu-1.raw").write_bytes(b"disk")
+        (tmp_path / "efivars.fd").write_bytes(b"efi")
+        args = _args(artifact_dir=str(tmp_path), dry_run=False, preflight=False, promote=False)
+        monkeypatch.setattr(upload, "parse_args", lambda: args)
+        monkeypatch.setattr(upload, "validate_target", lambda _args: None)
+        monkeypatch.setattr(upload, "source_sha", lambda: "d" * 40)
+        monkeypatch.setattr(upload.shutil, "which", lambda _tool: "/usr/bin/aws")
+        monkeypatch.setattr(upload, "find_tar", lambda: "tar")
+        monkeypatch.setattr(upload, "upload_bundle", lambda *_args: pytest.fail("bundle upload started"))
+        calls = self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (AccessDenied)")
+
+        with pytest.raises(subprocess.CalledProcessError):
+            upload.main()
+
+        assert len(calls) == 1
+        assert calls[0][-6:] == [
+            "s3api",
+            "head-object",
+            "--bucket",
+            "homelab-ci-images",
+            "--key",
+            "x86/noble/box/ci-42-gdeadbeef0000/disks.tar.zst",
+        ]
 
 
 class TestResolveImage:

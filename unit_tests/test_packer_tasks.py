@@ -288,7 +288,7 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
     _executable(
         fake_bin / "aws",
         '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$AWS_CALL_LOG"\ncase "$*" in\n'
-        '  *"s3api head-object"*) exit 1 ;;\n'
+        '  *"s3api head-object"*) printf "%s\\n" "An error occurred (404) when calling the HeadObject operation" >&2; exit 1 ;;\n'
         '  *"s3 cp - "*)\n'
         '    if [ "${AWS_STREAM_FAIL:-}" = "1" ]; then exit 9; fi\n'
         '    cat >"$AWS_STREAM_LOG" ;;\n'
