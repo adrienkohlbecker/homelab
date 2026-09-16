@@ -459,6 +459,25 @@
   retries: 10
   delay: 1
 
+- name: _verify | Reject an auth-less vhost as an Authelia gate
+  block:
+    - name: _verify | Probe the auth-less vhost with the production gate verifier
+      import_role:
+        name: nginx
+        tasks_from: verify_authelia_gate
+      vars:
+        nginx_verify_authelia_gate_args:
+          subdomain: nginxverifyplain
+          require_rd: false
+
+    - name: _verify | Reject an unexpectedly accepted auth-less vhost
+      fail:
+        msg: the Authelia gate verifier unexpectedly accepted an auth-less vhost
+  rescue:
+    - name: _verify | Gate verification failed at its production predicate
+      assert:
+        that: ansible_failed_task.name is search('Verify unauthenticated redirect')
+
 # The nginx_ipv6 path (host_vars/fox.yml only, never in the test matrix)
 # renders [::]-listeners in site.conf.j2 / nginx.conf.j2 that nothing
 # else exercises. The firewall role's disable_ipv6 sysctl does NOT run in the
