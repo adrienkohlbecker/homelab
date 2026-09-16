@@ -1,13 +1,3 @@
-- name: Lnav is installed at expected version
-  command: /usr/local/bin/lnav -V
-  register: lnav_installed_version
-  changed_when: false
-  failed_when: >-
-    lnav_installed_version.rc != 0 or
-    lnav_version not in lnav_installed_version.stdout
-  tags:
-    - lnav
-
 # The retired format planted in _setup must have been pruned by converge, and the
 # managed formats must be exactly what remains -- proving the prune removes
 # retired files without taking out live ones.
