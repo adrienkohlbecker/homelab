@@ -45,7 +45,6 @@ from qemu_image_store import (
     manifest_files,
     output,
     run,
-    sha256,
     validate_member_name,
 )
 
@@ -160,16 +159,6 @@ def validate_archive_members(tar: str, bundle: Path, expected_members: list[str]
         sys.exit(f"archive members do not match manifest; missing: {missing}; extra: {extra}")
 
 
-def verify_files(root: Path, files: list[dict[str, str]]) -> None:
-    for entry in files:
-        path = root / entry["name"]
-        if not path.is_file():
-            sys.exit(f"bundle did not extract expected member: {entry['name']}")
-        actual = sha256(path)
-        if actual != entry["sha256"]:
-            sys.exit(f"bundle sha256 mismatch for {entry['name']}: expected {entry['sha256']}, got {actual}")
-
-
 def local_cache_complete(target: Path, build_id: str) -> bool:
     marker = target / MARKER_NAME
     manifest_path = target / LOCAL_MANIFEST_NAME
@@ -241,15 +230,14 @@ def main() -> int:
             manifest = read_manifest(manifest_path, args, build_id)
             files = manifest_files(manifest)
             members = [entry["name"] for entry in files]
-            bundle_name = manifest.get("bundle_name", BUNDLE_NAME)
-            if not isinstance(bundle_name, str) or not bundle_name:
-                sys.exit("manifest bundle_name must be a non-empty string")
-            download_s3(f"{prefix}/{bundle_name}", bundle_path)
+            download_s3(f"{prefix}/{BUNDLE_NAME}", bundle_path)
 
-            print(f"==> extracting {bundle_name}")
+            print(f"==> extracting {BUNDLE_NAME}")
             validate_archive_members(tar, bundle_path, members)
             run([tar, "--sparse", "--zstd", "--no-same-owner", "-xf", str(bundle_path), "-C", str(staged)])
-            verify_files(staged, files)
+            for entry in files:
+                if not (staged / entry["name"]).is_file():
+                    sys.exit(f"bundle did not extract expected member: {entry['name']}")
 
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             (staged / MARKER_NAME).write_text(f"{build_id}\n")

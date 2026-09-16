@@ -20,8 +20,8 @@ images for the aws_qemu target:
 
 The tarball contains the packer-ubuntu-N.{raw,qcow2} disks plus efivars.fd,
 because the qemu harness copies efivars.fd from the same artifact directory
-before booting ZFS-root variants. The manifest records a SHA-256 for every
-member so hydration can reject corrupted artifacts before making them live.
+before booting ZFS-root variants. S3 verifies the archive checksum on upload
+and download before hydration makes its members live.
 
 The live build for each machine/release pair is selected by a pointer object
 (not SSM) stored inside the bucket itself:
@@ -69,7 +69,6 @@ from qemu_image_store import (  # noqa: E402
     find_tar,
     output,
     run,
-    sha256,
 )
 
 
@@ -146,11 +145,10 @@ def build_manifest(
 ) -> dict[str, Any]:
     files = [*disks, efivars]
     return {
-        "bundle_name": BUNDLE_NAME,
         "machine": args.machine,
         "ubuntu": args.ubuntu,
         "build_id": args.build_id,
-        "files": [{"name": path.name, "sha256": sha256(path)} for path in files],
+        "files": [{"name": path.name} for path in files],
     }
 
 

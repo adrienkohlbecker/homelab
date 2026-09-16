@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import shutil
 import subprocess
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Any
 
 BUNDLE_NAME = "disks.tar.zst"
@@ -40,14 +39,6 @@ def find_tar() -> str:
     sys.exit("required tar support missing: need GNU tar/bsdtar with --zstd and --sparse")
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def validate_member_name(member: str) -> None:
     path = PurePosixPath(member)
     if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
@@ -64,13 +55,10 @@ def manifest_files(manifest: dict[str, Any]) -> list[dict[str, str]]:
         if not isinstance(entry, dict):
             raise ValueError("manifest file entries must be objects")
         name = entry.get("name")
-        digest = entry.get("sha256")
         if not isinstance(name, str) or not name:
             raise ValueError("manifest file name must be a non-empty string")
-        if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-            raise ValueError(f"manifest file sha256 is invalid for {name!r}")
         validate_member_name(name)
-        normalized.append({"name": name, "sha256": digest})
+        normalized.append({"name": name})
 
     names = [entry["name"] for entry in normalized]
     if len(names) != len(set(names)):

@@ -58,7 +58,7 @@ class TestPointerBody:
 
 
 class TestManifest:
-    def test_round_trip_contains_only_identity_and_verified_files(
+    def test_round_trip_contains_only_identity_and_member_names(
         self,
         tmp_path: Path,
     ) -> None:
@@ -72,10 +72,10 @@ class TestManifest:
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        assert set(manifest) == {"build_id", "bundle_name", "files", "machine", "ubuntu"}
+        assert set(manifest) == {"build_id", "files", "machine", "ubuntu"}
         assert manifest["files"] == [
-            {"name": disk.name, "sha256": upload.sha256(disk)},
-            {"name": efivars.name, "sha256": upload.sha256(efivars)},
+            {"name": disk.name},
+            {"name": efivars.name},
         ]
         assert hydrate.read_manifest(manifest_path, args, args.build_id) == manifest
 
@@ -91,25 +91,17 @@ class TestManifest:
         with pytest.raises(SystemExit, match="manifest files must be a non-empty list"):
             hydrate.read_manifest(manifest_path, _args(), manifest["build_id"])
 
-    def test_missing_hash_is_rejected(self, tmp_path: Path) -> None:
+    def test_legacy_hash_is_ignored(self, tmp_path: Path) -> None:
         manifest = {
             "machine": "box",
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
-            "files": [{"name": "disk.raw"}],
+            "files": [{"name": "disk.raw", "sha256": "0" * 64}],
         }
         manifest_path = tmp_path / "manifest.json"
         manifest_path.write_text(json.dumps(manifest))
 
-        with pytest.raises(SystemExit, match="sha256 is invalid"):
-            hydrate.read_manifest(manifest_path, _args(), manifest["build_id"])
-
-    def test_extracted_hash_mismatch_is_rejected(self, tmp_path: Path) -> None:
-        disk = tmp_path / "disk.raw"
-        disk.write_bytes(b"corrupt")
-
-        with pytest.raises(SystemExit, match="sha256 mismatch"):
-            hydrate.verify_files(tmp_path, [{"name": disk.name, "sha256": "0" * 64}])
+        assert hydrate.read_manifest(manifest_path, _args(), manifest["build_id"]) == manifest
 
 
 class TestRetention:
