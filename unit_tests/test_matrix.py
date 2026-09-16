@@ -92,6 +92,10 @@ class TestRoleMeta:
 
 
 class TestBuildRoleCells:
+    def test_apt_source_has_no_standalone_cell(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(_REPO_ROOT)
+        assert matrix.build_role_cells("apt_source") == []
+
     def test_plain_role_one_cell(self) -> None:
         _make_role("plain")
         cells = matrix.build_role_cells("plain")
