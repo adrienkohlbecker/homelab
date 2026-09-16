@@ -16,49 +16,36 @@
       changed: false
   check_mode: true
 
-- name: _verify | Preserve the current OVMF vars for changed-input coverage
-  copy:
-    src: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
-    dest: /tmp/macos_vm_ovmf_vars_backup
-    remote_src: true
-    mode: "0644"
-  diff: false
-  become: true
+- name: _verify | Create missing firmware fixture
+  tempfile:
+    state: directory
+    suffix: macos_vm_missing_firmware
+  register: macos_vm_missing_firmware_fixture
 
-- name: _verify | Exercise changed firmware startup through production tasks
+- name: _verify | Exercise missing firmware through production tasks
   block:
-    - name: _verify | Remove the per-VM OVMF vars temporarily
-      file:
-        path: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
-        state: absent
-      become: true
-
-    - name: _verify | Reconcile the missing OVMF vars in check mode
+    - name: _verify | Predict seeding the missing OVMF vars
       import_tasks: service.yml
       vars:
+        macos_vm_workdir: "{{ macos_vm_missing_firmware_fixture.path }}"
         macos_vm_disk_source: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
+        macos_vm_autostart: false
         macos_vm_start_service: true
         macos_vm_workdir_result:
           changed: false
       check_mode: true
 
-  always:
-    - name: _verify | Restore the per-VM OVMF vars
-      copy:
-        src: /tmp/macos_vm_ovmf_vars_backup
-        dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
-        remote_src: true
-        owner: root
-        group: kvm
-        mode: "0644"
-      diff: false
-      become: true
+    - name: _verify | Missing firmware predicts a seed
+      assert:
+        that:
+          - not macos_vm_ovmf_vars.stat.exists
+          - macos_vm_ovmf_vars_result.changed
 
-    - name: _verify | Remove the OVMF vars backup
+  always:
+    - name: _verify | Remove missing firmware fixture
       file:
-        path: /tmp/macos_vm_ovmf_vars_backup
+        path: "{{ macos_vm_missing_firmware_fixture.path }}"
         state: absent
-      become: true
 
 - name: _verify | Render production units for both execution modes
   template:
