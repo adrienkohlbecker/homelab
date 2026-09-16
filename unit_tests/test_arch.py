@@ -1,5 +1,6 @@
 """Unit tests for test/arch.py — architecture profiles and detection."""
 
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -107,19 +108,7 @@ class TestUefiFirmwarePaths:
 
     @staticmethod
     def _pinned_profile() -> arch.ArchProfile:
-        return arch.ArchProfile(
-            name="test",
-            qemu_binary="qemu-system-test",
-            machine_type="virt",
-            net_device="virtio-net",
-            cloud_image_suffix="test",
-            serial_console_token="console=tty",
-            serial_console_default="console=tty0",
-            keep_vm_extra_devices=(),
-            uefi_code_candidates=(),
-            bios_boot_supported=False,
-            pinned_firmware=("code.fd", "vars.fd"),
-        )
+        return replace(arch.AARCH64, pinned_firmware=("code.fd", "vars.fd"))
 
     def test_pinned_pair_uses_directory_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         (tmp_path / "code.fd").write_bytes(b"code")
