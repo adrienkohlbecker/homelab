@@ -32,6 +32,35 @@
     state: absent
   become: true
 
+- name: _verify | Validate installed AWS profile and credentials
+  when: gitlab_runner_aws_qemu_enabled
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import configparser
+        import sys
+
+        config_path, credentials_path, profile, region = sys.argv[1:]
+        config = configparser.ConfigParser()
+        assert config.read(config_path) == [config_path]
+        assert config.sections() == [f"profile {profile}"]
+        assert config[f"profile {profile}"]["region"] == region
+
+        credentials = configparser.ConfigParser()
+        assert credentials.read(credentials_path) == [credentials_path]
+        assert credentials.sections() == [profile]
+        assert credentials[profile]["aws_access_key_id"]
+        assert credentials[profile]["aws_secret_access_key"]
+        assert "source_profile" not in credentials[profile]
+      - /mnt/services/gitlab_runner/.aws/config
+      - /mnt/services/gitlab_runner/.aws/credentials
+      - "{{ gitlab_runner_aws_qemu_profile }}"
+      - "{{ gitlab_runner_aws_qemu_region }}"
+  changed_when: false
+  become: true
+
 - name: _verify | Exercise gitlab_runner fluent-bit record contracts
   import_role:
     name: fluentbit
