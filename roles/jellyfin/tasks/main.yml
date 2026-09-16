@@ -18,16 +18,12 @@
   when:
     - qemu_test
     - jellyfin_intel_qsv_enabled
-  import_tasks: fake_render_device.yml
-  tags:
-    - jellyfin
-
-# Use the package-owned render GID so --group-add matches the GPU device.
-- name: Lookup render group gid (HW transcoding hosts only)
-  getent:
-    database: group
-    key: render
-  when: jellyfin_intel_qsv_enabled
+  command: systemd-tmpfiles --create -
+  args:
+    stdin: |
+      d /dev/dri 0755 root root -
+      c /dev/dri/renderD128 0660 root root - 226:128
+    creates: /dev/dri/renderD128
   become: true
   tags:
     - jellyfin

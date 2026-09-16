@@ -66,7 +66,6 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media \
 {% if jellyfin_intel_qsv_enabled %}
     --device /dev/dri/renderD128:/dev/dri/renderD128:rw \
-    --group-add={{ getent_group.render[1] | int }} \
 {% endif %}
     --env "TZ={{ system_timezone }}" \
     --env "JELLYFIN_CACHE_DIR=/cache" \

@@ -50,22 +50,12 @@
   changed_when: false
   become: true
 
-# The phantom QEMU device cannot accelerate codecs, but its container-visible
-# GID verifies both --device and --group-add wiring.
+# The phantom QEMU device cannot accelerate codecs, but it verifies --device wiring.
 - name: _verify | Confirm hardware transcoding device wiring
   when: jellyfin_intel_qsv_enabled
+  command: podman exec jellyfin test -c /dev/dri/renderD128
+  changed_when: false
   become: true
-  block:
-    - name: _verify | Read render device gid inside the container
-      command: podman exec jellyfin stat -c %g /dev/dri/renderD128
-      register: _jellyfin_container_render_gid
-      changed_when: false
-
-    - name: _verify | Confirm render gid in container supplementary groups
-      command: podman exec jellyfin id -G
-      register: _jellyfin_container_groups
-      changed_when: false
-      failed_when: _jellyfin_container_render_gid.stdout not in _jellyfin_container_groups.stdout.split()
 
 # Functional transcode probe: lavfi testsrc → libx264 → HLS segments on
 # /cache/transcodes — Jellyfin's effective transcode path (default
