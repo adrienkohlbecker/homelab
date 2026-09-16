@@ -129,13 +129,6 @@ build_arch() {
   sha256_file "${out_dir}/${boot_name}"
   sha256_file "${out_dir}/${driver_name}"
 
-  if [ "$arch" = "x86_64" ]; then
-    cp "${out_dir}/${boot_name}" "build/${boot_name}"
-    cp "${out_dir}/${driver_name}" "build/${driver_name}"
-    cp "${out_dir}/${boot_name}.sha256sum" "build/${boot_name}.sha256sum"
-    cp "${out_dir}/${driver_name}.sha256sum" "build/${driver_name}.sha256sum"
-  fi
-
   echo "Built $(pwd)/${out_dir}/${boot_name}"
   echo "Built $(pwd)/${out_dir}/${driver_name}"
 }

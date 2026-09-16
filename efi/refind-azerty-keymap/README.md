@@ -19,8 +19,7 @@ pre-boot setting.
 ./build.sh
 ```
 
-That preserves the original x86_64 outputs. Build both supported
-architectures with:
+Build both supported architectures with:
 
 ```bash
 ./build.sh all
@@ -32,8 +31,6 @@ The script expects `clang` plus either `lld-link` or `ld.lld`. It searches
 Outputs:
 
 ```text
-build/BOOTX64.EFI
-build/homelab_fr_azerty_x64.efi
 build/x86_64/BOOTX64.EFI
 build/x86_64/homelab_fr_azerty_x64.efi
 build/aarch64/BOOTAA64.EFI
