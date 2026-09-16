@@ -277,6 +277,23 @@
   tags:
     - homeassistant
 
+- name: Remove old HACS archive
+  file:
+    path: /var/cache/homeassistant/hacs.zip
+    state: absent
+  become: true
+  tags:
+    - homeassistant
+
+# rmdir preserves unexpected cache contents instead of deleting them recursively.
+- name: Remove empty old HACS cache directory  # noqa: command-instead-of-module
+  command: rmdir /var/cache/homeassistant
+  args:
+    removes: /var/cache/homeassistant
+  become: true
+  tags:
+    - homeassistant
+
 - name: Pull homeassistant image
   import_role:
     name: podman
