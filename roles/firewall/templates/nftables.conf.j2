@@ -62,11 +62,9 @@ table inet homelab {
     counter tailscale_underlay_accept {}
     counter tailscale_lan_accept {}
     counter input_silenced_tailscale {}
-{% if dns_vrrp_enabled %}
     counter input_silenced_vip_tcp {}
     counter input_silenced_vip {}
     counter forward_silenced_vip {}
-{% endif %}
 
     # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
     # *intersection*, not union: home-LAN saddrs must arrive on the WAN
@@ -105,9 +103,7 @@ table inet homelab {
         elements = {
             $WAN_IFACE comment "WAN-facing iface (LAN saddrs arrive via UDM)",
             "wg0" comment "wireguard tunnel",
-{% if dns_vrrp_enabled %}
             "vrrp.{{ dns_keepalived_vrid }}" comment "keepalived vmac (DNS VIP carrier; same L2 as $WAN_IFACE)",
-{% endif %}
         }
     }
 
@@ -226,12 +222,10 @@ table inet homelab {
         # set of named peer IPs (not the whole HOME_LAN) — a
         # compromised LAN device could otherwise forge a high-priority
         # VRRP packet and demote keepalived's MASTER role, stealing
-        # the DNS VIP. Rule is suppressed where VRRP is disabled.
-{% if dns_vrrp_enabled %}
+        # the DNS VIP.
 {% set vrrp_peer_ips = dns_keepalived_peers | reject('eq', inventory_hostname) | map('extract', external_ips) | list %}
 {% if vrrp_peer_ips %}
         iifname $WAN_IFACE ip saddr { {{ vrrp_peer_ips | join(', ') }} } ip protocol vrrp counter name "vrrp_accept" accept comment "keepalived (VRRP, named peers only)"
-{% endif %}
 {% endif %}
 
         # Recurring benign LAN discovery noise. Drop rather than reject to
@@ -250,7 +244,6 @@ table inet homelab {
         # nmbd is disabled and SMB3 listens directly on 445, so ambient
         # NetBIOS broadcasts can be silently counted and dropped.
         udp dport { 137, 138 } counter name "input_silenced_netbios" drop comment "NetBIOS broadcast noise (no local nmbd)"
-{% if dns_vrrp_enabled %}
 
         # DNS VIP traffic reaches INPUT only while netavark's AdGuard DNAT is
         # absent during a restart, plus unusable Tailscale probes to the
@@ -258,7 +251,6 @@ table inet homelab {
         # silently count the residual traffic without consuming log slots.
         iifname "vrrp.{{ dns_keepalived_vrid }}" ip daddr {{ network.virtual_ips.dns }} meta l4proto tcp counter name "input_silenced_vip_tcp" reject with tcp reset comment "DNS VIP leakage (resolver restart window)"
         iifname "vrrp.{{ dns_keepalived_vrid }}" ip daddr {{ network.virtual_ips.dns }} counter name "input_silenced_vip" drop comment "DNS VIP leakage (resolver restart + tailscale endpoint probes)"
-{% endif %}
 
         # Count and silence remaining cross-zone candidate probes.
         udp dport {{ tailscale_port }} counter name "input_silenced_tailscale" drop comment "tailscale disco probes (cross-zone candidate endpoints)"
@@ -368,12 +360,10 @@ table inet homelab {
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } ip daddr { $PODMAN_DEFAULT, $PODMAN_POOL } \
             counter name "forward_podman_isolation" drop comment "podman direct cross-network isolation"
 
-{% if dns_vrrp_enabled %}
         # Stale DNAT/ARP during a VIP handoff can route original-VIP traffic
         # through the old holder's vmac. Valid container DNAT was accepted
         # above; count and silence only the residual handoff traffic.
         iifname "vrrp.{{ dns_keepalived_vrid }}" ct original ip daddr {{ network.virtual_ips.dns }} counter name "forward_silenced_vip" drop comment "DNS VIP handoff leakage"
-{% endif %}
 
         # Catch-all log+drop. Counter for _verify.yml.
         limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "

@@ -317,8 +317,7 @@ dns_keepalived_priorities:
 dns_keepalived_peers: "{{ dns_keepalived_priorities.keys() | list }}"
 dns_keepalived_priority: "{{ dns_keepalived_priorities.get(inventory_hostname, 0) }}"
 dns_reboot_guard_enabled: "{{ inventory_hostname in dns_keepalived_priorities }}"
-# Shared by the firewall and netdata roles so VRRP policy follows the declared
-# keepalived topology everywhere.
+# Netdata enables its keepalived collector only on VRRP election hosts.
 dns_vrrp_enabled: "{{ (dns_keepalived_priority | int) > 0 }}"
 dns_keepalived_vrid: 1
 # One balanced aggregate covers ads and tracking, TIF extends threat coverage,
