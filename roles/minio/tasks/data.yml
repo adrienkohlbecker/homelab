@@ -19,7 +19,7 @@
     - name: data | Create buckets
       command: mcli mb --ignore-existing default/{{ item }}
       changed_when: false
-      loop: "{{ minio_buckets }}"
+      loop: "{{ minio_users | map(attribute='access_key') | list }}"
 
     # useronly scopes each user to its own bucket; admins matches the Authelia
     # OIDC group. Reapply both policies to repair server-side drift.

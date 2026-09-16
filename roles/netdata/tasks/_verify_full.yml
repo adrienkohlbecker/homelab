@@ -30,7 +30,7 @@
         (_netdata_prometheus_conf.content | b64decode)
         is search('(?m)^  - name: minio$')
     fail_msg: >-
-      Expected minio_buckets to enable the MinIO job in prometheus.conf.
+      Expected the configured MinIO collector to enable its job in prometheus.conf.
 
 # allmetrics reports the last collected sample directly, so no query-window
 # bucketing can leave the newest value invisible.

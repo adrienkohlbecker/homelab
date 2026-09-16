@@ -172,7 +172,7 @@
 
     - name: _verify | Every provisioned bucket is listable
       command: mcli ls default/{{ item }}
-      loop: "{{ minio_buckets }}"
+      loop: "{{ minio_users | map(attribute='access_key') | list }}"
       changed_when: false
 
     # The API must return the intended document after drift repair. OIDC claim

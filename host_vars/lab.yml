@@ -156,12 +156,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV4m+yJxWvdW
 
 fan2go_enabled: true
 
-minio_buckets:
-  - arq-adrien
-  - arq-{{ spouse_firstname }}
-  - arq-game
-  - terraform
-  - test
 netdata_intelgpu_enabled: true
 netdata_contexts:
   - pci.rootport_aer_correctable

@@ -86,9 +86,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkv
 
 dns_keepalived_priority: 5
 
-minio_buckets:
-  - test
-  - test-secondary
 netdata_intelgpu_enabled: true
 netdata_contexts:
   - system.cpu              # always-live chart, baseline
@@ -103,6 +100,7 @@ netdata_collectors:
   - go.d:collector:systemdunits:service-units
   # _setup serves the GitLab Runner counter fixture on its production port.
   - go.d:collector:prometheus:gitlab_runner
+  - go.d:collector:prometheus:minio
   - go.d:collector:fake_plugin:fake_job  # never-existed collector; exercises the netdata_collector_missing alert path
 netdata_expected_charts:
   system_cpu_chart: system.cpu
