@@ -31,13 +31,9 @@
         mode: "0644"
       become: true
 
-    - name: _setup | Reload systemd after installing the test drop-in
-      systemd:
-        daemon_reload: true
-      become: true
-
-    - name: _setup | Start podman.service before its drop-in is installed
+    - name: _setup | Reload systemd and start podman.service before converge
       systemd:
         name: podman.service
+        daemon_reload: true
         state: started
       become: true
