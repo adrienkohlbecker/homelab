@@ -544,7 +544,6 @@
       vars:
         nginx_site_args:
           subdomain: nginxverifydisabled
-          proxy_pass: http://127.0.0.1:18080/
           server_conf: |
             nginx_verify_broken_site_directive on;
 
@@ -611,7 +610,6 @@
           vars:
             nginx_site_args:
               subdomain: "{{ _nginx_verify_retarget_name }}"
-              proxy_pass: http://127.0.0.1:18080/
               server_conf: |
                 nginx_verify_broken_site_directive on;
 
@@ -654,7 +652,6 @@
   vars:
     _nginx_verify_enable_failure_args:
       subdomain: nginxverifyenablefailure
-      proxy_pass: http://127.0.0.1:18080/
   block:
     - name: _verify | Configure the enable-failure fixture
       import_tasks: site.yml
@@ -714,8 +711,6 @@
       vars:
         nginx_site_args:
           subdomain: nginxverifybroken
-          proxy_pass: http://127.0.0.1:18080/
-          auth: true
           server_conf: |
             nginx_verify_broken_site_directive on;
 
