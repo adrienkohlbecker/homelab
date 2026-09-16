@@ -52,7 +52,7 @@ sha256_file() {
 
 build_arch() {
   local arch=$1
-  local target boot_name driver_name out_dir red_zone_flags=()
+  local target boot_name driver_name out_dir red_zone_flags=() compiler_flags=()
 
   case "$arch" in
   x86_64 | amd64)
@@ -77,30 +77,26 @@ build_arch() {
   out_dir="build/${arch}"
   mkdir -p "$out_dir"
 
+  compiler_flags=(
+    --target="$target"
+    -ffreestanding
+    -fshort-wchar
+    "${red_zone_flags[@]}"
+    -fno-stack-protector
+    -fno-builtin
+    -Wall
+    -Wextra
+    -Werror
+  )
+
   "$clang" \
-    --target="$target" \
-    -ffreestanding \
-    -fshort-wchar \
-    "${red_zone_flags[@]}" \
-    -fno-stack-protector \
-    -fno-builtin \
-    -Wall \
-    -Wextra \
-    -Werror \
+    "${compiler_flags[@]}" \
     -c hii_azerty_keymap.c \
     -o "${out_dir}/hii_azerty_keymap.obj"
 
   "$clang" \
-    --target="$target" \
+    "${compiler_flags[@]}" \
     -DKEYTEST_DRIVER_ONLY \
-    -ffreestanding \
-    -fshort-wchar \
-    "${red_zone_flags[@]}" \
-    -fno-stack-protector \
-    -fno-builtin \
-    -Wall \
-    -Wextra \
-    -Werror \
     -c hii_azerty_keymap.c \
     -o "${out_dir}/homelab_fr_azerty.obj"
 
