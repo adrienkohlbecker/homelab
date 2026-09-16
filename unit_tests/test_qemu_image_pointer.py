@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -573,7 +574,10 @@ class TestLocalCache:
 
     def test_modified_member_is_rehydrated(self, tmp_path: Path) -> None:
         target, args, selection = self._hydrated_tree(tmp_path)
-        (target / "packer-ubuntu-1.raw").write_bytes(b"dusk")
+        disk = target / "packer-ubuntu-1.raw"
+        before = disk.stat()
+        disk.write_bytes(b"dusk")
+        os.utime(disk, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
 
         assert not hydrate.local_cache_complete(target, args, selection)
 
