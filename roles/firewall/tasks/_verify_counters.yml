@@ -120,11 +120,21 @@
       - nft_counters.input_loopback.packets | int >= 1
       - nft_counters.input_icmp_accept.packets | int >= 1
       - nft_counters.input_authelia_wg.packets | int >= 1
-      - nft_counters.tailscale_input_accept.packets | int >= 1
-      - nft_counters.tailscale_forward_accept.packets | int >= 1
-      - nft_counters.tailscale_underlay_accept.packets | int >= 1
-      - nft_counters.tailscale_lan_accept.packets | int >= 1 + (_firewall_verify_mac_mgmt_enabled | int)
-      - nft_counters.input_silenced_tailscale.packets | int >= 1
+      - >-
+        tailscale_advertise_routes is not defined
+        or nft_counters.tailscale_input_accept.packets | int >= 1
+      - >-
+        tailscale_advertise_routes is not defined
+        or nft_counters.tailscale_forward_accept.packets | int >= 1
+      - >-
+        not (tailscale_wan_direct | default(false))
+        or nft_counters.tailscale_underlay_accept.packets | int >= 1
+      - >-
+        not (tailscale_wan_direct | default(false))
+        or nft_counters.tailscale_lan_accept.packets | int >= 2
+      - >-
+        not (tailscale_wan_direct | default(false))
+        or nft_counters.input_silenced_tailscale.packets | int >= 1
       - nft_counters.input_silenced_vip_tcp.packets | int >= 1
       - nft_counters.input_silenced_vip.packets | int >= 1
       - nft_counters.forward_silenced_vip.packets | int >= 1

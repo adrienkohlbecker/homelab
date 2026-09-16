@@ -141,6 +141,7 @@
   become: true
 
 - name: _verify_forward | FORWARD — tailscale0 subnet-router path is accepted
+  when: tailscale_advertise_routes is defined
   block:
     - name: _verify_forward | Route one container-IP probe through synthetic tailscale0
       command: >

@@ -36,6 +36,7 @@
   become: true
 
 - name: _verify_input | INPUT allow — tailscale0 ingress reaches mesh accept
+  when: tailscale_advertise_routes is defined
   command: >
     ip netns exec extns curl --interface {{ _firewall_probe_tailscale }}
       --connect-timeout 3 --max-time 5 -sf http://100.64.99.1:80/
@@ -77,8 +78,9 @@
         {'label': 'wireguard accept', 'port': wan_forward_ports.udp['51820']},
         {'label': 'transmission accept', 'port': wan_forward_ports.udp[service_ports.transmission_bt | string]},
         {'label': 'mDNS non-home-source reject', 'port': wan_forward_ports.udp['5353']},
-        {'label': 'tailscale underlay accept', 'port': wan_forward_ports.udp[tailscale_port | string]},
       ]
+      + ([{'label': 'tailscale underlay accept', 'port': wan_forward_ports.udp[tailscale_port | string]}]
+         if tailscale_wan_direct | default(false) else [])
     }}
   loop_control:
     label: "{{ item.label }}"
@@ -122,8 +124,9 @@
       [
         {'label': 'mosh accept', 'port': '60000'},
         {'label': 'mDNS source reject', 'port': '5353'},
-        {'label': 'tailscale LAN-direct accept', 'port': tailscale_port},
       ]
+      + ([{'label': 'tailscale LAN-direct accept', 'port': tailscale_port}]
+         if tailscale_wan_direct | default(false) else [])
     }}
   loop_control:
     label: "{{ item.label }}"
@@ -222,7 +225,9 @@
   become: true
 
 - name: _verify_input | INPUT — tailscale direct endpoint reachable through mac_mgmt
-  when: _firewall_verify_mac_mgmt_enabled
+  when:
+    - _firewall_verify_mac_mgmt_enabled
+    - tailscale_wan_direct | default(false)
   command:
     argv:
       - ip

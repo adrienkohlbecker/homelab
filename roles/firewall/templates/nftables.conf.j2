@@ -57,11 +57,15 @@ table inet homelab {
 {% if inventory_hostname == authelia_host %}
     counter input_authelia_wg {}
 {% endif %}
+{% if tailscale_advertise_routes is defined %}
     counter tailscale_input_accept {}
     counter tailscale_forward_accept {}
+{% endif %}
+{% if tailscale_wan_direct | default(false) %}
     counter tailscale_underlay_accept {}
     counter tailscale_lan_accept {}
     counter input_silenced_tailscale {}
+{% endif %}
     counter input_silenced_vip_tcp {}
     counter input_silenced_vip {}
     counter forward_silenced_vip {}
@@ -134,11 +138,13 @@ table inet homelab {
         # rule below needs an explicit ct-state qualifier.
         ct state established,related accept
         iifname "lo" counter name "input_loopback" accept
+{% if tailscale_advertise_routes is defined %}
 
         # Trust decapsulated, ACL-gated tailnet traffic. Mirror tailscaled's
         # ts-input accept because a drop in any input base chain wins. iifname
         # lets the ruleset load before tailscaled creates the interface.
         iifname "tailscale0" counter name "tailscale_input_accept" accept comment "tailscale mesh (tailnet ingress)"
+{% endif %}
         ct state invalid drop
 
         # TCP NEW must have SYN. Conntrack's loose mode (default)
@@ -168,6 +174,7 @@ table inet homelab {
         # protocol and UDP for µTP/DHT.
         iifname $WAN_IFACE tcp dport {{ service_ports.transmission_bt }} counter name "input_transmission_tcp" accept comment "transmission BT peers (WAN TCP ingress)"
         iifname $WAN_IFACE udp dport {{ service_ports.transmission_bt }} counter name "input_transmission_udp" accept comment "transmission BT peers (WAN UDP ingress)"
+{% if tailscale_wan_direct | default(false) %}
 
         # A UniFi forward gives tailscaled a stable WAN underlay endpoint.
         # The tailscale0 rule sees only decapsulated inner traffic.
@@ -178,6 +185,7 @@ table inet homelab {
         # mac_mgmt/home-LAN and wg0/wireguard paths while excluding future
         # untrusted interfaces.
         iifname . ip saddr @lan_admin_pairs udp dport {{ tailscale_port }} counter name "tailscale_lan_accept" accept comment "tailscale direct endpoint (LAN/wireguard peers)"
+{% endif %}
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
@@ -251,9 +259,11 @@ table inet homelab {
         # silently count the residual traffic without consuming log slots.
         iifname "vrrp.{{ dns_keepalived_vrid }}" ip daddr {{ network.virtual_ips.dns }} meta l4proto tcp counter name "input_silenced_vip_tcp" reject with tcp reset comment "DNS VIP leakage (resolver restart window)"
         iifname "vrrp.{{ dns_keepalived_vrid }}" ip daddr {{ network.virtual_ips.dns }} counter name "input_silenced_vip" drop comment "DNS VIP leakage (resolver restart + tailscale endpoint probes)"
+{% if tailscale_wan_direct | default(false) %}
 
         # Count and silence remaining cross-zone candidate probes.
         udp dport {{ tailscale_port }} counter name "input_silenced_tailscale" drop comment "tailscale disco probes (cross-zone candidate endpoints)"
+{% endif %}
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
@@ -307,6 +317,7 @@ table inet homelab {
         # DNAT-reach rule below; direct podman → podman is still
         # dropped.
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
+{% if tailscale_advertise_routes is defined %}
 
         # Tailscale subnet router + exit node forwarding. As a subnet router this
         # host relays tailnet clients to home LAN hosts (daddr in the advertised
@@ -322,6 +333,7 @@ table inet homelab {
         # this also lets a tailnet client reach a published container port via
         # the host's DNAT. iifname (not iif) so it loads before the iface exists.
         iifname "tailscale0" counter name "tailscale_forward_accept" accept comment "tailscale subnet router + exit node"
+{% endif %}
 
         # Reach containers via netavark's DNAT. Three ingress paths,
         # all targeting any podman bridge:
