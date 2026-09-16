@@ -1,14 +1,10 @@
-# /var/lib/apt/lists/ filenames encode the mirror and suite. A populated
-# component adds a binary Packages index; an empty pocket, such as
-# resolute-backports before its first upload, legitimately has only InRelease.
-# Apt itself uses these files as its source of truth, so either form confirms
-# that the expected source is configured and fetched.
+# /var/lib/apt/lists/ filenames encode the mirror and suite. InRelease is
+# present even for an empty pocket such as resolute-backports before its first
+# upload, so it confirms every expected source was fetched.
 - name: _verify | Each (mirror, suite) has fetched metadata
   find:
     paths: /var/lib/apt/lists/
-    patterns:
-      - "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_InRelease"
-      - "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_main_*"
+    patterns: "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_InRelease"
   register: _apt_lists
   failed_when: _apt_lists.matched == 0
   vars:
