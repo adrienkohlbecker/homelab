@@ -43,54 +43,48 @@
   tags:
     - mosquitto
 
-# Keep the broker's config and native persistence format together under its
-# service state root.
-- name: Create mosquitto config and persistence directories
+- name: Configure mosquitto state
   when: not ansible_check_mode or mosquitto_user.uid is defined
-  file:
-    dest: "{{ item }}"
-    state: directory
-    owner: mosquitto
-    group: mosquitto
-    mode: "0750"
   become: true
   tags:
     - mosquitto
-  loop:
-    - /mnt/services/mosquitto/config
-    - /mnt/services/mosquitto/data
+  block:
+    # Keep the broker's config and native persistence format together under its
+    # service state root.
+    - name: Create mosquitto config and persistence directories
+      file:
+        dest: "{{ item }}"
+        state: directory
+        owner: mosquitto
+        group: mosquitto
+        mode: "0750"
+      loop:
+        - /mnt/services/mosquitto/config
+        - /mnt/services/mosquitto/data
 
-- name: Configure mosquitto passwords
-  when: not ansible_check_mode or mosquitto_user.uid is defined
-  template:
-    src: pwfile.j2
-    dest: /mnt/services/mosquitto/config/pwfile
-    owner: mosquitto
-    group: mosquitto
-    mode: "0600"
-    backup: true
-  register: mosquitto_pwfile
-  become: true
-  tags:
-    - mosquitto
+    - name: Configure mosquitto passwords
+      template:
+        src: pwfile.j2
+        dest: /mnt/services/mosquitto/config/pwfile
+        owner: mosquitto
+        group: mosquitto
+        mode: "0600"
+        backup: true
+      register: mosquitto_pwfile
 
-# No validate: -- mosquitto only parses its config at full broker startup; the
-# offline --test-config flag landed in broker 2.1 and the image pins 2.0.21, so
-# there is no host-side parser. A startup parse failure is caught by the unit's
-# Type=notify/--sdnotify=healthy gate instead.
-- name: Configure mosquitto  # noqa: require-validate
-  when: not ansible_check_mode or mosquitto_user.uid is defined
-  copy:
-    src: mosquitto.conf
-    dest: /mnt/services/mosquitto/config/mosquitto.conf
-    owner: mosquitto
-    group: mosquitto
-    mode: "0640"
-    backup: true
-  register: mosquitto_conf
-  become: true
-  tags:
-    - mosquitto
+    # No validate: -- mosquitto only parses its config at full broker startup; the
+    # offline --test-config flag landed in broker 2.1 and the image pins 2.0.21, so
+    # there is no host-side parser. A startup parse failure is caught by the unit's
+    # Type=notify/--sdnotify=healthy gate instead.
+    - name: Configure mosquitto  # noqa: require-validate
+      copy:
+        src: mosquitto.conf
+        dest: /mnt/services/mosquitto/config/mosquitto.conf
+        owner: mosquitto
+        group: mosquitto
+        mode: "0640"
+        backup: true
+      register: mosquitto_conf
 
 - name: Pull mosquitto image
   import_role:
