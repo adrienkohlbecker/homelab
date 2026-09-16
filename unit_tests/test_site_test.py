@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-import jinja2
 import pytest
 import site_test
 import yaml
@@ -81,8 +80,9 @@ def test_converge_poweroff_ignores_fixture_inhibitor(
 
 
 def test_reboot_bypasses_inhibitor_only_in_qemu() -> None:
-    task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())[0]
-    command = jinja2.Template(task["reboot"]["reboot_command"])
+    qemu_task, host_task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())
 
-    assert command.render(qemu_test=True) == "/usr/bin/sudo -n /usr/bin/systemctl --check-inhibitors=no reboot"
-    assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
+    assert qemu_task["when"] == "qemu_test | default(false)"
+    assert qemu_task["reboot"]["reboot_command"] == "/usr/bin/sudo -n /usr/bin/systemctl --check-inhibitors=no reboot"
+    assert host_task["when"] == "not (qemu_test | default(false))"
+    assert host_task["reboot"]["reboot_command"] == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
