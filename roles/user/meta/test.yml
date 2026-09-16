@@ -3,3 +3,5 @@
 machines:
   box:
   minimal:
+arm:
+  - box

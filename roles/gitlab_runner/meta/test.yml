@@ -3,3 +3,5 @@ machines:
   box_deps:
   # Shell-executor fallback selected by host_vars/lab.yml.
   lab:
+arm:
+  - box_deps

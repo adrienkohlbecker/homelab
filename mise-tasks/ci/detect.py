@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # [MISE] description="Render the GitLab role-test child pipeline"
 # [USAGE] flag "--target <target>" help="Qemu target to render: aws_qemu or lab"
-# [USAGE] flag "--arm-mode <arm_mode>" help="ARM lane mode: off or auto"
 # [USAGE] flag "--child-path <child_path>" help="Generated child pipeline path" default="test-child.yml"
 # [USAGE] flag "--all" help="Force the full test universe"
 """CI change-detection pipeline (GitLab).
@@ -527,23 +526,6 @@ def _full_universe_specs() -> list[str]:
 # Branch-safe read-only role used to hydrate AWS qemu images.
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 
-# The ARM lane is deliberately smaller than the x86 matrix. Keep its
-# architecture contract in one place for change detection and tests.
-ARM_CELL_SPECS = (
-    "apt:box",
-    "boot:box",
-    "packer:box",
-    "user:box",
-    "netdata:box_deps",
-    "minio:box_deps",
-    "lnav:box",
-    "gitlab_runner:box_deps",
-    "gitea:box",
-    "kdump:box",
-    "refind:box",
-    "zfsbootmenu:box",
-)
-ARM_MODES = ("off", "auto")
 ARM_RUNNER_TAG = "aws-shell-qemu-arm"
 
 TARGETS = {
@@ -567,26 +549,29 @@ TARGETS = {
 _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 
 
-def _arm_specs(specs: list[str], target: str, arm_mode: str) -> list[str]:
+def _arm_specs(specs: list[str], target: str) -> list[str]:
     """Return the change-selected ARM subset for this pipeline."""
-    if arm_mode not in ARM_MODES:
-        raise ValueError(f"unsupported ARM mode: {arm_mode!r}")
-    if target != "aws_qemu" or arm_mode == "off":
+    if target != "aws_qemu":
         return []
-    selected_pairs = {":".join(spec.split(":")[:2]) for spec in specs}
-    return [spec for spec in ARM_CELL_SPECS if spec in selected_pairs]
+    selected_cells = (ci_spec_to_cell(spec) for spec in specs)
+    return sorted(
+        {
+            f"{cell.role}:{cell.machine}"
+            for cell in selected_cells
+            if cell.machine in load_role_test_config(cell.role).arm_machines
+        }
+    )
 
 
 def render_child_pipeline(
     specs: list[str],
     site_test: bool,
     target: str = "aws_qemu",
-    arm_mode: str = "off",
 ) -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One x86 job per cell spec (``role:variant[:ubuntu]``), the ARM subset
-    selected by ``arm_mode``, an optional site-converge job, and a no-op
+    declared in role metadata, an optional site-converge job, and a no-op
     placeholder when no runtime job is selected. X86 cells are split evenly
     across two display stages but run as one DAG (``needs: []``).
 
@@ -603,7 +588,7 @@ def render_child_pipeline(
         raise ValueError(f"unsupported CI target: {target!r}")
     target_config = TARGETS[target]
     cells = [ci_spec_to_cell(s)._asdict() | {"spec": s} for s in specs]
-    arm_cells = [ci_spec_to_cell(s)._asdict() | {"spec": s} for s in _arm_specs(specs, target, arm_mode)]
+    arm_cells = [ci_spec_to_cell(s)._asdict() | {"spec": s} for s in _arm_specs(specs, target)]
     if cells:
         mid = (len(cells) + 1) // 2
         cell_groups = [{"stage": "test1", "cells": cells[:mid]}]
@@ -656,7 +641,6 @@ def _emit_gitlab(
     log,
     *,
     target: str = "aws_qemu",
-    arm_mode: str = "off",
 ) -> int:
     """Write the generated child-pipeline YAML.
 
@@ -673,10 +657,10 @@ def _emit_gitlab(
     specs, on_demand = _split_pug_cells(specs)
     specs = sort_specs_by_runtime(specs, runtimes)
 
-    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target, arm_mode=arm_mode))
+    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
 
     log(f"target={target} runner={target_config['cell_runner_tag']}")
-    log(f"arm_mode={arm_mode} arm_cells={len(_arm_specs(specs, target, arm_mode))}")
+    log(f"arm_cells={len(_arm_specs(specs, target))}")
     log(f"matrix={json.dumps(specs)}")
     if on_demand:
         log(f"dropped {len(on_demand)} on-demand cell(s): {' '.join(sorted(on_demand))}")
@@ -785,19 +769,10 @@ def _cmd_gitlab(args: list[str]) -> int:
         choices=sorted(TARGETS),
         help="Render jobs for the target qemu shell runner (default: HOMELAB_CI_TARGET or aws_qemu)",
     )
-    p.add_argument(
-        "--arm-mode",
-        default=os.environ.get("HOMELAB_CI_ARM", "off"),
-        choices=ARM_MODES,
-        help="Render the ARM lane as off or automatic gating jobs",
-    )
     opts = p.parse_args(args)
 
     def log(msg):
         print(f"[detect] {msg}", file=sys.stderr)
-
-    if opts.arm_mode not in ARM_MODES:
-        p.error(f"argument --arm-mode: invalid choice: {opts.arm_mode!r} (choose from {', '.join(ARM_MODES)})")
 
     # Resolve the diff base independently from runtime samples.
     branch = os.environ.get("CI_COMMIT_BRANCH", "")
@@ -829,7 +804,6 @@ def _cmd_gitlab(args: list[str]) -> int:
             runtimes,
             log,
             target=opts.target,
-            arm_mode=opts.arm_mode,
         )
 
     event = os.environ.get("CI_PIPELINE_SOURCE", "")
@@ -847,7 +821,6 @@ def _cmd_gitlab(args: list[str]) -> int:
                 runtimes,
                 log,
                 target=opts.target,
-                arm_mode=opts.arm_mode,
             )
         cells = build_dispatch_matrix(roles_input)
         return _emit_gitlab(
@@ -857,7 +830,6 @@ def _cmd_gitlab(args: list[str]) -> int:
             runtimes,
             log,
             target=opts.target,
-            arm_mode=opts.arm_mode,
         )
 
     log(f"mode: change detection (source={event or 'local'})")
@@ -869,7 +841,6 @@ def _cmd_gitlab(args: list[str]) -> int:
         runtimes,
         log,
         target=opts.target,
-        arm_mode=opts.arm_mode,
     )
 
 

@@ -3,3 +3,5 @@
 # on every test run. minio needs nothing else box_deps lacks.
 machines:
   box_deps:
+arm:
+  - box_deps

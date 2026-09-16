@@ -1,3 +1,5 @@
 base_prerequisites: false
+arm:
+  - box
 ubuntu:
   - resolute

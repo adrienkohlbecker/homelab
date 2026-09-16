@@ -20,7 +20,7 @@ UBUNTU_RELEASES: dict[str, str] = {
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
 DEFAULT_MACHINES = ("box",)
 
-_ROLE_META_KEYS = {"base_prerequisites", "machines", "skip", "ubuntu"}
+_ROLE_META_KEYS = {"arm", "base_prerequisites", "machines", "skip", "ubuntu"}
 
 
 class TestCell(NamedTuple):
@@ -39,6 +39,7 @@ class RoleTestConfig:
     machines: tuple[str, ...]
     ubuntu: tuple[str, ...]
     skip: frozenset[tuple[str, str]]
+    arm_machines: tuple[str, ...]
 
 
 class RoleTestConfigError(ValueError):
@@ -69,7 +70,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     """Parse one absolute metadata path once per process."""
 
     if not meta_path.exists():
-        return RoleTestConfig(True, DEFAULT_MACHINES, (), frozenset())
+        return RoleTestConfig(True, DEFAULT_MACHINES, (), frozenset(), ())
     try:
         data = yaml.safe_load(meta_path.read_text()) or {}
     except yaml.YAMLError as e:
@@ -158,10 +159,27 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 errors.append(f"skip {spec!r}: needs a non-empty reason")
             skip.add((machine, codename))
 
+    raw_arm = data.get("arm", [])
+    arm_machines: list[str] = []
+    if not isinstance(raw_arm, list):
+        errors.append(f"arm must be a list, got {type(raw_arm).__name__}")
+    else:
+        for name in raw_arm:
+            if not isinstance(name, str):
+                errors.append(f"arm entries must be strings, got {type(name).__name__}")
+            elif name not in machines:
+                errors.append(f"arm machine {name!r} not in machines {machines}")
+            elif (name, DEFAULT_UBUNTU) in skip:
+                errors.append(f"arm machine {name!r} skips the default release")
+            elif name in arm_machines:
+                errors.append(f"duplicate arm machine {name!r}")
+            else:
+                arm_machines.append(name)
+
     if errors:
         raise RoleTestConfigError(meta_path, errors)
 
-    return RoleTestConfig(base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip))
+    return RoleTestConfig(base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip), tuple(arm_machines))
 
 
 def build_role_cells(role: str) -> list[TestCell]:

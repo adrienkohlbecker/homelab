@@ -1000,10 +1000,9 @@ def _render_child_doc(
     specs: list[str],
     site_test: bool,
     target: str = "aws_qemu",
-    arm_mode: str = "off",
 ) -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
-    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target, arm_mode=arm_mode))
+    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
 
 
 class TestGitlabChangeMatrix:
@@ -1120,7 +1119,7 @@ class TestRenderChildPipeline:
         assert jobs == ["no_cells"]
 
     def test_arm_scaffold_uses_frankfurt_images_and_bounded_runtime(self) -> None:
-        doc = _render_child_doc(["apt:box"], site_test=False, arm_mode="auto")
+        doc = _render_child_doc(["apt:box"], site_test=False)
         scaffold = doc[".arm_cell"]
         before_script = "\n".join(scaffold["before_script"])
 
@@ -1134,44 +1133,47 @@ class TestRenderChildPipeline:
         assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
         assert scaffold["artifacts"]["paths"] == ["test/out/"]
 
-    def test_auto_arm_mode_preserves_change_selection_and_gates(self) -> None:
+    def test_arm_metadata_preserves_change_selection_and_gates(self) -> None:
         doc = _render_child_doc(
-            ["apt:box", "apt:box:resolute", "fan2go:box", "nginx:box"],
+            ["apt:box:resolute", "boot:minimal", "fan2go:box", "nginx:box"],
             site_test=False,
-            arm_mode="auto",
         )
 
         assert "apt:box:aarch64" in doc
+        assert "boot:minimal:aarch64" not in doc
         assert "fan2go:box:aarch64" not in doc
         assert "nginx:box:aarch64" not in doc
+        assert doc["stages"][-1] == "arm"
         assert "when" not in doc["apt:box:aarch64"]
         assert "allow_failure" not in doc["apt:box:aarch64"]
 
-    def test_off_arm_mode_renders_no_arm_jobs(self) -> None:
-        doc = _render_child_doc(["apt:box"], site_test=False, arm_mode="off")
-
-        assert "apt:box:aarch64" not in doc
-        assert doc["stages"] == ["test1"]
-
-    def test_auto_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
+    def test_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
-        doc = _render_child_doc(specs, site_test=True, arm_mode="auto")
+        doc = _render_child_doc(specs, site_test=True)
         x86_jobs = [name for name in specs if name in doc]
-        arm_jobs = [f"{spec}:aarch64" for spec in detect.ARM_CELL_SPECS]
+        arm_jobs = {
+            "apt:box:aarch64",
+            "boot:box:aarch64",
+            "packer:box:aarch64",
+            "user:box:aarch64",
+            "netdata:box_deps:aarch64",
+            "minio:box_deps:aarch64",
+            "lnav:box:aarch64",
+            "gitlab_runner:box_deps:aarch64",
+            "gitea:box:aarch64",
+            "kdump:box:aarch64",
+            "refind:box:aarch64",
+            "zfsbootmenu:box:aarch64",
+        }
 
         assert len(x86_jobs) == len(specs)
-        assert all(name in doc for name in arm_jobs)
+        assert {name for name in doc if name.endswith(":aarch64")} == arm_jobs
 
-    @pytest.mark.parametrize("arm_mode", detect.ARM_MODES)
-    def test_lab_target_never_renders_arm_jobs(self, arm_mode: str) -> None:
-        doc = _render_child_doc(["apt:box"], site_test=False, target="lab", arm_mode=arm_mode)
+    def test_lab_target_never_renders_arm_jobs(self) -> None:
+        doc = _render_child_doc(["apt:box"], site_test=False, target="lab")
 
         assert ".arm_cell" not in doc
         assert not any(name.endswith(":aarch64") for name in doc)
-
-    def test_rejects_unknown_arm_mode(self) -> None:
-        with pytest.raises(ValueError, match="unsupported ARM mode"):
-            detect.render_child_pipeline(["apt:box"], False, arm_mode="sometimes")
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:box"], site_test=False, target="lab")
@@ -1343,34 +1345,14 @@ class TestCmdGitlab:
         assert loaded[".cell"]["tags"] == [runner_tag]
         assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == in_aws
 
-    @pytest.mark.parametrize(
-        ("arm_mode", "arm_job"),
-        [
-            ("off", False),
-            ("auto", True),
-        ],
-    )
-    def test_arm_mode_selection_from_environment(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        arm_mode: str,
-        arm_job: bool,
-    ) -> None:
-        monkeypatch.setenv("HOMELAB_CI_ARM", arm_mode)
+    def test_aws_target_automatically_selects_arm(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["apt:box"])
         child = tmp_path / "child.yml"
 
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
 
-        assert ("apt:box:aarch64" in loaded) is arm_job
-
-    def test_unknown_arm_mode_returns_usage_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("HOMELAB_CI_ARM", "sometimes")
-        monkeypatch.setattr("sys.argv", ["detect.py", "--all"])
-
-        assert detect.main() == 2
+        assert "apt:box:aarch64" in loaded
 
     def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         child = tmp_path / "child.yml"

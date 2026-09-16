@@ -85,6 +85,33 @@ class TestRoleMeta:
         with pytest.raises(matrix.RoleTestConfigError, match="base_prerequisites must be a boolean"):
             matrix.load_role_test_config("foundation")
 
+    def test_arm_machines_default_to_empty(self) -> None:
+        _make_role("plain")
+        assert matrix.load_role_test_config("plain").arm_machines == ()
+
+    def test_arm_machines_read_declared_subset(self) -> None:
+        _make_role("svc", {"machines": {"box": None, "minimal": None}, "arm": ["box"]})
+        assert matrix.load_role_test_config("svc").arm_machines == ("box",)
+
+    @pytest.mark.parametrize(
+        ("arm", "error"),
+        [
+            ("box", "arm must be a list"),
+            ([1], "arm entries must be strings"),
+            (["minimal"], "not in machines"),
+            (["box", "box"], "duplicate arm machine"),
+        ],
+    )
+    def test_invalid_arm_machines_are_rejected(self, arm: object, error: str) -> None:
+        _make_role("svc", {"arm": arm})
+        with pytest.raises(matrix.RoleTestConfigError, match=error):
+            matrix.load_role_test_config("svc")
+
+    def test_arm_machine_cannot_skip_default_cell(self) -> None:
+        _make_role("svc", {"arm": ["box"], "skip": {"box": "disabled"}})
+        with pytest.raises(matrix.RoleTestConfigError, match="skips the default release"):
+            matrix.load_role_test_config("svc")
+
 
 # ---------------------------------------------------------------------------
 # build_role_cells
