@@ -11,9 +11,11 @@ Host *
     ControlMaster auto
     ControlPersist 300
     ForwardAgent no
+    HashKnownHosts yes
     IdentityFile ~/.ssh/id_ed25519
     IdentitiesOnly yes
     PreferredAuthentications publickey
     ServerAliveCountMax 2
     ServerAliveInterval 30
     ConnectTimeout 10
+    StrictHostKeyChecking accept-new

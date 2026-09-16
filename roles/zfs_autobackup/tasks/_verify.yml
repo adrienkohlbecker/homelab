@@ -30,16 +30,17 @@
       - "'controlpath /root/.ssh/.controlmaster-' in zfs_autobackup_verify_ssh_config.stdout"
       - "'controlpersist 300' in zfs_autobackup_verify_ssh_config.stdout"
       - "'forwardagent no' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'hashknownhosts yes' in zfs_autobackup_verify_ssh_config.stdout"
       - "'identityfile ~/.ssh/id_ed25519' in zfs_autobackup_verify_ssh_config.stdout"
       - "'identitiesonly yes' in zfs_autobackup_verify_ssh_config.stdout"
       - "'preferredauthentications publickey' in zfs_autobackup_verify_ssh_config.stdout"
       - "'serveralivecountmax 2' in zfs_autobackup_verify_ssh_config.stdout"
       - "'serveraliveinterval 30' in zfs_autobackup_verify_ssh_config.stdout"
       - "'connecttimeout 10' in zfs_autobackup_verify_ssh_config.stdout"
+      - "'stricthostkeychecking accept-new' in zfs_autobackup_verify_ssh_config.stdout"
     fail_msg: "backup SSH config missing expected directives"
 
-# dest.yml only scans peers absent from known_hosts, so forget localhost first
-# to drive the check/scan/register chain against the local sshd.
+# A first SSH connection records a new peer key without a separate keyscan.
 - name: _verify | Forget any localhost backup peer host key
   known_hosts:
     path: /root/.ssh/known_hosts
@@ -47,19 +48,13 @@
     state: absent
   become: true
 
-- name: _verify | Exercise backup peer host-key registration
-  import_tasks: dest.yml
-  vars:
-    qemu_test: false
-    external_ips:
-      box: 127.0.0.1
-      bunk: 127.0.0.1
-    zfs_autobackup_sources:
-      - host: box
-        dest_dataset: rpool/zfs_autobackup_receive_test
+- name: _verify | Exercise first backup SSH connection
+  command: ssh -F /etc/zfs_autobackup_ssh_config -o ControlMaster=no 127.0.0.1 true
+  changed_when: false
+  failed_when: false
+  become: true
 
-# The keyscan tolerates failure, so only a known_hosts lookup proves the peer
-# key was actually registered.
+# Authentication may fail, but the first connection must pin the peer key.
 - name: _verify | Backup peer host key was registered
   command: ssh-keygen -F 127.0.0.1 -f /root/.ssh/known_hosts
   changed_when: false
