@@ -162,8 +162,6 @@ def build_one(root: Path, ubuntu: str, base_provenance: BaseProvenance | None = 
             validate_base_provenance(staging, ubuntu, base_provenance)
         print_line(f"==> Publishing {staging} -> {destination}")
         publish_artifacts(root, staging, destination)
-        if base_provenance is not None:
-            validate_base_provenance(destination, ubuntu, base_provenance)
     finally:
         if staging.exists():
             shutil.rmtree(staging)
