@@ -6,31 +6,12 @@
   changed_when: false
   failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
 
-- name: _verify | Render the production unit with ZFS-backed state
-  template:
-    src: gitlab_runner.service.j2
-    dest: /tmp/gitlab-runner-zfs.service
-    mode: "0644"
+- name: _verify | Exercise alternate service storage layouts
+  include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
-    zfs_root: true
-    zfs_has_services_mount: true
-  become: true
-
-- name: _verify | Verify the ZFS-backed unit dependency
-  command:
-    argv:
-      - grep
-      - --fixed-strings
-      - Requires=zfs_mount_mnt_services.service
-      - /tmp/gitlab-runner-zfs.service
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate GitLab Runner unit
-  file:
-    path: /tmp/gitlab-runner-zfs.service
-    state: absent
-  become: true
+    _storage_service: gitlab_runner
+    _storage_mounts: [ services ]
+    _storage_autosnapshot: false
 
 - name: _verify | Validate installed AWS profile and credentials
   when: gitlab_runner_aws_qemu_enabled
