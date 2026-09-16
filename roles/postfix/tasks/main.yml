@@ -32,56 +32,50 @@
   tags:
     - postfix
 
-- name: Enable networkd-dispatcher for Postfix network hooks
+- name: Configure installed Postfix
   when: not (ansible_check_mode and postfix_apt.changed)
-  systemd:
-    name: networkd-dispatcher.service
-    enabled: true
-    masked: false
-    state: started
   become: true
   tags:
     - postfix
+  block:
+    - name: Enable networkd-dispatcher for Postfix network hooks
+      systemd:
+        name: networkd-dispatcher.service
+        enabled: true
+        masked: false
+        state: started
 
-# Postfix's parsers read the live /etc/postfix directory, not Ansible's
-# temporary files. The self-contained SASL map can still be validated before
-# installation; _verify.yml parses and exercises the installed configuration.
-- name: Install Postfix configuration
-  when: not (ansible_check_mode and postfix_apt.changed)
-  template:
-    src: "{{ item.name }}.j2"
-    dest: "/etc/postfix/{{ item.name }}"
-    owner: root
-    group: root
-    mode: "{{ item.mode }}"
-    backup: true
-    validate: "{{ item.validate | default(omit) }}"
-  loop:
-    - name: main.cf
-      mode: "0644"
-    - name: generic
-      mode: "0644"
-    - name: aliases
-      mode: "0644"
-    - name: sasl_passwd
-      mode: "0600"
-      validate: grep -qE '^[^[:space:]]+[[:space:]]+[^[:space:]]+:[^[:space:]]+$' %s
-  loop_control:
-    label: "{{ item.name }}"
-  become: true
-  register: postfix_cfg
-  tags:
-    - postfix
+    # Postfix's parsers read the live /etc/postfix directory, not Ansible's
+    # temporary files. The self-contained SASL map can still be validated before
+    # installation; _verify.yml parses and exercises the installed configuration.
+    - name: Install Postfix configuration
+      template:
+        src: "{{ item.name }}.j2"
+        dest: "/etc/postfix/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+        backup: true
+        validate: "{{ item.validate | default(omit) }}"
+      loop:
+        - name: main.cf
+          mode: "0644"
+        - name: generic
+          mode: "0644"
+        - name: aliases
+          mode: "0644"
+        - name: sasl_passwd
+          mode: "0600"
+          validate: grep -qE '^[^[:space:]]+[[:space:]]+[^[:space:]]+:[^[:space:]]+$' %s
+      loop_control:
+        label: "{{ item.name }}"
+      register: postfix_cfg
 
-- name: Enable postfix
-  when: not (ansible_check_mode and postfix_apt.changed)
-  systemd:
-    name: postfix.service
-    enabled: true
-    state: >-
-      {{ 'restarted'
-         if postfix_cfg.changed or postfix_apt.changed
-         else 'started' }}
-  become: true
-  tags:
-    - postfix
+    - name: Enable postfix
+      systemd:
+        name: postfix.service
+        enabled: true
+        state: >-
+          {{ 'restarted'
+             if postfix_cfg.changed or postfix_apt.changed
+             else 'started' }}
