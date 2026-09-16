@@ -111,10 +111,8 @@
             mode: "0600"
             backup: true
             content: |
-              {% if gitlab_runner_aws_qemu_enabled or gitlab_runner_aws_qemu_arm_enabled %}
               [profile {{ gitlab_runner_aws_qemu_profile }}]
               region = {{ gitlab_runner_aws_qemu_region }}
-              {% endif %}
             validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
           become: true
 
@@ -126,11 +124,9 @@
             mode: "0600"
             backup: true
             content: |
-              {% if gitlab_runner_aws_qemu_enabled or gitlab_runner_aws_qemu_arm_enabled %}
               [{{ gitlab_runner_aws_qemu_profile }}]
               aws_access_key_id = {{ gitlab_runner_aws_qemu_access_key_id }}
               aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key }}
-              {% endif %}
           become: true
 
     - name: Render ARM Fleeting SSH key
