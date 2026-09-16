@@ -10,7 +10,11 @@
 
 - name: extension_manifest | Rebuild service extension manifest
   copy:
-    content: "includes: {{ fluentbit_installed_extensions.files | map(attribute='path') | sort | to_json }}\n"
+    content: |
+      includes:{{ '' if fluentbit_installed_extensions.files else ' []' }}
+      {% for extension in fluentbit_installed_extensions.files | map(attribute='path') | sort %}
+        - {{ extension }}
+      {% endfor %}
     dest: /etc/fluent-bit/services.yaml
     owner: root
     group: root
