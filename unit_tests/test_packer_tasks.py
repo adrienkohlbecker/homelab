@@ -578,10 +578,10 @@ def test_qemu_host_static_key_is_arm_only(tmp_path: Path, architecture: str, ins
         "\nsudo install -dm 0755 /opt/mise", 1
     )[0]
     commands = tmp_path / "commands"
-    script = f'''set -euo pipefail
+    script = f"""set -euo pipefail
 sudo() {{ printf '%s\\n' "$*" >> "$COMMANDS"; }}
 {key_section}
-'''
+"""
     subprocess.run(
         ["bash", "-c", script],
         check=True,

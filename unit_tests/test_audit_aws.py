@@ -204,10 +204,12 @@ def test_sweep_reports_only_unattached_volumes_and_addresses(monkeypatch):
     class Ec2:
         @staticmethod
         def describe_addresses():
-            return {"Addresses": [
-                {"PublicIp": "192.0.2.1", "AssociationId": "eipassoc-1"},
-                {"PublicIp": "192.0.2.2"},
-            ]}
+            return {
+                "Addresses": [
+                    {"PublicIp": "192.0.2.1", "AssociationId": "eipassoc-1"},
+                    {"PublicIp": "192.0.2.2"},
+                ]
+            }
 
     inventory = {
         "describe_auto_scaling_groups": [],

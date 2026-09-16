@@ -702,7 +702,9 @@ class TestConditionalWrites:
         assert upload.read_pointer("bucket", "x86/noble/box/promoted.json", "region") == '"abc"'
 
     def test_missing_pointer_reads_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (404) when calling the HeadObject operation")
+        self._fake_aws(
+            monkeypatch, returncode=254, stderr="An error occurred (404) when calling the HeadObject operation"
+        )
 
         assert upload.read_pointer("bucket", "x86/noble/box/promoted.json", "region") is None
 
