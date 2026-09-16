@@ -102,65 +102,54 @@
   tags:
     - refind
 
-- name: Install aarch64 Linux EFI-stub staging hook
+- name: Manage aarch64 Linux EFI-stub lifecycle
   when: boot_via_efi_stub
-  copy:
-    src: zz-stage-efi-stub
-    dest: /etc/kernel/postinst.d/zz-stage-efi-stub
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
   become: true
-  register: refind_efi_stub_hook
   tags:
     - refind
+  block:
+    - name: Install aarch64 Linux EFI-stub staging hook
+      copy:
+        src: zz-stage-efi-stub
+        dest: /etc/kernel/postinst.d/zz-stage-efi-stub
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+        validate: bash -n %s
+      register: refind_efi_stub_hook
 
-- name: Create aarch64 Linux EFI-stub hook directories
-  when: boot_via_efi_stub
-  file:
-    path: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/kernel/postrm.d
-    - /etc/initramfs/post-update.d
-  become: true
-  tags:
-    - refind
+    - name: Create aarch64 Linux EFI-stub hook directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /etc/kernel/postrm.d
+        - /etc/initramfs/post-update.d
 
-- name: Link aarch64 Linux EFI-stub hook into kernel lifecycle
-  when: boot_via_efi_stub
-  file:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    state: link
-    force: true
-    owner: root
-    group: root
-  loop:
-    - src: ../postinst.d/zz-stage-efi-stub
-      dest: /etc/kernel/postrm.d/zz-stage-efi-stub
-    - src: /etc/kernel/postinst.d/zz-stage-efi-stub
-      dest: /etc/initramfs/post-update.d/zz-stage-efi-stub
-  loop_control:
-    label: "{{ item.dest }}"
-  become: true
-  tags:
-    - refind
+    - name: Link aarch64 Linux EFI-stub hook into kernel lifecycle
+      file:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        state: link
+        force: true
+        owner: root
+        group: root
+      loop:
+        - src: ../postinst.d/zz-stage-efi-stub
+          dest: /etc/kernel/postrm.d/zz-stage-efi-stub
+        - src: /etc/kernel/postinst.d/zz-stage-efi-stub
+          dest: /etc/initramfs/post-update.d/zz-stage-efi-stub
+      loop_control:
+        label: "{{ item.dest }}"
 
-- name: Stage aarch64 Linux EFI-stub kernel and initrd
-  when:
-    - boot_via_efi_stub
-    - not ansible_check_mode
-  command: /etc/kernel/postinst.d/zz-stage-efi-stub
-  changed_when: refind_efi_stub_hook is changed
-  become: true
-  tags:
-    - refind
+    - name: Stage aarch64 Linux EFI-stub kernel and initrd
+      when: not ansible_check_mode
+      command: /etc/kernel/postinst.d/zz-stage-efi-stub
+      changed_when: refind_efi_stub_hook is changed
 
 - name: Create theme directory
   file:
