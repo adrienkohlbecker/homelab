@@ -62,7 +62,6 @@ from qemu_image_store import (
     run,
 )
 
-MARKER_NAME = ".homelab_s3_build_id"
 LOCAL_MANIFEST_NAME = ".homelab_s3_manifest.json"
 LOCAL_FILES_KEY = "_local_files"
 
@@ -313,11 +312,8 @@ def local_cache_complete(target: Path, args: argparse.Namespace, selection: Imag
     runner host can write. File identity and timestamps catch accidental
     replacement or modification without rereading every multi-GiB member.
     """
-    marker = target / MARKER_NAME
     manifest_path = target / LOCAL_MANIFEST_NAME
-    if not marker.is_file() or not manifest_path.is_file():
-        return False
-    if marker.read_text().strip() != selection.build_id:
+    if not manifest_path.is_file():
         return False
     try:
         manifest = json.loads(manifest_path.read_text())
@@ -334,7 +330,7 @@ def local_cache_complete(target: Path, args: argparse.Namespace, selection: Imag
         files = manifest_files(manifest)
     except json.JSONDecodeError, ValueError, SystemExit:
         return False
-    expected_names = {entry.name for entry in files} | {LOCAL_MANIFEST_NAME, MARKER_NAME}
+    expected_names = {entry.name for entry in files} | {LOCAL_MANIFEST_NAME}
     if {path.name for path in target.iterdir()} != expected_names:
         print("==> cached image directory members changed; re-hydrating")
         return False
@@ -419,7 +415,6 @@ def main() -> int:
 
             local_manifest = {**manifest, LOCAL_FILES_KEY: cache_file_fingerprints(staged, files)}
             (staged / LOCAL_MANIFEST_NAME).write_text(json.dumps(local_manifest, indent=2, sort_keys=True) + "\n")
-            (staged / MARKER_NAME).write_text(f"{selection.build_id}\n")
             replace_target(staged, target)
             print(f"==> hydrated {target} for {selection.build_id}")
     return 0

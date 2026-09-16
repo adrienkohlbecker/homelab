@@ -532,7 +532,6 @@ class TestLocalCache:
             hydrate.manifest_files(manifest),
         )
         (target / hydrate.LOCAL_MANIFEST_NAME).write_text(json.dumps(manifest))
-        (target / hydrate.MARKER_NAME).write_text(f"{args.build_id}\n")
         return target, args, hydrate.ImageSelection(args.build_id, args.source_sha)
 
     def test_untouched_cache_is_reused(self, tmp_path: Path) -> None:
@@ -553,15 +552,21 @@ class TestLocalCache:
 
         assert hydrate.local_cache_complete(target, args, selection)
 
-    def test_modified_member_with_intact_marker_is_rehydrated(self, tmp_path: Path) -> None:
+    def test_modified_member_is_rehydrated(self, tmp_path: Path) -> None:
         target, args, selection = self._hydrated_tree(tmp_path)
         (target / "packer-ubuntu-1.raw").write_bytes(b"dusk")
 
         assert not hydrate.local_cache_complete(target, args, selection)
 
-    def test_added_member_with_intact_marker_is_rehydrated(self, tmp_path: Path) -> None:
+    def test_added_member_is_rehydrated(self, tmp_path: Path) -> None:
         target, args, selection = self._hydrated_tree(tmp_path)
         (target / "packer-ubuntu-3.raw").write_bytes(b"extra")
+
+        assert not hydrate.local_cache_complete(target, args, selection)
+
+    def test_legacy_marker_is_rehydrated(self, tmp_path: Path) -> None:
+        target, args, selection = self._hydrated_tree(tmp_path)
+        (target / ".homelab_s3_build_id").write_text(f"{args.build_id}\n")
 
         assert not hydrate.local_cache_complete(target, args, selection)
 

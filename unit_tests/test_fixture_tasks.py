@@ -33,7 +33,6 @@ def test_build_one_clones_seeds_and_publishes(tmp_path: Path, monkeypatch: pytes
     source.mkdir(parents=True)
     (source / "artifact").write_text("source\n")
     provenance = builder.BaseProvenance(build_id="base-123", source_sha="d" * 40, architecture="aarch64")
-    (source / builder.HYDRATED_BUILD_ID_NAME).write_text(f"{provenance.build_id}\n")
     (source / builder.HYDRATED_MANIFEST_NAME).write_text(
         json.dumps(
             {
@@ -66,7 +65,7 @@ def test_build_one_clones_seeds_and_publishes(tmp_path: Path, monkeypatch: pytes
     destination = root / "noble" / "box_deps"
     assert (destination / "artifact").read_text() == "source\n"
     assert (destination / "seeded").read_text() == "yes\n"
-    assert (destination / builder.HYDRATED_BUILD_ID_NAME).read_text().strip() == provenance.build_id
+    assert json.loads((destination / builder.HYDRATED_MANIFEST_NAME).read_text())["build_id"] == provenance.build_id
     assert destination.stat().st_mode & 0o7777 == 0o2770
 
 
@@ -74,8 +73,7 @@ def test_build_one_rejects_wrong_hydrated_base_before_clone(tmp_path: Path, monk
     root = tmp_path / "homelab_ci"
     source = root / "noble" / "box"
     source.mkdir(parents=True)
-    (source / builder.HYDRATED_BUILD_ID_NAME).write_text("older-build\n")
-    (source / builder.HYDRATED_MANIFEST_NAME).write_text("{}\n")
+    (source / builder.HYDRATED_MANIFEST_NAME).write_text(json.dumps({"build_id": "older-build"}))
     provenance = builder.BaseProvenance(build_id="requested-build", source_sha="d" * 40, architecture="aarch64")
     monkeypatch.setattr(
         builder,
@@ -83,7 +81,7 @@ def test_build_one_rejects_wrong_hydrated_base_before_clone(tmp_path: Path, monk
         lambda *_: pytest.fail("mismatched provenance must be rejected before cloning"),
     )
 
-    with pytest.raises(RuntimeError, match="does not match requested base"):
+    with pytest.raises(RuntimeError, match="Hydrated box provenance mismatch"):
         builder.build_one(root, "noble", provenance)
 
 

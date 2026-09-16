@@ -20,7 +20,6 @@ from utils import print_line, tee_output
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_TIMEOUT = 1200
-HYDRATED_BUILD_ID_NAME = ".homelab_s3_build_id"
 HYDRATED_MANIFEST_NAME = ".homelab_s3_manifest.json"
 
 
@@ -56,10 +55,7 @@ def base_provenance_from_env() -> BaseProvenance | None:
 def validate_base_provenance(source: Path, ubuntu: str, expected: BaseProvenance) -> None:
     """Fail unless a hydrated box tree matches the explicitly selected base."""
 
-    marker = source / HYDRATED_BUILD_ID_NAME
     manifest_path = source / HYDRATED_MANIFEST_NAME
-    if not marker.is_file() or marker.read_text().strip() != expected.build_id:
-        raise RuntimeError(f"Hydrated box build id does not match requested base {expected.build_id!r}")
     if not manifest_path.is_file():
         raise RuntimeError(f"Hydrated box manifest is missing: {manifest_path}")
     try:
