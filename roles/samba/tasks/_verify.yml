@@ -13,32 +13,25 @@
   failed_when: samba_nmbd_enabled.stdout != 'masked'
   become: true
 
-- name: _verify | Browse Samba service over mDNS
+- name: _verify | Browse Samba services over mDNS
   command:
     argv:
       - avahi-browse
       - --terminate
       - --resolve
-      - _smb._tcp
+      - "{{ item.service }}"
+  loop:
+    - service: _smb._tcp
+      expected: "{{ 'port = \\[' ~ service_ports.samba ~ '\\]' }}"
+    - service: _adisk._tcp
+      expected: dk0=adVN=smbtest,adVF=0x82
+  loop_control:
+    label: "{{ item.service }}"
   register: samba_mdns_browse
   changed_when: false
   failed_when: >-
     samba_mdns_browse.rc != 0 or
-    samba_mdns_browse.stdout is not search('port = \\[' ~ service_ports.samba ~ '\\]')
-  become: true
-
-- name: _verify | Browse Time Machine service over mDNS
-  command:
-    argv:
-      - avahi-browse
-      - --terminate
-      - --resolve
-      - _adisk._tcp
-  register: samba_time_machine_mdns_browse
-  changed_when: false
-  failed_when: >-
-    samba_time_machine_mdns_browse.rc != 0 or
-    samba_time_machine_mdns_browse.stdout is not search('dk0=adVN=smbtest,adVF=0x82')
+    samba_mdns_browse.stdout is not search(item.expected)
   become: true
 
 # testparm -v dumps the EFFECTIVE value of every parameter (incl. defaults), so
