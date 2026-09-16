@@ -29,7 +29,7 @@ immutable archive so hydration can verify the download while extracting it.
 The live build for each machine/release pair is selected by a pointer object
 (not SSM) stored inside the bucket itself:
 
-    s3://<bucket>/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
+    s3://<bucket>/<arch-prefix>/<ubuntu>/<machine>/promoted.json -> {"build_id": ...}
 
 The lab target does not read S3: lab bakes write the artifacts into lab's local
 /mnt/scratch/homelab_ci and its cells boot them in place, so only the aws_qemu

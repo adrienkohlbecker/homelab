@@ -3,7 +3,7 @@
 # Frankfurt, each scaled by fleeting-plugin-aws on fox. Cells hydrate a
 # promoted qemu image bundle and boot it under KVM. This file owns the platform
 # the harness does not: VPC, security group, host launch templates and ASGs,
-# image buckets, ECR cache, SSM AMI pointers, shared IAM/OIDC, and the account
+# image bucket, ECR cache, SSM AMI pointers, shared IAM/OIDC, and the account
 # budget. Changing an instance type or Spot policy happens here, never in test/.
 #
 # First-apply bootstrap (AMI parameter seeding, GitLab cutover):
