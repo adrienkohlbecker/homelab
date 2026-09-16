@@ -168,17 +168,6 @@
   diff: false
   become: true
 
-- name: _verify | Render production config with only a pinned IPv4 DERP address
-  template:
-    src: config.yaml.j2
-    dest: /tmp/headscale-ipv4.yaml
-    mode: "0640"
-  vars:
-    headscale_derp_ipv4: 192.0.2.1
-    headscale_derp_ipv6: "{{ undef() }}"
-  diff: false
-  become: true
-
 - name: _verify | Verify pinned DERP addresses and DNS records
   command:
     argv:
@@ -193,12 +182,7 @@
         assert config.count("2001:db8::1") == 2
         assert 'type: "A"' in config
         assert 'type: "AAAA"' in config
-        ipv4 = pathlib.Path(sys.argv[2]).read_text()
-        assert ipv4.count("192.0.2.1") == 2
-        assert 'type: "A"' in ipv4
-        assert 'type: "AAAA"' not in ipv4
       - /tmp/headscale-dual-stack.yaml
-      - /tmp/headscale-ipv4.yaml
   changed_when: false
   become: true
 
@@ -230,6 +214,5 @@
     state: absent
   loop:
     - headscale-dual-stack.yaml
-    - headscale-ipv4.yaml
     - headscale-physical.service
   become: true

@@ -38,8 +38,6 @@ derp:
     # public addresses while the IPv4-only fixture omits both keys.
 {% if headscale_derp_ipv4 is defined %}
     ipv4: "{{ headscale_derp_ipv4 }}"
-{% endif %}
-{% if headscale_derp_ipv6 is defined %}
     ipv6: "{{ headscale_derp_ipv6 }}"
 {% endif %}
   urls: []
@@ -93,11 +91,9 @@ dns:
     - name: "headscale.{{ domain }}"
       type: "A"
       value: "{{ headscale_derp_ipv4 }}"
-{% if headscale_derp_ipv6 is defined %}
     - name: "headscale.{{ domain }}"
       type: "AAAA"
       value: "{{ headscale_derp_ipv6 }}"
-{% endif %}
 {% else %}
   extra_records: []
 {% endif %}
