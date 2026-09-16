@@ -46,43 +46,31 @@
   failed_when: _kuma_wal.stdout | trim != 'wal'
   become: true
 
-# Exercise the shared seed against a synthetic DB without mutating live state.
-- name: _verify | DisableAuth seed flips once, then is idempotent
-  block:
-    - name: _verify | Build a synthetic kuma-shaped DB with one user
-      command: >-
-        sqlite3 /tmp/_verify_kuma_seed.db
-        "CREATE TABLE user (id INTEGER PRIMARY KEY, username TEXT);
-         CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT, type TEXT);
-         INSERT INTO user (username) VALUES ('_verify');"
-      changed_when: true
-      become: true
+- name: _verify | Add a user through the live Kuma schema
+  command:
+    argv:
+      - sqlite3
+      - -cmd
+      - .timeout 30000
+      - /mnt/services/kuma/kuma.db
+      - INSERT INTO user (username) VALUES ('_verify');
+  changed_when: true
+  become: true
 
-    - name: _verify | DisableAuth seed mutates once, then is idempotent
-      command:
-        argv:
-          - sqlite3
-          - -cmd
-          - .timeout 30000
-          - /tmp/_verify_kuma_seed.db
-      args:
-        stdin: "{{ lookup('file', 'disable_auth.sql') }}"
-      loop:
-        - "1"
-        - "0"
-      loop_control:
-        loop_var: kuma_seed_expected_changes
-        label: "changes()={{ kuma_seed_expected_changes }}"
-      register: _kuma_seed
-      changed_when: false
-      failed_when: (_kuma_seed.stdout | trim) != kuma_seed_expected_changes
-      become: true
-  always:
-    - name: _verify | Drop the synthetic DB
-      file:
-        path: /tmp/_verify_kuma_seed.db
-        state: absent
-      become: true
+- name: _verify | Reconcile live Kuma authentication
+  import_tasks: auth.yml
+
+- name: _verify | Confirm live Kuma authentication is disabled
+  command: >-
+    sqlite3 -readonly /mnt/services/kuma/kuma.db
+    "SELECT value FROM setting WHERE key='disableAuth';"
+  register: _kuma_disableauth_repaired
+  changed_when: false
+  failed_when: _kuma_disableauth_repaired.stdout | trim != 'true'
+  become: true
+
+- name: _verify | Recheck live Kuma authentication idempotence
+  import_tasks: auth.yml
 
 - name: _verify | Kuma emits native structured records
   command: podman logs kuma

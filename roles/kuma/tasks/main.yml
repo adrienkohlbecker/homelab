@@ -63,36 +63,8 @@
   tags:
     - kuma
 
-# Kuma has no config knob for disabling its login, so seed its setting after
-# the setup wizard creates a user. Enabling it earlier breaks auto-login because
-# Kuma expects to find the first user. Authelia then remains the sole gate.
-# The timeout accommodates WAL writes; changes() limits the restart to a flip.
-# A missing schema is tolerated until Kuma completes its first start.
-- name: Disable kuma's built-in auth (Authelia fronts it)
-  when: not ansible_check_mode
-  command:
-    argv:
-      - sqlite3
-      - -cmd
-      - .timeout 30000
-      - /mnt/services/kuma/kuma.db
-  args:
-    stdin: "{{ lookup('file', 'disable_auth.sql') }}"
-  register: kuma_disableauth_seed
-  changed_when: (kuma_disableauth_seed.stdout | trim | int) > 0
-  failed_when:
-    - kuma_disableauth_seed.rc != 0
-    - "'no such table' not in kuma_disableauth_seed.stderr"
-  become: true
-  tags:
-    - kuma
-
-- name: Restart kuma to load disableAuth
-  when: kuma_disableauth_seed.changed | default(false)
-  systemd:
-    name: kuma.service
-    state: restarted
-  become: true
+- name: Reconcile kuma authentication
+  import_tasks: auth.yml
   tags:
     - kuma
 
