@@ -172,17 +172,6 @@
       skip_local_2fa: true
     gitea_oidc_desired_fp: "{{ gitea_oidc_source_state | to_json(sort_keys=true) | hash('sha256') }}"
     gitea_oidc_current_fp: "{{ gitea_oidc_fp_slurp.content | default('') | b64decode | trim }}"
-    _gitea_oidc_options:
-      - --name=authelia
-      - --provider=openidConnect
-      - --key=gitea
-      - --secret={{ gitea_oidc_client_secret }}
-      - --auto-discover-url=https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
-      - --scopes=openid,email,profile,groups
-      - --group-claim-name=groups
-      - --admin-group=admins
-      - --skip-local-2fa
-      - --config=/etc/gitea/app.ini
   block:
     - name: Read existing OIDC provisioning fingerprint
       slurp:
@@ -220,13 +209,49 @@
                   | first | default('')
                   ).split() | first | default('') }}
 
-        - name: Reconcile Authelia OIDC auth source
+        - name: Register Authelia OIDC auth source
+          when: gitea_authelia_source_id | length == 0
           command:
-            argv: >-
-              {{ ['/usr/local/bin/gitea', 'admin', 'auth',
-                  'update-oauth' if gitea_authelia_source_id else 'add-oauth']
-                 + (['--id=' ~ gitea_authelia_source_id] if gitea_authelia_source_id else [])
-                 + _gitea_oidc_options }}
+            argv:
+              - /usr/local/bin/gitea
+              - admin
+              - auth
+              - add-oauth
+              - --name=authelia
+              - --provider=openidConnect
+              - --key=gitea
+              - --secret={{ gitea_oidc_client_secret }}
+              - --auto-discover-url=https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
+              - --scopes=openid,email,profile,groups
+              - --group-claim-name=groups
+              - --admin-group=admins
+              - --skip-local-2fa
+              - --config=/etc/gitea/app.ini
+          environment:
+            GITEA_WORK_DIR: /mnt/services/gitea
+          become: true
+          become_user: git
+          changed_when: true
+
+        - name: Update Authelia OIDC auth source
+          when: gitea_authelia_source_id | length > 0
+          command:
+            argv:
+              - /usr/local/bin/gitea
+              - admin
+              - auth
+              - update-oauth
+              - --id={{ gitea_authelia_source_id }}
+              - --name=authelia
+              - --provider=openidConnect
+              - --key=gitea
+              - --secret={{ gitea_oidc_client_secret }}
+              - --auto-discover-url=https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
+              - --scopes=openid,email,profile,groups
+              - --group-claim-name=groups
+              - --admin-group=admins
+              - --skip-local-2fa
+              - --config=/etc/gitea/app.ini
           environment:
             GITEA_WORK_DIR: /mnt/services/gitea
           become: true
