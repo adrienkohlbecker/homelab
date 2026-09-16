@@ -32,12 +32,10 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     assert job["parallel"]["matrix"] == [
         {
             "QEMU_HOST_ARCHITECTURE": "x86_64",
-            "AWS_REGION": "eu-central-1",
             "MISE_DISABLE_TOOLS": "",
         },
         {
             "QEMU_HOST_ARCHITECTURE": "aarch64",
-            "AWS_REGION": "eu-west-1",
             "MISE_DISABLE_TOOLS": "aqua:Kampfkarren/selene",
         },
     ]
@@ -48,7 +46,7 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     ]
 
 
-def test_arm_qemu_images_use_isolated_ireland_builder_jobs() -> None:
+def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
     scaffold = pipeline[".qemu_image_arm"]
     box = pipeline["qemu_image:box:arm"]
@@ -68,12 +66,12 @@ def test_arm_qemu_images_use_isolated_ireland_builder_jobs() -> None:
         "AWS_SHARED_CREDENTIALS_FILE",
     ):
         assert "$CI_JOB_ID" in scaffold["variables"][variable]
-    assert "--region eu-west-1" in scaffold["before_script"][-1]
+    assert "--region" not in scaffold["before_script"][-1]
     assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
 
     assert box["resource_group"] == "qemu_image_box_aarch64_$UBUNTU"
-    assert "--bucket homelab-ci-arm-images-eu-west-1" in box["script"][0]
-    assert "--region eu-west-1 --architecture aarch64" in box["script"][0]
+    assert "--bucket homelab-ci-arm-images-eu-central-1" in box["script"][0]
+    assert "--architecture aarch64" in box["script"][0]
     assert '--build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU"' in box["script"][0]
 
     assert box_deps["resource_group"] == "qemu_image_box_deps_aarch64_$UBUNTU"
@@ -82,9 +80,9 @@ def test_arm_qemu_images_use_isolated_ireland_builder_jobs() -> None:
     assert '--build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU"' in box_deps["script"][0]
 
 
-def test_bake_role_covers_both_qemu_image_regions() -> None:
+def test_bake_role_covers_both_qemu_image_buckets() -> None:
     terraform = (ROOT / "terraform" / "aws_ci.tf").read_text()
 
-    assert '"aws:RequestedRegion" = [local.ci_aws_region, local.ci_arm_aws_region]' in terraform
+    assert '"aws:RequestedRegion" = local.ci_aws_region' in terraform
     assert "aws_s3_bucket.ci_qemu_arm_images.arn" in terraform
     assert '"${aws_s3_bucket.ci_qemu_arm_images.arn}/*"' in terraform

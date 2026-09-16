@@ -14,6 +14,7 @@ default:
 
 variables:
   HOMELAB_CI_TARGET: aws_qemu
+  AWS_REGION: eu-central-1
   # Generate change-selected ARM cells on the AWS qemu lane.
   HOMELAB_CI_ARM: "auto"
   # Ansible ignores cwd config under world-writable /builds unless pinned.
@@ -178,10 +179,8 @@ qemu_host_ami:
   parallel:
     matrix:
       - QEMU_HOST_ARCHITECTURE: x86_64
-        AWS_REGION: eu-central-1
         MISE_DISABLE_TOOLS: ""
       - QEMU_HOST_ARCHITECTURE: aarch64
-        AWS_REGION: eu-west-1
         MISE_DISABLE_TOOLS: aqua:Kampfkarren/selene
   resource_group: ami-qemu-host-$QEMU_HOST_ARCHITECTURE-noble
   interruptible: false
@@ -255,7 +254,7 @@ qemu_host_ami:
           - UBUNTU: [ '$[[ matrix.UBUNTU ]]' ]
       artifacts: false
 
-# Build native aarch64 fixtures on the Ireland ARM pool. Every mutable path is
+# Build native aarch64 fixtures on the Frankfurt ARM pool. Every mutable path is
 # job-local on the ephemeral instance-store-backed checkout. This reduces
 # accidental cross-job state reuse; the shared runner is not a security boundary.
 .qemu_image_arm:
@@ -283,7 +282,7 @@ qemu_host_ami:
   before_script:
     - mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$PACKER_PLUGIN_PATH" "$MISE_DATA_DIR" "$UV_CACHE_DIR" "$HOMELAB_CI_DIR" "$(dirname "$AWS_CONFIG_FILE")"
     - mise run ci:bootstrap
-    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-arm-$CI_JOB_ID" --cache-dir --region eu-west-1
+    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-arm-$CI_JOB_ID" --cache-dir
   after_script:
     - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
 
@@ -295,7 +294,7 @@ qemu_host_ami:
       allow_failure: false
   resource_group: qemu_image_box_aarch64_$UBUNTU
   script:
-    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-west-1 --region eu-west-1 --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --promote
+    - mise run packer:publish-qemu box --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-central-1 --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --promote
 
 "qemu_image:box_deps:arm":
   extends: .qemu_image_arm
@@ -303,7 +302,7 @@ qemu_host_ami:
     - if: $CI_COMMIT_REF_PROTECTED == "true"
   resource_group: qemu_image_box_deps_aarch64_$UBUNTU
   script:
-    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-west-1 --region eu-west-1 --architecture aarch64 --base-build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU" --promote
+    - mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --bucket homelab-ci-arm-images-eu-central-1 --architecture aarch64 --base-build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" --build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU" --promote
   needs:
     - job: "qemu_image:box:arm"
       artifacts: false

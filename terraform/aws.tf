@@ -18,6 +18,9 @@ provider "aws" {
   profile = "default"
 }
 
+# Ireland resources remain in Terraform state until the Frankfurt ARM lane
+# passes; the provider is required to retire them safely after cutover.
+# tflint-ignore: terraform_unused_declarations
 provider "aws" {
   alias   = "ireland"
   region  = "eu-west-1"

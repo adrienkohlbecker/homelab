@@ -118,7 +118,7 @@ def test_retry_budget_counts_total_attempts():
     assert audit_aws.CFG.retries == {"total_max_attempts": 10, "mode": "adaptive"}
 
 
-def test_supported_qemu_images_are_region_and_architecture_specific():
+def test_supported_qemu_images_share_region_and_keep_architecture_specific_tags():
     x86 = image(
         "ami-x86",
         tags={
@@ -142,8 +142,8 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
     )
 
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", x86)
-    assert audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
-    assert not audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
+    assert audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
+    assert not audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", x86)
 
 
@@ -182,35 +182,43 @@ def _arm_instance_type(instance_type: str) -> dict:
     }
 
 
-def test_arm_regional_contract_documents_are_accepted():
-    audit_aws.audit_asg_documents("eu-west-1", [_spot_asg("homelab-ci-qemu-arm", 1)])
-    audit_aws.audit_arm_capacity_documents(
-        {"Value": 96.0},
+def test_frankfurt_contract_documents_are_accepted():
+    audit_aws.audit_asg_documents(
+        "eu-central-1",
         [
-            {"InstanceType": "c6gd.metal", "Location": "eu-west-1a"},
-            {"InstanceType": "c7gd.metal", "Location": "eu-west-1b"},
+            _spot_asg("homelab-ci-qemu-host", 5),
+            _spot_asg("homelab-ci-qemu-site", 1),
+            _spot_asg("homelab-ci-qemu-arm", 1),
+        ],
+    )
+    audit_aws.audit_arm_capacity_documents(
+        {"Value": 160.0},
+        [
+            {"InstanceType": "c6gd.metal", "Location": "eu-central-1a"},
+            {"InstanceType": "c7gd.metal", "Location": "eu-central-1b"},
         ],
         [_arm_instance_type("c6gd.metal"), _arm_instance_type("c7gd.metal")],
     )
     audit_aws.audit_promoted_image_document(
-        "eu-west-1",
+        "eu-central-1",
         "ami-arm",
         [{"ImageId": "ami-arm", "Architecture": "arm64"}],
+        "arm64",
     )
     audit_aws.audit_guard_documents(
-        "eu-west-1",
+        "eu-central-1",
         {"ImageBlockPublicAccessState": "block-new-sharing"},
         {"State": "block-all-sharing"},
         {"AccountLevel": {"HttpTokens": "required", "HttpPutResponseHopLimit": 1}},
     )
     audit_aws.audit_ecr_documents(
-        "eu-west-1",
+        "eu-central-1",
         [
             {
                 "ecrRepositoryPrefix": prefix,
                 "upstreamRegistryUrl": upstream,
                 **(
-                    {"credentialArn": f"arn:aws:secretsmanager:eu-west-1:123:secret:{prefix}"}
+                    {"credentialArn": f"arn:aws:secretsmanager:eu-central-1:123:secret:{prefix}"}
                     if prefix != "quay"
                     else {}
                 ),
@@ -220,8 +228,9 @@ def test_arm_regional_contract_documents_are_accepted():
         [{"repositoryName": "docker-hub/library/ubuntu"}],
     )
     audit_aws.audit_bucket_documents(
-        "eu-west-1",
-        {"LocationConstraint": "eu-west-1"},
+        "eu-central-1",
+        "homelab-ci-arm-images-eu-central-1",
+        {"LocationConstraint": "eu-central-1"},
         {
             "PublicAccessBlockConfiguration": {
                 "BlockPublicAcls": True,
@@ -252,33 +261,21 @@ def test_arm_regional_contract_documents_are_accepted():
                 {
                     "Condition": {
                         "StringEquals": {
-                            "aws:SourceArn": [
-                                "arn:aws:scheduler:eu-central-1:000390721279:schedule-group/default",
-                                "arn:aws:scheduler:eu-west-1:000390721279:schedule-group/default",
-                            ]
+                            "aws:SourceArn": "arn:aws:scheduler:eu-central-1:000390721279:schedule-group/default"
                         }
                     }
                 }
             ]
         },
-        {
-            "Statement": [
-                {
-                    "Resource": [
-                        "arn:aws:ec2:eu-central-1:000390721279:instance/*",
-                        "arn:aws:ec2:eu-west-1:000390721279:instance/*",
-                    ]
-                }
-            ]
-        },
+        {"Statement": [{"Resource": "arn:aws:ec2:eu-central-1:000390721279:instance/*"}]},
     )
 
     assert audit_aws.anomalies == []
 
 
-def test_arm_regional_contract_mismatches_are_reported():
+def test_frankfurt_contract_mismatches_are_reported():
     audit_aws.audit_asg_documents(
-        "eu-west-1",
+        "eu-central-1",
         [
             _spot_asg("homelab-ci-qemu-arm", 2),
             _spot_asg("homelab-ci-stale", 1),
@@ -290,26 +287,27 @@ def test_arm_regional_contract_mismatches_are_reported():
         [],
     )
     audit_aws.audit_promoted_image_document(
-        "eu-west-1",
+        "eu-central-1",
         "ami-wrong",
         [{"ImageId": "ami-wrong", "Architecture": "x86_64"}],
+        "arm64",
     )
-    audit_aws.audit_guard_documents("eu-west-1", {}, {}, {})
-    audit_aws.audit_ecr_documents("eu-west-1", [], [{"repositoryName": "unexpected/repo"}])
-    audit_aws.audit_bucket_documents("eu-west-1", {}, {}, {}, {})
+    audit_aws.audit_guard_documents("eu-central-1", {}, {}, {})
+    audit_aws.audit_ecr_documents("eu-central-1", [], [{"repositoryName": "unexpected/repo"}])
+    audit_aws.audit_bucket_documents("eu-central-1", "homelab-ci-arm-images-eu-central-1", {}, {}, {}, {})
     audit_aws.audit_scheduler_role_documents(
         {
             "Statement": [
                 {
                     "Condition": {
                         "StringEquals": {
-                            "aws:SourceArn": "arn:aws:scheduler:eu-central-1:000390721279:schedule-group/default"
+                            "aws:SourceArn": "arn:aws:scheduler:eu-west-1:000390721279:schedule-group/default"
                         }
                     }
                 }
             ]
         },
-        {"Statement": [{"Resource": "arn:aws:ec2:eu-central-1:000390721279:instance/*"}]},
+        {"Statement": [{"Resource": "arn:aws:ec2:eu-west-1:000390721279:instance/*"}]},
     )
 
     output = "\n".join(audit_aws.anomalies)

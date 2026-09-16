@@ -4,7 +4,7 @@
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Target architecture (x86_64 or aarch64)" default="x86_64"
-#USAGE flag "--region <region>" help="AWS region (defaults by architecture)"
+#USAGE flag "--region <region>" help="AWS region" default="eu-central-1"
 #USAGE flag "--promote" help="After a successful bake, update the architecture-specific qemu-host AMI pointer"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
@@ -19,12 +19,10 @@ repo_root=$(git rev-parse --show-toplevel)
 
 case "$architecture" in
 x86_64)
-  default_region=eu-central-1
   name_prefix=homelab-ci-qemu-host
   param="/homelab-ci/ami/qemu-host/${ubuntu}"
   ;;
 aarch64)
-  default_region=eu-west-1
   name_prefix=homelab-ci-qemu-host-aarch64
   param="/homelab-ci/ami/qemu-host/aarch64/${ubuntu}"
   ;;
@@ -33,7 +31,7 @@ aarch64)
   exit 2
   ;;
 esac
-region="${usage_region:-$default_region}"
+region="${usage_region:-eu-central-1}"
 
 # CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
 # schedule for the build instance, then disarm it on normal exit.

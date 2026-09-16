@@ -127,10 +127,10 @@ def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
         MISE_TEST_LOG=str(log),
         PATH=f"{fake_bin}:{env['PATH']}",
         usage_architecture="aarch64",
-        usage_bucket="homelab-ci-arm-images-eu-west-1",
+        usage_bucket="homelab-ci-arm-images-eu-central-1",
         usage_machine="box",
         usage_promote="true",
-        usage_region="eu-west-1",
+        usage_region="eu-central-1",
         usage_ubuntu="noble",
     )
 
@@ -141,8 +141,8 @@ def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
         "run packer:init",
         "run packer:build box --ubuntu noble --upstream",
         (
-            "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-west-1 "
-            "--region eu-west-1 --architecture aarch64 --promote"
+            "run packer:upload-s3 box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
+            "--region eu-central-1 --architecture aarch64 --promote"
         ),
     ]
 
@@ -158,8 +158,7 @@ def test_publish_qemu_hydrates_exact_arm_box_before_box_deps(tmp_path: Path) -> 
         'printf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n'
         'case "$*" in\n'
         '"run test:build_box_deps"*)\n'
-        '  printf "%s|%s|%s|%s|%s|%s\\n" "$HOMELAB_TEST_IN_AWS" '
-        '"$HOMELAB_TEST_AWS_COMPUTE_REGION" "$HOMELAB_TEST_AWS_ECR_REGION" '
+        '  printf "%s|%s|%s|%s\\n" "$HOMELAB_TEST_IN_AWS" '
         '"$HOMELAB_BOX_BASE_BUILD_ID" "$HOMELAB_BOX_BASE_SOURCE_SHA" '
         '"$HOMELAB_BOX_BASE_ARCHITECTURE" >"$ENV_TEST_LOG"\n'
         "  ;;\n"
@@ -173,11 +172,11 @@ def test_publish_qemu_hydrates_exact_arm_box_before_box_deps(tmp_path: Path) -> 
         PATH=f"{fake_bin}:{env['PATH']}",
         usage_architecture="aarch64",
         usage_base_build_id="123.arm-box-noble",
-        usage_bucket="homelab-ci-arm-images-eu-west-1",
+        usage_bucket="homelab-ci-arm-images-eu-central-1",
         usage_build_id="123.arm-box-deps-noble",
         usage_machine="box_deps",
         usage_promote="true",
-        usage_region="eu-west-1",
+        usage_region="eu-central-1",
         usage_ubuntu="noble",
     )
 
@@ -186,16 +185,16 @@ def test_publish_qemu_hydrates_exact_arm_box_before_box_deps(tmp_path: Path) -> 
     assert result.returncode == 0, result.stderr
     assert log.read_text().splitlines() == [
         (
-            "run ci:hydrate-qemu-images box --ubuntu noble --bucket homelab-ci-arm-images-eu-west-1 "
-            "--region eu-west-1 --architecture aarch64 --build-id 123.arm-box-noble"
+            "run ci:hydrate-qemu-images box --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
+            "--region eu-central-1 --architecture aarch64 --build-id 123.arm-box-noble"
         ),
         "run test:build_box_deps --ubuntu noble",
         (
-            "run packer:upload-s3 box_deps --ubuntu noble --bucket homelab-ci-arm-images-eu-west-1 "
-            "--region eu-west-1 --architecture aarch64 --build-id 123.arm-box-deps-noble --promote"
+            "run packer:upload-s3 box_deps --ubuntu noble --bucket homelab-ci-arm-images-eu-central-1 "
+            "--region eu-central-1 --architecture aarch64 --build-id 123.arm-box-deps-noble --promote"
         ),
     ]
-    assert env_log.read_text().strip() == f"true|eu-west-1|eu-west-1|123.arm-box-noble|{'d' * 40}|aarch64"
+    assert env_log.read_text().strip() == f"true|123.arm-box-noble|{'d' * 40}|aarch64"
 
 
 def test_publish_qemu_refuses_arm_box_deps_without_exact_base(tmp_path: Path) -> None:
@@ -483,7 +482,7 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
         "  fi\n"
         "  previous=$argument\n"
         "done\n"
-        'printf \'{"builds":[{"artifact_id":"eu-west-1:ami-1234abcd"}]}\\n\' >"$manifest"\n',
+        'printf \'{"builds":[{"artifact_id":"eu-central-1:ami-1234abcd"}]}\\n\' >"$manifest"\n',
     )
     env = dict(os.environ)
     env.pop("CI", None)
@@ -505,7 +504,7 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
 
     assert result.returncode == 0, result.stderr
     call = packer_log.read_text()
-    assert "aws_region=eu-west-1" in call
+    assert "aws_region=eu-central-1" in call
     assert "architecture=aarch64" in call
     assert "Candidate AMI: ami-1234abcd" in result.stdout
     assert "/homelab-ci/ami/qemu-host/aarch64/noble" in result.stdout

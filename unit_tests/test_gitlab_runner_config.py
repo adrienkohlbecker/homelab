@@ -52,7 +52,7 @@ def test_all_aws_runner_pools_render_consistently() -> None:
     expected = {
         "fox-aws-shell-qemu": ("homelab-ci-qemu-host", "homelab-ci-fleeting", 65, 13, 5, "10m0s"),
         "fox-aws-shell-qemu-site": ("homelab-ci-qemu-site", "homelab-ci-fleeting", 1, 1, 1, "10m0s"),
-        "fox-aws-shell-qemu-arm": ("homelab-ci-qemu-arm", "homelab-ci-fleeting-arm", 78, 78, 1, "20m0s"),
+        "fox-aws-shell-qemu-arm": ("homelab-ci-qemu-arm", "homelab-ci-fleeting", 78, 78, 1, "20m0s"),
     }
     for name, (asg, profile, limit, capacity, max_instances, acquire_timeout) in expected.items():
         runner = runners[name]
@@ -73,7 +73,7 @@ def test_all_aws_runner_pools_render_consistently() -> None:
     assert arm_connector["use_static_credentials"] is True
 
 
-def test_aws_profiles_share_credentials_without_source_profile() -> None:
+def test_aws_runners_share_one_credential_profile() -> None:
     tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
     profile_task = next(
         task for task in tasks[0]["block"] if task["name"] == "Render AWS qemu runner credential profile"
@@ -86,13 +86,12 @@ def test_aws_profiles_share_credentials_without_source_profile() -> None:
 
     config = configparser.ConfigParser()
     config.read_string(rendered_files["config"])
-    assert config.sections() == ["profile homelab-ci-fleeting", "profile homelab-ci-fleeting-arm"]
+    assert config.sections() == ["profile homelab-ci-fleeting"]
     assert config["profile homelab-ci-fleeting"]["region"] == "eu-central-1"
-    assert config["profile homelab-ci-fleeting-arm"]["region"] == "eu-west-1"
 
     credentials = configparser.ConfigParser()
     credentials.read_string(rendered_files["credentials"])
-    assert credentials.sections() == ["homelab-ci-fleeting", "homelab-ci-fleeting-arm"]
+    assert credentials.sections() == ["homelab-ci-fleeting"]
     for section in credentials.sections():
         assert credentials[section]["aws_access_key_id"] == _runner_values()["gitlab_runner_aws_qemu_access_key_id"]
         assert (

@@ -125,7 +125,7 @@ class TestManifest:
         assert hydrate.read_manifest(manifest_path, _args(), hydrate.ImageSelection(manifest["build_id"], None)) == manifest
 
     def test_wrong_architecture_is_rejected(self, tmp_path: Path) -> None:
-        args = _args(architecture="aarch64", bucket="homelab-ci-arm-images-eu-west-1", region="eu-west-1")
+        args = _args(architecture="aarch64", bucket="homelab-ci-arm-images-eu-central-1", region="eu-central-1")
         manifest = {
             "architecture": "x86_64",
             "build_id": args.build_id,
@@ -271,9 +271,9 @@ class TestResolveImage:
         calls: list[list[str]] = []
         args = _args(
             architecture="aarch64",
-            bucket="homelab-ci-arm-images-eu-west-1",
+            bucket="homelab-ci-arm-images-eu-central-1",
             build_id="arm-build",
-            region="eu-west-1",
+            region="eu-central-1",
         )
         body = upload.pointer_body(args, [args.build_id])
 
@@ -325,8 +325,8 @@ class TestResolveImage:
                 monkeypatch,
                 body,
                 architecture="aarch64",
-                bucket="homelab-ci-arm-images-eu-west-1",
-                region="eu-west-1",
+                bucket="homelab-ci-arm-images-eu-central-1",
+                region="eu-central-1",
             )
 
     @pytest.mark.parametrize(("field", "value"), [("machine", "box_deps"), ("ubuntu", "resolute")])

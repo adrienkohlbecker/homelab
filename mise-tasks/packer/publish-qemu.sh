@@ -59,8 +59,6 @@ box_deps)
     export HOMELAB_BOX_BASE_SOURCE_SHA="$CI_COMMIT_SHA"
     export HOMELAB_BOX_BASE_ARCHITECTURE="$architecture"
     export HOMELAB_TEST_IN_AWS=true
-    export HOMELAB_TEST_AWS_COMPUTE_REGION="$region"
-    export HOMELAB_TEST_AWS_ECR_REGION="$region"
   fi
   mise run test:build_box_deps --ubuntu "$ubuntu"
   ;;

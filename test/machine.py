@@ -746,16 +746,6 @@ class Machine:
         """
         return os.environ.get("HOMELAB_TEST_IN_AWS", "").strip().lower() in ("1", "true", "yes")
 
-    @property
-    def aws_compute_region(self) -> str:
-        """AWS compute/APT region selected by the job."""
-        return os.environ.get("HOMELAB_TEST_AWS_COMPUTE_REGION", "").strip() or "eu-central-1"
-
-    @property
-    def aws_ecr_region(self) -> str:
-        """AWS ECR region selected by the job."""
-        return os.environ.get("HOMELAB_TEST_AWS_ECR_REGION", "").strip() or "eu-central-1"
-
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details.
 
@@ -787,8 +777,6 @@ class Machine:
             "-e",
             json.dumps(
                 {
-                    "_test_aws_compute_region": self.aws_compute_region,
-                    "_test_aws_ecr_region": self.aws_ecr_region,
                     "_test_in_aws": self.in_aws,
                     "_test_nexus_url": "" if self.upstream_mirrors or self.in_aws else "nexus.lab.fahm.fr",
                 },

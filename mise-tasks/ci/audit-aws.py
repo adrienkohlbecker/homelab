@@ -6,8 +6,8 @@
 # ///
 """Read-only audit of the homelab CI AWS account.
 
-The account exists solely for the Frankfurt x86_64 and Ireland aarch64 AWS
-test-cell pools documented in notes/ci_aws_nested_qemu_cells.md and
+The account exists solely for the Frankfurt x86_64 and aarch64 AWS test-cell
+pools documented in notes/ci_aws_nested_qemu_cells.md and
 notes/ci_aws_arm_qemu_cells.md. Runner hosts autoscale to zero; their regional
 VPC, image bucket, ECR cache, AMI pointer, guards, and launch configuration are
 the expected standing footprint.
@@ -52,24 +52,25 @@ from botocore.exceptions import BotoCoreError, ClientError
 CFG = Config(retries={"total_max_attempts": 10, "mode": "adaptive"})
 CI_REGIONS: dict[str, dict[str, Any]] = {
     "eu-central-1": {
-        "ami_architecture": "x86_64",
-        "ami_name": "homelab-ci-qemu-host-noble",
-        "ami_parameter": "/homelab-ci/ami/qemu-host/{ubuntu}",
+        "amis": {
+            "x86_64": {
+                "name": "homelab-ci-qemu-host-noble",
+                "parameter": "/homelab-ci/ami/qemu-host/{ubuntu}",
+            },
+            "arm64": {
+                "name": "homelab-ci-qemu-host-aarch64-noble",
+                "parameter": "/homelab-ci/ami/qemu-host/aarch64/{ubuntu}",
+            },
+        },
         "asg_maxima": {
             "homelab-ci-qemu-host": 5,
             "homelab-ci-qemu-site": 1,
+            "homelab-ci-qemu-arm": 1,
         },
-        "bucket": "homelab-ci-images",
-    },
-    "eu-west-1": {
-        "ami_architecture": "arm64",
-        "ami_name": "homelab-ci-qemu-host-aarch64-noble",
-        "ami_parameter": "/homelab-ci/ami/qemu-host/aarch64/{ubuntu}",
-        "asg_maxima": {"homelab-ci-qemu-arm": 1},
-        "bucket": "homelab-ci-arm-images-eu-west-1",
+        "buckets": {"homelab-ci-images", "homelab-ci-arm-images-eu-central-1"},
     },
 }
-EXPECTED_GLOBAL_S3_BUCKETS = {contract["bucket"] for contract in CI_REGIONS.values()}
+EXPECTED_GLOBAL_S3_BUCKETS = set().union(*(contract["buckets"] for contract in CI_REGIONS.values()))
 ECR_UPSTREAMS = {
     "docker-hub": "registry-1.docker.io",
     "github": "ghcr.io",
@@ -77,9 +78,9 @@ ECR_UPSTREAMS = {
     "quay": "quay.io",
 }
 ARM_INSTANCE_TYPES = {"c6gd.metal", "c7gd.metal"}
-ARM_AVAILABILITY_ZONES = {"eu-west-1a", "eu-west-1b", "eu-west-1c"}
+ARM_AVAILABILITY_ZONES = {"eu-central-1a", "eu-central-1b", "eu-central-1c"}
 STANDARD_SPOT_QUOTA_CODE = "L-34B43A08"
-ARM_REQUIRED_SPOT_VCPUS = 64
+ARM_REQUIRED_SPOT_VCPUS = 152
 SCHEDULER_ROLE_NAME = "homelab-ci-cell-scheduler"
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
@@ -127,20 +128,17 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     if contract is None:
         return False
     tags = image_tags(image)
-    if not all(
-        tags.get(key) == value
-        for key, value in {
-            "Name": contract["ami_name"],
-            "role": "ci-ami",
-            "machine": "qemu_host",
-            "ubuntu": "noble",
-        }.items()
+    if any(
+        tags.get(key) != value for key, value in {"role": "ci-ami", "machine": "qemu_host", "ubuntu": "noble"}.items()
     ):
         return False
-    tag_architecture = tags.get("architecture")
-    if region == "eu-central-1":
-        return tag_architecture in (None, "x86_64")
-    return tag_architecture == "aarch64"
+    return any(
+        tags.get("Name") == ami["name"]
+        and (
+            tags.get("architecture") in (None, "x86_64") if arch == "x86_64" else tags.get("architecture") == "aarch64"
+        )
+        for arch, ami in contract["amis"].items()
+    )
 
 
 def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str] | None:
@@ -153,19 +151,20 @@ def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str] | None:
     promoted: set[str] = set()
     ssm = client("ssm", region)
     for ubuntu in ubuntus:
-        parameter = contract["ami_parameter"].format(ubuntu=ubuntu)
-        try:
-            value = ssm.get_parameter(Name=parameter)["Parameter"]["Value"]
-        except ClientError as error:
-            code = error.response["Error"].get("Code", "Error")
-            if code == "ParameterNotFound":
-                continue
-            errors.append(f"{region} promoted qemu-host {ubuntu}: {code}")
-            return None
-        except BotoCoreError as error:
-            errors.append(f"{region} promoted qemu-host {ubuntu}: {type(error).__name__}: {error}")
-            return None
-        promoted.add(value)
+        for arch, ami in contract["amis"].items():
+            parameter = ami["parameter"].format(ubuntu=ubuntu)
+            try:
+                value = ssm.get_parameter(Name=parameter)["Parameter"]["Value"]
+            except ClientError as error:
+                code = error.response["Error"].get("Code", "Error")
+                if code == "ParameterNotFound":
+                    continue
+                errors.append(f"{region} promoted qemu-host {arch} {ubuntu}: {code}")
+                return None
+            except BotoCoreError as error:
+                errors.append(f"{region} promoted qemu-host {arch} {ubuntu}: {type(error).__name__}: {error}")
+                return None
+            promoted.add(value)
     return promoted
 
 
@@ -246,7 +245,7 @@ def audit_asg_documents(region: str, groups: list[dict]) -> None:
             anomalies.append(f"[{region}] ASG {name} does not use price-capacity-optimized Spot allocation")
         if not group.get("NewInstancesProtectedFromScaleIn"):
             anomalies.append(f"[{region}] ASG {name} does not protect new instances from scale-in")
-        if region == "eu-west-1":
+        if name == "homelab-ci-qemu-arm":
             overrides = group.get("MixedInstancesPolicy", {}).get("LaunchTemplate", {}).get("Overrides", [])
             actual_types = {
                 override["InstanceType"] for override in overrides if isinstance(override.get("InstanceType"), str)
@@ -257,7 +256,7 @@ def audit_asg_documents(region: str, groups: list[dict]) -> None:
                     f"expected {sorted(ARM_INSTANCE_TYPES)!r}, got {sorted(actual_types)!r}"
                 )
             if set(group.get("AvailabilityZones", [])) != ARM_AVAILABILITY_ZONES:
-                anomalies.append(f"[{region}] ASG {name} does not span all configured Ireland AZs")
+                anomalies.append(f"[{region}] ASG {name} does not span all configured Frankfurt AZs")
     unexpected = sorted(set(by_name) - set(maxima))
     anomalies.extend(
         f"[{region}] unexpected CI Auto Scaling group {name}" for name in unexpected if name.startswith("homelab-ci-")
@@ -267,12 +266,12 @@ def audit_asg_documents(region: str, groups: list[dict]) -> None:
 
 
 def audit_arm_capacity_documents(quota: dict, offerings: list[dict], instance_types: list[dict]) -> None:
-    """Validate the Ireland quota and every configured ARM metal override."""
+    """Validate the Frankfurt quota and every configured ARM metal override."""
     anomaly_count = len(anomalies)
     quota_value = quota.get("Value")
     if not isinstance(quota_value, int | float) or quota_value < ARM_REQUIRED_SPOT_VCPUS:
         anomalies.append(
-            f"[eu-west-1] Standard Spot quota is {quota_value!r} vCPUs, expected at least {ARM_REQUIRED_SPOT_VCPUS}"
+            f"[eu-central-1] Standard Spot quota is {quota_value!r} vCPUs, expected at least {ARM_REQUIRED_SPOT_VCPUS}"
         )
 
     offered: dict[str, set[str]] = {instance_type: set() for instance_type in ARM_INSTANCE_TYPES}
@@ -283,29 +282,28 @@ def audit_arm_capacity_documents(quota: dict, offerings: list[dict], instance_ty
             offered[instance_type].add(location)
     for instance_type, locations in offered.items():
         if not locations & ARM_AVAILABILITY_ZONES:
-            anomalies.append(f"[eu-west-1] {instance_type} is unavailable in the configured Ireland AZs")
+            anomalies.append(f"[eu-central-1] {instance_type} is unavailable in the configured Frankfurt AZs")
 
     specs = {spec["InstanceType"]: spec for spec in instance_types}
     for instance_type in sorted(ARM_INSTANCE_TYPES):
         spec = specs.get(instance_type)
         if spec is None:
-            anomalies.append(f"[eu-west-1] missing instance-type description for {instance_type}")
+            anomalies.append(f"[eu-central-1] missing instance-type description for {instance_type}")
             continue
         vcpus = spec.get("VCpuInfo", {}).get("DefaultVCpus", 0)
         memory = spec.get("MemoryInfo", {}).get("SizeInMiB", 0)
         storage = spec.get("InstanceStorageInfo", {})
         disk_count = sum(disk.get("Count", 0) for disk in storage.get("Disks", []))
         if vcpus < 64 or memory < 128 * 1024 or not spec.get("InstanceStorageSupported"):
-            anomalies.append(f"[eu-west-1] {instance_type} is smaller than 64 vCPUs/128 GiB with instance storage")
+            anomalies.append(f"[eu-central-1] {instance_type} is smaller than 64 vCPUs/128 GiB with instance storage")
         if disk_count < 2 or storage.get("TotalSizeInGB", 0) < 3600:
-            anomalies.append(f"[eu-west-1] {instance_type} lacks two suitable local NVMe devices")
+            anomalies.append(f"[eu-central-1] {instance_type} lacks two suitable local NVMe devices")
     if len(anomalies) == anomaly_count:
-        expected.append("[eu-west-1] ARM Spot quota, offerings, and metal sizing validated")
+        expected.append("[eu-central-1] ARM Spot quota, offerings, and metal sizing validated")
 
 
-def audit_promoted_image_document(region: str, image_id: str, images: list[dict]) -> None:
+def audit_promoted_image_document(region: str, image_id: str, images: list[dict], architecture: str) -> None:
     """Validate the architecture of the AMI selected by the regional pointer."""
-    architecture = CI_REGIONS[region]["ami_architecture"]
     image = next((candidate for candidate in images if candidate.get("ImageId") == image_id), None)
     if image is None:
         anomalies.append(f"[{region}] promoted qemu-host AMI {image_id} is not readable")
@@ -356,6 +354,7 @@ def audit_ecr_documents(region: str, rules: list[dict], repositories: list[dict]
 
 def audit_bucket_documents(
     region: str,
+    bucket: str,
     location: dict,
     public_access: dict,
     versioning: dict,
@@ -363,7 +362,6 @@ def audit_bucket_documents(
 ) -> None:
     """Validate the regional image bucket's location and access controls."""
     anomaly_count = len(anomalies)
-    bucket = CI_REGIONS[region]["bucket"]
     if location.get("LocationConstraint") != region:
         anomalies.append(f"[{region}] bucket {bucket} is in {location.get('LocationConstraint')!r}")
     access = public_access.get("PublicAccessBlockConfiguration", {})
@@ -388,20 +386,20 @@ def audit_bucket_documents(
 
 
 def audit_scheduler_role_documents(trust: dict, permissions: dict) -> None:
-    """Validate the shared bake-backstop role covers exactly both CI regions."""
+    """Validate the bake-backstop role covers the CI region."""
     anomaly_count = len(anomalies)
     source_arns = trust["Statement"][0].get("Condition", {}).get("StringEquals", {}).get("aws:SourceArn", [])
     if isinstance(source_arns, str):
         source_arns = [source_arns]
     expected_source_arns = {f"arn:aws:scheduler:{region}:000390721279:schedule-group/default" for region in CI_REGIONS}
     if set(source_arns) != expected_source_arns:
-        anomalies.append("[global] bake scheduler trust does not match both CI regions")
+        anomalies.append("[global] bake scheduler trust does not match the CI region")
     resources = permissions["Statement"][0].get("Resource", [])
     if isinstance(resources, str):
         resources = [resources]
     expected_resources = {f"arn:aws:ec2:{region}:000390721279:instance/*" for region in CI_REGIONS}
     if set(resources) != expected_resources:
-        anomalies.append("[global] bake scheduler termination policy does not match both CI regions")
+        anomalies.append("[global] bake scheduler termination policy does not match the CI region")
     if len(anomalies) == anomaly_count:
         expected.append("[global] regional bake scheduler role checked")
 
@@ -418,19 +416,20 @@ def audit_region_contract(region: str, ec2) -> None:
     )
     audit_asg_documents(region, groups)
 
-    parameter = safe(
-        f"{region} qemu-host AMI parameter",
-        lambda: client("ssm", region).get_parameter(Name=contract["ami_parameter"].format(ubuntu="noble"))["Parameter"][
-            "Value"
-        ],
-        default=None,
-    )
-    if parameter is not None:
-        images = safe(
-            f"{region} promoted qemu-host AMI",
-            lambda: ec2.describe_images(ImageIds=[parameter]).get("Images", []),
+    for architecture, ami in contract["amis"].items():
+        parameter = safe(
+            f"{region} {architecture} qemu-host AMI parameter",
+            lambda ami=ami: client("ssm", region).get_parameter(Name=ami["parameter"].format(ubuntu="noble"))[
+                "Parameter"
+            ]["Value"],
+            default=None,
         )
-        audit_promoted_image_document(region, parameter, images)
+        if parameter is not None:
+            images = safe(
+                f"{region} promoted {architecture} qemu-host AMI",
+                lambda parameter=parameter: ec2.describe_images(ImageIds=[parameter]).get("Images", []),
+            )
+            audit_promoted_image_document(region, parameter, images, architecture)
 
     image_block = safe(f"{region} AMI public access", ec2.get_image_block_public_access_state, default=None)
     snapshot_block = safe(f"{region} snapshot public access", ec2.get_snapshot_block_public_access_state, default=None)
@@ -460,26 +459,30 @@ def audit_region_contract(region: str, ec2) -> None:
     audit_ecr_documents(region, rules, repositories)
 
     s3 = client("s3", region)
-    bucket = contract["bucket"]
-    location = safe(f"{region} image bucket location", lambda: s3.get_bucket_location(Bucket=bucket), default=None)
-    public_access = safe(
-        f"{region} image bucket public access",
-        lambda: s3.get_public_access_block(Bucket=bucket),
-        default=None,
-    )
-    versioning = safe(
-        f"{region} image bucket versioning", lambda: s3.get_bucket_versioning(Bucket=bucket), default=None
-    )
-    policy_body = safe(
-        f"{region} image bucket policy", lambda: s3.get_bucket_policy(Bucket=bucket)["Policy"], default=None
-    )
-    if None not in (location, public_access, versioning, policy_body):
-        try:
-            policy = json.loads(policy_body)
-        except json.JSONDecodeError as error:
-            errors.append(f"{region} image bucket policy: invalid JSON: {error}")
-        else:
-            audit_bucket_documents(region, location, public_access, versioning, policy)
+    for bucket in sorted(contract["buckets"]):
+        location = safe(
+            f"{region} {bucket} location", lambda bucket=bucket: s3.get_bucket_location(Bucket=bucket), default=None
+        )
+        public_access = safe(
+            f"{region} {bucket} public access",
+            lambda bucket=bucket: s3.get_public_access_block(Bucket=bucket),
+            default=None,
+        )
+        versioning = safe(
+            f"{region} {bucket} versioning", lambda bucket=bucket: s3.get_bucket_versioning(Bucket=bucket), default=None
+        )
+        policy_body = safe(
+            f"{region} {bucket} policy",
+            lambda bucket=bucket: s3.get_bucket_policy(Bucket=bucket)["Policy"],
+            default=None,
+        )
+        if None not in (location, public_access, versioning, policy_body):
+            try:
+                policy = json.loads(policy_body)
+            except json.JSONDecodeError as error:
+                errors.append(f"{region} {bucket} policy: invalid JSON: {error}")
+            else:
+                audit_bucket_documents(region, bucket, location, public_access, versioning, policy)
 
     schedules = paginated(
         f"{region} bake schedules",
@@ -491,16 +494,16 @@ def audit_region_contract(region: str, ec2) -> None:
     )
     expected.append(f"[{region}] {len(schedules)} active bake backstop schedules")
 
-    if region == "eu-west-1":
+    if region == "eu-central-1":
         quota = safe(
-            "eu-west-1 Standard Spot quota",
+            "eu-central-1 Standard Spot quota",
             lambda: client("service-quotas", region).get_service_quota(
                 ServiceCode="ec2", QuotaCode=STANDARD_SPOT_QUOTA_CODE
             )["Quota"],
             default=None,
         )
         offerings = paginated(
-            "eu-west-1 ARM metal offerings",
+            "eu-central-1 ARM metal offerings",
             ec2,
             "describe_instance_type_offerings",
             "InstanceTypeOfferings",
@@ -508,7 +511,7 @@ def audit_region_contract(region: str, ec2) -> None:
             Filters=[{"Name": "instance-type", "Values": sorted(ARM_INSTANCE_TYPES)}],
         )
         instance_types = safe(
-            "eu-west-1 ARM metal descriptions",
+            "eu-central-1 ARM metal descriptions",
             lambda: ec2.describe_instance_types(InstanceTypes=sorted(ARM_INSTANCE_TYPES))["InstanceTypes"],
             default=None,
         )

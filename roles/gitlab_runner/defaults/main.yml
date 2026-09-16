@@ -38,12 +38,10 @@ gitlab_runner_aws_qemu_site_asg_name: homelab-ci-qemu-site
 gitlab_runner_aws_qemu_site_idle_time: "5m"
 
 # ── AWS ARM qemu runner (instance / fleeting) ───────────────────────────────
-# A second runner block uses the same manager IAM access key with a regional
-# profile and an independent autoscaler ceiling.
+# A second runner block uses the same manager AWS profile and an independent
+# autoscaler ceiling.
 gitlab_runner_aws_qemu_arm_enabled: false
 gitlab_runner_aws_qemu_arm_token: ""
-gitlab_runner_aws_qemu_arm_profile: homelab-ci-fleeting-arm
-gitlab_runner_aws_qemu_arm_region: eu-west-1
 gitlab_runner_aws_qemu_arm_asg_name: homelab-ci-qemu-arm
 gitlab_runner_aws_qemu_arm_capacity_per_instance: 1
 gitlab_runner_aws_qemu_arm_max_instances: 1

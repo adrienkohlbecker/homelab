@@ -541,8 +541,7 @@ ARM_CELL_SPECS = (
     "zfsbootmenu:box",
 )
 ARM_MODES = ("off", "auto")
-ARM_IMAGE_BUCKET = "homelab-ci-arm-images-eu-west-1"
-ARM_REGION = "eu-west-1"
+ARM_IMAGE_BUCKET = "homelab-ci-arm-images-eu-central-1"
 ARM_RUNNER_TAG = "aws-shell-qemu-arm"
 
 TARGETS = {
@@ -632,7 +631,6 @@ def render_child_pipeline(
         image_oidc=target_config["image_oidc"],
         cell_role_arn=CELL_ROLE_ARN,
         arm_image_bucket=ARM_IMAGE_BUCKET,
-        arm_region=ARM_REGION,
         arm_runner_tag=ARM_RUNNER_TAG,
     )
 

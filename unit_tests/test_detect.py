@@ -1047,12 +1047,10 @@ class TestRenderChildPipeline:
         # no HOMELAB_TEST_BACKEND variable.
         assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_COMPUTE_REGION"] == "eu-central-1"
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_ECR_REGION"] == "eu-central-1"
+        assert "HOMELAB_TEST_AWS_REGION" not in doc[".cell"]["variables"]
         assert doc[".arm_cell"]["tags"] == ["aws-shell-qemu-arm"]
         assert doc[".arm_cell"]["variables"]["ARCH"] == "aarch64"
-        assert doc[".arm_cell"]["variables"]["HOMELAB_TEST_AWS_COMPUTE_REGION"] == "eu-west-1"
-        assert doc[".arm_cell"]["variables"]["HOMELAB_TEST_AWS_ECR_REGION"] == "eu-west-1"
+        assert "HOMELAB_TEST_AWS_REGION" not in doc[".arm_cell"]["variables"]
         # No spot retry on the qemu targets.
         assert "retry" not in doc[".cell"]
         # nginx:box defaults to Noble; podman:box:resolute is explicit.
@@ -1120,7 +1118,7 @@ class TestRenderChildPipeline:
         jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
         assert jobs == ["no_cells"]
 
-    def test_arm_scaffold_uses_ireland_images_and_bounded_runtime(self) -> None:
+    def test_arm_scaffold_uses_frankfurt_images_and_bounded_runtime(self) -> None:
         doc = _render_child_doc(["apt:box"], site_test=False, arm_mode="auto")
         scaffold = doc[".arm_cell"]
         before_script = "\n".join(scaffold["before_script"])
@@ -1129,7 +1127,7 @@ class TestRenderChildPipeline:
         assert scaffold["needs"] == []
         assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
         assert scaffold["variables"]["HOMELAB_AARCH64_FIRMWARE_DIR"] == ("/opt/homelab-ci/qemu-firmware/aarch64")
-        assert f"--region {detect.ARM_REGION}" in before_script
+        assert "--region" not in before_script
         assert f"--bucket {detect.ARM_IMAGE_BUCKET}" in before_script
         assert "--architecture aarch64" in before_script
         assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
@@ -1184,8 +1182,7 @@ class TestRenderChildPipeline:
         assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
         # lab's shell runner is on the operator LAN: qemu guest, not in AWS.
         assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_COMPUTE_REGION"] == "eu-central-1"
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_AWS_ECR_REGION"] == "eu-central-1"
+        assert "HOMELAB_TEST_AWS_REGION" not in doc[".cell"]["variables"]
         assert ".arm_cell" not in doc
         # lab's shell runner is not the baked AMI -- no /opt/mise to point at.
         assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]

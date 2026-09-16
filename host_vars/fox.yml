@@ -226,7 +226,7 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
 # One job per pipeline, so warm reuse buys nothing here either -- same 2m drain.
 gitlab_runner_aws_qemu_site_idle_time: "2m"
 
-# One Ireland ARM bare-metal worker supplies up to the validated 78-cell
+# One ARM bare-metal worker supplies up to the validated 78-cell
 # density ceiling. The acquisition bound leaves room for cold Spot metal
 # readiness.
 gitlab_runner_aws_qemu_arm_enabled: true
@@ -240,7 +240,6 @@ gitlab_runner_aws_qemu_arm_token: !vault |
           37343264303161626339623133306535373965353538613263613832616562353233643636363965
           39613932313665326466303337383963303438616133666335643265333337336663313933336134
           36393935326638643135
-gitlab_runner_aws_qemu_arm_profile: homelab-ci-fleeting-arm
 gitlab_runner_aws_qemu_arm_asg_name: homelab-ci-qemu-arm
 gitlab_runner_aws_qemu_arm_capacity_per_instance: 78
 gitlab_runner_aws_qemu_arm_max_instances: 1

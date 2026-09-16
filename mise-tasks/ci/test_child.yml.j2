@@ -27,10 +27,6 @@ stages:
   variables:
     # Select mirrors and DNS for the guest's network environment.
     HOMELAB_TEST_IN_AWS: "{{ "true" if in_aws else "false" }}"
-    # Existing x86 and local cells keep their Frankfurt compute/APT and ECR
-    # endpoints. The harness forwards both values as Ansible extra-vars.
-    HOMELAB_TEST_AWS_COMPUTE_REGION: eu-central-1
-    HOMELAB_TEST_AWS_ECR_REGION: eu-central-1
     # passt loses first-boot DHCP under synchronized launch bursts (~84/138
     # failures in a full-matrix trial). Remove this pin after that race is fixed.
     HOMELAB_NET_BACKEND: slirp
@@ -59,9 +55,9 @@ stages:
       - test/out/
 {% if target == "aws_qemu" %}
 
-# ARM jobs use a separate native pool and region-local guest images. They keep
-# their own complete scaffold so x86 and hosted aggregation cannot inherit ARM
-# runner state accidentally.
+# ARM jobs use a separate native pool and architecture-specific guest images.
+# They keep their own scaffold so x86 and hosted aggregation cannot inherit
+# ARM runner state accidentally.
 .arm_cell:
   stage: arm
   needs: []
@@ -74,8 +70,6 @@ stages:
   variables:
     ARCH: aarch64
     HOMELAB_TEST_IN_AWS: "true"
-    HOMELAB_TEST_AWS_COMPUTE_REGION: {{ arm_region }}
-    HOMELAB_TEST_AWS_ECR_REGION: {{ arm_region }}
     HOMELAB_NET_BACKEND: slirp
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     MISE_DATA_DIR: /opt/mise
@@ -86,8 +80,8 @@ stages:
   before_script:
     - test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }
     - mise run ci:bootstrap
-    - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "aws_qemu-arm-cell-$CI_JOB_ID" --cache-dir --region {{ arm_region }}
-    - mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU" --bucket {{ arm_image_bucket }} --region {{ arm_region }} --architecture aarch64
+    - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "aws_qemu-arm-cell-$CI_JOB_ID" --cache-dir
+    - mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU" --bucket {{ arm_image_bucket }} --architecture aarch64
   after_script:
     - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
   artifacts:
