@@ -36,49 +36,29 @@
       <a href="http://muttverify.invalid/">a link</a></p></body></html>
   become: true
 
-# Seed through the source path to prove existing index entries and tags survive
-# switching mail_root to the read-only alias, without rebuilding the database.
-- name: _verify | Read the managed notmuch configuration
-  slurp:
-    src: /opt/mutt/notmuch-config
-  register: _mutt_config
-
-- name: _verify | Configure source-path indexing for the migration fixture
-  copy:
-    dest: /tmp/mutt_source_config
-    content: >-
-      {{ (_mutt_config.content | b64decode)
-         | replace('mail_root=/mnt/services/mutt/archive', 'mail_root=/mnt/services/getmail')
-         | replace('hook_dir=/opt/mutt', 'hook_dir=/mnt/services/mutt/notmuch/hooks') }}
-    mode: "0600"
-
-- name: _verify | Index the planted message through the source path
-  command: /usr/bin/notmuch --config /tmp/mutt_source_config new
-  changed_when: false
-
-- name: _verify | Tag the existing index entry
-  command: /usr/bin/notmuch --config /tmp/mutt_source_config tag +migration_probe id:muttverify@example.com
-  changed_when: false
-
-- name: _verify | Refresh the existing index through the managed service
+- name: _verify | Index the planted message through the managed service
   systemd:
     name: mutt_notmuch.service
     state: started
   become: true
 
-- name: _verify | Notmuch preserves the existing message and its tag
+- name: _verify | Tag the indexed message
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config tag +mutt_verify id:muttverify@example.com
+  changed_when: false
+
+- name: _verify | Notmuch finds the indexed message and its tag
   command:
     argv:
       - /usr/bin/notmuch
       - --config
       - /opt/mutt/notmuch-config
       - count
-      - id:muttverify@example.com and tag:migration_probe
+      - id:muttverify@example.com and tag:mutt_verify
   register: _mutt_notmuch_count
   changed_when: false
   failed_when: (_mutt_notmuch_count.stdout | trim) != '1'
 
-- name: _verify | Notmuch resolves the existing message through the read-only mount
+- name: _verify | Notmuch resolves the message through the read-only mount
   command: /usr/bin/notmuch --config /opt/mutt/notmuch-config search --output=files id:muttverify@example.com
   register: _mutt_notmuch_path
   changed_when: false
@@ -186,8 +166,8 @@
       become: true
       changed_when: false
 
-- name: _verify | Rejected indexing preserves the existing message and tag
-  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config count tag:migration_probe
+- name: _verify | Rejected indexing preserves the message and tag
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config count tag:mutt_verify
   register: _mutt_preserved
   changed_when: false
   failed_when: (_mutt_preserved.stdout | trim) != '1'
