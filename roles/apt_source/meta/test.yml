@@ -1,3 +1,0 @@
-# Consumer roles exercise the helper with their real repository inputs.
-skip:
-  box: The helper has no standalone entry point; consumer cells cover it.
