@@ -14,9 +14,10 @@ if _MODULE_DIR not in sys.path:
 audit_aws = load_repo_module("mise-tasks/ci/audit-aws.py", name="audit_aws")
 
 
-def image(image_id, *, tags, snapshot_id):
+def image(image_id, *, tags, snapshot_id, architecture="x86_64"):
     return {
         "ImageId": image_id,
+        "Architecture": architecture,
         "CreationDate": "2026-07-10T00:00:00Z",
         "Tags": [{"Key": key, "Value": value} for key, value in tags.items()],
         "BlockDeviceMappings": [{"Ebs": {"SnapshotId": snapshot_id}}],
@@ -143,14 +144,16 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
             "ubuntu": "noble",
         },
         snapshot_id="snap-arm",
+        architecture="arm64",
     )
 
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", x86)
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", x86)
-    # Every retention-managed AMI carries its architecture tag.
-    assert not audit_aws.is_supported_qemu_host_image("eu-central-1", unlabelled_x86)
+    # Older x86 AMIs lack the architecture tag but retain the EC2 architecture.
+    assert audit_aws.is_supported_qemu_host_image("eu-central-1", unlabelled_x86)
+    assert not audit_aws.is_supported_qemu_host_image("eu-central-1", {**unlabelled_x86, "Architecture": "arm64"})
 
 
 def test_ami_recognition_follows_the_shared_architecture_table():
