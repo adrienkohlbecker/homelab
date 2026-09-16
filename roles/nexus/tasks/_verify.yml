@@ -71,10 +71,6 @@
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: nexus.service
-        - MESSAGE: '{"level":"INFO","threadName":"quartz-1-thread-1","loggerName":"org.sonatype.nexus.cleanup.internal.task.CleanupTask","mdc":{"userId":"*TASK","taskIdAndDate":"repository.cleanup-20260712010000008"},"formattedMessage":"nexus-task-detail"}'
-          CONTAINER_TAG: nexus
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: nexus.service
         - MESSAGE: '{"level":"INFO","threadName":"qtp2132356553-1528","loggerName":"outboundRequests","formattedMessage":"[12/Jul/2026:08:53:12 +0000] - \"GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1\" 304 0 312 45 [qtp2132356553-1528]"}'
           CONTAINER_TAG: nexus
           SYSLOG_IDENTIFIER: conmon
@@ -121,11 +117,6 @@
           level: error
           service: nexus
           fields.source: org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo
-        - message: nexus-task-detail
-          level: info
-          service: nexus
-          fields.source: org.sonatype.nexus.cleanup.internal.task.CleanupTask
-          fields.mdc.taskIdAndDate: repository.cleanup-20260712010000008
         - message: '[12/Jul/2026:08:53:12 +0000] - "GET https://ports.ubuntu.com/ubuntu-ports/dists/noble/InRelease HTTP/1.1" 304 0 312 45 [qtp2132356553-1528]'
           level: debug
           service: nexus
