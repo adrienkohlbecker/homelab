@@ -23,10 +23,16 @@
       - systemd_timer_args.name is match('^[a-zA-Z0-9_]+$')
       - systemd_timer_args.exec_start is defined
       - systemd_timer_args.on_calendar is defined
+      - systemd_timer_args.run_as is not defined or systemd_timer_args.user | default('root') == 'root'
+      - >-
+        (systemd_timer_args.environment | default({})).keys()
+        | reject('match', '^[A-Za-z_][A-Za-z0-9_]*$')
+        | list | length == 0
     fail_msg: >-
       systemd_timer: name (got {{ systemd_timer_args.name | default('<unset>') }})
       must be defined and contain only [a-zA-Z0-9_]; exec_start and on_calendar
-      must also be defined.
+      must also be defined. run_as requires a system-scope timer, and
+      environment keys must be valid POSIX variable names.
 
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
@@ -34,36 +40,6 @@
     # The collector reads system-scope stamps, so user-scope timers cannot be
     # monitored and must not register metadata that would stay overdue forever.
     _systemd_timer_monitor: "{{ (systemd_timer_args.user | default('root')) == 'root' }}"
-
-# run_as only makes sense for system-scope units; a user-scope unit
-# already runs as the named user, and User= in /etc/systemd/user/ is
-# invalid. Reject early with a clear message instead of letting the
-# unit template emit something systemd would reject at load time.
-- name: install | Reject run_as on user-scope timer for {{ systemd_timer_args.name }}
-  when:
-    - systemd_timer_args.run_as is defined
-  assert:
-    quiet: true
-    that:
-      - _systemd_timer_user == 'root'
-    fail_msg: >-
-      systemd_timer {{ systemd_timer_args.name }}: run_as is only valid
-      for system-scope units (user: root). user-scope units already
-      run as the named user; User= in /etc/systemd/user/ is invalid.
-
-- name: install | Validate environment keys for {{ systemd_timer_args.name }}
-  assert:
-    quiet: true
-    that:
-      - systemd_timer_environment_key is match('^[A-Za-z_][A-Za-z0-9_]*$')
-    fail_msg: >-
-      systemd_timer {{ systemd_timer_args.name }}: environment key
-      '{{ systemd_timer_environment_key }}'
-      is not a valid POSIX variable name ([A-Za-z_][A-Za-z0-9_]*).
-  loop: "{{ (systemd_timer_args.environment | default({})).keys() | list }}"
-  loop_control:
-    loop_var: systemd_timer_environment_key
-    label: "{{ systemd_timer_environment_key }}"
 
 # Nested import_role task names stay static. The role is called both
 # from import_role sites (where systemd_timer_args is in scope at
