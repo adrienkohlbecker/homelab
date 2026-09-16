@@ -23,20 +23,14 @@
   assert:
     that: _netdata_defaults.netdata_expected_charts == {}
 
-- name: _verify | Render keepalived collector without a cadence override
-  template:
-    src: charts_d_keepalived_vrrp.conf.j2
-    dest: /tmp/netdata-keepalived-default.conf
-    mode: "0644"
+- name: _verify | Keepalived collector omits an unset cadence
   vars:
     netdata_keepalived_vrrp_update_every: "{{ undef() }}"
-  become: true
+    _netdata_keepalived_default: "{{ lookup('template', 'charts_d_keepalived_vrrp.conf.j2') }}"
+  assert:
+    that: "'keepalived_vrrp_update_every=' not in _netdata_keepalived_default"
 
-- name: _verify | Render production configs for alternate collectors
-  template:
-    src: "{{ item.src }}"
-    dest: "/tmp/{{ item.dest }}"
-    mode: "0644"
+- name: _verify | Check alternate collector configuration
   vars:
     qemu_test: false
     netdata_keepalived_vrrp_update_every: 11
@@ -45,56 +39,19 @@
       - go.d:collector:prometheus:headscale
     netdata_zfspool_thresholds:
       verify_pool: [ 70, 80, 90 ]
-  loop:
-    - src: charts_d_keepalived_vrrp.conf.j2
-      dest: netdata-keepalived.conf
-    - src: charts_d_netdata_presence.conf.j2
-      dest: netdata-presence.conf
-    - src: gitlab_runner_alerts.conf.j2
-      dest: netdata-gitlab-runner-alerts.conf
-    - src: prometheus.conf.j2
-      dest: netdata-prometheus.conf
-    - src: zfs_alerts_override.conf.j2
-      dest: netdata-zfs-alerts.conf
-  become: true
-
-- name: _verify | Verify alternate collector configuration
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-        import sys
-
-        root = pathlib.Path(sys.argv[1])
-        assert "keepalived_vrrp_update_every=" not in (root / "netdata-keepalived-default.conf").read_text()
-        assert "keepalived_vrrp_update_every=11" in (root / "netdata-keepalived.conf").read_text()
-        presence = (root / "netdata-presence.conf").read_text()
-        assert "netdata_presence_update_every=60" in presence
-        assert "netdata_presence_startup_grace=300" in presence
-        alerts = (root / "netdata-gitlab-runner-alerts.conf").read_text()
-        assert "lookup: max -5m" in alerts
-        prometheus = (root / "netdata-prometheus.conf").read_text()
-        assert "name: kuma" in prometheus
-        assert "name: headscale" in prometheus
-        assert "name: gitlab_runner" not in prometheus
-        zfs = (root / "netdata-zfs-alerts.conf").read_text()
-        assert "zfspool.zfspool_verify_pool_space_utilization" in zfs
-        assert "? (70) : (80)" in zfs
-      - /tmp
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate Netdata configs
-  file:
-    path: "/tmp/{{ item }}"
-    state: absent
-  loop:
-    - netdata-keepalived-default.conf
-    - netdata-keepalived.conf
-    - netdata-presence.conf
-    - netdata-gitlab-runner-alerts.conf
-    - netdata-prometheus.conf
-    - netdata-zfs-alerts.conf
-  become: true
+    _netdata_keepalived: "{{ lookup('template', 'charts_d_keepalived_vrrp.conf.j2') }}"
+    _netdata_presence: "{{ lookup('template', 'charts_d_netdata_presence.conf.j2') }}"
+    _netdata_gitlab_runner_alerts: "{{ lookup('template', 'gitlab_runner_alerts.conf.j2') }}"
+    _netdata_prometheus: "{{ lookup('template', 'prometheus.conf.j2') }}"
+    _netdata_zfs_alerts: "{{ lookup('template', 'zfs_alerts_override.conf.j2') }}"
+  assert:
+    that:
+      - "'keepalived_vrrp_update_every=11' in _netdata_keepalived"
+      - "'netdata_presence_update_every=60' in _netdata_presence"
+      - "'netdata_presence_startup_grace=300' in _netdata_presence"
+      - "'lookup: max -5m' in _netdata_gitlab_runner_alerts"
+      - "'name: kuma' in _netdata_prometheus"
+      - "'name: headscale' in _netdata_prometheus"
+      - "'name: gitlab_runner' not in _netdata_prometheus"
+      - "'zfspool.zfspool_verify_pool_space_utilization' in _netdata_zfs_alerts"
+      - "'? (70) : (80)' in _netdata_zfs_alerts"
