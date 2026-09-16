@@ -126,5 +126,4 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: mosquitto
-    _storage_template: "{{ role_path }}/templates/mosquitto.service.j2"
     _storage_mounts: [ services ]

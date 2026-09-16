@@ -263,5 +263,4 @@
   vars:
     _storage_service: transmission
     _storage_group: media
-    _storage_template: "{{ role_path }}/templates/transmission.service.j2"
     _storage_mounts: [ services, scratch, media ]

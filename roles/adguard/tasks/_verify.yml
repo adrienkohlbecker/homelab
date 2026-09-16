@@ -11,7 +11,6 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: adguard
-    _storage_template: "{{ role_path }}/templates/adguard.service.j2"
     _storage_mounts:
       - services
 

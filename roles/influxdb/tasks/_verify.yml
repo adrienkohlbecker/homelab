@@ -107,5 +107,4 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: influxdb
-    _storage_template: "{{ role_path }}/templates/influxdb.service.j2"
     _storage_mounts: [ services ]

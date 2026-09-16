@@ -171,7 +171,6 @@
   vars:
     _storage_service: jellyfin
     _storage_group: media
-    _storage_template: "{{ role_path }}/templates/jellyfin.service.j2"
     _storage_mounts: [ services, scratch, media ]
 
 - name: _verify | Render the production unit without hardware transcoding

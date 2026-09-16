@@ -116,7 +116,6 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: headscale
-    _storage_template: "{{ role_path }}/templates/headscale.service.j2"
     _storage_mounts: [ services ]
 
 - name: _verify | Exercise the advertised-address guard with host network facts

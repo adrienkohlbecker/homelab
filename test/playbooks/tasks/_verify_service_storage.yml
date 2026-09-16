@@ -27,7 +27,7 @@
 
 - name: Render production units for alternate storage layouts
   template:
-    src: "{{ _storage_template }}"
+    src: "{{ role_path }}/templates/{{ _storage_service }}.service.j2"
     dest: "/tmp/{{ _storage_service }}-{{ item.name }}.service"
     mode: "0644"
   vars:
