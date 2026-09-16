@@ -62,7 +62,7 @@ z2m_image:           ghcr.io/koenkk/zigbee2mqtt:2.12.0  # 2026-06-09
 # ansible_architecture where upstream ships per-arch assets.
 
 # Public artifacts published by this repository (GitLab project 83079143).
-homelab_gitlab_generic_packages_url: 'https://{{ nexus_url ~ "/repository/gitlab" if nexus_url else "gitlab.com" }}/api/v4/projects/83079143/packages/generic'
+homelab_gitlab_generic_packages_url: "{{ mirror_gitlab }}/api/v4/projects/83079143/packages/generic"
 
 # fan2go fan controller. No-nvml flavor: smaller, no NVIDIA dependency
 # (lab/pug have no GPUs).
@@ -166,7 +166,7 @@ macos_vm_fetch_macos_artifact:
 # The live MinIO dataset uses the legacy fs backend. Newer servers require a
 # data migration, plus console/OIDC and provisioning validation before upgrading.
 # These discontinued upstream packages are preserved in the public homelab
-# GitLab generic package registry. The shared URL keeps test fixtures on Nexus.
+# GitLab generic package registry. mirror_gitlab keeps test fixtures on Nexus.
 minio_version: "20220526054841.0.0"  # 2022-05-26
 minio_release:
   x86_64:
@@ -197,7 +197,7 @@ zfs_autobackup_version: "3.3"  # 2024-12-17
 # ZFSBootMenu tarballs are built by mise-tasks/zbm/build.sh and published to
 # the homelab GitLab project's generic package registry (project 83079143 =
 # akohlbecker/homelab; numeric id keeps the path free of an encoded slash).
-# The project is public, so downloads are anonymous. The shared URL keeps test
+# The project is public, so downloads are anonymous. mirror_gitlab keeps test
 # fixtures on the lab Nexus proxy: their strict-DoT bootstrap DNS cannot
 # resolve public names (only nexus rides the seeded /etc/hosts), and the
 # cache spares gitlab.com a ~130 MB pull per cell. Prod (nexus_url == "")
