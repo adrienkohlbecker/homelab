@@ -26,10 +26,10 @@
       gid: "{{ ansible_facts.getent_group[_storage_group][1] }}"
 
 - name: Render production units for alternate storage layouts
-  template:
-    src: "{{ role_path }}/templates/{{ _storage_service }}.service.j2"
-    dest: "/tmp/{{ _storage_service }}-{{ item.name }}.service"
-    mode: "0644"
+  set_fact:
+    _storage_units: >-
+      {{ _storage_units | default({})
+         | combine({item.name: lookup('template', role_path ~ '/templates/' ~ _storage_service ~ '.service.j2')}) }}
   vars:
     zfs_root: "{{ item.zfs_root }}"
     zfs_has_services_mount: "{{ item.zfs_root }}"
@@ -40,41 +40,20 @@
       zfs_root: false
     - name: zfs_datasets
       zfs_root: true
-  become: true
 
-- name: Verify alternate storage dependencies
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-        import sys
+- name: Verify alternate autosnapshot dependencies
+  assert:
+    that:
+      - "'After=zfs_autosnapshot.target' not in _storage_units.ext4"
+      - "'WantedBy=zfs_autosnapshot.target' not in _storage_units.ext4"
+      - "('After=zfs_autosnapshot.target' in _storage_units.zfs_datasets) == (_storage_autosnapshot | default(true) | bool)"
+      - "('WantedBy=zfs_autosnapshot.target' in _storage_units.zfs_datasets) == (_storage_autosnapshot | default(true) | bool)"
 
-        ext4 = pathlib.Path(sys.argv[1]).read_text()
-        zfs = pathlib.Path(sys.argv[2]).read_text()
-        autosnapshot = sys.argv[4] == "true"
-        assert "After=zfs_autosnapshot.target" not in ext4
-        assert "WantedBy=zfs_autosnapshot.target" not in ext4
-        assert ("After=zfs_autosnapshot.target" in zfs) == autosnapshot
-        assert ("WantedBy=zfs_autosnapshot.target" in zfs) == autosnapshot
-        for mount in sys.argv[3].split(","):
-            for directive in ("After", "Requires"):
-                dependency = f"{directive}=zfs_mount_mnt_{mount}.service"
-                assert dependency not in ext4
-                assert dependency in zfs
-      - "/tmp/{{ _storage_service }}-ext4.service"
-      - "/tmp/{{ _storage_service }}-zfs_datasets.service"
-      - "{{ _storage_mounts | join(',') }}"
-      - "{{ _storage_autosnapshot | default(true) | bool | lower }}"
-  changed_when: false
-  become: true
-
-- name: Remove alternate-storage production units
-  file:
-    path: "/tmp/{{ _storage_service }}-{{ item }}.service"
-    state: absent
-  loop:
-    - ext4
-    - zfs_datasets
-  become: true
+- name: Verify alternate storage mount dependencies
+  assert:
+    that:
+      - "('After=zfs_mount_mnt_' ~ item ~ '.service') not in _storage_units.ext4"
+      - "('Requires=zfs_mount_mnt_' ~ item ~ '.service') not in _storage_units.ext4"
+      - "('After=zfs_mount_mnt_' ~ item ~ '.service') in _storage_units.zfs_datasets"
+      - "('Requires=zfs_mount_mnt_' ~ item ~ '.service') in _storage_units.zfs_datasets"
+  loop: "{{ _storage_mounts }}"
