@@ -432,18 +432,11 @@ def _ar_member(name: str, data: bytes) -> bytes:
 
 
 def _edk2_package(tmp_path: Path) -> Path:
-    """Build a minimal qemu-efi-aarch64-shaped .deb with a firmware descriptor."""
-    descriptor = {
-        "mapping": {
-            "executable": {"filename": "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd"},
-            "nvram-template": {"filename": "/usr/share/AAVMF/AAVMF_VARS.fd"},
-        }
-    }
+    """Build a minimal qemu-efi-aarch64-shaped .deb with both CODE variants."""
     members = {
         "./usr/share/AAVMF/AAVMF_CODE.no-secboot.fd": b"plain code",
         "./usr/share/AAVMF/AAVMF_CODE.secboot.fd": b"secure code",
         "./usr/share/AAVMF/AAVMF_VARS.fd": b"vars template",
-        "./usr/share/qemu/firmware/60-edk2-aarch64.json": json.dumps(descriptor).encode(),
     }
     data = io.BytesIO()
     with tarfile.open(fileobj=data, mode="w:xz") as tar:
@@ -495,7 +488,7 @@ def test_firmware_is_not_fetched_on_non_arm_hosts(tmp_path: Path) -> None:
     assert not firmware_dir.exists()
 
 
-def test_firmware_installs_the_descriptor_pair_once(tmp_path: Path) -> None:
+def test_firmware_installs_the_plain_pair_once(tmp_path: Path) -> None:
     package = _edk2_package(tmp_path)
     script = _firmware_checkout(tmp_path, package, hashlib.sha256(package.read_bytes()).hexdigest())
     firmware_dir = tmp_path / "firmware"
