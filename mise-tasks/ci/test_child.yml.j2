@@ -156,10 +156,6 @@ stages:
     ROLE: {{ cell.role }}
     VARIANT: {{ cell.machine }}
     UBUNTU: {{ cell.ubuntu }}
-{% if arm_mode == "manual" %}
-  when: manual
-  allow_failure: true
-{% endif %}
   script:
     - |
       rc=0

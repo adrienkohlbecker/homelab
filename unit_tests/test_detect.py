@@ -1120,20 +1120,6 @@ class TestRenderChildPipeline:
         jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
         assert jobs == ["no_cells"]
 
-    def test_manual_arm_mode_renders_fixed_optional_allowlist(self) -> None:
-        doc = _render_child_doc(["nginx:box"], site_test=False, arm_mode="manual")
-        arm_jobs = {f"{spec}:aarch64" for spec in detect.ARM_CELL_SPECS}
-
-        assert len(arm_jobs) == 12
-        assert "fan2go:box:aarch64" not in arm_jobs
-        assert arm_jobs <= doc.keys()
-        assert doc["stages"] == ["test1", "arm"]
-        for job_name in arm_jobs:
-            assert doc[job_name]["extends"] == ".arm_cell"
-            assert doc[job_name]["when"] == "manual"
-            assert doc[job_name]["allow_failure"] is True
-            assert doc[job_name]["variables"]["UBUNTU"] == "noble"
-
     def test_arm_scaffold_uses_ireland_images_and_bounded_runtime(self) -> None:
         doc = _render_child_doc(["apt:box"], site_test=False, arm_mode="auto")
         scaffold = doc[".arm_cell"]
@@ -1184,14 +1170,6 @@ class TestRenderChildPipeline:
 
         assert ".arm_cell" not in doc
         assert not any(name.endswith(":aarch64") for name in doc)
-
-    def test_manual_arm_only_pipeline_has_no_arm_only_coverage(self) -> None:
-        doc = _render_child_doc([], site_test=False, arm_mode="manual")
-
-        assert doc["stages"] == ["arm"]
-        assert "condition_coverage" not in doc
-        assert "condition_coverage:combined" not in doc
-        assert "no_cells" not in doc
 
     def test_rejects_unknown_arm_mode(self) -> None:
         with pytest.raises(ValueError, match="unsupported ARM mode"):
@@ -1372,7 +1350,6 @@ class TestCmdGitlab:
         ("arm_mode", "arm_job"),
         [
             ("off", False),
-            ("manual", True),
             ("auto", True),
         ],
     )

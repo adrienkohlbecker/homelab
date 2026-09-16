@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # [MISE] description="Render the GitLab role-test child pipeline"
 # [USAGE] flag "--target <target>" help="Qemu target to render: aws_qemu or lab"
-# [USAGE] flag "--arm-mode <arm_mode>" help="ARM lane mode: off, manual, or auto"
+# [USAGE] flag "--arm-mode <arm_mode>" help="ARM lane mode: off or auto"
 # [USAGE] flag "--child-path <child_path>" help="Generated child pipeline path" default="test-child.yml"
 # [USAGE] flag "--all" help="Force the full test universe"
 """CI change-detection pipeline (GitLab).
@@ -524,9 +524,8 @@ def _full_universe_specs() -> list[str]:
 # Branch-safe read-only role used to hydrate AWS qemu images.
 CELL_ROLE_ARN = "arn:aws:iam::000390721279:role/homelab-ci-cell"
 
-# The first ARM lane is deliberately smaller than the x86 matrix. Keep its
-# architecture contract in one place so change detection, manual burn-in, and
-# tests all select from the same auditable set.
+# The ARM lane is deliberately smaller than the x86 matrix. Keep its
+# architecture contract in one place for change detection and tests.
 ARM_CELL_SPECS = (
     "apt:box",
     "boot:box",
@@ -541,7 +540,7 @@ ARM_CELL_SPECS = (
     "refind:box",
     "zfsbootmenu:box",
 )
-ARM_MODES = ("off", "manual", "auto")
+ARM_MODES = ("off", "auto")
 ARM_IMAGE_BUCKET = "homelab-ci-arm-images-eu-west-1"
 ARM_REGION = "eu-west-1"
 ARM_RUNNER_TAG = "aws-shell-qemu-arm"
@@ -568,14 +567,11 @@ _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 
 
 def _arm_specs(specs: list[str], target: str, arm_mode: str) -> list[str]:
-    """Return the fixed or change-selected ARM subset for this pipeline."""
+    """Return the change-selected ARM subset for this pipeline."""
     if arm_mode not in ARM_MODES:
         raise ValueError(f"unsupported ARM mode: {arm_mode!r}")
     if target != "aws_qemu" or arm_mode == "off":
         return []
-    if arm_mode == "manual":
-        return list(ARM_CELL_SPECS)
-
     selected_pairs = {":".join(spec.split(":")[:2]) for spec in specs}
     return [spec for spec in ARM_CELL_SPECS if spec in selected_pairs]
 
@@ -625,7 +621,6 @@ def render_child_pipeline(
     return template.render(
         cells=cells,
         arm_cells=arm_cells,
-        arm_mode=arm_mode,
         cell_groups=cell_groups,
         stages=stages,
         site_test=site_test,
@@ -795,7 +790,7 @@ def _cmd_gitlab(args: list[str]) -> int:
         "--arm-mode",
         default=os.environ.get("HOMELAB_CI_ARM", "off"),
         choices=ARM_MODES,
-        help="Render the ARM lane as off, optional manual jobs, or automatic gating jobs",
+        help="Render the ARM lane as off or automatic gating jobs",
     )
     opts = p.parse_args(args)
 
