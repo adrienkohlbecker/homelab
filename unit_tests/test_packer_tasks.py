@@ -571,7 +571,7 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert "sshd -t" in provision
 
 
-@pytest.mark.parametrize("architecture,installs_key", [("x86_64", False), ("aarch64", True)])
+@pytest.mark.parametrize(("architecture", "installs_key"), [("x86_64", False), ("aarch64", True)])
 def test_qemu_host_static_key_is_arm_only(tmp_path: Path, architecture: str, installs_key: bool) -> None:
     provision = QEMU_HOST_PROVISION_SH.read_text()
     key_section = provision.split("# connector; x86 continues to use EC2 Instance Connect.\n", 1)[1].split(

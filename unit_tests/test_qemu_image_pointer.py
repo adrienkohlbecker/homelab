@@ -76,7 +76,7 @@ class TestValidateTarget:
             upload.validate_target(_args(architecture="x86_64"))
 
 
-@pytest.mark.parametrize("architecture,prefix", [("x86_64", "x86"), ("aarch64", "aarch64")])
+@pytest.mark.parametrize(("architecture", "prefix"), [("x86_64", "x86"), ("aarch64", "aarch64")])
 def test_upload_targets_architecture_prefix(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], architecture: str, prefix: str
 ) -> None:
