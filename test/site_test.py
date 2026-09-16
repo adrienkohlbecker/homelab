@@ -117,7 +117,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             await m.ansible_command(
                 str(m.workdir_path / "site.yml"),
                 "-e",
-                "_role_under_test=services",
+                "_test_role_under_test=services",
             )
 
         staged = m.workdir_path / "site.yml"
