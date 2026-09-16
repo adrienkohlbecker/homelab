@@ -1,0 +1,16 @@
+# Headscale cannot discover its public addresses behind nginx and Podman. Catch
+# stale Terraform pins at converge because the estate has no IPv6 egress probe.
+- name: Assert headscale DERP advertised IPs are held by this host
+  assert:
+    that:
+      - headscale_derp_ipv4 in ansible_all_ipv4_addresses
+      - headscale_derp_ipv6 in ansible_all_ipv6_addresses
+    fail_msg: >-
+      headscale_derp_ipv4 ({{ headscale_derp_ipv4 | default("unset") }}) or
+      headscale_derp_ipv6 ({{ headscale_derp_ipv6 | default("unset") }}) is not
+      configured on this host -- the DERPMap would advertise an address clients
+      cannot reach. Reconcile with the reserved primary IPs in
+      terraform/hetzner.tf (the IPv6 is cidrhost(ip_network, 1), not ip_address).
+  when: headscale_derp_ipv4 is defined and headscale_derp_ipv6 is defined
+  tags:
+    - headscale

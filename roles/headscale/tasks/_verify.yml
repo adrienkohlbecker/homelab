@@ -119,6 +119,44 @@
     _storage_template: "{{ role_path }}/templates/headscale.service.j2"
     _storage_mounts: [ services ]
 
+- name: _verify | Exercise the advertised-address guard with host network facts
+  block:
+    - name: _verify | Add a temporary advertised IPv4 address
+      command: ip address add 192.0.2.1/32 dev lo
+      changed_when: true
+      become: true
+
+    - name: _verify | Add a temporary advertised IPv6 address
+      command: ip -6 address add 2001:db8::1/128 dev lo
+      changed_when: true
+      become: true
+
+    - name: _verify | Refresh network facts with the advertised addresses
+      setup:
+        gather_subset:
+          - network
+
+    - name: _verify | Run the production advertised-address guard
+      import_tasks: validate_derp_ips.yml
+      vars:
+        headscale_derp_ipv4: 192.0.2.1
+        headscale_derp_ipv6: 2001:db8::1
+  always:
+    - name: _verify | Remove the temporary advertised IPv4 address
+      command: ip address delete 192.0.2.1/32 dev lo
+      changed_when: true
+      become: true
+
+    - name: _verify | Remove the temporary advertised IPv6 address
+      command: ip -6 address delete 2001:db8::1/128 dev lo
+      changed_when: true
+      become: true
+
+    - name: _verify | Restore network facts after address cleanup
+      setup:
+        gather_subset:
+          - network
+
 - name: _verify | Render production config with pinned DERP addresses
   template:
     src: config.yaml.j2
