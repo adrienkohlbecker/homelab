@@ -15,26 +15,16 @@
     - boot
 
 # We boot via rEFInd -> ZFSBootMenu, never grub. linux-generic Recommends a
-# grub-* alternation; hold the whole grub family so a later kernel upgrade can't
-# pull it in to fight the rEFInd boot path. dpkg-query expands the glob; then
-# dpkg_selections sets the hold with proper check-mode and diff support.
-- name: Enumerate grub packages
-  when: not grub_bootloader
-  shell:
-    executable: /bin/bash
-    cmd: set -euo pipefail; dpkg-query -W -f='${db:Status-Status}\t${binary:Package}\n' 'grub*' | awk -F'\t' '/^installed/ {print $2}'
-  register: boot_grub_packages
-  changed_when: false
-  failed_when: false
-  become: true
-  tags:
-    - boot
-
+# grub-* alternation; hold the whole grub family, including packages not yet
+# installed, so a later kernel upgrade cannot pull it in.
 - name: Hold grub packages
-  dpkg_selections:
-    name: "{{ item }}"
-    selection: hold
-  loop: "{{ boot_grub_packages.stdout_lines | default([]) }}"
+  when: not grub_bootloader
+  command: apt-mark hold 'grub*'
+  register: boot_grub_hold
+  changed_when: >-
+    boot_grub_hold.stdout_lines
+    | reject('search', ' was already set on hold')
+    | list | length > 0
   become: true
   tags:
     - boot
