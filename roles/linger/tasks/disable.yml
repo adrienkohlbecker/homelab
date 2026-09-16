@@ -4,7 +4,6 @@
 #         preserve a login session or clean up a potentially absent account.
 #
 # The removes guard makes an absent marker a no-op, even without an account.
-# Publishes the same bool <name>_lingered result as the enable path.
 - name: disable | Validate inputs for {{ linger_args.name | default('<unset>') }}
   assert:
     that:
@@ -41,8 +40,3 @@
       - "{{ linger_args.name }}"
     removes: /var/lib/systemd/linger/{{ linger_args.name }}
   become: true
-  register: _linger_disable_result
-
-- name: disable | Record linger result for {{ linger_args.name }}
-  set_fact:
-    "{{ linger_args.name | ansible_var_key }}_lingered": "{{ _linger_disable_result is changed }}"

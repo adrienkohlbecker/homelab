@@ -4,9 +4,7 @@
 #
 # For the SSH user, use gathered ansible_user_id / ansible_user_uid;
 # ansible_user may be unavailable when import_role vars are evaluated.
-# Publishes bool <name>_lingered (whether linger state changed), then starts
-# the manager synchronously so downstream user-scope tasks can use it.
-# See notes/linger_design.md for the result and lifecycle rationale.
+# Starts the manager synchronously so downstream user-scope tasks can use it.
 - name: linger | Validate inputs for {{ linger_args.name | default('<unset>') }}
   assert:
     that:
@@ -34,11 +32,6 @@
     creates: /var/lib/systemd/linger/{{ linger_args.name }}
   become: true
   register: _linger_enable_result
-
-# Sanitize hyphenated account names for Ansible fact keys.
-- name: linger | Record linger result for {{ linger_args.name }}
-  set_fact:
-    "{{ linger_args.name | ansible_var_key }}_lingered": "{{ _linger_enable_result is changed }}"
 
 - name: linger | Ensure user manager is running for {{ linger_args.name }}
   when: not (ansible_check_mode and _linger_enable_result.changed)
