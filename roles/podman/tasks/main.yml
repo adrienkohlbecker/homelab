@@ -1,3 +1,12 @@
+# A status-only query succeeds with LoadState=not-found before package install.
+- name: Read podman.service state before package changes
+  systemd:
+    name: podman.service
+  register: podman_service_before_install
+  become: true
+  tags:
+    - podman
+
 - name: Install podman package
   import_tasks: install.yml
   tags:
@@ -25,15 +34,17 @@
     - podman
 
 # Socket activation does not recycle an existing daemon after its package or
-# runtime drop-in changes; try-restart leaves an inactive daemon alone.
-- name: Restart an active podman.service after runtime changes  # noqa: command-instead-of-module
+# runtime drop-in changes; fresh installs have no process to restart.
+- name: Restart an existing podman.service after runtime changes
   when:
     - not ansible_check_mode
+    - podman_service_before_install.status.ActiveState | default('inactive') == 'active'
     - >-
       podman_apt.changed
       or podman_service_d_override_conf_result.changed | default(false)
-  command: systemctl try-restart podman.service
-  changed_when: true
+  systemd:
+    name: podman.service
+    state: restarted
   become: true
   tags:
     - podman
