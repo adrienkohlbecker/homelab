@@ -59,7 +59,6 @@
   when: apt_deb822_available | default(true)
   deb822_repository:
     name: "{{ apt_source_args.name }}"
-    types: deb
     uris: "{{ apt_source_args.uris }}"
     suites: "{{ apt_source_args.suites }}"
     components: "{{ apt_source_args.components | default(omit) }}"
