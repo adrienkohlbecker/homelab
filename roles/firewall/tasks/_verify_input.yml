@@ -359,6 +359,7 @@
     fail_msg: >-
       VRRP rule referencing counter `vrrp_accept` is missing
       iifname={{ default_interface }} or protocol=vrrp scope.
+  when: dns_vrrp_enabled
 
 - name: _verify_input | DNS VIP silence rules retain their destination scope
   vars:
@@ -376,6 +377,28 @@
     fail_msg: >-
       DNS VIP silence rules must match the current INPUT destination or the
       original FORWARD destination so unrelated vmac traffic stays observable.
+  when: dns_vrrp_enabled
+
+# The other half of the flag: a host outside the VRRP election must render no
+# accept for peer VRRP and no VIP silence rules, so a compromised LAN device
+# cannot forge a high-priority advertisement at it. The `minimal` fixture is the
+# only cell that reaches this branch, hence its coverage of the suppressed path.
+- name: _verify_input | INPUT — VRRP and VIP rules absent where VRRP is disabled
+  vars:
+    vrrp_rules: "{{ _firewall_nft_ruleset_scope.stdout | nft_rules_by_counter(item) }}"
+  assert:
+    that: vrrp_rules | length == 0
+    fail_msg: >-
+      Host outside the VRRP election rendered a rule referencing counter
+      `{{ item }}`; only hosts with a dns_keepalived_priority should accept
+      peer VRRP or silence VIP traffic.
+  loop:
+    - vrrp_accept
+    - input_silenced_vip_tcp
+    - input_silenced_vip
+    - forward_silenced_vip
+  when: not dns_vrrp_enabled
+
 - name: _verify_input | INPUT — mDNS rendered rule keeps LAN iif/source/port scope
   vars:
     mdns_rule: "{{ _firewall_nft_ruleset_scope.stdout | nft_rule_by_counter('mdns_accept') }}"

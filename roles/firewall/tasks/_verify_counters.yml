@@ -104,7 +104,7 @@
       - nft_counters.input_silenced_netbios.packets | int >= 1  # udp dport 137 probe
       - nft_counters.igmp_accept.packets | int >= 1             # raw proto-2 (IGMP) probe
       - nft_counters.input_catchall.packets | int >= 1
-      - nft_counters.vrrp_accept.packets | int == 0
+      - not dns_vrrp_enabled or nft_counters.vrrp_accept.packets | int == 0
       - nft_counters.mosh_accept.packets | int >= 1
       - nft_counters.aardvark_accept.packets | int >= 2  # default + named bridge probes
       - nft_counters.wireguard_accept.packets | int >= 1
@@ -135,9 +135,15 @@
       - >-
         not (tailscale_wan_direct | default(false))
         or nft_counters.input_silenced_tailscale.packets | int >= 1
-      - nft_counters.input_silenced_vip_tcp.packets | int >= 1
-      - nft_counters.input_silenced_vip.packets | int >= 1
-      - nft_counters.forward_silenced_vip.packets | int >= 1
+      - >-
+        not dns_vrrp_enabled
+        or nft_counters.input_silenced_vip_tcp.packets | int >= 1
+      - >-
+        not dns_vrrp_enabled
+        or nft_counters.input_silenced_vip.packets | int >= 1
+      - >-
+        not dns_vrrp_enabled
+        or nft_counters.forward_silenced_vip.packets | int >= 1
     fail_msg: >-
       Counter-based probes didn't fire all expected rules: non-SYN
       (input/forward), podman direct cross-network isolation,
