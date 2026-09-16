@@ -1,8 +1,7 @@
 # Checks that hold on every fixture: the service, the Postfix collector
 # against the shared _setup queue, the apt pin, the nginx/Authelia front,
 # netdata.conf's DNS policy, the certbot x509check coupling, and the Fluent Bit
-# extension. Fixture-specific surfaces live in _verify_full.yml and
-# _verify_minimal.yml.
+# extension. Full-fixture surfaces live in _verify_full.yml.
 
 - name: _verify | Wait for Postfix queue metrics
   uri:
