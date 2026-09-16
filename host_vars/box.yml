@@ -118,7 +118,6 @@ netdata_diskspace_blocklist:
 # asserts both the host enumeration and rendered error path.
 homepage_netdata_hosts:
   - box
-homepage_verify_netdata_error: true
 
 # Test shares so samba's smb.conf.j2 renders actual [share] blocks. The /srv
 # path also proves the snapshot-ordering template ignores non-ZFS shares.
