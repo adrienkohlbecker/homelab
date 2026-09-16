@@ -266,8 +266,15 @@
   tags:
     - zfs
 
+# A package upgrade or zed.rc change requires the running daemon to reload its
+# binary or notification settings; otherwise leave a healthy process alone.
 - name: Manage ZED service
-  import_tasks: zed_service.yml
+  when: not (ansible_check_mode and zfs_apt.changed)
+  systemd:
+    name: zfs-zed
+    enabled: true
+    state: '{{ "restarted" if zfs_apt.changed or zfs_zedrc.changed else "started" }}'
+  become: true
   tags:
     - zfs
 
