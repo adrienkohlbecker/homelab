@@ -7,7 +7,7 @@ macvlan_blocks:
     vlan: iot
     podman_network: true
 
-jellyfin_transcoding_backend: none
+jellyfin_intel_qsv_enabled: false
 
 # Override Lab's physical-NIC profile at extra-vars precedence.
 netplan: "{{ qemu_netplan }}"

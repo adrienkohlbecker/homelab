@@ -5,18 +5,17 @@
   tags:
     - jellyfin
 
-- name: Validate the jellyfin transcoding backend
+- name: Validate the jellyfin hardware transcoding policy
   assert:
     that:
-      - jellyfin_transcoding_backend in ['none', 'intel_qsv']
+      - jellyfin_intel_qsv_enabled is boolean
       - >-
-        jellyfin_transcoding_backend != 'intel_qsv'
+        not jellyfin_intel_qsv_enabled
         or ansible_architecture == 'x86_64'
         or qemu_test | default(false)
     fail_msg: >-
-      jellyfin_transcoding_backend must be none or intel_qsv; intel_qsv requires
-      x86_64 outside the QEMU wiring fixture (got
-      {{ jellyfin_transcoding_backend }} on {{ ansible_architecture }}).
+      jellyfin_intel_qsv_enabled must be boolean; Intel QSV requires x86_64
+      outside the QEMU wiring fixture (got {{ ansible_architecture }}).
   tags:
     - jellyfin
 
@@ -24,7 +23,7 @@
 - name: Create the QEMU render-device fixture
   when:
     - qemu_test
-    - jellyfin_transcoding_backend == 'intel_qsv'
+    - jellyfin_intel_qsv_enabled
   import_tasks: fake_render_device.yml
   tags:
     - jellyfin
@@ -34,7 +33,7 @@
   getent:
     database: group
     key: render
-  when: jellyfin_transcoding_backend == 'intel_qsv'
+  when: jellyfin_intel_qsv_enabled
   become: true
   tags:
     - jellyfin
@@ -448,7 +447,7 @@
 # gate, and in check mode by command's own default.
 - name: Confirm hardware transcoding works
   when:
-    - jellyfin_transcoding_backend == 'intel_qsv'
+    - jellyfin_intel_qsv_enabled
     - not (qemu_test | default(false))
   command: >-
     podman exec jellyfin /usr/lib/jellyfin-ffmpeg/ffmpeg

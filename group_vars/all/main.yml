@@ -49,7 +49,6 @@ etc_hosts_entries:
   # Pin auth.fahm.fr to lab's physical IP: this avoids Go DNS timeouts under
   # VIP load and lets fox resolve Headscale OIDC over wg0 before its tailnet exists.
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
-jellyfin_transcoding_backend: none
 minio_root_user: minio
 ssh_public_keys_additional: ""
 # Whether cloud-init owns bootstrap and networking on this host. The cleanup

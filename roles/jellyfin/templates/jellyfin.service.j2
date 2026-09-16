@@ -64,7 +64,7 @@ ExecStart=/usr/bin/podman run \
    are operator-managed in the Jellyfin UI, and those jobs fail on a
    read-only bind. Writes gate on the shared media group. #}
     --volume /mnt/media:/media \
-{% if jellyfin_transcoding_backend == 'intel_qsv' %}
+{% if jellyfin_intel_qsv_enabled %}
     --device /dev/dri/renderD128:/dev/dri/renderD128:rw \
     --group-add={{ getent_group.render[1] | int }} \
 {% endif %}

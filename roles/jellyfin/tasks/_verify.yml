@@ -53,7 +53,7 @@
 # The phantom QEMU device cannot accelerate codecs, but its container-visible
 # GID verifies both --device and --group-add wiring.
 - name: _verify | Confirm hardware transcoding device wiring
-  when: jellyfin_transcoding_backend == 'intel_qsv'
+  when: jellyfin_intel_qsv_enabled
   become: true
   block:
     - name: _verify | Read render device gid inside the container

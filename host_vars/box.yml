@@ -135,7 +135,7 @@ samba_shares:
 # No real GPU in QEMU — the runtime VAAPI probe inside the container falls back
 # to software, but the ansible-side machinery and container's view of /dev get
 # covered.
-jellyfin_transcoding_backend: intel_qsv
+jellyfin_intel_qsv_enabled: true
 netdata_packer_process_group_enabled: true
 # Exercise the AWS qemu instance-executor block: runner/plugin download,
 # manager-side AWS profile render, config.toml render, unit install, and the

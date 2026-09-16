@@ -258,7 +258,7 @@ samba_shares:
     path: /mnt/eckwersheim
     valid users: ak
 
-jellyfin_transcoding_backend: intel_qsv
+jellyfin_intel_qsv_enabled: true
 netdata_packer_process_group_enabled: true
 
 # Apex names are outside the per-host wildcard, so the Authelia portal and the
