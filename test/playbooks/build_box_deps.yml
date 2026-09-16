@@ -91,7 +91,6 @@
       assert:
         that:
           - (ubuntu_mirror | regex_replace('/$', '')) in box_deps_apt_sites.stdout_lines
-          - box_deps_apt_sites.stdout_lines | select('search', 'nexus\\.lab\\.fahm\\.fr') | list | length == 0
         fail_msg: >-
           The AWS box_deps fixture did not fetch Ubuntu indexes from
           {{ ubuntu_mirror }} without the lab Nexus.

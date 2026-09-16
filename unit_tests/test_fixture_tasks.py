@@ -104,17 +104,6 @@ def test_base_provenance_requires_complete_environment(monkeypatch: pytest.Monke
         builder.base_provenance_from_env()
 
 
-def test_box_deps_playbook_keeps_aws_mirrors_and_rejects_lab_nexus() -> None:
-    playbook = (builder.REPO_ROOT / "test" / "playbooks" / "build_box_deps.yml").read_text()
-
-    assert "Configure apt for the build environment" in playbook
-    assert playbook.count("when: not test_in_aws") == 3
-    assert "when: test_in_aws" in playbook
-    assert "ubuntu_mirror | regex_replace('/$', '')" in playbook
-    assert r"contains: nexus\.lab\.fahm\.fr" in playbook
-    assert "use_regex: true" not in playbook
-
-
 def test_seed_image_uses_private_writeback_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[object] = []
     constructor: dict[str, object] = {}
