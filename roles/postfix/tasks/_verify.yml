@@ -7,15 +7,12 @@
     dest: "/tmp/postfix-{{ item.label }}.cf"
     mode: "0644"
   vars:
-    smtp_use_ssl: "{{ item.ssl }}"
-    smtp_use_tls: "{{ item.tls }}"
+    smtp_port: "{{ item.port }}"
   loop:
     - label: plain
-      ssl: false
-      tls: false
+      port: 25
     - label: wrapper
-      ssl: true
-      tls: false
+      port: 465
   become: true
 
 - name: _verify | Verify alternate SMTP TLS policies
