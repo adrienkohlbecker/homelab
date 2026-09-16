@@ -43,8 +43,6 @@
     group: root
     mode: "0644"
   loop:
-    - path: /etc/netdata/health.d/disks.conf
-      content: "# stale disk-fill override fixture\n"
     - path: /etc/netdata/health.d/keepalived_vrrp.conf
       content: "# stale keepalived alert fixture\n"
       enabled: "{{ not netdata_keepalived_lost_master_alert }}"

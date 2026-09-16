@@ -1,6 +1,6 @@
 # Health-alert phase, imported by main.yml after the service is up so
 # netdatacli reload-health lands on a running daemon: the shipped alert
-# configs plus the disks.conf/timex.conf un-silence and their
+# configs plus the timex.conf un-silence and their
 # fail-closed asserts. Split out of main.yml for navigability.
 - name: Configure netdata alerts
   import_tasks: health.yml
@@ -102,26 +102,6 @@
     netdata_args:
       src: reboot_alerts.conf
       dest: reboot.conf
-  tags:
-    - netdata
-
-# Netdata ships its predictive out-of-space and out-of-inodes templates with
-# `to: silent`. Keep that upstream policy: short-term fill-rate extrapolation
-# is too noisy on filesystems with bursty container and scratch workloads.
-- name: Remove predictive disk-fill alert override
-  file:
-    path: /etc/netdata/health.d/disks.conf
-    state: absent
-  register: netdata_disks_override_absent
-  become: true
-  tags:
-    - netdata
-
-- name: Reload netdata health after disk-fill alert override removal
-  when:
-    - not ansible_check_mode
-    - netdata_disks_override_absent.changed
-  import_tasks: reload_health.yml
   tags:
     - netdata
 
