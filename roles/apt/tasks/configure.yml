@@ -54,7 +54,7 @@
           - coreutils-from-gnu
           - coreutils-from-uutils-
       register: apt_coreutils_plan
-      changed_when: false
+      changed_when: ansible_check_mode
       check_mode: false
       become: true
 
@@ -73,12 +73,11 @@
           with --allow-remove-essential against that plan.
 
     - name: Apply the GNU coreutils selection  # noqa: command-instead-of-module
+      when: not ansible_check_mode
       command: >-
         apt-get -y --allow-remove-essential -o DPkg::Lock::Timeout=300
-        {{ "--simulate" if ansible_check_mode else "" }}
         install coreutils-from-gnu coreutils-from-uutils-
       changed_when: true
-      check_mode: false
       become: true
 
 - name: Configure package-manager log compression
