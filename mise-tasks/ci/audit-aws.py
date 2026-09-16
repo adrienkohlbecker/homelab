@@ -4,35 +4,18 @@
 # requires-python = ">=3.11"
 # dependencies = ["boto3"]
 # ///
-"""Read-only audit of the homelab CI AWS account.
+"""Read-only sweep for orphan resources in the homelab CI AWS account.
 
-The account exists solely for the Frankfurt x86_64 and aarch64 AWS test-cell
-pools documented in notes/ci_aws_nested_qemu_cells.md and
-notes/ci_aws_arm_qemu_cells.md. Runner hosts autoscale to zero; their regional
-VPC, image bucket, ECR cache, AMI pointer, guards, and launch configuration are
-the expected standing footprint.
+Recognized Auto Scaling groups may have active instances and attached volumes.
+The sweep reports resources outside those groups, unattached volumes, unused
+addresses, unused infrastructure, excess AMIs, and snapshots backing no AMI.
+Promotion pointers protect selected AMIs from retention cleanup. Terraform
+plan checks the configuration of standing infrastructure.
 
-This sweeps every region for the billable strays that accumulate when a build
-or teardown leaks something -- running/stopped instances, unattached volumes,
-Elastic IPs, NAT gateways, VPC interface endpoints, load balancers, RDS -- and
-cross-references owned snapshots against owned AMIs to surface *orphaned*
-snapshots (a snapshot not backing any live AMI, the classic
-deregister/interrupted-packer leftover). Account-global S3 is checked too; the
-two qemu image bundle buckets are expected, while any other bucket is drift.
-
-Owned AMIs are also held to a retention rule: the promoted qemu-host image plus
-the newest AMI_RETAIN_PER_CATEGORY supported builds are legitimate. Only
-region- and architecture-matching qemu-host images are eligible for automatic
-cleanup. Any other owned AMI is reported for manual review.
-
-It NEVER mutates. For each stray AMI it prints the repository's guarded
-deregistration task; orphan snapshots still get an exact AWS deletion command.
-
-Exposed as ci:audit-aws. Exits 1 if any anomaly is found, 0 when clean, so it
-can double as a periodic check.
+It never mutates. Cleanup commands are suggestions for manual review. Query
+errors fail the sweep so an incomplete inventory cannot appear clean.
 """
 
-import json
 import sys
 from typing import Any
 
@@ -62,25 +45,11 @@ CI_REGIONS: dict[str, dict[str, Any]] = {
                 "parameter": "/homelab-ci/ami/qemu-host/aarch64/{ubuntu}",
             },
         },
-        "asg_maxima": {
-            "homelab-ci-qemu-host": 5,
-            "homelab-ci-qemu-site": 1,
-            "homelab-ci-qemu-arm": 1,
-        },
-        "buckets": {"homelab-ci-images", "homelab-ci-arm-images-eu-central-1"},
+        "asgs": {"homelab-ci-qemu-host", "homelab-ci-qemu-site", "homelab-ci-qemu-arm"},
     },
 }
-EXPECTED_GLOBAL_S3_BUCKETS = set().union(*(contract["buckets"] for contract in CI_REGIONS.values()))
-ECR_UPSTREAMS = {
-    "docker-hub": "registry-1.docker.io",
-    "github": "ghcr.io",
-    "gitlab": "registry.gitlab.com",
-    "quay": "quay.io",
-}
-ARM_INSTANCE_TYPES = {"c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"}
-ARM_AVAILABILITY_ZONES = {"eu-central-1a", "eu-central-1b", "eu-central-1c"}
-STANDARD_SPOT_QUOTA_CODE = "L-34B43A08"
-ARM_REQUIRED_SPOT_VCPUS = 152
+EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
+ECR_PREFIXES = ("docker-hub/", "github/", "gitlab/", "quay/")
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
 deletes: list[str] = []  # suggested cleanup commands (never executed here)
 expected: list[str] = []  # legitimate standing infra, reported for context
@@ -216,300 +185,55 @@ def audit_ami_inventory(
         deletes.append(f"aws ec2 delete-snapshot --region {region} --snapshot-id {snap['SnapshotId']}")
 
 
-def audit_asg_documents(region: str, groups: list[dict]) -> None:
-    """Validate AWS pool ceilings against the runner capacity contract."""
-    anomaly_count = len(anomalies)
-    maxima = CI_REGIONS[region]["asg_maxima"]
-    by_name = {group["AutoScalingGroupName"]: group for group in groups}
-    for name, maximum in maxima.items():
-        group = by_name.get(name)
-        if group is None:
-            anomalies.append(f"[{region}] missing Auto Scaling group {name}")
-            continue
-        if group.get("MinSize") != 0 or group.get("MaxSize") != maximum:
-            anomalies.append(
-                f"[{region}] ASG {name} bounds are {group.get('MinSize')}/{group.get('MaxSize')}, "
-                f"expected 0/{maximum} from the runner capacity contract"
-            )
-        distribution = group.get("MixedInstancesPolicy", {}).get("InstancesDistribution", {})
-        if (
-            distribution.get("OnDemandBaseCapacity") != 0
-            or distribution.get("OnDemandPercentageAboveBaseCapacity") != 0
-        ):
-            anomalies.append(f"[{region}] ASG {name} permits On-Demand capacity")
-        if distribution.get("SpotAllocationStrategy") != "price-capacity-optimized":
-            anomalies.append(f"[{region}] ASG {name} does not use price-capacity-optimized Spot allocation")
-        if not group.get("NewInstancesProtectedFromScaleIn"):
-            anomalies.append(f"[{region}] ASG {name} does not protect new instances from scale-in")
-        if name == "homelab-ci-qemu-arm":
-            overrides = group.get("MixedInstancesPolicy", {}).get("LaunchTemplate", {}).get("Overrides", [])
-            actual_types = {
-                override["InstanceType"] for override in overrides if isinstance(override.get("InstanceType"), str)
-            }
-            if actual_types != ARM_INSTANCE_TYPES:
-                anomalies.append(
-                    f"[{region}] ASG {name} instance overrides differ: "
-                    f"expected {sorted(ARM_INSTANCE_TYPES)!r}, got {sorted(actual_types)!r}"
-                )
-            if set(group.get("AvailabilityZones", [])) != ARM_AVAILABILITY_ZONES:
-                anomalies.append(f"[{region}] ASG {name} does not span all configured Frankfurt AZs")
-    unexpected = sorted(set(by_name) - set(maxima))
+def audit_compute_inventory(region: str, groups: list[dict] | None, reservations: list[dict] | None) -> None:
+    """Report instances outside recognized ASGs, including their stray groups."""
+    if groups is None or reservations is None:
+        return
+    recognized = CI_REGIONS.get(region, {}).get("asgs", set())
+    active_ids = {
+        instance["InstanceId"]
+        for group in groups
+        if group["AutoScalingGroupName"] in recognized
+        for instance in group.get("Instances", [])
+    }
     anomalies.extend(
-        f"[{region}] unexpected CI Auto Scaling group {name}" for name in unexpected if name.startswith("homelab-ci-")
+        f"[{region}] orphan Auto Scaling group {group['AutoScalingGroupName']}"
+        for group in groups
+        if group["AutoScalingGroupName"] not in recognized
     )
-    if len(anomalies) == anomaly_count:
-        expected.append(f"[{region}] {len(maxima)} qemu ASGs match runner maxima")
+    anomalies.extend(
+        f"[{region}] orphan EC2 instance {instance['InstanceId']} "
+        f"({instance['InstanceType']}, {instance['State']['Name']})"
+        for reservation in reservations
+        for instance in reservation.get("Instances", [])
+        if instance["State"]["Name"] != "terminated" and instance["InstanceId"] not in active_ids
+    )
 
 
-def audit_arm_capacity_documents(quota: dict, offerings: list[dict], instance_types: list[dict]) -> None:
-    """Validate the Frankfurt quota and every configured ARM metal override."""
-    anomaly_count = len(anomalies)
-    quota_value = quota.get("Value")
-    if not isinstance(quota_value, int | float) or quota_value < ARM_REQUIRED_SPOT_VCPUS:
-        anomalies.append(
-            f"[eu-central-1] Standard Spot quota is {quota_value!r} vCPUs, expected at least {ARM_REQUIRED_SPOT_VCPUS}"
-        )
-
-    offered: dict[str, set[str]] = {instance_type: set() for instance_type in ARM_INSTANCE_TYPES}
-    for offering in offerings:
-        instance_type = offering.get("InstanceType")
-        location = offering.get("Location")
-        if instance_type in offered and isinstance(location, str):
-            offered[instance_type].add(location)
-    for instance_type, locations in offered.items():
-        if not locations & ARM_AVAILABILITY_ZONES:
-            anomalies.append(f"[eu-central-1] {instance_type} is unavailable in the configured Frankfurt AZs")
-
-    specs = {spec["InstanceType"]: spec for spec in instance_types}
-    for instance_type in sorted(ARM_INSTANCE_TYPES):
-        spec = specs.get(instance_type)
-        if spec is None:
-            anomalies.append(f"[eu-central-1] missing instance-type description for {instance_type}")
-            continue
-        vcpus = spec.get("VCpuInfo", {}).get("DefaultVCpus", 0)
-        memory = spec.get("MemoryInfo", {}).get("SizeInMiB", 0)
-        storage = spec.get("InstanceStorageInfo", {})
-        disk_count = sum(disk.get("Count", 0) for disk in storage.get("Disks", []))
-        if vcpus < 64 or memory < 128 * 1024 or not spec.get("InstanceStorageSupported"):
-            anomalies.append(f"[eu-central-1] {instance_type} is smaller than 64 vCPUs/128 GiB with instance storage")
-        if disk_count < 2 or storage.get("TotalSizeInGB", 0) < 3600:
-            anomalies.append(f"[eu-central-1] {instance_type} lacks two suitable local NVMe devices")
-    if len(anomalies) == anomaly_count:
-        expected.append("[eu-central-1] ARM Spot quota, offerings, and metal sizing validated")
-
-
-def audit_promoted_image_document(region: str, image_id: str, images: list[dict], architecture: str) -> None:
-    """Validate the architecture of the AMI selected by the regional pointer."""
-    image = next((candidate for candidate in images if candidate.get("ImageId") == image_id), None)
-    if image is None:
-        anomalies.append(f"[{region}] promoted qemu-host AMI {image_id} is not readable")
-    elif image.get("Architecture") != architecture:
-        anomalies.append(
-            f"[{region}] promoted qemu-host AMI {image_id} architecture is {image.get('Architecture')!r}, "
-            f"expected {architecture!r}"
-        )
-    else:
-        expected.append(f"[{region}] promoted {architecture} qemu-host AMI {image_id}")
-
-
-def audit_guard_documents(region: str, image_block: dict, snapshot_block: dict, metadata: dict) -> None:
-    """Validate the three account-level EC2 guardrails in one region."""
-    anomaly_count = len(anomalies)
-    if image_block.get("ImageBlockPublicAccessState") != "block-new-sharing":
-        anomalies.append(f"[{region}] AMI public-access block is not enabled")
-    if snapshot_block.get("State") != "block-all-sharing":
-        anomalies.append(f"[{region}] snapshot public-access block is not enabled")
-    account = metadata.get("AccountLevel", {})
-    if account.get("HttpTokens") != "required" or account.get("HttpPutResponseHopLimit") != 1:
-        anomalies.append(f"[{region}] account metadata defaults do not require IMDSv2 with hop limit 1")
-    if len(anomalies) == anomaly_count:
-        expected.append(f"[{region}] EC2 public-access and metadata guards checked")
-
-
-def audit_ecr_documents(region: str, rules: list[dict], repositories: list[dict]) -> None:
-    """Validate pull-through rules and reject repositories outside their prefixes."""
-    anomaly_count = len(anomalies)
-    actual = {rule.get("ecrRepositoryPrefix"): rule.get("upstreamRegistryUrl") for rule in rules}
-    if actual != ECR_UPSTREAMS:
-        anomalies.append(f"[{region}] ECR pull-through rules differ: expected {ECR_UPSTREAMS!r}, got {actual!r}")
-    for rule in rules:
-        prefix = rule.get("ecrRepositoryPrefix")
-        credential_arn = rule.get("credentialArn")
-        if prefix in {"docker-hub", "github", "gitlab"} and not (
-            isinstance(credential_arn, str) and credential_arn.startswith(f"arn:aws:secretsmanager:{region}:")
-        ):
-            anomalies.append(f"[{region}] ECR rule {prefix!r} lacks a regional Secrets Manager credential")
-    prefixes = tuple(f"{prefix}/" for prefix in ECR_UPSTREAMS)
-    for repository in repositories:
-        name = repository.get("repositoryName", "")
-        if not name.startswith(prefixes):
-            anomalies.append(f"[{region}] unexpected ECR repository {name!r}")
-    if len(anomalies) == anomaly_count:
-        expected.append(f"[{region}] {len(rules)} ECR pull-through rules checked")
-
-
-def audit_bucket_documents(
-    region: str,
-    bucket: str,
-    location: dict,
-    public_access: dict,
-    versioning: dict,
-    policy: dict,
-) -> None:
-    """Validate the regional image bucket's location and access controls."""
-    anomaly_count = len(anomalies)
-    if location.get("LocationConstraint") != region:
-        anomalies.append(f"[{region}] bucket {bucket} is in {location.get('LocationConstraint')!r}")
-    access = public_access.get("PublicAccessBlockConfiguration", {})
-    required_access = {"BlockPublicAcls", "BlockPublicPolicy", "IgnorePublicAcls", "RestrictPublicBuckets"}
-    if not all(access.get(key) is True for key in required_access):
-        anomalies.append(f"[{region}] bucket {bucket} public-access block is incomplete")
-    if versioning.get("Status") != "Enabled":
-        anomalies.append(f"[{region}] bucket {bucket} versioning is not enabled")
-    statements = {statement.get("Sid"): statement for statement in policy.get("Statement", [])}
-    insecure_transport = statements.get("DenyInsecureTransport", {})
-    if insecure_transport.get("Effect") != "Deny" or insecure_transport.get("Condition") != {
-        "Bool": {"aws:SecureTransport": "false"}
-    }:
-        anomalies.append(f"[{region}] bucket {bucket} does not deny insecure transport")
-    cross_account = statements.get("DenyCrossAccountAccess", {})
-    if cross_account.get("Effect") != "Deny" or cross_account.get("Condition") != {
-        "StringNotEquals": {"aws:PrincipalAccount": "000390721279"}
-    }:
-        anomalies.append(f"[{region}] bucket {bucket} does not deny cross-account access")
-    if len(anomalies) == anomaly_count:
-        expected.append(f"[{region}] secure versioned image bucket {bucket}")
-
-
-def audit_region_contract(region: str, ec2) -> None:
-    """Audit expected standing resources for one configured CI region."""
-    contract = CI_REGIONS[region]
+def sweep_region(region):
+    ec2 = client("ec2", region)
 
     groups = paginated(
         f"{region} autoscaling groups",
         client("autoscaling", region),
         "describe_auto_scaling_groups",
         "AutoScalingGroups",
-    )
-    audit_asg_documents(region, groups)
-
-    for architecture, ami in contract["amis"].items():
-        parameter = safe(
-            f"{region} {architecture} qemu-host AMI parameter",
-            lambda ami=ami: client("ssm", region).get_parameter(Name=ami["parameter"].format(ubuntu="noble"))[
-                "Parameter"
-            ]["Value"],
-            default=None,
-        )
-        if parameter is not None:
-            images = safe(
-                f"{region} promoted {architecture} qemu-host AMI",
-                lambda parameter=parameter: ec2.describe_images(ImageIds=[parameter]).get("Images", []),
-            )
-            audit_promoted_image_document(region, parameter, images, architecture)
-
-    image_block = safe(f"{region} AMI public access", ec2.get_image_block_public_access_state, default=None)
-    snapshot_block = safe(f"{region} snapshot public access", ec2.get_snapshot_block_public_access_state, default=None)
-    metadata = safe(f"{region} metadata defaults", ec2.get_instance_metadata_defaults, default=None)
-    if image_block is not None and snapshot_block is not None and metadata is not None:
-        audit_guard_documents(region, image_block, snapshot_block, metadata)
-
-    key_pairs = safe(
-        f"{region} operator key pair",
-        lambda: ec2.describe_key_pairs(KeyNames=["homelab-ci-operator"]).get("KeyPairs", []),
         default=None,
     )
-    if key_pairs is not None:
-        if len(key_pairs) != 1:
-            anomalies.append(f"[{region}] operator key pair is missing or ambiguous")
-        else:
-            expected.append(f"[{region}] operator key pair homelab-ci-operator")
-
-    ecr = client("ecr", region)
-    rules = paginated(
-        f"{region} ECR pull-through rules",
-        ecr,
-        "describe_pull_through_cache_rules",
-        "pullThroughCacheRules",
-    )
-    repositories = paginated(f"{region} ECR repositories", ecr, "describe_repositories", "repositories")
-    audit_ecr_documents(region, rules, repositories)
-
-    s3 = client("s3", region)
-    for bucket in sorted(contract["buckets"]):
-        location = safe(
-            f"{region} {bucket} location", lambda bucket=bucket: s3.get_bucket_location(Bucket=bucket), default=None
-        )
-        public_access = safe(
-            f"{region} {bucket} public access",
-            lambda bucket=bucket: s3.get_public_access_block(Bucket=bucket),
-            default=None,
-        )
-        versioning = safe(
-            f"{region} {bucket} versioning", lambda bucket=bucket: s3.get_bucket_versioning(Bucket=bucket), default=None
-        )
-        policy_body = safe(
-            f"{region} {bucket} policy",
-            lambda bucket=bucket: s3.get_bucket_policy(Bucket=bucket)["Policy"],
-            default=None,
-        )
-        if None not in (location, public_access, versioning, policy_body):
-            try:
-                policy = json.loads(policy_body)
-            except json.JSONDecodeError as error:
-                errors.append(f"{region} {bucket} policy: invalid JSON: {error}")
-            else:
-                audit_bucket_documents(region, bucket, location, public_access, versioning, policy)
-
-    if region == "eu-central-1":
-        quota = safe(
-            "eu-central-1 Standard Spot quota",
-            lambda: client("service-quotas", region).get_service_quota(
-                ServiceCode="ec2", QuotaCode=STANDARD_SPOT_QUOTA_CODE
-            )["Quota"],
-            default=None,
-        )
-        offerings = paginated(
-            "eu-central-1 ARM metal offerings",
-            ec2,
-            "describe_instance_type_offerings",
-            "InstanceTypeOfferings",
-            LocationType="availability-zone",
-            Filters=[{"Name": "instance-type", "Values": sorted(ARM_INSTANCE_TYPES)}],
-        )
-        instance_types = safe(
-            "eu-central-1 ARM metal descriptions",
-            lambda: ec2.describe_instance_types(InstanceTypes=sorted(ARM_INSTANCE_TYPES))["InstanceTypes"],
-            default=None,
-        )
-        if quota is not None and instance_types is not None:
-            audit_arm_capacity_documents(quota, offerings, instance_types)
-
-
-def sweep_region(region):
-    ec2 = client("ec2", region)
-
-    # ── Compute-shaped strays (should be none -- cells are one-time spot) ──
-    anomalies.extend(
-        f"[{region}] EC2 instance {i['InstanceId']} ({i['InstanceType']}, {i['State']['Name']})"
-        for resv in paginated(
-            f"{region} instances",
-            ec2,
-            "describe_instances",
-            "Reservations",
-        )
-        for i in resv.get("Instances", [])
-        if i["State"]["Name"] != "terminated"
-    )
+    reservations = paginated(f"{region} instances", ec2, "describe_instances", "Reservations", default=None)
+    audit_compute_inventory(region, groups, reservations)
 
     anomalies.extend(
-        f"[{region}] EBS volume {v['VolumeId']} ({v['Size']}GB, {v['State']})"
+        f"[{region}] unattached EBS volume {v['VolumeId']} ({v['Size']}GB)"
         for v in paginated(f"{region} volumes", ec2, "describe_volumes", "Volumes")
+        if v["State"] == "available"
     )
 
-    for a in safe(f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", [])):
-        assoc = a.get("InstanceId") or a.get("AssociationId") or "UNASSOCIATED"
-        anomalies.append(f"[{region}] Elastic IP {a['PublicIp']} ({assoc})")
+    anomalies.extend(
+        f"[{region}] unassociated Elastic IP {address['PublicIp']}"
+        for address in safe(f"{region} addresses", lambda: ec2.describe_addresses().get("Addresses", []))
+        if not address.get("AssociationId") and not address.get("InstanceId")
+    )
 
     anomalies.extend(
         f"[{region}] NAT gateway {n['NatGatewayId']} ({n['State']})"
@@ -566,6 +290,14 @@ def sweep_region(region):
         )
     )
 
+    anomalies.extend(
+        f"[{region}] orphan ECR repository {repository['repositoryName']!r}"
+        for repository in paginated(
+            f"{region} ECR repositories", client("ecr", region), "describe_repositories", "repositories"
+        )
+        if not repository.get("repositoryName", "").startswith(ECR_PREFIXES)
+    )
+
     # ── AMIs + snapshots: distinguish legitimate cell images from orphans ──
     images = paginated(
         f"{region} images",
@@ -584,8 +316,6 @@ def sweep_region(region):
         OwnerIds=["self"],
     )
     audit_ami_inventory(region, images, snaps)
-    if region in CI_REGIONS:
-        audit_region_contract(region, ec2)
 
 
 def main():
@@ -598,7 +328,7 @@ def main():
         default=None,
     )
     region_names = [region["RegionName"] for region in regions or []]
-    print(f"sweeping {len(region_names)} regions for billable strays + orphaned snapshots...")
+    print(f"sweeping {len(region_names)} regions for orphan resources...")
     for region in region_names:
         sweep_region(region)
 
@@ -615,24 +345,24 @@ def main():
         else:
             anomalies.append(f"[global] S3 bucket {b['Name']}")
 
-    print("\n── Expected CI infra ──")
+    print("\n── Recognized resources ──")
     print("\n".join(f"  {line}" for line in expected) or "  (none)")
 
     if errors:
         print("\n── Query errors (results below may be incomplete) ──")
         print("\n".join(f"  {e}" for e in errors))
 
-    print("\n── Anomalies (billable / unexpected) ──")
+    print("\n── Orphan resources ──")
     if anomalies:
         print("\n".join(f"  {line}" for line in anomalies))
         if deletes:
             print("\n── Suggested cleanup (review, then run by hand — NOT executed) ──")
             print("\n".join(f"  {cmd}" for cmd in deletes))
     else:
-        print("  none — account holds only the expected CI infra")
+        print("  none found")
 
     verdict = len(anomalies)
-    print(f"\nVerdict: {verdict} anomal{'y' if verdict == 1 else 'ies'}")
+    print(f"\nVerdict: {verdict} orphan resource{'s' if verdict != 1 else ''}")
     # Query errors also fail the run: an audit that could not see everything
     # must not report a clean bill of health.
     sys.exit(1 if anomalies or errors else 0)

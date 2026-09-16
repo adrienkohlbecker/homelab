@@ -153,11 +153,12 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
     assert not audit_aws.is_supported_qemu_host_image("eu-central-1", unlabelled_x86)
 
 
-def test_region_contracts_follow_the_shared_architecture_table():
+def test_ami_recognition_follows_the_shared_architecture_table():
     architecture_table = yaml.safe_load((Path(__file__).parents[1] / "data/architectures.yml").read_text())
     assert {entry["ci"]["aws_region"] for entry in architecture_table.values()} == {"eu-central-1"}
     contract = audit_aws.CI_REGIONS["eu-central-1"]
-    assert contract["buckets"] == {entry["ci"]["image_bucket"] for entry in architecture_table.values()}
+    assert {"homelab-ci-images"} == audit_aws.EXPECTED_GLOBAL_S3_BUCKETS
+    assert contract["asgs"] == {"homelab-ci-qemu-host", "homelab-ci-qemu-site", "homelab-ci-qemu-arm"}
     for architecture, ec2_architecture in (("x86_64", "x86_64"), ("aarch64", "arm64")):
         ci = architecture_table[architecture]["ci"]
         assert contract["amis"][ec2_architecture] == {
@@ -166,156 +167,66 @@ def test_region_contracts_follow_the_shared_architecture_table():
         }
 
 
-def _spot_asg(name: str, maximum: int) -> dict:
-    group = {
-        "AutoScalingGroupName": name,
-        "MinSize": 0,
-        "MaxSize": maximum,
-        "NewInstancesProtectedFromScaleIn": True,
-        "MixedInstancesPolicy": {
-            "InstancesDistribution": {
-                "OnDemandBaseCapacity": 0,
-                "OnDemandPercentageAboveBaseCapacity": 0,
-                "SpotAllocationStrategy": "price-capacity-optimized",
-            }
-        },
-    }
-    if name == "homelab-ci-qemu-arm":
-        group["AvailabilityZones"] = sorted(audit_aws.ARM_AVAILABILITY_ZONES)
-        group["MixedInstancesPolicy"]["LaunchTemplate"] = {
-            "Overrides": [{"InstanceType": instance_type} for instance_type in sorted(audit_aws.ARM_INSTANCE_TYPES)]
-        }
-    return group
-
-
-def _arm_instance_type(instance_type: str) -> dict:
-    return {
-        "InstanceType": instance_type,
-        "VCpuInfo": {"DefaultVCpus": 64},
-        "MemoryInfo": {"SizeInMiB": 128 * 1024},
-        "InstanceStorageSupported": True,
-        "InstanceStorageInfo": {
-            "TotalSizeInGB": 3800,
-            "Disks": [{"Count": 2, "SizeInGB": 1900, "Type": "ssd"}],
-        },
-    }
-
-
-def test_frankfurt_contract_documents_are_accepted():
-    audit_aws.audit_asg_documents(
+def test_active_asg_instances_are_not_orphans():
+    audit_aws.audit_compute_inventory(
         "eu-central-1",
-        [
-            _spot_asg("homelab-ci-qemu-host", 5),
-            _spot_asg("homelab-ci-qemu-site", 1),
-            _spot_asg("homelab-ci-qemu-arm", 1),
-        ],
-    )
-    audit_aws.audit_arm_capacity_documents(
-        {"Value": 160.0},
-        [
-            {"InstanceType": "c6gd.metal", "Location": "eu-central-1a"},
-            {"InstanceType": "c7gd.metal", "Location": "eu-central-1b"},
-            {"InstanceType": "m6gd.metal", "Location": "eu-central-1c"},
-            {"InstanceType": "m7gd.metal", "Location": "eu-central-1a"},
-        ],
-        [_arm_instance_type(instance_type) for instance_type in sorted(audit_aws.ARM_INSTANCE_TYPES)],
-    )
-    audit_aws.audit_promoted_image_document(
-        "eu-central-1",
-        "ami-arm",
-        [{"ImageId": "ami-arm", "Architecture": "arm64"}],
-        "arm64",
-    )
-    audit_aws.audit_guard_documents(
-        "eu-central-1",
-        {"ImageBlockPublicAccessState": "block-new-sharing"},
-        {"State": "block-all-sharing"},
-        {"AccountLevel": {"HttpTokens": "required", "HttpPutResponseHopLimit": 1}},
-    )
-    audit_aws.audit_ecr_documents(
-        "eu-central-1",
-        [
-            {
-                "ecrRepositoryPrefix": prefix,
-                "upstreamRegistryUrl": upstream,
-                **(
-                    {"credentialArn": f"arn:aws:secretsmanager:eu-central-1:123:secret:{prefix}"}
-                    if prefix != "quay"
-                    else {}
-                ),
-            }
-            for prefix, upstream in audit_aws.ECR_UPSTREAMS.items()
-        ],
-        [{"repositoryName": "docker-hub/library/ubuntu"}],
-    )
-    audit_aws.audit_bucket_documents(
-        "eu-central-1",
-        "homelab-ci-arm-images-eu-central-1",
-        {"LocationConstraint": "eu-central-1"},
-        {
-            "PublicAccessBlockConfiguration": {
-                "BlockPublicAcls": True,
-                "BlockPublicPolicy": True,
-                "IgnorePublicAcls": True,
-                "RestrictPublicBuckets": True,
-            }
-        },
-        {"Status": "Enabled"},
-        {
-            "Statement": [
-                {
-                    "Sid": "DenyInsecureTransport",
-                    "Effect": "Deny",
-                    "Condition": {"Bool": {"aws:SecureTransport": "false"}},
-                },
-                {
-                    "Sid": "DenyCrossAccountAccess",
-                    "Effect": "Deny",
-                    "Condition": {"StringNotEquals": {"aws:PrincipalAccount": "000390721279"}},
-                },
-            ]
-        },
+        [{"AutoScalingGroupName": "homelab-ci-qemu-arm", "Instances": [{"InstanceId": "i-active"}]}],
+        [{"Instances": [{"InstanceId": "i-active", "InstanceType": "c7gd.metal", "State": {"Name": "running"}}]}],
     )
 
     assert audit_aws.anomalies == []
 
 
-def test_frankfurt_contract_mismatches_are_reported():
-    audit_aws.audit_asg_documents(
+def test_stray_asg_and_instances_are_orphans():
+    audit_aws.audit_compute_inventory(
         "eu-central-1",
-        [
-            _spot_asg("homelab-ci-qemu-arm", 2),
-            _spot_asg("homelab-ci-stale", 1),
-        ],
+        [{"AutoScalingGroupName": "homelab-ci-stale", "Instances": [{"InstanceId": "i-stray"}]}],
+        [{"Instances": [{"InstanceId": "i-stray", "InstanceType": "c8id.4xlarge", "State": {"Name": "running"}}]}],
     )
-    audit_aws.audit_arm_capacity_documents(
-        {"Value": 32.0},
-        [],
-        [],
-    )
-    audit_aws.audit_promoted_image_document(
-        "eu-central-1",
-        "ami-wrong",
-        [{"ImageId": "ami-wrong", "Architecture": "x86_64"}],
-        "arm64",
-    )
-    audit_aws.audit_guard_documents("eu-central-1", {}, {}, {})
-    audit_aws.audit_ecr_documents("eu-central-1", [], [{"repositoryName": "unexpected/repo"}])
-    audit_aws.audit_bucket_documents("eu-central-1", "homelab-ci-arm-images-eu-central-1", {}, {}, {}, {})
 
-    output = "\n".join(audit_aws.anomalies)
-    for message in (
-        "ASG homelab-ci-qemu-arm bounds",
-        "unexpected CI Auto Scaling group homelab-ci-stale",
-        "Standard Spot quota",
-        "c6gd.metal is unavailable",
-        "c7gd.metal is unavailable",
-        "m6gd.metal is unavailable",
-        "m7gd.metal is unavailable",
-        "promoted qemu-host AMI ami-wrong architecture",
-        "AMI public-access block",
-        "ECR pull-through rules differ",
-        "unexpected ECR repository",
-        "public-access block is incomplete",
-    ):
-        assert message in output
+    assert audit_aws.anomalies == [
+        "[eu-central-1] orphan Auto Scaling group homelab-ci-stale",
+        "[eu-central-1] orphan EC2 instance i-stray (c8id.4xlarge, running)",
+    ]
+
+
+def test_unknown_asg_inventory_does_not_classify_instances():
+    audit_aws.audit_compute_inventory(
+        "eu-central-1",
+        None,
+        [{"Instances": [{"InstanceId": "i-active", "InstanceType": "c7gd.metal", "State": {"Name": "running"}}]}],
+    )
+
+    assert audit_aws.anomalies == []
+
+
+def test_sweep_reports_only_unattached_volumes_and_addresses(monkeypatch):
+    class Ec2:
+        @staticmethod
+        def describe_addresses():
+            return {"Addresses": [
+                {"PublicIp": "192.0.2.1", "AssociationId": "eipassoc-1"},
+                {"PublicIp": "192.0.2.2"},
+            ]}
+
+    inventory = {
+        "describe_auto_scaling_groups": [],
+        "describe_instances": [],
+        "describe_volumes": [
+            {"VolumeId": "vol-attached", "Size": 40, "State": "in-use"},
+            {"VolumeId": "vol-orphan", "Size": 40, "State": "available"},
+        ],
+    }
+    monkeypatch.setattr(audit_aws, "client", lambda service, _region: Ec2() if service == "ec2" else object())
+    monkeypatch.setattr(
+        audit_aws,
+        "paginated",
+        lambda _label, _service, operation, _key, **_kwargs: inventory.get(operation, []),
+    )
+
+    audit_aws.sweep_region("eu-central-1")
+
+    assert audit_aws.anomalies == [
+        "[eu-central-1] unattached EBS volume vol-orphan (40GB)",
+        "[eu-central-1] unassociated Elastic IP 192.0.2.2",
+    ]
