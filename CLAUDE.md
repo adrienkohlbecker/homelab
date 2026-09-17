@@ -45,7 +45,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - DNS/terraform: `mise run tf {init,plan,apply}` — `cd`s into `terraform/` and forwards to `tofu` (use `--` for flags mise intercepts). State in MinIO (`s3://terraform/homelab.tfstate`), AES-GCM-encrypted. Rotation: [notes/runbooks/terraform-state-encryption-rotation.md](notes/runbooks/terraform-state-encryption-rotation.md).
 - Refresh a fixture image: `mise run packer:build [lab|pug]` (parallel; `--ubuntu resolute` for another release). See [notes/test_environment_design.md](notes/test_environment_design.md).
 - Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, ruff/pyright, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
-- Resume mid-converge: after a `testrole.py --keep` failure, `mise run ansible --limit <host> --start-at-task '<failing task name>'`. `--step` walks task-by-task when bisecting.
+- Resume a kept fixture with the `ansible-playbook` command printed by `testrole.py --keep`; replace `<task name>` with the failing task or use `--step` to walk tasks. The command pins the staged playbook, test inventory, and VM SSH connection. `mise run ansible` uses the production inventory and must not be used for fixture recovery.
 
 ## Workflows — use the skill, don't reinvent
 
@@ -70,7 +70,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 `site.yml` is ordered as a **layer ladder** — a role's converge position *is* its layer, and each layer builds on the guarantees of the ones above. Two bands:
 
-- **Base machine install** (`hosts: lab,pug,fox`) — sub-bands: *host base* (OS, networking, access), *persistent state* (`services` before its SSH identity consumers), *storage & boot* (`zfs`/`zfs_autobackup`/`zfsbootmenu`/`refind`), *service platform* (`podman`, `certbot`, `nginx`), *observability* (`netdata`/`fluentbit`). Roles within host-base are mutually independent.
+- **Base machine install** — shared `lab,pug,fox` plays provide *host base* (OS, networking, access), *persistent state* (`services` before its SSH identity consumers), *storage & boot* (`zfs`/`zfs_autobackup`/`zfsbootmenu`/`refind`), *service platform* (`podman`, `certbot`, `nginx`), and *observability* (`netdata`/`fluentbit`). A Lab-only play creates `tank/data` and `dozer/minio` between persistent state and the ZFS mount cache. Roles within host-base are mutually independent.
 - **Services** — host-scoped plays that assume the full platform is already in place.
 
 **Where does a new role go?** Stop at the first layer whose guarantees you need: booted OS → host base; ZFS → after storage; podman/nginx-TLS → after platform (the base⇄service watershed); app for subset of hosts → service play. Keep dataset *producers* ahead of consumers.
@@ -244,7 +244,7 @@ SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-author
 
 ### Test environment design
 
-Details in [notes/test_environment_design.md](notes/test_environment_design.md). There are two maintained and promoted **QEMU test-fixture** Packer variants: `lab`, the default integration fixture with Lab-style mirrored storage, and `pug`, for roles that need Pug's single-rpool partitioning or apoc layout. Both contain only the base OS and storage layout; role dependencies are installed by each test cell. The Hetzner image and AWS qemu-host AMI are separate Packer builds, not role-test fixtures. `minimal` remains a downloaded vanilla cloud-image fixture for non-ZFS, GRUB, cloud-init, and fresh-install branches; it is not built or promoted by this repository.
+Details in [notes/test_environment_design.md](notes/test_environment_design.md). Production hosts start from stock Ubuntu. There are two maintained and promoted **QEMU test-fixture** Packer variants: `lab`, the default integration fixture with Lab-style mirrored storage, and `pug`, for roles that need Pug's single-rpool partitioning or apoc layout. Both contain only the base OS and storage layout; role dependencies are installed by each test cell. The Hetzner image and AWS qemu-host AMI are separate Packer builds, not role-test fixtures. `minimal` remains a downloaded vanilla cloud-image fixture for non-ZFS, GRUB, cloud-init, and fresh-install branches; it is not built or promoted by this repository.
 
 ## Continuous Integration
 
@@ -266,7 +266,7 @@ Don't commit decrypted data; access secrets via `ansible-vault edit <path>`. Wir
 
 Two passwords, two scopes ([ansible.cfg](ansible.cfg): `vault_identity_list = prod@vault-client.sh, test@vault-client.sh`, `vault_id_match = True`).
 
-- `prod` — vault id for inline `!vault` values in `group_vars/prod.yml` and physical-host vars. Local workstations only; never in CI.
+- `prod` — vault id for inline `!vault` values in `group_vars/prod.yml`, physical-host vars, and root `host_vars/` (including Bunk). Local workstations only; never in CI.
 - `test` — vault id for inline `!vault` values in `group_vars/test.yml` and test-host vars. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
 
 [vault-client.sh](vault-client.sh): lookup per id: env `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` (CI), then macOS keychain `homelab-vault-<id>`, then Linux `~/.config/homelab/vault-pass-<id>` (0400). Bootstrap: [notes/runbooks/vault_setup.md](notes/runbooks/vault_setup.md). New values: `encrypt_string --encrypt-vault-id prod` (or `test`).
