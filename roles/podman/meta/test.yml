@@ -11,8 +11,6 @@ ubuntu:
   - resolute
 skip:
   "minimal:resolute": >-
-    Pug Resolute covers the release-divergent install path; Minimal Noble covers
-    root-filesystem storage.
+    Pug covers the Resolute install path; Minimal Noble covers root storage.
   "lab:resolute": >-
-    Pug Resolute covers the release-divergent install path; Lab Noble covers mdadm
-    storage and operator pruning.
+    Pug covers the Resolute install path; Lab Noble covers mdadm storage and pruning.

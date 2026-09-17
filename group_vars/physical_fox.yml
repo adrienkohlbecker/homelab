@@ -9,8 +9,8 @@
 # runs a curated role set rather than the home service roles. It DOES join the
 # wg0 backbone, scoped to peer host /32s: each server peer's wg /32 plus the
 # physical /32 for cross-site peers. This lets fox reach lab/pug services at
-# their LAN IPs without routing whole home subnets. Provisioned by terraform/hetzner.tf;
-# reached at fox.fahm.fr (public A -> reserved primary IP).
+# their LAN IPs without routing whole home subnets. Provisioned by
+# terraform/hetzner.tf; reached at fox.fahm.fr (public A -> reserved primary IP).
 
 external_services_enabled: true
 

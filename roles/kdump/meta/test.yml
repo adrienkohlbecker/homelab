@@ -1,4 +1,4 @@
-# Cover both ZFSBootMenu and GRUB crashkernel delivery.
+# Cover ZFSBootMenu, GRUB, and the ARM EFI-stub crashkernel paths.
 machines:
   lab:
   minimal:

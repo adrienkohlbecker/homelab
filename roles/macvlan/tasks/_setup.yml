@@ -1,7 +1,6 @@
 # Test-fixture role dependencies for the macvlan harness run. testrole.py imports
 # only the role under test, so the podman_network path in install.yml needs
-# podman installed first (prod gets it from site.yml's play order). The fixture
-# image contains only the base OS, so install Podman before macvlan setup.
+# podman installed first (prod gets it from site.yml's play order).
 - name: _setup | Install podman
   import_role:
     name: podman

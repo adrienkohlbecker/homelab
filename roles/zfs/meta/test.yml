@@ -1,5 +1,5 @@
 # Lab exercises the multi-pool and tank special-vdev contracts; Pug exercises
-# the single-root-pool plus apoc layout. Minimal covers non-root ZFS.
+# the single-rpool storage path. Minimal covers non-root ZFS.
 machines:
   lab:
   pug:
