@@ -233,3 +233,13 @@
           import_role:
             name: apt
             tasks_from: configure
+
+    # The site test starts from a base image, while production already has
+    # these persistent datasets before the zfs mount-cache role runs.
+    - name: Seed datasets required by the mount cache
+      when: zfs_root
+      community.general.zfs:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ zfs_mount_cache_datasets }}"
+      become: true
