@@ -45,8 +45,7 @@ def test_lab_qemu_image_is_published_for_supported_releases() -> None:
 
 
 def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None:
-    pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
-    job = pipeline["qemu_host_ami"]
+    job = PIPELINE["qemu_host_ami"]
 
     # The hosted amd64 job only drives Packer. The AMI's reduced ARM toolset
     # comes from qemu_host.pkr.hcl, not from this job's environment.
@@ -62,12 +61,11 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
 
 
 def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
-    pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
-    scaffold = pipeline[".qemu_image_arm"]
-    lab = pipeline["qemu_image:lab:arm"]
+    scaffold = PIPELINE[".qemu_image_arm"]
+    lab = PIPELINE["qemu_image:lab:arm"]
 
     assert scaffold["extends"] == ".protected_manual_job"
-    assert pipeline[".protected_manual_job"]["rules"] == [
+    assert PIPELINE[".protected_manual_job"]["rules"] == [
         {"if": '$CI_COMMIT_REF_PROTECTED == "true"', "when": "manual", "allow_failure": True}
     ]
     assert scaffold["tags"] == ["aws-shell-qemu-arm"]
@@ -94,7 +92,7 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     }
     assert {
         name.removeprefix("qemu_image:").removesuffix(":arm")
-        for name in pipeline
+        for name in PIPELINE
         if name.startswith("qemu_image:") and name.endswith(":arm")
     } == matrix.ARM_PUBLISHED_MACHINES
 
