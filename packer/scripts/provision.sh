@@ -278,16 +278,6 @@ create_extra_dozer() {
   zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "${extra_pool_disks[@]}"
 }
 
-create_extra_zee() {
-  pop_extra_disks 1 zee
-  local disk="${POPPED_EXTRA_DISKS[0]}"
-  if zpool list -H zee >/dev/null 2>&1; then return; fi
-  wipe_disks "$disk"
-  udevadm settle
-  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" zee "$disk"
-  zfs create -o canmount=on -o mountpoint=/zee/data zee/data
-}
-
 create_extra_tank_mouse() {
   pop_extra_disks 4 tank_mouse
   local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
@@ -333,7 +323,6 @@ create_extra_pools() {
     case "$pool" in
     apoc) create_extra_apoc ;;
     dozer) create_extra_dozer ;;
-    zee) create_extra_zee ;;
     tank_mouse) create_extra_tank_mouse ;;
     *)
       echo >&2 "provision.sh: unknown EXTRA_POOLS entry '$pool'"
