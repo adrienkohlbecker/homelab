@@ -639,15 +639,11 @@ def _emit_gitlab(
     placeholder, which the template adds. Cells are emitted longest-first by
     their median recent runtime so the slowest jobs start first.
     """
-    if target not in TARGETS:
-        raise ValueError(f"unsupported CI target: {target!r}")
-    target_config = TARGETS[target]
     specs = sort_specs_by_runtime(specs, runtimes)
 
     Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
 
-    log(f"target={target} runner={target_config['cell_runner_tag']}")
-    log(f"arm_cells={len(_arm_specs(specs, target))}")
+    log(f"target={target} runner={TARGETS[target]['cell_runner_tag']}")
     log(f"matrix={json.dumps(specs)}")
     if specs:
         unmeasured = [s for s in specs if s not in runtimes]
