@@ -170,7 +170,7 @@ locals {
     lab = {
       disks       = "/dev/vdb /dev/vdc /dev/vdd"
       extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes  = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      disk_sizes  = ["40G", "40G", "40G", "4G", "4G", "1.5G", "1.5G", "1G", "1G"]
       layout      = "mirror"
       swap_size   = "8G"
       podman_size = "5G"
