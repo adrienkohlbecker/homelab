@@ -119,6 +119,11 @@ class TestRoleMeta:
         with pytest.raises(matrix.RoleTestConfigError, match="skips the default release"):
             matrix.load_role_test_config("svc")
 
+    def test_release_must_keep_a_cell_after_skips(self) -> None:
+        _make_role("svc", {"ubuntu": ["resolute"], "skip": {"lab:resolute": "covered elsewhere"}})
+        with pytest.raises(matrix.RoleTestConfigError, match="expands to no test cell"):
+            matrix.load_role_test_config("svc")
+
 
 # ---------------------------------------------------------------------------
 # build_role_cells
@@ -202,10 +207,14 @@ class TestSkip:
     def test_build_role_cells_drops_skipped_release_cell_only(self) -> None:
         _make_role(
             "svc",
-            {"machines": {"lab": None}, "ubuntu": ["resolute"], "skip": {"lab:resolute": "flaky"}},
+            {"machines": {"lab": None, "pug": None}, "ubuntu": ["resolute"], "skip": {"lab:resolute": "flaky"}},
         )
         cells = matrix.build_role_cells("svc")
-        assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "svc")]
+        assert cells == [
+            matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "svc"),
+            matrix.TestCell("pug", matrix.DEFAULT_UBUNTU, "svc"),
+            matrix.TestCell("pug", "resolute", "svc"),
+        ]
 
     def test_bare_machine_skip_drops_only_that_machines_base_cell(self) -> None:
         # The bare form is the only correct spelling for the default cell.

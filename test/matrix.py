@@ -186,6 +186,10 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
             else:
                 arm_machines.append(name)
 
+    for codename in ubuntu:
+        if all((machine, codename) in skip for machine in machines):
+            errors.append(f"ubuntu={codename!r} expands to no test cell")
+
     if errors:
         raise RoleTestConfigError(meta_path, errors)
 
