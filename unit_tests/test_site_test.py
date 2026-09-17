@@ -60,7 +60,7 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10, check_mode=True))
 
     assert machine.ansible_calls == [
-        (str(tmp_path / "_environment.yml"),),
+        (str(tmp_path / "_environment.yml"), "-e", "test_site_check=true"),
         (str(tmp_path / "site.yml"), "-e", "_test_role_under_test=services"),
         (str(tmp_path / "site.yml"), "--check"),
     ]
@@ -86,3 +86,18 @@ def test_reboot_bypasses_inhibitor_only_in_qemu() -> None:
 
     assert command.render(qemu_test=True) == "/usr/bin/sudo -n /usr/bin/systemctl --check-inhibitors=no reboot"
     assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
+
+
+def test_site_produces_lab_datasets_before_mount_cache() -> None:
+    plays = yaml.safe_load(Path("site.yml").read_text())
+    names = [play["name"] for play in plays]
+    storage = plays[names.index("Lab storage datasets")]
+    base = plays[names.index("Base storage and platform")]
+    media = plays[names.index("Lab storage and media")]
+
+    assert names.index("Lab storage datasets") < names.index("Base storage and platform")
+    assert "data" in storage["roles"]
+    assert storage["tasks"][0]["import_role"] == {"name": "minio", "tasks_from": "storage"}
+    assert "zfs" in base["roles"]
+    assert names.index("Base storage and platform") < names.index("Lab storage and media")
+    assert media["roles"] == ["scratch", "media"]

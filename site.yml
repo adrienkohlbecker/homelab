@@ -1,9 +1,8 @@
 # Roles are ordered as a layer ladder: each section builds on the guarantees
-# of the ones above it. "Base machine install" (host base -> persistent state ->
-# storage -> service platform -> observability) runs on every managed host; the
-# service plays below are host-scoped and assume the full platform is already in
-# place. See CLAUDE.md "Role layering" for the rule on where a new role belongs.
-- name: Base machine install
+# of the ones above it. The base plays install the host, persistent state,
+# storage, service platform, and observability in that order. Service plays
+# below assume the full platform is in place. See CLAUDE.md "Role layering".
+- name: Base host and persistent state
   hosts: lab,pug,fox
   roles:
     # Host base -- OS, networking, remote access, system services. Apt first
@@ -29,6 +28,22 @@
     # later zfs policy role.
     - services
     - ssh
+
+- name: Lab storage datasets
+  hosts: lab
+  roles:
+    # This producer must run before zfs builds the mount cache for tank/data.
+    - data
+  tasks:
+    # The minio service runs later, after the platform is ready.
+    - name: Provision minio storage
+      import_role:
+        name: minio
+        tasks_from: storage
+
+- name: Base storage and platform
+  hosts: lab,pug,fox
+  roles:
     # Storage & boot substrate -- ZFS datasets/snapshots and the bootloader.
     - zfs
     - zfs_autobackup
@@ -54,13 +69,10 @@
     - role: headscale
       when: external_services_enabled | default(false)
 
-- name: Lab storage datasets
+- name: Lab storage and media
   hosts: lab
   roles:
-    # Storage dataset producers -- placed before the apps that mount
-    # /mnt/{scratch,data,media}.
     - scratch
-    - data
     - media
 
 - name: Lab and Pug
