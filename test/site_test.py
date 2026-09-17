@@ -106,8 +106,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
         await m.ensure_system_running()
 
         print_line("Preparing test environment")
-        environment_args = ("-e", "test_site_check=true") if check_mode else ()
-        await m.ansible_command(str(m.workdir_path / "_environment.yml"), *environment_args)
+        await m.ansible_command(str(m.workdir_path / "_environment.yml"))
 
         if check_mode:
             # A production check starts with the persistent services dataset

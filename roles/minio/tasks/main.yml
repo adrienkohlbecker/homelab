@@ -44,8 +44,32 @@
   tags:
     - minio
 
-- name: Provision minio storage
-  import_tasks: storage.yml
+- name: Create minio system user
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: minio-user
+      # /mnt/minio is a ZFS mountpoint (created below), not /mnt/services/<svc>
+      config_dir: false
+  tags:
+    - minio
+
+- name: Provision the minio dataset
+  import_role:
+    name: zfs_dataset
+    tasks_from: dataset
+  vars:
+    zfs_dataset_args:
+      dataset: '{{ zfs_dozer_filesystem }}/minio'
+      mountpoint: /mnt/minio
+      owner: minio-user
+      group: minio-user
+      extra_properties:
+        'autobackup:bak': 'true'
+  tags:
+    - minio
 
 - name: Configure minio
   template:

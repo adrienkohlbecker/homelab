@@ -234,15 +234,12 @@
             name: apt
             tasks_from: configure
 
-    # A fresh site check predicts dataset creation but cannot mount the
-    # predicted datasets. Seed only the absent cache entries for that check;
-    # real site converge creates them through the data and minio roles.
-    - name: Seed site-check mount-cache datasets
-      when:
-        - test_site_check | default(false) | bool
-        - zfs_root
+    # The site test starts from a base image, while production already has
+    # these persistent datasets before the zfs mount-cache role runs.
+    - name: Seed datasets required by the mount cache
+      when: zfs_root
       community.general.zfs:
         name: "{{ item }}"
         state: present
-      loop: "{{ zfs_mount_cache_datasets | reject('equalto', 'rpool/ROOT/' ~ ansible_distribution_release) | list }}"
+      loop: "{{ zfs_mount_cache_datasets }}"
       become: true
