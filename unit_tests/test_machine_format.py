@@ -71,7 +71,6 @@ def test_format_ansible_cmd_default_envelope(
     m = machine_factory(
         ssh_port=2222,
         ssh_user="vagrant",
-        ansible_args=["-e", "@group_vars/test.yml"],
     )
     cmd = m.format_ansible_cmd("site.yml")
 
@@ -83,11 +82,9 @@ def test_format_ansible_cmd_default_envelope(
     assert "ansible_ssh_user=vagrant" in cmd
     assert "ansible_ssh_private_key_file=packer/vagrant.key" in cmd
 
-    # Inventory + spec ansible_args present
+    # The test inventory supplies group vars at inventory precedence.
     assert "--inventory" in cmd
     assert cmd[cmd.index("--inventory") + 1] == "test/inventory.ini"
-    for arg in m.ansible_args:
-        assert arg in cmd
 
     # --limit pins the static `hosts: all` playbook to the inventory host
     assert "--limit" in cmd
@@ -179,12 +176,9 @@ def test_format_ansible_cmd_upstream_mirrors_clears_nexus(
 def test_format_ansible_cmd_no_positional(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    m = machine_factory(
-        ansible_args=["-e", "@group_vars/test.yml"],
-    )
+    m = machine_factory()
     cmd = m.format_ansible_cmd()
 
     assert cmd[0] == "ansible-playbook"
     assert "ansible-playbook" in cmd
-    # With no extra cmd args the tail is whatever the spec's ansible_args ended in
-    assert cmd[-1] == m.ansible_args[-1]
+    assert cmd[-1] == "test/inventory.ini"

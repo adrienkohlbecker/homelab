@@ -446,7 +446,6 @@ class Machine:
         self.ssh_port = 0
         self.ssh_host = loopback_host if loopback_host is not None else _cell_loopback_host()
         self.ssh_user = spec.ssh_user
-        self.ansible_args: list[str] = []
         self.inventory_host = spec.inventory_host
         self.machine = machine
         self.role = role
@@ -748,7 +747,6 @@ class Machine:
             ),
             "--inventory",
             "test/inventory.ini",
-            *self.ansible_args,
         ]
         if cmd:
             parts += cmd

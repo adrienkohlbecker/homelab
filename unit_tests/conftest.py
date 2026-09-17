@@ -56,7 +56,6 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
     def make(
         *,
         host_arch: str = "x86_64",
-        ansible_args: list[str] | None = None,
         ssh_port: int | None = None,
         ssh_user: str | None = None,
         **overrides: Any,
@@ -74,8 +73,6 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
         )
         kwargs.update(overrides)
         m = machine.Machine(**kwargs)
-        if ansible_args is not None:
-            m.ansible_args = ansible_args
         if ssh_port is not None:
             m.ssh_port = ssh_port
         if ssh_user is not None:
