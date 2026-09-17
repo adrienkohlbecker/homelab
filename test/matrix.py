@@ -179,6 +179,8 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 errors.append(f"arm entries must be strings, got {type(name).__name__}")
             elif name not in machines:
                 errors.append(f"arm machine {name!r} not in machines {machines}")
+            elif name != "lab":
+                errors.append(f"arm machine {name!r} has no published image; only 'lab' is supported")
             elif (name, DEFAULT_UBUNTU) in skip:
                 errors.append(f"arm machine {name!r} skips the default release")
             elif name in arm_machines:

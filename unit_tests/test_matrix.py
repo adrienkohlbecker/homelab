@@ -113,11 +113,12 @@ class TestRoleMeta:
             ("lab", "arm must be a list"),
             ([1], "arm entries must be strings"),
             (["minimal"], "not in machines"),
+            (["pug"], "has no published image"),
             (["lab", "lab"], "duplicate arm machine"),
         ],
     )
     def test_invalid_arm_machines_are_rejected(self, arm: object, error: str) -> None:
-        _make_role("svc", {"arm": arm})
+        _make_role("svc", {"machines": {"lab": None, "pug": None}, "arm": arm})
         with pytest.raises(matrix.RoleTestConfigError, match=error):
             matrix.load_role_test_config("svc")
 
