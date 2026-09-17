@@ -1146,6 +1146,13 @@ class Machine:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
         print_line("Keeping VM around, ssh using:")
         print_line(f"> {ssh_cmd}")
+        resume_cmd = [
+            "env",
+            *(f"{key}={value}" for key, value in self.ansible_env().items()),
+            *self.format_ansible_cmd(str(self.workdir_path / "site.yml"), "--start-at-task", "<task name>"),
+        ]
+        print_line("Resume Ansible against this fixture from the repository root:")
+        print_line(f"> {shlex.join(resume_cmd)}")
         print_line("Then Ctrl+C to stop the machine")
         if self.launch.display_window:
             print_line("Display: QEMU window")

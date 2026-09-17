@@ -105,6 +105,26 @@ def test_format_ansible_cmd_default_envelope(
     assert not any("tailscale_wan_direct" in part for part in cmd)
 
 
+def test_kept_vm_resume_command_targets_fixture(
+    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    m = machine_factory(keep_vm=True, ssh_port=2222)
+    m.vnc_display = 0
+    lines: list[str] = []
+    monkeypatch.setattr(machine, "print_line", lines.append)
+
+    m.print_ssh_instructions()
+
+    resume = next(line for line in lines if line.startswith("> env "))
+    parts = shlex.split(resume.removeprefix("> "))
+    assert "ansible-playbook" in parts
+    assert parts[parts.index("--inventory") + 1] == "test/inventory.ini"
+    assert parts[parts.index("--limit") + 1] == "lab"
+    assert parts[parts.index("--start-at-task") + 1] == "<task name>"
+    assert str(m.workdir_path / "site.yml") in parts
+    assert "ansible_ssh_port=2222" in parts
+
+
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
     machine_factory: Callable[..., machine.Machine],
     monkeypatch: pytest.MonkeyPatch,
