@@ -89,15 +89,20 @@ class TestParseArgs:
         assert pass_args == ["--tags", "homepage"]
 
 
-@pytest.mark.parametrize(("machine_name", "expected_memory"), [("lab", 5120), ("pug", None)])
+@pytest.mark.parametrize(("machine_name", "expected_memory"), [("lab", 6144), ("pug", None)])
 def test_main_passes_role_memory_to_machine(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     machine_name: str,
     expected_memory: int | None,
 ) -> None:
-    monkeypatch.chdir(Path(testrole.__file__).resolve().parents[1])
-    monkeypatch.setattr("sys.argv", ["testrole.py", "homeassistant", "--machine", machine_name])
+    role = tmp_path / "roles" / "fixture_role"
+    (role / "tasks").mkdir(parents=True)
+    (role / "tasks" / "main.yml").write_text("---\n")
+    (role / "meta").mkdir()
+    (role / "meta" / "test.yml").write_text("machines:\n  lab:\n    memory_mb: 6144\n  pug:\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["testrole.py", "fixture_role", "--machine", machine_name])
     monkeypatch.setattr(testrole, "imagedir_for_host", lambda: tmp_path)
     monkeypatch.setattr(testrole, "sweep_stale_workdirs", lambda _: None)
     monkeypatch.setattr(testrole, "tee_output", lambda _: nullcontext())
