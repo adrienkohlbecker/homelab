@@ -13,7 +13,7 @@
 
 - name: mount_generator | Enable zfs-mount-generator for pool
   file:
-    path: /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }}
+    path: /etc/zfs/zfs-list.cache/{{ item }}
     state: touch
     access_time: preserve
     modification_time: preserve
