@@ -53,8 +53,6 @@
   roles:
     - role: headscale
       when: external_services_enabled | default(false)
-    - role: gitlab_runner
-      when: external_services_enabled | default(false)
 
 - name: Lab storage datasets
   hosts: lab
@@ -120,11 +118,10 @@
     - nexus
     - homepage
 
-- name: Lab CI runner
-  hosts: lab
+- name: CI runners
+  hosts: lab,fox
   roles:
-    - role: gitlab_runner
-      when: not qemu_test
+    - gitlab_runner
 
 - name: MacOS VM
   hosts: lab
