@@ -6,6 +6,7 @@ that both test/testall.py and mise-tasks/ci/detect.py consume.
 
 import functools
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -42,7 +43,7 @@ class RoleTestConfig:
     arm_machines: tuple[str, ...]
     # Guest RAM overrides in MiB, keyed by machine; unlisted machines keep
     # their QemuMachineSpec default.
-    memory_mb: dict[str, int] = field(default_factory=dict)
+    memory_mb: Mapping[str, int] = field(default_factory=dict)
 
 
 class RoleTestConfigError(ValueError):
@@ -115,11 +116,10 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 value = machine_config["memory_mb"]
                 if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                     errors.append(f"machines.{name}.memory_mb must be a positive integer, got {value!r}")
-                    continue
-                memory_mb[name] = value
+                else:
+                    memory_mb[name] = value
             elif machine_config not in (None, {}):
                 errors.append(f"machines.{name} accepts only memory_mb")
-                continue
             machines.append(name)
     if not machines:
         machines = list(DEFAULT_MACHINES)
@@ -186,9 +186,11 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
             else:
                 arm_machines.append(name)
 
-    for codename in ubuntu:
-        if all((machine, codename) in skip for machine in machines):
-            errors.append(f"ubuntu={codename!r} expands to no test cell")
+    errors.extend(
+        f"ubuntu={codename!r} expands to no test cell"
+        for codename in ubuntu
+        if all((machine, codename) in skip for machine in machines)
+    )
 
     if errors:
         raise RoleTestConfigError(meta_path, errors)

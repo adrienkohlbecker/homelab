@@ -79,6 +79,13 @@ class TestRoleMeta:
         with pytest.raises(matrix.RoleTestConfigError, match=r"machines\.lab"):
             matrix.load_role_test_config("configured")
 
+    def test_invalid_memory_does_not_hide_machine_from_arm_validation(self) -> None:
+        _make_role("configured", {"machines": {"lab": {"memory_mb": 0}}, "arm": ["lab"]})
+        with pytest.raises(matrix.RoleTestConfigError) as exc:
+            matrix.load_role_test_config("configured")
+        assert len(exc.value.messages) == 1
+        assert "machines.lab.memory_mb" in exc.value.messages[0]
+
     def test_base_prerequisites_defaults_to_true(self) -> None:
         _make_role("plain")
         assert matrix.load_role_test_config("plain").base_prerequisites is True
