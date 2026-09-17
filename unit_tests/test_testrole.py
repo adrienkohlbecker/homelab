@@ -1,6 +1,8 @@
 """Unit tests for test/testrole.py — idempotence regex, argparse, constants."""
 
 import argparse
+from contextlib import nullcontext
+from pathlib import Path
 
 import pytest
 import testrole
@@ -85,3 +87,38 @@ class TestParseArgs:
         args, pass_args, _role_config = testrole.parse_args()
         assert args.role == "nginx"
         assert pass_args == ["--tags", "homepage"]
+
+
+@pytest.mark.parametrize(("machine_name", "expected_memory"), [("lab", 5120), ("pug", None)])
+def test_main_passes_role_memory_to_machine(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    machine_name: str,
+    expected_memory: int | None,
+) -> None:
+    monkeypatch.chdir(Path(testrole.__file__).resolve().parents[1])
+    monkeypatch.setattr("sys.argv", ["testrole.py", "homeassistant", "--machine", machine_name])
+    monkeypatch.setattr(testrole, "imagedir_for_host", lambda: tmp_path)
+    monkeypatch.setattr(testrole, "sweep_stale_workdirs", lambda _: None)
+    monkeypatch.setattr(testrole, "tee_output", lambda _: nullcontext())
+
+    seen: dict = {}
+
+    class FakeMachine:
+        output_file = tmp_path / "test.log"
+
+        def __init__(self, **kwargs: object) -> None:
+            seen.update(kwargs)
+
+        def cleanup_logs(self) -> None:
+            pass
+
+    async def fake_run_test(*args: object, **kwargs: object) -> None:
+        pass
+
+    monkeypatch.setattr(testrole, "Machine", FakeMachine)
+    monkeypatch.setattr(testrole, "run_test", fake_run_test)
+
+    assert testrole.main() == 0
+    assert seen["machine"] == machine_name
+    assert seen["run_options"].memory_mb == expected_memory
