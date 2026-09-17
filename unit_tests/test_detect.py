@@ -1284,12 +1284,14 @@ class TestRenderChildPipeline:
 
 
 class TestEmitGitlab:
-    def test_writes_child_with_cells(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
+    def test_writes_child_with_cells(self, tmp_path: Path, target: str) -> None:
         child = tmp_path / "child.yml"
-        rc = detect._emit_gitlab(["nginx:lab"], False, str(child), {}, lambda *_: None)
+        rc = detect._emit_gitlab(["zfs:lab", "zfs:pug"], False, str(child), {}, lambda *_: None, target=target)
         assert rc == 0
         loaded = detect.yaml.safe_load(child.read_text())
-        assert "nginx:lab" in loaded
+        assert "zfs:lab" in loaded
+        assert "zfs:pug" in loaded
         assert "no_cells" not in loaded
 
     def test_orders_cells_longest_first(self, tmp_path: Path) -> None:
@@ -1301,14 +1303,6 @@ class TestEmitGitlab:
         text = child.read_text()
         order = [text.index(f'"{name}":') for name in ("c:lab", "b:lab", "a:lab")]
         assert order == sorted(order)
-
-    @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
-    def test_lab_and_pug_cells_are_kept(self, tmp_path: Path, target: str) -> None:
-        child = tmp_path / "child.yml"
-        detect._emit_gitlab(["zfs:lab", "zfs:pug"], False, str(child), {}, lambda *_: None, target=target)
-        loaded = detect.yaml.safe_load(child.read_text())
-        assert "zfs:lab" in loaded
-        assert "zfs:pug" in loaded
 
     def test_full_universe_includes_declared_lab_cells(self) -> None:
         expected = {
