@@ -243,13 +243,6 @@ class TestMachineUbuntuValidation:
         with pytest.raises(ValueError, match="Unknown Ubuntu release"):
             machine_factory(machine="lab", role="test", ubuntu_name="bogus")
 
-    def test_write_image_requires_explicit_artifact_directory(
-        self, machine_factory: Callable[..., machine.Machine]
-    ) -> None:
-        with pytest.raises(ValueError, match="write_image=True requires an explicit image_dir"):
-            machine_factory(launch=machine.LaunchOptions(write_image=True))
-
-
 class TestMachineArtifactOwnership:
     def test_clears_and_cleans_every_per_run_artifact(
         self,

@@ -287,7 +287,7 @@ def discover_packer_disks(image_dir: Path) -> tuple[list[Path], str]:
 
 @dataclass(frozen=True)
 class LaunchOptions:
-    """QEMU boot options used by launch.py and derived-image builders."""
+    """QEMU boot options used by launch.py."""
 
     image_dir: Path | None = None
     kernel: Path | None = None
@@ -301,7 +301,6 @@ class LaunchOptions:
     headless: bool = False
     qmp_socket: Path | None = None
     extra_hostfwds: tuple[int, ...] = ()
-    write_image: bool = False
 
 
 @dataclass(frozen=True)
@@ -439,11 +438,6 @@ class Machine:
             raise ValueError(f"image_dir override requires an artifact-backed variant, got {machine!r}")
         if (self.launch.kernel is None) != (self.launch.initrd is None):
             raise ValueError("launch kernel and initrd must be provided together")
-        # Derived-image builders may mount a caller-staged artifact tree
-        # directly so guest writes persist. Requiring an explicit image_dir
-        # prevents mutation of a published machine directory.
-        if self.launch.write_image and self.launch.image_dir is None:
-            raise ValueError("write_image=True requires an explicit image_dir")
         self.extra_hostfwd_ports: dict[int, int] = {}
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
@@ -1297,18 +1291,12 @@ class Machine:
             os_src_paths, artifact_format = discover_packer_disks(image_dir)
 
             os_disk_paths: list[str] = []
-            if self.launch.write_image:
-                # No overlay: launch the explicit artifact directory in place.
-                os_disk_paths = [str(path) for path in os_src_paths]
-                drive_format = artifact_format
-            else:
-                for idx, src in enumerate(os_src_paths, start=1):
-                    dest = self.workdir_path / f"packer-ubuntu-{idx}"
-                    await self._create_overlay(str(src), str(dest), backing_fmt=artifact_format)
-                    os_disk_paths.append(str(dest))
-                drive_format = "qcow2"
+            for idx, src in enumerate(os_src_paths, start=1):
+                dest = self.workdir_path / f"packer-ubuntu-{idx}"
+                await self._create_overlay(str(src), str(dest), backing_fmt=artifact_format)
+                os_disk_paths.append(str(dest))
 
-            self.drives = [self._virtio_drive(path, drive_format) for path in os_disk_paths]
+            self.drives = [self._virtio_drive(path, "qcow2") for path in os_disk_paths]
             shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
             self.drives += await self._uefi_drives()
 
