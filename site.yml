@@ -48,11 +48,11 @@
 
 # Services -- host-scoped, built on the platform above. A role belongs here
 # (not in Base machine install) when only a subset of hosts run it.
-- name: External VPS services
+- name: Fox-only roles
   hosts: fox,lab
   roles:
     - role: headscale
-      when: external_services_enabled | default(false)
+      when: fox_only_roles_enabled | default(false)
 
 - name: Lab storage datasets
   hosts: lab

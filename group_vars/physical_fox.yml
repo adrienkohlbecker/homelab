@@ -12,7 +12,7 @@
 # their LAN IPs without routing whole home subnets. Provisioned by
 # terraform/hetzner.tf; reached at fox.fahm.fr (public A -> reserved primary IP).
 
-external_services_enabled: true
+fox_only_roles_enabled: true
 
 # Hetzner cloud-init owns matching and addressing for both NICs, including the
 # private-net DHCP address and eth0's static IPv6 configuration. This stanza
