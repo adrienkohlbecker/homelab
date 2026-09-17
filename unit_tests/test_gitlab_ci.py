@@ -89,10 +89,7 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     assert lab == {
         "extends": ".qemu_image_arm",
         "resource_group": "qemu_image_lab_aarch64_$UBUNTU",
-        "script": [
-            'mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 '
-            '--build-id "$CI_PIPELINE_ID.arm-lab-$UBUNTU" --promote'
-        ],
+        "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --promote'],
     }
     assert "qemu_image:pug:arm" not in pipeline
 
