@@ -45,7 +45,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - DNS/terraform: `mise run tf {init,plan,apply}` — `cd`s into `terraform/` and forwards to `tofu` (use `--` for flags mise intercepts). State in MinIO (`s3://terraform/homelab.tfstate`), AES-GCM-encrypted. Rotation: [notes/runbooks/terraform-state-encryption-rotation.md](notes/runbooks/terraform-state-encryption-rotation.md).
 - Refresh a fixture image: `mise run packer:build [lab|pug]` (parallel; `--ubuntu resolute` for another release). See [notes/test_environment_design.md](notes/test_environment_design.md).
 - Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, ruff/pyright, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
-- Resume a kept fixture with the `ansible-playbook` command printed by `testrole.py --keep`; replace `<task name>` with the failing task or use `--step` to walk tasks. The command pins the staged playbook, test inventory, and VM SSH connection. `mise run ansible` uses the production inventory and must not be used for fixture recovery.
+- Resume a kept fixture with the `ansible-playbook` command printed by `testrole.py --keep`; replace `<task name>` with the failing task or use `--step`. `mise run ansible` targets production and must not be used for fixture recovery.
 
 ## Workflows — use the skill, don't reinvent
 

@@ -69,9 +69,8 @@ Run the narrow role test first:
 test/testrole.py <svc>
 ```
 
-Lab is the default fixture. When the role needs Pug's storage layout or a
-non-ZFS host, list `lab:` alongside `pug:` or `minimal:` under `machines:` in
-`meta/test.yml` to retain Lab coverage. A nonempty map replaces the default.
+Lab is the default fixture. Declare any Pug or Minimal cells in `meta/test.yml`
+using the `machines:` rule in `AGENTS.md`.
 
 Before finishing, run the relevant lint target and inspect the diff for
 unnecessary role vars, pass-through inputs, missing backups, missing
