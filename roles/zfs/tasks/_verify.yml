@@ -248,6 +248,7 @@
 
 # --- Mount generator ---
 
+# Check the initial refresh before child creation triggers another zed update.
 - name: _verify | Read mount cache content for each pool
   command: cat /etc/zfs/zfs-list.cache/{{ item }}
   loop: "{{ zfs_mount_cache_pools }}"
@@ -255,9 +256,9 @@
   changed_when: false
   become: true
 
-- name: _verify | Mount cache lists its pool root
+- name: _verify | Initial mount cache lists its pool root
   assert:
-    that: item.item in item.stdout
+    that: item.stdout_lines | select('match', '^' ~ item.item ~ '\t') | list | length > 0
     fail_msg: >-
       /etc/zfs/zfs-list.cache/{{ item.item }} does not list
       pool root {{ item.item }} -- the zed cacher did not populate it.
