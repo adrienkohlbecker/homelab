@@ -1,4 +1,4 @@
-# Box exercises the full LAN/VIP fixture; Minimal covers the cloud-image base.
+# Lab exercises the full LAN/VIP fixture; Minimal covers the cloud-image base.
 machines:
   lab:
   minimal:

@@ -1,0 +1,6 @@
+# The real target is a UDM appliance, which has no QEMU fixture. Lab exercises
+# config validation, on-boot recovery, VIP claims, and the heartbeat timer.
+# Firmware-wipe persistence cannot be reproduced under QEMU; _verify checks
+# that restarting on-boot.service does not disrupt healthy keepalived.
+machines:
+  lab:

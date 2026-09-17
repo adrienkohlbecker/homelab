@@ -1,3 +1,3 @@
-# Minimal has no render-device acceleration and covers the fallback path.
+# Media datasets need the ZFS-backed Lab fixture.
 machines:
   lab:

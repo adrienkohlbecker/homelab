@@ -1,4 +1,5 @@
-# Cover compression policy on ZFS and ext4.
+# Exercise package-upgrade persistence, rotation with and without compression,
+# and preservation of unowned policies on ZFS and ext4.
 machines:
   lab:
   minimal:

@@ -1,4 +1,4 @@
-# Minimal covers disabled optional collectors alongside the full Lab fixture.
+# Verification exercises the nginx and Authelia front on the full Lab fixture.
 machines:
   lab:
 arm:

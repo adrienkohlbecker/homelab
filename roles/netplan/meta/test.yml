@@ -7,5 +7,5 @@ ubuntu:
   - resolute
 skip:
   "minimal:resolute": >-
-    Box covers Resolute rollback and DNS recovery; Minimal covers origin removal
+    Lab covers Resolute rollback and DNS recovery; Minimal covers origin removal
     on Noble.
