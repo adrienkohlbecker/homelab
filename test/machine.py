@@ -463,6 +463,7 @@ class Machine:
         self._live_lock_fd = -1
         self._publish_lock_fd = -1
         self._ansible_staged = False
+        self._last_ansible_cmd: tuple[str, ...] | None = None
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
 
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -761,6 +762,7 @@ class Machine:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
         self._stage_ansible_controller()
+        self._last_ansible_cmd = cmd
         return await run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
 
     def _stage_ansible_controller(self) -> None:
@@ -1146,13 +1148,14 @@ class Machine:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
         print_line("Keeping VM around, ssh using:")
         print_line(f"> {ssh_cmd}")
-        resume_cmd = [
-            "env",
-            *(f"{key}={value}" for key, value in self.ansible_env().items()),
-            *self.format_ansible_cmd(str(self.workdir_path / "site.yml"), "--start-at-task", "<task name>"),
-        ]
-        print_line("Resume Ansible against this fixture from the repository root:")
-        print_line(f"> {shlex.join(resume_cmd)}")
+        if self._last_ansible_cmd is not None:
+            resume_cmd = [
+                "env",
+                *(f"{key}={value}" for key, value in self.ansible_env().items()),
+                *self.format_ansible_cmd(*self._last_ansible_cmd, "--start-at-task", "<task name>"),
+            ]
+            print_line("Resume the last Ansible phase against this fixture from the repository root:")
+            print_line(f"> {shlex.join(resume_cmd)}")
         print_line("Then Ctrl+C to stop the machine")
         if self.launch.display_window:
             print_line("Display: QEMU window")

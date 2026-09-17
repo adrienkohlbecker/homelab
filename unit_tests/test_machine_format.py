@@ -1,5 +1,6 @@
 """Exact-output tests for Machine.format_{ssh,ansible}_cmd."""
 
+import asyncio
 import shlex
 from collections.abc import Callable
 from pathlib import Path
@@ -112,6 +113,14 @@ def test_kept_vm_resume_command_targets_fixture(
     m.vnc_display = 0
     lines: list[str] = []
     monkeypatch.setattr(machine, "print_line", lines.append)
+    monkeypatch.setattr(m, "_stage_ansible_controller", lambda: None)
+
+    async def fake_run_command(*args: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(machine, "run_command", fake_run_command)
+    playbook = str(m.workdir_path / "site.yml")
+    asyncio.run(m.ansible_command(playbook, "-e", "_role_tasks_from=_verify", "--tags", "homepage"))
 
     m.print_ssh_instructions()
 
@@ -121,8 +130,48 @@ def test_kept_vm_resume_command_targets_fixture(
     assert parts[parts.index("--inventory") + 1] == "test/inventory.ini"
     assert parts[parts.index("--limit") + 1] == "lab"
     assert parts[parts.index("--start-at-task") + 1] == "<task name>"
-    assert str(m.workdir_path / "site.yml") in parts
+    assert playbook in parts
+    assert "_role_tasks_from=_verify" in parts
+    assert parts[parts.index("--tags") + 1] == "homepage"
     assert "ansible_ssh_port=2222" in parts
+
+
+def test_kept_vm_without_ansible_only_prints_ssh(
+    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    m = machine_factory(keep_vm=True)
+    m.vnc_display = 0
+    lines: list[str] = []
+    monkeypatch.setattr(machine, "print_line", lines.append)
+
+    m.print_ssh_instructions()
+
+    assert any(line.startswith("> ssh ") for line in lines)
+    assert not any("ansible-playbook" in line for line in lines)
+
+
+def test_kept_vm_resume_uses_environment_playbook(
+    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    m = machine_factory(keep_vm=True)
+    m.vnc_display = 0
+    lines: list[str] = []
+    monkeypatch.setattr(machine, "print_line", lines.append)
+    monkeypatch.setattr(m, "_stage_ansible_controller", lambda: None)
+
+    async def fake_run_command(*args: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(machine, "run_command", fake_run_command)
+    playbook = str(m.workdir_path / "_environment.yml")
+    asyncio.run(m.ansible_command(playbook, "-e", "test_base_prerequisites=false"))
+
+    m.print_ssh_instructions()
+
+    resume = next(line for line in lines if line.startswith("> env "))
+    parts = shlex.split(resume.removeprefix("> "))
+    assert playbook in parts
+    assert "test_base_prerequisites=false" in parts
 
 
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
