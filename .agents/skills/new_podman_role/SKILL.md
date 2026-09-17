@@ -40,8 +40,10 @@ repo. Do not invent secret boundaries.
 - Cross-role wiring: `service_ports`, `site.yml`, and
   `roles/homepage/templates/bookmarks.yaml.j2`.
 
-Required service inputs belong in inventory vars (`group_vars/physical_<host>.yml`
-for a prod host, `test/host_vars/<host>.yml` for its fixture) plus an `assert`.
+Required service inputs belong in inventory vars plus an `assert`: use
+`group_vars/prod.yml` and `group_vars/test.yml` for environment-wide values
+(including shared secrets), and `group_vars/physical_<host>.yml` or
+`test/host_vars/<host>.yml` for host-specific values.
 Optional host-overridable values may live in `defaults/main.yml`.
 
 ## Podman Choices
