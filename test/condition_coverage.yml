@@ -34,17 +34,17 @@ scenarios:
             rc: 1
             stdout: ""
 
-  # Architecture variants
+  # Architecture and hardware policy variants
   - path: roles/jellyfin/tasks/main.yml
-    expression: jellyfin_transcoding_backend == 'intel_qsv'
+    expression: jellyfin_intel_qsv_enabled
     all: 2
     cases:
       - outcome: false
         variables:
-          jellyfin_transcoding_backend: software
+          jellyfin_intel_qsv_enabled: false
       - outcome: true
         variables:
-          jellyfin_transcoding_backend: intel_qsv
+          jellyfin_intel_qsv_enabled: true
 
   - path: roles/kdump/tasks/main.yml
     expression: ansible_architecture == 'x86_64'
@@ -78,7 +78,6 @@ scenarios:
 
   - path: roles/netdata/tasks/configure.yml
     expression: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
-    all: 2
     cases:
       - outcome: false
         variables:
@@ -91,7 +90,7 @@ scenarios:
 
   - path: roles/refind/tasks/main.yml
     expression: boot_via_efi_stub
-    all: 5
+    all: 2
     cases:
       - outcome: false
         variables:
@@ -162,16 +161,6 @@ scenarios:
         variables:
           qemu_test: true
 
-  - path: roles/media/tasks/main.yml
-    expression: qemu_test
-    cases:
-      - outcome: false
-        variables:
-          qemu_test: false
-      - outcome: true
-        variables:
-          qemu_test: true
-
   - path: roles/nut/tasks/server.yml
     expression: qemu_test | bool
     cases:
@@ -182,34 +171,10 @@ scenarios:
         variables:
           qemu_test: true
 
-  - path: roles/zfs_autobackup/tasks/dest.yml
-    expression: not qemu_test
-    all: 2
-    cases:
-      - outcome: false
-        variables:
-          qemu_test: true
-      - outcome: true
-        variables:
-          qemu_test: false
-
-  - path: roles/zfs_autobackup/tasks/dest.yml
-    expression: not qemu_test and zfs_autobackup_keyscan_result.stdout | default('') | length > 0
-    cases:
-      - outcome: false
-        variables:
-          qemu_test: true
-          zfs_autobackup_keyscan_result: {}
-      - outcome: true
-        variables:
-          qemu_test: false
-          zfs_autobackup_keyscan_result:
-            stdout: ssh-ed25519 test-key
-
   # Hardware-dependent feature variants
   - path: roles/fan2go/tasks/main.yml
     expression: fan2go_enabled
-    all: 9
+    all: 7
     cases:
       - outcome: false
         variables:
@@ -227,32 +192,6 @@ scenarios:
       - outcome: true
         variables:
           fan2go_enabled: false
-
-  - path: roles/fan2go/tasks/main.yml
-    expression: not (ansible_check_mode and (fan2go_binary_download.changed | default(false)))
-    cases:
-      - outcome: false
-        variables:
-          ansible_check_mode: true
-          fan2go_binary_download:
-            changed: true
-      - outcome: true
-        variables:
-          ansible_check_mode: false
-          fan2go_binary_download: {}
-
-  - path: roles/fan2go/tasks/main.yml
-    expression: not (ansible_check_mode and (fan2go_tui_binary_download.changed | default(false)))
-    cases:
-      - outcome: false
-        variables:
-          ansible_check_mode: true
-          fan2go_tui_binary_download:
-            changed: true
-      - outcome: true
-        variables:
-          ansible_check_mode: false
-          fan2go_tui_binary_download: {}
 
   - path: roles/fan2go/tasks/main.yml
     expression: not (ansible_check_mode and fan2go_config_directories.changed)
@@ -525,20 +464,18 @@ scenarios:
             changed: true
 
   - path: roles/homeassistant/tasks/main.yml
-    expression: not (ansible_check_mode and (homeassistant_hacs_dir.changed or homeassistant_hacs_download.changed | default(false)))
+    expression: not (ansible_check_mode and homeassistant_hacs_download.changed)
     cases:
       - outcome: false
         variables:
           ansible_check_mode: true
-          homeassistant_hacs_dir:
+          homeassistant_hacs_download:
             changed: true
-          homeassistant_hacs_download: {}
       - outcome: true
         variables:
           ansible_check_mode: false
-          homeassistant_hacs_dir:
+          homeassistant_hacs_download:
             changed: true
-          homeassistant_hacs_download: {}
 
   - path: roles/homeassistant/tasks/main.yml
     expression: homeassistant_unit_file.stat.exists
@@ -609,7 +546,7 @@ scenarios:
 
   - path: roles/zfs_autobackup/tasks/dest.yml
     expression: zfs_root
-    all: 2
+    all: 4
     cases:
       - outcome: false
         variables:
@@ -629,18 +566,18 @@ scenarios:
           zfs_root: true
 
   - path: roles/zfs_autobackup/tasks/identity.yml
-    expression: not (ansible_check_mode and zfs_autobackup_identity_directory.changed)
+    expression: not (ansible_check_mode and zfs_autobackup_identity_persist_dir.changed)
     all: 2
     cases:
       - outcome: false
         variables:
           ansible_check_mode: true
-          zfs_autobackup_identity_directory:
+          zfs_autobackup_identity_persist_dir:
             changed: true
       - outcome: true
         variables:
           ansible_check_mode: false
-          zfs_autobackup_identity_directory:
+          zfs_autobackup_identity_persist_dir:
             changed: true
 
   # The force-local loop only gets real items after the preceding guards pass.
@@ -786,22 +723,6 @@ scenarios:
             changed: true
 
   # Bootloader, firmware, and installed-unit states unavailable in one fixture
-  - path: roles/boot/tasks/cmdline.yml
-    task: "cmdline | Read fragments"
-    expression: not grub_bootloader
-    cases:
-      - outcome: false
-        variables:
-          grub_bootloader: true
-
-  - path: roles/boot/tasks/cmdline.yml
-    task: "cmdline | Read fragments"
-    expression: boot_cmdline_zbm_fragments_ready
-    cases:
-      - outcome: false
-        variables:
-          boot_cmdline_zbm_fragments_ready: false
-
   - path: roles/boot/tasks/efi_entries.yml
     expression: (_boot_efi_result.stdout | from_json).warnings | default([]) | length > 0
     cases:
@@ -1006,7 +927,7 @@ scenarios:
 
   - path: site.yml
     expression: reboot_required.stat.exists
-    all: 6
+    all: 4
     cases:
       - outcome: false
         variables:
@@ -1100,44 +1021,6 @@ scenarios:
           _reboot_vip_check:
             rc: 1
             stdout: ""
-
-  - path: site.yml
-    expression: qemu_test
-    all: 2
-    cases:
-      - outcome: false
-        variables:
-          qemu_test: false
-      - outcome: true
-        variables:
-          qemu_test: true
-
-  - path: site.yml
-    expression: qemu_dns_reboot_guard_unit.stat.exists | default(false)
-    cases:
-      - outcome: false
-        variables:
-          qemu_dns_reboot_guard_unit:
-            stat:
-              exists: false
-      - outcome: true
-        variables:
-          qemu_dns_reboot_guard_unit:
-            stat:
-              exists: true
-
-  - path: site.yml
-    expression: ansible_play_hosts_all | length > 1
-    cases:
-      - outcome: false
-        variables:
-          ansible_play_hosts_all:
-            - box
-      - outcome: true
-        variables:
-          ansible_play_hosts_all:
-            - lab
-            - pug
 
   - path: site.yml
     expression: inventory_hostname != ansible_play_hosts_all[-1]
@@ -1266,7 +1149,7 @@ scenarios:
 
   - kind: failed_when
     path: roles/influxdb/tasks/bucket.yml
-    line: 51
+    line: 40
     expression: "_influxdb_bucket_user_query.rc != 0 and '404 Not Found: user not found' not in _influxdb_bucket_user_query.stderr"
     cases:
       - outcome: true
@@ -1277,7 +1160,7 @@ scenarios:
 
   - kind: failed_when
     path: roles/influxdb/tasks/bucket.yml
-    line: 91
+    line: 58
     expression: >-
       _influxdb_bucket_bucket_query.rc != 0 and not (
         '404 Not Found: bucket' in _influxdb_bucket_bucket_query.stderr
@@ -1291,7 +1174,7 @@ scenarios:
 
   - kind: failed_when
     path: roles/influxdb/tasks/bucket.yml
-    line: 135
+    line: 79
     expression: >-
       _influxdb_bucket_bucket_id_query.rc != 0 or (_influxdb_bucket_bucket_id_query.stdout
         | from_json
@@ -1434,9 +1317,7 @@ scenarios:
     cases:
       - tasks:
           - Download fan2go binary
-          - Symlink /usr/local/bin/fan2go to versioned binary
           - Download fan2go-tui binary
-          - Symlink /usr/local/bin/fan2go-tui to versioned binary
           - Create fan2go config directories
           - Install /etc/fan2go/fan2go.yaml (per-host)
           - Install /etc/fan2go-tui/fan2go-tui.yaml
@@ -1459,9 +1340,7 @@ scenarios:
     path: roles/gitea/tasks/main.yml
     cases:
       - tasks:
-          - Compose desired OIDC source state
           - Read existing OIDC provisioning fingerprint
-          - Compute desired vs current OIDC fingerprints
         variables:
           qemu_test: false
       - tasks:
@@ -1525,7 +1404,7 @@ scenarios:
       - tasks:
           - Confirm hardware transcoding works
         variables:
-          jellyfin_transcoding_backend: intel_qsv
+          jellyfin_intel_qsv_enabled: true
           qemu_test: false
 
   - kind: task
@@ -1717,7 +1596,7 @@ scenarios:
 
   - kind: until
     path: roles/user/tasks/main.yml
-    line: 232
+    line: 231
     expression: user_gpg_import.rc == 0
     cases:
       - outcome: false
@@ -1727,7 +1606,7 @@ scenarios:
 
   - kind: until
     path: roles/user/tasks/main.yml
-    line: 253
+    line: 252
     expression: user_dotfiles_clone is not failed
     cases:
       - outcome: false
@@ -1737,7 +1616,7 @@ scenarios:
 
   - kind: until
     path: roles/user/tasks/main.yml
-    line: 327
+    line: 326
     expression: user_mise_tools is not failed
     cases:
       - outcome: false
