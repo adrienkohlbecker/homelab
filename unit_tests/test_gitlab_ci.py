@@ -64,8 +64,11 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
     scaffold = pipeline[".qemu_image_arm"]
     lab = pipeline["qemu_image:lab:arm"]
-    pug = pipeline["qemu_image:pug:arm"]
 
+    assert scaffold["extends"] == ".protected_manual_job"
+    assert pipeline[".protected_manual_job"]["rules"] == [
+        {"if": '$CI_COMMIT_REF_PROTECTED == "true"', "when": "manual", "allow_failure": True}
+    ]
     assert scaffold["tags"] == ["aws-shell-qemu-arm"]
     assert scaffold["variables"]["UBUNTU"] == "noble"
     assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
@@ -83,17 +86,15 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     assert "--region" not in scaffold["before_script"][-1]
     assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
 
-    assert lab["resource_group"] == "qemu_image_lab_aarch64_$UBUNTU"
-    assert "--bucket" not in lab["script"][0]
-    assert "--architecture aarch64" in lab["script"][0]
-    assert '--build-id "$CI_PIPELINE_ID.arm-lab-$UBUNTU"' in lab["script"][0]
-
-    assert pug["resource_group"] == "qemu_image_pug_aarch64_$UBUNTU"
-    assert "needs" not in pug
-    assert pug["script"] == [
-        'mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --architecture aarch64 '
-        '--build-id "$CI_PIPELINE_ID.arm-pug-$UBUNTU" --promote'
-    ]
+    assert lab == {
+        "extends": ".qemu_image_arm",
+        "resource_group": "qemu_image_lab_aarch64_$UBUNTU",
+        "script": [
+            'mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 '
+            '--build-id "$CI_PIPELINE_ID.arm-lab-$UBUNTU" --promote'
+        ],
+    }
+    assert "qemu_image:pug:arm" not in pipeline
 
 
 def test_bake_role_uses_shared_qemu_image_bucket() -> None:

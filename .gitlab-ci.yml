@@ -265,21 +265,9 @@ qemu_host_ami:
 
 "qemu_image:lab:arm":
   extends: .qemu_image_arm
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      allow_failure: false
   resource_group: qemu_image_lab_aarch64_$UBUNTU
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-lab-$UBUNTU" --promote
-
-"qemu_image:pug:arm":
-  extends: .qemu_image_arm
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-  resource_group: qemu_image_pug_aarch64_$UBUNTU
-  script:
-    - mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --architecture aarch64 --build-id "$CI_PIPELINE_ID.arm-pug-$UBUNTU" --promote
 
 # Build fox's ZFS-root disk on lab, stream it through a temporary Hetzner rescue
 # server, and retain the two newest snapshots. The published project-global
