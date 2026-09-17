@@ -1139,7 +1139,8 @@ class TestRenderChildPipeline:
         assert scaffold["variables"]["HOMELAB_AARCH64_FIRMWARE_DIR"] == ("/opt/homelab-ci/qemu-firmware/aarch64")
         assert "--region" not in before_script
         assert "--bucket" not in before_script
-        assert "--architecture aarch64" in before_script
+        assert 'if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images' in before_script
+        assert '--architecture aarch64; fi' in before_script
         assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
         assert scaffold["artifacts"]["paths"] == ["test/out/"]
 
