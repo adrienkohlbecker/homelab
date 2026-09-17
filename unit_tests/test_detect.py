@@ -1046,6 +1046,15 @@ class TestGitlabChangeMatrix:
         monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["full"])
         assert detect._gitlab_change_matrix(None, lambda _: None) == (["full"], True)
 
+    def test_site_playbook_change_triggers_only_site_jobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CI_BASE_REF", "explicit")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
+        monkeypatch.setattr(detect, "git_diff_files", lambda base: ["site.yml"])
+        monkeypatch.setattr(detect, "list_testable_roles", list)
+        monkeypatch.setattr(detect, "build_role_deps_map", dict)
+
+        assert detect._gitlab_change_matrix(None, lambda _: None) == ([], True)
+
 
 class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:

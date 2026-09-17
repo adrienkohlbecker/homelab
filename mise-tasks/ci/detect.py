@@ -733,7 +733,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     else:
         log("no role-relevant changes; matrix will be empty")
 
-    return cells_to_ci_specs(build_test_matrix(roles_sorted, release_cells)), False
+    return cells_to_ci_specs(build_test_matrix(roles_sorted, release_cells)), "site.yml" in changed
 
 
 def _cmd_gitlab(args: list[str]) -> int:
