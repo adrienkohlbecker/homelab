@@ -5,29 +5,25 @@ set -euo pipefail
   exit 1
 }
 
-filesystem=${1:-}
+pool=${1:-}
 
-if [ -z "$filesystem" ]; then
-  echo >&2 "Usage: zfs_update_mount_cache FILESYSTEM"
+if [ -z "$pool" ]; then
+  echo >&2 "Usage: zfs_update_mount_cache POOL"
   exit 1
 fi
-if [[ ! "$filesystem" =~ ^[a-zA-Z0-9_./-]+$ ]]; then
-  echo >&2 "Invalid filesystem name: $filesystem"
+if [[ ! "$pool" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+  echo >&2 "Invalid pool name: $pool"
   exit 1
 fi
-cachefile=${filesystem%%/*}
-if [[ ! "$cachefile" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-  echo >&2 "Invalid pool name derived from filesystem: $cachefile"
-  exit 1
-fi
-if [ ! -f "/etc/zfs/zfs-list.cache/$cachefile" ]; then
-  echo >&2 "Cache file '$cachefile' does not exist"
+cache_file="/etc/zfs/zfs-list.cache/$pool"
+if [ ! -f "$cache_file" ]; then
+  echo >&2 "Cache file '$pool' does not exist"
   exit 1
 fi
 
-canmount=$(zfs get -o value -pH canmount "$filesystem")
-before=$(md5sum "/etc/zfs/zfs-list.cache/$cachefile" | cut -f 1 -d " ")
-zfs set canmount="$canmount" "$filesystem"
+canmount=$(zfs get -o value -pH canmount "$pool")
+before=$(md5sum "$cache_file" | cut -f 1 -d " ")
+zfs set canmount="$canmount" "$pool"
 
 # zed's history_event-zfs-list-cacher.sh regenerates this cache file
 # asynchronously in response to the canmount-set above. Poll for the content
@@ -43,7 +39,7 @@ prev=initial
 after=$before
 for _ in $(seq 1 25); do
   sleep 0.2
-  after=$(md5sum "/etc/zfs/zfs-list.cache/$cachefile" | cut -f 1 -d " ")
+  after=$(md5sum "$cache_file" | cut -f 1 -d " ")
   if [ "$after" != "$prev" ]; then
     prev=$after
     continue

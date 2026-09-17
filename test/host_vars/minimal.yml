@@ -7,7 +7,7 @@ qemu_test_minimal: true
 zfs_root: false
 zfs_trim_pools: []
 zfs_pool_properties: []
-zfs_mount_cache_datasets: []
+zfs_mount_cache_pools: []
 # Mirror Fox's small-VM ARC policy (no floor, 512 MiB cap) so zfs.conf.j2
 # renders its unset-minimum branch; Lab and Pug test fixtures set both bounds.
 zfs_arc_min: 0

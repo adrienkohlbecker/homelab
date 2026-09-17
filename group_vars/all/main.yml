@@ -39,7 +39,7 @@ zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
 # The pool roots exist before service datasets, so the mount cache can be
 # initialized before the dataset-producing roles run.
-zfs_mount_cache_datasets:
+zfs_mount_cache_pools:
   - rpool
 
 macvlan_blocks: []

@@ -10,7 +10,7 @@ zfs_pool_properties:
   - { pool: dozer, name: autotrim, value: "on" }
   - { pool: tank, name: autotrim, value: "on" }
 # Each pool root exists before its service datasets are created.
-zfs_mount_cache_datasets:
+zfs_mount_cache_pools:
   - rpool
   - dozer
   - tank

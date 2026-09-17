@@ -20,7 +20,7 @@
     owner: root
     group: root
     mode: "0644"
-  loop: "{{ zfs_mount_cache_datasets }}"
+  loop: "{{ zfs_mount_cache_pools }}"
   become: true
   tags:
     - zfs
@@ -55,7 +55,7 @@
   command: /usr/local/bin/zfs_update_mount_cache {{ item }}
   register: zfs_mount_cache_cmd
   changed_when: "'file updated' in zfs_mount_cache_cmd.stdout"
-  loop: "{{ zfs_mount_cache_datasets }}"
+  loop: "{{ zfs_mount_cache_pools }}"
   become: true
   tags:
     - zfs

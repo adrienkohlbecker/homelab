@@ -250,7 +250,7 @@
 
 - name: _verify | Read mount cache content for each pool
   command: cat /etc/zfs/zfs-list.cache/{{ item }}
-  loop: "{{ zfs_mount_cache_datasets }}"
+  loop: "{{ zfs_mount_cache_pools }}"
   register: _zfs_verify_cache_files
   changed_when: false
   become: true
@@ -272,12 +272,12 @@
     extra_zfs_properties:
       canmount: "off"
       mountpoint: none
-  loop: "{{ zfs_mount_cache_datasets }}"
+  loop: "{{ zfs_mount_cache_pools }}"
   become: true
 
 - name: _verify | Mount cache follows later dataset creation
   command: cat /etc/zfs/zfs-list.cache/{{ item }}
-  loop: "{{ zfs_mount_cache_datasets }}"
+  loop: "{{ zfs_mount_cache_pools }}"
   register: _zfs_verify_new_cache
   changed_when: false
   until: (item ~ '/_verify_mount_cache') in _zfs_verify_new_cache.stdout

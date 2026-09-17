@@ -11,14 +11,14 @@
       - zfs_trim_pools is defined
       - zfs_trim_pools is not string
       - zfs_trim_pools is iterable
-      - zfs_mount_cache_datasets is defined
-      - zfs_mount_cache_datasets is not string
-      - zfs_mount_cache_datasets is iterable
+      - zfs_mount_cache_pools is defined
+      - zfs_mount_cache_pools is not string
+      - zfs_mount_cache_pools is iterable
       - zfs_trim_pools | select('search', '/') | list | length == 0
-      - zfs_mount_cache_datasets | select('search', '/') | list | length == 0
+      - zfs_mount_cache_pools | select('search', '/') | list | length == 0
     fail_msg: >-
       zfs_root must be a bool; zfs_trim_pools must contain bare pool names; and
-      zfs_mount_cache_datasets must contain pool root datasets.
+      zfs_mount_cache_pools must contain bare pool names.
   tags:
     - zfs
 
