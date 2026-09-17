@@ -14,9 +14,18 @@ def test_root_host_vars_never_name_a_fixture_host() -> None:
     # The harness copies host_vars/ beside every test playbook, so a file named
     # after a fixture host would load prod settings into that fixture.
     fixture_hosts = {host.name for host in load_inventory("test/inventory.ini").get_hosts()}
-    root_host_vars = {path.stem for path in (ROOT / "host_vars").glob("*.yml")}
+    root_host_vars = {
+        path.stem
+        for path in (ROOT / "host_vars").iterdir()
+        if path.is_dir() or path.suffix in {".yml", ".yaml"}
+    }
 
     assert not root_host_vars & fixture_hosts
+
+
+def test_fixture_inventory_never_loads_physical_host_vars() -> None:
+    physical_groups = {name for name in load_inventory("test/inventory.ini").groups if name.startswith("physical_")}
+    assert not physical_groups
 
 
 def test_group_vars_files_name_an_inventory_group() -> None:
