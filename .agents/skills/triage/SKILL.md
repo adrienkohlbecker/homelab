@@ -45,7 +45,7 @@ For each host/unit, run the remote service commands with `sudo`:
 
 Once locally:
 
-- `git log --since=30.days.ago --format='%h %cr %s' -- roles/$ARGUMENTS/ group_vars/physical_<h>.yml group_vars/storage_<h>.yml group_vars/all/`
+- `git log --since=30.days.ago --format='%h %cr %s' -- roles/$ARGUMENTS/ group_vars/prod.yml group_vars/physical_<h>.yml group_vars/storage_<h>.yml group_vars/all/`
 - Mark unpushed when `git log origin/master..HEAD -- roles/$ARGUMENTS/` is
   non-empty.
 

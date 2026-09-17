@@ -244,7 +244,7 @@ SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-author
 
 ### Test environment design
 
-Details in [notes/test_environment_design.md](notes/test_environment_design.md). **Packer images exist only for qemu test fixtures** — prod hosts are configured by ansible from stock Ubuntu. There are exactly two maintained and promoted Packer variants: `lab`, the default integration fixture with Lab-style mirrored storage, and `pug`, for roles that need Pug's single-rpool partitioning or apoc layout. Both images contain only the base OS and storage layout; role dependencies are installed by each test cell. `minimal` remains a downloaded vanilla cloud-image fixture for non-ZFS, GRUB, cloud-init, and fresh-install branches; it is not built or promoted by this repository.
+Details in [notes/test_environment_design.md](notes/test_environment_design.md). There are two maintained and promoted **QEMU test-fixture** Packer variants: `lab`, the default integration fixture with Lab-style mirrored storage, and `pug`, for roles that need Pug's single-rpool partitioning or apoc layout. Both contain only the base OS and storage layout; role dependencies are installed by each test cell. The Hetzner image and AWS qemu-host AMI are separate Packer builds, not role-test fixtures. `minimal` remains a downloaded vanilla cloud-image fixture for non-ZFS, GRUB, cloud-init, and fresh-install branches; it is not built or promoted by this repository.
 
 ## Continuous Integration
 
@@ -266,8 +266,8 @@ Don't commit decrypted data; access secrets via `ansible-vault edit <path>`. Wir
 
 Two passwords, two scopes ([ansible.cfg](ansible.cfg): `vault_identity_list = prod@vault-client.sh, test@vault-client.sh`, `vault_id_match = True`).
 
-- `prod` — encrypts `group_vars/prod.yml` + `group_vars/physical_*.yml`. Local workstations only; never in CI.
-- `test` — encrypts `group_vars/test.yml` + `test/host_vars/`. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
+- `prod` — vault id for inline `!vault` values in `group_vars/prod.yml` and physical-host vars. Local workstations only; never in CI.
+- `test` — vault id for inline `!vault` values in `group_vars/test.yml` and test-host vars. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
 
 [vault-client.sh](vault-client.sh): lookup per id: env `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` (CI), then macOS keychain `homelab-vault-<id>`, then Linux `~/.config/homelab/vault-pass-<id>` (0400). Bootstrap: [notes/runbooks/vault_setup.md](notes/runbooks/vault_setup.md). New values: `encrypt_string --encrypt-vault-id prod` (or `test`).
 
