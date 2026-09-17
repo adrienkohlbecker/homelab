@@ -15,9 +15,7 @@ def test_root_host_vars_never_name_a_fixture_host() -> None:
     # after a fixture host would load prod settings into that fixture.
     fixture_hosts = {host.name for host in load_inventory("test/inventory.ini").get_hosts()}
     root_host_vars = {
-        path.stem
-        for path in (ROOT / "host_vars").iterdir()
-        if path.is_dir() or path.suffix in {".yml", ".yaml"}
+        path.stem for path in (ROOT / "host_vars").iterdir() if path.is_dir() or path.suffix in {".yml", ".yaml"}
     }
 
     assert not root_host_vars & fixture_hosts

@@ -243,6 +243,7 @@ class TestMachineUbuntuValidation:
         with pytest.raises(ValueError, match="Unknown Ubuntu release"):
             machine_factory(machine="lab", role="test", ubuntu_name="bogus")
 
+
 class TestMachineArtifactOwnership:
     def test_clears_and_cleans_every_per_run_artifact(
         self,
