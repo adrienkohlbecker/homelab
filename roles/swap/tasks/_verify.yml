@@ -96,12 +96,11 @@
 # the reason it exists -- the active-swap assert above proves it's usable but
 # not that the mirror is intact. A regression that assembled the wrong level
 # or left the array degraded would pass swapon yet silently lose fault
-# tolerance. Gated on the resolved device being an md node, so Pug's plain
-# partition and minimal's zram-only layout skip it; Lab exercises this path.
-# (Initial-create resync may still be
-# running here -- harmless: all members are active-sync throughout, so the
-# level/failed-count asserts hold; we deliberately don't gate on 'clean' to
-# avoid racing the resync.)
+# tolerance. Gated on swap_partition resolving to an md node: Minimal has no
+# partition, Pug uses a plain partition, and Lab exercises this path.
+# Initial-create resync may still be running here; all members are active-sync,
+# so the level/failed-count asserts hold. We don't gate on 'clean' because
+# that would race the resync.
 - name: _verify | Inspect the swap raid array when swap is on mdadm
   when:
     - swap_partition is defined

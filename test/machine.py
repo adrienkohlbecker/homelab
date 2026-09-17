@@ -1380,6 +1380,7 @@ class Machine:
         if target.exists():
             return target
 
+        # Several cells share this cache; wait without blocking the event loop.
         lockfile = cache / f"{name}.lock"
         fd = os.open(str(lockfile), os.O_RDWR | os.O_CREAT, 0o644)
         try:

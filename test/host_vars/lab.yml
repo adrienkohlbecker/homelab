@@ -42,8 +42,8 @@ netdata_intelgpu_enabled: true
 netdata_contexts:
   - system.cpu              # always-live chart, baseline
   - foo.does_not_exist      # never-existed chart, probes the "missing-chart" gap
-# Integration is the positive fixture for the primary-only alert; its priority
-# remains outside the production election map.
+# The fixture priority (5) is below the production map's maximum, so the role
+# default would disable the primary-only alert. Force it on for this test.
 netdata_keepalived_lost_master_alert: true
 netdata_keepalived_vrrp_ip: 198.51.100.10
 netdata_keepalived_vrrp_update_every: 5

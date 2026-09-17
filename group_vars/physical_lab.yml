@@ -10,8 +10,8 @@ ssh_public_keys_additional: |
 
 zfs_arc_min: 1073741824   # 1 GiB — let ARC shrink under pressure so qemu VMs can wire
 zfs_arc_max: 4294967296   # 4 GiB — halved from 8 to free headroom for 6 concurrent CI VMs
-# zram is the primary swap; the 16G RAID1 partition above is the deadlock-free-by-
-# coldness overflow (notes/swap_strategy.md).
+# zram is the primary swap; the 16G RAID1 partition in storage_lab.yml is the
+# deadlock-free-by-coldness overflow (notes/swap_strategy.md).
 swap_zram_size: 8G
 
 podman_operator_prune_enabled: true

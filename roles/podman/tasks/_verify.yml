@@ -198,7 +198,7 @@
       changed_when: false
       failed_when: false
 
-# Box Noble prestarts the daemon, so its live argv proves the drop-in took
+# Pug Noble prestarts the daemon, so its live argv proves the drop-in took
 # effect after the restart rather than merely being loaded by systemd.
 - name: _verify | Read the running podman.service PID
   when:

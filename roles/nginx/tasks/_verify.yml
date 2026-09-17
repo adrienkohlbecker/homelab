@@ -478,7 +478,7 @@
       assert:
         that: ansible_failed_task.name is search('Verify unauthenticated redirect')
 
-# The nginx_ipv6 path (host_vars/fox.yml only, never in the test matrix)
+# The nginx_ipv6 path (group_vars/physical_fox.yml only, never in the test matrix)
 # renders [::]-listeners in site.conf.j2 / nginx.conf.j2 that nothing
 # else exercises. The firewall role's disable_ipv6 sysctl does NOT run in the
 # nginx test path, so the Lab VM has IPv6 live and we can bind + probe it for

@@ -19,7 +19,7 @@ lm_sensors_config: |
       set temp7_max 90
       set temp7_max_hyst 85
 
-# zram is the primary swap; the partition above is the overflow
+# zram is the primary swap; the partition in storage_pug.yml is the overflow
 # (notes/swap_strategy.md).
 swap_zram_size: 8G
 

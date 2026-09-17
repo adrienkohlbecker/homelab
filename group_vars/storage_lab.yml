@@ -9,6 +9,7 @@ zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
   - { pool: dozer, name: autotrim, value: "on" }
   - { pool: tank, name: autotrim, value: "on" }
+# One canmount=on dataset per pool gives zfs-mount-generator a cache entry.
 zfs_mount_cache_datasets:
   - rpool/ROOT/{{ ansible_distribution_release }}
   - dozer/minio

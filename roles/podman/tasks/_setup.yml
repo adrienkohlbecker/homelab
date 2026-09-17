@@ -1,5 +1,5 @@
 ---
-# Box Noble prestarts the API daemon to exercise the existing-service restart.
+# Pug Noble prestarts the API daemon to exercise the existing-service restart.
 - name: _setup | Prepare the running-service restart exercise
   when:
     - not qemu_test_minimal

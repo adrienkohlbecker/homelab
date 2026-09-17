@@ -426,7 +426,7 @@
     - jellyfin
 
 # Functional HW-transcode gate. This is the only place the real VAAPI/QSV
-# path can be exercised: Lab cannot (phantom render node + no codec
+# path can be exercised: the Lab fixture cannot (phantom render node + no codec
 # silicon) and _verify runs only against qemu, never prod. A regression to
 # silent software fallback (e.g. the crun 0.17 device-cgroup bug that
 # denied libdrm's access(F_OK) probe) passes every stat check, so assert

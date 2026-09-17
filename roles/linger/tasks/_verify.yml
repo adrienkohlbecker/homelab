@@ -33,7 +33,7 @@
   become: true
 
 # Probe the runtime directory rather than its bus socket: the minimal fixture
-# fixture lacks dbus-user-session.
+# lacks dbus-user-session.
 - name: _verify | XDG_RUNTIME_DIR is provisioned
   stat:
     path: /run/user/{{ _linger_user.uid }}
