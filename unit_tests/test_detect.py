@@ -167,7 +167,7 @@ class TestPropagateReleaseCells:
             "load_role_test_config",
             lambda role: SimpleNamespace(
                 ubuntu=role_releases.get(role, []),
-                machines=role_machines.get(role, ["box"]),
+                machines=role_machines.get(role, ["lab"]),
             ),
         )
 
@@ -175,7 +175,7 @@ class TestPropagateReleaseCells:
         self._stub_configs(
             monkeypatch,
             {"apt_source": ["noble", "resolute"]},
-            {"nginx": ["box"], "podman": ["box_deps"]},
+            {"nginx": ["lab"], "podman": ["lab"]},
         )
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
@@ -183,10 +183,10 @@ class TestPropagateReleaseCells:
             universe={"nginx", "podman"},
         )
         assert result == [
-            detect.TestCell("box", "noble", "nginx"),
-            detect.TestCell("box", "resolute", "nginx"),
-            detect.TestCell("box_deps", "noble", "podman"),
-            detect.TestCell("box_deps", "resolute", "podman"),
+            detect.TestCell("lab", "noble", "nginx"),
+            detect.TestCell("lab", "noble", "podman"),
+            detect.TestCell("lab", "resolute", "nginx"),
+            detect.TestCell("lab", "resolute", "podman"),
         ]
 
     @pytest.mark.parametrize(
@@ -208,7 +208,7 @@ class TestPropagateReleaseCells:
             "universe": {"nginx"},
         }
         arguments.update(overrides)
-        self._stub_configs(monkeypatch, arguments.pop("releases"), {"nginx": ["box"]})
+        self._stub_configs(monkeypatch, arguments.pop("releases"), {"nginx": ["lab"]})
 
         assert detect.propagate_release_cells(**arguments) == []
 
@@ -219,22 +219,22 @@ class TestPropagateReleaseCells:
             consumers={"apt_source": ["newrole"]},
             universe={"newrole"},
         )
-        assert result == [detect.TestCell("box", "noble", "newrole")]
+        assert result == [detect.TestCell("lab", "noble", "newrole")]
 
     def test_deduplicates_across_helpers(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._stub_configs(monkeypatch, {"helper_a": ["noble"], "helper_b": ["noble"]}, {"consumer": ["box"]})
+        self._stub_configs(monkeypatch, {"helper_a": ["noble"], "helper_b": ["noble"]}, {"consumer": ["lab"]})
         result = detect.propagate_release_cells(
             direct_roles=["helper_a", "helper_b"],
             consumers={"helper_a": ["consumer"], "helper_b": ["consumer"]},
             universe={"consumer"},
         )
-        assert result == [detect.TestCell("box", "noble", "consumer")]
+        assert result == [detect.TestCell("lab", "noble", "consumer")]
 
     def test_multiple_roles_multiple_releases(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._stub_configs(
             monkeypatch,
             {"apt_source": ["noble", "resolute"], "podman": ["noble"]},
-            {"nginx": ["box"], "redis": ["box_deps"]},
+            {"nginx": ["lab"], "redis": ["lab"]},
         )
         result = detect.propagate_release_cells(
             direct_roles=["apt_source", "podman"],
@@ -242,21 +242,21 @@ class TestPropagateReleaseCells:
             universe={"nginx", "redis"},
         )
         assert result == [
-            detect.TestCell("box", "noble", "nginx"),
-            detect.TestCell("box", "resolute", "nginx"),
-            detect.TestCell("box_deps", "noble", "redis"),
-            detect.TestCell("box_deps", "resolute", "redis"),
+            detect.TestCell("lab", "noble", "nginx"),
+            detect.TestCell("lab", "noble", "redis"),
+            detect.TestCell("lab", "resolute", "nginx"),
+            detect.TestCell("lab", "resolute", "redis"),
         ]
 
     def test_multi_machine_propagation(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._stub_configs(monkeypatch, {"apt_source": ["noble"]}, {"cleanup": ["box", "minimal"]})
+        self._stub_configs(monkeypatch, {"apt_source": ["noble"]}, {"cleanup": ["lab", "minimal"]})
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["cleanup"]},
             universe={"cleanup"},
         )
         assert result == [
-            detect.TestCell("box", "noble", "cleanup"),
+            detect.TestCell("lab", "noble", "cleanup"),
             detect.TestCell("minimal", "noble", "cleanup"),
         ]
 
@@ -1099,18 +1099,18 @@ class TestRenderChildPipeline:
         # build ids stage-by-stage) gives it the lowest id and a runner claims
         # it first. needs:[] (from .cell) keeps it parallel, so the leading
         # stage never gates the cells.
-        doc = _render_child_doc(["nginx:box", "podman:box:noble"], site_test=True)
+        doc = _render_child_doc(["nginx:lab", "podman:lab:noble"], site_test=True)
         assert doc["stages"] == ["site", "test1", "test2"]
-        assert doc["_site_test:box"]["stage"] == "site"
-        assert doc["_site_check:box"]["stage"] == "site"
+        assert doc["_site_test:lab"]["stage"] == "site"
+        assert doc["_site_check:lab"]["stage"] == "site"
         assert doc[".cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
         # site_test with no cells still seeds a single leading `site` stage.
         doc = _render_child_doc([], site_test=True)
         assert doc["stages"] == ["site"]
-        assert doc["_site_test:box"]["stage"] == "site"
-        assert doc["_site_check:box"]["stage"] == "site"
+        assert doc["_site_test:lab"]["stage"] == "site"
+        assert doc["_site_check:lab"]["stage"] == "site"
         assert "no_cells" not in doc
 
     def test_empty_gets_noop_placeholder(self) -> None:
@@ -1123,7 +1123,7 @@ class TestRenderChildPipeline:
         assert jobs == ["no_cells"]
 
     def test_arm_scaffold_uses_frankfurt_images_and_bounded_runtime(self) -> None:
-        doc = _render_child_doc(["apt:box"], site_test=False)
+        doc = _render_child_doc(["apt:lab"], site_test=False)
         scaffold = doc[".arm_cell"]
         before_script = "\n".join(scaffold["before_script"])
 
@@ -1139,42 +1139,42 @@ class TestRenderChildPipeline:
 
     def test_arm_metadata_preserves_change_selection_and_gates(self) -> None:
         doc = _render_child_doc(
-            ["apt:box:resolute", "boot:minimal", "fan2go:box", "nginx:box"],
+            ["apt:lab:resolute", "boot:minimal", "fan2go:lab", "nginx:lab"],
             site_test=False,
         )
 
-        assert "apt:box:aarch64" in doc
+        assert "apt:lab:aarch64" in doc
         assert "boot:minimal:aarch64" not in doc
-        assert "fan2go:box:aarch64" not in doc
-        assert "nginx:box:aarch64" not in doc
+        assert "fan2go:lab:aarch64" not in doc
+        assert "nginx:lab:aarch64" not in doc
         assert doc["stages"][-1] == "arm"
-        assert "when" not in doc["apt:box:aarch64"]
-        assert "allow_failure" not in doc["apt:box:aarch64"]
+        assert "when" not in doc["apt:lab:aarch64"]
+        assert "allow_failure" not in doc["apt:lab:aarch64"]
 
     def test_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
         doc = _render_child_doc(specs, site_test=True)
         x86_jobs = [name for name in specs if name in doc]
         arm_jobs = {
-            "apt:box:aarch64",
-            "boot:box:aarch64",
-            "packer:box:aarch64",
-            "user:box:aarch64",
-            "netdata:box_deps:aarch64",
-            "minio:box_deps:aarch64",
-            "lnav:box:aarch64",
-            "gitlab_runner:box_deps:aarch64",
-            "gitea:box:aarch64",
-            "kdump:box:aarch64",
-            "refind:box:aarch64",
-            "zfsbootmenu:box:aarch64",
+            "apt:lab:aarch64",
+            "boot:lab:aarch64",
+            "packer:lab:aarch64",
+            "user:lab:aarch64",
+            "netdata:lab:aarch64",
+            "minio:lab:aarch64",
+            "lnav:lab:aarch64",
+            "gitlab_runner:lab:aarch64",
+            "gitea:lab:aarch64",
+            "kdump:lab:aarch64",
+            "refind:lab:aarch64",
+            "zfsbootmenu:lab:aarch64",
         }
 
         assert len(x86_jobs) == len(specs)
         assert {name for name in doc if name.endswith(":aarch64")} == arm_jobs
 
     def test_lab_target_never_renders_arm_jobs(self) -> None:
-        doc = _render_child_doc(["apt:box"], site_test=False, target="lab")
+        doc = _render_child_doc(["apt:lab"], site_test=False, target="lab")
 
         assert ".arm_cell" not in doc
         assert not any(name.endswith(":aarch64") for name in doc)
@@ -1350,13 +1350,13 @@ class TestCmdGitlab:
         assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == in_aws
 
     def test_aws_target_automatically_selects_arm(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["apt:box"])
+        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["apt:lab"])
         child = tmp_path / "child.yml"
 
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
 
-        assert "apt:box:aarch64" in loaded
+        assert "apt:lab:aarch64" in loaded
 
     def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         child = tmp_path / "child.yml"

@@ -81,7 +81,7 @@ class TestJoblogRoundTrip:
         log = tmp_path / "out.tsv"
         monkeypatch.setattr(testall, "LOG_FILE", log)
         results = [
-            testall.JobResult(testall.TestCell("box", "noble", "nginx"), 12.345, 0, "2026-01-01T00:00:00Z"),
+            testall.JobResult(testall.TestCell("lab", "noble", "nginx"), 12.345, 0, "2026-01-01T00:00:00Z"),
             testall.JobResult(testall.TestCell("lab", "noble", "podman"), 60.0, 1, "2026-01-01T01:00:00Z"),
         ]
         testall._write_joblog(results)

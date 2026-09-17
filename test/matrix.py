@@ -189,7 +189,9 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     if errors:
         raise RoleTestConfigError(meta_path, errors)
 
-    return RoleTestConfig(base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip), tuple(arm_machines), memory_mb)
+    return RoleTestConfig(
+        base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip), tuple(arm_machines), memory_mb
+    )
 
 
 def build_role_cells(role: str) -> list[TestCell]:

@@ -1,4 +1,4 @@
-# The standalone apt_source:box cell configures a representative real source.
+# The standalone apt_source:lab cell configures a representative real source.
 - name: _verify | Standalone — configure a representative source under test
   import_role:
     name: apt_source

@@ -138,7 +138,7 @@
     - user
 
 # Gate the compile on the source copy so an updated terminfo recompiles,
-# but skip the check-mode fresh-box case where the copy only reports the
+# but skip the check-mode fresh-fixture case where the copy only reports the
 # change without writing the file tic would read.
 - name: Compile Ghostty terminfo
   when: user_ghostty_terminfo.changed and not ansible_check_mode

@@ -36,7 +36,7 @@ def test_lab_qemu_image_is_published_for_supported_releases() -> None:
         "resource_group": "qemu_image_lab_$UBUNTU",
         "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote'],
     }
-    assert pipeline["qemu_image:pug"] == {
+    assert PIPELINE["qemu_image:pug"] == {
         "extends": ".qemu_image",
         "resource_group": "qemu_image_pug_$UBUNTU",
         "script": ['mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --promote'],
@@ -83,17 +83,16 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     assert "--region" not in scaffold["before_script"][-1]
     assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
 
-    assert box["resource_group"] == "qemu_image_box_aarch64_$UBUNTU"
-    assert "--bucket" not in box["script"][0]
-    assert "--architecture aarch64" in box["script"][0]
-    assert '--build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU"' in box["script"][0]
+    assert lab["resource_group"] == "qemu_image_lab_aarch64_$UBUNTU"
+    assert "--bucket" not in lab["script"][0]
+    assert "--architecture aarch64" in lab["script"][0]
+    assert '--build-id "$CI_PIPELINE_ID.arm-lab-$UBUNTU"' in lab["script"][0]
 
-    assert box_deps["resource_group"] == "qemu_image_box_deps_aarch64_$UBUNTU"
-    assert box_deps["needs"] == [{"job": "qemu_image:box:arm", "artifacts": False}]
-    assert "variables" not in box_deps
-    assert box_deps["script"] == [
-        'mise run packer:publish-qemu box_deps --ubuntu "$UBUNTU" --architecture aarch64 --base-build-id "$CI_PIPELINE_ID.arm-box-$UBUNTU" '
-        '--build-id "$CI_PIPELINE_ID.arm-box-deps-$UBUNTU" --promote'
+    assert pug["resource_group"] == "qemu_image_pug_aarch64_$UBUNTU"
+    assert "needs" not in pug
+    assert pug["script"] == [
+        'mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --architecture aarch64 '
+        '--build-id "$CI_PIPELINE_ID.arm-pug-$UBUNTU" --promote'
     ]
 
 

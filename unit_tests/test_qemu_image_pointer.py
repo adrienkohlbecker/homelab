@@ -55,8 +55,8 @@ class TestImageStore:
     def test_both_architectures_use_one_regional_store_with_distinct_prefixes(self) -> None:
         assert upload.image_store("x86_64") == ("homelab-ci-images", "eu-central-1")
         assert upload.image_store("aarch64") == ("homelab-ci-images", "eu-central-1")
-        assert upload.image_prefix("x86_64", "noble", "box") == "x86/noble/box"
-        assert upload.image_prefix("aarch64", "noble", "box") == "aarch64/noble/box"
+        assert upload.image_prefix("x86_64", "noble", "lab") == "x86/noble/lab"
+        assert upload.image_prefix("aarch64", "noble", "lab") == "aarch64/noble/lab"
         assert {"aarch64", "x86_64"} == upload.VALID_ARCHITECTURES
 
     def test_unknown_architecture_is_rejected(self) -> None:
@@ -90,8 +90,8 @@ def test_upload_targets_architecture_prefix(
 
     assert upload.main() == 0
     output = capsys.readouterr().out
-    assert f"target:   s3://homelab-ci-images/{prefix}/noble/box/{args.build_id}/" in output
-    assert f"DRY RUN: would write pointer {prefix}/noble/box/promoted.json" in output
+    assert f"target:   s3://homelab-ci-images/{prefix}/noble/lab/{args.build_id}/" in output
+    assert f"DRY RUN: would write pointer {prefix}/noble/lab/promoted.json" in output
 
 
 class TestSourceSha:
@@ -189,7 +189,7 @@ class TestManifest:
         manifest = {
             "architecture": "x86_64",
             "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
-            "machine": "box",
+            "machine": "lab",
             "format_version": 2,
             "source_sha": "d" * 40,
             "ubuntu": "noble",
@@ -209,7 +209,7 @@ class TestManifest:
         manifest = {
             "architecture": "x86_64",
             "bundle": {"name": "disks.tar.zst", "sha256": "a" * 64},
-            "machine": "box",
+            "machine": "lab",
             "source_sha": "d" * 40,
             "ubuntu": "noble",
             "build_id": "ci-42-gdeadbeef0000",
@@ -507,12 +507,12 @@ class TestDownloadStream:
 
         monkeypatch.setattr(hydrate.subprocess, "Popen", popen)
 
-        with hydrate.download_s3_stream(_args(), "x86/noble/box/build/disks.tar.zst") as stream:
+        with hydrate.download_s3_stream(_args(), "x86/noble/lab/build/disks.tar.zst") as stream:
             assert stream.read() == b"bundle"
 
         assert process is not None
         assert process.args[-4:] == ["-", "--only-show-errors", "--checksum-mode", "ENABLED"]
-        assert "s3://homelab-ci-images/x86/noble/box/build/disks.tar.zst" in process.args
+        assert "s3://homelab-ci-images/x86/noble/lab/build/disks.tar.zst" in process.args
 
     def test_failed_download_is_not_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
         process = self.FakeProcess([], stdout=subprocess.PIPE)
@@ -534,7 +534,7 @@ class TestDownloadStream:
 
 class TestLocalCache:
     def _hydrated_tree(self, tmp_path: Path) -> tuple[Path, argparse.Namespace, object]:
-        target = tmp_path / "noble" / "box"
+        target = tmp_path / "noble" / "lab"
         target.mkdir(parents=True)
         disk = target / "packer-ubuntu-1.raw"
         efivars = target / "efivars.fd"
@@ -611,18 +611,18 @@ class TestRetention:
             lambda _argv: json.dumps(
                 {
                     "Contents": [
-                        {"Key": "x86/noble/box/promoted.json", "LastModified": "2026-01-03T00:00:00Z"},
-                        {"Key": "x86/noble/box/b1/manifest.json", "LastModified": "2026-01-01T00:00:00Z"},
-                        {"Key": "x86/noble/box/b1/disks.tar.zst", "LastModified": "2026-01-02T00:00:00Z"},
+                        {"Key": "x86/noble/lab/promoted.json", "LastModified": "2026-01-03T00:00:00Z"},
+                        {"Key": "x86/noble/lab/b1/manifest.json", "LastModified": "2026-01-01T00:00:00Z"},
+                        {"Key": "x86/noble/lab/b1/disks.tar.zst", "LastModified": "2026-01-02T00:00:00Z"},
                     ]
                 }
             ),
         )
 
-        assert upload.list_build_objects("bucket", "x86/noble/box", "region") == {
+        assert upload.list_build_objects("bucket", "x86/noble/lab", "region") == {
             "b1": {
                 "last_modified": "2026-01-02T00:00:00Z",
-                "keys": ["x86/noble/box/b1/manifest.json", "x86/noble/box/b1/disks.tar.zst"],
+                "keys": ["x86/noble/lab/b1/manifest.json", "x86/noble/lab/b1/disks.tar.zst"],
             }
         }
 
@@ -665,7 +665,7 @@ class TestConditionalWrites:
         calls = self._fake_aws(monkeypatch)
         current = '"abc"'
 
-        upload.write_pointer("bucket", "x86/noble/box/promoted.json", "new body\n", "region", current)
+        upload.write_pointer("bucket", "x86/noble/lab/promoted.json", "new body\n", "region", current)
 
         assert calls[0][calls[0].index("--if-match") + 1] == '"abc"'
         assert "--if-none-match" not in calls[0]
@@ -674,7 +674,7 @@ class TestConditionalWrites:
     def test_first_pointer_requires_the_key_to_be_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls = self._fake_aws(monkeypatch)
 
-        upload.write_pointer("bucket", "x86/noble/box/promoted.json", "body\n", "region", None)
+        upload.write_pointer("bucket", "x86/noble/lab/promoted.json", "body\n", "region", None)
 
         assert calls[0][calls[0].index("--if-none-match") + 1] == "*"
 
@@ -683,7 +683,7 @@ class TestConditionalWrites:
         self._fake_aws(monkeypatch, returncode=254, stderr=f"An error occurred ({error}) when calling PutObject")
 
         with pytest.raises(SystemExit, match="changed during promotion"):
-            upload.write_pointer("bucket", "x86/noble/box/promoted.json", "body\n", "region", None)
+            upload.write_pointer("bucket", "x86/noble/lab/promoted.json", "body\n", "region", None)
 
     def test_existing_manifest_is_never_overwritten(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         calls = self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (PreconditionFailed)")
@@ -691,33 +691,33 @@ class TestConditionalWrites:
         manifest.write_text("{}\n")
 
         with pytest.raises(SystemExit, match="refusing to overwrite existing object"):
-            upload.publish_manifest("bucket", manifest, "x86/noble/box/b1/manifest.json", "region")
+            upload.publish_manifest("bucket", manifest, "x86/noble/lab/b1/manifest.json", "region")
         assert calls[0][calls[0].index("--if-none-match") + 1] == "*"
 
     def test_other_write_failures_propagate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._fake_aws(monkeypatch, returncode=254, stderr="An error occurred (AccessDenied)")
 
         with pytest.raises(subprocess.CalledProcessError):
-            upload.write_pointer("bucket", "x86/noble/box/promoted.json", "body\n", "region", None)
+            upload.write_pointer("bucket", "x86/noble/lab/promoted.json", "body\n", "region", None)
 
     def test_reads_object_etag_without_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._fake_aws(monkeypatch, stdout='{"ETag": "\\"abc\\""}')
 
-        assert upload.object_etag("bucket", "x86/noble/box/promoted.json", "region") == '"abc"'
+        assert upload.object_etag("bucket", "x86/noble/lab/promoted.json", "region") == '"abc"'
 
     def test_missing_object_reads_as_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._fake_aws(
             monkeypatch, returncode=254, stderr="An error occurred (404) when calling the HeadObject operation"
         )
 
-        assert upload.object_etag("bucket", "x86/noble/box/promoted.json", "region") is None
+        assert upload.object_etag("bucket", "x86/noble/lab/promoted.json", "region") is None
 
     @pytest.mark.parametrize("error", ["AccessDenied", "InternalError"])
     def test_unreadable_object_is_not_treated_as_absent(self, monkeypatch: pytest.MonkeyPatch, error: str) -> None:
         self._fake_aws(monkeypatch, returncode=254, stderr=f"An error occurred ({error})")
 
         with pytest.raises(subprocess.CalledProcessError):
-            upload.object_etag("bucket", "x86/noble/box/promoted.json", "region")
+            upload.object_etag("bucket", "x86/noble/lab/promoted.json", "region")
 
     def test_unreadable_bundle_stops_before_upload(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         (tmp_path / "packer-ubuntu-1.raw").write_bytes(b"disk")
@@ -741,7 +741,7 @@ class TestConditionalWrites:
             "--bucket",
             "homelab-ci-images",
             "--key",
-            "x86/noble/box/ci-42-gdeadbeef0000/disks.tar.zst",
+            "x86/noble/lab/ci-42-gdeadbeef0000/disks.tar.zst",
         ]
 
 
@@ -799,7 +799,7 @@ class TestResolveImage:
                 "300",
                 "s3",
                 "cp",
-                f"s3://{args.bucket}/aarch64/noble/box/promoted.json",
+                f"s3://{args.bucket}/aarch64/noble/lab/promoted.json",
                 "-",
             ]
         ]
@@ -811,7 +811,7 @@ class TestResolveImage:
 
     @pytest.mark.parametrize("architecture", ["x86_64", "aarch64"])
     def test_unlabelled_pointer_is_rejected(self, monkeypatch: pytest.MonkeyPatch, architecture: str) -> None:
-        body = json.dumps({"build_id": "legacy", "machine": "box", "ubuntu": "noble"})
+        body = json.dumps({"build_id": "legacy", "machine": "lab", "ubuntu": "noble"})
 
         with pytest.raises(SystemExit, match="architecture mismatch"):
             self._resolve(monkeypatch, body, architecture=architecture)

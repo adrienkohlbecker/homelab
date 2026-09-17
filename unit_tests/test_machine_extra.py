@@ -259,7 +259,7 @@ class TestMachineArtifactOwnership:
         out = tmp_path / "out"
         out.mkdir()
         artifacts = [
-            out / f"box.noble.testrole.{suffix}.ansi"
+            out / f"lab.noble.testrole.{suffix}.ansi"
             for suffix in ("output", "journal", "boot", "dmesg", "systemctl-failed", "passt")
         ]
         for artifact in artifacts:
