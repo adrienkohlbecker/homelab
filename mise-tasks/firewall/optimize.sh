@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Operator diagnostic: run nft --optimize against a host ruleset"
 #USAGE arg "<host>" help="inventory host (e.g. lab or pug)"
-#USAGE complete "host" run="awk '/^\\[/{next} /^$/{next} {print $1}' hosts.ini | sort -u"
+#USAGE complete "host" run="ANSIBLE_VERBOSITY=0 ANSIBLE_NOCOLOR=1 ansible-inventory -i hosts.ini --list | jq -r '._meta.hostvars | keys[]'"
 # shellcheck disable=SC2154  # usage_host injected by mise from the #USAGE spec
 set -euo pipefail
 
