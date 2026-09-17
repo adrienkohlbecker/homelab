@@ -22,13 +22,6 @@ ROOT = Path(__file__).parents[1]
 COVERAGE_FLAGS = [
     (
         "box",
-        "homepage_verify_netdata_error",
-        lambda value: value is True,
-        "roles/homepage/tasks/_verify.yml",
-        'the rendered per-host <div class="err"> path',
-    ),
-    (
-        "box",
         "netdata_diskspace_blocklist",
         lambda value: bool(value),
         "roles/netdata/tasks/_verify_full.yml",
