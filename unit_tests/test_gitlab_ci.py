@@ -32,10 +32,10 @@ def test_lab_qemu_image_is_published_for_supported_releases() -> None:
     assert PIPELINE[".qemu_image"]["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
     assert PIPELINE["qemu_image:lab"] == {
         "extends": ".qemu_image",
-        "rules": [{"if": '$CI_COMMIT_REF_PROTECTED == "true"', "when": "manual", "allow_failure": True}],
         "resource_group": "qemu_image_lab_$UBUNTU",
         "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote'],
     }
+    assert PIPELINE[".qemu_image"]["extends"] == ".protected_manual_job"
     assert PIPELINE["qemu_image:pug"] == {
         "extends": ".qemu_image",
         "resource_group": "qemu_image_pug_$UBUNTU",

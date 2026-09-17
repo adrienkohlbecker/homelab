@@ -217,10 +217,6 @@ qemu_host_ami:
 
 "qemu_image:lab":
   extends: .qemu_image
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
-      when: manual
-      allow_failure: true
   resource_group: qemu_image_lab_$UBUNTU
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
