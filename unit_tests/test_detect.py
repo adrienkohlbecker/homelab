@@ -1118,6 +1118,8 @@ class TestRenderChildPipeline:
         assert doc["stages"] == ["site", "test1", "test2"]
         assert doc["_site_test:lab"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
+        for job in ("_site_test:lab", "_site_check:lab"):
+            assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
         assert doc[".cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
@@ -1275,8 +1277,8 @@ class TestRenderChildPipeline:
         # aws_qemu reads from AWS S3 via OIDC -- never the lab MinIO mirror.
         assert "HOMELAB_CI_MINIO_ACCESS_KEY" not in joined
         assert "HOMELAB_CI_S3_ENDPOINT" not in joined
-        assert 'if [ "${VARIANT:-lab}" != "minimal" ]; then mise run ci:hydrate-qemu-images' in joined
-        assert '"${VARIANT:-lab}" --ubuntu "${UBUNTU:-noble}"; fi' in joined
+        assert 'if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images' in joined
+        assert '"$VARIANT" --ubuntu "$UBUNTU"; fi' in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:lab"]["script"])
         assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab"]["script"])
 

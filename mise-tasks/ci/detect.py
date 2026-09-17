@@ -32,6 +32,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from matrix import (
+    DEFAULT_UBUNTU,
     TestCell,
     build_dispatch_matrix,
     build_test_matrix,
@@ -617,6 +618,7 @@ def render_child_pipeline(
         image_oidc=target_config["image_oidc"],
         cell_role_arn=CELL_ROLE_ARN,
         arm_runner_tag=ARM_RUNNER_TAG,
+        default_ubuntu=DEFAULT_UBUNTU,
     )
 
 

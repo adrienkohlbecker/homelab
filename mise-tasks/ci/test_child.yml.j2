@@ -46,7 +46,7 @@ stages:
     # The branch-safe cell role can only read promoted qemu bundles.
     - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "{{ target }}-cell-$CI_JOB_ID" --cache-dir
     # minimal downloads its cloud image directly and has no bundle to hydrate.
-    - if [ "${VARIANT:-lab}" != "minimal" ]; then mise run ci:hydrate-qemu-images "${VARIANT:-lab}" --ubuntu "${UBUNTU:-noble}"; fi
+    - if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU"; fi
 {% endif %}
   artifacts:
     when: on_failure
@@ -98,6 +98,9 @@ stages:
 "_site_test:lab":
   extends: .cell
   stage: site
+  variables:
+    VARIANT: lab
+    UBUNTU: {{ default_ubuntu }}
   # AWS uses a dedicated runner so this critical path stays uncontended.
   tags:
     - {{ site_runner_tag }}
@@ -115,6 +118,9 @@ stages:
 "_site_check:lab":
   extends: .cell
   stage: site
+  variables:
+    VARIANT: lab
+    UBUNTU: {{ default_ubuntu }}
   timeout: 35m
   script:
     # Backstop the harness deadline with 60s for teardown.
