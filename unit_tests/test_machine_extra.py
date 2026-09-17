@@ -292,6 +292,7 @@ class TestMachineArtifactOwnership:
 
         assert instance.condition_coverage_file.name == "lab.noble.aarch64.testrole.jsonl"
 
+
 class TestSystemReadiness:
     def test_accepts_running_state(
         self,
