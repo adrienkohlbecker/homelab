@@ -57,13 +57,12 @@ class TestClassifyChangedFiles:
             ("data/network_topology.schema.json", True),
             ("data/architectures.yml", True),
             ("mise-tasks/ci/detect.py", True),
-            ("test/host_vars/lab.yml", False),
+            ("test/host_vars/lab.yml", True),
             ("test/host_vars/minimal.yml", False),
-            ("test/host_vars/pug.yml", False),
             ("group_vars/physical_lab.yml", False),
             ("group_vars/physical_pug.yml", False),
             ("group_vars/physical_fox.yml", False),
-            ("group_vars/storage_lab.yml", False),
+            ("group_vars/storage_lab.yml", True),
             ("group_vars/storage_pug.yml", False),
             ("site.yml", False),
             ("group_vars/all/sub/deep.yml", False),
@@ -96,12 +95,11 @@ class TestClassifyChangedFiles:
         [
             ("test/host_vars/minimal.yml", {"minimal"}),
             ("test/minimal/user-data", {"minimal"}),
-            ("test/host_vars/lab.yml", {"lab"}),
-            ("test/host_vars/pug.yml", {"pug"}),
+            ("test/host_vars/lab.yml", set()),
             ("group_vars/physical_lab.yml", set()),
             ("group_vars/physical_pug.yml", set()),
             ("group_vars/physical_fox.yml", set()),
-            ("group_vars/storage_lab.yml", {"lab"}),
+            ("group_vars/storage_lab.yml", set()),
             ("group_vars/storage_pug.yml", {"pug"}),
         ],
     )
@@ -145,9 +143,9 @@ class TestClassifyChangedFiles:
             ]
         )
         assert result.direct_roles == ["zfs"]
-        assert result.full_universe_paths == ["mise.toml", "pyproject.toml"]
+        assert result.full_universe_paths == ["mise.toml", "pyproject.toml", "group_vars/storage_lab.yml"]
         assert result.packer_changed
-        assert result.machine_universe == {"lab", "pug"}
+        assert result.machine_universe == {"pug"}
 
 
 # ---------------------------------------------------------------------------
@@ -1039,6 +1037,14 @@ class TestGitlabChangeMatrix:
         seen = self._empty_diff(monkeypatch)
         assert detect._gitlab_change_matrix(None, lambda _: None) == ([], False)
         assert seen == ["explicit"]
+
+    @pytest.mark.parametrize("path", ["test/host_vars/lab.yml", "group_vars/storage_lab.yml"])
+    def test_lab_site_inputs_trigger_site_jobs(self, monkeypatch: pytest.MonkeyPatch, path: str) -> None:
+        monkeypatch.setenv("CI_BASE_REF", "explicit")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
+        monkeypatch.setattr(detect, "git_diff_files", lambda base: [path])
+        monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["full"])
+        assert detect._gitlab_change_matrix(None, lambda _: None) == (["full"], True)
 
 
 class TestRenderChildPipeline:

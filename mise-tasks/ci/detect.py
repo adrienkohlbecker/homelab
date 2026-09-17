@@ -46,7 +46,9 @@ from matrix import (
 FULL_UNIVERSE_PATTERNS: list[str] = [
     r"group_vars/all/[^/]+\.(yml|yaml)",
     r"group_vars/test\.yml",
+    r"group_vars/storage_lab\.yml",
     r"test/[^/]+\.py",
+    r"test/host_vars/lab\.yml",
     r"test/inventory\.ini",
     r"test/playbooks/.+",
     r"ansible\.cfg",
@@ -65,9 +67,6 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
     (r"test/host_vars/minimal\.yml", "minimal"),
     (r"test/minimal/.+", "minimal"),
-    (r"test/host_vars/lab\.yml", "lab"),
-    (r"test/host_vars/pug\.yml", "pug"),
-    (r"group_vars/storage_lab\.yml", "lab"),
     (r"group_vars/storage_pug\.yml", "pug"),
 ]
 _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]
