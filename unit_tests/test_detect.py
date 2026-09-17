@@ -1167,6 +1167,20 @@ class TestRenderChildPipeline:
         assert "when" not in doc["apt:lab:aarch64"]
         assert "allow_failure" not in doc["apt:lab:aarch64"]
 
+    def test_arm_minimal_uses_upstream_cloud_image(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        meta_dir = tmp_path / "roles" / "minimal_probe" / "meta"
+        meta_dir.mkdir(parents=True)
+        (meta_dir / "test.yml").write_text("machines:\n  lab:\n  minimal:\narm:\n  - minimal\n")
+
+        doc = _render_child_doc(["minimal_probe:minimal"], site_test=False)
+
+        assert "minimal_probe:minimal:aarch64" in doc
+        assert doc["minimal_probe:minimal:aarch64"]["variables"]["VARIANT"] == "minimal"
+        assert 'if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images' in "\n".join(
+            doc[".arm_cell"]["before_script"]
+        )
+
     def test_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
         doc = _render_child_doc(specs, site_test=True)

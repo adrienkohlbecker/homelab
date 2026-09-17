@@ -104,8 +104,8 @@ class TestRoleMeta:
         assert matrix.load_role_test_config("plain").arm_machines == ()
 
     def test_arm_machines_read_declared_subset(self) -> None:
-        _make_role("svc", {"machines": {"lab": None, "minimal": None}, "arm": ["lab"]})
-        assert matrix.load_role_test_config("svc").arm_machines == ("lab",)
+        _make_role("svc", {"machines": {"lab": None, "minimal": None}, "arm": ["lab", "minimal"]})
+        assert matrix.load_role_test_config("svc").arm_machines == ("lab", "minimal")
 
     @pytest.mark.parametrize(
         ("arm", "error"),

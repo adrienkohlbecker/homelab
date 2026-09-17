@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import matrix
 import yaml
 
 ROOT = Path(__file__).parents[1]
@@ -91,7 +92,11 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
         "resource_group": "qemu_image_lab_aarch64_$UBUNTU",
         "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --promote'],
     }
-    assert "qemu_image:pug:arm" not in pipeline
+    assert {
+        name.removeprefix("qemu_image:").removesuffix(":arm")
+        for name in pipeline
+        if name.startswith("qemu_image:") and name.endswith(":arm")
+    } == matrix.ARM_PUBLISHED_MACHINES
 
 
 def test_bake_role_uses_shared_qemu_image_bucket() -> None:
