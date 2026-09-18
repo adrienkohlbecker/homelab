@@ -665,6 +665,9 @@ class Machine:
             "ANSIBLE_FACT_CACHING": "jsonfile",
             "ANSIBLE_FACT_CACHING_CONNECTION": str(self.workdir_path / "facts"),
             "ANSIBLE_FACT_CACHING_TIMEOUT": "7200",
+            # Timestamps each TASK header and ends every playbook run with a
+            # recap of its slowest tasks.
+            "ANSIBLE_CALLBACKS_ENABLED": "ansible.posix.profile_tasks",
         }
 
         # The full-site converge runs ~4400 tasks; at the per-role default
@@ -680,10 +683,8 @@ class Machine:
             env["ANSIBLE_DISPLAY_OK_HOSTS"] = "false"
             env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
             env["ANSIBLE_VERBOSITY"] = "0"
-            # Slowest-tasks recap at the end of each playbook run. summary_only
-            # because per-task timestamps would print without their (suppressed)
-            # ok/skipped TASK headers.
-            env["ANSIBLE_CALLBACKS_ENABLED"] = "ansible.posix.profile_tasks"
+            # Per-task timestamps would print without their suppressed
+            # ok/skipped TASK headers; keep only the end-of-playbook recap.
             env["PROFILE_TASKS_SUMMARY_ONLY"] = "true"
 
         return env
