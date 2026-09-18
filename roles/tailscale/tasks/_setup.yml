@@ -18,6 +18,12 @@
     name: nginx
     tasks_from: test_fixture
 
+# headscale:main registers and dry-run validates a fluent-bit extension.
+- name: _setup | Install fluent-bit for the headscale log extension
+  import_role:
+    name: fluentbit
+    tasks_from: configure
+
 - name: _setup | Create /mnt/services
   file:
     path: /mnt/services
