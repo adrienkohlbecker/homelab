@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -185,6 +186,7 @@ def test_callback_records_inline_and_file_template_events_across_workers(
         "ANSIBLE_CALLBACKS_ENABLED": "condition_coverage",
         "ANSIBLE_CONDITION_COVERAGE_FILE": str(report),
         "ANSIBLE_CONDITION_COVERAGE_PHASE": "converge",
+        "ANSIBLE_PYTHON_INTERPRETER": sys.executable,
         "ANSIBLE_STRATEGY": "linear",
     }
 
