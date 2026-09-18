@@ -80,6 +80,23 @@ def test_converge_poweroff_ignores_fixture_inhibitor(
     assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") in machine.ssh_calls
 
 
+def test_converge_profiles_settled_boot_before_poweroff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
+    machine = SiteTestMachine(tmp_path)
+
+    asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
+
+    assert [call[:2] for call in machine.ssh_calls] == [
+        ("systemctl", "is-system-running"),
+        ("systemd-analyze", "blame"),
+        ("systemd-analyze", "critical-chain"),
+        ("sudo", "systemctl"),
+    ]
+
+
 def test_reboot_bypasses_inhibitor_only_in_qemu() -> None:
     task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())[0]
     command = jinja2.Template(task["reboot"]["reboot_command"])

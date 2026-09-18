@@ -95,6 +95,20 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+async def print_boot_profile(m: Machine) -> None:
+    """Print where the settled boot spent its time.
+
+    The settle waits out the whole post-reboot fleet start, so the slowest
+    units and the critical chain are what bound it. Diagnostic only: a
+    failure here never fails the test.
+    """
+    blame = await m.ssh_command("systemd-analyze", "blame", "--no-pager", check=False)
+    slowest = "\n".join(blame.stdout[:25]).rstrip() or "(unavailable)"
+    print_line(f"Slowest units this boot:\n{slowest}")
+    chain = await m.ssh_command("systemd-analyze", "critical-chain", "--no-pager", check=False)
+    print_line("Boot critical chain:\n" + ("\n".join(chain.stdout).rstrip() or "(unavailable)"))
+
+
 async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
     async with m.session(timeout):
         await m.ensure_booted()
@@ -163,6 +177,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                 failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
                 failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
                 print_line(f"Fleet settled as {settle_state!r}; failed units:\n{failed_units}")
+            await print_boot_profile(m)
 
             await m.ssh_command("sudo", "systemctl", "--check-inhibitors=no", "poweroff", check=False)
             # Bound the shutdown wait separately from the converge
