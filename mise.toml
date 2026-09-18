@@ -79,8 +79,9 @@ shellcheck = "0.11.0"
 shfmt = "3.13.1"
 yq = "4.53.3"
 stylua = "2.5.2"
-# selene (Lua linter) has no short registry name; pin the aqua backend.
-"aqua:Kampfkarren/selene" = "0.31.0"
+# selene (Lua linter) ships no linux/arm64 release asset, so aqua cannot
+# install it on ARM hosts; conda-forge builds every platform.
+"conda:selene" = "0.31.0"
 tflint = "0.62.0"
 node = "24"
 # npm backend: depend on node so a cold `mise install` (the lab-shell-qemu CI
@@ -95,6 +96,8 @@ glab = "1.102.0"
 
 [settings]
 python.uv_venv_auto = "create|source"
+# The conda backend (selene) is still gated behind experimental.
+experimental = true
 
 [tasks."packer:init"]
 description = "packer init (forwards args)"
