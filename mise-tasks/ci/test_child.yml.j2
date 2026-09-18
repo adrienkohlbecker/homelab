@@ -92,17 +92,26 @@ stages:
 {% endif %}
 {% if site_test %}
 
+{% if site_after_cells %}
+# The trailing site stage holds the converge until the x86 cells finish, so it
+# runs on a drained worker instead of overrunning a memory-bound cell slot.
+# Clearing the inherited needs:[] restores stage ordering; ARM cells sit in a
+# later stage and keep running in parallel. It runs even when a cell fails.
+"_site_test:lab":
+  extends: .cell
+  stage: site
+  needs: null
+  when: always
+{% else %}
 # The leading stage gives the critical-path converge the first build id;
 # inherited needs:[] keeps it parallel with every cell.
 "_site_test:lab":
   extends: .cell
   stage: site
+{% endif %}
   variables:
     VARIANT: lab
     UBUNTU: {{ default_ubuntu }}
-  # AWS uses a dedicated runner so this critical path stays uncontended.
-  tags:
-    - {{ site_runner_tag }}
   timeout: 60m
   script:
     # GNU timeout backstops the asyncio deadline; 60s permits VM teardown.
@@ -112,8 +121,8 @@ stages:
       echo "harness exit code: $rc"
       exit $rc
 
-# Full-site check mode covers cross-role rendering and gates without using the
-# dedicated converge runner.
+# Full-site check mode covers cross-role rendering and gates. Its guest is
+# cell-sized, so it keeps the inherited needs:[] and starts immediately.
 "_site_check:lab":
   extends: .cell
   stage: site

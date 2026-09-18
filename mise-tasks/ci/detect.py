@@ -531,15 +531,19 @@ ARM_RUNNER_TAG = "aws-shell-qemu-arm"
 TARGETS = {
     "aws_qemu": {
         "cell_runner_tag": "aws-shell-qemu",
-        # Keep the critical-path converge off the role-cell pool.
-        "site_runner_tag": "aws-shell-qemu-site",
+        # A 12-GiB site guest overruns the memory-bound cell slots during the
+        # burst, so the converge waits for the x86 cells and then takes a
+        # drained worker to itself.
+        "site_after_cells": True,
         "in_aws": True,
         "baked_toolchain": True,
         "image_oidc": True,
     },
     "lab": {
         "cell_runner_tag": "lab-shell-qemu",
-        "site_runner_tag": "lab-shell-qemu",
+        # Lab's single host works through the matrix for longer than the
+        # converge itself, so running alongside it is still the shorter path.
+        "site_after_cells": False,
         "in_aws": False,
         "baked_toolchain": False,
         "image_oidc": False,
@@ -596,10 +600,12 @@ def render_child_pipeline(
             cell_groups.append({"stage": "test2", "cells": cells[mid:]})
     else:
         cell_groups = []
-    # Stage order gives the critical-path site job the lowest build id; needs:[]
-    # keeps every stage parallel. Empty pipelines still need one stage.
+    # A leading site stage gives the critical-path converge the lowest build id;
+    # a trailing one lets it wait for the x86 cells. Empty pipelines still need
+    # one stage.
     cell_stages = [g["stage"] for g in cell_groups]
-    stages = (["site"] if site_test else []) + cell_stages
+    site_stages = ["site"] if site_test else []
+    stages = cell_stages + site_stages if target_config["site_after_cells"] else site_stages + cell_stages
     if arm_cells:
         stages.append("arm")
     if not stages:
@@ -612,7 +618,7 @@ def render_child_pipeline(
         site_test=site_test,
         target=target,
         cell_runner_tag=target_config["cell_runner_tag"],
-        site_runner_tag=target_config["site_runner_tag"],
+        site_after_cells=target_config["site_after_cells"],
         in_aws=target_config["in_aws"],
         baked_toolchain=target_config["baked_toolchain"],
         image_oidc=target_config["image_oidc"],
