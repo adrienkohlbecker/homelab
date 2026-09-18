@@ -220,9 +220,9 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
           63383134383261376562656636663530613961306133356436373138363533333565636530663465
           3938666634326536393731623530626531613761636231666135
 
-# One ARM bare-metal worker supplies up to the validated 78-cell
-# density ceiling. The acquisition bound leaves room for cold Spot metal
-# readiness.
+# Up to two On-Demand a1.metal workers (one per AZ offering the type) at
+# the benchmark-validated 20 cells each; one covers the whole ARM lane. The
+# acquisition bound leaves room for cold bare-metal readiness.
 gitlab_runner_aws_qemu_arm_enabled: true
 gitlab_runner_aws_qemu_arm_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
@@ -235,8 +235,8 @@ gitlab_runner_aws_qemu_arm_token: !vault |
           39613932313665326466303337383963303438616133666335643265333337336663313933336134
           36393935326638643135
 gitlab_runner_aws_qemu_arm_asg_name: homelab-ci-qemu-arm
-gitlab_runner_aws_qemu_arm_capacity_per_instance: 78
-gitlab_runner_aws_qemu_arm_max_instances: 1
+gitlab_runner_aws_qemu_arm_capacity_per_instance: 20
+gitlab_runner_aws_qemu_arm_max_instances: 2
 gitlab_runner_aws_qemu_arm_idle_time: "2m"
 gitlab_runner_aws_qemu_arm_connector_timeout: "2m0s"
 gitlab_runner_aws_qemu_arm_instance_acquire_timeout: "20m0s"

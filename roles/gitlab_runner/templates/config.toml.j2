@@ -82,7 +82,7 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
 {% endif %}
 {% if gitlab_runner_aws_qemu_arm_enabled %}
 
-# AWS ARM qemu runner: one bare-metal host supplies the ARM cell pool.
+# AWS ARM qemu runner: bare-metal hosts supply the ARM cell pool.
 {{ aws_instance_runner(
      'aws-shell-qemu-arm',
      gitlab_runner_aws_qemu_arm_token,

@@ -25,8 +25,8 @@ def _runner_values() -> dict:
         gitlab_runner_aws_qemu_idle_time="2m",
         gitlab_runner_aws_qemu_arm_enabled=True,
         gitlab_runner_aws_qemu_arm_token="arm-token",
-        gitlab_runner_aws_qemu_arm_capacity_per_instance=78,
-        gitlab_runner_aws_qemu_arm_max_instances=1,
+        gitlab_runner_aws_qemu_arm_capacity_per_instance=20,
+        gitlab_runner_aws_qemu_arm_max_instances=2,
         gitlab_runner_aws_qemu_arm_idle_time="2m",
         gitlab_runner_aws_qemu_arm_ssh_private_key="arm-private-key",
     )
@@ -50,7 +50,7 @@ def test_all_aws_runner_pools_render_consistently() -> None:
 
     expected = {
         "fox-aws-shell-qemu": ("homelab-ci-qemu-host", "homelab-ci-fleeting", 60, 10, 6, "10m0s"),
-        "fox-aws-shell-qemu-arm": ("homelab-ci-qemu-arm", "homelab-ci-fleeting", 78, 78, 1, "20m0s"),
+        "fox-aws-shell-qemu-arm": ("homelab-ci-qemu-arm", "homelab-ci-fleeting", 40, 20, 2, "20m0s"),
     }
     for name, (asg, profile, limit, capacity, max_instances, acquire_timeout) in expected.items():
         runner = runners[name]

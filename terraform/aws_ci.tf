@@ -1,6 +1,6 @@
 # AWS-backed CI nested-qemu fleets (notes/ci_aws_nested_qemu_cells.md and
-# notes/ci_aws_arm_qemu_cells.md): role tests run on scale-to-zero Spot hosts in
-# Frankfurt, each scaled by fleeting-plugin-aws on fox. Cells hydrate a
+# notes/ci_aws_arm_qemu_cells.md): role tests run on scale-to-zero hosts in
+# Frankfurt (Spot x86_64, On-Demand ARM metal), each scaled by fleeting-plugin-aws on fox. Cells hydrate a
 # promoted qemu image bundle and boot it under KVM. This file owns the platform
 # the harness does not: VPC, security group, host launch templates and ASGs,
 # image bucket, ECR cache, SSM AMI pointers, shared IAM/OIDC, and the account
@@ -36,12 +36,14 @@ locals {
       # would churn the runner default and IAM groupName condition on a resize.
       name = "homelab-ci-qemu-host"
       # 16 vCPU / 32 GiB / 950 GB NVMe, at 10 cells each plus room for the
-      # _site_test guest. Six hosts plus one 64-vCPU ARM metal host exactly
-      # fill the 160-vCPU Frankfurt Spot quota. max_size must match
-      # gitlab_runner_aws_qemu_max_instances in group_vars/physical_fox.yml.
+      # _site_test guest. Six hosts use 96 of the 160-vCPU Frankfurt Spot
+      # quota. max_size must match gitlab_runner_aws_qemu_max_instances in
+      # group_vars/physical_fox.yml.
       instance_type           = "c8id.4xlarge"
       instance_type_overrides = []
       max_size                = 6
+      on_demand               = false
+      subnets                 = ["a", "b", "c"]
       # Heavy CI I/O lands on the "d" family's local NVMe. The EBS root holds
       # only the OS and baked toolchain on the gp3 free baseline.
       root_volume_size       = 40
@@ -50,11 +52,26 @@ locals {
       extra_tags             = {}
     }
     arm = {
-      name                    = "homelab-ci-qemu-arm"
-      instance_type_overrides = ["c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"]
-      max_size                = 1
+      name = "homelab-ci-qemu-arm"
+      # a1.metal (16 vCPU / 32 GiB) is the only Graviton bare-metal size
+      # small enough for the ~15-cell ARM lane; every newer metal type is 64+
+      # vCPUs. Its Spot pool scores 1/10 and prices at On-Demand, and Frankfurt
+      # On-Demand reliably yields one host per AZ, so the pool runs On-Demand
+      # in the two AZs that offer the type. max_size must match
+      # gitlab_runner_aws_qemu_arm_max_instances in group_vars/physical_fox.yml.
+      instance_type_overrides = ["a1.metal"]
+      max_size                = 2
+      on_demand               = true
+      subnets                 = ["a", "b"]
       root_volume_size        = 40
-      extra_tags              = { architecture = "aarch64" }
+      # a1.metal has no instance store; homelab_ci_prepare_scratch mounts
+      # this volume. IOPS/throughput sit just above the benchmark's
+      # one-minute peaks (4.7k IOPS, 244 MiB/s), where baseline gp3 held
+      # scratch at 100% utilization.
+      scratch_volume_size       = 250
+      scratch_volume_iops       = 6000
+      scratch_volume_throughput = 250
+      extra_tags                = { architecture = "aarch64" }
     }
   }
   ci_qemu_image_read_statements = [
@@ -903,12 +920,12 @@ resource "aws_autoscaling_group" "ci_qemu" {
   protect_from_scale_in = true
   health_check_type     = "EC2"
   suspended_processes   = ["AZRebalance"]
-  vpc_zone_identifier   = [for subnet in aws_subnet.ci : subnet.id]
+  vpc_zone_identifier   = [for zone in each.value.subnets : aws_subnet.ci[zone].id]
 
   mixed_instances_policy {
     instances_distribution {
       on_demand_base_capacity                  = 0
-      on_demand_percentage_above_base_capacity = 0
+      on_demand_percentage_above_base_capacity = each.value.on_demand ? 100 : 0
       spot_allocation_strategy                 = "price-capacity-optimized"
     }
 
@@ -985,6 +1002,19 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
       volume_type           = "gp3"
       iops                  = 3000
       throughput            = 125
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  block_device_mappings {
+    device_name = "/dev/sdf"
+
+    ebs {
+      volume_size           = local.ci_qemu_pools.arm.scratch_volume_size
+      volume_type           = "gp3"
+      iops                  = local.ci_qemu_pools.arm.scratch_volume_iops
+      throughput            = local.ci_qemu_pools.arm.scratch_volume_throughput
       encrypted             = true
       delete_on_termination = true
     }
@@ -1068,7 +1098,7 @@ resource "aws_ssm_parameter" "ci_qemu_arm_host_ami" {
 # Account-wide (the account holds nothing but CI), $25/mo. Alert-only —
 # budgets ride Cost Explorer data that lags hours, and forecast alerts need
 # weeks of billing history before AWS emits them at all — so the hard spend
-# ceilings are the qemu-host pool's instance-type/size and the spot quota; this
+# ceilings are the pools' instance types, max sizes, and vCPU quotas; this
 # is the operator's tripwire, not containment.
 
 resource "aws_budgets_budget" "ci" {
