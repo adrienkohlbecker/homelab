@@ -189,6 +189,54 @@
   assert:
     that: not systemd_unit_verify_ok_service_result.changed
 
+# enable: false must leave the unit out of boot and never start it, even when
+# it was enabled before (a unit the host cannot satisfy).
+- name: _verify | Manage an enabled fixture
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+      start: false
+
+- name: _verify | Manage the fixture with enable false
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+      enable: false
+      start: false
+
+- name: _verify | Read the disabled fixture state  # noqa: command-instead-of-module
+  command: systemctl is-enabled systemd_unit_verify_ok.service
+  register: _systemd_unit_disabled_state
+  changed_when: false
+  failed_when: false
+
+- name: _verify | Enable false disabled the unit without starting it
+  assert:
+    that:
+      - _systemd_unit_disabled_state.stdout == 'disabled'
+      - _systemd_unit_enable.changed
+      - _systemd_unit_enable.status.ActiveState | default('inactive') != 'active'
+
+- name: _verify | Manage the fixture with enable false again
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+      enable: false
+      start: false
+
+- name: _verify | A repeat enable false is a no-op
+  assert:
+    that: not _systemd_unit_enable.changed
+
 - name: _verify | Manage fixture for stop-only removal
   import_role:
     name: systemd_unit

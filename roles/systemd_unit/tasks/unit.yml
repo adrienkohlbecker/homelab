@@ -2,6 +2,8 @@
 # package-owned units use tasks_from=install and role-local systemd tasks.
 #
 # Inputs are systemd_unit/install inputs plus:
+#   enable            default true; false leaves the unit disabled, for units
+#                     the host cannot satisfy (pair it with start: false)
 #   start             default true; false enables without touching state
 #   restart           default false; restart an already-active unit
 #   reload            default false; reload when restart is false
@@ -21,13 +23,13 @@
       suffix; use tasks_from=install for drop-ins. Got
       {{ systemd_unit_args | default('<unset>') }}
 
-- name: unit | Enable {{ _systemd_unit_name }}
+- name: unit | Set enablement for {{ _systemd_unit_name }}
   when:
     - _systemd_unit_condition
     - not (ansible_check_mode and systemd_unit_file.changed)
   systemd:
     name: "{{ _systemd_unit_name }}"
-    enabled: true
+    enabled: "{{ systemd_unit_args.enable | default(true) }}"
     scope: "{{ _systemd_unit_scope }}"
   register: _systemd_unit_enable
   become: true
@@ -40,6 +42,7 @@
     - _systemd_unit_condition
     - not ansible_check_mode
     - systemd_unit_file.changed
+    - systemd_unit_args.enable | default(true)
     - _systemd_unit_enable.status.UnitFileState | default('') == 'enabled'
   command:
     argv:

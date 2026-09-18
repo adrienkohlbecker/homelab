@@ -23,7 +23,7 @@
       - systemd_unit_args.src is string
       - systemd_unit_args.for is not defined or systemd_unit_args.for is string
       - systemd_unit_args.dest is not defined or systemd_unit_args.for is not defined
-      - systemd_unit_args.keys() | difference(['src', 'dest', 'for', 'user', 'condition', 'start', 'restart', 'reload', 'throttle']) | length == 0
+      - systemd_unit_args.keys() | difference(['src', 'dest', 'for', 'user', 'condition', 'enable', 'start', 'restart', 'reload', 'throttle']) | length == 0
     fail_msg: >-
       systemd_unit_args needs src (source filename); dest and for are mutually
       exclusive, for must be a string when set, and no other keys are accepted;
