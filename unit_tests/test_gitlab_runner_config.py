@@ -116,11 +116,26 @@ def test_autoscaler_connector_changes_restart_runner() -> None:
     assert "gitlab_runner_aws_qemu_arm_ssh_key.changed" in restart
 
 
-def test_lab_fixture_supplies_every_enabled_arm_runner_secret() -> None:
-    values = yaml.safe_load((REPO_ROOT / "test" / "host_vars" / "lab.yml").read_text())
+def test_lab_fixture_supplies_secrets_for_enabled_runner_backends() -> None:
+    # BaseLoader leaves unrelated !vault values opaque and booleans as strings.
+    values = yaml.load((REPO_ROOT / "group_vars" / "test.yml").read_text(), Loader=yaml.BaseLoader)
+    values.update(yaml.load((REPO_ROOT / "test" / "host_vars" / "lab.yml").read_text(), Loader=yaml.BaseLoader))
+    backend_secrets = {
+        "gitlab_runner_shell_enabled": {"gitlab_runner_shell_token"},
+        "gitlab_runner_aws_qemu_enabled": {"gitlab_runner_aws_qemu_token", "gitlab_runner_aws_qemu_site_token"},
+        "gitlab_runner_aws_qemu_arm_enabled": {
+            "gitlab_runner_aws_qemu_arm_token",
+            "gitlab_runner_aws_qemu_arm_ssh_private_key",
+        },
+    }
+    required = {
+        secret for backend, secrets in backend_secrets.items() if values.get(backend) == "true" for secret in secrets
+    }
+    if (
+        values.get("gitlab_runner_aws_qemu_enabled") == "true"
+        or values.get("gitlab_runner_aws_qemu_arm_enabled") == "true"
+    ):
+        required.update({"gitlab_runner_aws_qemu_access_key_id", "gitlab_runner_aws_qemu_secret_access_key"})
 
-    assert values["gitlab_runner_aws_qemu_arm_enabled"] is True
-    assert values["gitlab_runner_aws_qemu_arm_token"]
-    assert values["gitlab_runner_aws_qemu_arm_ssh_private_key"] == (
-        "{{ lookup('file', inventory_dir + '/../packer/vagrant.key') }}"
-    )
+    assert required
+    assert all(isinstance(values.get(secret), str) and values[secret].strip() for secret in required)
