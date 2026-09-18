@@ -9,17 +9,47 @@
       "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
       "InstanceId": "${aws:InstanceId}"
     },
-    "aggregation_dimensions": [["AutoScalingGroupName"]],
+    "aggregation_dimensions": [
+      [
+        "AutoScalingGroupName"
+      ]
+    ],
     "metrics_collected": {
       "cpu": {
         "totalcpu": true,
-        "measurement": ["cpu_usage_active", "cpu_usage_iowait", "cpu_usage_steal"]
+        "measurement": [
+          "cpu_usage_active",
+          "cpu_usage_iowait",
+          "cpu_usage_steal"
+        ]
       },
       "mem": {
-        "measurement": ["mem_used_percent", "mem_available"]
+        "measurement": [
+          "mem_used_percent",
+          "mem_available"
+        ]
       },
       "swap": {
-        "measurement": ["swap_used_percent", "swap_used"]
+        "measurement": [
+          "swap_used_percent",
+          "swap_used"
+        ]
+      },
+      "diskio": {
+        "resources": [
+          "nvme*n1",
+          "md*"
+        ],
+        "measurement": [
+          "reads",
+          "writes",
+          "read_bytes",
+          "write_bytes",
+          "read_time",
+          "write_time",
+          "io_time",
+          "iops_in_progress"
+        ]
       }
     }
   }
