@@ -547,8 +547,12 @@ _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 
 
 def _arm_specs(specs: list[str], target: str) -> list[str]:
-    """Return the change-selected ARM subset for this pipeline."""
-    if target != "aws_qemu":
+    """Return the change-selected ARM subset for this pipeline.
+
+    ``HOMELAB_CI_ARM=false`` drops the ARM lane, e.g. to benchmark the x86 pool
+    without the metal host.
+    """
+    if target != "aws_qemu" or os.environ.get("HOMELAB_CI_ARM") == "false":
         return []
     selected_cells = (ci_spec_to_cell(spec) for spec in specs)
     return sorted(

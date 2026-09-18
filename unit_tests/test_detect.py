@@ -1196,6 +1196,13 @@ class TestRenderChildPipeline:
         assert arm_jobs
         assert {name for name in doc if name.endswith(":aarch64")} == arm_jobs
 
+    def test_arm_lane_can_be_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOMELAB_CI_ARM", "false")
+        doc = _render_child_doc(detect._full_universe_specs(), site_test=True)
+
+        assert "arm" not in doc["stages"]
+        assert not any(name.endswith(":aarch64") for name in doc)
+
     def test_lab_target_never_renders_arm_jobs(self) -> None:
         doc = _render_child_doc(["apt:lab"], site_test=False, target="lab")
 
