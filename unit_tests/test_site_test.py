@@ -93,6 +93,7 @@ def test_converge_profiles_settled_boot_before_poweroff(
         ("systemctl", "is-system-running"),
         ("systemd-analyze", "blame"),
         ("systemd-analyze", "critical-chain"),
+        ("journalctl", "--boot"),
         ("sudo", "systemctl"),
     ]
 
