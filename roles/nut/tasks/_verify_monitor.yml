@@ -218,7 +218,10 @@
           - --no-pager
       register: nut_wake_journal
       changed_when: false
-      failed_when: "'Sending magic packet' not in nut_wake_journal.stdout"
+      # Type=exec returns once the script starts; its first round follows.
+      until: "'Sending magic packet' in nut_wake_journal.stdout"
+      retries: 10
+      delay: 1
       become: true
 
     # RemainAfterExit must hold the unit active after the run -- converge

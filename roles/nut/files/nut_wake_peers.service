@@ -5,7 +5,9 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-Type=oneshot
+# The wake rounds span a minute; exec lets boot (multi-user.target) proceed
+# without waiting for them.
+Type=exec
 # Stay active after the boot run so a converge's `started` is a no-op
 # rather than a re-broadcast (which could wake a peer the operator
 # deliberately powered off).
