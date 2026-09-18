@@ -77,7 +77,6 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     ]
     assert scaffold["tags"] == ["aws-shell-qemu-arm"]
     assert scaffold["variables"]["UBUNTU"] == "noble"
-    assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
     for variable in (
         "HOME",
         "XDG_CONFIG_HOME",

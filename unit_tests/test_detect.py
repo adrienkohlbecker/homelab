@@ -1146,7 +1146,6 @@ class TestRenderChildPipeline:
 
         assert scaffold["timeout"] == "45m"
         assert scaffold["needs"] == []
-        assert scaffold["variables"]["MISE_DISABLE_TOOLS"] == "aqua:Kampfkarren/selene"
         assert scaffold["variables"]["HOMELAB_AARCH64_FIRMWARE_DIR"] == ("/opt/homelab-ci/qemu-firmware/aarch64")
         assert "--region" not in before_script
         assert "--bucket" not in before_script

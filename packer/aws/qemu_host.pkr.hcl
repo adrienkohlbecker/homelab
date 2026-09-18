@@ -61,7 +61,6 @@ locals {
       qemu_packages        = "qemu-system-x86 ovmf"
       qemu_system_binary   = "qemu-system-x86_64"
       runner_artifact      = local.versions.gitlab_runner_archive.x86_64
-      mise_disable_tools   = ""
       firmware_destination = ""
     }
     aarch64 = {
@@ -70,7 +69,6 @@ locals {
       qemu_packages        = "qemu-system-arm qemu-efi-aarch64"
       qemu_system_binary   = "qemu-system-aarch64"
       runner_artifact      = local.versions.gitlab_runner_archive.aarch64
-      mise_disable_tools   = "aqua:Kampfkarren/selene"
       firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"
     }
   }
@@ -168,7 +166,6 @@ build {
       "QEMU_MACHINE_TYPE"            = local.guest_architecture.machine_type
       "GITLAB_RUNNER_URL"            = local.architecture_config.runner_artifact.url
       "GITLAB_RUNNER_SHA256"         = local.architecture_config.runner_artifact.sha256
-      "MISE_DISABLE_TOOLS"           = local.architecture_config.mise_disable_tools
       "HOMELAB_AARCH64_FIRMWARE_DIR" = local.architecture_config.firmware_destination
     }
   }

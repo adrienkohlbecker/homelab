@@ -246,7 +246,6 @@ qemu_host_ami:
     XDG_CONFIG_HOME: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/xdg"
     PACKER_PLUGIN_PATH: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/packer_plugins"
     MISE_DATA_DIR: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/mise"
-    MISE_DISABLE_TOOLS: aqua:Kampfkarren/selene
     UV_CACHE_DIR: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/uv_cache"
     HOMELAB_CI_DIR: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/images"
     AWS_CONFIG_FILE: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/aws/config"

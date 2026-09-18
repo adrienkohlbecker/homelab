@@ -100,9 +100,6 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
     MISE_DATA_DIR=/opt/mise
     PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
   )
-  if [ -n "$MISE_DISABLE_TOOLS" ]; then
-    mise_environment+=("MISE_DISABLE_TOOLS=${MISE_DISABLE_TOOLS}")
-  fi
   sudo env "${mise_environment[@]}" mise trust /tmp/homelab-ci-build/mise.toml
   sudo env "${mise_environment[@]}" mise install
   # Warm the persistent uv cache through a project-local environment. The
@@ -110,7 +107,6 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
   # concurrent jobs create their own environments from the shared cache.
   sudo env \
     MISE_DATA_DIR=/opt/mise \
-    MISE_DISABLE_TOOLS="$MISE_DISABLE_TOOLS" \
     UV_CACHE_DIR=/opt/uv-cache \
     MISE_PYTHON_UV_VENV_AUTO=false \
     PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
@@ -119,13 +115,6 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
 )
 sudo awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/homelab-ci-build/mise.toml |
   sudo tee /etc/mise/config.toml >/dev/null
-if [ -n "$MISE_DISABLE_TOOLS" ]; then
-  # MISE_DISABLE_TOOLS is comma-separated; TOML needs one string per tool.
-  IFS=, read -r -a disabled_tools <<<"$MISE_DISABLE_TOOLS"
-  printf -v disabled_tools_toml '"%s", ' "${disabled_tools[@]}"
-  printf '\n[settings]\ndisable_tools = [%s]\n' "${disabled_tools_toml%, }" |
-    sudo tee -a /etc/mise/config.toml >/dev/null
-fi
 sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache
 
 sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'

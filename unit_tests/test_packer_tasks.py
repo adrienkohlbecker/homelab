@@ -12,7 +12,6 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -457,7 +456,7 @@ def test_qemu_host_retains_caches_without_a_shared_virtualenv() -> None:
     assert "/opt/venv" not in provision
 
 
-def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -> None:
+def test_qemu_host_arm_provisioning_uses_pinned_firmware() -> None:
     template = QEMU_HOST_TEMPLATE.read_text()
     provision = QEMU_HOST_PROVISION_SH.read_text()
 
@@ -465,14 +464,12 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware_and_reduced_toolset() -
     assert 'qemu_system_binary   = "qemu-system-aarch64"' in template
     assert "runner_artifact      = local.versions.gitlab_runner_archive.aarch64" in template
     assert 'firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"' in template
-    assert 'mise_disable_tools   = "aqua:Kampfkarren/selene"' in template
 
     # The AMI installs firmware through the same script operators run locally.
     assert '"${path.cwd}/mise-tasks/test/firmware.sh"' in template
     assert 'bash "$firmware_tree/mise-tasks/test/firmware.sh"' in provision
     assert "AAVMF" not in provision
     assert "test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256" in provision
-    assert 'MISE_DISABLE_TOOLS="$MISE_DISABLE_TOOLS"' in provision
     assert "mise exec -- true" in provision
     # Cells hydrate through their checked-out source tree. The AMI build must
     # not try to execute a partial copy of that task without its imports.
@@ -554,34 +551,6 @@ def test_qemu_host_smoke_fails_when_qemu_exits_before_the_boot_manager(tmp_path:
 
     assert result.returncode == 1
     assert "did not reach the UEFI boot manager" in result.stderr
-
-
-@pytest.mark.parametrize(
-    ("disabled", "expected"),
-    [
-        ("aqua:Kampfkarren/selene", ["aqua:Kampfkarren/selene"]),
-        ("aqua:Kampfkarren/selene,shfmt", ["aqua:Kampfkarren/selene", "shfmt"]),
-    ],
-)
-def test_qemu_host_disable_tools_renders_one_toml_string_per_tool(
-    tmp_path: Path, disabled: str, expected: list[str]
-) -> None:
-    provision = QEMU_HOST_PROVISION_SH.read_text()
-    match = re.search(r'^if \[ -n "\$MISE_DISABLE_TOOLS" \]; then\n.*?disable_tools = .*?^fi$', provision, re.M | re.S)
-    assert match is not None
-    config = tmp_path / "config.toml"
-    fake_bin = tmp_path / "bin"
-    _executable(fake_bin / "sudo", '#!/bin/sh\nexec "$@"\n')
-
-    result = subprocess.run(
-        ["bash", "-c", "set -euo pipefail\n" + match.group(0).replace("/etc/mise/config.toml", str(config))],
-        env=dict(os.environ, MISE_DISABLE_TOOLS=disabled, PATH=f"{fake_bin}:{os.environ['PATH']}"),
-        text=True,
-        capture_output=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert tomllib.loads(config.read_text())["settings"]["disable_tools"] == expected
 
 
 @pytest.mark.parametrize(
