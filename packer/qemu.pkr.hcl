@@ -165,15 +165,16 @@ locals {
       zfs_arc_max = 0
     }
     # lab: mdadm EFI/swap/podman, 3-disk mirror rpool, dozer mirror, tank raidz2
-    # + special mirror, and mouse mirror. Fixture sizes only prove the storage
-    # topology; prod sizing lives in notes/unified_disk_layout.md.
+    # + special mirror, and mouse mirror. The podman RAID5 needs room for the
+    # full-site container fleet; the dozer mirror needs transcode scratch space.
+    # Prod sizing lives in notes/unified_disk_layout.md.
     lab = {
       disks       = "/dev/vdb /dev/vdc /dev/vdd"
       extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes  = ["40G", "40G", "40G", "4G", "4G", "1.5G", "1.5G", "1G", "1G"]
+      disk_sizes  = ["60G", "60G", "60G", "4G", "4G", "1.5G", "1.5G", "1G", "1G"]
       layout      = "mirror"
       swap_size   = "8G"
-      podman_size = "5G"
+      podman_size = "25G"
       meta_size   = "2G"
       extra_pools = "dozer tank_mouse"
       zfs_arc_max = 0
