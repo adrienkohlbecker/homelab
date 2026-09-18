@@ -111,6 +111,22 @@
     - name: Configure test-only connectivity and credentials
       become: true
       block:
+        # man-db rebuilds its whole index as a dpkg trigger after every install
+        # that ships man pages, a large share of each converge's apt time. The
+        # trigger is a no-op without the flag file; the debconf answer keeps man-db
+        # upgrades from recreating it.
+        - name: Disable man-db index rebuilds on package installs
+          debconf:
+            name: man-db
+            question: man-db/auto-update
+            vtype: boolean
+            value: "false"
+
+        - name: Remove the man-db auto-update flag
+          file:
+            path: /var/lib/man-db/auto-update
+            state: absent
+
         - name: Create systemd-resolved configuration directory
           file:
             path: /etc/systemd/resolved.conf.d
