@@ -106,8 +106,13 @@ async def print_boot_profile(m: Machine) -> None:
     blame = await m.ssh_command("systemd-analyze", "blame", "--no-pager", check=False)
     slowest = "\n".join(blame.stdout[:25]).rstrip() or "(unavailable)"
     print_line(f"Slowest units this boot:\n{slowest}")
-    chain = await m.ssh_command("systemd-analyze", "critical-chain", "--no-pager", check=False)
-    print_line("Boot critical chain:\n" + ("\n".join(chain.stdout).rstrip() or "(unavailable)"))
+    # Per-unit chains show when each slow unit started (@) and what it waited
+    # on, which blame's durations alone cannot: late starts vs slow starts.
+    slow_units = [line.split()[-1] for line in blame.stdout[:10] if line.strip()]
+    chain = await m.ssh_command(
+        "systemd-analyze", "critical-chain", "--no-pager", "default.target", *slow_units, check=False
+    )
+    print_line("Boot critical chains:\n" + ("\n".join(chain.stdout).rstrip() or "(unavailable)"))
 
 
 async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
