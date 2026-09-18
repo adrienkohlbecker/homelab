@@ -680,6 +680,11 @@ class Machine:
             env["ANSIBLE_DISPLAY_OK_HOSTS"] = "false"
             env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
             env["ANSIBLE_VERBOSITY"] = "0"
+            # Slowest-tasks recap at the end of each playbook run. summary_only
+            # because per-task timestamps would print without their (suppressed)
+            # ok/skipped TASK headers.
+            env["ANSIBLE_CALLBACKS_ENABLED"] = "ansible.posix.profile_tasks"
+            env["PROFILE_TASKS_SUMMARY_ONLY"] = "true"
 
         return env
 
