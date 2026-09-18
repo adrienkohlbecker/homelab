@@ -60,3 +60,33 @@ output "certbot_token" {
   value     = cloudflare_account_token.certbot.value
   sensitive = true
 }
+
+# DNS-01 token for the qemu test fixtures, limited to the mhaf.fr test zone.
+# CI holds only the test vault and its job output can surface this value, so
+# it stays separate from the prod token above. Rotate it the same way:
+#   mise run tf -- apply -replace=cloudflare_account_token.certbot_test
+#   mise run tf -- output -raw certbot_test_token \
+#     | ansible-vault encrypt_string --encrypt-vault-id test \
+#         --stdin-name cloudflare_api_token
+#   # replace cloudflare_api_token in group_vars/test.yml with the envelope
+resource "cloudflare_account_token" "certbot_test" {
+  account_id = local.cloudflare_account_id
+  name       = "certbot-dns01-test"
+  status     = "active"
+
+  policies = [
+    {
+      effect = "allow"
+      permission_groups = [
+        { id = local.cf_perm_groups["DNS Write"] },
+        { id = local.cf_perm_groups["Zone Read"] },
+      ]
+      resources = jsonencode({ "com.cloudflare.api.account.zone.${local.zones["mhaf.fr"]}" = "*" })
+    },
+  ]
+}
+
+output "certbot_test_token" {
+  value     = cloudflare_account_token.certbot_test.value
+  sensitive = true
+}
