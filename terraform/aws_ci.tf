@@ -25,6 +25,8 @@ locals {
   ci_qemu_retired_prefixes = toset(flatten([
     for release in local.ci_qemu_retired_releases : [for architecture in ["x86", "aarch64"] : "${architecture}/${release}/"]
   ]))
+  # Must match the namespace in packer/aws/files/cloudwatch_agent.json.
+  ci_host_metrics_namespace      = "homelab-ci"
   ci_qemu_host_ami_parameter     = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", "noble")
   ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", "noble")
   ci_qemu_pools = {
@@ -544,7 +546,8 @@ resource "aws_iam_role_policy" "ci_cell" {
 # ─── Nested-qemu runner hosts ────────────────────────────────────────────────
 # The instance-executor worker identity is deliberately harmless when exposed
 # to shell jobs through IMDS: it can read the promoted.json pointer object and
-# the qemu image bundles from S3, and nothing that scales ASGs, writes images,
+# the qemu image bundles from S3, and publish the CloudWatch agent's host
+# metrics into its own namespace, and nothing that scales ASGs, writes images,
 # or promotes artifacts.
 
 resource "aws_iam_role" "ci_qemu_host" {
@@ -574,8 +577,26 @@ resource "aws_iam_role_policy" "ci_qemu_host" {
   role = aws_iam_role.ci_qemu_host.id
 
   policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = local.ci_qemu_image_read_statements
+    Version = "2012-10-17"
+    Statement = concat(local.ci_qemu_image_read_statements, [
+      {
+        Sid      = "PublishHostMetrics"
+        Effect   = "Allow"
+        Action   = "cloudwatch:PutMetricData"
+        Resource = "*"
+        Condition = {
+          StringEquals = { "cloudwatch:namespace" = local.ci_host_metrics_namespace }
+        }
+      },
+      # The agent resolves its AutoScalingGroupName dimension from the
+      # instance's tags.
+      {
+        Sid      = "ResolveHostMetricDimensions"
+        Effect   = "Allow"
+        Action   = "ec2:DescribeTags"
+        Resource = "*"
+      },
+    ])
   })
 }
 
@@ -808,6 +829,11 @@ resource "aws_launch_template" "ci_qemu_host" {
 
   instance_initiated_shutdown_behavior = "terminate"
 
+  # One-minute EC2 metrics; the in-guest agent adds memory and swap.
+  monitoring {
+    enabled = true
+  }
+
   iam_instance_profile {
     arn = aws_iam_instance_profile.ci_qemu_host.arn
   }
@@ -934,6 +960,11 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
   instance_type = local.ci_qemu_pools.arm.instance_type_overrides[0]
 
   instance_initiated_shutdown_behavior = "terminate"
+
+  # One-minute EC2 metrics; the in-guest agent adds memory and swap.
+  monitoring {
+    enabled = true
+  }
 
   iam_instance_profile {
     arn = aws_iam_instance_profile.ci_qemu_host.arn
