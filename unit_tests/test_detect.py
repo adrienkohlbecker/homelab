@@ -19,6 +19,14 @@ from conftest import load_repo_module
 detect = load_repo_module("mise-tasks/ci/detect.py")
 
 
+@pytest.fixture(autouse=True)
+def _no_pipeline_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    # GitLab exports pipeline variables to every job, including unit_tests, so
+    # a benchmark pipeline's ROLES / HOMELAB_CI_ARM would otherwise steer detect.
+    for name in ("ROLES", "HOMELAB_CI_ARM"):
+        monkeypatch.delenv(name, raising=False)
+
+
 # ---------------------------------------------------------------------------
 # classify_changed_files
 # ---------------------------------------------------------------------------
