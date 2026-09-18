@@ -106,8 +106,19 @@ def test_format_ansible_cmd_default_envelope(
     assert not any("tailscale_wan_direct" in part for part in cmd)
 
 
+@pytest.mark.parametrize(
+    ("playbook_name", "phase_args", "expected_arg"),
+    [
+        ("site.yml", ("-e", "_role_tasks_from=_verify", "--tags", "homepage"), "_role_tasks_from=_verify"),
+        ("_environment.yml", ("-e", "test_base_prerequisites=false"), "test_base_prerequisites=false"),
+    ],
+)
 def test_kept_vm_resume_command_targets_fixture(
-    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
+    machine_factory: Callable[..., machine.Machine],
+    monkeypatch: pytest.MonkeyPatch,
+    playbook_name: str,
+    phase_args: tuple[str, ...],
+    expected_arg: str,
 ) -> None:
     m = machine_factory(keep_vm=True, ssh_port=2222)
     m.vnc_display = 0
@@ -119,8 +130,8 @@ def test_kept_vm_resume_command_targets_fixture(
         return None
 
     monkeypatch.setattr(machine, "run_command", fake_run_command)
-    playbook = str(m.workdir_path / "site.yml")
-    asyncio.run(m.ansible_command(playbook, "-e", "_role_tasks_from=_verify", "--tags", "homepage"))
+    playbook = str(m.workdir_path / playbook_name)
+    asyncio.run(m.ansible_command(playbook, *phase_args))
 
     m.print_ssh_instructions()
 
@@ -129,11 +140,14 @@ def test_kept_vm_resume_command_targets_fixture(
     assert "ansible-playbook" in parts
     assert parts[parts.index("--inventory") + 1] == "test/inventory.ini"
     assert parts[parts.index("--limit") + 1] == "lab"
-    assert parts[parts.index("--start-at-task") + 1] == "<task name>"
+    assert "--start-at-task" not in parts
     assert playbook in parts
-    assert "_role_tasks_from=_verify" in parts
-    assert parts[parts.index("--tags") + 1] == "homepage"
+    assert expected_arg in parts
+    if "--tags" in phase_args:
+        assert parts[parts.index("--tags") + 1] == "homepage"
     assert "ansible_ssh_port=2222" in parts
+    assert any("uses staged code" in line for line in lines)
+    assert any("--step" in line for line in lines)
 
 
 def test_kept_vm_without_ansible_only_prints_ssh(
@@ -148,30 +162,6 @@ def test_kept_vm_without_ansible_only_prints_ssh(
 
     assert any(line.startswith("> ssh ") for line in lines)
     assert not any("ansible-playbook" in line for line in lines)
-
-
-def test_kept_vm_resume_uses_environment_playbook(
-    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    m = machine_factory(keep_vm=True)
-    m.vnc_display = 0
-    lines: list[str] = []
-    monkeypatch.setattr(machine, "print_line", lines.append)
-    monkeypatch.setattr(m, "_stage_ansible_controller", lambda: None)
-
-    async def fake_run_command(*args: object, **kwargs: object) -> None:
-        return None
-
-    monkeypatch.setattr(machine, "run_command", fake_run_command)
-    playbook = str(m.workdir_path / "_environment.yml")
-    asyncio.run(m.ansible_command(playbook, "-e", "test_base_prerequisites=false"))
-
-    m.print_ssh_instructions()
-
-    resume = next(line for line in lines if line.startswith("> env "))
-    parts = shlex.split(resume.removeprefix("> "))
-    assert playbook in parts
-    assert "test_base_prerequisites=false" in parts
 
 
 def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
@@ -250,4 +240,4 @@ def test_format_ansible_cmd_no_positional(
 
     assert cmd[0] == "ansible-playbook"
     assert "ansible-playbook" in cmd
-    assert cmd[-1] == "test/inventory.ini"
+    assert not any(part.endswith((".yml", ".yaml")) for part in cmd)

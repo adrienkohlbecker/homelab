@@ -1152,10 +1152,12 @@ class Machine:
             resume_cmd = [
                 "env",
                 *(f"{key}={value}" for key, value in self.ansible_env().items()),
-                *self.format_ansible_cmd(*self._last_ansible_cmd, "--start-at-task", "<task name>"),
+                *self.format_ansible_cmd(*self._last_ansible_cmd),
             ]
-            print_line("Resume the last Ansible phase against this fixture from the repository root:")
+            print_line("Replay the last Ansible phase against this fixture from the repository root:")
             print_line(f"> {shlex.join(resume_cmd)}")
+            print_line("Add --start-at-task 'TASK NAME' or --step to resume within that phase.")
+            print_line("This uses staged code; rerun testrole.py after editing repository files.")
         print_line("Then Ctrl+C to stop the machine")
         if self.launch.display_window:
             print_line("Display: QEMU window")
