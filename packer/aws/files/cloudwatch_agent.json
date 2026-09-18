@@ -78,7 +78,7 @@
       },
       "procstat": [
         {
-          "exe": "qemu-system",
+          "pattern": "qemu-system",
           "measurement": [
             "pid_count",
             "memory_rss",
