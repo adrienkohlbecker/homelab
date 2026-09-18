@@ -1,4 +1,7 @@
-# Cover both ZFSBootMenu and GRUB command-line delivery.
+# Lab checks the ZFSBootMenu property (including its ARM handoff to rEFInd);
+# Minimal checks GRUB command-line delivery after reboot.
 machines:
   lab:
   minimal:
+arm:
+  - lab
