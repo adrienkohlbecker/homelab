@@ -88,7 +88,7 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
     assert lab == {
         "extends": ".qemu_image_arm",
         "resource_group": "qemu_image_lab_aarch64_$UBUNTU",
-        "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --promote'],
+        "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --upstream --promote'],
     }
     assert {
         name.removeprefix("qemu_image:").removesuffix(":arm")

@@ -127,29 +127,6 @@ def test_publish_qemu_builds_and_uploads_promoted_fixture(tmp_path: Path, fixtur
     ]
 
 
-def test_publish_qemu_defaults_to_the_normalized_build_host_architecture(tmp_path: Path) -> None:
-    fake_bin = tmp_path / "bin"
-    log = tmp_path / "mise.log"
-    _executable(
-        fake_bin / "mise",
-        '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n',
-    )
-    _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'arm64\\n'\n")
-    env = dict(os.environ)
-    env.update(
-        MISE_TEST_LOG=str(log),
-        PATH=f"{fake_bin}:{env['PATH']}",
-        usage_machine="lab",
-        usage_ubuntu="noble",
-    )
-    env.pop("usage_architecture", None)
-
-    result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
-
-    assert result.returncode == 0, result.stderr
-    assert log.read_text().splitlines()[-1] == "run packer:upload-s3 lab --ubuntu noble --architecture aarch64"
-
-
 def test_publish_qemu_stops_before_building_when_preflight_fails(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     log = tmp_path / "mise.log"
@@ -172,22 +149,31 @@ def test_publish_qemu_stops_before_building_when_preflight_fails(tmp_path: Path)
     assert len(log.read_text().splitlines()) == 1
 
 
-def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("architecture", "upstream"),
+    [(None, False), ("aarch64", True)],
+)
+def test_publish_qemu_threads_arm_store_options(tmp_path: Path, architecture: str | None, upstream: bool) -> None:
     fake_bin = tmp_path / "bin"
     log = tmp_path / "mise.log"
     _executable(
         fake_bin / "mise",
         '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n',
     )
+    _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'arm64\\n'\n")
     env = dict(os.environ)
     env.update(
         MISE_TEST_LOG=str(log),
         PATH=f"{fake_bin}:{env['PATH']}",
-        usage_architecture="aarch64",
         usage_machine="lab",
         usage_promote="true",
         usage_ubuntu="noble",
+        usage_upstream=str(upstream).lower(),
     )
+    if architecture is None:
+        env.pop("usage_architecture", None)
+    else:
+        env["usage_architecture"] = architecture
 
     result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
@@ -196,7 +182,7 @@ def test_publish_qemu_threads_arm_store_options(tmp_path: Path) -> None:
     assert log.read_text().splitlines() == [
         f"{upload} --preflight",
         "run packer:init",
-        "run packer:build lab --ubuntu noble --upstream",
+        "run packer:build lab --ubuntu noble" + (" --upstream" if upstream else ""),
         upload,
     ]
 

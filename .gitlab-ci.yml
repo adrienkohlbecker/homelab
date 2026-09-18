@@ -263,7 +263,7 @@ qemu_host_ami:
   extends: .qemu_image_arm
   resource_group: qemu_image_lab_aarch64_$UBUNTU
   script:
-    - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --promote
+    - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --upstream --promote
 
 # Build fox's ZFS-root disk on lab, stream it through a temporary Hetzner rescue
 # server, and retain the two newest snapshots. The published project-global
