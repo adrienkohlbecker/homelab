@@ -6,6 +6,8 @@
 #     - foo.does_not_exist     (never-existed chart)
 #   netdata_collectors:
 #     - go.d:collector:systemdunits:service-units  (real, always-live -- the role configures it)
+#     - go.d:collector:prometheus:gitlab_runner   (fixture metrics server)
+#     - go.d:collector:prometheus:minio           (MinIO scrape job)
 #     - go.d:collector:fake_plugin:fake_job        (never-existed collector)
 #   netdata_expected_charts:
 #     system_cpu_chart: system.cpu                 (real exact chart)
