@@ -58,14 +58,35 @@
 
 # example.com is IANA-reserved and permanently delegated, so the probe measures
 # resolved recovering its upstreams rather than a third party's availability.
+# resolved can take several seconds past the DHCP re-lease to reach its DoT
+# upstreams again, so the window is bounded at ~30s rather than a few retries.
 - name: _verify rejection | Resolve a public name after rollback
-  command: resolvectl query --cache=no example.com
-  register: netplan_verify_restored_dns
-  retries: 3
-  delay: 2
-  until: netplan_verify_restored_dns.rc == 0
-  changed_when: false
   become: true
+  block:
+    - name: _verify rejection | Query a public name after rollback
+      command: resolvectl query --cache=no example.com
+      register: netplan_verify_restored_dns
+      retries: 15
+      delay: 2
+      until: netplan_verify_restored_dns.rc == 0
+      changed_when: false
+
+  rescue:
+    - name: _verify rejection | Capture resolved state after the failed query
+      command: resolvectl status
+      register: netplan_verify_resolved_status
+      changed_when: false
+      failed_when: false
+
+    - name: _verify rejection | Report the failed post-rollback resolution
+      fail:
+        msg: |-
+          resolved did not recover its upstreams after rollback:
+          {{ netplan_verify_restored_dns.stderr | default('') }}
+
+          resolvectl status:
+          {{ netplan_verify_resolved_status.stdout }}
+          {{ netplan_verify_resolved_status.stderr }}
 
 # The connectivity rejection above fails after staging. Exercise the separate
 # staging-failure path and verify it cancels the D-Bus transaction before
