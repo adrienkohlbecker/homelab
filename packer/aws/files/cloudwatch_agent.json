@@ -50,7 +50,42 @@
           "io_time",
           "iops_in_progress"
         ]
-      }
+      },
+      "processes": {
+        "measurement": [
+          "running",
+          "blocked"
+        ]
+      },
+      "disk": {
+        "resources": [
+          "/",
+          "/mnt/scratch"
+        ],
+        "measurement": [
+          "used_percent"
+        ]
+      },
+      "net": {
+        "resources": [
+          "ens*",
+          "eth*"
+        ],
+        "measurement": [
+          "bytes_recv",
+          "bytes_sent"
+        ]
+      },
+      "procstat": [
+        {
+          "exe": "qemu-system",
+          "measurement": [
+            "pid_count",
+            "memory_rss",
+            "cpu_usage"
+          ]
+        }
+      ]
     }
   }
 }
