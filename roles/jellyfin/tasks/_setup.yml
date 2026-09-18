@@ -3,6 +3,11 @@
     name: podman
     tasks_from: install
 
+- name: _setup | Converge the services role
+  import_role:
+    name: services
+    tasks_from: main
+
 # The full media role (network, group, /mnt/media dataset with the prod
 # owner/group/0775 shape, library dirs) -- so the write probe in _verify
 # exercises the same permissions prod grants, not a hand-rolled fixture.
@@ -25,10 +30,3 @@
   import_role:
     name: fluentbit
     tasks_from: configure
-
-- name: _setup | Ensure /mnt/services exists
-  file:
-    path: /mnt/services
-    state: directory
-    mode: "0755"
-  become: true
