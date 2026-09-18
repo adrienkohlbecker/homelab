@@ -2,9 +2,11 @@ from pathlib import Path
 
 import matrix
 import yaml
+from conftest import load_repo_module
 
 ROOT = Path(__file__).parents[1]
 PIPELINE = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
+IMAGE_STORE = load_repo_module("mise-tasks/ci/qemu_image_store.py")
 
 
 def test_ansible_config_is_global() -> None:
@@ -42,6 +44,11 @@ def test_lab_qemu_image_is_published_for_supported_releases() -> None:
         "resource_group": "qemu_image_pug_$UBUNTU",
         "script": ['mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --promote'],
     }
+    assert {
+        name.removeprefix("qemu_image:")
+        for name in PIPELINE
+        if name.startswith("qemu_image:") and not name.endswith(":arm")
+    } == IMAGE_STORE.VALID_MACHINES
 
 
 def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None:
