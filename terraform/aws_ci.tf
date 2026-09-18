@@ -33,9 +33,9 @@ locals {
       # aws_launch_template.name are ForceNew, so encoding the type in the name
       # would churn the runner default and IAM groupName condition on a resize.
       name = "homelab-ci-qemu-host"
-      # 16 vCPU / 32 GiB / 950 GB NVMe, at 13 cells each. Five hosts plus the
-      # separate 8-vCPU site host and one 64-vCPU ARM metal host fit inside the
-      # 160-vCPU Spot quota (152 total). max_size must match
+      # 16 vCPU / 32 GiB / 950 GB NVMe, at 13 cells each. Five hosts plus one
+      # 64-vCPU ARM metal host fit inside the 160-vCPU Spot quota (144 total).
+      # _site_test runs here once the x86 cells drain. max_size must match
       # gitlab_runner_aws_qemu_max_instances in host_vars/fox.yml.
       instance_type           = "c8id.4xlarge"
       instance_type_overrides = []
@@ -46,15 +46,6 @@ locals {
       root_volume_iops       = 3000
       root_volume_throughput = 125
       extra_tags             = {}
-    }
-    # Dedicated single-host pool for _site_test. Its 8-vCPU c8id.2xlarge hosts
-    # the 6-vCPU / 12-GiB guest without contending with the role-cell burst.
-    # It reuses the role pool's launch template and overrides only instance type.
-    site = {
-      name                    = "homelab-ci-qemu-site"
-      instance_type_overrides = ["c8id.2xlarge"]
-      max_size                = 1
-      extra_tags              = {}
     }
     arm = {
       name                    = "homelab-ci-qemu-arm"
@@ -901,7 +892,7 @@ resource "aws_autoscaling_group" "ci_qemu" {
         version            = "$Latest"
       }
 
-      # Site and ARM pools override their launch-template instance types.
+      # The ARM pool overrides its launch-template instance type.
       dynamic "override" {
         for_each = each.value.instance_type_overrides
 

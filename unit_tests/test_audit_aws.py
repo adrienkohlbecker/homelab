@@ -161,7 +161,7 @@ def test_ami_recognition_follows_the_shared_architecture_table():
     assert {entry["ci"]["aws_region"] for entry in architecture_table.values()} == {"eu-central-1"}
     contract = audit_aws.CI_REGIONS["eu-central-1"]
     assert {"homelab-ci-images"} == audit_aws.EXPECTED_GLOBAL_S3_BUCKETS
-    assert contract["asgs"] == {"homelab-ci-qemu-host", "homelab-ci-qemu-site", "homelab-ci-qemu-arm"}
+    assert contract["asgs"] == {"homelab-ci-qemu-host", "homelab-ci-qemu-arm"}
     for architecture, ec2_architecture in (("x86_64", "x86_64"), ("aarch64", "arm64")):
         ci = architecture_table[architecture]["ci"]
         assert contract["amis"][ec2_architecture] == {

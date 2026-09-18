@@ -45,7 +45,7 @@ CI_REGIONS: dict[str, dict[str, Any]] = {
                 "parameter": "/homelab-ci/ami/qemu-host/aarch64/{ubuntu}",
             },
         },
-        "asgs": {"homelab-ci-qemu-host", "homelab-ci-qemu-site", "homelab-ci-qemu-arm"},
+        "asgs": {"homelab-ci-qemu-host", "homelab-ci-qemu-arm"},
     },
 }
 EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
