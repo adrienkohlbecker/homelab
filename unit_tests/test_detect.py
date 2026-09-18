@@ -1108,39 +1108,22 @@ class TestRenderChildPipeline:
         assert "timeout --kill-after=30s 1860" in script
         assert "no_cells" not in doc
 
-    def test_aws_site_test_waits_for_x86_cells(self) -> None:
-        # The 12-GiB converge guest overruns a memory-bound cell slot, so on AWS
-        # it sits in a trailing `site` stage with needs cleared: GitLab holds it
-        # until test1/test2 finish, then it takes a drained worker. ARM cells
-        # stay in a later stage with needs:[] and are not held back.
-        doc = _render_child_doc(["nginx:lab", "podman:lab:noble", "apt:lab"], site_test=True)
-        assert doc["stages"] == ["test1", "test2", "site", "arm"]
-        site_test = doc["_site_test:lab"]
-        assert site_test["stage"] == "site"
-        assert "needs" in site_test
-        assert site_test["needs"] is None
-        assert site_test["when"] == "always"
-        # The check guest is cell-sized and still starts with the burst.
+    def test_site_test_seeded_first_in_leading_stage(self) -> None:
+        # _site_test must be picked before the matrix: it lives in a dedicated
+        # `site` stage declared ahead of the cell stages, so GitLab (which seeds
+        # build ids stage-by-stage) gives it the lowest id and a runner claims
+        # it first. needs:[] (from .cell) keeps it parallel, so the leading
+        # stage never gates the cells.
+        doc = _render_child_doc(["nginx:lab", "podman:lab:noble"], site_test=True)
+        assert doc["stages"] == ["site", "test1", "test2"]
+        assert doc["_site_test:lab"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
-        assert "needs" not in doc["_site_check:lab"]
         for job in ("_site_test:lab", "_site_check:lab"):
             assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
         assert doc[".cell"]["needs"] == []
-        assert doc[".arm_cell"]["needs"] == []
-
-    def test_lab_site_test_seeded_first_in_leading_stage(self) -> None:
-        # On lab the converge runs alongside the matrix: a leading `site` stage
-        # gives it the lowest build id so the runner claims it first, and the
-        # inherited needs:[] keeps it from gating the cells.
-        doc = _render_child_doc(["nginx:lab", "podman:lab:noble"], site_test=True, target="lab")
-        assert doc["stages"] == ["site", "test1", "test2"]
-        assert doc["_site_test:lab"]["stage"] == "site"
-        assert "needs" not in doc["_site_test:lab"]
-        assert "when" not in doc["_site_test:lab"]
-        assert doc[".cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
-        # site_test with no cells still renders a single `site` stage.
+        # site_test with no cells still seeds a single leading `site` stage.
         doc = _render_child_doc([], site_test=True)
         assert doc["stages"] == ["site"]
         assert doc["_site_test:lab"]["stage"] == "site"

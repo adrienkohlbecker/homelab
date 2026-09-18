@@ -33,9 +33,9 @@ locals {
       # aws_launch_template.name are ForceNew, so encoding the type in the name
       # would churn the runner default and IAM groupName condition on a resize.
       name = "homelab-ci-qemu-host"
-      # 16 vCPU / 32 GiB / 950 GB NVMe, at 13 cells each. Six hosts plus one
-      # 64-vCPU ARM metal host exactly fill the 160-vCPU Frankfurt Spot quota.
-      # _site_test runs here once the x86 cells drain. max_size must match
+      # 16 vCPU / 32 GiB / 950 GB NVMe, at 10 cells each plus room for the
+      # _site_test guest. Six hosts plus one 64-vCPU ARM metal host exactly
+      # fill the 160-vCPU Frankfurt Spot quota. max_size must match
       # gitlab_runner_aws_qemu_max_instances in group_vars/physical_fox.yml.
       instance_type           = "c8id.4xlarge"
       instance_type_overrides = []

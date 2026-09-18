@@ -182,16 +182,17 @@ gitlab_runner_concurrent: 160
 
 gitlab_runner_aws_qemu_enabled: true
 
-# Memory-bound safe ceiling on each 16-vCPU / 32-GiB worker. Its 16-GiB
-# low-swappiness scratch swap is an overrun backstop; lower this if swap fills
-# routinely or OOM kills reappear. Capacity evidence is in
+# Each 16-vCPU / 32-GiB worker safely holds 13 cell-sized (4-GiB) guests; its
+# 16-GiB low-swappiness scratch swap is an overrun backstop. Three of those are
+# held back on every worker because _site_test shares the pool: its 12-GiB guest
+# can land on any one of them. Capacity evidence is in
 # notes/ci_aws_nested_qemu_cells.md.
-gitlab_runner_aws_qemu_capacity_per_instance: 13
+gitlab_runner_aws_qemu_capacity_per_instance: 10
 # Keep this equal to ci_qemu_pools.role.max_size in terraform/aws_ci.tf, whose
 # comment carries the Spot-quota arithmetic.
 gitlab_runner_aws_qemu_max_instances: 6
 # Keep a worker for a straggler in the next wave without retaining the burst
-# across pushes. _site_test reuses a drained worker inside this window.
+# across pushes.
 gitlab_runner_aws_qemu_idle_time: "2m"
 gitlab_runner_aws_qemu_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
