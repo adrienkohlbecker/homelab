@@ -1190,6 +1190,7 @@ class TestRenderChildPipeline:
         arm_jobs = {
             "apt:lab:aarch64",
             "boot:lab:aarch64",
+            "console:lab:aarch64",
             "packer:lab:aarch64",
             "user:lab:aarch64",
             "netdata:lab:aarch64",
