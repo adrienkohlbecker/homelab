@@ -3,6 +3,8 @@ set -euxo pipefail
 
 : "${GITLAB_RUNNER_URL:?gitlab_runner_url is required}"
 : "${GITLAB_RUNNER_SHA256:?gitlab_runner_sha256 is required}"
+: "${CLOUDWATCH_AGENT_URL:?cloudwatch_agent_url is required}"
+: "${CLOUDWATCH_AGENT_SHA256:?cloudwatch_agent_sha256 is required}"
 : "${TARGET_ARCHITECTURE:?target_architecture is required}"
 : "${QEMU_PACKAGES:?qemu_packages is required}"
 : "${QEMU_SYSTEM_BINARY:?qemu_system_binary is required}"
@@ -77,6 +79,16 @@ sudo install -m 0755 -o root -g root /tmp/gitlab-runner /usr/local/bin/gitlab-ru
 sudo ln -sf /usr/local/bin/gitlab-runner /usr/bin/gitlab-runner
 sudo install -m 0755 -o root -g root /tmp/homelab_ci_prepare_scratch.sh /usr/local/bin/homelab_ci_prepare_scratch
 sudo usermod -aG kvm ubuntu
+
+# Host memory, swap, and CPU metrics for capacity tuning. fetch-config only
+# translates (and so validates) the config; the enabled unit starts the agent
+# on each instance boot, never on the builder.
+curl -fsSL --retry 5 --retry-all-errors --retry-connrefused -o /tmp/amazon-cloudwatch-agent.deb "$CLOUDWATCH_AGENT_URL"
+echo "${CLOUDWATCH_AGENT_SHA256}  /tmp/amazon-cloudwatch-agent.deb" | sha256sum -c -
+sudo DEBIAN_FRONTEND=noninteractive dpkg -i /tmp/amazon-cloudwatch-agent.deb
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -c file:/tmp/cloudwatch_agent.json
+sudo systemctl enable amazon-cloudwatch-agent.service
 
 # ARM metal takes longer than EC2 Instance Connect's 60-second key lifetime to
 # reach sshd. Keep a dedicated, non-operator key available for the ARM Fleeting
@@ -179,6 +191,8 @@ sudo apt-get clean
 sudo rm -rf \
   /var/lib/apt/lists/* \
   /tmp/gitlab-runner \
+  /tmp/amazon-cloudwatch-agent.deb \
+  /tmp/cloudwatch_agent.json \
   /tmp/gitlab_runner_fleeting_arm.pub \
   /tmp/homelab_ci_prepare_scratch.sh \
   /tmp/qemu_host_smoke.sh \

@@ -1,0 +1,26 @@
+{
+  "agent": {
+    "metrics_collection_interval": 5,
+    "run_as_user": "cwagent"
+  },
+  "metrics": {
+    "namespace": "homelab-ci",
+    "append_dimensions": {
+      "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "aggregation_dimensions": [["AutoScalingGroupName"]],
+    "metrics_collected": {
+      "cpu": {
+        "totalcpu": true,
+        "measurement": ["cpu_usage_active", "cpu_usage_iowait", "cpu_usage_steal"]
+      },
+      "mem": {
+        "measurement": ["mem_used_percent", "mem_available"]
+      },
+      "swap": {
+        "measurement": ["swap_used_percent", "swap_used"]
+      }
+    }
+  }
+}

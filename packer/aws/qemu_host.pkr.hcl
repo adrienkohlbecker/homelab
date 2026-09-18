@@ -61,6 +61,7 @@ locals {
       qemu_packages        = "qemu-system-x86 ovmf"
       qemu_system_binary   = "qemu-system-x86_64"
       runner_artifact      = local.versions.gitlab_runner_archive.x86_64
+      cloudwatch_agent     = local.versions.cloudwatch_agent_deb.x86_64
       firmware_destination = ""
     }
     aarch64 = {
@@ -69,6 +70,7 @@ locals {
       qemu_packages        = "qemu-system-arm qemu-efi-aarch64"
       qemu_system_binary   = "qemu-system-aarch64"
       runner_artifact      = local.versions.gitlab_runner_archive.aarch64
+      cloudwatch_agent     = local.versions.cloudwatch_agent_deb.aarch64
       firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"
     }
   }
@@ -149,6 +151,7 @@ build {
       "${path.cwd}/packer/aws/files/homelab_ci_prepare_scratch.sh",
       "${path.cwd}/packer/aws/files/gitlab_runner_fleeting_arm.pub",
       "${path.cwd}/packer/aws/files/qemu_host_smoke.sh",
+      "${path.cwd}/packer/aws/files/cloudwatch_agent.json",
       # The ARM firmware installer and the pins it reads.
       "${path.cwd}/mise-tasks/test/firmware.sh",
       "${path.cwd}/group_vars/all/versions.yml",
@@ -166,6 +169,8 @@ build {
       "QEMU_MACHINE_TYPE"            = local.guest_architecture.machine_type
       "GITLAB_RUNNER_URL"            = local.architecture_config.runner_artifact.url
       "GITLAB_RUNNER_SHA256"         = local.architecture_config.runner_artifact.sha256
+      "CLOUDWATCH_AGENT_URL"         = local.architecture_config.cloudwatch_agent.url
+      "CLOUDWATCH_AGENT_SHA256"      = local.architecture_config.cloudwatch_agent.sha256
       "HOMELAB_AARCH64_FIRMWARE_DIR" = local.architecture_config.firmware_destination
     }
   }

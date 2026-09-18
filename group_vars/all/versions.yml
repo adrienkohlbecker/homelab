@@ -111,6 +111,19 @@ gitlab_runner_archive:
     url: "https://gitlab-runner-downloads.s3.amazonaws.com/v19.0.1/binaries/gitlab-runner-linux-arm64"
     sha256: "fd2d07bf3ee40b495cf0affa46257407dbba9c18e46d6a91001dee938d8b10ac"
 
+# Amazon CloudWatch agent baked into the AWS qemu-host AMI for host memory,
+# swap, and CPU metrics (packer/aws/files/cloudwatch_agent.json). Versioned
+# S3 paths; debs verified against the agent's GPG signing key
+# 937616F3450B7D806CBD9725D58167303B789C72 on 2026-09-18.
+cloudwatch_agent_version: "1.300072.0b1766"  # 2026-09-18
+cloudwatch_agent_deb:
+  x86_64:
+    url: "https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/1.300072.0b1766/amazon-cloudwatch-agent.deb"
+    sha256: "05baeadca96c4bb8e43906ed09cf0bebd0f321ff6d41987bdc46ce681de0978d"
+  aarch64:
+    url: "https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/arm64/1.300072.0b1766/amazon-cloudwatch-agent.deb"
+    sha256: "f84cbb6b193f80440f713ec3a2b2b6ed45a16f10d8f0fe38c01cbff9155cb3f9"
+
 # fleeting-plugin-aws: the instance executor's ASG plugin for nested-qemu AWS
 # runner hosts (roles/gitlab_runner aws_qemu runner, notes/
 # ci_aws_nested_qemu_cells.md). Same shape as the Hetzner plugin: a plain
