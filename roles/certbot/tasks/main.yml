@@ -71,12 +71,15 @@
       tags:
         - certbot
 
-    # Exercise both fresh credentials and later token rotations through the renewal
-    # path that the timer will use.
-    - name: Exercise renewal after cloudflare credential changes
+    # Surface a bad rotated token at apply time rather than at the next timer
+    # renewal. A first issuance already proved the credentials, and re-validating
+    # the same names right after it trips the CA's DNS caching.
+    - name: Exercise renewal after cloudflare token rotation
       command: certbot renew --dry-run --no-random-sleep-on-renew
       changed_when: false
-      when: certbot_cf_creds.changed
+      when:
+        - certbot_cf_creds.changed
+        - certbot_cert_stat.stat.exists
 
     - name: Enable certbot renewal timer
       when: not (ansible_check_mode and certbot_apt.changed)
