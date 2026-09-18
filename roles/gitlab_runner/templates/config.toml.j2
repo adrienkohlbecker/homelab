@@ -8,7 +8,7 @@
   shell = "bash"
   limit = {{ max_instances * capacity }}
   request_concurrency = 4
-  # The AMI mounts local NVMe at /mnt/scratch and pre-creates these paths.
+  # The AMI mounts local NVMe (or an EBS scratch volume) at /mnt/scratch and pre-creates these paths.
   builds_dir = "/mnt/scratch/gitlab-runner/builds"
   cache_dir = "/mnt/scratch/gitlab-runner/cache"
 
