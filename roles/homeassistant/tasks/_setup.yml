@@ -13,25 +13,6 @@
     name: fluentbit
     tasks_from: configure
 
-- name: _setup | Create dummy iot interface
-  # The role's macvlan network uses `iot` as its parent. Production hosts
-  # have a real iot VLAN; test environments don't, so stand up a dummy
-  # interface with the same name to satisfy the macvlan creation.
-  shell: |
-    set -euo pipefail
-    if ip link show iot >/dev/null 2>&1; then
-      echo "exists"
-    else
-      ip link add iot type dummy
-      ip link set iot up
-      echo "created"
-    fi
-  args:
-    executable: /bin/bash
-  register: _homeassistant_iot_setup
-  changed_when: '"created" in _homeassistant_iot_setup.stdout'
-  become: true
-
 # Provision the mac_iot iface + podman network from the integration inventory's
 # macvlan_blocks. In site.yml the macvlan role runs early in the
 # play order so homeassistant's `--network=mac_iot` finds it
