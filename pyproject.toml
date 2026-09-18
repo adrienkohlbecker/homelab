@@ -16,6 +16,7 @@ dependencies = [
   "pytest>=8.0",
   "check-jsonschema>=0.37.2", # lint:topology (a dep, not uvx, so it's CI-cached)
   "boto3>=1.40.0",            # mise-tasks/ci/audit-aws.py (in-process S3/EC2 calls)
+  "python-hcl2>=8.1",         # unit_tests: parse terraform locals
 ]
 
 [tool.ruff]
