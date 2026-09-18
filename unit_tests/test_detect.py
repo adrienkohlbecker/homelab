@@ -1187,23 +1187,13 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(specs, site_test=True)
         x86_jobs = [name for name in specs if name in doc]
         arm_jobs = {
-            "apt:lab:aarch64",
-            "boot:lab:aarch64",
-            "console:lab:aarch64",
-            "packer:lab:aarch64",
-            "user:lab:aarch64",
-            "netdata:lab:aarch64",
-            "minio:lab:aarch64",
-            "lnav:lab:aarch64",
-            "gitlab_runner:lab:aarch64",
-            "gitea:lab:aarch64",
-            "kdump:lab:aarch64",
-            "kdump:minimal:aarch64",
-            "refind:lab:aarch64",
-            "zfsbootmenu:lab:aarch64",
+            f"{role}:{machine}:aarch64"
+            for role in detect.list_testable_roles()
+            for machine in detect.load_role_test_config(role).arm_machines
         }
 
         assert len(x86_jobs) == len(specs)
+        assert arm_jobs
         assert {name for name in doc if name.endswith(":aarch64")} == arm_jobs
 
     def test_lab_target_never_renders_arm_jobs(self) -> None:
