@@ -4,7 +4,6 @@
     tasks_from: install
 
 - name: _setup | Enable the rootful podman socket
-  when: not (ansible_check_mode and podman_apt.changed)
   systemd:
     name: podman.socket
     enabled: true
