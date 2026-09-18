@@ -117,17 +117,12 @@
     - profilarr
     - nexus
     - homepage
+    - macos_vm
 
 - name: CI runners
   hosts: lab,fox
   roles:
     - gitlab_runner
-
-- name: MacOS VM
-  hosts: lab
-  roles:
-    - role: macos_vm
-      when: not qemu_test
 
 - name: UDM appliance services
   hosts: udm
