@@ -80,12 +80,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
         help="Use public apt/podman mirrors instead of the local Nexus cache (escape hatch when the lab mirror is unreachable)",
     )
     parser.add_argument(
-        "--benchmark",
-        action="store_true",
-        default=False,
-        help="Enable ansible's profile_tasks callback for per-task timing",
-    )
-    parser.add_argument(
         "--workdir-parent",
         type=Path,
         default=os.environ.get("HOMELAB_WORKDIR_PARENT") or None,
@@ -200,12 +194,6 @@ def main() -> int:
     """CLI entry point for running a single role test."""
 
     parsed_args, pass_args, role_config = parse_args()
-
-    if parsed_args.benchmark:
-        # profile_tasks tags every TASK header with elapsed time and prints a
-        # TASKS RECAP at end of each play; env var picks it up for every
-        # ansible-playbook subprocess without editing ansible.cfg.
-        os.environ["ANSIBLE_CALLBACKS_ENABLED"] = "profile_tasks"
 
     role_main = Path(f"roles/{parsed_args.role}/tasks/main.yml")
     if not role_main.exists():
