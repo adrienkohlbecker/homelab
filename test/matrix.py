@@ -20,7 +20,8 @@ UBUNTU_RELEASES: dict[str, str] = {
 }
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
 DEFAULT_MACHINES = ("lab",)
-ARM_PUBLISHED_MACHINES = frozenset({"lab"})
+# ARM Lab uses a published Packer image; Minimal downloads Ubuntu's cloud image.
+ARM_CAPABLE_MACHINES = frozenset({"lab", "minimal"})
 
 _ROLE_META_KEYS = {"arm", "base_prerequisites", "machines", "skip", "ubuntu"}
 
@@ -180,8 +181,8 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 errors.append(f"arm entries must be strings, got {type(name).__name__}")
             elif name not in machines:
                 errors.append(f"arm machine {name!r} not in machines {machines}")
-            elif name != "minimal" and name not in ARM_PUBLISHED_MACHINES:
-                errors.append(f"arm machine {name!r} has no published image")
+            elif name not in ARM_CAPABLE_MACHINES:
+                errors.append(f"arm machine {name!r} has no ARM image")
             elif (name, DEFAULT_UBUNTU) in skip:
                 errors.append(f"arm machine {name!r} skips the default release")
             elif name in arm_machines:

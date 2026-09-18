@@ -101,7 +101,7 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
         name.removeprefix("qemu_image:").removesuffix(":arm")
         for name in PIPELINE
         if name.startswith("qemu_image:") and name.endswith(":arm")
-    } == matrix.ARM_PUBLISHED_MACHINES
+    } == matrix.ARM_CAPABLE_MACHINES - {"minimal"}
 
 
 def test_bake_role_uses_shared_qemu_image_bucket() -> None:
