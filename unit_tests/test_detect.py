@@ -1198,6 +1198,7 @@ class TestRenderChildPipeline:
             "gitlab_runner:lab:aarch64",
             "gitea:lab:aarch64",
             "kdump:lab:aarch64",
+            "kdump:minimal:aarch64",
             "refind:lab:aarch64",
             "zfsbootmenu:lab:aarch64",
         }
