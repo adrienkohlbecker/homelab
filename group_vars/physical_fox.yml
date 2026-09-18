@@ -189,7 +189,7 @@ gitlab_runner_aws_qemu_enabled: true
 gitlab_runner_aws_qemu_capacity_per_instance: 13
 # Keep this equal to ci_qemu_pools.role.max_size in terraform/aws_ci.tf, whose
 # comment carries the Spot-quota arithmetic.
-gitlab_runner_aws_qemu_max_instances: 5
+gitlab_runner_aws_qemu_max_instances: 6
 # Keep a worker for a straggler in the next wave without retaining the burst
 # across pushes. _site_test reuses a drained worker inside this window.
 gitlab_runner_aws_qemu_idle_time: "2m"

@@ -33,13 +33,13 @@ locals {
       # aws_launch_template.name are ForceNew, so encoding the type in the name
       # would churn the runner default and IAM groupName condition on a resize.
       name = "homelab-ci-qemu-host"
-      # 16 vCPU / 32 GiB / 950 GB NVMe, at 13 cells each. Five hosts plus one
-      # 64-vCPU ARM metal host fit inside the 160-vCPU Spot quota (144 total).
+      # 16 vCPU / 32 GiB / 950 GB NVMe, at 13 cells each. Six hosts plus one
+      # 64-vCPU ARM metal host exactly fill the 160-vCPU Frankfurt Spot quota.
       # _site_test runs here once the x86 cells drain. max_size must match
-      # gitlab_runner_aws_qemu_max_instances in host_vars/fox.yml.
+      # gitlab_runner_aws_qemu_max_instances in group_vars/physical_fox.yml.
       instance_type           = "c8id.4xlarge"
       instance_type_overrides = []
-      max_size                = 5
+      max_size                = 6
       # Heavy CI I/O lands on the "d" family's local NVMe. The EBS root holds
       # only the OS and baked toolchain on the gp3 free baseline.
       root_volume_size       = 40
