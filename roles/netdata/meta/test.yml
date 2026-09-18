@@ -1,5 +1,3 @@
 # Verification exercises the nginx and Authelia front on the full Lab fixture.
-machines:
-  lab:
 arm:
   - lab

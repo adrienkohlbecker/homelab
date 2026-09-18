@@ -1,7 +1,5 @@
 # upsmon.conf.j2's NOTIFYFLAG block and one-shot mode ride the default noble
 # cell. resolute adds no distinct template branch; it covers the role against
 # the newer nut runtime the next prod release will carry.
-machines:
-  lab:
 ubuntu:
   - resolute

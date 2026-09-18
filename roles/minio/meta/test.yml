@@ -1,4 +1,2 @@
-machines:
-  lab:
 arm:
   - lab
