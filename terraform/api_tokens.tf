@@ -5,7 +5,7 @@
 # order on each PATCH and the post-apply consistency check refuses the
 # rearrangement. This file manages only a narrow DNS-01 child for
 # ansible's certbot role, so a host compromise gets DNS edit on the
-# 3 zones and nothing else.
+# prod zones and nothing else.
 #
 # Inspect the live homelab-tofu scopes when in doubt:
 #   curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -21,12 +21,14 @@ locals {
     "Zone Read" = "c8fed203ed3043cba015a93ad1616f1f"
   }
 
-  cf_zone_resources = {
-    for zid in values(local.zones) : "com.cloudflare.api.account.zone.${zid}" => "*"
+  # mhaf.fr is the test zone, covered by certbot_test below.
+  cf_prod_zone_resources = {
+    for name, zid in local.zones : "com.cloudflare.api.account.zone.${zid}" => "*"
+    if name != "mhaf.fr"
   }
 }
 
-# DNS:Write + Zone:Read on the 3 zones -- enough for certbot's DNS-01
+# DNS:Write + Zone:Read on the prod zones -- enough for certbot's DNS-01
 # challenge (write _acme-challenge TXT, list zones to find the FQDN's
 # parent), nothing else.
 #
@@ -51,7 +53,7 @@ resource "cloudflare_account_token" "certbot" {
         { id = local.cf_perm_groups["DNS Write"] },
         { id = local.cf_perm_groups["Zone Read"] },
       ]
-      resources = jsonencode(local.cf_zone_resources)
+      resources = jsonencode(local.cf_prod_zone_resources)
     },
   ]
 }
