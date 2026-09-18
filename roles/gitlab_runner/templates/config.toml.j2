@@ -79,19 +79,6 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
      gitlab_runner_aws_qemu_instance_acquire_timeout,
      ''
    ) }}
-
-# Dedicated one-host, one-job pool for the full-site converge cell.
-{{ aws_instance_runner(
-     'aws-shell-qemu-site',
-     gitlab_runner_aws_qemu_site_token,
-     gitlab_runner_aws_qemu_site_asg_name,
-     1,
-     1,
-     gitlab_runner_aws_qemu_site_idle_time,
-     gitlab_runner_aws_qemu_connector_timeout,
-     gitlab_runner_aws_qemu_instance_acquire_timeout,
-     ''
-   ) }}
 {% endif %}
 {% if gitlab_runner_aws_qemu_arm_enabled %}
 

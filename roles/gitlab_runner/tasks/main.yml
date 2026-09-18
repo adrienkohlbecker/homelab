@@ -31,9 +31,6 @@
             not gitlab_runner_aws_qemu_enabled
             or gitlab_runner_aws_qemu_token | length > 0
           - >-
-            not gitlab_runner_aws_qemu_enabled
-            or gitlab_runner_aws_qemu_site_token | length > 0
-          - >-
             not gitlab_runner_aws_qemu_arm_enabled
             or gitlab_runner_aws_qemu_arm_token | length > 0
           - >-

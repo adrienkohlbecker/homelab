@@ -187,11 +187,11 @@ gitlab_runner_aws_qemu_enabled: true
 # routinely or OOM kills reappear. Capacity evidence is in
 # notes/ci_aws_nested_qemu_cells.md.
 gitlab_runner_aws_qemu_capacity_per_instance: 13
-# Five workers consume 80 of the 96 regional Spot vCPUs, leaving eight for the
-# site worker. Keep this equal to ci_qemu_pools.role.max_size in terraform/aws_ci.tf.
+# Keep this equal to ci_qemu_pools.role.max_size in terraform/aws_ci.tf, whose
+# comment carries the Spot-quota arithmetic.
 gitlab_runner_aws_qemu_max_instances: 5
 # Keep a worker for a straggler in the next wave without retaining the burst
-# across pushes. The site pool overrides this below.
+# across pushes. _site_test reuses a drained worker inside this window.
 gitlab_runner_aws_qemu_idle_time: "2m"
 gitlab_runner_aws_qemu_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
@@ -218,16 +218,6 @@ gitlab_runner_aws_qemu_secret_access_key: !vault |
           6637393637626530350a333365363965353665313162613063633335613361653961616638353766
           63383134383261376562656636663530613961306133356436373138363533333565636530663465
           3938666634326536393731623530626531613761636231666135
-
-# Dedicated _site_test pool (terraform ASG homelab-ci-qemu-site, 8-vCPU
-# c8id.2xlarge): runs only the full-site converge cell, off the role-cell pool, so
-# it runs uncontended and the role-cell pool drains without waiting on it. The
-# project-runner token (tagged aws-shell-qemu-site) is vaulted in
-# group_vars/prod.yml (gitlab_runner_aws_qemu_site_token); the role-cell runner's
-# AWS plugin + .aws profile are reused. detect.py routes _site_test here via the
-# aws_qemu site_runner_tag.
-# One job per pipeline, so warm reuse buys nothing here either -- same 2m drain.
-gitlab_runner_aws_qemu_site_idle_time: "2m"
 
 # One ARM bare-metal worker supplies up to the validated 78-cell
 # density ceiling. The acquisition bound leaves room for cold Spot metal

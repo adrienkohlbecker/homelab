@@ -45,13 +45,11 @@ def test_all_aws_runner_pools_render_consistently() -> None:
     runners = {runner["name"]: runner for runner in config["runners"]}
     assert set(runners) == {
         "fox-aws-shell-qemu",
-        "fox-aws-shell-qemu-site",
         "fox-aws-shell-qemu-arm",
     }
 
     expected = {
         "fox-aws-shell-qemu": ("homelab-ci-qemu-host", "homelab-ci-fleeting", 65, 13, 5, "10m0s"),
-        "fox-aws-shell-qemu-site": ("homelab-ci-qemu-site", "homelab-ci-fleeting", 1, 1, 1, "10m0s"),
         "fox-aws-shell-qemu-arm": ("homelab-ci-qemu-arm", "homelab-ci-fleeting", 78, 78, 1, "20m0s"),
     }
     for name, (asg, profile, limit, capacity, max_instances, acquire_timeout) in expected.items():
@@ -65,9 +63,9 @@ def test_all_aws_runner_pools_render_consistently() -> None:
         assert autoscaler["plugin_config"]["profile"] == profile
         assert autoscaler["connector_config"]["timeout"] == "2m0s"
 
-    for name in ("fox-aws-shell-qemu", "fox-aws-shell-qemu-site"):
-        assert "key_path" not in runners[name]["autoscaler"]["connector_config"]
-        assert "use_static_credentials" not in runners[name]["autoscaler"]["connector_config"]
+    role_connector = runners["fox-aws-shell-qemu"]["autoscaler"]["connector_config"]
+    assert "key_path" not in role_connector
+    assert "use_static_credentials" not in role_connector
     arm_connector = runners["fox-aws-shell-qemu-arm"]["autoscaler"]["connector_config"]
     assert arm_connector["key_path"] == "/mnt/services/gitlab_runner/.ssh/fleeting_arm"
     assert arm_connector["use_static_credentials"] is True
@@ -122,7 +120,7 @@ def test_lab_fixture_supplies_secrets_for_enabled_runner_backends() -> None:
     values.update(yaml.load((REPO_ROOT / "test" / "host_vars" / "lab.yml").read_text(), Loader=yaml.BaseLoader))
     backend_secrets = {
         "gitlab_runner_shell_enabled": {"gitlab_runner_shell_token"},
-        "gitlab_runner_aws_qemu_enabled": {"gitlab_runner_aws_qemu_token", "gitlab_runner_aws_qemu_site_token"},
+        "gitlab_runner_aws_qemu_enabled": {"gitlab_runner_aws_qemu_token"},
         "gitlab_runner_aws_qemu_arm_enabled": {
             "gitlab_runner_aws_qemu_arm_token",
             "gitlab_runner_aws_qemu_arm_ssh_private_key",
