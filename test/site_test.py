@@ -47,9 +47,10 @@ from utils import (
 # serial console (boot.ansi) records which stop jobs hung.
 POWEROFF_TIMEOUT = 120
 
-# The converge runs dozens of services on a dedicated 8-vCPU/16-GiB CI host;
-# check mode renders the same site without starting them.
-SITE_CONVERGE_OPTIONS = MachineRunOptions(vcpus=6, memory_mb=12288, quiet_ansible=True)
+# The converge runs dozens of services; its 12-GiB guest books three cells'
+# worth of a shared 16-vCPU/32-GiB CI worker (capacity_per_instance). Check
+# mode renders the same site without starting them.
+SITE_CONVERGE_OPTIONS = MachineRunOptions(vcpus=8, memory_mb=12288, quiet_ansible=True)
 SITE_CHECK_OPTIONS = MachineRunOptions(quiet_ansible=True)
 
 
