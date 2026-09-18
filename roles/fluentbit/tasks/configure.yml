@@ -178,28 +178,12 @@
   tags:
     - fluentbit
 
-# Package and systemd changes require a restart; configuration and Lua changes
-# support a SIGHUP reload that preserves the in-memory backlog.
-- name: Enable fluent-bit service
-  when: fluentbit_package_ready
-  systemd:
-    name: fluent-bit.service
-    enabled: true
-    state: >-
-      {{ 'restarted'
-         if fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed
-         else 'reloaded'
-         if fluentbit_conf.changed or fluentbit_assets.changed
-            or fluentbit_extension_dir.changed or fluentbit_service_manifest.changed
-            or fluentbit_filters_post.changed
-         else 'started' }}
-  become: true
-  tags:
-    - fluentbit
-
 # The systemd input plugin does not expose db.journal_mode. SQLite accepts
-# journal_mode=WAL on a missing database, then Fluent Bit creates its cursor
-# schema on first write. The timeout covers its short concurrent cursor writes.
+# journal_mode=WAL on a missing database and persists it, then Fluent Bit
+# creates its cursor schema on first write. Run before the first start:
+# switching to WAL takes an exclusive lock and SQLite can return SQLITE_BUSY
+# without consulting the busy timeout while Fluent Bit creates that schema.
+# Once WAL, later runs only read the mode, which the timeout covers.
 - name: Set fluent-bit journal.db to WAL
   command:
     argv:
@@ -232,6 +216,25 @@
     group: root
     mode: "0600"
   when: not ansible_check_mode
+  become: true
+  tags:
+    - fluentbit
+
+# Package and systemd changes require a restart; configuration and Lua changes
+# support a SIGHUP reload that preserves the in-memory backlog.
+- name: Enable fluent-bit service
+  when: fluentbit_package_ready
+  systemd:
+    name: fluent-bit.service
+    enabled: true
+    state: >-
+      {{ 'restarted'
+         if fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed
+         else 'reloaded'
+         if fluentbit_conf.changed or fluentbit_assets.changed
+            or fluentbit_extension_dir.changed or fluentbit_service_manifest.changed
+            or fluentbit_filters_post.changed
+         else 'started' }}
   become: true
   tags:
     - fluentbit
