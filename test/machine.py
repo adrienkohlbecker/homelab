@@ -684,8 +684,10 @@ class Machine:
             env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
             env["ANSIBLE_VERBOSITY"] = "0"
             # Per-task timestamps would print without their suppressed
-            # ok/skipped TASK headers; keep only the end-of-playbook recap.
+            # ok/skipped TASK headers; keep only the end-of-playbook recap,
+            # uncut so the long tail of small tasks stays measurable.
             env["PROFILE_TASKS_SUMMARY_ONLY"] = "true"
+            env["PROFILE_TASKS_TASK_OUTPUT_LIMIT"] = "all"
 
         return env
 

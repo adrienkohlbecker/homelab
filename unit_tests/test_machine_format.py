@@ -213,6 +213,7 @@ def test_ansible_env_quiet_runs_suppress_verbose_output(
     assert env["ANSIBLE_DISPLAY_OK_HOSTS"] == "false"
     assert env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] == "false"
     assert env["ANSIBLE_VERBOSITY"] == "0"
+    assert env["PROFILE_TASKS_TASK_OUTPUT_LIMIT"] == "all"
 
 
 def test_run_options_override_machine_resources(machine_factory: Callable[..., machine.Machine]) -> None:
