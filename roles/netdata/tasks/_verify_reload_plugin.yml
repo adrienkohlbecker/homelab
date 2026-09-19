@@ -1,0 +1,44 @@
+# One respawn probe: kill the plugin, require netdata to start a new one, and
+# require one of its charts to update after the kill.
+
+- name: _verify | Read the running plugin pid for {{ netdata_reload_plugin.process }}
+  command: pgrep -o -f {{ netdata_reload_plugin.process }}
+  register: _netdata_reload_old_pid
+  changed_when: false
+
+- name: _verify | Record the kill time for {{ netdata_reload_plugin.process }}
+  command: date +%s
+  register: _netdata_reload_killed_at
+  changed_when: false
+
+- name: _verify | Send SIGTERM to {{ netdata_reload_plugin.process }}
+  command: pkill -TERM -f {{ netdata_reload_plugin.process }}
+  changed_when: true
+  become: true
+
+- name: _verify | Netdata respawns {{ netdata_reload_plugin.process }}
+  command: pgrep -o -f {{ netdata_reload_plugin.process }}
+  register: _netdata_reload_new_pid
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 2
+  until: >-
+    _netdata_reload_new_pid.rc == 0
+    and _netdata_reload_new_pid.stdout != _netdata_reload_old_pid.stdout
+
+- name: _verify | Plugin chart updates after the respawn of {{ netdata_reload_plugin.process }}
+  uri:
+    url: >-
+      http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter={{ netdata_reload_plugin.chart_prefix }}*
+  register: _netdata_reload_plugin_charts
+  retries: 30
+  delay: 2
+  vars:
+    _updated: >-
+      {{ (_netdata_reload_plugin_charts.json | default({})).values()
+         | map(attribute='last_updated') | map('int') | list }}
+  until: >-
+    _netdata_reload_plugin_charts.status == 200
+    and (_updated | length) > 0
+    and (_updated | max) > (_netdata_reload_killed_at.stdout | int)

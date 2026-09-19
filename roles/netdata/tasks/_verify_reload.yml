@@ -1,0 +1,51 @@
+# Lighter-than-restart config application. go.d, charts.d, and apps.plugin
+# read their config only at start, and the helpers apply changes by
+# killing the plugin and relying on netdata to respawn it. These checks fail
+# if a netdata upgrade stops respawning killed plugins or the respawned
+# process stops reading the current config.
+
+# End to end through the production path: config.yml kills go.d.plugin after
+# writing the job file; the chart only exists once the respawned
+# plugin has read the file.
+- name: _verify | Record the go.d reload time
+  command: date +%s
+  register: _netdata_reload_go_d_at
+  changed_when: false
+
+- name: _verify | Write a go.d job through the config helper
+  import_tasks: config.yml
+  vars:
+    netdata_args:
+      src: _httpcheck_reload_probe.conf.j2
+      dest: go.d/httpcheck.conf
+
+
+- name: _verify | The respawned go.d.plugin collects the new job
+  uri:
+    url: >-
+      http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=httpcheck_reload_probe.*
+  register: _netdata_reload_probe_charts
+  retries: 30
+  delay: 2
+  vars:
+    _updated: >-
+      {{ (_netdata_reload_probe_charts.json | default({})).values()
+         | map(attribute='last_updated') | map('int') | list }}
+  until: >-
+    _netdata_reload_probe_charts.status == 200
+    and (_updated | length) > 0
+    and (_updated | max) > (_netdata_reload_go_d_at.stdout | int)
+
+- name: _verify | Remove the go.d probe job
+  file:
+    path: /etc/netdata/go.d/httpcheck.conf
+    state: absent
+  become: true
+
+- name: _verify | Probe charts.d and apps.plugin respawns
+  include_tasks: _verify_reload_plugin.yml
+  loop:
+    - { process: charts.d.plugin, chart_prefix: netdata_presence. }
+    - { process: apps.plugin, chart_prefix: app. }
+  loop_control:
+    loop_var: netdata_reload_plugin

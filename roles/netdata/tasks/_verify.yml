@@ -55,3 +55,6 @@
       - "'name: gitlab_runner' not in _netdata_prometheus"
       - "'zfspool.zfspool_verify_pool_space_utilization' in _netdata_zfs_alerts"
       - "'? (70) : (80)' in _netdata_zfs_alerts"
+
+- name: _verify | Probe lighter-than-restart config application
+  import_tasks: _verify_reload.yml

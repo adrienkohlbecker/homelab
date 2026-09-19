@@ -96,13 +96,51 @@
   register: netdata_config
   become: true
 
-# No explicit HTTP-API readiness probe after the restart: netdata's
-# ExecStartPost drop-in (override.conf, installed in main.yml) blocks the
-# restart until /api/v1/info answers, so a following reload-health can't
-# race the listener. charts_d.yml keeps its own probe as a backstop for
-# the _setup paths that run before that drop-in is in place.
+# go.d.plugin reads its job files only at start, so killing it is enough when
+# it runs: netdata respawns it within seconds and the new process reads the
+# file on disk (_verify_reload.yml proves it). The plugin is matched by
+# command line because charts.d.plugin runs as a bash script. When nothing
+# matches after this run already killed it, a respawn is pending and will read
+# the latest file too. Otherwise it is disabled (charts.d.plugin disables
+# itself when netdata starts it with no collectors) or netdata is not running,
+# and only a netdata restart relaunches it.
+- name: config | Restart go.d.plugin
+  when:
+    - netdata_args.dest.startswith('go.d/')
+    - netdata_config_seed.changed or netdata_config.changed
+  command:
+    argv:
+      - pkill
+      - --signal
+      - TERM
+      - --full
+      - plugins.d/go.d.plugin
+  register: _netdata_config_go_d_kill
+  changed_when: _netdata_config_go_d_kill.rc == 0
+  failed_when: _netdata_config_go_d_kill.rc > 1
+  become: true
+
+- name: config | Record the go.d.plugin kill
+  when: _netdata_config_go_d_kill.rc | default(1) == 0
+  set_fact:
+    netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['go.d.plugin']) }}"
+
+- name: config | Restart netdata when go.d.plugin is not running
+  when:
+    - _netdata_config_go_d_kill.rc | default(0) == 1
+    - "'go.d.plugin' not in netdata_killed_plugins | default([])"
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+
+# Other daemon config needs the agent itself restarted. No explicit HTTP-API
+# readiness probe: netdata's ExecStartPost drop-in (override.conf, installed
+# in main.yml) blocks the restart until /api/v1/info answers.
 - name: config | Restart netdata
-  when: netdata_config_seed.changed or netdata_config.changed
+  when:
+    - not netdata_args.dest.startswith('go.d/')
+    - netdata_config_seed.changed or netdata_config.changed
   systemd:
     name: netdata
     state: restarted

@@ -50,13 +50,39 @@
   register: netdata_apps_groups_removed
   become: true
 
-# apps.plugin reads apps_groups.conf only at startup, so a change needs a
-# netdata restart to take effect (the override.conf ExecStartPost gates the
-# restart on the HTTP API answering -- see configure.yml).
-- name: Restart netdata after an apps_groups change
+# apps.plugin reads apps_groups.conf only at start, so killing it is enough
+# when it runs: netdata respawns it within seconds and the new process reads
+# the file on disk (_verify_reload.yml proves it). The plugin is matched by
+# command line because charts.d.plugin runs as a bash script. When nothing
+# matches after this run already killed it, a respawn is pending and will read
+# the latest file too. Otherwise it is disabled (charts.d.plugin disables
+# itself when netdata starts it with no collectors) or netdata is not running,
+# and only a netdata restart relaunches it.
+- name: Restart apps.plugin after an apps_groups change
   when: >-
     netdata_apps_groups.changed | default(false)
     or netdata_apps_groups_removed.changed | default(false)
+  command:
+    argv:
+      - pkill
+      - --signal
+      - TERM
+      - --full
+      - plugins.d/apps.plugin
+  register: netdata_apps_plugin_kill
+  changed_when: netdata_apps_plugin_kill.rc == 0
+  failed_when: netdata_apps_plugin_kill.rc > 1
+  become: true
+
+- name: Record the apps.plugin kill
+  when: netdata_apps_plugin_kill.rc | default(1) == 0
+  set_fact:
+    netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['apps.plugin']) }}"
+
+- name: Restart netdata when apps.plugin is not running
+  when:
+    - netdata_apps_plugin_kill.rc | default(0) == 1
+    - "'apps.plugin' not in netdata_killed_plugins | default([])"
   systemd:
     name: netdata
     state: restarted

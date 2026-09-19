@@ -1,0 +1,5 @@
+# _verify fixture: a go.d job whose chart only exists once a go.d.plugin
+# reload has read this file.
+jobs:
+  - name: reload_probe
+    url: http://127.0.0.1:{{ service_ports.netdata }}/api/v1/info
