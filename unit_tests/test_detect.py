@@ -1116,6 +1116,17 @@ class TestRenderChildPipeline:
         assert "timeout --kill-after=30s 1860" in script
         assert "no_cells" not in doc
 
+    def test_cells_yield_to_the_site_converge(self) -> None:
+        # Cells share hosts with the critical-path site converge, so they run
+        # at lower CPU priority and a higher OOM score; the site jobs do not.
+        doc = _render_child_doc(["nginx:lab"], site_test=True)
+        cell_script = "\n".join(doc["nginx:lab"]["script"])
+        assert "nice -n 10 choom -n 500 -- mise exec --" in cell_script
+        for job in ("_site_test:lab", "_site_check:lab"):
+            script = "\n".join(doc[job]["script"])
+            assert "nice" not in script
+            assert "choom" not in script
+
     def test_site_test_seeded_first_in_leading_stage(self) -> None:
         # _site_test must be picked before the matrix: it lives in a dedicated
         # `site` stage declared ahead of the cell stages, so GitLab (which seeds

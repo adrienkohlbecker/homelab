@@ -137,9 +137,12 @@ stages:
     UBUNTU: {{ cell.ubuntu }}
   script:
     # GNU timeout survives a wedged event loop; 60s permits VM teardown.
+    # Cells share hosts with the critical-path site converge: lower CPU
+    # priority lets it keep its vCPUs through the burst, and a higher OOM
+    # score makes the kernel pick a cell over it under memory pressure.
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 || rc=$?
+      nice -n 10 choom -n 500 -- mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}
