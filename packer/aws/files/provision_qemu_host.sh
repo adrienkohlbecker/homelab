@@ -177,6 +177,41 @@ WantedBy=multi-user.target
 EOF
 sudo systemctl enable homelab-ci-scratch.service
 
+# Hydrate the default Lab image as soon as scratch is up, so the first job on
+# a host (often the critical-path site converge) finds it cached instead of
+# waiting ~30s for S3. The script's per-image flock makes a job that arrives
+# mid-hydration wait and then reuse the result; a failure here only means the
+# job hydrates itself. The copy keeps the repository layout the script's
+# relative imports and data reads expect; bundle checksums guard content, and
+# a job whose newer script rejects this copy's cache simply re-hydrates.
+hydrate_root=/opt/homelab-ci/hydrate
+sudo install -D -m 0755 /tmp/hydrate-qemu-images.py "$hydrate_root/mise-tasks/ci/hydrate-qemu-images.py"
+sudo install -D -m 0644 /tmp/qemu_image_store.py "$hydrate_root/mise-tasks/ci/qemu_image_store.py"
+sudo install -D -m 0644 /tmp/matrix.py "$hydrate_root/test/matrix.py"
+sudo install -D -m 0644 /tmp/architectures.yml "$hydrate_root/data/architectures.yml"
+sudo install -D -m 0644 /tmp/ubuntu_releases.yml "$hydrate_root/data/ubuntu_releases.yml"
+sudo tee /etc/systemd/system/homelab-ci-prehydrate.service >/dev/null <<UNIT
+[Unit]
+Description=Pre-hydrate the default qemu image for homelab CI jobs
+Requires=homelab-ci-scratch.service
+After=homelab-ci-scratch.service network-online.target
+Wants=network-online.target
+
+[Service]
+# exec: boot and host readiness proceed while the download runs.
+Type=exec
+User=ubuntu
+Environment=MISE_DATA_DIR=/opt/mise
+Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 $hydrate_root/mise-tasks/ci/hydrate-qemu-images.py lab
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemd-analyze verify /etc/systemd/system/homelab-ci-prehydrate.service
+sudo systemctl enable homelab-ci-prehydrate.service
+
 if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
   firmware_code="$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-code.fd"
   firmware_vars="$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-vars.fd"
@@ -196,6 +231,10 @@ sudo rm -rf \
   /tmp/gitlab_runner_fleeting_arm.pub \
   /tmp/homelab_ci_prepare_scratch.sh \
   /tmp/qemu_host_smoke.sh \
+  /tmp/hydrate-qemu-images.py \
+  /tmp/qemu_image_store.py \
+  /tmp/matrix.py \
+  /tmp/ubuntu_releases.yml \
   /tmp/firmware.sh \
   /tmp/versions.yml \
   /tmp/architectures.yml \

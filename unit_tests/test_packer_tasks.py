@@ -471,9 +471,9 @@ def test_qemu_host_arm_provisioning_uses_pinned_firmware() -> None:
     assert "AAVMF" not in provision
     assert "test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256" in provision
     assert "mise exec -- true" in provision
-    # Cells hydrate through their checked-out source tree. The AMI build must
-    # not try to execute a partial copy of that task without its imports.
-    assert "hydrate-qemu-images.py" not in template
+    # The boot-time pre-hydration runs a baked copy of the task outside any
+    # checkout; test_qemu_host_prehydrate_tree_is_self_contained proves the
+    # copy carries its imports. It must not rely on the mise task wrapper.
     assert "homelab_ci_hydrate_images" not in provision
     assert "mise run ci:hydrate-qemu-images" not in provision
     assert "command -v __QEMU_SYSTEM_BINARY__" in provision
@@ -845,3 +845,31 @@ printf '%s %s\n' "$rc" "$attempts"
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f"{expected_rc} {expected_attempts}"
+
+
+def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
+    """Rebuild the AMI's hydrate tree from provision's installs and run it.
+
+    A hydrate import or data read the AMI does not ship would make the boot
+    unit fail on every host; running --help from outside the repository
+    exercises every module import and data read at load time.
+    """
+    template = QEMU_HOST_TEMPLATE.read_text()
+    provision = QEMU_HOST_PROVISION_SH.read_text()
+    installs = re.findall(r'install -D -m \d+ /tmp/(\S+) "\$hydrate_root/(\S+)"', provision)
+    assert installs
+    sources = {
+        Path(line.split("}/", 1)[1].rstrip('",')).name: line.split("}/", 1)[1].rstrip('",')
+        for line in template.splitlines()
+        if "${path.cwd}/" in line
+    }
+    for name, relative in installs:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((REPO_ROOT / sources[name]).read_bytes())
+    script = tmp_path / "mise-tasks" / "ci" / "hydrate-qemu-images.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"], cwd=tmp_path, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert "{lab,pug}" in result.stdout

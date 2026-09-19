@@ -156,6 +156,11 @@ build {
       "${path.cwd}/mise-tasks/test/firmware.sh",
       "${path.cwd}/group_vars/all/versions.yml",
       "${path.cwd}/data/architectures.yml",
+      # The boot-time image pre-hydration and the modules and data it reads.
+      "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py",
+      "${path.cwd}/mise-tasks/ci/qemu_image_store.py",
+      "${path.cwd}/test/matrix.py",
+      "${path.cwd}/data/ubuntu_releases.yml",
     ]
     destination = "/tmp/"
   }
