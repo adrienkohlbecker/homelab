@@ -68,8 +68,7 @@
       },
       "net": {
         "resources": [
-          "ens*",
-          "eth*"
+          "*"
         ],
         "measurement": [
           "bytes_recv",
