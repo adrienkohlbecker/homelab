@@ -100,12 +100,6 @@ stages:
   variables:
     VARIANT: lab
     UBUNTU: {{ default_ubuntu }}
-{% if in_aws %}
-    # The first-boot DHCP loss behind the .cell slirp pin needs a burst of
-    # passt guests; this is the only passt guest on its host, and the converge
-    # pulls ~4 GiB through its NIC.
-    HOMELAB_NET_BACKEND: passt
-{% endif %}
   timeout: 60m
   script:
     # GNU timeout backstops the asyncio deadline; 60s permits VM teardown.

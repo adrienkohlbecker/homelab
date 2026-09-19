@@ -1116,15 +1116,6 @@ class TestRenderChildPipeline:
         assert "timeout --kill-after=30s 1860" in script
         assert "no_cells" not in doc
 
-    def test_aws_site_converge_uses_passt_and_cells_keep_slirp(self) -> None:
-        doc = _render_child_doc(["nginx:lab"], site_test=True, target="aws_qemu")
-        assert doc["_site_test:lab"]["variables"]["HOMELAB_NET_BACKEND"] == "passt"
-        assert doc[".cell"]["variables"]["HOMELAB_NET_BACKEND"] == "slirp"
-        assert "HOMELAB_NET_BACKEND" not in doc["nginx:lab"]["variables"]
-        assert "HOMELAB_NET_BACKEND" not in doc["_site_check:lab"]["variables"]
-        lab = _render_child_doc(["nginx:lab"], site_test=True, target="lab")
-        assert "HOMELAB_NET_BACKEND" not in lab["_site_test:lab"]["variables"]
-
     def test_cells_yield_to_the_site_converge(self) -> None:
         # Cells share hosts with the critical-path site converge, so they run
         # at lower CPU priority and a higher OOM score; the site jobs do not.
@@ -1146,9 +1137,8 @@ class TestRenderChildPipeline:
         assert doc["stages"] == ["site", "test1", "test2"]
         assert doc["_site_test:lab"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
-        machine = {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
-        assert doc["_site_check:lab"]["variables"] == machine
-        assert doc["_site_test:lab"]["variables"] == machine | {"HOMELAB_NET_BACKEND": "passt"}
+        for job in ("_site_test:lab", "_site_check:lab"):
+            assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
         assert doc[".cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
