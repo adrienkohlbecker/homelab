@@ -127,6 +127,17 @@
             path: /var/lib/man-db/auto-update
             state: absent
 
+        # dpkg syncs every unpacked file. The disks are cache=unsafe, so the
+        # host ignores those flushes, but the guest filesystem still pays the
+        # journal and ZIL work per file on every install.
+        - name: Skip dpkg per-file syncs
+          copy:
+            dest: /etc/dpkg/dpkg.cfg.d/90-test-unsafe-io
+            content: "force-unsafe-io\n"
+            owner: root
+            group: root
+            mode: "0644"
+
         - name: Create systemd-resolved configuration directory
           file:
             path: /etc/systemd/resolved.conf.d
