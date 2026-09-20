@@ -583,6 +583,9 @@ def test_qemu_host_boots_the_ga_kernel_before_anything_is_provisioned() -> None:
     # Grub boots the highest version it finds, so the replacement has to be
     # installed and the AWS flavour gone before the reboot, in that order.
     assert kernel.index("apt-get install -y -qq --no-install-recommends linux-generic") < kernel.index("apt-get purge")
+    # Otherwise apt resolves linux-image-generic's firmware alternation to the
+    # full blob set, none of which an EC2 instance has hardware for.
+    assert "linux-generic linux-firmware-minimal" in kernel
     # The kernel being purged is the running one; the prerm defaults to
     # refusing that, and noninteractive dpkg never gets asked.
     assert "linux-base linux-base/removing-running-kernel boolean false" in kernel

@@ -12,7 +12,10 @@
 set -euxo pipefail
 
 sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends linux-generic
+# linux-image-generic depends on `linux-firmware | linux-firmware-minimal`, and
+# unqualified apt takes the first: ~20 blob packages for GPUs, wireless and NICs
+# no EC2 instance has. Naming the stub satisfies the alternation instead.
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends linux-generic linux-firmware-minimal
 
 # The kernel being purged is the running one, which linux-image's prerm
 # defaults to refusing -- and under a noninteractive frontend it never gets to
