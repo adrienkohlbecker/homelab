@@ -800,10 +800,17 @@ def _cmd_gitlab(args: list[str]) -> int:
                 log,
                 target=opts.target,
             )
-        cells = build_dispatch_matrix(roles_input)
+        # SITE names the full-fleet converge, which no role token can: it is a
+        # play over every role rather than a role with its own cell. Mixing it
+        # with role tokens is allowed, so one dispatch can pair the converge
+        # with the cells for whatever it is being tested against.
+        tokens = [token.strip() for token in roles_input.split(",") if token.strip()]
+        site_test = any(token.upper() == "SITE" for token in tokens)
+        role_tokens = ",".join(token for token in tokens if token.upper() != "SITE")
+        cells = build_dispatch_matrix(role_tokens) if role_tokens else []
         return _emit_gitlab(
             cells_to_ci_specs(cells),
-            False,
+            site_test,
             opts.child_path,
             runtimes,
             log,

@@ -1367,6 +1367,36 @@ class TestCmdGitlab:
         assert {"nginx:lab", "_site_test:lab"} <= loaded.keys()
 
     @pytest.mark.parametrize(
+        ("roles", "expect_site", "expect_cells"),
+        [
+            pytest.param("SITE", True, False, id="site-only"),
+            pytest.param("site", True, False, id="site-lowercase"),
+            pytest.param("SITE,nginx", True, True, id="site-with-a-role"),
+            pytest.param("nginx", False, True, id="role-only"),
+        ],
+    )
+    def test_site_dispatch(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        roles: str,
+        expect_site: bool,
+        expect_cells: bool,
+    ) -> None:
+        """SITE dispatches the full-fleet converge without the whole universe.
+
+        Without it the converge can only be reached through ROLES=ALL, which
+        drags in every cell and costs a full matrix to exercise one play.
+        """
+        monkeypatch.setenv("CI_PIPELINE_SOURCE", "web")
+        monkeypatch.setenv("ROLES", roles)
+        child = tmp_path / "child.yml"
+        assert detect._cmd_gitlab(["--child-path", str(child)]) == 0
+        loaded = detect.yaml.safe_load(child.read_text())
+        assert ("_site_test:lab" in loaded) is expect_site
+        assert any(key == "nginx:lab" for key in loaded) is expect_cells
+
+    @pytest.mark.parametrize(
         ("target", "runner_tag", "in_aws"),
         [
             pytest.param("lab", "lab-shell-qemu", "false", id="lab"),
