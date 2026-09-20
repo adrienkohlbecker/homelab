@@ -588,6 +588,12 @@ Description=Mirror the journal to the harness virtio console
 DefaultDependencies=no
 After=systemd-journald.service
 Before=sysinit.target
+# No start rate limit: journald may not have a readable journal on the first
+# attempt this early in boot, and a burst of quick exits must not retire the
+# unit for the rest of the run. StartLimitIntervalSec is a [Unit] key -- in
+# [Service] systemd only warns, and that warning then fails every later
+# `systemd-analyze verify` the systemd_unit helper runs.
+StartLimitIntervalSec=0
 
 [Service]
 Type=exec
@@ -597,16 +603,20 @@ StandardOutput=file:/dev/hvc0
 StandardError=null
 Restart=always
 RestartSec=1
-# No start rate limit: journald may not have a readable journal on the first
-# attempt this early in boot, and a burst of quick exits must not retire the
-# unit for the rest of the run.
-StartLimitIntervalSec=0
 OOMScoreAdjust=-900
 
 [Install]
 WantedBy=sysinit.target
 UNIT
-  systemd-analyze verify /etc/systemd/system/homelab_guest_journal.service
+  # verify exits 0 on "Unknown key name ... ignoring", so a misplaced
+  # directive passes the bake and then fails every unit the systemd_unit
+  # helper validates on the fixture. Treat any complaint as fatal here.
+  guest_journal_verify=$(systemd-analyze verify /etc/systemd/system/homelab_guest_journal.service 2>&1)
+  if [ -n "$guest_journal_verify" ]; then
+    echo "homelab_guest_journal.service did not verify cleanly:" >&2
+    echo "$guest_journal_verify" >&2
+    exit 1
+  fi
   systemctl enable homelab_guest_journal.service
   # systemd-getty-generator puts a getty on every virtualization console it
   # knows, hvc0 included. Nothing ever types at ours -- the chardev is a
