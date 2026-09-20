@@ -351,19 +351,20 @@ def test_qemu_image_is_sealed_ready_to_boot() -> None:
     assert 'mdadm --wait "$md" || true' in provision
 
 
-def test_qemu_fixture_journal_console_is_conditional() -> None:
-    """The guest mirrors its journal only when the harness attaches hvc0.
+def test_qemu_fixture_mirrors_journal_from_first_boot() -> None:
+    """The drop-in is baked into /etc, not installed by a unit at runtime.
 
-    Without the condition every fixture boot would pay journald's console
-    forwarding, which costs the converge time and loses _SYSTEMD_UNIT on
-    short-lived senders.
+    A unit that writes the config and restarts journald loses every entry
+    before it runs, and the restart gap on top; /etc is in force before
+    journald's first line. 95- sorts below the journald role's 99-custom.conf.
     """
     chroot = QEMU_CHROOT_SH.read_text()
 
-    assert "ConditionPathExists=/dev/hvc0" in chroot
+    assert "/etc/systemd/journald.conf.d/95-guest-journal.conf" in chroot
     assert "TTYPath=/dev/hvc0" in chroot
-    assert "/run/systemd/journald.conf.d/95-guest-journal.conf" in chroot
-    assert "systemctl enable homelab-guest-journal.service" in chroot
+    assert "systemctl restart systemd-journald" not in chroot
+    # Otherwise the generator's console getty interleaves its banners in.
+    assert "systemctl mask serial-getty@hvc0.service" in chroot
 
 
 def test_qemu_build_separates_host_os_from_architecture() -> None:

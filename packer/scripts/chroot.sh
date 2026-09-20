@@ -564,46 +564,28 @@ EOF
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
-# Mirror the journal onto the harness virtio console, but only when the
-# harness attached one (HOMELAB_GUEST_JOURNAL). A guest that never reaches SSH
-# -- a broken NIC backend, a wedged boot -- then still explains itself in an
-# artifact, while a run without the flag pays nothing: no device, condition
-# unmet, journald untouched. The drop-in lands in /run so the journald role
-# keeps /etc, and virtio avoids the serial console's VM exit per byte (which
-# also slowed journald enough to lose _SYSTEMD_UNIT on short-lived senders).
+# Mirror the journal onto the virtio console the harness always attaches. A
+# guest that never reaches SSH -- a broken NIC backend, a wedged boot -- then
+# still explains itself in an artifact, and the stream survives the reboots
+# that wipe the fixture's volatile journal. Baked into /etc so it is in force
+# before journald's first line, with no restart to lose entries across; 95-
+# sorts below the journald role's 99-custom.conf, which shares no key with it.
+# virtio avoids the serial console's VM exit per byte (which also slowed
+# journald enough to lose _SYSTEMD_UNIT on short-lived senders).
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  cat <<'SCRIPT' >/usr/local/bin/homelab_guest_journal
-#!/usr/bin/env bash
-set -euo pipefail
-
-install -d /run/systemd/journald.conf.d
-cat >/run/systemd/journald.conf.d/95-guest-journal.conf <<'CONF'
+  install -d /etc/systemd/journald.conf.d
+  cat <<'CONF' >/etc/systemd/journald.conf.d/95-guest-journal.conf
 [Journal]
 ForwardToConsole=yes
 MaxLevelConsole=info
 TTYPath=/dev/hvc0
 CONF
-systemctl restart systemd-journald
-SCRIPT
-  chmod 0755 /usr/local/bin/homelab_guest_journal
-  cat <<'UNIT' >/etc/systemd/system/homelab-guest-journal.service
-[Unit]
-Description=Mirror the journal to the harness virtio console
-ConditionPathExists=/dev/hvc0
-DefaultDependencies=no
-After=systemd-journald.service
-Before=sysinit.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/homelab_guest_journal
-
-[Install]
-WantedBy=sysinit.target
-UNIT
-  systemd-analyze verify /etc/systemd/system/homelab-guest-journal.service
-  systemctl enable homelab-guest-journal.service
+  # systemd-getty-generator puts a getty on every virtualization console it
+  # knows, hvc0 included. Nothing ever types at ours -- the chardev is a
+  # write-only file -- so the getty only interleaves login banners into the
+  # artifact. Masked by instance name: the generator synthesizes the unit at
+  # runtime, so the list-unit-files guard used for the masks below misses it.
+  systemctl mask serial-getty@hvc0.service
 fi
 
 # Prevent background apt work from taking the dpkg lock in QEMU cells. The

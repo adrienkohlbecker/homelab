@@ -135,7 +135,7 @@ def test_failure_artifact_collection_continues_after_capture_error(
 
     async def collect(label: str, _dest: Path, *_command: str) -> bool:
         labels.append(label)
-        if label == "Systemd journal":
+        if label == "Kernel ring buffer":
             raise OSError("guest disappeared")
         return True
 
@@ -143,7 +143,7 @@ def test_failure_artifact_collection_continues_after_capture_error(
 
     asyncio.run(instance.collect_failure_artifacts())
 
-    assert labels == ["Systemd journal", "Kernel ring buffer", "Failed units"]
+    assert labels == ["Kernel ring buffer", "Failed units"]
 
 
 # ---------------------------------------------------------------------------

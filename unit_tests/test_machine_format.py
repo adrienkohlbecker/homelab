@@ -216,31 +216,22 @@ def test_ansible_env_quiet_runs_suppress_verbose_output(
     assert env["PROFILE_TASKS_TASK_OUTPUT_LIMIT"] == "all"
 
 
-def test_guest_journal_console_is_opt_in(
-    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The virtio journal console only appears with HOMELAB_GUEST_JOURNAL.
+def test_journal_console_is_always_attached(machine_factory: Callable[..., machine.Machine]) -> None:
+    """Every cell carries the virtio console the image mirrors its journal onto.
 
-    Every cell would otherwise carry the device, and the guest unit that
-    mirrors the journal onto it keys on the device existing.
+    The image's journald drop-in points at /dev/hvc0 unconditionally, so a
+    missing device would cost a failed open per forwarded message and leave
+    the run with no journal at all.
     """
 
-    def boot_command(m: machine.Machine) -> str:
-        # prepare() builds these; the command assembly only reads them.
-        m.drives = ["file=disk.qcow2,if=virtio"]
-        return " ".join(m._boot_command())
-
-    monkeypatch.delenv("HOMELAB_GUEST_JOURNAL", raising=False)
-    off = boot_command(machine_factory())
-    assert "virtconsole" not in off
-    assert "id=guest_journal" not in off
-
-    monkeypatch.setenv("HOMELAB_GUEST_JOURNAL", "1")
     m = machine_factory()
-    on = boot_command(m)
-    assert "virtio-serial-pci,id=guest_journal_bus" in on
-    assert f"file,id=guest_journal,path={m.guest_journal_file}" in on
-    assert "virtconsole,chardev=guest_journal,bus=guest_journal_bus.0" in on
+    # prepare() builds these; the command assembly only reads them.
+    m.drives = ["file=disk.qcow2,if=virtio"]
+    cmd = " ".join(m._boot_command())
+
+    assert "virtio-serial-pci,id=journal_bus" in cmd
+    assert f"file,id=journal,path={m.journal_file}" in cmd
+    assert "virtconsole,chardev=journal,bus=journal_bus.0" in cmd
 
 
 def test_run_options_override_machine_resources(machine_factory: Callable[..., machine.Machine]) -> None:

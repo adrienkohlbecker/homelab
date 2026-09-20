@@ -350,7 +350,6 @@ class Machine:
     dmesg_file: Path
     systemctl_failed_file: Path
     passt_file: Path
-    guest_journal_file: Path
     workdir: tempfile.TemporaryDirectory[str]
     workdir_path: Path
     # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
@@ -486,7 +485,6 @@ class Machine:
         self.dmesg_file = output_dir / f"{prefix}.dmesg.ansi"
         self.systemctl_failed_file = output_dir / f"{prefix}.systemctl-failed.ansi"
         self.passt_file = output_dir / f"{prefix}.passt.ansi"
-        self.guest_journal_file = output_dir / f"{prefix}.guest-journal.ansi"
         self._artifact_files = (
             self.output_file,
             self.journal_file,
@@ -494,7 +492,6 @@ class Machine:
             self.dmesg_file,
             self.systemctl_failed_file,
             self.passt_file,
-            self.guest_journal_file,
         )
         for stale in self._artifact_files:
             stale.unlink(missing_ok=True)
@@ -985,9 +982,9 @@ class Machine:
 
         stderr is streamed to the main log; stdout goes only to *dest*.
         *label* is what we print when the capture fails or succeeds. Used by
-        the per-run failure diagnostics so each artifact (journal, dmesg,
-        systemctl --failed) is a separate file the operator (or CI artifact
-        upload) can read in isolation.
+        the per-run failure diagnostics so each artifact (dmesg, systemctl
+        --failed) is a separate file the operator (or CI artifact upload) can
+        read in isolation.
         """
         cmd = self.format_ssh_cmd(*remote_cmd)
         print_cmd_line(cmd)
@@ -1017,22 +1014,19 @@ class Machine:
     async def collect_failure_artifacts(self) -> None:
         """Collect post-mortem diagnostics from the guest after a failed run.
 
-        Three artifacts:
-          - <variant>.<role>.journal.ansi -- full systemd journal
-          - <variant>.<role>.dmesg.ansi -- guest kernel ring buffer
-          - <variant>.<role>.systemctl-failed.ansi -- list of failed units
+        Two artifacts, both carrying what the always-on journal mirror
+        structurally cannot:
+          - <variant>.<role>.dmesg.ansi -- the kernel ring buffer, the only
+            source of kernel lines below MaxLevelConsole=info, and readable
+            even when journald itself is wedged
+          - <variant>.<role>.systemctl-failed.ansi -- derived state, not a log
 
         Each runs as a best-effort capture so a failure of one doesn't shadow
-        the others. The files remain available for local inspection and CI
+        the other. The files remain available for local inspection and CI
         artifact collection.
         """
 
         captures = (
-            (
-                "Systemd journal",
-                self.journal_file,
-                ("env", "SYSTEMD_COLORS=true", "journalctl", "--no-pager", "--priority", "info"),
-            ),
             ("Kernel ring buffer", self.dmesg_file, ("sudo", "dmesg", "--color=always", "--ctime")),
             (
                 "Failed units",
@@ -1661,22 +1655,6 @@ class Machine:
 
         netdev_arg, net_device_arg = self._netdev_args()
 
-        # HOMELAB_GUEST_JOURNAL attaches a virtio console the guest mirrors its
-        # journal onto (its own unit, gated on the device existing). virtio
-        # carries it over a ring buffer rather than the serial port's VM exit
-        # per byte, and without the flag the device is absent and the guest
-        # leaves journald alone.
-        guest_journal_args: list[str] = []
-        if os.environ.get("HOMELAB_GUEST_JOURNAL"):
-            guest_journal_args = [
-                "-device",
-                "virtio-serial-pci,id=guest_journal_bus",
-                "-chardev",
-                f"file,id=guest_journal,path={self.guest_journal_file}",
-                "-device",
-                "virtconsole,chardev=guest_journal,bus=guest_journal_bus.0",
-            ]
-
         cmd = [
             "timeout",
             "--kill-after=10s",
@@ -1713,7 +1691,19 @@ class Machine:
             "stdio",
             "-device",
             net_device_arg,
-            *guest_journal_args,
+            # The console the image's journald drop-in mirrors the journal
+            # onto -- the only diagnostic that survives a guest which never
+            # reaches SSH, and the only one spanning the reboots that wipe
+            # the fixture's volatile journal. virtio and not a second serial
+            # port: a ring buffer instead of a VM exit per byte, which also
+            # slowed journald enough to lose _SYSTEMD_UNIT on short-lived
+            # senders.
+            "-device",
+            "virtio-serial-pci,id=journal_bus",
+            "-chardev",
+            f"file,id=journal,path={self.journal_file}",
+            "-device",
+            "virtconsole,chardev=journal,bus=journal_bus.0",
             "-pidfile",
             str(self.pid_file),
         ]
