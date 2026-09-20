@@ -177,11 +177,21 @@
   set_fact:
     fluentbit_lnav_crun_id: "{{ fluentbit_lnav_crun_barrier_marker | hash('sha256') }}"
 
+# journald reads the sending process cgroup to fill _SYSTEMD_UNIT when it
+# handles the message, so a logger that already exited lands as unit=unknown:
+# 5 of 10 emits on a fixture whose journal is mirrored to the console, 10 of
+# 10 once the sender stays open past the write. Hold it open rather than
+# assert on the race.
 - name: _verify | Journald path | emit marked log via transient unit
-  command: >-
-    systemd-run --unit=fluentbit_verify_journald --no-block --quiet
-    /usr/bin/logger -t fluentbit_verify_journald
-    "ERROR {{ fluentbit_lnav_journald_marker }}"
+  command:
+    argv:
+      - systemd-run
+      - --unit=fluentbit_verify_journald
+      - --no-block
+      - --quiet
+      - /bin/sh
+      - -c
+      - '{ echo "ERROR {{ fluentbit_lnav_journald_marker }}"; sleep 2; } | logger -t fluentbit_verify_journald'
   changed_when: false
   become: true
 
