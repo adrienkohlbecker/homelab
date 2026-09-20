@@ -567,19 +567,47 @@ fi
 # Mirror the journal onto the virtio console the harness always attaches. A
 # guest that never reaches SSH -- a broken NIC backend, a wedged boot -- then
 # still explains itself in an artifact, and the stream survives the reboots
-# that wipe the fixture's volatile journal. Baked into /etc so it is in force
-# before journald's first line, with no restart to lose entries across; 95-
-# sorts below the journald role's 99-custom.conf, which shares no key with it.
-# virtio avoids the serial console's VM exit per byte (which also slowed
-# journald enough to lose _SYSTEMD_UNIT on short-lived senders).
+# that wipe the fixture's volatile journal.
+#
+# journalctl --follow and not journald's own ForwardToConsole: forwarding
+# starts only once journald opens the console, drops everything logged before
+# that, and never replays the kernel records it imported from /dev/kmsg, so
+# the artifact opened mid-boot with no kernel lines at all. --lines=all
+# replays the journal from its first entry, so a late start costs nothing and
+# the mirror begins where the boot does. It also buys journalctl's formatting
+# -- ISO timestamps with an offset (the guest runs UTC, the harness rarely
+# does), hostname, and priority colour -- which ForwardToConsole hardcodes
+# away behind a bare monotonic counter.
+#
+# --cursor-file keeps a Restart= from replaying the whole journal again; /run
+# scopes it to the boot, which is also the lifetime of the volatile journal.
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  install -d /etc/systemd/journald.conf.d
-  cat <<'CONF' >/etc/systemd/journald.conf.d/95-guest-journal.conf
-[Journal]
-ForwardToConsole=yes
-MaxLevelConsole=info
-TTYPath=/dev/hvc0
-CONF
+  cat <<'UNIT' >/etc/systemd/system/homelab_guest_journal.service
+[Unit]
+Description=Mirror the journal to the harness virtio console
+DefaultDependencies=no
+After=systemd-journald.service
+Before=sysinit.target
+
+[Service]
+Type=exec
+Environment=SYSTEMD_COLORS=true
+ExecStart=/usr/bin/journalctl --follow --lines=all --output=short-iso-precise --cursor-file=/run/homelab_guest_journal.cursor
+StandardOutput=file:/dev/hvc0
+StandardError=null
+Restart=always
+RestartSec=1
+# No start rate limit: journald may not have a readable journal on the first
+# attempt this early in boot, and a burst of quick exits must not retire the
+# unit for the rest of the run.
+StartLimitIntervalSec=0
+OOMScoreAdjust=-900
+
+[Install]
+WantedBy=sysinit.target
+UNIT
+  systemd-analyze verify /etc/systemd/system/homelab_guest_journal.service
+  systemctl enable homelab_guest_journal.service
   # systemd-getty-generator puts a getty on every virtualization console it
   # knows, hvc0 included. Nothing ever types at ours -- the chardev is a
   # write-only file -- so the getty only interleaves login banners into the

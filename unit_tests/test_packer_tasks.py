@@ -352,18 +352,22 @@ def test_qemu_image_is_sealed_ready_to_boot() -> None:
     assert 'mdadm --wait "$md" || true' in provision
 
 
-def test_qemu_fixture_mirrors_journal_from_first_boot() -> None:
-    """The drop-in is baked into /etc, not installed by a unit at runtime.
+def test_qemu_fixture_mirrors_journal_from_the_first_entry() -> None:
+    """The mirror follows the journal rather than using ForwardToConsole.
 
-    A unit that writes the config and restarts journald loses every entry
-    before it runs, and the restart gap on top; /etc is in force before
-    journald's first line. 95- sorts below the journald role's 99-custom.conf.
+    Forwarding starts only when journald opens the console and never replays
+    the kernel records it imported from kmsg, so the artifact opened mid-boot
+    with no kernel lines. --lines=all makes a late start cost nothing, and
+    --cursor-file stops a Restart= from replaying the journal twice.
     """
     chroot = QEMU_CHROOT_SH.read_text()
 
-    assert "/etc/systemd/journald.conf.d/95-guest-journal.conf" in chroot
-    assert "TTYPath=/dev/hvc0" in chroot
-    assert "systemctl restart systemd-journald" not in chroot
+    assert "/etc/systemd/system/homelab_guest_journal.service" in chroot
+    assert "--follow --lines=all" in chroot
+    assert "--cursor-file=/run/homelab_guest_journal.cursor" in chroot
+    assert "StandardOutput=file:/dev/hvc0" in chroot
+    # A second writer on the same chardev would double every line.
+    assert "ForwardToConsole=" not in chroot
     # Otherwise the generator's console getty interleaves its banners in.
     assert "systemctl mask serial-getty@hvc0.service" in chroot
 

@@ -1691,13 +1691,13 @@ class Machine:
             "stdio",
             "-device",
             net_device_arg,
-            # The console the image's journald drop-in mirrors the journal
-            # onto -- the only diagnostic that survives a guest which never
-            # reaches SSH, and the only one spanning the reboots that wipe
-            # the fixture's volatile journal. virtio and not a second serial
-            # port: a ring buffer instead of a VM exit per byte, which also
-            # slowed journald enough to lose _SYSTEMD_UNIT on short-lived
-            # senders.
+            # The console the image's journal-mirror unit follows the
+            # journal onto -- the only diagnostic that survives a guest
+            # which never reaches SSH, and the only one spanning the
+            # reboots that wipe the fixture's volatile journal. virtio and
+            # not a second serial port: a ring buffer instead of a VM exit
+            # per byte, which also slowed journald enough to lose
+            # _SYSTEMD_UNIT on short-lived senders.
             "-device",
             "virtio-serial-pci,id=journal_bus",
             "-chardev",
