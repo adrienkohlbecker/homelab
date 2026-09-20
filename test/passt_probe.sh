@@ -85,27 +85,51 @@ run_probe() {
   echo "### ${label}: accepted connection lines"
   grep -c "accepted connection" "$log" || true
   echo "### ${label}: passt log"
-  tail -15 "$log"
+  sed -n '/epoll event on listening/,$p' "$log" | head -6
+  grep -E "unshare|Failed to sandbox|error" "$log" | head -3 || true
   if [ -s "$trace" ]; then
     echo "### ${label}: accept call"
     grep -E "accept4" "$trace" | head -5 || true
   fi
 }
 
-# Load the shipped profile first, so the probe starts from the same state
-# whatever an earlier run on this reused instance left behind.
-sudo apparmor_parser -r /etc/apparmor.d/usr.bin.passt 2>&1 || true
-
 # Kernel audit records are rate-limited on these hosts, which is why the
-# denial behind the EACCES never reaches the log. Unthrottle printk so the
-# record naming the requested permission is visible, and clear the ring first.
+# denial behind the EACCES never reaches the log.
 sudo sysctl -w kernel.printk_ratelimit=0 kernel.printk_ratelimit_burst=0 >/dev/null || true
-sudo dmesg --clear || true
 
-run_probe as_shipped
+# Write the profile ourselves rather than patching the shipped file, so a
+# reused instance an earlier probe already touched cannot skew the result.
+write_profile() {
+  sudo tee /etc/apparmor.d/usr.bin.passt >/dev/null <<EOF
+abi <abi/3.0>,
+include <tunables/global>
+profile passt /usr/bin/passt{,.avx2} {
+  include <abstractions/passt>
+  owner /tmp/** w,
+  owner @{HOME}/** w,
+${1}
+}
+EOF
+  sudo apparmor_parser -r /etc/apparmor.d/usr.bin.passt
+}
 
-echo "### denial records"
-sudo dmesg | grep -iE "apparmor|passt" | tail -20 || echo "(none)"
+try_rules() {
+  local label="$1" rules="$2"
+  echo "#################### ${label}"
+  if ! write_profile "$rules"; then
+    echo "${label}: profile failed to load"
+    return
+  fi
+  sudo dmesg --clear || true
+  run_probe "$label"
+  echo "### ${label}: denial records"
+  sudo dmesg | grep -iE "apparmor.*(passt|DENIED)" | tail -10 || echo "(none)"
+}
 
-echo "### abstraction the profile includes"
-sudo cat /etc/apparmor.d/abstractions/passt 2>/dev/null || echo "(none)"
+try_rules as_shipped ""
+try_rules unix_rule "  unix (accept, bind, connect, listen, receive, send),"
+try_rules tmp_rw "  owner /tmp/** rw,"
+try_rules network_unix "  network unix,"
+try_rules everything "  unix (accept, bind, connect, listen, receive, send),
+  owner /tmp/** rw,
+  network unix,"
