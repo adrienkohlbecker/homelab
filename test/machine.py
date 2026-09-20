@@ -198,6 +198,14 @@ def resolve_net_backend(qemu_binary: str) -> str:
     return "passt" if available else "slirp"
 
 
+def _passt_log_level() -> str:
+    """passt's log flag for this run: quiet unless HOMELAB_PASST_DEBUG is set."""
+    level = os.environ.get("HOMELAB_PASST_DEBUG", "").strip().lower()
+    if level == "trace":
+        return "--trace"
+    return "--debug" if level else "--quiet"
+
+
 def passt_address_fields(machine: str) -> dict[str, str] | None:
     """The address/netmask/gateway that pin the guest to its topology IP, or
     None for machines absent from the topology (minimal).
@@ -1550,8 +1558,9 @@ class Machine:
             # stderr instead of the syslog socket absent in the container.
             "--foreground",
             # HOMELAB_PASST_DEBUG swaps the quiet default for passt's own
-            # connection/DHCP/forward logging in the per-run .passt.ansi.
-            "--debug" if os.environ.get("HOMELAB_PASST_DEBUG") else "--quiet",
+            # logging in the per-run .passt.ansi: `trace` adds the per-packet
+            # detail (client connection, send errno) `debug` leaves out.
+            _passt_log_level(),
             # Quit once qemu (the only client) disconnects so a leaked sidecar
             # can't outlive its VM; stop() also kills it explicitly as backup.
             "--one-off",
