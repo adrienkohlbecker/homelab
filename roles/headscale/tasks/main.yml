@@ -121,28 +121,13 @@
   tags:
     - headscale
 
-# The firewall role disables IPv6 kernel-wide, and it runs on lab and pug but
-# not on fox, which is where headscale actually serves. Only the site converge
-# puts the two on one host, and there netavark cannot assign the bridge's IPv6
-# address: the first container start dies with "failed to add ipv6 address"
-# (exit 126) and only succeeds on the retry, once the bridge already exists.
-- name: Read whether the kernel has IPv6 available
-  slurp:
-    src: /proc/sys/net/ipv6/conf/all/disable_ipv6
-  register: headscale_ipv6_sysctl
-  failed_when: false
-  become: true
-  tags:
-    - headscale
-
 # The default Podman bridge is IPv4-only. A dual-stack network gives embedded
-# DERP STUN an IPv6 DNAT path while preserving the remote client address, so
-# ask for it wherever the kernel can actually deliver it.
-- name: Create headscale podman network
+# DERP STUN an IPv6 DNAT path while preserving the remote client address.
+- name: Create headscale dual-stack podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
     name: headscale
-    ipv6: "{{ (headscale_ipv6_sysctl.content | default('') | b64decode | trim) == '0' }}"
+    ipv6: true
     state: present
   become: true
   register: headscale_network
