@@ -1546,7 +1546,9 @@ class Machine:
             # Foreground: a managed child (torn down in stop()) that logs to
             # stderr instead of the syslog socket absent in the container.
             "--foreground",
-            "--quiet",
+            # HOMELAB_PASST_DEBUG swaps the quiet default for passt's own
+            # connection/DHCP/forward logging in the per-run .passt.ansi.
+            "--debug" if os.environ.get("HOMELAB_PASST_DEBUG") else "--quiet",
             # Quit once qemu (the only client) disconnects so a leaked sidecar
             # can't outlive its VM; stop() also kills it explicitly as backup.
             "--one-off",
