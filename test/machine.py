@@ -29,7 +29,6 @@ from utils import (
     cancel_on_signal,
     print_cmd_line,
     print_line,
-    read_and_write_stream,
     run_command,
     sleep_tick,
     terminate_pid,
@@ -347,8 +346,6 @@ class Machine:
     output_file: Path
     journal_file: Path
     boot_file: Path
-    dmesg_file: Path
-    systemctl_failed_file: Path
     passt_file: Path
     workdir: tempfile.TemporaryDirectory[str]
     workdir_path: Path
@@ -482,15 +479,11 @@ class Machine:
         self.output_file = output_dir / f"{prefix}.output.ansi"
         self.journal_file = output_dir / f"{prefix}.journal.ansi"
         self.boot_file = output_dir / f"{prefix}.boot.ansi"
-        self.dmesg_file = output_dir / f"{prefix}.dmesg.ansi"
-        self.systemctl_failed_file = output_dir / f"{prefix}.systemctl-failed.ansi"
         self.passt_file = output_dir / f"{prefix}.passt.ansi"
         self._artifact_files = (
             self.output_file,
             self.journal_file,
             self.boot_file,
-            self.dmesg_file,
-            self.systemctl_failed_file,
             self.passt_file,
         )
         for stale in self._artifact_files:
@@ -976,71 +969,6 @@ class Machine:
             # dropped the connection before our close completed.
             with contextlib.suppress(OSError, TimeoutError):
                 await asyncio.wait_for(writer.wait_closed(), timeout=2)
-
-    async def _collect_remote_to_file(self, label: str, dest: Path, *remote_cmd: str) -> None:
-        """Run *remote_cmd* over SSH, capture stdout into *dest*.
-
-        stderr is streamed to the main log; stdout goes only to *dest*.
-        *label* is what we print when the capture fails or succeeds. Used by
-        the per-run failure diagnostics so each artifact (dmesg, systemctl
-        --failed) is a separate file the operator (or CI artifact upload) can
-        read in isolation.
-        """
-        cmd = self.format_ssh_cmd(*remote_cmd)
-        print_cmd_line(cmd)
-
-        with dest.open("w") as handle:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=handle,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            assert proc.stderr is not None
-            # stderr only -- stdout is already going to the file. Drain to
-            # EOF before waiting so a chatty stderr can't deadlock the
-            # child by filling the pipe buffer. Ordering: stdout lines land
-            # in *dest* in source order (single FD, kernel FIFO); stderr
-            # lines land in the main log in source order. The two streams
-            # go to different destinations so there's no cross-stream
-            # interleave to worry about here.
-            await read_and_write_stream(proc.stderr, "red", [])
-            exitcode = await proc.wait()
-
-        if exitcode != 0:
-            print_line(f"Failed to collect {label}: exit code {exitcode}")
-        else:
-            print_line(f"{label}: {dest}")
-
-    async def collect_failure_artifacts(self) -> None:
-        """Collect post-mortem diagnostics from the guest after a failed run.
-
-        Two artifacts, both carrying what the always-on journal mirror
-        structurally cannot:
-          - <variant>.<role>.dmesg.ansi -- the kernel ring buffer read
-            straight from the kernel, so it still answers when journald or
-            the journalctl following it is the thing that wedged
-          - <variant>.<role>.systemctl-failed.ansi -- derived state, not a log
-
-        Each runs as a best-effort capture so a failure of one doesn't shadow
-        the other. The files remain available for local inspection and CI
-        artifact collection.
-        """
-
-        captures = (
-            ("Kernel ring buffer", self.dmesg_file, ("sudo", "dmesg", "--color=always", "--ctime")),
-            (
-                "Failed units",
-                self.systemctl_failed_file,
-                ("env", "SYSTEMD_COLORS=true", "systemctl", "--failed", "--no-pager"),
-            ),
-        )
-        for label, dest, remote_cmd in captures:
-            try:
-                await self._collect_remote_to_file(label, dest, *remote_cmd)
-            except Exception as exc:
-                # Diagnostics are best-effort and must not mask the original
-                # test failure or prevent the remaining captures.
-                print_line(f"Failed to collect {label}: {exc}")
 
     def cleanup_logs(self) -> None:
         """Remove all per-run log artifacts."""

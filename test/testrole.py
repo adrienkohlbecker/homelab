@@ -183,7 +183,6 @@ async def run_test(
                 await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
         except CommandFailedException:
             print_line("Command failed")
-            await m.collect_failure_artifacts()
             raise
         except IdempotenceFailedException:
             print_line("Idempotence check failed")

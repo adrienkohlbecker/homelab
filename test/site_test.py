@@ -182,7 +182,6 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             await m.ansible_command(str(staged), *extra)
         except CommandFailedException:
             print_line(f"Site {label} failed")
-            await m.collect_failure_artifacts()
             raise
 
         print_line(f"Site {label} passed")
@@ -230,7 +229,6 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                     f"Guest did not power off within {POWEROFF_TIMEOUT}s after a passed converge",
                     error=True,
                 )
-                await m.collect_failure_artifacts()
                 raise PoweroffTimeoutError(
                     f"poweroff did not complete within {POWEROFF_TIMEOUT}s "
                     "(a stop job wedged on its TimeoutStopSec -- see the "
