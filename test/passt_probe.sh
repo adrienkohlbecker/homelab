@@ -50,6 +50,9 @@ echo "### limits"
 ulimit -n
 cat /proc/sys/fs/file-nr
 
+echo "### passt profile"
+sudo cat /etc/apparmor.d/usr.bin.passt 2>/dev/null || echo "(no profile file)"
+
 strace_prefix=()
 if [ "${HOMELAB_PASST_PROBE_STRACE:-}" = "1" ]; then
   sudo DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y -qq strace >/dev/null 2>&1 || true
@@ -58,35 +61,38 @@ if [ "${HOMELAB_PASST_PROBE_STRACE:-}" = "1" ]; then
   fi
 fi
 
-# Self-terminating so a wedged passt cannot hold the job to its timeout.
-timeout 20 "${strace_prefix[@]}" passt --socket "$sock" --foreground --trace >"$log" 2>&1 &
-passt_pid=$!
-for _ in $(seq 40); do
-  [ -S "$sock" ] && break
-  sleep 0.25
-done
+run_probe() {
+  local label="$1"
+  rm -f "$sock" "$log" "$trace"
 
-# passt derives the guest and gateway addresses from the host route; reuse them
-# so the ARP request targets an address it actually answers for.
-guest=$(awk '/assign:/ {print $2; exit}' "$log")
-gw=$(awk '/router:/ {print $2; exit}' "$log")
-echo "### probing with guest=${guest} gateway=${gw}"
-python3 -c "$client_py" "$sock" "${guest:-0.0.0.0}" "${gw:-0.0.0.0}" || true
-wait "$passt_pid" 2>/dev/null || true
+  # Self-terminating so a wedged passt cannot hold the job to its timeout.
+  timeout 15 "${strace_prefix[@]}" passt --socket "$sock" --foreground --trace >"$log" 2>&1 &
+  local passt_pid=$!
+  for _ in $(seq 40); do
+    [ -S "$sock" ] && break
+    sleep 0.25
+  done
 
-echo "### kernel messages during the probe"
-sudo journalctl -k --since "-3 min" --no-pager 2>/dev/null | grep -iE "apparmor|audit|denied" | tail -20 || echo "(none)"
+  # passt derives the guest and gateway addresses from the host route; reuse
+  # them so the ARP request targets an address it actually answers for.
+  local guest gw
+  guest=$(awk '/assign:/ {print $2; exit}' "$log")
+  gw=$(awk '/router:/ {print $2; exit}' "$log")
+  echo "### ${label}: probing with guest=${guest} gateway=${gw}"
+  python3 -c "$client_py" "$sock" "${guest:-0.0.0.0}" "${gw:-0.0.0.0}" || true
+  wait "$passt_pid" 2>/dev/null || true
 
-echo "### accepted connection lines"
-grep -c "accepted connection" "$log" || true
-echo "### passt log after the listening-socket event"
-sed -n '/epoll event on listening/,$p' "$log" | head -40
+  echo "### ${label}: accepted connection lines"
+  grep -c "accepted connection" "$log" || true
+  if [ -s "$trace" ]; then
+    echo "### ${label}: accept call"
+    grep -nE "accept4" "$trace" | head -5
+  fi
+}
 
-if [ -s "$trace" ]; then
-  echo "### fds opened before the failure"
-  grep -cE "socket\(" "$trace" || true
-  echo "### accept and error lines"
-  grep -nE "accept4|EMFILE|ENFILE|EPERM|EACCES|EBADF|ECONNABORTED" "$trace" | head -40
-  echo "### trace tail"
-  tail -25 "$trace"
-fi
+run_probe confined
+
+echo "### unloading the passt profile"
+sudo apparmor_parser -R /etc/apparmor.d/usr.bin.passt && echo "unloaded" || echo "(unload failed)"
+
+run_probe unconfined
