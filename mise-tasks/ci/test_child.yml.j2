@@ -27,8 +27,10 @@ stages:
   variables:
     # Select mirrors and DNS for the guest's network environment.
     HOMELAB_TEST_IN_AWS: "{{ "true" if in_aws else "false" }}"
-    # passt loses first-boot DHCP under synchronized launch bursts (~84/138
-    # failures in a full-matrix trial). Remove this pin after that race is fixed.
+    # slirp is the measured-faster backend here. A full-matrix passt trial on
+    # 2026-09-20 cost 29% more cell compute (4.9h -> 6.3h, p50 2.5 -> 3.1 min)
+    # and failed adguard, seerr and both homeassistant cells. See
+    # notes/passt_aws_host_apparmor.md before reconsidering.
     HOMELAB_NET_BACKEND: slirp
     # Production vault material is deliberately unavailable in CI.
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
