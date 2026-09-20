@@ -331,6 +331,20 @@ create_extra_pools() {
     esac
   done
 
+  # zpool.cache records the device paths a pool was imported from, and the
+  # build VM carries its own root disk ahead of the target disks: /dev/vdX
+  # here is one letter further along than in a machine booted from the
+  # image alone. The cached import then fails on every first boot and falls
+  # back to a full device scan. Re-import by partition UUID, which survives
+  # the renumbering. A bare-metal install keeps its own paths -- they are
+  # already the paths that host boots with.
+  if [ "$INSTALL_TARGET" != bare_metal ]; then
+    for pool in $(zpool list -H -o name | grep -vx rpool); do
+      zpool_export_retry "$pool"
+      zpool import -d /dev/disk/by-partuuid -N "$pool"
+    done
+  fi
+
   mkdir -p /mnt/etc/zfs
   cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 }
@@ -608,6 +622,19 @@ fi
 # Create any non-rpool pools while /mnt is still rpool's root so the current
 # zpool.cache can be copied into the shipped install.
 create_extra_pools
+
+# A freshly created array resyncs in the background, and these are built
+# without a write-intent bitmap. Sealing the image mid-resync makes every
+# machine booted from it redo the whole resync -- on a CI host that is a
+# 26 GiB RAID5 rebuild per cell, competing with the converge it just
+# started. Wait once here instead. mdadm --wait exits 1 when an array has
+# nothing in flight, which is the common case for the small mirrors.
+if [ "$INSTALL_TARGET" != bare_metal ]; then
+  for md in /dev/md/efi /dev/md/swap /dev/md/podman; do
+    [ -e "$md" ] || continue
+    mdadm --wait "$md" || true
+  done
+fi
 
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"

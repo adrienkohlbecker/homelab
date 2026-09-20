@@ -336,6 +336,20 @@ def test_qemu_build_uses_one_install_target() -> None:
     assert "QEMU_TEST_IMAGE" not in template
 
 
+def test_qemu_image_is_sealed_ready_to_boot() -> None:
+    """Fixture images must not push per-boot work onto every machine.
+
+    Both cost every cell, every boot: a cache recorded against the build
+    VM's device names fails its import and falls back to a device scan, and
+    an array sealed mid-resync rebuilds itself in full on each boot.
+    """
+    provision = QEMU_PROVISION_SH.read_text()
+
+    assert "zpool import -d /dev/disk/by-partuuid -N" in provision
+    assert re.search(r"for md in /dev/md/efi /dev/md/swap /dev/md/podman; do", provision)
+    assert 'mdadm --wait "$md" || true' in provision
+
+
 def test_qemu_build_separates_host_os_from_architecture() -> None:
     template = QEMU_TEMPLATE.read_text()
 
