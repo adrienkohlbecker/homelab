@@ -2,6 +2,7 @@
 # Smoke-test a provisioned qemu-host image before Packer captures it.
 #
 #   qemu_host_smoke.sh toolchain
+#   qemu_host_smoke.sh passt
 #   qemu_host_smoke.sh firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>
 #
 # Promotion points every new CI host at the image, so the bake proves what cells
@@ -21,6 +22,63 @@ toolchain() {
   run_as_ci_user uv --version
   run_as_ci_user aws --version
   run_as_ci_user yq --version
+}
+
+passt_backend() {
+  local workdir sock log passt_pid guest gw reply
+  workdir=$(mktemp -d)
+  sock="$workdir/passt.sock"
+  log="$workdir/passt.log"
+
+  timeout 30 passt --socket "$sock" --foreground >"$log" 2>&1 &
+  passt_pid=$!
+  for _ in $(seq 1 40); do
+    [ -S "$sock" ] && break
+    sleep 0.25
+  done
+
+  # Host confinement has denied passt's accept() of the qemu socket before,
+  # which leaves the guest with a link but no address and shows up only as a
+  # cell-wide ssh timeout. Drive one ARP exchange so the bake fails here
+  # instead.
+  guest=$(awk '/assign:/ {print $2; exit}' "$log")
+  gw=$(awk '/router:/ {print $2; exit}' "$log")
+  reply=$(
+    python3 - "$sock" "${guest:-0.0.0.0}" "${gw:-0.0.0.0}" <<'PY'
+import socket, struct, sys
+
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.connect(sys.argv[1])
+frame = (
+    b"\xff" * 6
+    + b"\x52\x54\x00\x12\x34\x56"
+    + b"\x08\x06"
+    + b"\x00\x01\x08\x00\x06\x04\x00\x01"
+    + b"\x52\x54\x00\x12\x34\x56"
+    + bytes(int(o) for o in sys.argv[2].split("."))
+    + b"\x00" * 6
+    + bytes(int(o) for o in sys.argv[3].split("."))
+)
+s.sendall(struct.pack(">I", len(frame)) + frame)
+s.settimeout(5)
+try:
+    print(len(s.recv(65536)))
+except OSError:
+    print(0)
+PY
+  )
+  kill "$passt_pid" 2>/dev/null || true
+  wait "$passt_pid" 2>/dev/null || true
+
+  if [ "${reply:-0}" -gt 0 ]; then
+    echo "==> passt answered the guest ARP request (${reply} bytes)"
+    rm -rf "$workdir"
+    return 0
+  fi
+  echo "qemu_host_smoke: passt did not answer the guest; passt log:" >&2
+  cat "$log" >&2 2>/dev/null || true
+  rm -rf "$workdir"
+  return 1
 }
 
 firmware() {
@@ -55,12 +113,13 @@ firmware() {
 
 case "${1:-}" in
 toolchain) toolchain ;;
+passt) passt_backend ;;
 firmware)
   shift
   firmware "$@"
   ;;
 *)
-  echo "usage: $0 toolchain | firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>" >&2
+  echo "usage: $0 toolchain | passt | firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>" >&2
   exit 2
   ;;
 esac
