@@ -58,6 +58,25 @@ workflow:
 # missing or failed API resolution safely expands to the full universe.
 # CI_JOB_TOKEN queries pipelines by default; GITLAB_API_TOKEN is the optional
 # read_api fallback. See notes/ci_aws_nested_qemu_cells.md.
+# Temporary: read-only host probe for the passt investigation.
+host_probe:
+  stage: prepare
+  tags:
+    - aws-shell-qemu
+  rules:
+    - if: '$HOMELAB_HOST_PROBE == "1"'
+      when: manual
+      allow_failure: true
+  timeout: 10m
+  script:
+    - uname -a
+    - sysctl kernel.apparmor_restrict_unprivileged_userns || true
+    - sudo aa-status 2>&1 | head -20 || sudo apparmor_status 2>&1 | head -20 || true
+    - sudo dmesg | grep -i apparmor | tail -40 || true
+    - sudo dmesg | grep -iE "passt|denied" | tail -40 || true
+    - passt --version 2>&1 | head -3 || true
+    - qemu-system-x86_64 --version | head -1
+
 detect:
   stage: prepare
   # Rendering on the selected cell pool warms its first runner for the matrix.
