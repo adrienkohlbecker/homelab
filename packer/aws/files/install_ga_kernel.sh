@@ -32,4 +32,15 @@ if [ "${#aws_kernel_packages[@]}" -gt 0 ]; then
   sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq "${aws_kernel_packages[@]}"
 fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get autoremove --purge -y -qq
+
+# The AWS image boots initrd-less, straight to a root device named by PARTUUID,
+# which works only because linux-aws builds the Nitro drivers in. The GA kernel
+# ships nvme and ena as modules, so root has to be found through an initramfs
+# and the override has to go with the kernel that justified it. Fail loudly
+# rather than hand grub a config that boots a kernel it cannot mount root for.
+sudo rm -f /etc/default/grub.d/40-force-partuuid.cfg
+if grep -rqs '^[^#]*GRUB_FORCE_PARTUUID' /etc/default/grub /etc/default/grub.d; then
+  echo "install_ga_kernel: GRUB_FORCE_PARTUUID still set; initrd-less boot would panic" >&2
+  exit 1
+fi
 sudo update-grub

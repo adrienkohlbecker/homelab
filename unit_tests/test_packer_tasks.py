@@ -582,6 +582,10 @@ def test_qemu_host_boots_the_ga_kernel_before_anything_is_provisioned() -> None:
     # The kernel being purged is the running one; the prerm defaults to
     # refusing that, and noninteractive dpkg never gets asked.
     assert "linux-base linux-base/removing-running-kernel boolean false" in kernel
+    # linux-aws builds the Nitro drivers in and the image boots initrd-less on
+    # that; the GA kernel needs an initramfs to find root at all.
+    assert "rm -f /etc/default/grub.d/40-force-partuuid.cfg" in kernel
+    assert kernel.index("GRUB_FORCE_PARTUUID") < kernel.index("update-grub")
 
 
 @pytest.mark.parametrize(
