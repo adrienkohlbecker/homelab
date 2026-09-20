@@ -68,9 +68,21 @@ host_probe:
       when: manual
       allow_failure: true
   timeout: 10m
+  variables:
+    HOMELAB_PASST_PROBE_STRACE: "1"
   script:
-    - uname -a
-    - sysctl kernel.apparmor_restrict_unprivileged_userns || true
+    - ./test/passt_probe.sh
+
+host_probe_lab:
+  stage: prepare
+  tags:
+    - lab-shell-qemu
+  rules:
+    - if: '$HOMELAB_HOST_PROBE == "1"'
+      when: manual
+      allow_failure: true
+  timeout: 10m
+  script:
     - ./test/passt_probe.sh
 
 detect:
