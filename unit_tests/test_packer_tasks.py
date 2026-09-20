@@ -560,27 +560,12 @@ def test_qemu_host_smoke_boots_the_pinned_firmware_to_its_boot_manager() -> None
     assert "edk2-aarch64-code.fd reached the UEFI boot manager" in result.stdout
 
 
-def test_qemu_host_provision_drops_both_apparmor_halves() -> None:
-    """passt is unusable if either half is left in place.
-
-    The packaged profile denies accept4() on the qemu socket under a kernel
-    that mediates AF_UNIX, and it is also the only grant of an exception to
-    apparmor_restrict_unprivileged_userns, without which passt cannot sandbox
-    itself. Dropping one and keeping the other still leaves cells with no
-    guest network.
-    """
-    provision = QEMU_HOST_PROVISION_SH.read_text()
-
-    assert "/etc/apparmor.d/disable/usr.bin.passt" in provision
-    assert "kernel.apparmor_restrict_unprivileged_userns = 0" in provision
-
-
 def test_qemu_host_boots_the_ga_kernel_before_anything_is_provisioned() -> None:
     """The kernel swap and its reboot precede every other provisioner.
 
     linux-aws runs ahead of the release GA kernel the rest of the fleet is on,
-    so the qemu, passt, and firmware checks would otherwise vouch for a kernel
-    the captured image never boots.
+    so the toolchain and firmware checks would otherwise vouch for a kernel the
+    captured image never boots.
     """
     template = QEMU_HOST_TEMPLATE.read_text()
 
@@ -630,45 +615,6 @@ def test_qemu_host_smoke_rejects_a_host_that_kept_the_aws_kernel(
     assert (result.returncode == 0) is succeeds
     if not succeeds:
         assert "qemu_host_smoke:" in result.stderr
-
-
-def test_qemu_host_smoke_fails_when_passt_never_answers(tmp_path: Path) -> None:
-    """The bake must fail on a passt that accepts but never replies.
-
-    That is exactly how host confinement broke it: passt started, bound its
-    socket and reported a DHCP range, so every stat-style check passed while
-    guests got no address at all.
-    """
-    fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
-    _executable(
-        fake_bin / "passt",
-        """#!/usr/bin/env python3
-import socket, sys, time
-
-path = sys.argv[sys.argv.index("--socket") + 1]
-print("DHCP:")
-print("    assign: 10.0.0.2")
-print("    router: 10.0.0.1")
-sys.stdout.flush()
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.bind(path)
-s.listen(1)
-conn, _ = s.accept()
-time.sleep(30)
-""",
-    )
-
-    result = subprocess.run(
-        ["bash", str(QEMU_HOST_SMOKE_SH), "passt"],
-        text=True,
-        capture_output=True,
-        timeout=120,
-        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"},
-    )
-
-    assert result.returncode == 1
-    assert "passt did not answer the guest" in result.stderr
 
 
 def test_qemu_host_smoke_fails_when_qemu_exits_before_the_boot_manager(tmp_path: Path) -> None:

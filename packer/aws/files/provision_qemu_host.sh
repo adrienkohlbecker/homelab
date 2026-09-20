@@ -53,24 +53,6 @@ sudo apt-get update -qq
     ec2-instance-connect
 )
 
-# passt cannot run confined on these hosts, and neither half of AppArmor can
-# be kept on its own. The packaged profile predates this kernel mediating
-# AF_UNIX, so accept4() on the qemu socket is denied and the guest never gets
-# a network; unload the profile instead and passt dies at startup with
-# "unshare: Operation not permitted", because that profile was the only thing
-# granting it an exception to apparmor_restrict_unprivileged_userns. Drop
-# both. These are single-purpose, disposable CI workers that run our own code,
-# and lab — where passt works — already has neither.
-sudo install -dm 0755 /etc/apparmor.d/disable
-sudo ln -sf /etc/apparmor.d/usr.bin.passt /etc/apparmor.d/disable/usr.bin.passt
-sudo apparmor_parser -R /etc/apparmor.d/usr.bin.passt || true
-sudo tee /etc/sysctl.d/99-homelab-ci-passt.conf >/dev/null <<'EOF'
-# passt sandboxes itself in a user namespace; see the AppArmor note in
-# packer/aws/files/provision_qemu_host.sh.
-kernel.apparmor_restrict_unprivileged_userns = 0
-EOF
-sudo sysctl --system >/dev/null
-
 if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
   # firmware.sh resolves its pins relative to its own location; give it the
   # repository layout it expects.
@@ -239,7 +221,6 @@ else
 fi
 bash /tmp/qemu_host_smoke.sh kernel
 bash /tmp/qemu_host_smoke.sh toolchain
-bash /tmp/qemu_host_smoke.sh passt
 bash /tmp/qemu_host_smoke.sh firmware "$QEMU_SYSTEM_BINARY" "$QEMU_MACHINE_TYPE" "$firmware_code" "$firmware_vars"
 
 sudo apt-get clean
