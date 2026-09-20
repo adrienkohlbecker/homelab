@@ -104,3 +104,46 @@ def test_reboot_bypasses_inhibitor_only_in_qemu() -> None:
 
     assert command.render(qemu_test=True) == "/usr/bin/sudo -n /usr/bin/systemctl --check-inhibitors=no reboot"
     assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
+
+
+class RestartJournalMachine:
+    """A machine whose PID 1 journal reports the given unit failures."""
+
+    def __init__(self, journal: list[str]) -> None:
+        self.journal = journal
+        self.unit_logs_requested: list[str] = []
+
+    async def ssh_command(self, *args: str, **_kwargs: object) -> SimpleNamespace:
+        if "-u" in args:
+            self.unit_logs_requested.append(args[args.index("-u") + 1])
+        return SimpleNamespace(stdout=self.journal, returncode=0)
+
+
+def test_podman_healthcheck_units_are_not_treated_as_failures() -> None:
+    """podman's startup probes exit non-zero by design until a container is healthy.
+
+    Every container contributes one, so counting them would make the settled
+    boot permanently red and bury the real failures among them.
+    """
+    container = "a" * 64
+    journal = [
+        f"lab systemd[1]: {container}-startup.service: Main process exited, code=exited, status=1/FAILURE",
+        "lab systemd[1]: jellyfin.service: Main process exited, code=exited, status=125/n/a",
+        "lab systemd[1]: jellyfin.service: Scheduled restart job, restart counter is at 1.",
+    ]
+    machine = RestartJournalMachine(journal)
+
+    restarted = asyncio.run(site_test.report_restarted_units(cast(site_test.Machine, machine), journal))
+
+    assert restarted == ["jellyfin.service"]
+    assert machine.unit_logs_requested == ["jellyfin.service"]
+
+
+def test_a_unit_that_recovers_still_fails_the_converge() -> None:
+    """The whole point: recovery on a retry hides the failure from is-system-running."""
+    journal = ["lab systemd[1]: headscale.service: Failed with result 'exit-code'."]
+    machine = RestartJournalMachine(journal)
+
+    restarted = asyncio.run(site_test.report_restarted_units(cast(site_test.Machine, machine), journal))
+
+    assert restarted == ["headscale.service"]

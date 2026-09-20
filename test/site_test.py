@@ -59,6 +59,16 @@ class PoweroffTimeoutError(Exception):
     """The guest failed to power off within POWEROFF_TIMEOUT after a passed converge."""
 
 
+class UnitRestartedError(Exception):
+    """A unit failed during the settled boot, even though it recovered later."""
+
+
+# podman runs each container's --health-startup-cmd as a transient
+# <container-id>-startup.service, which exits non-zero on every probe until the
+# container reports healthy. Those failures are the mechanism working.
+PODMAN_HEALTHCHECK_UNIT = re.compile(r"^[0-9a-f]{64}-startup\.service$")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -97,12 +107,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def print_boot_profile(m: Machine) -> None:
+async def print_boot_profile(m: Machine) -> list[str]:
     """Print where the settled boot spent its time.
 
     The settle waits out the whole post-reboot fleet start, so the slowest
-    units and the critical chain are what bound it. Diagnostic only: a
-    failure here never fails the test.
+    units and the critical chain are what bound it. The timings are diagnostic
+    only, but the returned list of units that failed during the boot is not:
+    see report_restarted_units.
     """
     blame = await m.ssh_command("systemd-analyze", "blame", "--no-pager", check=False)
     slowest = "\n".join(blame.stdout[:25]).rstrip() or "(unavailable)"
@@ -120,31 +131,36 @@ async def print_boot_profile(m: Machine) -> None:
     if reached:
         tail = journal.stdout[max(0, reached[-1] - 40) : reached[-1] + 1]
         print_line("systemd log before multi-user.target:\n" + "\n".join(tail))
-    await print_restarted_units(m, journal.stdout)
+    return await report_restarted_units(m, journal.stdout)
 
 
-async def print_restarted_units(m: Machine, pid1_journal: list[str]) -> None:
-    """Print the logs of units that failed or restarted during this boot.
+async def report_restarted_units(m: Machine, pid1_journal: list[str]) -> list[str]:
+    """Print the logs of units that failed during this boot, and name them.
 
-    A unit that crash-loops before succeeding still reaches `active`, so the
-    test passes and `systemd-analyze blame` only shows the attempt that
-    worked. PID 1 reports the failure but not the unit's own output, which is
-    where the reason lives. Diagnostic only: never fails the test.
+    A unit that crash-loops before succeeding still ends up `active`, so
+    `systemctl is-system-running` reports `running` and only the attempt that
+    worked shows in `systemd-analyze blame`. Jellyfin spent months never
+    starting in the settled boot behind exactly that. PID 1 reports the
+    failure but not the unit's own output, which is where the reason lives.
     """
-    failed = []
+    failed: list[str] = []
     for line in pid1_journal:
         match = re.search(r"(\S+\.service): (?:Main process exited|Failed with result|Scheduled restart)", line)
-        if match and match.group(1) not in failed:
-            failed.append(match.group(1))
+        if not match:
+            continue
+        unit = match.group(1)
+        if unit not in failed and not PODMAN_HEALTHCHECK_UNIT.match(unit):
+            failed.append(unit)
     if not failed:
-        return
-    print_line(f"Units that failed or restarted this boot: {' '.join(failed)}")
+        return []
+    print_line(f"Units that failed or restarted this boot: {' '.join(failed)}", error=True)
     for unit in failed[:5]:
         logs = await m.ssh_command(
             "journalctl", "--boot", "--no-pager", "--output=short-monotonic", "-u", unit, check=False
         )
         body = "\n".join(logs.stdout[-30:]).rstrip() or "(unavailable)"
         print_line(f"{unit} log:\n{body}")
+    return failed
 
 
 async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
@@ -185,6 +201,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             raise
 
         print_line(f"Site {label} passed")
+        restarted: list[str] = []
         # Check mode makes no changes: nothing was installed, no
         # kernel upgrade set reboot-required, no container is
         # mid-bootstrap -- so the settle gate and poweroff dance
@@ -214,7 +231,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                 failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
                 failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
                 print_line(f"Fleet settled as {settle_state!r}; failed units:\n{failed_units}")
-            await print_boot_profile(m)
+            restarted = await print_boot_profile(m)
 
             await m.ssh_command("sudo", "systemctl", "--check-inhibitors=no", "poweroff", check=False)
             # Bound the shutdown wait separately from the converge
@@ -234,6 +251,16 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                     "(a stop job wedged on its TimeoutStopSec -- see the "
                     "serial console for which units)"
                 ) from None
+
+        # Raised after the guest is down so the shutdown path and its
+        # artifacts are still exercised. A unit that recovers on a retry is
+        # still a unit that could not start the fleet as converged.
+        if restarted:
+            raise UnitRestartedError(
+                f"units failed during the settled boot: {' '.join(restarted)} "
+                "(each recovered later, so the fleet still reports running -- "
+                "see the per-unit logs above)"
+            )
 
 
 def main() -> int:
