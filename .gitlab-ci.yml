@@ -58,33 +58,6 @@ workflow:
 # missing or failed API resolution safely expands to the full universe.
 # CI_JOB_TOKEN queries pipelines by default; GITLAB_API_TOKEN is the optional
 # read_api fallback. See notes/ci_aws_nested_qemu_cells.md.
-# Temporary: read-only host probe for the passt investigation.
-host_probe:
-  stage: prepare
-  tags:
-    - aws-shell-qemu
-  rules:
-    - if: '$HOMELAB_HOST_PROBE == "1"'
-      when: manual
-      allow_failure: true
-  timeout: 40m
-  variables:
-    HOMELAB_PASST_PROBE_STRACE: "1"
-  script:
-    - ./test/passt_probe.sh
-
-host_probe_lab:
-  stage: prepare
-  tags:
-    - lab-shell-qemu
-  rules:
-    - if: '$HOMELAB_HOST_PROBE == "1"'
-      when: manual
-      allow_failure: true
-  timeout: 10m
-  script:
-    - ./test/passt_probe.sh
-
 detect:
   stage: prepare
   # Rendering on the selected cell pool warms its first runner for the matrix.
