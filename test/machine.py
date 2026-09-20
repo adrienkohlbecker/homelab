@@ -1016,9 +1016,9 @@ class Machine:
 
         Two artifacts, both carrying what the always-on journal mirror
         structurally cannot:
-          - <variant>.<role>.dmesg.ansi -- the kernel ring buffer, the only
-            source of kernel lines below MaxLevelConsole=info, and readable
-            even when journald itself is wedged
+          - <variant>.<role>.dmesg.ansi -- the kernel ring buffer read
+            straight from the kernel, so it still answers when journald or
+            the journalctl following it is the thing that wedged
           - <variant>.<role>.systemctl-failed.ansi -- derived state, not a log
 
         Each runs as a best-effort capture so a failure of one doesn't shadow
