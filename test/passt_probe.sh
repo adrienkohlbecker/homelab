@@ -46,15 +46,20 @@ sudo aa-status 2>/dev/null | grep -iE "passt|apparmor module" || echo "(no passt
 
 rm -f "$sock" "$log" "$trace"
 
+echo "### limits"
+ulimit -n
+cat /proc/sys/fs/file-nr
+
 strace_prefix=()
 if [ "${HOMELAB_PASST_PROBE_STRACE:-}" = "1" ]; then
-  sudo apt-get install -y -qq strace >/dev/null 2>&1 || true
+  sudo DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y -qq strace >/dev/null 2>&1 || true
   if command -v strace >/dev/null; then
     strace_prefix=(strace -f -tt -o "$trace" -e "trace=network,desc")
   fi
 fi
 
-"${strace_prefix[@]}" passt --socket "$sock" --foreground --trace >"$log" 2>&1 &
+# Self-terminating so a wedged passt cannot hold the job to its timeout.
+timeout 20 "${strace_prefix[@]}" passt --socket "$sock" --foreground --trace >"$log" 2>&1 &
 passt_pid=$!
 for _ in $(seq 40); do
   [ -S "$sock" ] && break
@@ -67,9 +72,10 @@ guest=$(awk '/assign:/ {print $2; exit}' "$log")
 gw=$(awk '/router:/ {print $2; exit}' "$log")
 echo "### probing with guest=${guest} gateway=${gw}"
 python3 -c "$client_py" "$sock" "${guest:-0.0.0.0}" "${gw:-0.0.0.0}" || true
-sleep 2
-kill "$passt_pid" 2>/dev/null || true
 wait "$passt_pid" 2>/dev/null || true
+
+echo "### kernel messages during the probe"
+sudo journalctl -k --since "-3 min" --no-pager 2>/dev/null | grep -iE "apparmor|audit|denied" | tail -20 || echo "(none)"
 
 echo "### accepted connection lines"
 grep -c "accepted connection" "$log" || true
