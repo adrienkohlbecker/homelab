@@ -83,6 +83,10 @@ echo "### passt log after the listening-socket event"
 sed -n '/epoll event on listening/,$p' "$log" | head -40
 
 if [ -s "$trace" ]; then
-  echo "### syscalls around accept"
-  grep -nE "accept|getsockopt|setsockopt|recvmsg|sendmsg|epoll_ctl|EPERM|EACCES|EINVAL" "$trace" | tail -60
+  echo "### fds opened before the failure"
+  grep -cE "socket\(" "$trace" || true
+  echo "### accept and error lines"
+  grep -nE "accept4|EMFILE|ENFILE|EPERM|EACCES|EBADF|ECONNABORTED" "$trace" | head -40
+  echo "### trace tail"
+  tail -25 "$trace"
 fi
