@@ -67,7 +67,7 @@ host_probe:
     - if: '$HOMELAB_HOST_PROBE == "1"'
       when: manual
       allow_failure: true
-  timeout: 10m
+  timeout: 40m
   variables:
     HOMELAB_PASST_PROBE_STRACE: "1"
   script:
