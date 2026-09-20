@@ -96,23 +96,16 @@ run_probe() {
 # whatever an earlier run on this reused instance left behind.
 sudo apparmor_parser -r /etc/apparmor.d/usr.bin.passt 2>&1 || true
 
+# Kernel audit records are rate-limited on these hosts, which is why the
+# denial behind the EACCES never reaches the log. Unthrottle printk so the
+# record naming the requested permission is visible, and clear the ring first.
+sudo sysctl -w kernel.printk_ratelimit=0 kernel.printk_ratelimit_burst=0 >/dev/null || true
+sudo dmesg --clear || true
+
 run_probe as_shipped
 
-# Candidate fix: grant passt the AF_UNIX access its qemu socket needs. The
-# profile predates this kernel mediating AF_UNIX, so accept4() is denied while
-# the profile is still what grants passt its userns exception.
-echo "### adding the missing unix rule"
-sudo python3 - <<'FIX'
-import pathlib
+echo "### denial records"
+sudo dmesg | grep -iE "apparmor|passt" | tail -20 || echo "(none)"
 
-profile = pathlib.Path("/etc/apparmor.d/usr.bin.passt")
-text = profile.read_text()
-rule = "  unix (accept, bind, connect, listen, receive, send),\n"
-if rule not in text:
-    text = text[: text.rindex("}")] + rule + "}\n"
-    profile.write_text(text)
-print(text)
-FIX
-sudo apparmor_parser -r /etc/apparmor.d/usr.bin.passt && echo "reloaded"
-
-run_probe fixed
+echo "### abstraction the profile includes"
+sudo cat /etc/apparmor.d/abstractions/passt 2>/dev/null || echo "(none)"
