@@ -237,6 +237,7 @@ else
   firmware_code=/usr/share/OVMF/OVMF_CODE_4M.fd
   firmware_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
 fi
+bash /tmp/qemu_host_smoke.sh kernel
 bash /tmp/qemu_host_smoke.sh toolchain
 bash /tmp/qemu_host_smoke.sh passt
 bash /tmp/qemu_host_smoke.sh firmware "$QEMU_SYSTEM_BINARY" "$QEMU_MACHINE_TYPE" "$firmware_code" "$firmware_vars"

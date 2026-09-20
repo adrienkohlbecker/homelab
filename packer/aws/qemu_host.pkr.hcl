@@ -143,7 +143,24 @@ source "amazon-ebs" "qemu_host" {
 build {
   sources = ["source.amazon-ebs.qemu_host"]
 
+  # The stock AMI boots linux-aws, a rolling flavour that runs ahead of the GA
+  # kernel the fleet is on. Swap it and reboot before anything else, so every
+  # later provisioner -- and the smoke tests that gate the capture -- exercises
+  # the kernel the image will actually boot.
+  provisioner "shell" {
+    script = "${path.root}/files/install_ga_kernel.sh"
+  }
+
+  provisioner "shell" {
+    expect_disconnect = true
+    inline            = ["sudo systemctl reboot"]
+  }
+
   provisioner "file" {
+    # Let sshd finish going down, so the upload is not raced onto the
+    # connection that is about to be torn down by the reboot above.
+    pause_before = "30s"
+
     sources = [
       "${path.cwd}/mise.toml",
       "${path.cwd}/pyproject.toml",

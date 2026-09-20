@@ -25,6 +25,7 @@ QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 PUBLISH_QEMU_SH = REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
+QEMU_HOST_KERNEL_SH = REPO_ROOT / "packer" / "aws" / "files" / "install_ga_kernel.sh"
 QEMU_HOST_SCRATCH_SH = REPO_ROOT / "packer" / "aws" / "files" / "homelab_ci_prepare_scratch.sh"
 QEMU_HOST_SMOKE_SH = REPO_ROOT / "packer" / "aws" / "files" / "qemu_host_smoke.sh"
 QEMU_POSTPROCESS_SH = REPO_ROOT / "packer" / "scripts" / "postprocess.sh"
@@ -572,6 +573,63 @@ def test_qemu_host_provision_drops_both_apparmor_halves() -> None:
 
     assert "/etc/apparmor.d/disable/usr.bin.passt" in provision
     assert "kernel.apparmor_restrict_unprivileged_userns = 0" in provision
+
+
+def test_qemu_host_boots_the_ga_kernel_before_anything_is_provisioned() -> None:
+    """The kernel swap and its reboot precede every other provisioner.
+
+    linux-aws runs ahead of the release GA kernel the rest of the fleet is on,
+    so the qemu, passt, and firmware checks would otherwise vouch for a kernel
+    the captured image never boots.
+    """
+    template = QEMU_HOST_TEMPLATE.read_text()
+
+    kernel_step = template.index('script = "${path.root}/files/install_ga_kernel.sh"')
+    reboot_step = template.index('inline            = ["sudo systemctl reboot"]')
+    upload_step = template.index('provisioner "file"')
+    assert kernel_step < reboot_step < upload_step
+    assert "expect_disconnect = true" in template
+
+    kernel = QEMU_HOST_KERNEL_SH.read_text()
+    # Grub boots the highest version it finds, so the replacement has to be
+    # installed and the AWS flavour gone before the reboot, in that order.
+    assert kernel.index("apt-get install -y -qq --no-install-recommends linux-generic") < kernel.index("apt-get purge")
+    # The kernel being purged is the running one; the prerm defaults to
+    # refusing that, and noninteractive dpkg never gets asked.
+    assert "linux-base linux-base/removing-running-kernel boolean false" in kernel
+
+
+@pytest.mark.parametrize(
+    ("running", "installed", "succeeds"),
+    [
+        ("6.8.0-139-generic", "", True),
+        ("7.0.0-1012-aws", "", False),
+        ("6.8.0-139-generic", "installed linux-image-7.0.0-1012-aws", False),
+    ],
+)
+def test_qemu_host_smoke_rejects_a_host_that_kept_the_aws_kernel(
+    tmp_path: Path, running: str, installed: str, succeeds: bool
+) -> None:
+    """Both halves matter: the booted kernel and what grub can pick next time.
+
+    A leftover linux-aws package outranks the GA kernel on the next boot, so an
+    image that merely happens to be running generic right now is not enough.
+    """
+    fake_bin = tmp_path / "bin"
+    _executable(fake_bin / "uname", f"#!/bin/sh\nset -eu\nprintf '{running}\\n'\n")
+    _executable(fake_bin / "dpkg-query", f"#!/bin/sh\nset -eu\nprintf '{installed}\\n'\n")
+
+    result = subprocess.run(
+        ["bash", str(QEMU_HOST_SMOKE_SH), "kernel"],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"},
+    )
+
+    assert (result.returncode == 0) is succeeds
+    if not succeeds:
+        assert "qemu_host_smoke:" in result.stderr
 
 
 def test_qemu_host_smoke_fails_when_passt_never_answers(tmp_path: Path) -> None:

@@ -1,19 +1,41 @@
 #!/usr/bin/env bash
 # Smoke-test a provisioned qemu-host image before Packer captures it.
 #
+#   qemu_host_smoke.sh kernel
 #   qemu_host_smoke.sh toolchain
 #   qemu_host_smoke.sh passt
 #   qemu_host_smoke.sh firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>
 #
 # Promotion points every new CI host at the image, so the bake proves what cells
-# depend on: the runner binary starts, the baked mise toolchain runs as the CI
-# user, and the UEFI firmware boots under qemu to its boot manager. Build
-# instances are not metal, so the firmware boot uses TCG.
+# depend on: the host came back on the fleet's GA kernel, the runner binary
+# starts, the baked mise toolchain runs as the CI user, and the UEFI firmware
+# boots under qemu to its boot manager. Build instances are not metal, so the
+# firmware boot uses TCG.
 set -euo pipefail
 
 run_as_ci_user() {
   (cd /tmp && sudo -u ubuntu env -i HOME=/home/ubuntu MISE_DATA_DIR=/opt/mise \
     PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin mise exec -- "$@")
+}
+
+kernel() {
+  local running
+  running=$(uname -r)
+  case "$running" in
+  *-generic) ;;
+  *)
+    echo "qemu_host_smoke: running ${running}, expected the GA (-generic) kernel" >&2
+    return 1
+    ;;
+  esac
+  # The purge is what keeps grub from picking the higher-versioned AWS kernel
+  # back up on the next boot; leftovers would make the capture a coin toss.
+  if dpkg-query -W -f '${db:Status-Status} ${Package}\n' 'linux*aws*' 2>/dev/null |
+    grep -q '^installed '; then
+    echo "qemu_host_smoke: linux-aws packages are still installed" >&2
+    return 1
+  fi
+  echo "==> running the GA kernel ${running} with no linux-aws packages left"
 }
 
 toolchain() {
@@ -112,6 +134,7 @@ firmware() {
 }
 
 case "${1:-}" in
+kernel) kernel ;;
 toolchain) toolchain ;;
 passt) passt_backend ;;
 firmware)
@@ -119,7 +142,7 @@ firmware)
   firmware "$@"
   ;;
 *)
-  echo "usage: $0 toolchain | passt | firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>" >&2
+  echo "usage: $0 kernel | toolchain | passt | firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>" >&2
   exit 2
   ;;
 esac
