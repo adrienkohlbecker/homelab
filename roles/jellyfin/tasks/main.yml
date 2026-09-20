@@ -14,15 +14,33 @@
     - jellyfin
 
 # QEMU has no GPU, so reproduce the render-device shape consumed below.
+# /dev is devtmpfs, so the node has to be declared rather than created once:
+# a reboot wipes it, and podman then refuses to start the container at all
+# (`stat /dev/dri/renderD128: no such file or directory`, exit 125).
+- name: Install the QEMU render-device fixture
+  when:
+    - qemu_test
+    - jellyfin_intel_qsv_enabled
+  copy:
+    dest: /etc/tmpfiles.d/jellyfin_qemu_render_node.conf
+    content: |
+      d /dev/dri 0755 root root -
+      c /dev/dri/renderD128 0660 root root - 226:128
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: systemd-tmpfiles --dry-run --create %s
+  become: true
+  tags:
+    - jellyfin
+
 - name: Create the QEMU render-device fixture
   when:
     - qemu_test
     - jellyfin_intel_qsv_enabled
-  command: systemd-tmpfiles --create -
+  command: systemd-tmpfiles --create /etc/tmpfiles.d/jellyfin_qemu_render_node.conf
   args:
-    stdin: |
-      d /dev/dri 0755 root root -
-      c /dev/dri/renderD128 0660 root root - 226:128
     creates: /dev/dri/renderD128
   become: true
   tags:
