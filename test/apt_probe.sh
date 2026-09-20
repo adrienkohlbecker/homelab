@@ -21,21 +21,37 @@ total_unpack=0
 
 elapsed() { date +%s.%N; }
 
+# The bake clears /var/lib/apt/lists, so without an index every install below
+# would no-op instantly and the measurement would read as pure overhead.
+sudo apt-get update -qq
+
 for pkgs in "${sets[@]}"; do
   read -r -a pkg_list <<<"$pkgs"
+
+  already=$(dpkg-query -W -f '${Status}\n' "${pkg_list[@]}" 2>/dev/null | grep -c "^install ok installed" || true)
+  if [ "$already" -eq "${#pkg_list[@]}" ]; then
+    echo "SKIP (already installed): $pkgs"
+    continue
+  fi
 
   # A clean cache makes the download real rather than a no-op.
   sudo rm -rf /var/cache/apt/archives/*.deb
   start=$(elapsed)
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -d "${pkg_list[@]}" >/dev/null 2>&1 || true
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -d "${pkg_list[@]}" >/dev/null
   fetch=$(echo "$(elapsed) - $start" | bc)
+
+  debs=$(find /var/cache/apt/archives -maxdepth 1 -name '*.deb' | wc -l)
+  if [ "$debs" -eq 0 ]; then
+    echo "ERROR: nothing downloaded for '$pkgs'; measurement would be meaningless" >&2
+    exit 1
+  fi
 
   # Everything needed is cached now, so this second pass is unpack + configure.
   start=$(elapsed)
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkg_list[@]}" >/dev/null 2>&1 || true
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkg_list[@]}" >/dev/null
   unpack=$(echo "$(elapsed) - $start" | bc)
 
-  printf '%-56s fetch %6.2fs   unpack %6.2fs\n' "$pkgs" "$fetch" "$unpack"
+  printf '%-52s %2s debs  fetch %6.2fs   unpack %6.2fs\n' "$pkgs" "$debs" "$fetch" "$unpack"
   total_fetch=$(echo "$total_fetch + $fetch" | bc)
   total_unpack=$(echo "$total_unpack + $unpack" | bc)
 done
