@@ -19,6 +19,7 @@ Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
 
 import argparse
 import asyncio
+import re
 import shutil
 import sys
 import traceback
@@ -119,6 +120,31 @@ async def print_boot_profile(m: Machine) -> None:
     if reached:
         tail = journal.stdout[max(0, reached[-1] - 40) : reached[-1] + 1]
         print_line("systemd log before multi-user.target:\n" + "\n".join(tail))
+    await print_restarted_units(m, journal.stdout)
+
+
+async def print_restarted_units(m: Machine, pid1_journal: list[str]) -> None:
+    """Print the logs of units that failed or restarted during this boot.
+
+    A unit that crash-loops before succeeding still reaches `active`, so the
+    test passes and `systemd-analyze blame` only shows the attempt that
+    worked. PID 1 reports the failure but not the unit's own output, which is
+    where the reason lives. Diagnostic only: never fails the test.
+    """
+    failed = []
+    for line in pid1_journal:
+        match = re.search(r"(\S+\.service): (?:Main process exited|Failed with result|Scheduled restart)", line)
+        if match and match.group(1) not in failed:
+            failed.append(match.group(1))
+    if not failed:
+        return
+    print_line(f"Units that failed or restarted this boot: {' '.join(failed)}")
+    for unit in failed[:5]:
+        logs = await m.ssh_command(
+            "journalctl", "--boot", "--no-pager", "--output=short-monotonic", "-u", unit, check=False
+        )
+        body = "\n".join(logs.stdout[-30:]).rstrip() or "(unavailable)"
+        print_line(f"{unit} log:\n{body}")
 
 
 async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
