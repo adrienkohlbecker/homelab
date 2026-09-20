@@ -342,6 +342,7 @@ class Machine:
     dmesg_file: Path
     systemctl_failed_file: Path
     passt_file: Path
+    guest_journal_file: Path
     workdir: tempfile.TemporaryDirectory[str]
     workdir_path: Path
     # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
@@ -477,6 +478,7 @@ class Machine:
         self.dmesg_file = output_dir / f"{prefix}.dmesg.ansi"
         self.systemctl_failed_file = output_dir / f"{prefix}.systemctl-failed.ansi"
         self.passt_file = output_dir / f"{prefix}.passt.ansi"
+        self.guest_journal_file = output_dir / f"{prefix}.guest-journal.ansi"
         self._artifact_files = (
             self.output_file,
             self.journal_file,
@@ -484,6 +486,7 @@ class Machine:
             self.dmesg_file,
             self.systemctl_failed_file,
             self.passt_file,
+            self.guest_journal_file,
         )
         for stale in self._artifact_files:
             stale.unlink(missing_ok=True)
@@ -1649,6 +1652,22 @@ class Machine:
 
         netdev_arg, net_device_arg = self._netdev_args()
 
+        # HOMELAB_GUEST_JOURNAL attaches a virtio console the guest mirrors its
+        # journal onto (its own unit, gated on the device existing). virtio
+        # carries it over a ring buffer rather than the serial port's VM exit
+        # per byte, and without the flag the device is absent and the guest
+        # leaves journald alone.
+        guest_journal_args: list[str] = []
+        if os.environ.get("HOMELAB_GUEST_JOURNAL"):
+            guest_journal_args = [
+                "-device",
+                "virtio-serial-pci,id=guest_journal_bus",
+                "-chardev",
+                f"file,id=guest_journal,path={self.guest_journal_file}",
+                "-device",
+                "virtconsole,chardev=guest_journal,bus=guest_journal_bus.0",
+            ]
+
         cmd = [
             "timeout",
             "--kill-after=10s",
@@ -1685,6 +1704,7 @@ class Machine:
             "stdio",
             "-device",
             net_device_arg,
+            *guest_journal_args,
             "-pidfile",
             str(self.pid_file),
         ]

@@ -30,6 +30,7 @@ QEMU_HOST_SMOKE_SH = REPO_ROOT / "packer" / "aws" / "files" / "qemu_host_smoke.s
 QEMU_POSTPROCESS_SH = REPO_ROOT / "packer" / "scripts" / "postprocess.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
+QEMU_CHROOT_SH = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
 UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
 UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
@@ -348,6 +349,21 @@ def test_qemu_image_is_sealed_ready_to_boot() -> None:
     assert "zpool import -d /dev/disk/by-partuuid -N" in provision
     assert re.search(r"for md in /dev/md/efi /dev/md/swap /dev/md/podman; do", provision)
     assert 'mdadm --wait "$md" || true' in provision
+
+
+def test_qemu_fixture_journal_console_is_conditional() -> None:
+    """The guest mirrors its journal only when the harness attaches hvc0.
+
+    Without the condition every fixture boot would pay journald's console
+    forwarding, which costs the converge time and loses _SYSTEMD_UNIT on
+    short-lived senders.
+    """
+    chroot = QEMU_CHROOT_SH.read_text()
+
+    assert "ConditionPathExists=/dev/hvc0" in chroot
+    assert "TTYPath=/dev/hvc0" in chroot
+    assert "/run/systemd/journald.conf.d/95-guest-journal.conf" in chroot
+    assert "systemctl enable homelab-guest-journal.service" in chroot
 
 
 def test_qemu_build_separates_host_os_from_architecture() -> None:

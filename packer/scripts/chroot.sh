@@ -564,6 +564,48 @@ EOF
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
+# Mirror the journal onto the harness virtio console, but only when the
+# harness attached one (HOMELAB_GUEST_JOURNAL). A guest that never reaches SSH
+# -- a broken NIC backend, a wedged boot -- then still explains itself in an
+# artifact, while a run without the flag pays nothing: no device, condition
+# unmet, journald untouched. The drop-in lands in /run so the journald role
+# keeps /etc, and virtio avoids the serial console's VM exit per byte (which
+# also slowed journald enough to lose _SYSTEMD_UNIT on short-lived senders).
+if [ "$INSTALL_TARGET" = "qemu" ]; then
+  cat <<'SCRIPT' >/usr/local/bin/homelab_guest_journal
+#!/usr/bin/env bash
+set -euo pipefail
+
+install -d /run/systemd/journald.conf.d
+cat >/run/systemd/journald.conf.d/95-guest-journal.conf <<'CONF'
+[Journal]
+ForwardToConsole=yes
+MaxLevelConsole=info
+TTYPath=/dev/hvc0
+CONF
+systemctl restart systemd-journald
+SCRIPT
+  chmod 0755 /usr/local/bin/homelab_guest_journal
+  cat <<'UNIT' >/etc/systemd/system/homelab-guest-journal.service
+[Unit]
+Description=Mirror the journal to the harness virtio console
+ConditionPathExists=/dev/hvc0
+DefaultDependencies=no
+After=systemd-journald.service
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/homelab_guest_journal
+
+[Install]
+WantedBy=sysinit.target
+UNIT
+  systemd-analyze verify /etc/systemd/system/homelab-guest-journal.service
+  systemctl enable homelab-guest-journal.service
+fi
+
 # Prevent background apt work from taking the dpkg lock in QEMU cells. The
 # unattended_upgrades role unmasks its timers; the boot role owns the multipath
 # masks. Only mask installed units so the image carries no dangling symlinks.
