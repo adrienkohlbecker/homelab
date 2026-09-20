@@ -84,9 +84,11 @@ run_probe() {
 
   echo "### ${label}: accepted connection lines"
   grep -c "accepted connection" "$log" || true
+  echo "### ${label}: passt log"
+  tail -15 "$log"
   if [ -s "$trace" ]; then
     echo "### ${label}: accept call"
-    grep -nE "accept4" "$trace" | head -5
+    grep -E "accept4" "$trace" | head -5 || true
   fi
 }
 
