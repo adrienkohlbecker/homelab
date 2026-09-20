@@ -119,3 +119,9 @@ tailscale_wan_direct: true
 # drive them end-to-end.
 nut_wake_peers:
   - "{{ mac_addresses.lab_i210 }}"
+
+# The site converge is the only place fox's headscale lands on a host that also
+# runs lab's firewall role. Cutting IPv6 there leaves netavark unable to give
+# the headscale bridge its address, so the container never starts. Production
+# never pairs the two: the firewall role runs on lab and pug, headscale on fox.
+firewall_disable_ipv6: false

@@ -1,0 +1,4 @@
+# Cutting IPv6 at the kernel means anything that needs it cannot run on this
+# host. Only the site converge crams fox's headscale onto a lab that also runs
+# this role, and there netavark cannot give its bridge an IPv6 address.
+firewall_disable_ipv6: true

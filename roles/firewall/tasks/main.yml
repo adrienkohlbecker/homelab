@@ -90,8 +90,8 @@
     # services binding `::` end up on a dead listener, neighbor
     # discovery churn stops, and we don't maintain a parallel
     # ip6tables ruleset.
-    - { name: net.ipv6.conf.all.disable_ipv6, value: '1' }
-    - { name: net.ipv6.conf.default.disable_ipv6, value: '1' }
+    - { name: net.ipv6.conf.all.disable_ipv6, value: "{{ '1' if firewall_disable_ipv6 else '0' }}" }
+    - { name: net.ipv6.conf.default.disable_ipv6, value: "{{ '1' if firewall_disable_ipv6 else '0' }}" }
     # Loose reverse-path (rp_filter=2): drop packets whose source isn't
     # routable via ANY interface (still catches RFC1918-on-WAN spoofs),
     # but tolerate the asymmetric paths this host's macvlan topology
