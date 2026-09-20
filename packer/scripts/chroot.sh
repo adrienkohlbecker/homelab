@@ -564,6 +564,21 @@ EOF
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
+# Mirror the journal onto the serial console the harness already captures, so
+# a guest that never reaches SSH (a broken NIC backend, a wedged boot) still
+# explains itself in boot.ansi instead of taking its journal down with it.
+# Own drop-in, ahead of the journald role's 99-custom.conf, so a converge
+# keeps it. info level: DHCP leases and unit failures both matter, and the
+# console costs a VM exit per byte (~4.6us) rather than a real baud rate.
+if [ "$INSTALL_TARGET" = "qemu" ]; then
+  mkdir -p /etc/systemd/journald.conf.d
+  cat <<'JOURNALD' >/etc/systemd/journald.conf.d/95-test-console.conf
+[Journal]
+ForwardToConsole=yes
+MaxLevelConsole=info
+JOURNALD
+fi
+
 # Prevent background apt work from taking the dpkg lock in QEMU cells. The
 # unattended_upgrades role unmasks its timers; the boot role owns the multipath
 # masks. Only mask installed units so the image carries no dangling symlinks.
