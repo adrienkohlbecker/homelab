@@ -9,7 +9,7 @@ sock=/tmp/passt_probe.sock
 log=/tmp/passt_probe.log
 
 client_py=$(
-	cat <<'PY'
+  cat <<'PY'
 import socket, struct, sys
 
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -35,30 +35,30 @@ PY
 )
 
 run_probe() {
-	local label="$1"
-	rm -f "$sock" "$log"
-	dmesg --clear 2>/dev/null || sudo dmesg --clear || true
+  local label="$1"
+  rm -f "$sock" "$log"
+  dmesg --clear 2>/dev/null || sudo dmesg --clear || true
 
-	passt --socket "$sock" --foreground --trace >"$log" 2>&1 &
-	local pid=$!
-	for _ in $(seq 20); do
-		[ -S "$sock" ] && break
-		sleep 0.25
-	done
+  passt --socket "$sock" --foreground --trace >"$log" 2>&1 &
+  local pid=$!
+  for _ in $(seq 20); do
+    [ -S "$sock" ] && break
+    sleep 0.25
+  done
 
-	python3 -c "$client_py" "$sock" || true
-	sleep 2
-	kill "$pid" 2>/dev/null || true
-	wait "$pid" 2>/dev/null || true
+  python3 -c "$client_py" "$sock" || true
+  sleep 2
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
 
-	echo "=== ${label}: accepted connection? ==="
-	grep -c "accepted connection from PID" "$log" || true
-	echo "=== ${label}: send failures ==="
-	grep -c "failed to send" "$log" || true
-	echo "=== ${label}: log tail ==="
-	tail -40 "$log"
-	echo "=== ${label}: kernel denials ==="
-	(dmesg 2>/dev/null || sudo dmesg) | grep -iE "apparmor|denied" | tail -20 || true
+  echo "=== ${label}: accepted connection? ==="
+  grep -c "accepted connection from PID" "$log" || true
+  echo "=== ${label}: send failures ==="
+  grep -c "failed to send" "$log" || true
+  echo "=== ${label}: log tail ==="
+  tail -40 "$log"
+  echo "=== ${label}: kernel denials ==="
+  (dmesg 2>/dev/null || sudo dmesg) | grep -iE "apparmor|denied" | tail -20 || true
 }
 
 echo "### passt profile state"
