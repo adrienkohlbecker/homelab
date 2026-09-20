@@ -48,7 +48,10 @@
           key-type = ecdsa
           elliptic-curve = secp384r1
           dns-cloudflare-credentials = /etc/letsencrypt/cloudflare.ini
-          dns-cloudflare-propagation-seconds = {{ 10 if qemu_test else 60 }}
+          {# Fixtures shorten the wait, but not below what Cloudflare actually
+             needs: 10s issued fine most runs and then failed a site converge
+             with "No TXT record found", which costs far more than it saved. #}
+          dns-cloudflare-propagation-seconds = {{ 30 if qemu_test else 60 }}
         mode: "0644"
         owner: root
         group: root
