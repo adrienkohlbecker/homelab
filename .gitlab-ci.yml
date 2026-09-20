@@ -71,11 +71,7 @@ host_probe:
   script:
     - uname -a
     - sysctl kernel.apparmor_restrict_unprivileged_userns || true
-    - sudo aa-status 2>&1 | head -20 || sudo apparmor_status 2>&1 | head -20 || true
-    - sudo dmesg | grep -i apparmor | tail -40 || true
-    - sudo dmesg | grep -iE "passt|denied" | tail -40 || true
-    - passt --version 2>&1 | head -3 || true
-    - qemu-system-x86_64 --version | head -1
+    - ./test/passt_probe.sh
 
 detect:
   stage: prepare
