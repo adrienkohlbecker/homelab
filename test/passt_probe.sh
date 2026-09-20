@@ -92,9 +92,27 @@ run_probe() {
   fi
 }
 
-run_probe confined
+# Load the shipped profile first, so the probe starts from the same state
+# whatever an earlier run on this reused instance left behind.
+sudo apparmor_parser -r /etc/apparmor.d/usr.bin.passt 2>&1 || true
 
-echo "### unloading the passt profile"
-sudo apparmor_parser -R /etc/apparmor.d/usr.bin.passt && echo "unloaded" || echo "(unload failed)"
+run_probe as_shipped
 
-run_probe unconfined
+# Candidate fix: grant passt the AF_UNIX access its qemu socket needs. The
+# profile predates this kernel mediating AF_UNIX, so accept4() is denied while
+# the profile is still what grants passt its userns exception.
+echo "### adding the missing unix rule"
+sudo python3 - <<'FIX'
+import pathlib
+
+profile = pathlib.Path("/etc/apparmor.d/usr.bin.passt")
+text = profile.read_text()
+rule = "  unix (accept, bind, connect, listen, receive, send),\n"
+if rule not in text:
+    text = text[: text.rindex("}")] + rule + "}\n"
+    profile.write_text(text)
+print(text)
+FIX
+sudo apparmor_parser -r /etc/apparmor.d/usr.bin.passt && echo "reloaded"
+
+run_probe fixed
