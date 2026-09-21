@@ -22,12 +22,20 @@ def _runner_values() -> dict:
         gitlab_runner_shell_enabled=False,
         gitlab_runner_aws_qemu_enabled=True,
         gitlab_runner_aws_qemu_token="x86-token",
+        gitlab_runner_aws_qemu_asg_name="x86-asg",
         gitlab_runner_aws_qemu_capacity_per_instance=3,
         gitlab_runner_aws_qemu_max_instances=7,
+        gitlab_runner_aws_qemu_idle_time="11m",
+        gitlab_runner_aws_qemu_connector_timeout="21s",
+        gitlab_runner_aws_qemu_instance_acquire_timeout="31m",
         gitlab_runner_aws_qemu_arm_enabled=True,
         gitlab_runner_aws_qemu_arm_token="arm-token",
+        gitlab_runner_aws_qemu_arm_asg_name="arm-asg",
         gitlab_runner_aws_qemu_arm_capacity_per_instance=5,
         gitlab_runner_aws_qemu_arm_max_instances=11,
+        gitlab_runner_aws_qemu_arm_idle_time="12m",
+        gitlab_runner_aws_qemu_arm_connector_timeout="22s",
+        gitlab_runner_aws_qemu_arm_instance_acquire_timeout="32m",
         gitlab_runner_aws_qemu_arm_ssh_private_key="arm-private-key",
     )
     return values
@@ -45,6 +53,27 @@ def test_runner_limit_is_the_pool_slot_total() -> None:
     for runner in runners:
         autoscaler = runner["autoscaler"]
         assert runner["limit"] == autoscaler["capacity_per_instance"] * autoscaler["max_instances"]
+
+
+def test_each_runner_takes_its_own_pools_settings() -> None:
+    """Every pool-specific value is distinct, so swapped macro arguments fail here."""
+    rendered = _render_template((ROLE / "templates" / "config.toml.j2").read_text(), _runner_values())
+    runners = {runner["name"]: runner for runner in tomllib.loads(rendered)["runners"]}
+
+    expected = {
+        "fox-aws-shell-qemu": ("x86-token", "x86-asg", 3, 7, "11m", "21s", "31m"),
+        "fox-aws-shell-qemu-arm": ("arm-token", "arm-asg", 5, 11, "12m", "22s", "32m"),
+    }
+    for name, (token, asg, capacity, max_instances, idle, connector_timeout, acquire) in expected.items():
+        runner = runners[name]
+        autoscaler = runner["autoscaler"]
+        assert runner["token"] == token
+        assert autoscaler["plugin_config"]["name"] == asg
+        assert autoscaler["capacity_per_instance"] == capacity
+        assert autoscaler["max_instances"] == max_instances
+        assert autoscaler["policy"][0]["idle_time"] == idle
+        assert autoscaler["connector_config"]["timeout"] == connector_timeout
+        assert autoscaler["instance_acquire_timeout"] == acquire
 
 
 def test_only_the_arm_runner_uses_a_static_ssh_key() -> None:
