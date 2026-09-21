@@ -40,9 +40,9 @@ class ManifestFile(NamedTuple):
     size: int
 
 
-# Mirrors ci.image_bucket and ci.aws_region in data/architectures.yml, which
-# Terraform provisions from; hardcoded so the baked AMI copy needs no data
-# files. unit_tests/test_qemu_image_pointer.py checks the two agree.
+# Hardcoded so the baked AMI copy needs no data files. The bucket is created by
+# terraform/aws_ci.tf and the region mirrors ci.aws_region in
+# data/architectures.yml; unit_tests/test_qemu_image_pointer.py checks both.
 IMAGE_STORE = ImageStore(bucket="homelab-ci-images", region="eu-central-1")
 
 

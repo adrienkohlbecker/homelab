@@ -19,7 +19,7 @@ locals {
   # re-registered username could recreate the project and mint valid tokens.
   ci_gitlab_project         = "akohlbecker/homelab"
   ci_account_id             = "000390721279"
-  ci_qemu_image_bucket_name = local.ci_architectures.x86_64.ci.image_bucket
+  ci_qemu_image_bucket_name = "homelab-ci-images"
   # Removing a release from test/matrix.py does not enumerate its S3 prefix.
   # Add its codename here so lifecycle explicitly retires every remaining object.
   ci_qemu_retired_releases = toset([])

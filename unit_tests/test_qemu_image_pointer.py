@@ -60,12 +60,16 @@ class TestImageStore:
         assert upload.image_prefix("aarch64", "noble", "lab") == "aarch64/noble/lab"
         assert {"aarch64", "x86_64"} == upload.VALID_ARCHITECTURES
 
-    def test_store_matches_the_architecture_catalog(self) -> None:
-        catalog = yaml.safe_load((Path(__file__).resolve().parent.parent / "data" / "architectures.yml").read_text())
+    def test_store_matches_terraform_and_the_architecture_catalog(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        catalog = yaml.safe_load((root / "data" / "architectures.yml").read_text())
+        terraform = (root / "terraform" / "aws_ci.tf").read_text()
+
+        bucket, region = upload.image_store("x86_64")
 
         assert set(catalog) == upload.VALID_ARCHITECTURES
-        for architecture, facts in catalog.items():
-            assert upload.image_store(architecture) == (facts["ci"]["image_bucket"], facts["ci"]["aws_region"])
+        assert f'ci_qemu_image_bucket_name = "{bucket}"' in terraform
+        assert {facts["ci"]["aws_region"] for facts in catalog.values()} == {region}
 
     def test_unknown_architecture_is_rejected(self) -> None:
         with pytest.raises(KeyError):
