@@ -14,7 +14,7 @@
     _storage_autosnapshot: false
 
 - name: _verify | Validate installed AWS profile and credentials
-  when: gitlab_runner_aws_qemu_enabled
+  when: gitlab_runner_aws_qemu_enabled or gitlab_runner_aws_qemu_arm_enabled
   command:
     argv:
       - python3
@@ -93,7 +93,7 @@
 
 # Without its go-plugin handshake, the AWS plugin may block on stdin.
 - name: _verify | Pinned fleeting-plugin-aws binary runs on this arch
-  when: gitlab_runner_aws_qemu_enabled
+  when: gitlab_runner_aws_qemu_enabled or gitlab_runner_aws_qemu_arm_enabled
   command: timeout 10 /usr/local/bin/fleeting-plugin-aws --version
   register: _gitlab_runner_fleeting_aws_version
   changed_when: false
