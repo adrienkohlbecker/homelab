@@ -8,15 +8,14 @@
 # anonymous (public project) — only this publish path needs auth.
 #
 # Auth, by environment:
-#   GitLab CI:   CI_JOB_TOKEN (the zbm_build job) — built-in write access to
+#   GitLab CI:   CI_JOB_TOKEN (the zbm_build and zbm_build_arm jobs) — built-in write access to
 #                this project's package registry, no standing secret. curl,
 #                not glab: glab only authenticates via PRIVATE-TOKEN/Bearer
 #                (a PAT shape job tokens are not valid as), while the
 #                packages API honors job tokens solely through the JOB-TOKEN
 #                header.
 #   Workstation: the operator's authenticated glab CLI (`glab auth login`),
-#                covering the locally-built aarch64 tarballs CI does not
-#                produce. No deploy token to mint or store.
+#                for tarballs built locally. No deploy token to mint or store.
 set -euo pipefail
 
 # shellcheck source=mise-tasks/zbm/lib.sh

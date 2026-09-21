@@ -129,38 +129,54 @@ unit_tests:
 
 # Manually publish Dockerfile as ci:<sha>; only master also moves :latest.
 # Hosted dind cannot reach Nexus, so the build uses upstream apt. An optional
-# no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit secret.
-ci_image:
+# no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit secret. The image is
+# built natively per architecture; CI_IMAGE_TAG_SUFFIX keeps the arm64 tags
+# (ci:<sha>-arm64, ci:latest-arm64) apart from the amd64 ones.
+.ci_image:
   stage: prepare
   extends: .manual_job
   image: docker:28.3.3
   services:
     - docker:28.3.3-dind
+  timeout: 45m
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    CI_IMAGE_TAG_SUFFIX: ""
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    # A missing cache is expected on the first build.
+    - docker pull "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX" || true
+    - |
+      docker build ${MISE_GITHUB_TOKEN:+--secret id=mise_github_token,env=MISE_GITHUB_TOKEN} \
+        --build-arg USE_NEXUS_MIRRORS=0 \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --cache-from "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX" \
+        --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA$CI_IMAGE_TAG_SUFFIX" .
+    - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA$CI_IMAGE_TAG_SUFFIX"
+    # Branch dispatches must not retarget what other pipelines pin.
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA$CI_IMAGE_TAG_SUFFIX" "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX"
+        docker push "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX"
+      fi
+
+ci_image:
+  extends: .ci_image
   tags:
     - saas-linux-medium-amd64
   # Serialize and never cancel a possible :latest push.
   resource_group: ci_image
   interruptible: false
-  timeout: 45m
+
+# The arm64 image lets hosted arm64 jobs (zbm_build_arm) use the same toolchain.
+ci_image_arm:
+  extends: .ci_image
+  tags:
+    - saas-linux-medium-arm64
+  resource_group: ci_image_arm
+  interruptible: false
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
-  script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    # A missing cache is expected on the first build.
-    - docker pull "$CI_REGISTRY_IMAGE/ci:latest" || true
-    - |
-      docker build ${MISE_GITHUB_TOKEN:+--secret id=mise_github_token,env=MISE_GITHUB_TOKEN} \
-        --build-arg USE_NEXUS_MIRRORS=0 \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        --cache-from "$CI_REGISTRY_IMAGE/ci:latest" \
-        --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA" .
-    - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA"
-    # Branch dispatches must not retarget what other pipelines pin.
-    - |
-      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE/ci:latest"
-        docker push "$CI_REGISTRY_IMAGE/ci:latest"
-      fi
+    CI_IMAGE_TAG_SUFFIX: "-arm64"
 
 # Bake the AWS nested-qemu runner host AMIs, not guest fixtures. Each
 # architecture uses the same protected manual bake-and-promote path.
@@ -287,7 +303,8 @@ fox_image:
 
 # Manually rebuild ZFSBootMenu after a version or overlay change, verify the
 # artifacts, then pin the tarball. zbm:ci-build owns dind setup, cache, assertions,
-# and default-branch publication.
+# and default-branch publication. The architecture comes from the runner, so the
+# arm64 job differs only in its runner, CI image, and serialization group.
 zbm_build:
   stage: prepare
   extends:
@@ -314,3 +331,10 @@ zbm_build:
       - zbm-build/**/*.sha256sum
   script:
     - mise run zbm:ci-build
+
+zbm_build_arm:
+  extends: zbm_build
+  image: $CI_REGISTRY_IMAGE/ci:latest-arm64
+  tags:
+    - saas-linux-medium-arm64
+  resource_group: zbm_build_arm
