@@ -82,7 +82,7 @@
 # Without a reachable reboot the post-reboot probe below cannot run, so retain the
 # ZBM property check as the handoff the boot chain consumes.
 - name: _verify | ZBM commandline includes consoleblank=0
-  when: not qemu_boot_changes_reachable
+  when: not qemu_boot_changes_reachable and zfs_root
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: _console_zbm_cmdline
   changed_when: false
