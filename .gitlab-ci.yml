@@ -58,18 +58,6 @@ workflow:
 # missing or failed API resolution safely expands to the full universe.
 # CI_JOB_TOKEN queries pipelines by default; GITLAB_API_TOKEN is the optional
 # read_api fallback. See notes/ci_aws_nested_qemu_cells.md.
-apt_probe:
-  stage: prepare
-  tags:
-    - aws-shell-qemu
-  rules:
-    - if: '$HOMELAB_APT_PROBE == "1"'
-      when: manual
-      allow_failure: true
-  timeout: 40m
-  script:
-    - ./test/apt_probe.sh
-
 detect:
   stage: prepare
   # Rendering on the selected cell pool warms its first runner for the matrix.
