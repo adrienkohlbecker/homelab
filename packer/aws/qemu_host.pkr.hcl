@@ -165,7 +165,6 @@ build {
       # The ARM firmware installer and the pins it reads.
       "${path.cwd}/mise-tasks/test/firmware.sh",
       "${path.cwd}/group_vars/all/versions.yml",
-      "${path.cwd}/data/architectures.yml",
       # The boot-time image pre-hydration and the module it imports.
       "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py",
       "${path.cwd}/mise-tasks/ci/qemu_image_store.py",

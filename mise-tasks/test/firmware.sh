@@ -12,7 +12,10 @@ set -euo pipefail
 #
 # This is the only extractor: the ARM qemu-host AMI runs this script from a
 # minimal copy of the repo layout, so it resolves its inputs relative to itself
-# and needs only python3 with PyYAML, curl, ar, and tar.
+# and needs only python3 with PyYAML, curl, ar, and tar. The output file names
+# are fixed here and mirrored by guest.firmware in data/architectures.yml, which
+# the harness and the Packer fixture read; unit_tests/test_packer_tasks.py
+# checks they agree.
 
 # Only aarch64 guests boot the pinned pair, and fixtures always boot natively,
 # so other hosts (the x86 lab builder) have nothing to fetch.
@@ -28,35 +31,30 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 firmware_dir="${HOMELAB_AARCH64_FIRMWARE_DIR:-${root}/test/firmware}"
 archive_marker="${firmware_dir}/archive.sha256"
 # The pinned package pairs the plain (no Secure Boot) CODE image with VARS.
+code_dest="${firmware_dir}/edk2-aarch64-code.fd"
+vars_dest="${firmware_dir}/edk2-aarch64-vars.fd"
 
 {
   read -r deb_version
   read -r deb_url
   read -r deb_sha256
-  read -r code_name
-  read -r vars_name
 } < <(
-  python3 - "${root}/group_vars/all/versions.yml" "${root}/data/architectures.yml" <<'PY'
+  python3 - "${root}/group_vars/all/versions.yml" <<'PY'
 import sys
 
 import yaml
 
-with open(sys.argv[1]) as versions_file, open(sys.argv[2]) as architectures_file:
+with open(sys.argv[1]) as versions_file:
     versions = yaml.safe_load(versions_file)
-    firmware = yaml.safe_load(architectures_file)["aarch64"]["guest"]["firmware"]
 artifact = versions["qemu_efi_aarch64_artifact"]
 print(
     versions["qemu_efi_aarch64_version"],
     artifact["url"],
     artifact["sha256"],
-    firmware["code_name"],
-    firmware["vars_name"],
     sep="\n",
 )
 PY
 )
-code_dest="${firmware_dir}/${code_name}"
-vars_dest="${firmware_dir}/${vars_name}"
 
 # shasum is the macOS builtin (the aarch64 fixture is the local Mac); Linux
 # hosts may only have coreutils' sha256sum. Both check GNU checksum lines.

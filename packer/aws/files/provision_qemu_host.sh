@@ -60,7 +60,6 @@ if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
   firmware_tree=$(mktemp -d)
   install -D -m 0755 /tmp/firmware.sh "$firmware_tree/mise-tasks/test/firmware.sh"
   install -D -m 0644 /tmp/versions.yml "$firmware_tree/group_vars/all/versions.yml"
-  install -D -m 0644 /tmp/architectures.yml "$firmware_tree/data/architectures.yml"
   sudo env HOMELAB_AARCH64_FIRMWARE_DIR="$HOMELAB_AARCH64_FIRMWARE_DIR" \
     bash "$firmware_tree/mise-tasks/test/firmware.sh"
   rm -rf "$firmware_tree"
@@ -237,5 +236,4 @@ sudo rm -rf \
   /tmp/qemu_image_store.py \
   /tmp/firmware.sh \
   /tmp/versions.yml \
-  /tmp/architectures.yml \
   /tmp/homelab-ci-build

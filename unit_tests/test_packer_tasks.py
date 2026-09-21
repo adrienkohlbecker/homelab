@@ -411,10 +411,8 @@ def _firmware_checkout(tmp_path: Path, package: Path, sha256: str) -> Path:
     """Lay out firmware.sh with the pins it reads, as the AMI bake does."""
     root = tmp_path / "checkout"
     (root / "mise-tasks" / "test").mkdir(parents=True)
-    (root / "data").mkdir()
     (root / "group_vars" / "all").mkdir(parents=True)
     shutil.copy(FIRMWARE_SH, root / "mise-tasks" / "test" / "firmware.sh")
-    shutil.copy(REPO_ROOT / "data" / "architectures.yml", root / "data" / "architectures.yml")
     versions = {
         "qemu_efi_aarch64_version": "test",
         "qemu_efi_aarch64_artifact": {"url": package.as_uri(), "sha256": sha256},
@@ -430,6 +428,15 @@ def _run_firmware(script: Path, firmware_dir: Path, host: str = "aarch64") -> su
     path = f"{fake_bin}:{Path(sys.executable).parent}:{os.environ['PATH']}"
     env = dict(os.environ, HOMELAB_AARCH64_FIRMWARE_DIR=str(firmware_dir), PATH=path)
     return subprocess.run(["bash", str(script)], env=env, text=True, capture_output=True)
+
+
+def test_firmware_file_names_match_the_architecture_catalog() -> None:
+    catalog = yaml.safe_load((REPO_ROOT / "data" / "architectures.yml").read_text())
+    firmware = catalog["aarch64"]["guest"]["firmware"]
+    script = FIRMWARE_SH.read_text()
+
+    assert f'code_dest="${{firmware_dir}}/{firmware["code_name"]}"' in script
+    assert f'vars_dest="${{firmware_dir}}/{firmware["vars_name"]}"' in script
 
 
 def test_firmware_is_not_fetched_on_non_arm_hosts(tmp_path: Path) -> None:
