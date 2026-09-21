@@ -1,6 +1,6 @@
-# Verify the bootloader integration and post-reboot capture state. The non-GRUB
-# aarch64 fixture uses a staged EFI-stub command line, so it exercises only the
-# written next-boot source rather than rebooting into it.
+# Verify the bootloader integration and post-reboot capture state. A fixture
+# where the reboot is not reachable (qemu_boot_changes_reachable, see
+# group_vars/test.yml) exercises only the written next-boot source.
 
 - name: _verify | Provide a reserved-memory result through Ansible
   command: printf 1
@@ -46,8 +46,8 @@
 - name: _verify | Exercise post-reboot kdump state
   when: qemu_boot_changes_reachable
   block:
-    # The excluded non-GRUB aarch64 fixture uses a staged rEFInd EFI-stub
-    # command line, so its ZBM write cannot reach the running kernel here.
+    # Not reachable under HVF, where a ZBM kexec cannot bring the next kernel's
+    # secondary CPUs online.
     - name: _verify | Reboot to exercise crashkernel reservation
       import_role:
         name: reboot

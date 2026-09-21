@@ -37,12 +37,12 @@ set -euxo pipefail
 # through to chroot.sh. The ZBM_*/UBUNTU_MIRROR_* vars used downstream
 # are documented at the top of chroot.sh.
 
-# Directories holding chroot.sh, optional installer extensions, and the four
+# Directories holding chroot.sh, optional installer extensions, and the three
 # role-owned bootstrap files. Packer uploads them to /home/vagrant; bare-metal
 # callers can point both variables at their staged bundle.
 SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
 ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
-ROLE_FILES=(console-setup keyboard modules_most zz-stage-efi-stub)
+ROLE_FILES=(console-setup keyboard modules_most)
 
 preflight() {
   local name disk role_file
@@ -568,7 +568,7 @@ if [ "$INSTALL_TARGET" != bare_metal ]; then
   echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 fi
 
-# Stage the four role-owned bootstrap files inside the target root so chroot.sh
+# Stage the three role-owned bootstrap files inside the target root so chroot.sh
 # consumes the same bytes as Ansible without installing Ansible there.
 CHROOT_ROLE_FILES=/var/tmp/homelab-role-files
 cleanup_chroot_role_files() {

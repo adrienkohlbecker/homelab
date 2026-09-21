@@ -167,8 +167,8 @@
 
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
-# not just that the ZFS property was set. The non-GRUB aarch64 fixture cannot
-# exercise that handoff because its EFI-stub command line is staged elsewhere.
+# not just that the ZFS property was set. Skipped where the reboot is not
+# reachable (qemu_boot_changes_reachable, see group_vars/test.yml).
 - name: _verify | Read the running kernel's cmdline
   when: qemu_boot_changes_reachable and not grub_bootloader
   slurp:

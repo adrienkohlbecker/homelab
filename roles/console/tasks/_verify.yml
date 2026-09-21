@@ -16,10 +16,9 @@
 # in exchange every downstream check tests post-reboot reality rather
 # than next-boot intent.
 
-# Non-GRUB aarch64 boxes bypass ZBM: rEFInd boots a Linux EFI-stub menuentry
-# whose kernel cmdline is staged at image-build time, so the property written
-# here is not consumed until the later rEFInd role restages it. GRUB fixtures
-# consume update-grub directly and can exercise the post-reboot contract.
+# Fixtures on a host where a ZBM kexec cannot complete (qemu_boot_changes_reachable
+# is false, see group_vars/test.yml) skip the reboot and check the property
+# instead. Elsewhere the reboot exercises the post-reboot contract directly.
 - name: _verify | Reboot to apply role changes
   import_role:
     name: reboot
@@ -80,8 +79,8 @@
   failed_when: _console_noblank_active.stdout | trim != 'active'
   become: true
 
-# Non-GRUB aarch64 cannot exercise the post-reboot probe below, so retain its
-# ZBM property check as the handoff consumed by the later rEFInd role.
+# Without a reachable reboot the post-reboot probe below cannot run, so retain the
+# ZBM property check as the handoff the boot chain consumes.
 - name: _verify | ZBM commandline includes consoleblank=0
   when: not qemu_boot_changes_reachable
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
@@ -116,8 +115,8 @@
 
 # /sys/module/kernel/parameters/consoleblank exposes the value the
 # running kernel parsed from the cmdline at boot, proving the boot chain applied
-# the argument. Non-GRUB aarch64 skips the reboot because its running kernel
-# still reflects the EFI-stub entry baked into the image.
+# the argument. Skipped where the reboot is not reachable, since the running
+# kernel then still carries the previous boot's arguments.
 - name: _verify | Running kernel applied consoleblank=0
   when: qemu_boot_changes_reachable
   command: grep -qxF 0 /sys/module/kernel/parameters/consoleblank

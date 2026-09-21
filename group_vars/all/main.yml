@@ -28,9 +28,6 @@ zfs_has_data_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_minio_mount: "{{ not (qemu_test | bool) }}"
 zfs_root: true
 grub_bootloader: false
-# aarch64 has no ZBM EFI executable, so non-GRUB hosts boot a Linux EFI stub
-# staged by rEFInd instead.
-boot_via_efi_stub: "{{ not grub_bootloader and ansible_architecture == 'aarch64' }}"
 zfs_dozer_filesystem: rpool
 zfs_tank_filesystem: rpool
 zfs_trim_pools:

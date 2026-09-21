@@ -317,7 +317,6 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
         "roles/boot/files/modules_most",
         "roles/console/files/console-setup",
         "roles/console/files/keyboard",
-        "roles/refind/files/zz-stage-efi-stub",
     }
     uploaded_role_files = {match.group(1) for match in re.finditer(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)}
     assert uploaded_role_files == expected

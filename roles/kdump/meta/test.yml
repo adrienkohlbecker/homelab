@@ -1,4 +1,4 @@
-# Cover ZFSBootMenu, GRUB (both architectures), and the ARM EFI-stub
+# Cover ZFSBootMenu, GRUB (both architectures), and the ARM ZFSBootMenu
 # crashkernel paths; ARM Minimal is the only ARM cell that reboots.
 machines:
   lab:

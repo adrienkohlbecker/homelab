@@ -333,11 +333,10 @@ mount /boot/efi
 # group_vars/all/versions.yml and passes it here as $ZBM_VERSION.
 #
 # The tarball carries both the unified ZBM EFI image and the components-mode
-# kernel + initrd. The shipped default ZBM entry uses the unified image
-# (/EFI/ZBM/VMLINUZ.EFI); the aarch64 image also stages the components so the
-# ZBM menu remains available even though the default boot path is the Linux
-# EFI-stub entry below. rEFInd ships as refind_x64.efi on x86_64 and
-# refind_aa64.efi on aarch64 ($REFIND_NAME, derived from `uname -m` above).
+# kernel + initrd. The default ZBM entry uses the unified image
+# (/EFI/ZBM/VMLINUZ.EFI); the aarch64 image also stages the components as a
+# recovery entry. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi
+# on aarch64 ($REFIND_NAME, derived from `uname -m` above).
 #
 # The registry path is project 83079143 = akohlbecker/homelab (numeric id
 # keeps the path free of an encoded slash); the project is public, so the
@@ -388,36 +387,13 @@ rm /boot/refind_linux.conf
 mkdir -p /boot/efi/EFI/BOOT
 cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
 
-# aarch64 boots the kernel EFI stub directly because ZBM kexec panics under
-# EDK2 (notes/archive/zbm-aarch64-kexec-bug-report.md). Install the shared hook
-# for kernel removal, installation, and initrd-only rebuilds, then use that same
-# path for initial staging. ZBM remains available as a recovery menu entry.
-if [ "$ZBM_ARCH" = "aarch64" ]; then
-  install -m 0755 \
-    "${CHROOT_ROLE_FILES}/zz-stage-efi-stub" \
-    /etc/kernel/postinst.d/zz-stage-efi-stub
-
-  mkdir -p /etc/kernel/postrm.d /etc/initramfs/post-update.d
-  ln -sf ../postinst.d/zz-stage-efi-stub /etc/kernel/postrm.d/zz-stage-efi-stub
-  ln -sf /etc/kernel/postinst.d/zz-stage-efi-stub \
-    /etc/initramfs/post-update.d/zz-stage-efi-stub
-
-  /etc/kernel/postinst.d/zz-stage-efi-stub
-
-  refind_default_selection="Ubuntu (Linux EFI Stub)"
-  refind_dont_scan_dirs="EFI:/EFI/ZBM,EFI:/EFI/Linux"
-else
-  refind_default_selection="Ubuntu (ZBM)"
-  refind_dont_scan_dirs="EFI:/EFI/ZBM"
-fi
-
 # Menu countdown. 3 matches the role template (a converge overwrites this
 # file with that value).
 
 cat <<EOF >/boot/efi/EFI/refind/refind.conf
 timeout 3
-default_selection "$refind_default_selection"
-dont_scan_dirs $refind_dont_scan_dirs
+default_selection "Ubuntu (ZBM)"
+dont_scan_dirs EFI:/EFI/ZBM
 
 # Twin of the converge-time roles/refind/templates/refind.conf.j2, kept in sync by
 # hand.
@@ -441,12 +417,6 @@ menuentry "Ubuntu (ZBM, Components)" {
       options "$ZBM_CMDLINE $COMMANDLINE zbm.show"
     }
 }
-
-menuentry "Ubuntu (Linux EFI Stub)" {
-    loader /EFI/Linux/vmlinuz.efi
-    initrd /EFI/Linux/initrd
-    options "root=zfs:rpool/ROOT/${UBUNTU_NAME} $COMMANDLINE"
-}
 EOF
 
 fi
@@ -462,9 +432,8 @@ fi
 # efivars.fd) and never read this copy.
 cp /boot/efi/EFI/refind/refind.conf /boot/efi/EFI/BOOT/refind.conf
 
-# Configure EFI boot entries. rEFInd is the firmware entry for the image. On
-# aarch64, the Linux EFI-stub boot path is the manual rEFInd menuentry above;
-# its kernel command line lives in refind.conf `options`.
+# Configure EFI boot entries. rEFInd is the firmware entry for the image; the
+# kernel command line lives in refind.conf `options`.
 
 # On the multi-disk mdadm-EFI mirror, register one boot entry per disk
 # so the system survives losing any single disk — firmware only follows

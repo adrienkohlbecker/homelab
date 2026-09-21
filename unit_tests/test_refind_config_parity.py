@@ -44,10 +44,6 @@ def _canonical_menuentry(block: str) -> tuple[str, ...]:
         "$ZBM_CMDLINE $COMMANDLINE": "<launch_cmdline>",
         "{{ _zbm_launch_cmdline }}": "<launch_cmdline>",
         "${ZBM_KERNEL}": "vmlinux-bootmenu",
-        "${UBUNTU_NAME}": "<release>",
-        "{{ ansible_distribution_release }}": "<release>",
-        "$COMMANDLINE": "<pool_cmdline>",
-        "{{ refind_pool_cmdline.stdout }}": "<pool_cmdline>",
     }
     for source, replacement in replacements.items():
         block = block.replace(source, replacement)
@@ -64,7 +60,6 @@ def _canonical_menuentry(block: str) -> tuple[str, ...]:
     [
         "Ubuntu (ZBM)",
         "Ubuntu (ZBM, Components)",
-        "Ubuntu (Linux EFI Stub)",
     ],
 )
 def test_packer_and_ansible_refind_menuentries_match(name: str) -> None:

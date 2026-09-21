@@ -338,7 +338,6 @@ build {
       "${path.cwd}/roles/boot/files/modules_most",
       "${path.cwd}/roles/console/files/console-setup",
       "${path.cwd}/roles/console/files/keyboard",
-      "${path.cwd}/roles/refind/files/zz-stage-efi-stub",
     ]
     destination = "/home/vagrant/"
   }

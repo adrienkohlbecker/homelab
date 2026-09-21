@@ -40,7 +40,6 @@
     mode: "0644"
   vars:
     ansible_architecture: x86_64
-    boot_via_efi_stub: false
     refind_zbm_cmdline_content:
       content: "{{ 'quiet splash' | b64encode }}"
   become: true
@@ -55,7 +54,6 @@
 
         config = pathlib.Path("/tmp/refind-x86-zbm.conf").read_text()
         assert 'default_selection "Ubuntu (ZBM)"' in config
-        assert 'menuentry "Ubuntu (Linux EFI Stub)"' not in config
         assert "vmlinux-bootmenu" not in config
   changed_when: false
   become: true
@@ -113,17 +111,12 @@
 - name: _verify | Validate refind.conf boot config
   vars:
     _conf: "{{ _refind_verify_conf.content | b64decode }}"
-    _expected_default_selection: "{{ 'Ubuntu (Linux EFI Stub)' if boot_via_efi_stub else 'Ubuntu (ZBM)' }}"
-    _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if boot_via_efi_stub else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
   assert:
     that:
       - "'timeout 3' in _conf"
-      - "'default_selection \"' ~ _expected_default_selection ~ '\"' in _conf"
-      - _expected_dont_scan_dirs in _conf
+      - "'default_selection \"Ubuntu (ZBM)\"' in _conf"
+      - "'dont_scan_dirs EFI:/EFI/ZBM' in _conf"
       - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
-      - not boot_via_efi_stub or 'menuentry "Ubuntu (Linux EFI Stub)"' in _conf
-      - not boot_via_efi_stub or 'loader /EFI/Linux/vmlinuz.efi' in _conf
-      - not boot_via_efi_stub or 'initrd /EFI/Linux/initrd' in _conf
       - "'include themes/refind-theme-regular/theme.conf' in _conf"
     fail_msg: "refind.conf missing expected boot directives"
 
@@ -164,31 +157,11 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: _verify | Stat the Linux EFI-stub files
-  when: boot_via_efi_stub
-  stat:
-    path: "/boot/efi/EFI/Linux/{{ item }}"
-  loop:
-    - vmlinuz.efi
-    - initrd
-  register: _refind_verify_linux_stub
-  become: true
-
-- name: _verify | Linux EFI-stub files are present
-  when: boot_via_efi_stub
-  assert:
-    that:
-      - item.stat.exists
-      - item.stat.size > 0
-    fail_msg: "aarch64 Linux EFI-stub file missing or empty: {{ item.item }}"
-  loop: "{{ _refind_verify_linux_stub.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
 # The fixture's NVRAM already holds rEFInd's PreviousBoot variable, so this
 # warm reboot is rEFInd's second-or-later boot: the case that ASSERTs in the
 # stock aarch64 edk2 when rEFInd is 0.13.2 (see refind_noble_release).
 - name: _verify | Reboot through the installed rEFInd path
+  when: qemu_boot_changes_reachable
   import_role:
     name: reboot
     tasks_from: reboot

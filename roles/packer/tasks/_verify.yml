@@ -36,12 +36,12 @@
 - name: _verify | Recovery scan policy in refind.conf
   vars:
     _conf: "{{ packer_verify_refind_conf.content | b64decode }}"
-    _expected_dont_scan_dirs: "{{ 'dont_scan_dirs EFI:/EFI/ZBM,EFI:/EFI/Linux' if boot_via_efi_stub else 'dont_scan_dirs EFI:/EFI/ZBM' }}"
   assert:
     that:
-      - _expected_dont_scan_dirs in _conf
-      - not boot_via_efi_stub or 'menuentry "Ubuntu (ZBM)"' in _conf
-      - not boot_via_efi_stub or 'loader /EFI/ZBM/VMLINUZ.EFI' in _conf
+      - "'dont_scan_dirs EFI:/EFI/ZBM' in _conf"
+      - "'default_selection \"Ubuntu (ZBM)\"' in _conf"
+      - "'menuentry \"Ubuntu (ZBM)\"' in _conf"
+      - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
     fail_msg: "refind.conf missing the recovery scan policy"
 
 # --- NVRAM Boot entries (rEFInd) ---
@@ -326,62 +326,20 @@
        | select('match', '^passwordauthentication\s+no$')
        | list | length == 0
 
-# --- aarch64: rEFInd EFI-stub menuentry + kernel-install hook ---
-
-- name: _verify | EFI-stub rEFInd-entry assertions (aarch64)
-  when: ansible_architecture == "aarch64"
-  block:
-    - name: _verify | Staged EFI-stub kernel + initrd are present and non-empty
-      stat:
-        path: "{{ item }}"
-        checksum_algorithm: sha256
-      loop:
-        - /boot/efi/EFI/Linux/vmlinuz.efi
-        - /boot/efi/EFI/Linux/initrd
-      register: packer_verify_efi_linux
-      failed_when: >-
-        not packer_verify_efi_linux.stat.exists
-        or (packer_verify_efi_linux.stat.size | default(0) | int) == 0
-      become: true
-
-    - name: _verify | Kernel-install hook is a regular executable file
-      stat:
-        path: /etc/kernel/postinst.d/zz-stage-efi-stub
-      register: packer_verify_hook_postinst
-      failed_when: >-
-        not packer_verify_hook_postinst.stat.exists
-        or not packer_verify_hook_postinst.stat.isreg
-        or not packer_verify_hook_postinst.stat.executable
-
-    - name: _verify | Hook symlinks point at the postinst.d entry
-      stat:
-        path: "{{ item }}"
-      loop:
-        - /etc/kernel/postrm.d/zz-stage-efi-stub
-        - /etc/initramfs/post-update.d/zz-stage-efi-stub
-      register: packer_verify_hook_links
-      failed_when: >-
-        not packer_verify_hook_links.stat.exists
-        or not packer_verify_hook_links.stat.islnk
-        or 'postinst.d/zz-stage-efi-stub'
-           not in (packer_verify_hook_links.stat.lnk_target | default(''))
-      loop_control:
-        label: "{{ item }}"
-
 # --- Functional aarch64 kernel-update + reboot exercise ---
 #
 # Trigger an apt-driven kernel transaction and reboot, then prove the
-# firmware boots into a *different* kernel through rEFInd and the Linux
-# EFI stub under /EFI/Linux/.
+# firmware boots into a *different* kernel through rEFInd and ZFSBootMenu,
+# which picks the highest kernel in the boot environment.
 #
 # Install an older linux-image-X.Y.Z-generic, then hide the running
 # kernel's /boot files behind dotfile names so the "highest kernel"
-# selection skips them. Re-run the postinst.d hook so /EFI/Linux/
-# restages with the older kernel, then assert the file hashes changed.
-# Dpkg's running-kernel guard blocks the cleaner apt-purge path.
+# selection skips them. Dpkg's running-kernel guard blocks the cleaner
+# apt-purge path.
 #
 # On aarch64, ABI discovery always runs; the reboot exercise requires a
-# distinct swap target because multiple package versions can map to one ABI.
+# distinct swap target because multiple package versions can map to one ABI,
+# and a host where the reboot is reachable (qemu_boot_changes_reachable).
 
 - name: _verify | Refresh apt cache so madison sees the current archive
   when: ansible_architecture == "aarch64"
@@ -451,6 +409,7 @@
   when:
     - ansible_architecture == "aarch64"
     - packer_verify_swap_abi.stdout | default('') | length > 0
+    - qemu_boot_changes_reachable
   block:
     - name: _verify | Install older specific kernel + modules
       apt:
@@ -462,8 +421,7 @@
 
     # dpkg refuses to purge the running kernel ("Aborting removal of
     # the running kernel"). Hide the /boot files behind dotfile names
-    # — shell globs don't match leading dots, so the hook skips them
-    # when it restages /EFI/Linux/ below.
+    # — ZFSBootMenu's kernel discovery does not match leading dots.
     - name: _verify | Hide running kernel files from highest-kernel selection
       shell:
         cmd: |
@@ -473,35 +431,6 @@
         executable: /bin/bash
       changed_when: true
       become: true
-
-    - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/
-      command: /etc/kernel/postinst.d/zz-stage-efi-stub
-      changed_when: true
-      become: true
-
-    - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after
-      stat:
-        path: "{{ item }}"
-        checksum_algorithm: sha256
-      loop:
-        - /boot/efi/EFI/Linux/vmlinuz.efi
-        - /boot/efi/EFI/Linux/initrd
-      register: packer_verify_efi_linux_after
-      become: true
-
-    - name: _verify | Hook restaged vmlinuz.efi and initrd onto the ESP
-      assert:
-        that:
-          - >-
-            packer_verify_efi_linux_after.results[0].stat.checksum
-            != packer_verify_efi_linux.results[0].stat.checksum
-          - >-
-            packer_verify_efi_linux_after.results[1].stat.checksum
-            != packer_verify_efi_linux.results[1].stat.checksum
-        fail_msg: >-
-          /EFI/Linux/vmlinuz.efi or /EFI/Linux/initrd unchanged after the
-          kernel transaction — postinst.d hook didn't fire (or fired but
-          failed silently)
 
     - name: _verify | Reboot to pick up the swapped kernel
       import_role:

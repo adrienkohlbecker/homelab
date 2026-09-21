@@ -10,11 +10,6 @@ zfs_arc_min: 268435456
 zfs_arc_max: 536870912
 swap_zram_size: 3G
 
-# An EFI-stub fixture stages its kernel command line through rEFInd, outside the
-# role under test, so role-local changes cannot reach the running kernel after a
-# reboot. GRUB and x86 ZFSBootMenu fixtures apply them directly.
-qemu_boot_changes_reachable: "{{ not boot_via_efi_stub }}"
-
 # Noble's archive has enough kernel history to exercise Packer's aarch64
 # kernel-update path. Resolute remains waived while its development archive
 # carries only the image's running ABI; adding a release requires an explicit
@@ -41,6 +36,12 @@ domain: mhaf.fr
 # Harness inputs stay behind test-only indirection so task-scoped fixtures can
 # exercise the public environment variables at normal Ansible precedence.
 nexus_url: "{{ _test_nexus_url | default('nexus.lab.fahm.fr') }}"
+# Under HVF (a Mac host) a kernel booted by kexec cannot bring its secondary CPUs
+# online, so ZFSBootMenu cannot hand off to the boot environment and role changes
+# that need a reboot are not reachable. KVM and TCG hosts reboot through ZBM
+# normally (notes/zbm_aarch64_kexec_investigation.md).
+qemu_boot_changes_reachable: "{{ not (_test_hvf | default(false) | bool) }}"
+
 test_in_aws: "{{ _test_in_aws | default(false) | bool }}"
 # DoT servers for the qemu test fixture. Local fixtures use the household
 # AdGuard VIP even when --upstream-mirrors bypasses Nexus; Internet-bound 853

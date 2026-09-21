@@ -1,6 +1,5 @@
-# This role maintains rEFInd's on-ESP binaries, config, theme, and aarch64
-# Linux EFI-stub staging hook. It runs after zfsbootmenu, which installs the
-# ZBM artifacts referenced by the menuentries. The boot role mounts the vfat
+# This role maintains rEFInd's on-ESP binaries, config, and theme. It runs after
+# zfsbootmenu, which installs the ZBM artifacts referenced by the menuentries. The boot role mounts the vfat
 # ESP with umask=0077; use its effective mode for every on-ESP path because FAT
 # has no per-path Unix permissions.
 # Noble's own rEFInd is too old to survive a warm reboot under edk2-stable202408
@@ -137,55 +136,6 @@
   tags:
     - refind
 
-- name: Manage aarch64 Linux EFI-stub lifecycle
-  when: boot_via_efi_stub
-  become: true
-  tags:
-    - refind
-  block:
-    - name: Install aarch64 Linux EFI-stub staging hook
-      copy:
-        src: zz-stage-efi-stub
-        dest: /etc/kernel/postinst.d/zz-stage-efi-stub
-        owner: root
-        group: root
-        mode: "0755"
-        backup: true
-        validate: bash -n %s
-      register: refind_efi_stub_hook
-
-    - name: Create aarch64 Linux EFI-stub hook directories
-      file:
-        path: "{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      loop:
-        - /etc/kernel/postrm.d
-        - /etc/initramfs/post-update.d
-
-    - name: Link aarch64 Linux EFI-stub hook into kernel lifecycle
-      file:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        state: link
-        force: true
-        owner: root
-        group: root
-      loop:
-        - src: ../postinst.d/zz-stage-efi-stub
-          dest: /etc/kernel/postrm.d/zz-stage-efi-stub
-        - src: /etc/kernel/postinst.d/zz-stage-efi-stub
-          dest: /etc/initramfs/post-update.d/zz-stage-efi-stub
-      loop_control:
-        label: "{{ item.dest }}"
-
-    - name: Stage aarch64 Linux EFI-stub kernel and initrd
-      when: not ansible_check_mode
-      command: /etc/kernel/postinst.d/zz-stage-efi-stub
-      changed_when: refind_efi_stub_hook is changed
-
 - name: Create theme directory
   file:
     path: "{{ item }}"
@@ -265,15 +215,6 @@
   slurp:
     src: /boot/efi/EFI/ZBM/cmdline
   register: refind_zbm_cmdline_content
-  become: true
-  tags:
-    - refind
-
-- name: Read pool cmdline for aarch64 Linux EFI-stub entry
-  when: boot_via_efi_stub
-  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
-  changed_when: false
-  register: refind_pool_cmdline
   become: true
   tags:
     - refind
