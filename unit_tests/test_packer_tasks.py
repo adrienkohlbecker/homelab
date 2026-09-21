@@ -14,6 +14,7 @@ import sys
 import tarfile
 from pathlib import Path
 
+import arch
 import pytest
 import yaml
 
@@ -430,13 +431,15 @@ def _run_firmware(script: Path, firmware_dir: Path, host: str = "aarch64") -> su
     return subprocess.run(["bash", str(script)], env=env, text=True, capture_output=True)
 
 
-def test_firmware_file_names_match_the_architecture_catalog() -> None:
-    catalog = yaml.safe_load((REPO_ROOT / "data" / "architectures.yml").read_text())
-    firmware = catalog["aarch64"]["guest"]["firmware"]
+def test_firmware_file_names_agree_across_the_task_harness_and_fixture() -> None:
+    code, vars_ = "edk2-aarch64-code.fd", "edk2-aarch64-vars.fd"
     script = FIRMWARE_SH.read_text()
 
-    assert f'code_dest="${{firmware_dir}}/{firmware["code_name"]}"' in script
-    assert f'vars_dest="${{firmware_dir}}/{firmware["vars_name"]}"' in script
+    assert f'code_dest="${{firmware_dir}}/{code}"' in script
+    assert f'vars_dest="${{firmware_dir}}/{vars_}"' in script
+    assert (code, vars_) == arch.AARCH64.pinned_firmware
+    assert f"${{local.aarch64_firmware_dir}}/{code}" in QEMU_TEMPLATE.read_text()
+    assert f"${{local.aarch64_firmware_dir}}/{vars_}" in QEMU_TEMPLATE.read_text()
 
 
 def test_firmware_is_not_fetched_on_non_arm_hosts(tmp_path: Path) -> None:

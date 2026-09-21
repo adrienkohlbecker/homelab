@@ -3,8 +3,6 @@
 # Terraform. Keys are uname-style architecture names.
 #
 # guest.cloud_image_suffix is the architecture token in Ubuntu cloud-image names.
-# guest.firmware names the pinned CODE/VARS pair `mise run test:firmware`
-# installs; architectures without it use packaged firmware.
 # ci.ami_parameter is an SSM parameter name template; `{ubuntu}` is replaced by
 # the Ubuntu codename.
 x86_64:
@@ -22,9 +20,6 @@ aarch64:
     # firmware discovers PCI devices directly, so no ROM is needed.
     net_device: virtio-net,romfile=
     cloud_image_suffix: arm64
-    firmware:
-      code_name: edk2-aarch64-code.fd
-      vars_name: edk2-aarch64-vars.fd
   ci:
     ami_name_prefix: homelab-ci-qemu-host-aarch64
     ami_parameter: /homelab-ci/ami/qemu-host/aarch64/{ubuntu}

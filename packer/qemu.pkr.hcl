@@ -136,8 +136,8 @@ locals {
       vars = "/usr/share/OVMF/OVMF_VARS_4M.fd"
     }
     aarch64 = {
-      code = "${local.aarch64_firmware_dir}/${local.architectures.aarch64.guest.firmware.code_name}"
-      vars = "${local.aarch64_firmware_dir}/${local.architectures.aarch64.guest.firmware.vars_name}"
+      code = "${local.aarch64_firmware_dir}/edk2-aarch64-code.fd"
+      vars = "${local.aarch64_firmware_dir}/edk2-aarch64-vars.fd"
     }
   }
   firmware_cfg = local.firmware_table[local.arch]

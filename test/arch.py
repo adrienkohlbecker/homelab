@@ -101,7 +101,7 @@ AARCH64 = ArchProfile(
     # on every aarch64 host rather than silently accepting the packaged blobs.
     uefi_code_candidates=(),
     bios_boot_supported=False,
-    pinned_firmware=(_AARCH64_GUEST["firmware"]["code_name"], _AARCH64_GUEST["firmware"]["vars_name"]),
+    pinned_firmware=("edk2-aarch64-code.fd", "edk2-aarch64-vars.fd"),
 )
 
 

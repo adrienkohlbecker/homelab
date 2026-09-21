@@ -13,9 +13,8 @@ set -euo pipefail
 # This is the only extractor: the ARM qemu-host AMI runs this script from a
 # minimal copy of the repo layout, so it resolves its inputs relative to itself
 # and needs only python3 with PyYAML, curl, ar, and tar. The output file names
-# are fixed here and mirrored by guest.firmware in data/architectures.yml, which
-# the harness and the Packer fixture read; unit_tests/test_packer_tasks.py
-# checks they agree.
+# are fixed here and mirrored by test/arch.py and packer/qemu.pkr.hcl;
+# unit_tests/test_packer_tasks.py checks they agree.
 
 # Only aarch64 guests boot the pinned pair, and fixtures always boot natively,
 # so other hosts (the x86 lab builder) have nothing to fetch.
