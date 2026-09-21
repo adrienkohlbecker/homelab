@@ -121,7 +121,9 @@
   become: true
 
 - name: config | Record the go.d.plugin kill
-  when: _netdata_config_go_d_kill.rc | default(1) == 0
+  when:
+    - _netdata_config_go_d_kill is not skipped
+    - _netdata_config_go_d_kill.rc | default(1) == 0
   set_fact:
     netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['go.d.plugin']) }}"
 

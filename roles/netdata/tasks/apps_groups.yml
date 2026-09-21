@@ -75,7 +75,9 @@
   become: true
 
 - name: Record the apps.plugin kill
-  when: netdata_apps_plugin_kill.rc | default(1) == 0
+  when:
+    - netdata_apps_plugin_kill is not skipped
+    - netdata_apps_plugin_kill.rc | default(1) == 0
   set_fact:
     netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['apps.plugin']) }}"
 

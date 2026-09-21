@@ -23,7 +23,7 @@
 - name: _verify | The respawned go.d.plugin collects the new job
   uri:
     url: >-
-      http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=httpcheck_reload_probe.*
+      http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=httpcheck_reload_probe_{{ _netdata_reload_go_d_at.stdout }}.*
   register: _netdata_reload_probe_charts
   retries: 30
   delay: 2

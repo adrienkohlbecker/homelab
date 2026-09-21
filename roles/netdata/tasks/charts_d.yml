@@ -103,7 +103,9 @@
   become: true
 
 - name: charts_d | Record the charts.d.plugin kill
-  when: _netdata_charts_d_kill.rc | default(1) == 0
+  when:
+    - _netdata_charts_d_kill is not skipped
+    - _netdata_charts_d_kill.rc | default(1) == 0
   set_fact:
     netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['charts.d.plugin']) }}"
 

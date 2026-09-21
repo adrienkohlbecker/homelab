@@ -1,5 +1,6 @@
 # _verify fixture: a go.d job whose chart only exists once a go.d.plugin
-# reload has read this file.
+# reload has read this file. The name carries the run's start time so a job a
+# previous run left loaded in a kept fixture cannot satisfy the probe.
 jobs:
-  - name: reload_probe
+  - name: reload_probe_{{ _netdata_reload_go_d_at.stdout }}
     url: http://127.0.0.1:{{ service_ports.netdata }}/api/v1/info
