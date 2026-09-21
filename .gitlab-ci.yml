@@ -169,10 +169,12 @@ ci_image:
   interruptible: false
 
 # The arm64 image lets hosted arm64 jobs (zbm_build_arm) use the same toolchain.
+# Free-plan namespaces only get the small arm64 runner (medium and large are
+# Premium and Ultimate only).
 ci_image_arm:
   extends: .ci_image
   tags:
-    - saas-linux-medium-arm64
+    - saas-linux-small-arm64
   resource_group: ci_image_arm
   interruptible: false
   variables:
@@ -336,5 +338,5 @@ zbm_build_arm:
   extends: zbm_build
   image: $CI_REGISTRY_IMAGE/ci:latest-arm64
   tags:
-    - saas-linux-medium-arm64
+    - saas-linux-small-arm64
   resource_group: zbm_build_arm
