@@ -373,6 +373,8 @@ build {
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
       "INSTALL_TARGET"                  = source.name == "hetzner" ? "hetzner" : "qemu"
+      "REFIND_DEB_URL"                  = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""
+      "REFIND_DEB_SHA256"               = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""
       "ZBM_VERSION"                     = local.arch_cfg.zbm_version
       "ZFS_ARC_MAX"                     = "${local.variant_config[source.name].zfs_arc_max}"
     }

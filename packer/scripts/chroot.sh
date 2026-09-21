@@ -20,7 +20,8 @@ trap 'exit 130' INT TERM
 # - From packer's shell-provisioner env block (qemu.pkr.hcl):
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
-#   SSH_KEY_PUB, ZBM_VERSION.
+#   SSH_KEY_PUB, ZBM_VERSION, and optionally REFIND_DEB_URL/REFIND_DEB_SHA256
+#   (a pinned rEFInd package; empty installs the distribution's).
 # - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_ROLE_FILES, INSTALL_TARGET,
 #   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN,
 #   HOSTNAME, USERNAME.
@@ -367,7 +368,16 @@ fi
 
 # Configure rEFInd
 
-apt-get install --yes refind
+# Noble's rEFInd 0.13.2 wedges the second boot under edk2-stable202408; the
+# packer template passes the pinned newer package only for releases that need it.
+if [ -n "${REFIND_DEB_URL:-}" ]; then
+  curl -fL --retry 3 --retry-connrefused -o /tmp/refind.deb "$REFIND_DEB_URL"
+  echo "$REFIND_DEB_SHA256  /tmp/refind.deb" | sha256sum -c -
+  apt-get install --yes /tmp/refind.deb
+  rm /tmp/refind.deb
+else
+  apt-get install --yes refind
+fi
 refind-install
 rm /boot/refind_linux.conf
 

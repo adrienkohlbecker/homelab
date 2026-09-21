@@ -185,6 +185,9 @@
   loop_control:
     label: "{{ item.item }}"
 
+# The fixture's NVRAM already holds rEFInd's PreviousBoot variable, so this
+# warm reboot is rEFInd's second-or-later boot: the case that ASSERTs in the
+# stock aarch64 edk2 when rEFInd is 0.13.2 (see refind_noble_release).
 - name: _verify | Reboot through the installed rEFInd path
   import_role:
     name: reboot

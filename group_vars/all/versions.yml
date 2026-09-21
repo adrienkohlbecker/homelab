@@ -175,6 +175,20 @@ macos_vm_fetch_macos_artifact:
   url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/fetch-macOS-v2.py"
   sha256: "39ac6d26bd265f5d32198062f515ad15ef93afb7a74e702be2b008090d5bd5f3"
 
+# Noble packages rEFInd 0.13.2, which rewrites its PreviousBoot NVRAM variable
+# on every boot after the first. Under the stock edk2-stable202408 that ships
+# with Noble and Homebrew qemu, that rewrite ASSERTs in the DXE pool and wedges
+# the guest on its second boot (any role that reboots). rEFInd 0.14.2 -- what
+# Resolute packages -- does not. The .deb is Resolute's, installed on Noble
+# only; newer releases keep the distribution package.
+refind_noble_release:
+  x86_64:
+    url: "http://archive.ubuntu.com/ubuntu/pool/universe/r/refind/refind_0.14.2-2.1_amd64.deb"
+    sha256: "89591c162e65a21c3cfa80cd8e051382c4ddabe531664a81c6417c47b6698d42"
+  aarch64:
+    url: "http://ports.ubuntu.com/ubuntu-ports/pool/universe/r/refind/refind_0.14.2-2.1_arm64.deb"
+    sha256: "cf81a5530fda88fe1e57d0a761ae8c17c27eeb819eeb2609f7e03e519e44ee6d"
+
 # ARM QEMU firmware newer than Ubuntu Noble and Homebrew currently package.
 # The Debian snapshot URL is content-addressed and the package is hash-verified.
 qemu_efi_aarch64_version: "2025.11-5"  # edk2-stable202511

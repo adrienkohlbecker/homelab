@@ -3,7 +3,42 @@
 # ZBM artifacts referenced by the menuentries. The boot role mounts the vfat
 # ESP with umask=0077; use its effective mode for every on-ESP path because FAT
 # has no per-path Unix permissions.
+# Noble's own rEFInd is too old to survive a warm reboot under edk2-stable202408
+# (see refind_noble_release in versions.yml); later releases use the archive.
+- name: Download the pinned rEFInd package
+  when: ansible_distribution_release == 'noble'
+  get_url:
+    url: "{{ refind_noble_release[ansible_architecture].url }}"
+    dest: /var/cache/refind.deb
+    checksum: "sha256:{{ refind_noble_release[ansible_architecture].sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: refind_deb_download
+  retries: 3
+  delay: 5
+  until: refind_deb_download is succeeded
+  become: true
+  tags:
+    - refind
+
+# apt reads the archive's embedded package/version and skips an exact match. A
+# missing cache is only predicted by get_url in check mode, so there is no local
+# archive for apt to inspect until a real apply downloads it.
+- name: Install the pinned refind
+  when:
+    - ansible_distribution_release == 'noble'
+    - not (ansible_check_mode and refind_deb_download.changed)
+  apt:
+    deb: /var/cache/refind.deb
+    allow_downgrade: true
+  register: refind_deb
+  become: true
+  tags:
+    - refind
+
 - name: Install refind
+  when: ansible_distribution_release != 'noble'
   apt:
     package:
       - refind
@@ -61,7 +96,7 @@
 # Runs on both arches: the package ships refind_x64.efi on x86 and
 # refind_aa64.efi on arm64 under the same path.
 - name: Install the rEFInd binaries on the ESP  # noqa: require-backup
-  when: not (ansible_check_mode and refind_apt.changed)
+  when: not (ansible_check_mode and (refind_apt.changed or refind_deb_download.changed))
   copy:
     src: "/usr/share/refind/refind/{{ refind_efi_binary }}"
     dest: "{{ item }}"
