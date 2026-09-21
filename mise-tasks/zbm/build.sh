@@ -76,7 +76,7 @@ if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" "$initramfs_lis
 fi
 
 if [ "$arch" = "aarch64" ]; then
-  for required in "usr/bin/fdtput" "hooks/early-setup.d/40-kexec-uefi-secure-boot.sh"; do
+  for required in "usr/bin/fdtput" "usr/bin/zstd" "hooks/early-setup.d/40-kexec-uefi-secure-boot.sh"; do
     if ! grep -qF "$required" "$initramfs_listing"; then
       echo "ZBM initramfs is missing the aarch64 kexec DTB hook dependency: ${required}" >&2
       exit 1
