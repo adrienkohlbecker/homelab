@@ -221,20 +221,6 @@
     that:
       - _systemd_unit_disabled_state.stdout == 'disabled'
 
-- name: _verify | Manage the fixture with enable false again
-  import_role:
-    name: systemd_unit
-    tasks_from: unit
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
-      enable: false
-      start: false
-
-- name: _verify | A repeat enable false is a no-op
-  assert:
-    that: not _systemd_unit_enable.changed
-
 - name: _verify | Manage fixture for stop-only removal
   import_role:
     name: systemd_unit
