@@ -349,7 +349,7 @@ def test_qemu_image_is_sealed_ready_to_boot() -> None:
 
     assert "zpool import -d /dev/disk/by-partuuid -N" in provision
     assert re.search(r"for md in /dev/md/efi /dev/md/swap /dev/md/podman; do", provision)
-    assert 'mdadm --wait "$md" || true' in provision
+    assert 'mdadm --wait "$md" || wait_status=$?' in provision
 
 
 def test_qemu_fixture_mirrors_journal_from_the_first_entry() -> None:

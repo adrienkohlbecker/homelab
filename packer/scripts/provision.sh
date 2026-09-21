@@ -632,7 +632,12 @@ create_extra_pools
 if [ "$INSTALL_TARGET" != bare_metal ]; then
   for md in /dev/md/efi /dev/md/swap /dev/md/podman; do
     [ -e "$md" ] || continue
-    mdadm --wait "$md" || true
+    wait_status=0
+    mdadm --wait "$md" || wait_status=$?
+    if [ "$wait_status" -gt 1 ]; then
+      echo "mdadm --wait $md failed with status $wait_status" >&2
+      exit "$wait_status"
+    fi
   done
 fi
 
