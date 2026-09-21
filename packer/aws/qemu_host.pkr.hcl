@@ -166,8 +166,7 @@ build {
       "${path.cwd}/mise-tasks/test/firmware.sh",
       "${path.cwd}/group_vars/all/versions.yml",
       "${path.cwd}/data/architectures.yml",
-      # The boot-time image pre-hydration and the module it imports (its data,
-      # architectures.yml, is already staged above).
+      # The boot-time image pre-hydration and the module it imports.
       "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py",
       "${path.cwd}/mise-tasks/ci/qemu_image_store.py",
     ]

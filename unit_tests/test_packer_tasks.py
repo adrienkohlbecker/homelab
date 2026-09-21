@@ -952,7 +952,7 @@ def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
 
     A hydrate import or data read the AMI does not ship would make the boot
     unit fail on every host; running --help from outside the repository
-    exercises every module import and data read at load time.
+    exercises every module import at load time.
     """
     template = QEMU_HOST_TEMPLATE.read_text()
     provision = QEMU_HOST_PROVISION_SH.read_text()
@@ -967,7 +967,7 @@ def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((REPO_ROOT / sources[name]).read_bytes())
-    script = tmp_path / "mise-tasks" / "ci" / "hydrate-qemu-images.py"
+    script = tmp_path / "hydrate-qemu-images.py"
     result = subprocess.run(
         [sys.executable, str(script), "--help"], cwd=tmp_path, capture_output=True, text=True, check=False
     )

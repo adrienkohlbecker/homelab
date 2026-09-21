@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from conftest import load_repo_module
 
 upload = load_repo_module("mise-tasks/packer/upload-s3.py", name="upload_s3")
@@ -58,6 +59,13 @@ class TestImageStore:
         assert upload.image_prefix("x86_64", "noble", "lab") == "x86/noble/lab"
         assert upload.image_prefix("aarch64", "noble", "lab") == "aarch64/noble/lab"
         assert {"aarch64", "x86_64"} == upload.VALID_ARCHITECTURES
+
+    def test_store_matches_the_architecture_catalog(self) -> None:
+        catalog = yaml.safe_load((Path(__file__).resolve().parent.parent / "data" / "architectures.yml").read_text())
+
+        assert set(catalog) == upload.VALID_ARCHITECTURES
+        for architecture, facts in catalog.items():
+            assert upload.image_store(architecture) == (facts["ci"]["image_bucket"], facts["ci"]["aws_region"])
 
     def test_unknown_architecture_is_rejected(self) -> None:
         with pytest.raises(KeyError):

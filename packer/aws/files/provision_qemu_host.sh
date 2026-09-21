@@ -182,13 +182,12 @@ sudo systemctl enable homelab-ci-scratch.service
 # a host (often the critical-path site converge) finds it cached instead of
 # waiting ~30s for S3. The script's per-image flock makes a job that arrives
 # mid-hydration wait and then reuse the result; a failure here only means the
-# job hydrates itself. The copy keeps the repository layout the script's
-# relative data read expects; bundle checksums guard content, and
-# a job whose newer script rejects this copy's cache simply re-hydrates.
+# job hydrates itself. The copy is just the script and its store module;
+# bundle checksums guard content, and a job whose newer script rejects this
+# copy's cache simply re-hydrates.
 hydrate_root=/opt/homelab-ci/hydrate
-sudo install -D -m 0755 /tmp/hydrate-qemu-images.py "$hydrate_root/mise-tasks/ci/hydrate-qemu-images.py"
-sudo install -D -m 0644 /tmp/qemu_image_store.py "$hydrate_root/mise-tasks/ci/qemu_image_store.py"
-sudo install -D -m 0644 /tmp/architectures.yml "$hydrate_root/data/architectures.yml"
+sudo install -D -m 0755 /tmp/hydrate-qemu-images.py "$hydrate_root/hydrate-qemu-images.py"
+sudo install -D -m 0644 /tmp/qemu_image_store.py "$hydrate_root/qemu_image_store.py"
 sudo tee /etc/systemd/system/homelab-ci-prehydrate.service >/dev/null <<UNIT
 [Unit]
 Description=Pre-hydrate the default qemu image for homelab CI jobs
@@ -204,7 +203,7 @@ Environment=MISE_DATA_DIR=/opt/mise
 Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
 # The script needs the toolchain's Python (3.14 syntax, zstd tarfile), not the
 # distro's, so it runs through mise like every CI job does.
-ExecStart=/usr/bin/mise exec -- python3 $hydrate_root/mise-tasks/ci/hydrate-qemu-images.py lab --ubuntu $PREHYDRATE_UBUNTU
+ExecStart=/usr/bin/mise exec -- python3 $hydrate_root/hydrate-qemu-images.py lab --ubuntu $PREHYDRATE_UBUNTU
 # TimeoutStartSec does not bound a Type=exec unit once its process is running.
 RuntimeMaxSec=10min
 

@@ -6,20 +6,17 @@ import platform
 import shutil
 import subprocess
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Any, NamedTuple
-
-import yaml
 
 BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
 MANIFEST_VERSION = 2
 POINTER_NAME = "promoted.json"
 VALID_MACHINES = {"lab", "pug"}
-ARCHITECTURES: dict[str, Any] = yaml.safe_load(
-    (Path(__file__).resolve().parents[2] / "data" / "architectures.yml").read_text()
-)
-VALID_ARCHITECTURES = set(ARCHITECTURES)
+# Each architecture keeps its pointers and builds under its own prefix.
+ARCHITECTURE_PREFIXES = {"x86_64": "x86", "aarch64": "aarch64"}
+VALID_ARCHITECTURES = set(ARCHITECTURE_PREFIXES)
 
 
 class ImageStore(NamedTuple):
@@ -43,15 +40,20 @@ class ManifestFile(NamedTuple):
     size: int
 
 
+# Mirrors ci.image_bucket and ci.aws_region in data/architectures.yml, which
+# Terraform provisions from; hardcoded so the baked AMI copy needs no data
+# files. unit_tests/test_qemu_image_pointer.py checks the two agree.
+IMAGE_STORE = ImageStore(bucket="homelab-ci-images", region="eu-central-1")
+
+
 def image_store(architecture: str) -> ImageStore:
-    ci = ARCHITECTURES[architecture]["ci"]
-    return ImageStore(bucket=ci["image_bucket"], region=ci["aws_region"])
+    if architecture not in VALID_ARCHITECTURES:
+        raise KeyError(architecture)
+    return IMAGE_STORE
 
 
 def image_prefix(architecture: str, ubuntu: str, machine: str) -> str:
-    """Keep each architecture's pointers and builds under its own prefix."""
-    prefix = {"x86_64": "x86", "aarch64": "aarch64"}[architecture]
-    return f"{prefix}/{ubuntu}/{machine}"
+    return f"{ARCHITECTURE_PREFIXES[architecture]}/{ubuntu}/{machine}"
 
 
 def host_architecture() -> str:
