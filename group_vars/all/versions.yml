@@ -237,8 +237,8 @@ zfsbootmenu_release:
     version: v3.0.1-linux6.1-ci.2615022324.14945838188-x86_64  # ZBM v3.0.1 2025-01-19 (CI build)
     url: "{{ zfsbootmenu_repository_url }}/v3.0.1-linux6.1-ci.2615022324.14945838188-x86_64/zfsbootmenu-v3.0.1-linux6.1-ci.2615022324.14945838188-x86_64.tar.gz"
   aarch64:
-    version: v3.1.0-linux6.18-local.20260619193945-aarch64  # ZBM v3.1.0 2026-01-01 (local build)
-    url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-local.20260619193945-aarch64/zfsbootmenu-v3.1.0-linux6.18-local.20260619193945-aarch64.tar.gz"
+    version: v3.1.0-linux6.18-local.20260921161013-aarch64  # ZBM v3.1.0 2026-01-01 (local build with the kexec DTB hook)
+    url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-local.20260921161013-aarch64/zfsbootmenu-v3.1.0-linux6.18-local.20260921161013-aarch64.tar.gz"
 
 # === Package-manager pins ====================================================
 
