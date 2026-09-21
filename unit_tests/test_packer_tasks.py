@@ -977,3 +977,18 @@ def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "{lab,pug}" in result.stdout
+
+
+def test_minimal_fixture_mirrors_journal_with_the_same_unit_as_packer_fixtures() -> None:
+    """The stock cloud image has no baked-in mirror, so cloud-init installs it."""
+    chroot = QEMU_CHROOT_SH.read_text()
+    match = re.search(r"<<'UNIT' >/etc/systemd/system/homelab_guest_journal\.service\n(.*?)\nUNIT\n", chroot, re.S)
+    assert match
+
+    user_data = yaml.safe_load((REPO_ROOT / "test" / "minimal" / "user-data").read_text())
+    (unit,) = user_data["write_files"]
+
+    assert unit["path"] == "/etc/systemd/system/homelab_guest_journal.service"
+    assert unit["content"].rstrip("\n") == match.group(1)
+    assert ["systemctl", "enable", "--now", "homelab_guest_journal.service"] in user_data["runcmd"]
+    assert ["systemctl", "mask", "serial-getty@hvc0.service"] in user_data["runcmd"]

@@ -10,3 +10,42 @@
 manage_etc_hosts: true
 ssh_authorized_keys:
   - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
+# The Packer fixtures ship the journal-mirror unit in their image; the stock
+# cloud image has none, so a minimal cell that fails after SSH comes up would
+# leave no journal artifact. Same unit as packer/scripts/chroot.sh.
+write_files:
+  - path: /etc/systemd/system/homelab_guest_journal.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Mirror the journal to the harness virtio console
+      DefaultDependencies=no
+      After=systemd-journald.service
+      Before=sysinit.target
+      # No start rate limit: journald may not have a readable journal on the first
+      # attempt this early in boot, and a burst of quick exits must not retire the
+      # unit for the rest of the run. StartLimitIntervalSec is a [Unit] key -- in
+      # [Service] systemd only warns, and that warning then fails every later
+      # `systemd-analyze verify` the systemd_unit helper runs.
+      StartLimitIntervalSec=0
+
+      [Service]
+      Type=exec
+      Environment=SYSTEMD_COLORS=true
+      ExecStart=/usr/bin/journalctl --follow --lines=all --output=short-iso-precise --cursor-file=/run/homelab_guest_journal.cursor
+      StandardOutput=file:/dev/hvc0
+      StandardError=null
+      Restart=always
+      RestartSec=1
+      OOMScoreAdjust=-900
+
+      [Install]
+      WantedBy=sysinit.target
+runcmd:
+  - - systemctl
+    - mask
+    - serial-getty@hvc0.service
+  - - systemctl
+    - enable
+    - --now
+    - homelab_guest_journal.service
