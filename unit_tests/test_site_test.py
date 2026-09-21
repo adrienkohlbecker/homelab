@@ -147,3 +147,12 @@ def test_a_unit_that_recovers_still_fails_the_converge() -> None:
     restarted = asyncio.run(site_test.report_restarted_units(cast(site_test.Machine, machine), journal))
 
     assert restarted == ["headscale.service"]
+
+
+def test_failed_non_service_units_fail_the_converge() -> None:
+    journal = ["lab systemd[1]: mnt-media.mount: Failed with result 'exit-code'."]
+    machine = RestartJournalMachine(journal)
+
+    restarted = asyncio.run(site_test.report_restarted_units(cast(site_test.Machine, machine), journal))
+
+    assert restarted == ["mnt-media.mount"]

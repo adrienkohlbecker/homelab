@@ -123,10 +123,9 @@ async def print_boot_profile(m: Machine) -> list[str]:
     # critical-chain skips units without an active-enter timestamp (oneshots
     # without RemainAfterExit, failed units), so it can credit multi-user.target
     # to a unit that finished minutes earlier. PID 1's own log shows what really
-    # completed last before the target.
-    journal = await m.ssh_command(
-        "journalctl", "--boot", "--no-pager", "--output=short-monotonic", "_PID=1", check=False
-    )
+    # completed last before the target. It also drives the failed-unit check
+    # below, so a failed query must raise rather than read as "nothing failed".
+    journal = await m.ssh_command("journalctl", "--boot", "--no-pager", "--output=short-monotonic", "_PID=1")
     reached = [i for i, line in enumerate(journal.stdout) if "Reached target multi-user.target" in line]
     if reached:
         tail = journal.stdout[max(0, reached[-1] - 40) : reached[-1] + 1]
@@ -145,7 +144,10 @@ async def report_restarted_units(m: Machine, pid1_journal: list[str]) -> list[st
     """
     failed: list[str] = []
     for line in pid1_journal:
-        match = re.search(r"(\S+\.service): (?:Main process exited|Failed with result|Scheduled restart)", line)
+        match = re.search(
+            r"(\S+\.(?:service|socket|timer|mount|path|swap)): (?:Main process exited|Failed with result|Scheduled restart)",
+            line,
+        )
         if not match:
             continue
         unit = match.group(1)
