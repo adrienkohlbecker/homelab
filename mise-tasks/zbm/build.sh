@@ -75,6 +75,15 @@ if [ "$arch" = "aarch64" ] && ! grep -Eq "/efivarfs[.]ko([.]|$)" "$initramfs_lis
   exit 1
 fi
 
+if [ "$arch" = "aarch64" ]; then
+  for required in "usr/bin/fdtput" "hooks/early-setup.d/40-kexec-uefi-secure-boot.sh"; do
+    if ! grep -qF "$required" "$initramfs_listing"; then
+      echo "ZBM initramfs is missing the aarch64 kexec DTB hook dependency: ${required}" >&2
+      exit 1
+    fi
+  done
+fi
+
 tarball="zfsbootmenu-v${ZBM_VERSION}-linux${ZBM_KERNEL_VERSION}${ZBM_BUILD_SUFFIX:-}-${arch}.tar.gz"
 (cd "$package_dir" && tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=ustar -cf - vmlin*-bootmenu initramfs-bootmenu.img zfsbootmenu.EFI cmdline | gzip -n >"${out_dir}/${tarball}")
 (cd "$out_dir" && sha256sum "$tarball" | tee "${tarball}.sha256sum")

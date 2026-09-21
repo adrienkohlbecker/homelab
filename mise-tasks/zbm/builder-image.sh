@@ -64,6 +64,7 @@ git -C "$src_dir" clean -fdx >/dev/null
 # PACKAGES are extra Void packages layered onto upstream's base image to satisfy
 # recovery.conf's install_items need mdadm + nvme-cli for operator recovery.
 # Keep dhclient available for manual networking; the base ships no DHCP client.
+# dtc provides fdtput, which the aarch64 kexec DTB hook uses.
 img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 
 # Registry-backed layer cache in the homelab GitLab project's container
@@ -92,7 +93,7 @@ docker buildx build \
   --progress=plain \
   --build-arg "XBPS_REPOS=${xbps_repo}" \
   --build-arg "KERNELS=linux${ZBM_KERNEL_VERSION}" \
-  --build-arg "PACKAGES=mdadm nvme-cli dhclient" \
+  --build-arg "PACKAGES=mdadm nvme-cli dhclient dtc" \
   ${cache_args[@]+"${cache_args[@]}"} \
   --load \
   --tag "$img" \

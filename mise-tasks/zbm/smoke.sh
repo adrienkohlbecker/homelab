@@ -112,19 +112,22 @@ boot_started() { LC_ALL=C grep -aq "Booting " "$boot_log"; }
 wait_for 60 "ZFSBootMenu to start the selected boot environment" boot_started
 echo "PASS: serial input selected the default boot environment"
 
-# On aarch64 EDK2 the kexec handoff itself is a known upstream bug: the BE
-# kernel starts and immediately panics with a misalignment complaint
-# (notes/archive/zbm-aarch64-kexec-bug-report.md) — prod aarch64 boots via
-# rEFInd EFI-stub instead. Accept that signature as proof the handoff fired;
-# an upstream fix upgrades this run to the login-prompt assertion on its own.
+# On aarch64 the handoff needs the DTB hook baked into the ZBM image
+# (zbm/hooks/), which lets Ubuntu kernels find EFI after kexec. Under HVF (a Mac
+# host) the next kernel then cannot bring its secondary CPUs online after a kexec
+# from a newer kernel, so its init dies; that signature still proves the handoff
+# fired. KVM and TCG hosts must reach the login prompt
+# (notes/zbm_aarch64_kexec_investigation.md).
 booted() { LC_ALL=C grep -aqE "Welcome to Ubuntu|login:" "$boot_log"; }
-known_misalign() { [ "$arch" = aarch64 ] && LC_ALL=C grep -aq "Kernel image misaligned at boot" "$boot_log"; }
-handoff_done() { booted || known_misalign; }
+known_hvf_cpu_failure() {
+  [ "$arch" = aarch64 ] && [ "$(uname -s)" = Darwin ] && LC_ALL=C grep -aq "failed to come online" "$boot_log"
+}
+handoff_done() { booted || known_hvf_cpu_failure; }
 wait_for 240 "the boot environment to come up after kexec" handoff_done
 if booted; then
   echo "PASS: kexec handed off and the boot environment reached its login prompt"
 else
-  echo "PASS: kexec handed off; the BE kernel started and hit the known aarch64 EDK2 misalignment panic"
+  echo "PASS: kexec handed off; the BE kernel started and hit the known HVF secondary-CPU failure"
 fi
 
 echo "ZBM smoke test OK: ${tarball##*/}"
