@@ -1,0 +1,62 @@
+From a4de69c1236df689de984df8d7584536d194e5ba Mon Sep 17 00:00:00 2001
+From: Adrien Kohlbecker <adrien.kohlbecker@gmail.com>
+Date: Mon, 21 Sep 2026 21:03:09 +0200
+Subject: [PATCH] target/arm: sync vCPU state after PSCI CPU_ON reset
+
+arm_set_cpu_on_async_work() resets the target CPU and sets its entry
+point and context ID in CPUARMState, but never tells the accelerator
+that the register state changed. TCG reads CPUARMState directly, and
+KVM re-pushes state on reset, but HVF only writes CPUARMState back to
+the hardware vCPU when cpu->vcpu_dirty is set.
+
+A vCPU that reached PSCI_OFF is left clean: its last hv_vcpu_run() exit
+was a WFI or a cancel, and flush_cpu_state() cleared the flag. A later
+CPU_ON then resets and re-points only the QEMU-side copy. The vCPU
+resumes in its old context, with the old MMU state and vector table, and
+never runs the requested entry point.
+
+This shows up when a guest that already onlined and offlined its
+secondary CPUs boots another kernel, for example kexec on Apple Silicon:
+the new kernel logs "CPUn: failed to come online" for every secondary.
+Fresh vCPUs are created dirty and single-CPU guests never issue CPU_ON,
+so the ordinary boot path is unaffected.
+
+Call cpu_synchronize_post_reset() after resetting the target, in both
+arm_set_cpu_on_async_work() and arm_set_cpu_on_and_reset_async_work().
+It is a no-op for TCG.
+
+Signed-off-by: Adrien Kohlbecker <adrien.kohlbecker@gmail.com>
+---
+ target/arm/arm-powerctl.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/target/arm/arm-powerctl.c b/target/arm/arm-powerctl.c
+index a788376..34e4c19 100644
+--- a/target/arm/arm-powerctl.c
++++ b/target/arm/arm-powerctl.c
+@@ -16,6 +16,7 @@
+ #include "qemu/log.h"
+ #include "qemu/main-loop.h"
+ #include "system/tcg.h"
++#include "system/hw_accel.h"
+ #include "target/arm/multiprocessing.h"
+ #include "trace.h"
+
+@@ -73,6 +74,7 @@ static void arm_set_cpu_on_async_work(CPUState *target_cpu_state,
+
+     /* Start the new CPU at the requested address */
+     cpu_set_pc(target_cpu_state, info->entry);
++    cpu_synchronize_post_reset(target_cpu_state);
+
+     g_free(info);
+
+@@ -182,6 +184,7 @@ static void arm_set_cpu_on_and_reset_async_work(CPUState *target_cpu_state,
+
+     /* Initialize the cpu we are turning on */
+     cpu_reset(target_cpu_state);
++    cpu_synchronize_post_reset(target_cpu_state);
+     target_cpu_state->halted = 0;
+
+     /* Finally set the power status */
+--
+2.51.2

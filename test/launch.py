@@ -87,8 +87,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="N",
         help="Guest vCPU count, overriding the machine spec. Boots through "
-        "ZFSBootMenu need 1 under HVF: a kexec'd kernel cannot bring its "
-        "secondary CPUs online there.",
+        "ZFSBootMenu need 1 under stock HVF QEMU: a kexec'd kernel cannot bring its "
+        "secondary CPUs online there (fixed by `mise run qemu:install_hvf_patched`).",
     )
     parser.add_argument(
         "--with-pflash",

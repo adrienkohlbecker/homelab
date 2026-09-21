@@ -1,4 +1,7 @@
 [env]
+# The patched QEMU from `mise run qemu:install_hvf_patched` (macOS only; the path
+# is absent elsewhere). Ahead of Homebrew's qemu so the harness and packer pick it.
+_.path = ["/opt/homebrew/opt/qemu-hvf/bin"]
 CLOUDFLARE_API_TOKEN = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
 NEXUS_USERNAME = "op://Lab/u2lem3tvichptsn37new73ftv4/username"
 NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"

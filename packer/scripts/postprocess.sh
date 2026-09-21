@@ -35,10 +35,11 @@ for disk in "${disks[@]}"; do
 done
 
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  # Under HVF (a Mac builder) a kernel that ZFSBootMenu kexecs into cannot bring
-  # its secondary CPUs online, so the verify boot runs on one vCPU there.
+  # Stock QEMU's HVF never applies the reset state on PSCI CPU_ON, so a kernel
+  # that ZFSBootMenu kexecs into cannot bring its secondary CPUs online; a Mac
+  # builder verifies on one vCPU unless it runs the patched qemu-hvf build.
   vcpus_args=()
-  if [ "$(uname -s)" = "Darwin" ]; then
+  if [ "$(uname -s)" = "Darwin" ] && [[ "$(command -v qemu-system-aarch64)" != */qemu-hvf/* ]]; then
     vcpus_args=(--vcpus 1)
   fi
   timeout --kill-after=30s 300 \
