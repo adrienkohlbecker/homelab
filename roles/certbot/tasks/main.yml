@@ -75,14 +75,14 @@
         - certbot
 
     # Surface a bad rotated token at apply time rather than at the next timer
-    # renewal. A first issuance already proved the credentials, and re-validating
-    # the same names right after it trips the CA's DNS caching.
+    # renewal. Any issuance this run already proved the credentials, and
+    # re-validating the same names right after it trips the CA's DNS caching.
     - name: Exercise renewal after cloudflare token rotation
       command: certbot renew --dry-run --no-random-sleep-on-renew
       changed_when: false
       when:
         - certbot_cf_creds.changed
-        - certbot_cert_stat.stat.exists
+        - certbot_issue is skipped
 
     - name: Enable certbot renewal timer
       when: not (ansible_check_mode and certbot_apt.changed)

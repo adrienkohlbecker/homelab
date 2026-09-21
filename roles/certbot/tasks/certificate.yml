@@ -51,6 +51,7 @@
       {{ certbot_cert_stat.stat.exists
          and ('renew_hook = ' + certbot_deploy_hook) not in certbot_renewal_text }}
     certbot_renewal_required: "{{ certbot_sans_drifted or certbot_hook_drifted }}"
+  register: certbot_issue
   when:
     - not (ansible_check_mode and certbot_apt.changed)
     - (not certbot_cert_stat.stat.exists) or certbot_renewal_required
