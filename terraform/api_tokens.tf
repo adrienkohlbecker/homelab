@@ -5,7 +5,7 @@
 # order on each PATCH and the post-apply consistency check refuses the
 # rearrangement. This file manages only a narrow DNS-01 child for
 # ansible's certbot role, so a host compromise gets DNS edit on the
-# prod zones and nothing else.
+# prod certificate zone and nothing else.
 #
 # Inspect the live homelab-tofu scopes when in doubt:
 #   curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -21,14 +21,16 @@ locals {
     "Zone Read" = "c8fed203ed3043cba015a93ad1616f1f"
   }
 
-  # mhaf.fr is the test zone, covered by certbot_test below.
+  # Only the zone the prod certificate is issued under (`domain` in
+  # group_vars/prod.yml). An allowlist, so a zone added later is not covered by
+  # the host-resident token unless it is added here.
   cf_prod_zone_resources = {
     for name, zid in local.zones : "com.cloudflare.api.account.zone.${zid}" => "*"
-    if name != "mhaf.fr"
+    if name == "fahm.fr"
   }
 }
 
-# DNS:Write + Zone:Read on the prod zones -- enough for certbot's DNS-01
+# DNS:Write + Zone:Read on the prod certificate zone -- enough for certbot's DNS-01
 # challenge (write _acme-challenge TXT, list zones to find the FQDN's
 # parent), nothing else.
 #
@@ -39,8 +41,7 @@ locals {
 #         --stdin-name cloudflare_api_token
 #   # replace cloudflare_api_token in group_vars/prod.yml with the envelope
 #   mise run ansible --tags certbot
-# The role's "Exercise renewal" task (certbot/tasks/main.yml:158)
-# dry-runs the new credential end-to-end on apply.
+# The role's "Exercise renewal" task dry-runs the new credential end-to-end on apply.
 resource "cloudflare_account_token" "certbot" {
   account_id = local.cloudflare_account_id
   name       = "certbot-dns01"
