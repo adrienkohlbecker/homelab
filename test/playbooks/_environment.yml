@@ -12,6 +12,14 @@
           - _console_serial | trim == ''
           - _console_cmdline == 'console=tty0'
 
+    - name: Verify physical console rendering keeps tty0 last
+      vars:
+        qemu_test: false
+        boot_serial_console: earlycon=uart8250,io,0x3f8 console=ttyS0,115200
+      assert:
+        that:
+          - _console_cmdline == 'earlycon=uart8250,io,0x3f8 console=ttyS0,115200 console=tty0'
+
     - name: Verify ARM QEMU console rendering
       vars:
         qemu_test: true

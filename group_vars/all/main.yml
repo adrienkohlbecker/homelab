@@ -8,7 +8,10 @@ boot_esp_mount_opts: defaults,umask=0077
 boot_esp_mode: "0700"
 
 # Shared boot/rEFInd console fragment: use the architecture-specific QEMU UART
-# in tests and each physical host's boot_serial_console otherwise.
+# in tests and each physical host's boot_serial_console otherwise. The last
+# console= receives /dev/console (systemd status, ZBM's UI), so tests end on the
+# serial console for the harness to read, while real hosts end on tty0 to keep
+# the VGA/VNC console alive through ZBM and shutdown.
 _console_serial: >-
   {% if qemu_test %}
   {{ (ansible_architecture == 'aarch64')
@@ -17,7 +20,10 @@ _console_serial: >-
   {% else %}
   {{ boot_serial_console | default('') }}
   {% endif %}
-_console_cmdline: "console=tty0{{ (' ' ~ (_console_serial | trim)) if (_console_serial | trim | length > 0) else '' }}"
+_console_cmdline: >-
+  {{ (['console=tty0', _console_serial | trim] if qemu_test
+      else [_console_serial | trim, 'console=tty0'])
+     | reject('equalto', '') | join(' ') }}
 
 # Prod hosts carry the real homelab datasets; qemu fixtures start without those
 # bind mounts and can opt individual consumers back in when they seed content.

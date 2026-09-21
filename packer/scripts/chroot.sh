@@ -224,8 +224,9 @@ fi
 # Keep VGA output on every target. QEMU adds the architecture-specific serial
 # console consumed by verify-boot and disables mitigations only in disposable
 # nested-KVM cells. The fragment preserves that tuning when the boot role
-# rebuilds the command line during a test. Hetzner exposes a serial console;
-# bare-metal lab and pug do not. The boot role owns the final prod command line.
+# rebuilds the command line during a test. Hetzner exposes a serial console,
+# listed before tty0 so the VGA console keeps /dev/console; bare-metal lab and
+# pug have no UART. The boot role owns the final prod command line.
 COMMANDLINE="console=tty0"
 
 if [ "$INSTALL_TARGET" = "qemu" ]; then
@@ -233,8 +234,7 @@ if [ "$INSTALL_TARGET" = "qemu" ]; then
   mkdir -p /etc/zfsbootmenu
   echo "mitigations=off" >/etc/zfsbootmenu/mitigations
 elif [ "$INSTALL_TARGET" = "hetzner" ]; then
-  # Hetzner Cloud exposes a serial console, so keep the serial args.
-  COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE"
+  COMMANDLINE="$SERIAL_CMDLINE $COMMANDLINE"
 fi
 
 zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "rpool/ROOT"
