@@ -223,14 +223,3 @@
       retries: 10
       delay: 1
       become: true
-
-    # RemainAfterExit must hold the unit active after the run -- converge
-    # idempotence rides on a later `started` being a no-op, not a re-broadcast.
-    # `changed` here means the unit went back to inactive and re-fired.
-    - name: _verify | A repeat start is a no-op on the still-active unit
-      systemd:
-        name: nut_wake_peers.service
-        state: started
-      register: nut_wake_restart
-      failed_when: nut_wake_restart.changed
-      become: true

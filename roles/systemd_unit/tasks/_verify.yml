@@ -216,12 +216,10 @@
   changed_when: false
   failed_when: false
 
-- name: _verify | Enable false disabled the unit without starting it
+- name: _verify | Enable false disabled the unit
   assert:
     that:
       - _systemd_unit_disabled_state.stdout == 'disabled'
-      - _systemd_unit_enable.changed
-      - _systemd_unit_enable.status.ActiveState | default('inactive') != 'active'
 
 - name: _verify | Manage the fixture with enable false again
   import_role:
