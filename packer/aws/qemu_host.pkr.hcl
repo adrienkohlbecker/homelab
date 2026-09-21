@@ -182,6 +182,12 @@ build {
     destination = "/tmp/"
   }
 
+  # The reboot above dropped the shutdown user data scheduled in /run, so
+  # schedule it again to keep the build instance self-terminating.
+  provisioner "shell" {
+    inline = ["sudo shutdown -h +180"]
+  }
+
   provisioner "shell" {
     script = "${path.root}/files/provision_qemu_host.sh"
     env = {
