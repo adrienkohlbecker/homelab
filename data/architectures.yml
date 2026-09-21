@@ -13,7 +13,6 @@ x86_64:
     net_device: virtio-net
     cloud_image_suffix: amd64
   ci:
-    aws_region: eu-central-1
     ami_name_prefix: homelab-ci-qemu-host
     ami_parameter: /homelab-ci/ami/qemu-host/{ubuntu}
 aarch64:
@@ -27,6 +26,5 @@ aarch64:
       code_name: edk2-aarch64-code.fd
       vars_name: edk2-aarch64-vars.fd
   ci:
-    aws_region: eu-central-1
     ami_name_prefix: homelab-ci-qemu-host-aarch64
     ami_parameter: /homelab-ci/ami/qemu-host/aarch64/{ubuntu}

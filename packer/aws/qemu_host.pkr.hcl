@@ -47,7 +47,7 @@ locals {
   versions       = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
   ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))
   ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name].version
-  # Region and AMI naming are shared with qemu-host-ami.sh, the audit, and
+  # AMI naming is shared with qemu-host-ami.sh, the audit, and
   # Terraform's launch templates.
   architecture_data = yamldecode(file("${path.cwd}/data/architectures.yml"))[var.architecture]
   ci_architecture   = local.architecture_data.ci
@@ -85,7 +85,7 @@ locals {
 }
 
 source "amazon-ebs" "qemu_host" {
-  region                                    = local.ci_architecture.aws_region
+  region                                    = "eu-central-1"
   instance_type                             = local.architecture_config.builder_instance
   ssh_username                              = "ubuntu"
   ssh_interface                             = "public_ip"

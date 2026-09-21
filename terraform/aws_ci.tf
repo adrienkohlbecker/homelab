@@ -12,7 +12,7 @@
 
 locals {
   ci_architectures = yamldecode(file("${path.module}/../data/architectures.yml"))
-  ci_aws_region    = local.ci_architectures.x86_64.ci.aws_region
+  ci_aws_region    = "eu-central-1"
   # GitLab project whose OIDC tokens may assume the CI roles. The sub claim
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a

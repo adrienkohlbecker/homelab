@@ -158,7 +158,6 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
 
 def test_ami_recognition_follows_the_shared_architecture_table():
     architecture_table = yaml.safe_load((Path(__file__).parents[1] / "data/architectures.yml").read_text())
-    assert {entry["ci"]["aws_region"] for entry in architecture_table.values()} == {"eu-central-1"}
     contract = audit_aws.CI_REGIONS["eu-central-1"]
     assert {"homelab-ci-images"} == audit_aws.EXPECTED_GLOBAL_S3_BUCKETS
     assert contract["asgs"] == {"homelab-ci-qemu-host", "homelab-ci-qemu-arm"}

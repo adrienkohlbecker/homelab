@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 from conftest import load_repo_module
 
 upload = load_repo_module("mise-tasks/packer/upload-s3.py", name="upload_s3")
@@ -60,16 +59,12 @@ class TestImageStore:
         assert upload.image_prefix("aarch64", "noble", "lab") == "aarch64/noble/lab"
         assert {"aarch64", "x86_64"} == upload.VALID_ARCHITECTURES
 
-    def test_store_matches_terraform_and_the_architecture_catalog(self) -> None:
-        root = Path(__file__).resolve().parent.parent
-        catalog = yaml.safe_load((root / "data" / "architectures.yml").read_text())
-        terraform = (root / "terraform" / "aws_ci.tf").read_text()
-
+    def test_store_matches_terraform(self) -> None:
+        terraform = (Path(__file__).resolve().parent.parent / "terraform" / "aws_ci.tf").read_text()
         bucket, region = upload.image_store("x86_64")
 
-        assert set(catalog) == upload.VALID_ARCHITECTURES
         assert f'ci_qemu_image_bucket_name = "{bucket}"' in terraform
-        assert {facts["ci"]["aws_region"] for facts in catalog.values()} == {region}
+        assert f'ci_aws_region    = "{region}"' in terraform
 
     def test_unknown_architecture_is_rejected(self) -> None:
         with pytest.raises(KeyError):

@@ -24,7 +24,7 @@ fi
 ci_value() {
   ARCH="$architecture" yq -r ".[strenv(ARCH)].ci.$1" "$architectures"
 }
-region=$(ci_value aws_region)
+region=eu-central-1
 name_prefix=$(ci_value ami_name_prefix)
 param_template=$(ci_value ami_parameter)
 param=${param_template//\{ubuntu\}/$ubuntu}
