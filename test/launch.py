@@ -27,6 +27,7 @@ from machine import (
     SSH_HOST,
     LaunchOptions,
     Machine,
+    MachineRunOptions,
 )
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import cancel_on_signal, print_cmd_line, print_line, tee_output
@@ -79,6 +80,15 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="SIZE",
         help="qemu memory size, e.g. '8192' or '8G'. Default 4096M.",
+    )
+    parser.add_argument(
+        "--vcpus",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Guest vCPU count, overriding the machine spec. Boots through "
+        "ZFSBootMenu need 1 under HVF: a kexec'd kernel cannot bring its "
+        "secondary CPUs online there.",
     )
     parser.add_argument(
         "--with-pflash",
@@ -311,6 +321,7 @@ def main() -> int:
         # Pin the default loopback: --write-hostfwds emits ports only, and the
         # ZBM smoke test connects at 127.0.0.1.
         loopback_host=SSH_HOST,
+        run_options=MachineRunOptions(vcpus=args.vcpus),
     )
 
     if args.foreground:

@@ -47,3 +47,19 @@ def test_exit_after_ready_skips_interactive_ssh_instructions(monkeypatch: pytest
 
     assert machine.printed_ssh_instructions is False
     assert machine.system_running_checked is True
+
+
+def test_vcpus_flag_reaches_the_machine(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_machine(**kwargs: object) -> object:
+        captured.update(kwargs)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(launch, "Machine", fake_machine)
+    monkeypatch.setattr(launch.sys, "argv", ["launch.py", "--machine", "lab", "--vcpus", "1"])
+
+    with pytest.raises(SystemExit):
+        launch.main()
+
+    assert captured["run_options"] == launch.MachineRunOptions(vcpus=1)

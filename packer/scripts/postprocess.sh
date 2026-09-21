@@ -35,12 +35,19 @@ for disk in "${disks[@]}"; do
 done
 
 if [ "$INSTALL_TARGET" = "qemu" ]; then
+  # Under HVF (a Mac builder) a kernel that ZFSBootMenu kexecs into cannot bring
+  # its secondary CPUs online, so the verify boot runs on one vCPU there.
+  vcpus_args=()
+  if [ "$(uname -s)" = "Darwin" ]; then
+    vcpus_args=(--vcpus 1)
+  fi
   timeout --kill-after=30s 300 \
     "$script_dir/../../test/launch.py" \
     --machine "$SOURCE_NAME" \
     --ubuntu "$UBUNTU_NAME" \
     --exit-after-ready \
-    --image-dir "$build_dir"
+    --image-dir "$build_dir" \
+    ${vcpus_args[@]+"${vcpus_args[@]}"}
 fi
 
 if [ "$IMAGE_FORMAT" != "raw" ]; then

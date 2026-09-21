@@ -769,6 +769,10 @@ def test_qemu_postprocess_bounds_boot_verification() -> None:
 
     assert "timeout --kill-after=30s 300" in postprocess
     assert '"$script_dir/../../test/launch.py"' in postprocess
+    # HVF cannot bring a kexec'd kernel's secondary CPUs online, so a Mac builder
+    # verifies the image on one vCPU.
+    assert 'if [ "$(uname -s)" = "Darwin" ]' in postprocess
+    assert "vcpus_args=(--vcpus 1)" in postprocess
     assert "--timeout 300" not in postprocess
 
 
