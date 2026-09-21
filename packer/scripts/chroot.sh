@@ -256,11 +256,20 @@ else
   # mount is still ro. Remount rw for the duration of the chroot.
   mount -o remount,rw /sys
 
+  # Image builds write to fresh qcow2s that read back as zeros, and all-zero
+  # members are already consistent: RAID1 halves match and RAID5 parity of
+  # zeros is zero. Skip the initial resync rather than wait on it before
+  # sealing. Bare metal keeps it -- its disks hold arbitrary old data.
+  MDADM_CREATE_OPTS=()
+  if [ "$INSTALL_TARGET" != bare_metal ]; then
+    MDADM_CREATE_OPTS+=(--assume-clean)
+  fi
+
   # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
   # Some firmware may still reject a member; per-disk NVRAM entries below retain
   # alternate boot paths. Validate this layout on each new bare-metal platform.
   # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
-  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
+  mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
   udevadm settle --timeout=10
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
@@ -268,18 +277,18 @@ else
   # Disk-backed RAID1 swap avoids the memory-pressure deadlock risk of a ZFS
   # zvol. mdadm.conf makes it available to the initramfs and swapon at boot.
   # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
-  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
+  mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
   udevadm settle --timeout=10
   mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
   SWAP_DEVICE=/dev/md/swap
 
   # The reconstructible Podman store uses RAID5 without a write-intent bitmap:
   # accept a full replacement resync in exchange for lower write amplification.
-  # Run the initial parity resync, and record the array for boot-time assembly;
-  # the Podman role formats and mounts /dev/md/podman.
+  # Record the array for boot-time assembly; the Podman role formats and mounts
+  # /dev/md/podman.
   if [ -n "$PARTITIONS_PODMAN" ]; then
     # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
-    mdadm --create /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
+    mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
     udevadm settle --timeout=10
     mdadm --detail --brief /dev/md/podman >>/etc/mdadm/mdadm.conf
   fi
