@@ -254,7 +254,13 @@ class TestSystemReadiness:
         instance = machine_factory()
 
         async def ssh_command(*args: str, check: bool = True) -> SimpleNamespace:
-            assert args == ("systemctl", "is-system-running", "--wait")
+            assert args == (
+                "timeout",
+                str(machine.SYSTEM_RUNNING_WAIT_TIMEOUT),
+                "systemctl",
+                "is-system-running",
+                "--wait",
+            )
             assert check is False
             return SimpleNamespace(exitcode=0, stdout=["running"])
 

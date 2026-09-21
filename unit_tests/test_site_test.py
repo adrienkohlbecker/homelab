@@ -14,8 +14,16 @@ from machine import Machine
 
 
 class SiteTestMachine:
-    def __init__(self, workdir_path: Path) -> None:
+    def __init__(
+        self,
+        workdir_path: Path,
+        *,
+        pid1_journal: list[str] | None = None,
+        settle_exitcode: int = 0,
+    ) -> None:
         self.workdir_path = workdir_path
+        self.pid1_journal = pid1_journal or []
+        self.settle_exitcode = settle_exitcode
         self.keep_vm = False
         self.ansible_calls: list[tuple[str, ...]] = []
         self.ssh_calls: list[tuple[str, ...]] = []
@@ -44,7 +52,11 @@ class SiteTestMachine:
 
     async def ssh_command(self, *args: str, check: bool = True) -> SimpleNamespace:
         self.ssh_calls.append(args)
-        return SimpleNamespace(stdout=["running"])
+        if args[0] == "journalctl" and "_PID=1" in args:
+            return SimpleNamespace(exitcode=0, stdout=self.pid1_journal)
+        if args[0] == "timeout":
+            return SimpleNamespace(exitcode=self.settle_exitcode, stdout=["running"])
+        return SimpleNamespace(exitcode=0, stdout=["running"])
 
     async def wait(self) -> None:
         return None
@@ -90,7 +102,7 @@ def test_converge_profiles_settled_boot_before_poweroff(
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
 
     assert [call[:2] for call in machine.ssh_calls] == [
-        ("systemctl", "is-system-running"),
+        ("timeout", str(site_test.SYSTEM_RUNNING_WAIT_TIMEOUT)),
         ("systemd-analyze", "blame"),
         ("systemd-analyze", "critical-chain"),
         ("journalctl", "--boot"),
@@ -156,3 +168,43 @@ def test_failed_non_service_units_fail_the_converge() -> None:
     restarted = asyncio.run(site_test.report_restarted_units(cast(site_test.Machine, machine), journal))
 
     assert restarted == ["mnt-media.mount"]
+
+
+def test_a_recovered_unit_fails_the_converge_after_the_guest_powered_off(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
+    machine = SiteTestMachine(
+        tmp_path,
+        pid1_journal=["lab systemd[1]: jellyfin.service: Failed with result 'exit-code'."],
+    )
+
+    with pytest.raises(site_test.UnitRestartedError, match=r"jellyfin\.service"):
+        asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
+
+    # The shutdown path is still exercised, so a wedged stop job is not hidden.
+    assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") in machine.ssh_calls
+
+
+def test_a_fleet_that_never_settles_fails_before_the_poweroff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
+    machine = SiteTestMachine(tmp_path, settle_exitcode=124)
+
+    with pytest.raises(site_test.SettleTimeoutError):
+        asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
+
+    assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") not in machine.ssh_calls
+
+
+@pytest.mark.parametrize("suffix", ["-startup.service", ".service", ".timer"])
+def test_podman_healthcheck_transient_units_are_not_failures(suffix: str) -> None:
+    assert site_test.PODMAN_HEALTHCHECK_UNIT.match("a" * 64 + suffix)
+
+
+def test_lookalike_units_are_still_failures() -> None:
+    assert not site_test.PODMAN_HEALTHCHECK_UNIT.match("a" * 63 + ".service")
+    assert not site_test.PODMAN_HEALTHCHECK_UNIT.match("a" * 64 + ".mount")

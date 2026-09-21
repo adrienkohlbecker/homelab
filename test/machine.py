@@ -320,6 +320,11 @@ class MachineRunOptions:
 
 
 SSH_WAIT_TIMEOUT = 120
+
+# Bound on `systemctl is-system-running --wait`, which otherwise waits for as
+# long as any unit is still activating and leaves only the overall session
+# timeout to end a wedged start.
+SYSTEM_RUNNING_WAIT_TIMEOUT = 600
 IDFILE_TIMEOUT = 60
 # Bounded shared-acquire window on the publish-lock. A wedged packer
 # publish (holding LOCK_EX) would otherwise stall every concurrent test
@@ -877,7 +882,9 @@ class Machine:
 
     async def ensure_system_running(self) -> None:
         """Require systemd to finish booting in a healthy running state."""
-        result = await self.ssh_command("systemctl", "is-system-running", "--wait", check=False)
+        result = await self.ssh_command(
+            "timeout", str(SYSTEM_RUNNING_WAIT_TIMEOUT), "systemctl", "is-system-running", "--wait", check=False
+        )
         state = "\n".join(result.stdout).strip()
         if result.exitcode == 0 and state == "running":
             print_line(f"System fully booted: {state}")

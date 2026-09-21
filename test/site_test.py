@@ -26,6 +26,7 @@ import traceback
 from pathlib import Path
 
 from machine import (
+    SYSTEM_RUNNING_WAIT_TIMEOUT,
     Machine,
     MachineRunOptions,
     imagedir_for_host,
@@ -59,14 +60,20 @@ class PoweroffTimeoutError(Exception):
     """The guest failed to power off within POWEROFF_TIMEOUT after a passed converge."""
 
 
+class SettleTimeoutError(Exception):
+    """The fleet was still starting units SYSTEM_RUNNING_WAIT_TIMEOUT after the converge."""
+
+
 class UnitRestartedError(Exception):
     """A unit failed during the settled boot, even though it recovered later."""
 
 
 # podman runs each container's --health-startup-cmd as a transient
-# <container-id>-startup.service, which exits non-zero on every probe until the
-# container reports healthy. Those failures are the mechanism working.
-PODMAN_HEALTHCHECK_UNIT = re.compile(r"^[0-9a-f]{64}-startup\.service$")
+# <container-id>-startup.service, and its periodic --health-cmd as a transient
+# <container-id>.service driven by a matching .timer. They exit non-zero on
+# every probe while the container is not (yet) healthy. Those failures are the
+# mechanism working.
+PODMAN_HEALTHCHECK_UNIT = re.compile(r"^[0-9a-f]{64}(?:-startup)?\.(?:service|timer)$")
 
 
 def parse_args() -> argparse.Namespace:
@@ -225,7 +232,15 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             # legitimately degraded under the test harness (e.g. z2m has no
             # live adapter) and waiting longer won't change that -- the point
             # is only that nothing is still mid-bootstrap.
-            settle = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
+            settle = await m.ssh_command(
+                "timeout", str(SYSTEM_RUNNING_WAIT_TIMEOUT), "systemctl", "is-system-running", "--wait", check=False
+            )
+            if settle.exitcode == 124:
+                print_line(f"Fleet still starting units after {SYSTEM_RUNNING_WAIT_TIMEOUT}s", error=True)
+                raise SettleTimeoutError(
+                    f"systemd did not finish starting within {SYSTEM_RUNNING_WAIT_TIMEOUT}s of the converge "
+                    "(a unit is stuck activating -- see the serial console and journal mirror)"
+                )
             settle_state = "\n".join(settle.stdout).strip()
             if settle_state == "running":
                 print_line(f"Fleet settled: {settle_state}")
@@ -290,7 +305,7 @@ def main() -> int:
             print_line(str(exc), error=True)
             print_line("site_test failed", error=True)
             rc = 1
-        except PoweroffTimeoutError as exc:
+        except (PoweroffTimeoutError, SettleTimeoutError, UnitRestartedError) as exc:
             print_line(str(exc), error=True)
             print_line("site_test failed", error=True)
             rc = 1
