@@ -76,10 +76,12 @@ locals {
     }
   }
   ci_qemu_image_read_statements = [
+    # ListBucket makes S3 answer a missing object (an unpromoted release or
+    # arch) with 404 instead of an ambiguous 403.
     {
       Sid      = "LocateQemuImages"
       Effect   = "Allow"
-      Action   = "s3:GetBucketLocation"
+      Action   = ["s3:GetBucketLocation", "s3:ListBucket"]
       Resource = aws_s3_bucket.ci_qemu_images.arn
     },
     # GetObject covers both the promoted.json pointer object and the bundle it
