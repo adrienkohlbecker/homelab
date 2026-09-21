@@ -183,7 +183,10 @@
 # creates its cursor schema on first write. Run before the first start:
 # switching to WAL takes an exclusive lock and SQLite can return SQLITE_BUSY
 # without consulting the busy timeout while Fluent Bit creates that schema.
-# Once WAL, later runs only read the mode, which the timeout covers.
+# Once WAL, later runs only read the mode, which the timeout covers. A
+# snapshot-restored database can still be in DELETE mode under a running
+# Fluent Bit, so the switch retries: the BUSY is transient, gone as soon as
+# Fluent Bit is between writes.
 - name: Set fluent-bit journal.db to WAL
   command:
     argv:
@@ -191,13 +194,21 @@
       - -c
       - |
         import sqlite3
+        import time
 
         connection = sqlite3.connect("/var/lib/fluent-bit/journal.db", timeout=5)
         current_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
         if current_mode.lower() == "wal":
             print("unchanged")
         else:
-            new_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            for attempt in range(10):
+                try:
+                    new_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+                    break
+                except sqlite3.OperationalError:
+                    if attempt == 9:
+                        raise
+                    time.sleep(1)
             if new_mode.lower() != "wal":
                 raise RuntimeError("Failed to set journal mode to WAL: " + new_mode)
             print("changed")
