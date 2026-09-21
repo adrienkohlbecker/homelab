@@ -91,3 +91,26 @@
   import_tasks: _verify_counters.yml
 - name: _verify | Run lifecycle (stop/start) probes
   import_tasks: _verify_lifecycle.yml
+
+# Lab fixtures run with IPv6 on (firewall_disable_ipv6: false) while Minimal
+# keeps the production setting, so this pins both states to the kernel.
+- name: _verify | Read the live IPv6 disable sysctls
+  command: sysctl -n net.ipv6.conf.all.disable_ipv6 net.ipv6.conf.default.disable_ipv6
+  register: _firewall_ipv6_live
+  changed_when: false
+
+- name: _verify | Read the persisted sysctl drop-in
+  slurp:
+    src: /etc/sysctl.d/90-firewall-hardening.conf
+  register: _firewall_sysctl_dropin
+
+- name: _verify | IPv6 is disabled exactly when firewall_disable_ipv6 says so
+  vars:
+    _firewall_ipv6_expected: "{{ '1' if firewall_disable_ipv6 else '0' }}"
+  assert:
+    that:
+      - _firewall_ipv6_live.stdout_lines == [_firewall_ipv6_expected, _firewall_ipv6_expected]
+      - >-
+        (_firewall_sysctl_dropin.content | b64decode | regex_findall(
+          '(?m)^net\.ipv6\.conf\.(?:all|default)\.disable_ipv6\s*=\s*' ~ _firewall_ipv6_expected ~ '\s*$')
+        ) | length == 2
