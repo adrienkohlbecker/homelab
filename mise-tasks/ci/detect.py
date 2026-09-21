@@ -549,19 +549,19 @@ _CHILD_TEMPLATE = Path(__file__).parent / "test_child.yml.j2"
 def _arm_specs(specs: list[str], target: str) -> list[str]:
     """Return the change-selected ARM subset for this pipeline.
 
-    ``HOMELAB_CI_ARM=false`` drops the ARM lane, e.g. to benchmark the x86 pool
-    without the metal host.
+    An ``arm`` entry ``machine:release`` adds that release's ARM cell whenever
+    any cell of the machine is selected. ``HOMELAB_CI_ARM=false`` drops the ARM
+    lane, e.g. to benchmark the x86 pool without the metal host.
     """
     if target != "aws_qemu" or os.environ.get("HOMELAB_CI_ARM") == "false":
         return []
-    selected_cells = (ci_spec_to_cell(spec) for spec in specs)
-    return sorted(
-        {
-            f"{cell.role}:{cell.machine}"
-            for cell in selected_cells
-            if cell.machine in load_role_test_config(cell.role).arm_machines
-        }
-    )
+    arm_specs: set[str] = set()
+    for cell in (ci_spec_to_cell(spec) for spec in specs):
+        for entry in load_role_test_config(cell.role).arm_machines:
+            machine, _, codename = entry.partition(":")
+            if machine == cell.machine:
+                arm_specs.add(cell_to_ci_spec(cell._replace(ubuntu=codename or DEFAULT_UBUNTU)))
+    return sorted(arm_specs)
 
 
 def render_child_pipeline(

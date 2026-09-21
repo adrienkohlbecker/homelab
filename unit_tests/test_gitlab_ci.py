@@ -76,7 +76,7 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
         {"if": '$CI_COMMIT_REF_PROTECTED == "true"', "when": "manual", "allow_failure": True}
     ]
     assert scaffold["tags"] == ["aws-shell-qemu-arm"]
-    assert scaffold["variables"]["UBUNTU"] == "noble"
+    assert scaffold["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
     for variable in (
         "HOME",
         "XDG_CONFIG_HOME",

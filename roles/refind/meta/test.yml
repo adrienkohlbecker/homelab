@@ -1,2 +1,5 @@
+# The resolute ARM cell asserts the warm reboot chain (firmware -> rEFInd ->
+# ZBM kexec) on the release whose PE-wrapped kernel ZBM has to unwrap.
 arm:
   - lab
+  - lab:resolute

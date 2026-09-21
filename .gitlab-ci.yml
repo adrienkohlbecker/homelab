@@ -258,8 +258,12 @@ qemu_host_ami:
       aud: sts.amazonaws.com
   interruptible: false
   timeout: 90m
+  parallel:
+    matrix:
+      - UBUNTU:
+          - noble
+          - resolute
   variables:
-    UBUNTU: noble
     HOME: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/home"
     XDG_CONFIG_HOME: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/xdg"
     PACKER_PLUGIN_PATH: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/packer_plugins"

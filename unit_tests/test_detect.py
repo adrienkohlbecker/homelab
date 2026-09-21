@@ -1200,14 +1200,25 @@ class TestRenderChildPipeline:
             doc[".arm_cell"]["before_script"]
         )
 
+    def test_arm_release_entry_adds_that_releases_cell(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        meta_dir = tmp_path / "roles" / "release_probe" / "meta"
+        meta_dir.mkdir(parents=True)
+        (meta_dir / "test.yml").write_text("arm:\n  - lab\n  - lab:resolute\n")
+
+        doc = _render_child_doc(["release_probe:lab"], site_test=False)
+
+        assert doc["release_probe:lab:aarch64"]["variables"]["UBUNTU"] == "noble"
+        assert doc["release_probe:lab:resolute:aarch64"]["variables"]["UBUNTU"] == "resolute"
+
     def test_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
         doc = _render_child_doc(specs, site_test=True)
         x86_jobs = [name for name in specs if name in doc]
         arm_jobs = {
-            f"{role}:{machine}:aarch64"
+            f"{role}:{entry}:aarch64"
             for role in detect.list_testable_roles()
-            for machine in detect.load_role_test_config(role).arm_machines
+            for entry in detect.load_role_test_config(role).arm_machines
         }
 
         assert len(x86_jobs) == len(specs)

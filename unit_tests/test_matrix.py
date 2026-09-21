@@ -107,9 +107,14 @@ class TestRoleMeta:
         _make_role("svc", {"machines": {"lab": None, "minimal": None}, "arm": ["lab", "minimal"]})
         assert matrix.load_role_test_config("svc").arm_machines == ("lab", "minimal")
 
+    def test_arm_machines_accept_a_release_suffix(self) -> None:
+        _make_role("svc", {"arm": ["lab", "lab:resolute"]})
+        assert matrix.load_role_test_config("svc").arm_machines == ("lab", "lab:resolute")
+
     @pytest.mark.parametrize(
         ("arm", "error"),
         [
+            (["lab:bogus"], "not in"),
             ("lab", "arm must be a list"),
             ([1], "arm entries must be strings"),
             (["minimal"], "not in machines"),
@@ -124,7 +129,7 @@ class TestRoleMeta:
 
     def test_arm_machine_cannot_skip_default_cell(self) -> None:
         _make_role("svc", {"arm": ["lab"], "skip": {"lab": "disabled"}})
-        with pytest.raises(matrix.RoleTestConfigError, match="skips the default release"):
+        with pytest.raises(matrix.RoleTestConfigError, match="skips its own release"):
             matrix.load_role_test_config("svc")
 
     def test_release_must_keep_a_cell_after_skips(self) -> None:

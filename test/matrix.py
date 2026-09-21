@@ -176,19 +176,24 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
     if not isinstance(raw_arm, list):
         errors.append(f"arm must be a list, got {type(raw_arm).__name__}")
     else:
-        for name in raw_arm:
-            if not isinstance(name, str):
-                errors.append(f"arm entries must be strings, got {type(name).__name__}")
-            elif name not in machines:
+        for entry in raw_arm:
+            if not isinstance(entry, str):
+                errors.append(f"arm entries must be strings, got {type(entry).__name__}")
+                continue
+            name, _, codename = entry.partition(":")
+            codename = codename or DEFAULT_UBUNTU
+            if name not in machines:
                 errors.append(f"arm machine {name!r} not in machines {machines}")
             elif name not in ARM_CAPABLE_MACHINES:
                 errors.append(f"arm machine {name!r} has no ARM image")
-            elif (name, DEFAULT_UBUNTU) in skip:
-                errors.append(f"arm machine {name!r} skips the default release")
-            elif name in arm_machines:
-                errors.append(f"duplicate arm machine {name!r}")
+            elif codename not in UBUNTU_RELEASES:
+                errors.append(f"arm entry {entry!r}: ubuntu {codename!r} not in {sorted(UBUNTU_RELEASES)}")
+            elif (name, codename) in skip:
+                errors.append(f"arm entry {entry!r} skips its own release")
+            elif entry in arm_machines:
+                errors.append(f"duplicate arm machine {entry!r}")
             else:
-                arm_machines.append(name)
+                arm_machines.append(entry)
 
     errors.extend(
         f"ubuntu={codename!r} expands to no test cell"
