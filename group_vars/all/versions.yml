@@ -115,7 +115,6 @@ gitlab_runner_archive:
 # swap, and CPU metrics (packer/aws/files/cloudwatch_agent.json). Versioned
 # S3 paths; debs verified against the agent's GPG signing key
 # 937616F3450B7D806CBD9725D58167303B789C72 on 2026-09-18.
-cloudwatch_agent_version: "1.300072.0b1766"  # 2026-09-18
 cloudwatch_agent_deb:
   x86_64:
     url: "https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/1.300072.0b1766/amazon-cloudwatch-agent.deb"
