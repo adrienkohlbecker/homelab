@@ -45,8 +45,6 @@ from pathlib import Path
 from typing import Any, BinaryIO, cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
-from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from qemu_image_store import (
     MANIFEST_NAME,
     POINTER_NAME,
@@ -98,13 +96,9 @@ class DigestReader(BufferedIOBase):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
-    # choices, not just USAGE completion: an unsupported codename should fail
-    # at parse rather than deep inside an S3 fetch for a prefix that is gone.
-    parser.add_argument(
-        "--ubuntu",
-        choices=sorted(UBUNTU_RELEASES),
-        default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
-    )
+    # No catalog lookup: the script must run outside a checkout. An unknown
+    # codename fails at the pointer read; mise supplies the default.
+    parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu"), required="usage_ubuntu" not in os.environ)
     parser.add_argument(
         "--architecture",
         choices=sorted(VALID_ARCHITECTURES),

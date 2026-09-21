@@ -9,6 +9,7 @@ set -euxo pipefail
 : "${QEMU_PACKAGES:?qemu_packages is required}"
 : "${QEMU_SYSTEM_BINARY:?qemu_system_binary is required}"
 : "${QEMU_MACHINE_TYPE:?qemu_machine_type is required}"
+: "${PREHYDRATE_UBUNTU:?prehydrate_ubuntu is required}"
 
 case "$TARGET_ARCHITECTURE" in
 x86_64) ;;
@@ -182,14 +183,12 @@ sudo systemctl enable homelab-ci-scratch.service
 # waiting ~30s for S3. The script's per-image flock makes a job that arrives
 # mid-hydration wait and then reuse the result; a failure here only means the
 # job hydrates itself. The copy keeps the repository layout the script's
-# relative imports and data reads expect; bundle checksums guard content, and
+# relative data read expects; bundle checksums guard content, and
 # a job whose newer script rejects this copy's cache simply re-hydrates.
 hydrate_root=/opt/homelab-ci/hydrate
 sudo install -D -m 0755 /tmp/hydrate-qemu-images.py "$hydrate_root/mise-tasks/ci/hydrate-qemu-images.py"
 sudo install -D -m 0644 /tmp/qemu_image_store.py "$hydrate_root/mise-tasks/ci/qemu_image_store.py"
-sudo install -D -m 0644 /tmp/matrix.py "$hydrate_root/test/matrix.py"
 sudo install -D -m 0644 /tmp/architectures.yml "$hydrate_root/data/architectures.yml"
-sudo install -D -m 0644 /tmp/ubuntu_releases.yml "$hydrate_root/data/ubuntu_releases.yml"
 sudo tee /etc/systemd/system/homelab-ci-prehydrate.service >/dev/null <<UNIT
 [Unit]
 Description=Pre-hydrate the default qemu image for homelab CI jobs
@@ -205,7 +204,7 @@ Environment=MISE_DATA_DIR=/opt/mise
 Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
 # The script needs the toolchain's Python (3.14 syntax, zstd tarfile), not the
 # distro's, so it runs through mise like every CI job does.
-ExecStart=/usr/bin/mise exec -- python3 $hydrate_root/mise-tasks/ci/hydrate-qemu-images.py lab
+ExecStart=/usr/bin/mise exec -- python3 $hydrate_root/mise-tasks/ci/hydrate-qemu-images.py lab --ubuntu $PREHYDRATE_UBUNTU
 # TimeoutStartSec does not bound a Type=exec unit once its process is running.
 RuntimeMaxSec=10min
 
@@ -237,8 +236,6 @@ sudo rm -rf \
   /tmp/qemu_host_smoke.sh \
   /tmp/hydrate-qemu-images.py \
   /tmp/qemu_image_store.py \
-  /tmp/matrix.py \
-  /tmp/ubuntu_releases.yml \
   /tmp/firmware.sh \
   /tmp/versions.yml \
   /tmp/architectures.yml \

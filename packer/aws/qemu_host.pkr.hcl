@@ -166,11 +166,10 @@ build {
       "${path.cwd}/mise-tasks/test/firmware.sh",
       "${path.cwd}/group_vars/all/versions.yml",
       "${path.cwd}/data/architectures.yml",
-      # The boot-time image pre-hydration and the modules and data it reads.
+      # The boot-time image pre-hydration and the module it imports (its data,
+      # architectures.yml, is already staged above).
       "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py",
       "${path.cwd}/mise-tasks/ci/qemu_image_store.py",
-      "${path.cwd}/test/matrix.py",
-      "${path.cwd}/data/ubuntu_releases.yml",
     ]
     destination = "/tmp/"
   }
@@ -187,6 +186,7 @@ build {
       "CLOUDWATCH_AGENT_URL"         = local.architecture_config.cloudwatch_agent.url
       "CLOUDWATCH_AGENT_SHA256"      = local.architecture_config.cloudwatch_agent.sha256
       "HOMELAB_AARCH64_FIRMWARE_DIR" = local.architecture_config.firmware_destination
+      "PREHYDRATE_UBUNTU"            = local.ubuntu_catalog.default
     }
   }
 
