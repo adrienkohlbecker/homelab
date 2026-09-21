@@ -203,8 +203,11 @@ Type=exec
 User=ubuntu
 Environment=MISE_DATA_DIR=/opt/mise
 Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3 $hydrate_root/mise-tasks/ci/hydrate-qemu-images.py lab
-TimeoutStartSec=10min
+# The script needs the toolchain's Python (3.14 syntax, zstd tarfile), not the
+# distro's, so it runs through mise like every CI job does.
+ExecStart=/usr/bin/mise exec -- python3 $hydrate_root/mise-tasks/ci/hydrate-qemu-images.py lab
+# TimeoutStartSec does not bound a Type=exec unit once its process is running.
+RuntimeMaxSec=10min
 
 [Install]
 WantedBy=multi-user.target
