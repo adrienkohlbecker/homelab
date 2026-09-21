@@ -1007,5 +1007,42 @@ def test_minimal_fixture_mirrors_journal_with_the_same_unit_as_packer_fixtures()
 
     assert unit["path"] == "/etc/systemd/system/homelab_guest_journal.service"
     assert unit["content"].rstrip("\n") == match.group(1)
+    # StartLimitIntervalSec is a [Unit] key; in [Service] systemd only warns,
+    # which fails every later `systemd-analyze verify` on the fixture.
+    assert unit["content"].index("StartLimitIntervalSec=0") < unit["content"].index("\n[Service]\n")
     assert ["systemctl", "enable", "--now", "homelab_guest_journal.service"] in user_data["runcmd"]
-    assert ["systemctl", "mask", "serial-getty@hvc0.service"] in user_data["runcmd"]
+    # --now: a getty that already started would otherwise keep writing its
+    # banner into the write-only journal artifact.
+    assert ["systemctl", "mask", "--now", "serial-getty@hvc0.service"] in user_data["runcmd"]
+
+
+@pytest.mark.parametrize(
+    ("mdadm_status", "expected_rc"),
+    [(0, 0), (1, 0), (2, 2)],
+)
+def test_qemu_seal_tolerates_only_an_idle_md_wait(tmp_path: Path, mdadm_status: int, expected_rc: int) -> None:
+    """mdadm --wait exits 1 for an array with nothing resyncing; anything above is an error."""
+    provision = QEMU_PROVISION_SH.read_text()
+    loop = re.search(r"^  for md in .*?^  done$", provision, re.S | re.M)
+    assert loop
+    md = tmp_path / "md0"
+    md.touch()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    mdadm = fake_bin / "mdadm"
+    mdadm.write_text(f"#!/bin/sh\nexit {mdadm_status}\n")
+    mdadm.chmod(0o755)
+    script = (
+        "set -euo pipefail\n" + re.sub(r"for md in [^;]*;", f"for md in {md};", loop.group(0)) + "\necho reached_end\n"
+    )
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={"PATH": f"{fake_bin}:{os.environ['PATH']}"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == expected_rc, result.stderr
+    assert ("reached_end" in result.stdout) == (expected_rc == 0)

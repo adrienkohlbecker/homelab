@@ -41,11 +41,15 @@ write_files:
 
       [Install]
       WantedBy=sysinit.target
+# runcmd is the last thing cloud-init runs, so a hang before it leaves the
+# mirror unstarted; the serial console artifact (boot.ansi) still holds that
+# case, and --lines=all replays the whole journal once the unit does start.
 runcmd:
-  - - systemctl
-    - mask
-    - serial-getty@hvc0.service
   - - systemctl
     - enable
     - --now
     - homelab_guest_journal.service
+  - - systemctl
+    - mask
+    - --now
+    - serial-getty@hvc0.service
