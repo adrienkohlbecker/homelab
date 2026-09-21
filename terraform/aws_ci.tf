@@ -3,8 +3,9 @@
 # Frankfurt (Spot x86_64, On-Demand ARM metal), each scaled by fleeting-plugin-aws on fox. Cells hydrate a
 # promoted qemu image bundle and boot it under KVM. This file owns the platform
 # the harness does not: VPC, security group, host launch templates and ASGs,
-# image bucket, ECR cache, SSM AMI pointers, shared IAM/OIDC, and the account
-# budget. Changing an instance type or Spot policy happens here, never in test/.
+# image bucket, ECR cache, SSM AMI pointers, shared IAM/OIDC, the bake
+# scheduler role, and the account budget. Changing an instance type or Spot
+# policy happens here, never in test/.
 #
 # First-apply bootstrap (AMI parameter seeding, GitLab cutover):
 # notes/archive/ci_aws_test_cells.md, "Bootstrap".
@@ -672,6 +673,64 @@ resource "aws_iam_user_policy" "ci_fleeting_manager" {
   })
 }
 
+# ─── EventBridge Scheduler execution role ────────────────────────────────────
+# Target role for the packer bake one-time termination backstop: immediately
+# after a successful launch the bake wrappers (per build instance,
+# mise-tasks/packer/qemu-host-ami.sh) create a one-time schedule invoking EC2
+# TerminateInstances through this role; normal cleanup deletes the schedule
+# before it fires. The backstop matters because a CI job-timeout SIGKILL
+# bypasses the wrapper's own on-error cleanup. Scoped so it can only ever
+# terminate ci-ami (bake) instances. Assumed only by the kept ci_bake role.
+
+resource "aws_iam_role" "ci_cell_scheduler" {
+  name = "homelab-ci-cell-scheduler"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        # Confused-deputy guard. aws:SourceArn must be a schedule GROUP —
+        # scoping it to a schedule or schedule-name prefix is explicitly
+        # unsupported (docs: "Confused deputy prevention in EventBridge
+        # Scheduler") and fails every CreateSchedule with "execution role
+        # must allow ... to assume the role". Per-instance scoping isn't lost:
+        # the permission policy below only terminates role=ci-ami instances
+        # regardless of which schedule fires it.
+        StringEquals = {
+          "aws:SourceAccount" = local.ci_account_id
+          "aws:SourceArn"     = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule-group/default"
+        }
+      }
+    }]
+  })
+
+  tags = { role = "ci" }
+}
+
+resource "aws_iam_role_policy" "ci_cell_scheduler" {
+  name = "terminate-ci-instances"
+  role = aws_iam_role.ci_cell_scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "ec2:TerminateInstances"
+      Resource = "arn:aws:ec2:${local.ci_aws_region}:${local.ci_account_id}:instance/*"
+      Condition = {
+        StringEquals = {
+          # Bake build instances (qemu-host-ami.sh) — nothing else this role
+          # can ever reap.
+          "ec2:ResourceTag/role" = ["ci-ami"]
+        }
+      }
+    }]
+  })
+}
+
 # ─── Bake role ───────────────────────────────────────────────────────────────
 # Assumed only by protected-ref jobs (master): packer ebssurrogate bakes,
 # AMI registration, host-AMI SSM promotion, and writing the qemu image bundle
@@ -781,6 +840,25 @@ resource "aws_iam_role_policy" "ci_bake" {
           "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
         ]
         Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
+      },
+      # Per-bake one-time termination schedules (mise-tasks/packer/
+      # qemu-host-ami.sh): a CI job-timeout SIGKILL bypasses the wrapper's
+      # on-error cleanup, so the schedule is the only thing that reaps an
+      # orphaned build instance.
+      {
+        Sid      = "BakeSchedules"
+        Effect   = "Allow"
+        Action   = ["scheduler:CreateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"]
+        Resource = "arn:aws:scheduler:${local.ci_aws_region}:${local.ci_account_id}:schedule/default/ci-bake-*"
+      },
+      {
+        Sid      = "PassSchedulerRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = aws_iam_role.ci_cell_scheduler.arn
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "scheduler.amazonaws.com" }
+        }
       },
     ]
   })

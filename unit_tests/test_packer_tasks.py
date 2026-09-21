@@ -578,10 +578,6 @@ def test_qemu_host_boots_the_ga_kernel_before_anything_is_provisioned() -> None:
     upload_step = template.index('provisioner "file"')
     assert kernel_step < reboot_step < upload_step
     assert "expect_disconnect = true" in template
-    # The reboot drops the user-data shutdown schedule (it lives in /run), so
-    # the watchdog must be armed again after it, before the long provisioning.
-    rearm_step = template.index('inline = ["sudo shutdown -h +180"]')
-    assert reboot_step < rearm_step < template.index("provision_qemu_host.sh")
 
     kernel = QEMU_HOST_KERNEL_SH.read_text()
     # Grub boots the highest version it finds, so the replacement has to be
