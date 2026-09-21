@@ -10,6 +10,7 @@ DOCUMENTATION = """
   short_description: default output with verbose module result dicts digested
   description:
     - Default callback output with noisy module result payloads summarized.
+    - Unarchive diffs (one itemized line per extracted file) are collapsed to a file count.
   extends_documentation_fragment:
     - default_callback
     - result_format_callback
@@ -41,8 +42,20 @@ def _json_summary(value):
     return f"<{len(encoded)}-character JSON hidden>"
 
 
+def _unarchive_diff_summary(diff):
+    if not isinstance(diff, dict) or not isinstance(diff.get("prepared"), str):
+        return diff
+    lines = diff["prepared"].splitlines()
+    return {**diff, "prepared": f"{len(lines)} extracted paths hidden\n"}
+
+
 class CallbackModule(DefaultCallback):
     CALLBACK_NAME = "digest"
+
+    def v2_on_file_diff(self, result):
+        if result.task.action.rsplit(".", 1)[-1] == "unarchive" and isinstance(result.result.get("diff"), dict):
+            result.result["diff"] = _unarchive_diff_summary(result.result["diff"])
+        return super().v2_on_file_diff(result)
 
     def _dump_results(self, result, *args, **kwargs):
         def digest(obj):
