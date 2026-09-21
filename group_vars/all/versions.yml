@@ -189,13 +189,6 @@ refind_noble_release:
     url: "http://ports.ubuntu.com/ubuntu-ports/pool/universe/r/refind/refind_0.14.2-2.1_arm64.deb"
     sha256: "cf81a5530fda88fe1e57d0a761ae8c17c27eeb819eeb2609f7e03e519e44ee6d"
 
-# ARM QEMU firmware newer than Ubuntu Noble and Homebrew currently package.
-# The Debian snapshot URL is content-addressed and the package is hash-verified.
-qemu_efi_aarch64_version: "2025.11-5"  # edk2-stable202511
-qemu_efi_aarch64_artifact:
-  url: "https://snapshot.debian.org/file/137d1a34bd9ec2e10b1d81331e92d163824579c4"
-  sha256: "95388b7606e821dd8af1dd852767094d569ff78cb2e8f1dc218b60959a52ee81"
-
 # The live MinIO dataset uses the legacy fs backend. Newer servers require a
 # data migration, plus console/OIDC and provisioning validation before upgrading.
 # These discontinued upstream packages are preserved in the public homelab

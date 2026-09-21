@@ -44,22 +44,8 @@ symlink_missing() {
   fi
 }
 
-symlink_existing_dir() {
-  local path=$1
-
-  if [ -d "$repo/$path" ]; then
-    symlink_missing "$path"
-  fi
-}
-
 symlink_missing packer/artifacts
 symlink_missing terraform/.terraform
-
-# test/firmware/ holds the fetched aarch64 edk2 blob (gitignored; see test/arch.py).
-# Share the main checkout's so one `mise run test:firmware` covers every worktree.
-# Guarded on the source existing so we never leave a dangling symlink that arch.py
-# would misread -- a worktree created before the first fetch just fetches its own.
-symlink_existing_dir test/firmware
 
 for copied_path in .ansible-mitogen-strategy mise.local.toml; do
   src="$repo/$copied_path"

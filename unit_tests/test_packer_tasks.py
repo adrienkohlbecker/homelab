@@ -3,24 +3,19 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import sys
-import tarfile
 from pathlib import Path
 
-import arch
 import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
-FIRMWARE_SH = REPO_ROOT / "mise-tasks" / "test" / "firmware.sh"
 HETZNER_SH = REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
 PUBLISH_QEMU_SH = REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh"
@@ -400,108 +395,6 @@ def test_noble_refind_pin_covers_every_architecture_and_is_baked_only_on_noble()
     assert "sha256sum -c -" in chroot.split('if [ -n "${REFIND_DEB_URL:-}" ]', 1)[1].split("refind-install", 1)[0]
 
 
-def _ar_member(name: str, data: bytes) -> bytes:
-    header = f"{name:<16}{0:<12}{0:<6}{0:<6}{'100644':<8}{len(data):<10}`\n".encode()
-    return header + data + (b"\n" if len(data) % 2 else b"")
-
-
-def _edk2_package(tmp_path: Path) -> Path:
-    """Build a minimal qemu-efi-aarch64-shaped .deb with both CODE variants."""
-    members = {
-        "./usr/share/AAVMF/AAVMF_CODE.no-secboot.fd": b"plain code",
-        "./usr/share/AAVMF/AAVMF_CODE.secboot.fd": b"secure code",
-        "./usr/share/AAVMF/AAVMF_VARS.fd": b"vars template",
-    }
-    data = io.BytesIO()
-    with tarfile.open(fileobj=data, mode="w:xz") as tar:
-        for name, content in members.items():
-            info = tarfile.TarInfo(name)
-            info.size = len(content)
-            tar.addfile(info, io.BytesIO(content))
-    package = tmp_path / "qemu-efi-aarch64.deb"
-    package.write_bytes(
-        b"!<arch>\n" + _ar_member("debian-binary", b"2.0\n") + _ar_member("data.tar.xz", data.getvalue())
-    )
-    return package
-
-
-def _firmware_checkout(tmp_path: Path, package: Path, sha256: str) -> Path:
-    """Lay out firmware.sh with the pins it reads, as the AMI bake does."""
-    root = tmp_path / "checkout"
-    (root / "mise-tasks" / "test").mkdir(parents=True)
-    (root / "group_vars" / "all").mkdir(parents=True)
-    shutil.copy(FIRMWARE_SH, root / "mise-tasks" / "test" / "firmware.sh")
-    versions = {
-        "qemu_efi_aarch64_version": "test",
-        "qemu_efi_aarch64_artifact": {"url": package.as_uri(), "sha256": sha256},
-    }
-    (root / "group_vars" / "all" / "versions.yml").write_text(yaml.safe_dump(versions))
-    return root / "mise-tasks" / "test" / "firmware.sh"
-
-
-def _run_firmware(script: Path, firmware_dir: Path, host: str = "aarch64") -> subprocess.CompletedProcess[str]:
-    fake_bin = script.parents[2] / "bin"
-    _executable(fake_bin / "uname", f"#!/bin/sh\nprintf '{host}\\n'\n")
-    # firmware.sh parses its pins with python3 + PyYAML; use this interpreter.
-    path = f"{fake_bin}:{Path(sys.executable).parent}:{os.environ['PATH']}"
-    env = dict(os.environ, HOMELAB_AARCH64_FIRMWARE_DIR=str(firmware_dir), PATH=path)
-    return subprocess.run(["bash", str(script)], env=env, text=True, capture_output=True)
-
-
-def test_firmware_file_names_agree_across_the_task_harness_and_fixture() -> None:
-    code, vars_ = "edk2-aarch64-code.fd", "edk2-aarch64-vars.fd"
-    script = FIRMWARE_SH.read_text()
-
-    assert f'code_dest="${{firmware_dir}}/{code}"' in script
-    assert f'vars_dest="${{firmware_dir}}/{vars_}"' in script
-    assert (code, vars_) == arch.AARCH64.pinned_firmware
-    assert f"${{local.aarch64_firmware_dir}}/{code}" in QEMU_TEMPLATE.read_text()
-    assert f"${{local.aarch64_firmware_dir}}/{vars_}" in QEMU_TEMPLATE.read_text()
-
-
-def test_firmware_is_not_fetched_on_non_arm_hosts(tmp_path: Path) -> None:
-    missing_package = tmp_path / "absent.deb"
-    script = _firmware_checkout(tmp_path, missing_package, "0" * 64)
-    firmware_dir = tmp_path / "firmware"
-
-    result = _run_firmware(script, firmware_dir, host="x86_64")
-
-    assert result.returncode == 0, result.stderr
-    assert "nothing to fetch" in result.stdout
-    assert not firmware_dir.exists()
-
-
-def test_firmware_installs_the_plain_pair_once(tmp_path: Path) -> None:
-    package = _edk2_package(tmp_path)
-    script = _firmware_checkout(tmp_path, package, hashlib.sha256(package.read_bytes()).hexdigest())
-    firmware_dir = tmp_path / "firmware"
-
-    first = _run_firmware(script, firmware_dir)
-
-    assert first.returncode == 0, first.stderr
-    assert (firmware_dir / "edk2-aarch64-code.fd").read_bytes() == b"plain code"
-    assert (firmware_dir / "edk2-aarch64-vars.fd").read_bytes() == b"vars template"
-    assert (firmware_dir / "archive.sha256").read_text().strip() == hashlib.sha256(package.read_bytes()).hexdigest()
-
-    # A matching marker short-circuits before any download.
-    package.unlink()
-    second = _run_firmware(script, firmware_dir)
-    assert second.returncode == 0, second.stderr
-    assert "already present" in second.stdout
-
-
-def test_firmware_rejects_an_archive_that_does_not_match_its_pin(tmp_path: Path) -> None:
-    package = _edk2_package(tmp_path)
-    script = _firmware_checkout(tmp_path, package, "0" * 64)
-    firmware_dir = tmp_path / "firmware"
-
-    result = _run_firmware(script, firmware_dir)
-
-    assert result.returncode == 1
-    assert "sha256 mismatch" in result.stderr
-    assert not firmware_dir.exists()
-
-
 def test_qemu_host_uses_canonical_mise_upstream() -> None:
     provision = QEMU_HOST_PROVISION_SH.read_text()
 
@@ -519,20 +412,17 @@ def test_qemu_host_retains_caches_without_a_shared_virtualenv() -> None:
     assert "/opt/venv" not in provision
 
 
-def test_qemu_host_arm_provisioning_uses_pinned_firmware() -> None:
+def test_qemu_host_arm_provisioning_uses_packaged_firmware() -> None:
     template = QEMU_HOST_TEMPLATE.read_text()
     provision = QEMU_HOST_PROVISION_SH.read_text()
 
-    assert 'qemu_packages        = "qemu-system-arm qemu-efi-aarch64"' in template
-    assert 'qemu_system_binary   = "qemu-system-aarch64"' in template
-    assert "runner_artifact      = local.versions.gitlab_runner_archive.aarch64" in template
-    assert 'firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"' in template
+    assert re.search(r'qemu_packages\s+= "qemu-system-arm qemu-efi-aarch64"', template)
+    assert re.search(r'qemu_system_binary\s+= "qemu-system-aarch64"', template)
+    assert re.search(r"runner_artifact\s+= local\.versions\.gitlab_runner_archive\.aarch64", template)
 
-    # The AMI installs firmware through the same script operators run locally.
-    assert '"${path.cwd}/mise-tasks/test/firmware.sh"' in template
-    assert 'bash "$firmware_tree/mise-tasks/test/firmware.sh"' in provision
-    assert "AAVMF" not in provision
-    assert "test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256" in provision
+    # The firmware comes from the qemu-efi-aarch64 package, not a fetched pin.
+    assert "/usr/share/AAVMF/AAVMF_CODE.fd" in provision
+    assert "HOMELAB_AARCH64_FIRMWARE_DIR" not in template + provision
     assert "mise exec -- true" in provision
     # The boot-time pre-hydration runs a baked copy of the task outside any
     # checkout; test_qemu_host_prehydrate_tree_is_self_contained proves the
@@ -562,33 +452,6 @@ sudo() {{ printf '%s\\n' "$*" >> "$COMMANDS"; }}
         env={**os.environ, "TARGET_ARCHITECTURE": architecture, "COMMANDS": str(commands)},
     )
     assert ("/etc/ssh/authorized_keys/ubuntu" in commands.read_text() if commands.exists() else False) is installs_key
-
-
-@pytest.mark.skipif(
-    shutil.which("qemu-system-aarch64") is None
-    or not (REPO_ROOT / "test" / "firmware" / "edk2-aarch64-code.fd").is_file(),
-    reason="needs qemu-system-aarch64 and the fetched firmware (mise run test:firmware)",
-)
-def test_qemu_host_smoke_boots_the_pinned_firmware_to_its_boot_manager() -> None:
-    firmware = REPO_ROOT / "test" / "firmware"
-
-    result = subprocess.run(
-        [
-            "bash",
-            str(QEMU_HOST_SMOKE_SH),
-            "firmware",
-            "qemu-system-aarch64",
-            "virt",
-            str(firmware / "edk2-aarch64-code.fd"),
-            str(firmware / "edk2-aarch64-vars.fd"),
-        ],
-        text=True,
-        capture_output=True,
-        timeout=240,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "edk2-aarch64-code.fd reached the UEFI boot manager" in result.stdout
 
 
 def test_qemu_host_boots_the_ga_kernel_before_anything_is_provisioned() -> None:

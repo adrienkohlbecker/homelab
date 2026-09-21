@@ -190,26 +190,24 @@ class TestDiscoverPackerDisks:
 
 
 class TestUefiDrives:
-    def test_copies_required_vars_template(
+    def test_creates_blank_vars_sized_to_code(
         self,
         machine_factory: Callable[..., machine.Machine],
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         code = tmp_path / "code.fd"
-        variables = tmp_path / "vars.fd"
         code.write_bytes(b"code")
-        variables.write_bytes(b"variables")
-        monkeypatch.setattr(machine, "uefi_firmware_paths_for", lambda _arch: (code, variables))
+        monkeypatch.setattr(machine, "uefi_code_path_for", lambda _arch: code)
         instance = machine_factory(host_arch="aarch64")
 
         drives = asyncio.run(instance._uefi_drives())
 
-        copied_vars = instance.workdir_path / "uefi-vars.fd"
-        assert copied_vars.read_bytes() == b"variables"
+        blank_vars = instance.workdir_path / "uefi-vars.fd"
+        assert blank_vars.read_bytes() == b"\0" * len(b"code")
         assert drives == [
             f"file={code},if=pflash,unit=0,format=raw,readonly=on",
-            f"file={copied_vars},if=pflash,unit=1,format=raw",
+            f"file={blank_vars},if=pflash,unit=1,format=raw",
         ]
 
 

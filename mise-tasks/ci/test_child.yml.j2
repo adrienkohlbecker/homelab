@@ -77,7 +77,6 @@ stages:
     MISE_DATA_DIR: /opt/mise
     UV_CACHE_DIR: /opt/uv-cache
     UV_LINK_MODE: copy
-    HOMELAB_AARCH64_FIRMWARE_DIR: /opt/homelab-ci/qemu-firmware/aarch64
   before_script:
     - test -n "${HOMELAB_VAULT_PASSWORD_TEST:-}" || { echo "HOMELAB_VAULT_PASSWORD_TEST CI/CD variable is not set" >&2; exit 1; }
     - mise run ci:bootstrap

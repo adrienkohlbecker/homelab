@@ -250,7 +250,6 @@ qemu_host_ami:
     HOMELAB_CI_DIR: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/images"
     AWS_CONFIG_FILE: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/aws/config"
     AWS_SHARED_CREDENTIALS_FILE: "$CI_PROJECT_DIR/.ci/$CI_JOB_ID/aws/credentials"
-    HOMELAB_AARCH64_FIRMWARE_DIR: /opt/homelab-ci/qemu-firmware/aarch64
   before_script:
     - mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$PACKER_PLUGIN_PATH" "$MISE_DATA_DIR" "$UV_CACHE_DIR" "$HOMELAB_CI_DIR" "$(dirname "$AWS_CONFIG_FILE")"
     - mise run ci:bootstrap

@@ -56,22 +56,20 @@ locals {
 
   architecture_table = {
     x86_64 = {
-      ami_architecture     = "amd64"
-      builder_instance     = "c6a.xlarge"
-      qemu_packages        = "qemu-system-x86 ovmf"
-      qemu_system_binary   = "qemu-system-x86_64"
-      runner_artifact      = local.versions.gitlab_runner_archive.x86_64
-      cloudwatch_agent     = local.versions.cloudwatch_agent_deb.x86_64
-      firmware_destination = ""
+      ami_architecture   = "amd64"
+      builder_instance   = "c6a.xlarge"
+      qemu_packages      = "qemu-system-x86 ovmf"
+      qemu_system_binary = "qemu-system-x86_64"
+      runner_artifact    = local.versions.gitlab_runner_archive.x86_64
+      cloudwatch_agent   = local.versions.cloudwatch_agent_deb.x86_64
     }
     aarch64 = {
-      ami_architecture     = "arm64"
-      builder_instance     = "c7g.xlarge"
-      qemu_packages        = "qemu-system-arm qemu-efi-aarch64"
-      qemu_system_binary   = "qemu-system-aarch64"
-      runner_artifact      = local.versions.gitlab_runner_archive.aarch64
-      cloudwatch_agent     = local.versions.cloudwatch_agent_deb.aarch64
-      firmware_destination = "/opt/homelab-ci/qemu-firmware/aarch64"
+      ami_architecture   = "arm64"
+      builder_instance   = "c7g.xlarge"
+      qemu_packages      = "qemu-system-arm qemu-efi-aarch64"
+      qemu_system_binary = "qemu-system-aarch64"
+      runner_artifact    = local.versions.gitlab_runner_archive.aarch64
+      cloudwatch_agent   = local.versions.cloudwatch_agent_deb.aarch64
     }
   }
   architecture_config = local.architecture_table[var.architecture]
@@ -162,9 +160,6 @@ build {
       "${path.cwd}/packer/aws/files/gitlab_runner_fleeting_arm.pub",
       "${path.cwd}/packer/aws/files/qemu_host_smoke.sh",
       "${path.cwd}/packer/aws/files/cloudwatch_agent.json",
-      # The ARM firmware installer and the pins it reads.
-      "${path.cwd}/mise-tasks/test/firmware.sh",
-      "${path.cwd}/group_vars/all/versions.yml",
       # The boot-time image pre-hydration and the module it imports.
       "${path.cwd}/mise-tasks/ci/hydrate-qemu-images.py",
       "${path.cwd}/mise-tasks/ci/qemu_image_store.py",
@@ -175,16 +170,15 @@ build {
   provisioner "shell" {
     script = "${path.root}/files/provision_qemu_host.sh"
     env = {
-      "TARGET_ARCHITECTURE"          = var.architecture
-      "QEMU_PACKAGES"                = local.architecture_config.qemu_packages
-      "QEMU_SYSTEM_BINARY"           = local.architecture_config.qemu_system_binary
-      "QEMU_MACHINE_TYPE"            = local.guest_architecture.machine_type
-      "GITLAB_RUNNER_URL"            = local.architecture_config.runner_artifact.url
-      "GITLAB_RUNNER_SHA256"         = local.architecture_config.runner_artifact.sha256
-      "CLOUDWATCH_AGENT_URL"         = local.architecture_config.cloudwatch_agent.url
-      "CLOUDWATCH_AGENT_SHA256"      = local.architecture_config.cloudwatch_agent.sha256
-      "HOMELAB_AARCH64_FIRMWARE_DIR" = local.architecture_config.firmware_destination
-      "PREHYDRATE_UBUNTU"            = local.ubuntu_catalog.default
+      "TARGET_ARCHITECTURE"     = var.architecture
+      "QEMU_PACKAGES"           = local.architecture_config.qemu_packages
+      "QEMU_SYSTEM_BINARY"      = local.architecture_config.qemu_system_binary
+      "QEMU_MACHINE_TYPE"       = local.guest_architecture.machine_type
+      "GITLAB_RUNNER_URL"       = local.architecture_config.runner_artifact.url
+      "GITLAB_RUNNER_SHA256"    = local.architecture_config.runner_artifact.sha256
+      "CLOUDWATCH_AGENT_URL"    = local.architecture_config.cloudwatch_agent.url
+      "CLOUDWATCH_AGENT_SHA256" = local.architecture_config.cloudwatch_agent.sha256
+      "PREHYDRATE_UBUNTU"       = local.ubuntu_catalog.default
     }
   }
 

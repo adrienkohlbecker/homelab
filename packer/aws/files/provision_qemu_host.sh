@@ -12,10 +12,7 @@ set -euxo pipefail
 : "${PREHYDRATE_UBUNTU:?prehydrate_ubuntu is required}"
 
 case "$TARGET_ARCHITECTURE" in
-x86_64) ;;
-aarch64)
-  : "${HOMELAB_AARCH64_FIRMWARE_DIR:?aarch64_firmware_dir is required}"
-  ;;
+x86_64 | aarch64) ;;
 *)
   echo "provision_qemu_host: unsupported architecture ${TARGET_ARCHITECTURE}" >&2
   exit 2
@@ -53,17 +50,6 @@ sudo apt-get update -qq
     mdadm \
     ec2-instance-connect
 )
-
-if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
-  # firmware.sh resolves its pins relative to its own location; give it the
-  # repository layout it expects.
-  firmware_tree=$(mktemp -d)
-  install -D -m 0755 /tmp/firmware.sh "$firmware_tree/mise-tasks/test/firmware.sh"
-  install -D -m 0644 /tmp/versions.yml "$firmware_tree/group_vars/all/versions.yml"
-  sudo env HOMELAB_AARCH64_FIRMWARE_DIR="$HOMELAB_AARCH64_FIRMWARE_DIR" \
-    bash "$firmware_tree/mise-tasks/test/firmware.sh"
-  rm -rf "$firmware_tree"
-fi
 
 curl -fsSL --retry 5 --retry-all-errors --retry-connrefused https://mise.en.dev/gpg-key.pub |
   gpg --dearmor |
@@ -153,13 +139,6 @@ command -v passt >/dev/null
 command -v mise >/dev/null
 EOF
 sudo sed -i "s/__QEMU_SYSTEM_BINARY__/${QEMU_SYSTEM_BINARY}/" /usr/local/bin/homelab_ci_ready
-if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
-  sudo tee -a /usr/local/bin/homelab_ci_ready >/dev/null <<EOF
-test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/edk2-aarch64-code.fd
-test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/edk2-aarch64-vars.fd
-test -r ${HOMELAB_AARCH64_FIRMWARE_DIR}/archive.sha256
-EOF
-fi
 sudo chmod 0755 /usr/local/bin/homelab_ci_ready
 
 sudo tee /etc/systemd/system/homelab-ci-scratch.service >/dev/null <<'EOF'
@@ -213,8 +192,8 @@ sudo systemd-analyze verify /etc/systemd/system/homelab-ci-prehydrate.service
 sudo systemctl enable homelab-ci-prehydrate.service
 
 if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
-  firmware_code="$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-code.fd"
-  firmware_vars="$HOMELAB_AARCH64_FIRMWARE_DIR/edk2-aarch64-vars.fd"
+  firmware_code=/usr/share/AAVMF/AAVMF_CODE.fd
+  firmware_vars=/usr/share/AAVMF/AAVMF_VARS.fd
 else
   firmware_code=/usr/share/OVMF/OVMF_CODE_4M.fd
   firmware_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
@@ -234,6 +213,4 @@ sudo rm -rf \
   /tmp/qemu_host_smoke.sh \
   /tmp/hydrate-qemu-images.py \
   /tmp/qemu_image_store.py \
-  /tmp/firmware.sh \
-  /tmp/versions.yml \
   /tmp/homelab-ci-build

@@ -1,6 +1,5 @@
 """Unit tests for test/arch.py — architecture profiles and detection."""
 
-from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -28,9 +27,7 @@ class TestProfiles:
     def test_aarch64_has_more_keep_vm_devices(self) -> None:
         assert len(arch.AARCH64.keep_vm_extra_devices) > len(arch.X86_64.keep_vm_extra_devices)
 
-    def test_aarch64_requires_the_pinned_firmware_pair(self) -> None:
-        assert arch.AARCH64.pinned_firmware == ("edk2-aarch64-code.fd", "edk2-aarch64-vars.fd")
-        assert arch.X86_64.pinned_firmware is None
+    def test_aarch64_net_device_omits_the_efi_rom(self) -> None:
         assert arch.AARCH64.net_device == "virtio-net,romfile="
 
     def test_every_shared_architecture_has_a_harness_profile(self) -> None:
@@ -68,7 +65,7 @@ class TestDetectHostArch:
             arch.detect_host_arch()
 
 
-class TestUefiFirmwarePaths:
+class TestUefiCodePath:
     def test_finds_first_existing(self, tmp_path: Path) -> None:
         profile = arch.ArchProfile(
             name="test",
@@ -88,7 +85,7 @@ class TestUefiFirmwarePaths:
         )
         (tmp_path / "found.fd").write_bytes(b"uefi")
         (tmp_path / "also_found.fd").write_bytes(b"uefi2")
-        assert arch.uefi_firmware_paths_for(profile) == (tmp_path / "found.fd", None)
+        assert arch.uefi_code_path_for(profile) == tmp_path / "found.fd"
 
     def test_raises_when_none_exist(self) -> None:
         profile = arch.ArchProfile(
@@ -104,30 +101,4 @@ class TestUefiFirmwarePaths:
             bios_boot_supported=False,
         )
         with pytest.raises(RuntimeError, match="No test UEFI firmware"):
-            arch.uefi_firmware_paths_for(profile)
-
-    @staticmethod
-    def _pinned_profile() -> arch.ArchProfile:
-        return replace(arch.AARCH64, pinned_firmware=("code.fd", "vars.fd"))
-
-    def test_pinned_pair_uses_directory_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        (tmp_path / "code.fd").write_bytes(b"code")
-        (tmp_path / "vars.fd").write_bytes(b"vars")
-        monkeypatch.setenv("HOMELAB_AARCH64_FIRMWARE_DIR", str(tmp_path))
-
-        assert arch.uefi_firmware_paths_for(self._pinned_profile()) == (tmp_path / "code.fd", tmp_path / "vars.fd")
-
-    def test_pinned_pair_defaults_to_the_fetched_firmware_dir(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Empty matches Packer's env() default and must not mean the cwd.
-        monkeypatch.setenv("HOMELAB_AARCH64_FIRMWARE_DIR", "")
-        default_dir = Path(arch.__file__).resolve().parent / "firmware"
-
-        with pytest.raises(RuntimeError, match=str(default_dir / "code.fd")):
-            arch.uefi_firmware_paths_for(self._pinned_profile())
-
-    def test_pinned_pair_rejects_missing_vars(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        (tmp_path / "code.fd").write_bytes(b"code")
-        monkeypatch.setenv("HOMELAB_AARCH64_FIRMWARE_DIR", str(tmp_path))
-
-        with pytest.raises(RuntimeError, match=r"vars\.fd"):
-            arch.uefi_firmware_paths_for(self._pinned_profile())
+            arch.uefi_code_path_for(profile)

@@ -9,7 +9,6 @@ platform.machine() mapping.
 from __future__ import annotations
 
 import dataclasses
-import os
 import platform
 from pathlib import Path
 
@@ -52,10 +51,6 @@ class ArchProfile:
     # minimal variant doesn't need UEFI pflash. aarch64 virt only boots via
     # UEFI -- pflash must be attached even on minimal.
     bios_boot_supported: bool
-    # (CODE, VARS) file names of the pinned pair `mise run test:firmware`
-    # installs, required over any packaged firmware. None = use the CODE
-    # candidate search and synthesize a blank VARS file.
-    pinned_firmware: tuple[str, str] | None = None
 
 
 X86_64 = ArchProfile(
@@ -96,12 +91,15 @@ AARCH64 = ArchProfile(
         "-device",
         "usb-tablet",
     ),
-    # Homebrew's QEMU and Ubuntu Noble both package edk2-stable202408, whose DXE
-    # allocator ASSERTs when rEFInd warm-reboots. Keep the newer pin mandatory
-    # on every aarch64 host rather than silently accepting the packaged blobs.
-    uefi_code_candidates=(),
+    uefi_code_candidates=(
+        # Homebrew QEMU on macOS:
+        "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+        "/usr/local/share/qemu/edk2-aarch64-code.fd",
+        # Debian/Ubuntu (qemu-efi-aarch64 package):
+        "/usr/share/AAVMF/AAVMF_CODE.fd",
+        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+    ),
     bios_boot_supported=False,
-    pinned_firmware=("edk2-aarch64-code.fd", "edk2-aarch64-vars.fd"),
 )
 
 
@@ -122,31 +120,15 @@ def detect_host_arch() -> ArchProfile:
     return profile
 
 
-def uefi_firmware_paths_for(profile: ArchProfile) -> tuple[Path, Path | None]:
-    """Locate the EDK2/OVMF CODE and optional VARS template for *profile*.
+def uefi_code_path_for(profile: ArchProfile) -> Path:
+    """Locate the packaged EDK2/OVMF CODE blob matching *profile* on this host.
 
-    A pinned pair lives in HOMELAB_AARCH64_FIRMWARE_DIR (default test/firmware,
-    the same default Packer uses). Both members must exist; otherwise fail with
-    fetch guidance rather than falling back to an older host package.
-    Architectures without a pin use the first existing packaged CODE candidate
-    and let the harness create blank VARS.
+    Searches uefi_code_candidates in order; first existing path wins.
     """
-    if profile.pinned_firmware is not None:
-        directory = Path(os.environ.get("HOMELAB_AARCH64_FIRMWARE_DIR") or Path(__file__).resolve().parent / "firmware")
-        code_path, vars_path = (directory / name for name in profile.pinned_firmware)
-        missing = [path for path in (code_path, vars_path) if not path.is_file()]
-        if missing:
-            raise RuntimeError(
-                f"Required {profile.name} UEFI firmware is missing: {', '.join(map(str, missing))}\n"
-                "Run `mise run test:firmware` to fetch it, or set HOMELAB_AARCH64_FIRMWARE_DIR "
-                "to the directory containing the pinned CODE and VARS files. Older packaged "
-                "edk2 builds ASSERT in rEFInd across a warm reboot."
-            )
-        return code_path, vars_path
     for c in profile.uefi_code_candidates:
         if Path(c).exists():
-            return Path(c), None
+            return Path(c)
     raise RuntimeError(
         f"No {profile.name} UEFI firmware found in {list(profile.uefi_code_candidates)}. "
-        "Install the `ovmf` package (Debian/Ubuntu)."
+        "Install `ovmf` (x86_64) or `qemu-efi-aarch64` (aarch64), or Homebrew's qemu on macOS."
     )

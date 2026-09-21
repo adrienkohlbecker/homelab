@@ -51,14 +51,6 @@ variable "upstream_mirrors" {
   description = "When true, build from upstream Ubuntu mirrors instead of Nexus."
 }
 
-variable "aarch64_firmware_dir" {
-  type = string
-  # The verify-boot post-processor inherits the same environment variable, so
-  # Packer and the harness always agree on the firmware location.
-  default     = env("HOMELAB_AARCH64_FIRMWARE_DIR")
-  description = "Directory containing the pinned aarch64 CODE and VARS firmware files; empty means test/firmware."
-}
-
 locals {
   # Normalize Mac's "arm64" to "aarch64" (qemu / refind / ZBM use the
   # latter; uname -m reports the former). Pass-through for x86_64.
@@ -73,8 +65,7 @@ locals {
   ubuntu_release = local.ubuntu_catalog.releases[local.ubuntu_name]
   ubuntu_version = local.ubuntu_release.version
 
-  # Guest machine, NIC, cloud-image token, and pinned firmware names are shared
-  # with the qemu harness.
+  # Guest machine, NIC, and cloud-image token are shared with the qemu harness.
   architectures = yamldecode(file("${path.cwd}/data/architectures.yml"))
   guest         = local.architectures[local.arch].guest
 
@@ -126,21 +117,29 @@ locals {
   }
   host_os_cfg = local.host_os_table[local.host_os]
 
-  aarch64_firmware_dir = coalesce(var.aarch64_firmware_dir, "${path.cwd}/test/firmware")
-  # The pinned ARM pair is host-independent. x86_64 keeps the packaged OVMF
-  # paths used by its only supported native builder, Linux/KVM.
+  # Packaged UEFI firmware. x86_64's only supported native builder is
+  # Linux/KVM; aarch64 builds on Linux (qemu-efi-aarch64) and on a Mac
+  # (Homebrew qemu).
   firmware_table = {
     x86_64 = {
-      # Ubuntu 24.04 dropped the legacy non-4M names.
-      code = "/usr/share/OVMF/OVMF_CODE_4M.fd"
-      vars = "/usr/share/OVMF/OVMF_VARS_4M.fd"
+      linux = {
+        # Ubuntu 24.04 dropped the legacy non-4M names.
+        code = "/usr/share/OVMF/OVMF_CODE_4M.fd"
+        vars = "/usr/share/OVMF/OVMF_VARS_4M.fd"
+      }
     }
     aarch64 = {
-      code = "${local.aarch64_firmware_dir}/edk2-aarch64-code.fd"
-      vars = "${local.aarch64_firmware_dir}/edk2-aarch64-vars.fd"
+      linux = {
+        code = "/usr/share/AAVMF/AAVMF_CODE.fd"
+        vars = "/usr/share/AAVMF/AAVMF_VARS.fd"
+      }
+      darwin = {
+        code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
+        vars = "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
+      }
     }
   }
-  firmware_cfg = local.firmware_table[local.arch]
+  firmware_cfg = local.firmware_table[local.arch][local.host_os]
 
   # Each qemu source below has one entry. disk_sizes covers every attached disk
   # in device order; the space-delimited disks prefix becomes rpool and
@@ -373,9 +372,9 @@ build {
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
       "INSTALL_TARGET"                  = source.name == "hetzner" ? "hetzner" : "qemu"
+      "ZBM_VERSION"                     = local.arch_cfg.zbm_version
       "REFIND_DEB_URL"                  = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""
       "REFIND_DEB_SHA256"               = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""
-      "ZBM_VERSION"                     = local.arch_cfg.zbm_version
       "ZFS_ARC_MAX"                     = "${local.variant_config[source.name].zfs_arc_max}"
     }
   }
