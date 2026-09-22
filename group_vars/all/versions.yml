@@ -236,8 +236,8 @@ zfsbootmenu_release:
     version: v3.0.1-linux6.1-ci.2868646152.16634528861-x86_64  # ZBM v3.0.1 2025-01-19 (CI build)
     url: "{{ zfsbootmenu_repository_url }}/v3.0.1-linux6.1-ci.2868646152.16634528861-x86_64/zfsbootmenu-v3.0.1-linux6.1-ci.2868646152.16634528861-x86_64.tar.gz"
   aarch64:
-    version: v3.1.0-linux6.18-ci.2868646152.16634528862-aarch64  # ZBM v3.1.0 2026-01-01 (CI build with the kexec hook)
-    url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-ci.2868646152.16634528862-aarch64/zfsbootmenu-v3.1.0-linux6.18-ci.2868646152.16634528862-aarch64.tar.gz"
+    version: v3.1.0-linux6.18-ci.2870525488.16647762690-aarch64  # ZBM v3.1.0 2026-01-01 (CI build with the kexec hook, no purgatory checks)
+    url: "{{ zfsbootmenu_repository_url }}/v3.1.0-linux6.18-ci.2870525488.16647762690-aarch64/zfsbootmenu-v3.1.0-linux6.18-ci.2870525488.16647762690-aarch64.tar.gz"
 
 # === Package-manager pins ====================================================
 
