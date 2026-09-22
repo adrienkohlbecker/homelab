@@ -16,14 +16,10 @@
 # in exchange every downstream check tests post-reboot reality rather
 # than next-boot intent.
 
-# Fixtures on a host where a ZBM kexec cannot complete (qemu_boot_changes_reachable
-# is false, see group_vars/test.yml) skip the reboot and check the property
-# instead. Elsewhere the reboot exercises the post-reboot contract directly.
 - name: _verify | Reboot to apply role changes
   import_role:
     name: reboot
     tasks_from: reboot
-  when: qemu_boot_changes_reachable
 
 # dumpkeys reads the kernel VT's current keymap via KDGKBENT on /dev/tty0, so it
 # doesn't depend on a controlling terminal and works from ansible's ssh session.
@@ -79,16 +75,6 @@
   failed_when: _console_noblank_active.stdout | trim != 'active'
   become: true
 
-# Without a reachable reboot the post-reboot probe below cannot run, so retain the
-# ZBM property check as the handoff the boot chain consumes.
-- name: _verify | ZBM commandline includes consoleblank=0
-  when: not qemu_boot_changes_reachable and zfs_root
-  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
-  register: _console_zbm_cmdline
-  changed_when: false
-  failed_when: "'consoleblank=0' not in _console_zbm_cmdline.stdout"
-  become: true
-
 - name: _verify | Read rendered /boot/grub/grub.cfg
   when: grub_bootloader
   slurp:
@@ -115,10 +101,8 @@
 
 # /sys/module/kernel/parameters/consoleblank exposes the value the
 # running kernel parsed from the cmdline at boot, proving the boot chain applied
-# the argument. Skipped where the reboot is not reachable, since the running
-# kernel then still carries the previous boot's arguments.
+# the argument.
 - name: _verify | Running kernel applied consoleblank=0
-  when: qemu_boot_changes_reachable
   command: grep -qxF 0 /sys/module/kernel/parameters/consoleblank
   changed_when: false
   become: true

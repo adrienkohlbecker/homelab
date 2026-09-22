@@ -1,7 +1,6 @@
 """Exact-output tests for Machine.format_{ssh,ansible}_cmd."""
 
 import asyncio
-import platform
 import shlex
 from collections.abc import Callable
 from pathlib import Path
@@ -103,8 +102,7 @@ def test_format_ansible_cmd_default_envelope(
 
     # Harness inputs are indirect so Ansible task vars can override the public
     # environment variables during fixture coverage.
-    hvf = str(platform.system() == "Darwin").lower()
-    assert f'{{"_test_hvf":{hvf},"_test_in_aws":false,"_test_nexus_url":"nexus.lab.fahm.fr"}}' in cmd
+    assert '{"_test_in_aws":false,"_test_nexus_url":"nexus.lab.fahm.fr"}' in cmd
     assert not any("tailscale_wan_direct" in part for part in cmd)
 
 
@@ -178,8 +176,7 @@ def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
     m = machine_factory()
     cmd = m.format_ansible_cmd("site.yml")
 
-    hvf = str(platform.system() == "Darwin").lower()
-    assert f'{{"_test_hvf":{hvf},"_test_in_aws":true,"_test_nexus_url":""}}' in cmd
+    assert '{"_test_in_aws":true,"_test_nexus_url":""}' in cmd
     assert "nexus_url=" not in cmd
 
 

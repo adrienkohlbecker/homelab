@@ -161,7 +161,6 @@
 # warm reboot is rEFInd's second-or-later boot: the case that ASSERTs in the
 # stock aarch64 edk2 when rEFInd is 0.13.2 (see refind_noble_release).
 - name: _verify | Reboot through the installed rEFInd path
-  when: qemu_boot_changes_reachable
   import_role:
     name: reboot
     tasks_from: reboot

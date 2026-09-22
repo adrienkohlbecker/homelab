@@ -739,7 +739,6 @@ class Machine:
             "-e",
             json.dumps(
                 {
-                    "_test_hvf": platform.system() == "Darwin",
                     "_test_in_aws": self.in_aws,
                     "_test_nexus_url": "" if self.upstream_mirrors or self.in_aws else "nexus.lab.fahm.fr",
                 },

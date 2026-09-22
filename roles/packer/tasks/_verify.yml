@@ -338,8 +338,7 @@
 # apt-purge path.
 #
 # On aarch64, ABI discovery always runs; the reboot exercise requires a
-# distinct swap target because multiple package versions can map to one ABI,
-# and a host where the reboot is reachable (qemu_boot_changes_reachable).
+# distinct swap target because multiple package versions can map to one ABI.
 
 - name: _verify | Refresh apt cache so madison sees the current archive
   when: ansible_architecture == "aarch64"
@@ -409,7 +408,6 @@
   when:
     - ansible_architecture == "aarch64"
     - packer_verify_swap_abi.stdout | default('') | length > 0
-    - qemu_boot_changes_reachable
   block:
     - name: _verify | Install older specific kernel + modules
       apt:

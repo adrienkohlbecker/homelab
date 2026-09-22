@@ -32,7 +32,6 @@
     ansible_architecture: aarch64
 
 - name: _verify | Reboot to apply boot-chain changes
-  when: qemu_boot_changes_reachable
   import_role:
     name: reboot
     tasks_from: reboot
@@ -167,10 +166,9 @@
 
 # /proc/cmdline exposes the args the running kernel actually booted with.
 # Post-reboot this proves the ZBM property propagated through the boot chain,
-# not just that the ZFS property was set. Skipped where the reboot is not
-# reachable (qemu_boot_changes_reachable, see group_vars/test.yml).
+# not just that the ZFS property was set.
 - name: _verify | Read the running kernel's cmdline
-  when: qemu_boot_changes_reachable and not grub_bootloader
+  when: not grub_bootloader
   slurp:
     src: /proc/cmdline
   register: _boot_verify_proc_cmdline
@@ -219,7 +217,6 @@
   failed_when: _boot_verify_tmp_enabled.stdout not in ['enabled', 'enabled-runtime', 'static']
 
 - name: _verify | Read /tmp filesystem type
-  when: qemu_boot_changes_reachable
   command: findmnt -no FSTYPE -T /tmp
   changed_when: false
   become: true

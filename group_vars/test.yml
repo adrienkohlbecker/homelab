@@ -36,12 +36,6 @@ domain: mhaf.fr
 # Harness inputs stay behind test-only indirection so task-scoped fixtures can
 # exercise the public environment variables at normal Ansible precedence.
 nexus_url: "{{ _test_nexus_url | default('nexus.lab.fahm.fr') }}"
-# Under HVF (a Mac host) a kernel booted by kexec cannot bring its secondary CPUs
-# online, so ZFSBootMenu cannot hand off to the boot environment and role changes
-# that need a reboot are not reachable. KVM and TCG hosts reboot through ZBM
-# normally (notes/zbm_aarch64_kexec_investigation.md).
-qemu_boot_changes_reachable: "{{ not (_test_hvf | default(false) | bool) }}"
-
 test_in_aws: "{{ _test_in_aws | default(false) | bool }}"
 # DoT servers for the qemu test fixture. Local fixtures use the household
 # AdGuard VIP even when --upstream-mirrors bypasses Nexus; Internet-bound 853
