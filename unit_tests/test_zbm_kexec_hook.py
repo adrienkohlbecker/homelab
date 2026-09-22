@@ -55,6 +55,7 @@ def test_load_unwraps_a_zstd_zboot_kernel(tmp_path: Path) -> None:
 
     assert argv == [
         "--kexec-syscall",
+        "--no-checks",
         "-l",
         str(tmp_path / "Image"),
         "--initrd=/initrd",
@@ -71,7 +72,7 @@ def test_load_unwraps_a_gzip_zboot_kernel(tmp_path: Path) -> None:
 
     argv = _run(wrapper, argv_file, "-l", str(kernel))
 
-    assert argv[:3] == ["--kexec-syscall", "-l", str(tmp_path / "Image")]
+    assert argv[:4] == ["--kexec-syscall", "--no-checks", "-l", str(tmp_path / "Image")]
     assert (tmp_path / "Image").read_bytes() == IMAGE
 
 
@@ -82,7 +83,7 @@ def test_load_passes_other_kernels_through(tmp_path: Path) -> None:
 
     argv = _run(wrapper, argv_file, "-a", "-l", str(kernel))
 
-    assert argv == ["--kexec-syscall", "-l", str(kernel), "--dtb=DTB"]
+    assert argv == ["--kexec-syscall", "--no-checks", "-l", str(kernel), "--dtb=DTB"]
     assert not (tmp_path / "Image").exists()
 
 

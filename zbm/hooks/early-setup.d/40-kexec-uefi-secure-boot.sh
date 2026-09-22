@@ -15,6 +15,11 @@
 #    kexec-tools cannot load that, so the wrapper cuts the payload out and
 #    decompresses it first.
 #
+# kexec_load hands off through kexec-tools' purgatory, which SHA-256-verifies
+# every loaded segment with the MMU off. Uncached, that takes ~30s on the
+# Cortex-A72 CI hosts, so loads pass --no-checks. It must go on the load:
+# ZBM's own -i on kexec -e comes too late to reach purgatory.
+#
 # See notes/zbm_aarch64_kexec_investigation.md.
 set -euo pipefail
 
@@ -78,7 +83,7 @@ done
 
 if [ -n "$load" ]; then
   [ -z "$kernel" ] || args[kernel]=$(unwrap_kernel "${args[kernel]}")
-  exec /usr/bin/kexec.real --kexec-syscall "${args[@]}" --dtb=/run/zbm_kexec.dtb
+  exec /usr/bin/kexec.real --kexec-syscall --no-checks "${args[@]}" --dtb=/run/zbm_kexec.dtb
 fi
 exec /usr/bin/kexec.real "$@"
 WRAPPER
