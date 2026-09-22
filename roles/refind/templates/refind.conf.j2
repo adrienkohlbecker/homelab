@@ -730,19 +730,4 @@ menuentry "Ubuntu (ZBM)" {
     }
 }
 
-{# Recovery entry: boots the separate kernel+initramfs pair that
-   roles/zfsbootmenu stages only on aarch64. Not the default; rEFInd splits
-   default_selection on commas, so a title with a comma cannot be selected. #}
-{% if ansible_architecture == "aarch64" %}
-menuentry "Ubuntu (ZBM, Components)" {
-    loader /EFI/ZBM/vmlinux-bootmenu
-    initrd /EFI/ZBM/initramfs-bootmenu.img
-    options "{{ _zbm_launch_cmdline }} zbm.skip"
-    icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
-    submenuentry "Show ZFSBootMenu" {
-      options "{{ _zbm_launch_cmdline }} zbm.show"
-    }
-}
-{% endif %}
-
 include themes/refind-theme-regular/theme.conf

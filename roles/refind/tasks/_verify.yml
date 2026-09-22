@@ -33,31 +33,6 @@
   vars:
     ansible_architecture: aarch64
 
-- name: _verify | Render the production x86 ZBM-only config
-  template:
-    src: refind.conf.j2
-    dest: /tmp/refind-x86-zbm.conf
-    mode: "0644"
-  vars:
-    ansible_architecture: x86_64
-    refind_zbm_cmdline_content:
-      content: "{{ 'quiet splash' | b64encode }}"
-  become: true
-
-- name: _verify | Verify the x86 ZBM-only config
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-
-        config = pathlib.Path("/tmp/refind-x86-zbm.conf").read_text()
-        assert 'default_selection "Ubuntu (ZBM)"' in config
-        assert "vmlinux-bootmenu" not in config
-  changed_when: false
-  become: true
-
 - name: _verify | Remove alternate rEFInd config
   file:
     path: /tmp/refind-x86-zbm.conf
@@ -137,11 +112,10 @@
 - name: _verify | Stat ZBM artifacts consumed by refind
   stat:
     path: "/boot/efi/EFI/ZBM/{{ item }}"
-  loop: >-
-    {{
-      ['VMLINUZ.EFI', 'VMLINUZ-BACKUP.EFI', 'cmdline']
-      + (['vmlinux-bootmenu', 'initramfs-bootmenu.img'] if ansible_architecture == 'aarch64' else [])
-    }}
+  loop:
+    - VMLINUZ.EFI
+    - VMLINUZ-BACKUP.EFI
+    - cmdline
   loop_control:
     label: "{{ item }}"
   register: _refind_verify_zbm_artifacts

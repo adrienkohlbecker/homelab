@@ -341,11 +341,10 @@ mount /boot/efi
 # qemu.pkr.hcl reads the architecture-specific release from
 # group_vars/all/versions.yml and passes it here as $ZBM_VERSION.
 #
-# The tarball carries both the unified ZBM EFI image and the components-mode
-# kernel + initrd. The default ZBM entry uses the unified image
-# (/EFI/ZBM/VMLINUZ.EFI); the aarch64 image also stages the components as a
-# recovery entry. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi
-# on aarch64 ($REFIND_NAME, derived from `uname -m` above).
+# The tarball also carries a components-mode kernel + initrd alongside the
+# unified ZBM EFI image; only the unified image (/EFI/ZBM/VMLINUZ.EFI) is
+# installed. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on
+# aarch64 ($REFIND_NAME, derived from `uname -m` above).
 #
 # The registry path is project 83079143 = akohlbecker/homelab (numeric id
 # keeps the path free of an encoded slash); the project is public, so the
@@ -364,15 +363,6 @@ mv "$tmp"/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
 mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
 
 ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM/cmdline)
-
-if [ "$ZBM_ARCH" = "aarch64" ]; then
-  mv "$tmp"/initramfs-bootmenu.img /boot/efi/EFI/ZBM/
-  mv "$tmp"/vmlinu*-bootmenu /boot/efi/EFI/ZBM/
-
-  # x86_64 emits vmlinuz-bootmenu (compressed); aarch64 emits vmlinux-bootmenu
-  # (uncompressed). Capture the actual filename for the rEFInd menuentry.
-  ZBM_KERNEL="$(basename /boot/efi/EFI/ZBM/vmlin*-bootmenu)"
-fi
 
 # Configure rEFInd
 
@@ -414,21 +404,6 @@ menuentry "Ubuntu (ZBM)" {
     }
 }
 EOF
-
-if [ "$ZBM_ARCH" = "aarch64" ]; then
-
-  cat <<EOF >>/boot/efi/EFI/refind/refind.conf
-menuentry "Ubuntu (ZBM, Components)" {
-    loader /EFI/ZBM/${ZBM_KERNEL}
-    initrd /EFI/ZBM/initramfs-bootmenu.img
-    options "$ZBM_CMDLINE $COMMANDLINE zbm.skip"
-    submenuentry "Show ZFSBootMenu" {
-      options "$ZBM_CMDLINE $COMMANDLINE zbm.show"
-    }
-}
-EOF
-
-fi
 
 # Mirror the config next to the fallback binary. rEFInd only reads
 # refind.conf from its own directory, so the fallback copy at \EFI\BOOT

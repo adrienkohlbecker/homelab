@@ -9,14 +9,9 @@
     _boot_artifacts:
       - /boot/efi/EFI/BOOT/BOOT{{ 'AA64' if ansible_architecture == 'aarch64' else 'X64' }}.EFI
       - /boot/efi/EFI/ZBM/VMLINUZ.EFI
-    _aarch64_boot_artifacts:
-      - /boot/efi/EFI/ZBM/initramfs-bootmenu.img
-      - /boot/efi/EFI/ZBM/vmlinux-bootmenu
   stat:
     path: "{{ item }}"
-  loop: >-
-    {{ _boot_artifacts
-       + (_aarch64_boot_artifacts if ansible_architecture == 'aarch64' else []) }}
+  loop: "{{ _boot_artifacts }}"
   register: packer_verify_boot_artifact
   failed_when: >-
     not packer_verify_boot_artifact.stat.exists

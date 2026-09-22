@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKER_CHROOT = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
 REFIND_TEMPLATE = REPO_ROOT / "roles" / "refind" / "templates" / "refind.conf.j2"
@@ -43,7 +41,6 @@ def _canonical_menuentry(block: str) -> tuple[str, ...]:
     replacements = {
         "$ZBM_CMDLINE $COMMANDLINE": "<launch_cmdline>",
         "{{ _zbm_launch_cmdline }}": "<launch_cmdline>",
-        "${ZBM_KERNEL}": "vmlinux-bootmenu",
     }
     for source, replacement in replacements.items():
         block = block.replace(source, replacement)
@@ -55,15 +52,10 @@ def _canonical_menuentry(block: str) -> tuple[str, ...]:
     )
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "Ubuntu (ZBM)",
-        "Ubuntu (ZBM, Components)",
-    ],
-)
-def test_packer_and_ansible_refind_menuentries_match(name: str) -> None:
+def test_packer_and_ansible_refind_menuentries_match() -> None:
     packer = PACKER_CHROOT.read_text()
     ansible = REFIND_TEMPLATE.read_text()
 
-    assert _canonical_menuentry(_menuentry(packer, name)) == _canonical_menuentry(_menuentry(ansible, name))
+    assert _canonical_menuentry(_menuentry(packer, "Ubuntu (ZBM)")) == _canonical_menuentry(
+        _menuentry(ansible, "Ubuntu (ZBM)")
+    )
