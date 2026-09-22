@@ -159,7 +159,18 @@ stages:
   script:
     - |
       rc=0
+      mkdir -p test/out
+      prefix="test/out/$VARIANT.$UBUNTU.$ROLE"
+      # DIAG: host wall-clock copy of the serial console and journal; testrole
+      # deletes the originals on a clean pass.
+      for kind in boot journal; do
+        tail -s 0.2 -n +1 -F "$prefix.$kind.ansi" 2>/dev/null \
+          | perl -MPOSIX=strftime -MTime::HiRes=time -ne 'BEGIN { $| = 1 } my $t = time; my $s = strftime("%H:%M:%S", gmtime $t) . sprintf(".%03d ", ($t - int $t) * 1000); for my $l (split /\r(?!\n)/) { next if $l eq ""; $l .= "\n" unless $l =~ /\n\z/; print $s, $l }' \
+          > "$prefix.$kind.timestamped.log" &
+      done
       mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 || rc=$?
+      sleep 1
+      kill $(jobs -p) 2>/dev/null || true
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}
