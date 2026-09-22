@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="ZBM smoke test: drive the serial menu and assert boot-environment handoff"
 # Exercises the ZBM recovery loop end-to-end with no terminal:
-# direct-boot the ZBM kernel + initrd against the Lab Packer image,
+# direct-boot the unified ZBM EFI image against the Lab Packer image,
 # wait for the menu on the captured serial log, select the default boot
 # environment through the serial console, and assert the guest kexecs all the
 # way to its login prompt.
@@ -65,7 +65,7 @@ fi
 echo "Smoke-testing ${tarball}"
 
 tar -xzf "$tarball" -C "$workdir" --no-same-owner
-for member in cmdline initramfs-bootmenu.img; do
+for member in cmdline zfsbootmenu.EFI; do
   if [ ! -f "${workdir}/${member}" ]; then
     echo "tarball is missing ${member}" >&2
     exit 1
@@ -73,10 +73,13 @@ for member in cmdline initramfs-bootmenu.img; do
 done
 base_cmdline=$(cat "${workdir}/cmdline")
 
+# Boot the unified EFI image rEFInd actually loads in production, not the
+# components-mode kernel+initrd pair -- it embeds its own initrd/cmdline PE
+# sections, read the same way as a real firmware boot (--with-pflash), so no
+# --initrd is needed.
 HOMELAB_NET_BACKEND=slirp "${repo_root}/test/launch.py" \
   --machine lab \
-  --kernel "$workdir"/vmlin*-bootmenu \
-  --initrd "${workdir}/initramfs-bootmenu.img" \
+  --kernel "${workdir}/zfsbootmenu.EFI" \
   --append "$base_cmdline loglevel=7 zbm.show" \
   --mem 2048 \
   --with-pflash \
@@ -119,15 +122,7 @@ echo "PASS: serial input selected the default boot environment"
 # fired. KVM and TCG hosts must reach the login prompt
 # (notes/zbm_aarch64_kexec_investigation.md).
 booted() { LC_ALL=C grep -aqE "Welcome to Ubuntu|login:" "$boot_log"; }
-known_hvf_cpu_failure() {
-  [ "$arch" = aarch64 ] && [ "$(uname -s)" = Darwin ] && LC_ALL=C grep -aq "failed to come online" "$boot_log"
-}
-handoff_done() { booted || known_hvf_cpu_failure; }
-wait_for 240 "the boot environment to come up after kexec" handoff_done
-if booted; then
-  echo "PASS: kexec handed off and the boot environment reached its login prompt"
-else
-  echo "PASS: kexec handed off; the BE kernel started and hit the known HVF secondary-CPU failure"
-fi
+wait_for 240 "the boot environment to come up after kexec" booted
+echo "PASS: kexec handed off and the boot environment reached its login prompt"
 
 echo "ZBM smoke test OK: ${tarball##*/}"

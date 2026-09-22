@@ -446,8 +446,8 @@ class Machine:
         self._spec = spec
         if self.launch.image_dir is not None and spec.cloud_image:
             raise ValueError(f"image_dir override requires an artifact-backed variant, got {machine!r}")
-        if (self.launch.kernel is None) != (self.launch.initrd is None):
-            raise ValueError("launch kernel and initrd must be provided together")
+        if self.launch.initrd is not None and self.launch.kernel is None:
+            raise ValueError("launch initrd requires a kernel")
         self.extra_hostfwd_ports: dict[int, int] = {}
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
@@ -1571,18 +1571,17 @@ class Machine:
         else:
             display_args = ["-display", "none"]
 
+        # A unified ZBM EFI image embeds its own initrd/cmdline PE sections
+        # (read by qemu's aarch64 PE loader when pflash/UEFI is attached, the
+        # same LoadOptions-override rEFInd uses); no -initrd is needed for it.
+        # A bare kernel Image still requires one.
         direct_boot: list[str] = []
         if self.launch.kernel is not None:
-            assert self.launch.initrd is not None
             cmdline = self._augment_kernel_cmdline(self.launch.append)
-            direct_boot = [
-                "-kernel",
-                str(self.launch.kernel.resolve()),
-                "-initrd",
-                str(self.launch.initrd.resolve()),
-                "-append",
-                cmdline,
-            ]
+            direct_boot = ["-kernel", str(self.launch.kernel.resolve())]
+            if self.launch.initrd is not None:
+                direct_boot += ["-initrd", str(self.launch.initrd.resolve())]
+            direct_boot += ["-append", cmdline]
 
         netdev_arg, net_device_arg = self._netdev_args()
 

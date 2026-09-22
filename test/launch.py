@@ -4,12 +4,12 @@
 Pick a variant and the harness prepares its image overlays and launches QEMU.
 After boot it prints the SSH command, leaves the VM up, and blocks until
 Ctrl-C. Pass
---kernel/--initrd/--append to direct-boot a custom kernel against the
-variant's qcow2:
+--kernel/--append (plus --initrd for a bare kernel Image) to direct-boot a
+custom kernel against the variant's qcow2. A unified ZBM EFI image embeds its
+own initrd, so --initrd is optional with one:
 
   test/launch.py --machine lab \\
-      --kernel /tmp/zbm/vmlinux-bootmenu \\
-      --initrd /tmp/zbm/initramfs-bootmenu.img \\
+      --kernel /tmp/zbm/zfsbootmenu.EFI --with-pflash \\
       --append 'earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200 zbm.show' \\
       --no-ssh-wait --foreground
 """
@@ -61,12 +61,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--kernel",
         type=Path,
-        help="Override kernel for direct -kernel boot (also requires --initrd)",
+        help="Override kernel for direct -kernel boot. A bare kernel Image "
+        "also requires --initrd; a unified EFI image (e.g. ZBM's "
+        "zfsbootmenu.EFI, with --with-pflash) embeds its own and needs none.",
     )
     parser.add_argument(
         "--initrd",
         type=Path,
-        help="Override initrd (also requires --kernel)",
+        help="Override initrd for a direct -kernel boot of a bare kernel Image.",
     )
     parser.add_argument(
         "--append",
@@ -178,8 +180,8 @@ def parse_args() -> argparse.Namespace:
     )
 
     args = parser.parse_args()
-    if (args.kernel is None) != (args.initrd is None):
-        parser.error("--kernel and --initrd must be provided together")
+    if args.initrd is not None and args.kernel is None:
+        parser.error("--initrd requires --kernel")
     if args.exit_after_ready and (args.foreground or args.no_ssh_wait):
         parser.error("--exit-after-ready requires waiting for SSH; cannot combine with --foreground or --no-ssh-wait")
     return args

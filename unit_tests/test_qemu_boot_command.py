@@ -197,6 +197,26 @@ def test_direct_boot_aarch64_appends_console_when_missing(
     assert "console=tty0" not in append
 
 
+def test_direct_boot_kernel_alone_omits_initrd(
+    machine_factory: Callable[..., machine.Machine],
+) -> None:
+    m = machine_factory(
+        host_arch="aarch64",
+        keep_vm=False,
+        launch=machine.LaunchOptions(
+            kernel=Path("/cache/zfsbootmenu.EFI"),
+            append="root=zfs:rpool/ROOT/ubuntu_xyz",
+        ),
+    )
+    _setup(m)
+    cmd = m._boot_command()
+
+    # A unified EFI image carries its own initrd/cmdline PE sections; no
+    # separate -initrd is needed or added.
+    assert cmd[cmd.index("-kernel") + 1] == "/cache/zfsbootmenu.EFI"
+    assert "-initrd" not in cmd
+
+
 def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
