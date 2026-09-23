@@ -14,8 +14,8 @@ run_step() {
   }
 }
 
-# --final: quiesce mode for the rebuild runbooks. Runs the full nightly (local
-# snapshots, onsite pulls, offsite rsync) but leaves zfs_autosnapshot.target
+# --final: quiesce mode for the rebuild runbooks. Runs local snapshots and
+# onsite pulls but leaves zfs_autosnapshot.target
 # stopped afterwards, so no state writer restarts between the final snapshot
 # and the host being wiped/restored.
 zfs_backup_local_args=()
@@ -74,24 +74,26 @@ zfs_backup_local_ok=$((failed == 0))
 {% for src in zfs_autobackup_sources %}
 run_step zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
+
+# Offsite sync is paused while bunk is unavailable.
 # sync each dataset to offsite synology
-if ((zfs_backup_local_ok)); then
-  for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
-    offsite_failed_before=$failed
-    run_step zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
-    # If this dataset failed, bunk rrsync receiver may still hold the per-host
-    # fcntl flock for the second or two it takes to notice the dropped
-    # connection. Pause before the next dataset so it does not trip "Another
-    # instance of rrsync is already accessing this directory" -- a code-12 abort
-    # that would lose an otherwise-healthy dataset. Only on failure: a clean
-    # transfer has already released the lock before the next iteration starts.
-    if ((failed != offsite_failed_before)); then
-      sleep 10
-    fi
-  done
-else
-  echo >&2 "Error: local snapshot step failed; skipping offsite replication to avoid pushing a cross-dataset generation skew over last night's consistent copy"
-fi
+# if ((zfs_backup_local_ok)); then
+#   for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
+#     offsite_failed_before=$failed
+#     run_step zfs_backup_offsite "{{ external_ips.bunk }}" "$dataset"
+#     # If this dataset failed, bunk rrsync receiver may still hold the per-host
+#     # fcntl flock for the second or two it takes to notice the dropped
+#     # connection. Pause before the next dataset so it does not trip "Another
+#     # instance of rrsync is already accessing this directory" -- a code-12 abort
+#     # that would lose an otherwise-healthy dataset. Only on failure: a clean
+#     # transfer has already released the lock before the next iteration starts.
+#     if ((failed != offsite_failed_before)); then
+#       sleep 10
+#     fi
+#   done
+# else
+#   echo >&2 "Error: local snapshot step failed; skipping offsite replication to avoid pushing a cross-dataset generation skew over last night's consistent copy"
+# fi
 
 # fail if any of the above failed
 if ((failed != 0)); then

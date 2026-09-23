@@ -49,11 +49,10 @@ zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
   - { pool: rpool, name: autoexpand, value: "on" }
 # fox runs no onsite pull of its own (empty sources) -- it is a leaf source
-# that lab pulls (lab's zfs_autobackup_sources lists fox -> tank/fox). It still
-# snapshots locally and rsyncs its bak-tagged datasets offsite to bunk: fox
-# reaches bunk's rsync endpoint (external_ips.bunk) over wg0 because wg.conf
-# grants cross-site peers the physical /32, same path lab/pug use. The key
-# below authorizes root@lab on fox's zfs_autobackup user so lab's pull works.
+# that lab pulls (lab's zfs_autobackup_sources lists fox -> tank/fox). It
+# snapshots locally; offsite rsync to bunk is paused in zfs_autosnapshot.
+# When resumed, fox reaches bunk over wg0 using the physical /32 route.
+# The key below authorizes root@lab on fox's zfs_autobackup user for lab pulls.
 zfs_autobackup_sources: []
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
 
