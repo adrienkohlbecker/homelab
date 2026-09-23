@@ -35,7 +35,7 @@
         import sys
 
         config = pathlib.Path(sys.argv[1]).read_text()
-        assert config.count("hdd_1_temp") == 2
+        assert config.count("hdd_1_temp") == 3
         assert config.count("hdd_1_curve") == 2
         assert "device: /dev/disk/by-id/ata-verify-disk" in config
       - "/tmp/fan2go-{{ item }}.yaml"
