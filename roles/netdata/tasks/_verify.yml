@@ -3,26 +3,6 @@
 
 - name: _verify | Run the full-fixture checks
   import_tasks: _verify_full.yml
-- name: _verify | Load the production defaults for variant checks
-  include_vars:
-    file: "{{ role_path }}/defaults/main.yml"
-    name: _netdata_defaults
-
-- name: _verify | Resolve expected charts with a keepalive peer
-  vars:
-    wireguard_peers:
-      bunk:
-        keepalive_from:
-          - "{{ inventory_hostname }}"
-  assert:
-    that: "'wireguard_bunk_peer' in _netdata_defaults.netdata_expected_charts"
-
-- name: _verify | Resolve expected charts without a keepalive peer
-  vars:
-    wireguard_peers: {}
-  assert:
-    that: _netdata_defaults.netdata_expected_charts == {}
-
 - name: _verify | Keepalived collector omits an unset cadence
   vars:
     netdata_keepalived_vrrp_update_every: "{{ undef() }}"

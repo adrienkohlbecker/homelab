@@ -5,14 +5,17 @@ netdata_keepalived_lost_master_alert: >-
      == (dns_keepalived_priorities.values() | max) }}
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
-netdata_expected_charts: >-
-  {{
-    {
-      'wireguard_bunk_peer':
-        'wireguard.peer_wg0_'
-        ~ wireguard_keys['bunk']['public_key']
-        ~ '_latest_handshake_ago'
-    }
-    if inventory_hostname in wireguard_peers.get('bunk', {}).get('keepalive_from', [])
-    else {}
-  }}
+# Pause bunk chart presence while bunk is unavailable. Restore this default
+# when the offsite link returns; fixtures still exercise exact-chart alerts.
+netdata_expected_charts: {}
+# netdata_expected_charts: >-
+#   {{
+#     {
+#       'wireguard_bunk_peer':
+#         'wireguard.peer_wg0_'
+#         ~ wireguard_keys['bunk']['public_key']
+#         ~ '_latest_handshake_ago'
+#     }
+#     if inventory_hostname in wireguard_peers.get('bunk', {}).get('keepalive_from', [])
+#     else {}
+#   }}
