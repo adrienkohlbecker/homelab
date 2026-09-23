@@ -18,22 +18,33 @@
   shell: |
     set -euo pipefail
     fixture=$(mktemp -d)
-    trap "rm -rf -- \"$fixture\"" EXIT
+    mount_source=$(mktemp -d)
+    cleanup() {
+      if mountpoint -q "$fixture/readonly_view"; then
+        umount "$fixture/readonly_view"
+      fi
+      rm -rf -- "$fixture" "$mount_source"
+    }
+    trap cleanup EXIT
     fresh={{ ansible_date_time.date }}@{{ ansible_date_time.time }}
     touch "$fixture/old.111.2020-01-01@00:00:00~"
     touch "$fixture/fresh.222.$fresh~"
     touch "$fixture/editor~"
-    mkdir -p "$fixture/mutt/archive" "$fixture/getmail"
-    touch "$fixture/mutt/archive/old.333.2020-01-01@00:00:00~"
+    mkdir -p "$fixture/readonly_view" "$fixture/getmail"
+    touch "$mount_source/old.333.2020-01-01@00:00:00~"
     touch "$fixture/getmail/old.444.2020-01-01@00:00:00~"
+    mount --bind "$mount_source" "$fixture/readonly_view"
+    mount -o remount,bind,ro "$fixture/readonly_view"
     /usr/local/sbin/prune_ansible_backups "$fixture"
     [ ! -e "$fixture/old.111.2020-01-01@00:00:00~" ]
     [ -e "$fixture/fresh.222.$fresh~" ]
     [ -e "$fixture/editor~" ]
-    [ -e "$fixture/mutt/archive/old.333.2020-01-01@00:00:00~" ]
+    [ -e "$fixture/readonly_view/old.333.2020-01-01@00:00:00~" ]
+    [ -e "$mount_source/old.333.2020-01-01@00:00:00~" ]
     [ ! -e "$fixture/getmail/old.444.2020-01-01@00:00:00~" ]
   args:
     executable: /bin/bash
+  become: true
   changed_when: false
 
 - name: _verify | Re-run production cleanup while preserving cloud-init
