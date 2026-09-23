@@ -23,10 +23,15 @@
     touch "$fixture/old.111.2020-01-01@00:00:00~"
     touch "$fixture/fresh.222.$fresh~"
     touch "$fixture/editor~"
+    mkdir -p "$fixture/mutt/archive" "$fixture/getmail"
+    touch "$fixture/mutt/archive/old.333.2020-01-01@00:00:00~"
+    touch "$fixture/getmail/old.444.2020-01-01@00:00:00~"
     /usr/local/sbin/prune_ansible_backups "$fixture"
     [ ! -e "$fixture/old.111.2020-01-01@00:00:00~" ]
     [ -e "$fixture/fresh.222.$fresh~" ]
     [ -e "$fixture/editor~" ]
+    [ -e "$fixture/mutt/archive/old.333.2020-01-01@00:00:00~" ]
+    [ ! -e "$fixture/getmail/old.444.2020-01-01@00:00:00~" ]
   args:
     executable: /bin/bash
   changed_when: false
