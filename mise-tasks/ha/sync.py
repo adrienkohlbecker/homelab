@@ -203,13 +203,16 @@ def upload_to_host(files: list[SyncFile]) -> None:
         safe = file.rel.replace("/", "_")
         tmp_remote = f"/tmp/.ha_sync_{pid}_{safe}"
         sh(["scp", "-q", str(CLONE / file.rel), f"{HOST}:{tmp_remote}"])
-        # Make sure the parent dir exists on the host before installing.
-        host_parent = f"{HOST_DIR}/{file.rel.rsplit('/', 1)[0]}" if "/" in file.rel else HOST_DIR
+        # The role owns HOST_DIR at 0750; only create nested directories here.
+        parent = file.rel.rpartition("/")[0]
+        ensure_parent = (
+            f"sudo install -d -o homeassistant -g homeassistant -m 0755 {HOST_DIR}/{parent} && " if parent else ""
+        )
         sh(
             [
                 "ssh",
                 HOST,
-                f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m 0644 -b {tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
+                f"{ensure_parent}sudo install -o homeassistant -g homeassistant -m 0644 -b {tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
             ]
         )
 
