@@ -315,6 +315,31 @@
   tags:
     - homeassistant
 
+# HACS installs SILAM Pollen through the UI, so a fresh fixture may not have
+# it. Once present, keep its coordinator callback compatible with HA's
+# synchronous listener contract. The script accepts only the known upstream
+# block or the already-fixed block and backs up the original on change.
+- name: Check for the SILAM Pollen integration
+  stat:
+    path: /mnt/services/homeassistant/custom_components/silam_pollen/pollen_forecast.py
+  register: homeassistant_silam_pollen_file
+  become: true
+  tags:
+    - homeassistant
+
+- name: Fix the SILAM Pollen coordinator callback
+  when: homeassistant_silam_pollen_file.stat.exists
+  script: >-
+    silam_pollen_callback.py
+    /mnt/services/homeassistant/custom_components/silam_pollen/pollen_forecast.py
+    {{ '--check' if ansible_check_mode else '' }}
+  register: homeassistant_silam_pollen_patch
+  changed_when: (homeassistant_silam_pollen_patch.stdout | from_json).changed
+  check_mode: false
+  become: true
+  tags:
+    - homeassistant
+
 # HA 2026.9 replaced the SMTP notify YAML platform with a config entry, and
 # ships no offline API for one -- so the role reconciles the entry inside
 # .storage/core.config_entries itself, keeping the relay, the sender identity,
@@ -389,7 +414,7 @@
     systemd_unit_args:
       src: homeassistant.service.j2
       condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
-      restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed }}"
+      restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed or homeassistant_silam_pollen_patch.changed }}"
   tags:
     - homeassistant
 
