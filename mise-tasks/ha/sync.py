@@ -6,16 +6,17 @@
 Bidirectional sync for Home Assistant GUI YAML.
 
 The gitignored ha_gui_config clone is the source of truth for these files.
-`last_synced_to_host` records the clone commit whose tree matches lab, so push
-can refuse when the host has changed since the last pull.
+`last_synced_to_host` records the clone commit applied on lab, so push can
+refuse host-side edits and retry a reload that failed after upload.
 
 pull: copy host files into the clean clone, commit changes, advance the tag.
-push: commit local clone edits, validate changed files, upload to lab, advance
-the tag, then reload domains or restart HA for files without a hot reload.
+push: commit local clone edits, validate changed files, upload to lab, reload
+domains or restart HA for files without a hot reload, then advance the tag.
 push --dry-run: compare the host to the working tree, validate and print what
 would change, but do not write to the host or move git refs.
 """
 
+import getpass
 import os
 import subprocess
 import sys
@@ -24,17 +25,13 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-# Resolve mise's op:// HA_API_TOKEN before calling the HA API.
-if os.environ.get("HA_API_TOKEN", "").startswith("op://") and not os.environ.get("_HA_SYNC_OP_RESOLVED"):
-    os.environ["_HA_SYNC_OP_RESOLVED"] = "1"
-    os.execvp("op", ["op", "run", "--", sys.executable, __file__, *sys.argv[1:]])
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLONE = REPO_ROOT / "roles/homeassistant/files/ha_gui_config"
 HOST = "lab"
 HOST_DIR = "/mnt/services/homeassistant"
 HA_URL = "https://homeassistant.lab.fahm.fr"
 SYNCED_TAG = "last_synced_to_host"
+KEYCHAIN_SERVICE = "homelab-homeassistant-api-token"
 
 
 @dataclass(frozen=True)
@@ -189,9 +186,9 @@ def resolve_ref(ref: str) -> str | None:
 
 
 def advance_synced_tag() -> None:
-    """Move SYNCED_TAG to HEAD (locally + on origin)."""
+    """Publish the applied HEAD before moving the local marker."""
+    sh(["git", "push", "origin", "--force", f"HEAD:refs/tags/{SYNCED_TAG}"], cwd=CLONE)
     sh(["git", "tag", "-f", SYNCED_TAG], cwd=CLONE)
-    sh(["git", "push", "origin", "--force", f"refs/tags/{SYNCED_TAG}"], cwd=CLONE)
 
 
 def upload_to_host(files: list[SyncFile]) -> None:
@@ -217,15 +214,29 @@ def upload_to_host(files: list[SyncFile]) -> None:
         )
 
 
-def _ha_post(service: str) -> None:
-    """POST /api/services/<domain>/<action> with the bearer. service is `domain.action`."""
+def ha_api_token() -> str:
+    """Read the HA bearer from the environment or the macOS login Keychain."""
     token = os.environ.get("HA_API_TOKEN", "").strip()
-    if not token:
-        print(
-            f"WARN: HA_API_TOKEN unset; skipping {service}. Files landed on disk; reload/restart manually.",
-            file=sys.stderr,
+    if token and not token.startswith("op://"):
+        return token
+    if sys.platform == "darwin":
+        result = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", "-a", getpass.getuser(), "-s", KEYCHAIN_SERVICE, "-w"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-        return
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    sys.exit(
+        "refusing: no Home Assistant API token available; nothing uploaded. "
+        f"Add it to Keychain with `security add-generic-password -a {getpass.getuser()} -s {KEYCHAIN_SERVICE} -w` "
+        "or set HA_API_TOKEN to a literal token."
+    )
+
+
+def _ha_post(service: str, token: str) -> None:
+    """POST /api/services/<domain>/<action> with the bearer."""
     domain, _, action = service.partition(".")
     url = f"{HA_URL}/api/services/{domain}/{action}"
     req = urllib.request.Request(
@@ -238,7 +249,7 @@ def _ha_post(service: str) -> None:
         with urllib.request.urlopen(req, timeout=10) as resp:
             print(f"{service}: HTTP {resp.status}")
     except urllib.error.URLError as e:
-        print(f"WARN: {service} failed: {e}", file=sys.stderr)
+        raise RuntimeError(f"{service} failed; retry `mise run ha:sync push` after fixing HA: {e}") from e
 
 
 def _print_diff_header(label: str) -> None:
@@ -267,6 +278,13 @@ def do_pull() -> None:
     assert_clean_working_tree()
     sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
     sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
+    if resolve_ref(f"refs/tags/{SYNCED_TAG}") is not None:
+        pending = [file.rel for file in enumerate_files() if blob_at(SYNCED_TAG, file.rel) != blob_at("HEAD", file.rel)]
+        if pending:
+            sys.exit(
+                f"refusing: clone changes await push or reload ({', '.join(pending)}); "
+                "run `mise run ha:sync push` before pulling."
+            )
     for file in enumerate_files(for_pull=True):
         target = CLONE / file.rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -301,11 +319,12 @@ def do_push(dry_run: bool = False) -> None:
     #   tag_bytes  -- content at last_synced_to_host, or None if new to sync
     #   head_bytes -- content at clone HEAD (always exists by definition)
     #   host_bytes -- content on lab, or None if not deployed yet
-    # diverged   = host has stale-but-present content edited away from tag
-    #              (would clobber on push without a pull first)
+    # diverged   = host content differs from both tag and HEAD
     # changed    = host content differs from HEAD (missing-on-host counts)
+    # pending    = clone content differs from the last successfully reloaded tag
     diverged: list[str] = []
     changed: dict[SyncFile, bytes | None] = {}
+    pending: list[SyncFile] = []
     for file in enumerate_files():
         # dry-run compares the working tree (uncommitted edits included); a real
         # push has already folded those into HEAD via commit_and_push.
@@ -318,21 +337,25 @@ def do_push(dry_run: bool = False) -> None:
         # role seeds a dashboards/ placeholder that differs from the repo). Only
         # guard divergence for round-tripped files, where a stale host/GUI edit
         # would otherwise be clobbered.
-        if file.pull and tag_bytes is not None and host_bytes is not None and host_bytes != tag_bytes:
+        if file.pull and tag_bytes is not None and host_bytes is not None and host_bytes not in (tag_bytes, head_bytes):
             diverged.append(file.rel)
             continue
         if host_bytes != head_bytes:
             changed[file] = host_bytes
+        if tag_bytes != head_bytes:
+            pending.append(file)
     if diverged:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
         msg.append("\nrun `mise run ha:pull` to capture host-side edits, then retry push.")
         sys.exit("\n".join(msg))
-    if not changed:
+    if not changed and not pending:
+        if not dry_run and resolve_ref(f"refs/tags/{SYNCED_TAG}") != resolve_ref("HEAD"):
+            advance_synced_tag()
         print("push: HEAD matches host, nothing to do")
         return
     files = list(changed)
-    reloads = {file.reload_service for file in files}
+    reloads = {file.reload_service for file in [*files, *pending]}
     services = (
         ["homeassistant.restart"]
         if "homeassistant.restart" in reloads
@@ -340,20 +363,23 @@ def do_push(dry_run: bool = False) -> None:
     )
     relpaths = [file.rel for file in files]
     show_push_diff(changed)
-    validate_syntax(relpaths)
+    validate_syntax([file.rel for file in dict.fromkeys([*files, *pending])])
     if dry_run:
         reload_desc = ", ".join(services) or "none"
         print(f"\n\033[1;33mdry-run\033[0m: would upload {relpaths}")
         print(f"\033[1;33mdry-run\033[0m: would advance {SYNCED_TAG} and trigger: {reload_desc}")
         print("\033[1;33mdry-run\033[0m: nothing written to host, no git refs moved, HA not reloaded.")
         return
-    upload_to_host(files)
-    advance_synced_tag()
-    print(f"push: uploaded {relpaths}")
+    token = ha_api_token() if services else None
+    if files:
+        upload_to_host(files)
+        print(f"push: uploaded {relpaths}")
     if services == ["homeassistant.restart"]:
         print("at least one changed file requires a restart -- restarting homeassistant")
     for service in services:
-        _ha_post(service)
+        assert token is not None
+        _ha_post(service, token)
+    advance_synced_tag()
     # YAML-mode dashboards need no service call; nudge the operator that the
     # change is live but only visible after a browser refresh.
     if any(file.reload_service is None for file in changed):

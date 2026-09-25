@@ -48,13 +48,6 @@ ZBM_VERSION = '{% if arch() == "arm64" or arch() == "aarch64" %}3.1.0{% else %}3
 # arg) and embedded in the tarball name. Single kernel in the image means
 # generate-zbm picks it up automatically; no Kernel.Version needed in config.yaml.
 ZBM_KERNEL_VERSION = '{% if arch() == "arm64" or arch() == "aarch64" %}6.18{% else %}6.1{% endif %}'
-# Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync.py
-# to call /api/services/<domain>/reload after pushing the GUI YAML. Minted
-# in HA UI under Profile > Security > Long-Lived Access Tokens. The
-# script re-execs under `op run --` to substitute the op:// reference;
-# without that wrapping mise would export the literal string and HA
-# would reject it as a bad bearer.
-HA_API_TOKEN = "op://Lab/pfcoggyhvncfnr6rt6p5zbnuja/password"
 # Suppress the HashiCorp checkpoint phone-home (update check) on every
 # packer build/init and tofu plan/apply — latency + privacy on CI workers.
 CHECKPOINT_DISABLE = "1"
