@@ -256,8 +256,6 @@ GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) runs the role-test matrix as **qemu
 
 Descriptive imperative subjects; prefix with role when it helps. Body: summary + motivation, max two paragraphs.
 
-Never stage a vault-rendering template hunk-by-hunk — files with rendered secrets must be staged whole-file or not at all.
-
 ## Security & Configuration Tips
 
 Don't commit decrypted data; access secrets via `ansible-vault edit <path>`. WireGuard keys stay vaulted in `group_vars/{prod,test}.yml`. Touching networking/DNS: run with `--limit`, apply Terraform only after review.
