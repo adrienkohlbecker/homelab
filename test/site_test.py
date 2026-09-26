@@ -68,12 +68,11 @@ class UnitRestartedError(Exception):
     """A unit failed during the settled boot, even though it recovered later."""
 
 
-# podman runs each container's --health-startup-cmd as a transient
-# <container-id>-startup.service, and its periodic --health-cmd as a transient
-# <container-id>.service driven by a matching .timer. They exit non-zero on
-# every probe while the container is not (yet) healthy. Those failures are the
-# mechanism working.
-PODMAN_HEALTHCHECK_UNIT = re.compile(r"^[0-9a-f]{64}(?:-startup)?\.(?:service|timer)$")
+# podman runs each container's --health-startup-cmd and periodic --health-cmd
+# as transient units named from the container ID. Podman 5 adds a random hex
+# suffix to keep names unique across runs. Probes exit non-zero while the
+# container is not (yet) healthy; those failures are the mechanism working.
+PODMAN_HEALTHCHECK_UNIT = re.compile(r"^[0-9a-f]{64}(?:-startup)?(?:-[0-9a-f]+)?\.(?:service|timer)$")
 
 
 def parse_args() -> argparse.Namespace:

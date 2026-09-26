@@ -139,7 +139,7 @@ def test_podman_healthcheck_units_are_not_treated_as_failures() -> None:
     """
     container = "a" * 64
     journal = [
-        f"lab systemd[1]: {container}-startup.service: Main process exited, code=exited, status=1/FAILURE",
+        f"lab systemd[1]: {container}-startup-784185405a4177c2.service: Main process exited, code=exited, status=1/FAILURE",
         "lab systemd[1]: jellyfin.service: Main process exited, code=exited, status=125/n/a",
         "lab systemd[1]: jellyfin.service: Scheduled restart job, restart counter is at 1.",
     ]
@@ -200,11 +200,22 @@ def test_a_fleet_that_never_settles_fails_before_the_poweroff(
     assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") not in machine.ssh_calls
 
 
-@pytest.mark.parametrize("suffix", ["-startup.service", ".service", ".timer"])
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "-startup.service",
+        ".service",
+        ".timer",
+        "-startup-784185405a4177c2.service",
+        "-784185405a4177c2.service",
+        "-784185405a4177c2.timer",
+    ],
+)
 def test_podman_healthcheck_transient_units_are_not_failures(suffix: str) -> None:
     assert site_test.PODMAN_HEALTHCHECK_UNIT.match("a" * 64 + suffix)
 
 
 def test_lookalike_units_are_still_failures() -> None:
     assert not site_test.PODMAN_HEALTHCHECK_UNIT.match("a" * 63 + ".service")
+    assert not site_test.PODMAN_HEALTHCHECK_UNIT.match("a" * 64 + "-startup-not-hex.service")
     assert not site_test.PODMAN_HEALTHCHECK_UNIT.match("a" * 64 + ".mount")
