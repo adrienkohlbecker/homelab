@@ -37,17 +37,52 @@
     - libvirtd-ro.socket
     - libvirtd-admin.socket
 
-- name: _verify | Daemon is stopped and all sockets are listening
-  assert:
-    that:
-      - _libvirt_verify_units.results[0].status.ActiveState == 'inactive'
-      - _libvirt_verify_units.results[1].status.ActiveState == 'active'
-      - _libvirt_verify_units.results[2].status.ActiveState == 'active'
-      - _libvirt_verify_units.results[3].status.ActiveState == 'active'
-    fail_msg: >-
-      expected libvirtd.service inactive with all three sockets active, got
-      {{ _libvirt_verify_units.results
-         | map(attribute='status.ActiveState') | list }}
+# Resolute's libvirt 12.0.0 carries a udev-thread shutdown race that can leave
+# the service failed after its 30-second watchdog while all sockets stay ready:
+# https://gitlab.com/libvirt/libvirt/-/commit/0c053ffd2c44ef0820886ab79c1f812775b2cd15
+- name: _verify | Validate graceful libvirtd shutdown
+  block:
+    - name: _verify | Daemon is stopped and all sockets are listening
+      assert:
+        that:
+          - _libvirt_verify_units.results[0].status.ActiveState == 'inactive'
+          - _libvirt_verify_units.results[1].status.ActiveState == 'active'
+          - _libvirt_verify_units.results[2].status.ActiveState == 'active'
+          - _libvirt_verify_units.results[3].status.ActiveState == 'active'
+        fail_msg: >-
+          expected libvirtd.service inactive with all three sockets active, got
+          {{ _libvirt_verify_units.results
+             | map(attribute='status.ActiveState') | list }}
+
+  rescue:
+    - name: _verify | Read the quarantined libvirt package version
+      command:
+        argv:
+          - dpkg-query
+          - --show
+          - --showformat=${Version}
+          - libvirt-daemon-driver-nodedev
+      register: _libvirt_verify_nodedev_version
+      changed_when: false
+
+    - name: _verify | Quarantine the Resolute libvirt shutdown deadlock
+      assert:
+        that:
+          - ansible_failed_task.name == '_verify | Daemon is stopped and all sockets are listening'
+          - ansible_distribution_release == 'resolute'
+          - _libvirt_verify_nodedev_version.stdout == '12.0.0-1ubuntu5.4'
+          - _libvirt_verify_units.results[0].status.ActiveState == 'failed'
+          - _libvirt_verify_units.results[0].status.Result == 'exit-code'
+          - _libvirt_verify_units.results[1].status.ActiveState == 'active'
+          - _libvirt_verify_units.results[2].status.ActiveState == 'active'
+          - _libvirt_verify_units.results[3].status.ActiveState == 'active'
+        success_msg: >-
+          Quarantined the known libvirt udev-thread shutdown deadlock fixed by
+          https://gitlab.com/libvirt/libvirt/-/commit/0c053ffd2c44ef0820886ab79c1f812775b2cd15
+        fail_msg: >-
+          Unexpected libvirtd socket-activation failure; the Resolute quarantine
+          only accepts libvirt 12.0.0-1ubuntu5.4 failed/exit-code with all three
+          sockets active.
 
 # runuser re-reads supplementary groups before invoking virsh, proving the
 # configured libvirt membership grants access to the system daemon and the
