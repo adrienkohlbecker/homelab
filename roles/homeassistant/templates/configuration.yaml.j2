@@ -56,8 +56,7 @@ climate: !include climate.yaml
 # dashboards are YAML-mode: authored in the ha_gui_config clone under dashboards/
 # and deployed by `mise run ha:sync push` (read-only in the UI, re-read on load).
 # Each needs an explicit entry here — HA can't glob a dashboards/ dir.
-# The url_path key MUST contain a hyphen (HA rejects single-word custom paths),
-# so the dashboard is served at /climate-control.
+# The url_path keys MUST contain a hyphen (HA rejects single-word custom paths).
 lovelace:
   mode: storage
   dashboards:
@@ -67,6 +66,12 @@ lovelace:
       icon: mdi:home-thermometer
       show_in_sidebar: true
       filename: dashboards/climate.yaml
+    sun-calibration:
+      mode: yaml
+      title: Sun Calibration
+      icon: mdi:weather-sunset
+      show_in_sidebar: true
+      filename: dashboards/sun_calibration.yaml
 
 # notify.family fans one message out to both phones. Consumed by household
 # alerts in automations.yaml (water leak, humidifier-empty, dog-walk reminder)

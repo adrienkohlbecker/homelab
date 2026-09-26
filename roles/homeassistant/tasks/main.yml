@@ -217,11 +217,11 @@
 # ha:sync's deployed copy is authoritative and converge never re-clobbers it.
 - name: Seed dashboard placeholder
   copy:
-    dest: /mnt/services/homeassistant/dashboards/climate.yaml
+    dest: /mnt/services/homeassistant/dashboards/{{ item.filename }}
     content: |
-      title: Climate
+      title: {{ item.title }}
       views:
-        - title: Climate
+        - title: {{ item.title }}
     owner: homeassistant
     group: homeassistant
     mode: "0644"
@@ -229,6 +229,13 @@
     backup: true
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   become: true
+  loop:
+    - filename: climate.yaml
+      title: Climate
+    - filename: sun_calibration.yaml
+      title: Sun Calibration
+  loop_control:
+    label: "{{ item.filename }}"
   tags:
     - homeassistant
 
