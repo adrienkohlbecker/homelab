@@ -1109,6 +1109,10 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
         assert "_site_test:lab" in doc
         assert doc["_site_test:lab"]["timeout"] == "60m"
+        assert "_site_test:lab:resolute" in doc
+        assert doc["_site_test:lab:resolute"]["timeout"] == "60m"
+        resolute_script = "\n".join(doc["_site_test:lab:resolute"]["script"])
+        assert 'site_test.py --ubuntu "$UBUNTU" --timeout 3000' in resolute_script
         assert "_site_check:lab" in doc
         assert doc["_site_check:lab"]["timeout"] == "35m"
         script = "\n".join(doc["_site_check:lab"]["script"])
@@ -1122,7 +1126,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
         cell_script = "\n".join(doc["nginx:lab"]["script"])
         assert "nice -n 10 choom -n 500 -- mise exec --" in cell_script
-        for job in ("_site_test:lab", "_site_check:lab"):
+        for job in ("_site_test:lab", "_site_test:lab:resolute", "_site_check:lab"):
             script = "\n".join(doc[job]["script"])
             assert "nice" not in script
             assert "choom" not in script
@@ -1136,9 +1140,11 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab", "podman:lab:noble"], site_test=True)
         assert doc["stages"] == ["site", "test1", "test2"]
         assert doc["_site_test:lab"]["stage"] == "site"
+        assert doc["_site_test:lab:resolute"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
         for job in ("_site_test:lab", "_site_check:lab"):
             assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
+        assert doc["_site_test:lab:resolute"]["variables"] == {"VARIANT": "lab", "UBUNTU": "resolute"}
         assert doc[".cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
@@ -1146,6 +1152,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc([], site_test=True)
         assert doc["stages"] == ["site"]
         assert doc["_site_test:lab"]["stage"] == "site"
+        assert doc["_site_test:lab:resolute"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
         assert "no_cells" not in doc
 
@@ -1153,6 +1160,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc([], site_test=False)
         assert "no_cells" in doc
         assert "_site_test:lab" not in doc
+        assert "_site_test:lab:resolute" not in doc
         assert "_site_check:lab" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
         jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
@@ -1289,6 +1297,8 @@ class TestRenderChildPipeline:
         assert "retry" not in doc[".cell"]
         assert doc["_site_test:lab"]["extends"] == ".cell"
         assert "tags" not in doc["_site_test:lab"]
+        assert doc["_site_test:lab:resolute"]["extends"] == ".cell"
+        assert "tags" not in doc["_site_test:lab:resolute"]
         assert doc["_site_check:lab"]["extends"] == ".cell"
         assert "tags" not in doc["_site_check:lab"]
 
@@ -1308,6 +1318,7 @@ class TestRenderChildPipeline:
         assert '"$VARIANT" --ubuntu "$UBUNTU"; fi' in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:lab"]["script"])
         assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab"]["script"])
+        assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab:resolute"]["script"])
 
 
 class TestEmitGitlab:

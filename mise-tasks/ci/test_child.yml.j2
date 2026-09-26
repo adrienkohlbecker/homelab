@@ -106,7 +106,22 @@ stages:
     # GNU timeout backstops the asyncio deadline; 60s permits VM teardown.
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 3060 test/site_test.py --timeout 3000 || rc=$?
+      mise exec -- timeout --kill-after=30s 3060 test/site_test.py --ubuntu "$UBUNTU" --timeout 3000 || rc=$?
+      echo "harness exit code: $rc"
+      exit $rc
+
+"_site_test:lab:resolute":
+  extends: .cell
+  stage: site
+  variables:
+    VARIANT: lab
+    UBUNTU: resolute
+  timeout: 60m
+  script:
+    # GNU timeout backstops the asyncio deadline; 60s permits VM teardown.
+    - |
+      rc=0
+      mise exec -- timeout --kill-after=30s 3060 test/site_test.py --ubuntu "$UBUNTU" --timeout 3000 || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 
