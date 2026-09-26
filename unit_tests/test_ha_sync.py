@@ -6,6 +6,12 @@ import pytest
 from conftest import load_repo_module
 
 
+def test_plants_require_home_assistant_restart() -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_plants_test")
+
+    assert ("plants.yaml", "homeassistant.restart", True) in sync.SYNC_SPEC
+
+
 def test_upload_creates_only_nested_parent_directories(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("HA_API_TOKEN", raising=False)
     sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_upload_test")

@@ -62,6 +62,8 @@ SYNC_SPEC = [
     ("counters.yaml", "homeassistant.restart", True),
     # `statistics` sensors have no hot reload, so restart for the whole file.
     ("sensors.yaml", "homeassistant.restart", True),
+    # The legacy `plant:` integration has no hot reload service.
+    ("plants.yaml", "homeassistant.restart", True),
     # climate_template is a legacy `climate:` platform — no hot reload, restart.
     ("climate.yaml", "homeassistant.restart", True),
     # HA returns a clear API warning if this reload service is unavailable.

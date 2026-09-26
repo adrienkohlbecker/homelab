@@ -175,7 +175,8 @@
   tags:
     - homeassistant
 
-# sensors.yaml / templates.yaml / custom_templates/macros.jinja and the
+# sensors.yaml / templates.yaml / plants.yaml / custom_templates/macros.jinja
+# and the
 # blueprint sources live in the ha_gui_config clone, deployed by
 # `mise run ha:sync push` (see CLAUDE.md > Home Assistant GUI YAML sync).
 # This task only touches the include-targets HA reads at startup; their
@@ -201,6 +202,7 @@
     - scenes.yaml
     - sensors.yaml
     - templates.yaml
+    - plants.yaml
     - input_numbers.yaml
     - input_selects.yaml
     - climate.yaml
