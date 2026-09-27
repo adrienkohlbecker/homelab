@@ -349,9 +349,9 @@
   tags:
     - homeassistant
 
-# The Philips integration provides the `pap:` icon set but only includes a
-# PM2.5 glyph. Keep the matching PM10 glyph outside the HACS-managed source and
-# restore it after integration updates.
+# The Philips integration provides the `pap:` icon set but lacks matching
+# glyphs for some dashboard air-quality metrics. Keep the additions outside the
+# HACS-managed source and restore them after integration updates.
 - name: Check for the Philips AirPurifier icon set
   stat:
     path: /mnt/services/homeassistant/custom_components/philips_airpurifier_coap/icons/pap
@@ -359,19 +359,25 @@
   become: true
   tags:
     - homeassistant
+    - homeassistant_icons
 
-- name: Install the Philips AirPurifier PM10 icon
+- name: Install the Philips AirPurifier dashboard icons
   when: homeassistant_philips_icon_dir.stat.isdir | default(false)
   copy:
-    src: philips_airpurifier_pm10.svg
-    dest: /mnt/services/homeassistant/custom_components/philips_airpurifier_coap/icons/pap/pm10.svg
+    src: "{{ item }}.svg"
+    dest: "/mnt/services/homeassistant/custom_components/philips_airpurifier_coap/icons/pap/{{ item | regex_replace('^philips_airpurifier_', '') }}.svg"
     owner: homeassistant
     group: homeassistant
     mode: "0644"
     backup: true
+  loop:
+    - philips_airpurifier_pm10
+    - philips_airpurifier_voc
+    - philips_airpurifier_nox
   become: true
   tags:
     - homeassistant
+    - homeassistant_icons
 
 # HA 2026.9 replaced the SMTP notify YAML platform with a config entry, and
 # ships no offline API for one -- so the role reconciles the entry inside
