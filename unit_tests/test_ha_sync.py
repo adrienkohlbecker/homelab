@@ -74,6 +74,7 @@ def test_push_retries_reload_after_upload_failure(monkeypatch: pytest.MonkeyPatc
     tags: list[str] = []
     monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
     monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
     monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
     monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old" if ref != "HEAD" else "new")
     monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
@@ -108,6 +109,7 @@ def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> No
     file = sync.SyncFile("scripts.yaml", "script.reload", True)
     monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
     monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
     monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
     monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old")
     monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
@@ -127,8 +129,76 @@ def test_pull_refuses_to_erase_pending_push(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
     monkeypatch.setattr(sync, "assert_clean_working_tree", lambda: None)
     monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
     monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old")
     monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
     monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
     with pytest.raises(SystemExit, match="clone changes await push"):
         sync.do_pull()
+
+
+def test_diverged_clone_names_the_rebase_escape_hatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_diverged_test")
+    monkeypatch.setattr(
+        sync,
+        "sh",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 1, stdout="", stderr="fatal: Not possible to fast-forward, aborting."
+        ),
+    )
+    with pytest.raises(SystemExit) as caught:
+        sync.sync_clone_with_origin()
+    message = str(caught.value)
+    assert "diverged from origin" in message
+    assert "--rebase" in message
+    assert "Not possible to fast-forward" in message
+
+
+def test_rebase_flag_switches_the_pull_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_rebase_strategy_test")
+    seen: list[list[str]] = []
+
+    def run(cmd, cwd=None, check=True):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(sync, "sh", run)
+    sync.sync_clone_with_origin(rebase=True)
+    assert seen == [["git", "pull", "--rebase", "--quiet"]]
+    seen.clear()
+    sync.sync_clone_with_origin()
+    assert seen == [["git", "pull", "--ff-only", "--quiet"]]
+
+
+def test_failed_rebase_aborts_and_leaves_the_clone_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_rebase_abort_test")
+    seen: list[list[str]] = []
+
+    def run(cmd, cwd=None, check=True):
+        seen.append(cmd)
+        code = 1 if cmd[:2] == ["git", "pull"] else 0
+        return subprocess.CompletedProcess(cmd, code, stdout="", stderr="CONFLICT in automations.yaml")
+
+    monkeypatch.setattr(sync, "sh", run)
+    with pytest.raises(SystemExit) as caught:
+        sync.sync_clone_with_origin(rebase=True)
+    assert ["git", "rebase", "--abort"] in seen
+    assert "CONFLICT in automations.yaml" in str(caught.value)
+
+
+def test_subprocess_failures_report_the_command_not_a_traceback() -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_error_render_test")
+    error = subprocess.CalledProcessError(
+        128, ["git", "push", "origin", "main"], output="", stderr="fatal: remote rejected"
+    )
+    rendered = sync.describe_process_error(error)
+    assert "git push origin main" in rendered
+    assert "exit 128" in rendered
+    assert "fatal: remote rejected" in rendered
+
+
+def test_rebase_is_rejected_with_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_flag_combo_test")
+    monkeypatch.setattr(sync.sys, "argv", ["sync.py", "push", "--dry-run", "--rebase"])
+    with pytest.raises(SystemExit, match="no effect with --dry-run"):
+        sync.main()

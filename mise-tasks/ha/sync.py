@@ -2,6 +2,7 @@
 # [MISE] description="Sync HA GUI YAML files (automations/scripts/scenes) between the ha_gui_config clone and lab. Default mode: pull then push."
 # [USAGE] arg "<mode>" help="pull | push | sync (default)" default="sync"
 # [USAGE] flag "--dry-run" help="preview a push (diff + syntax validation) without writing to the host, moving the synced tag, or reloading HA"
+# [USAGE] flag "--rebase" help="when the clone cannot fast-forward from origin, replay its local commits on top instead of refusing"
 """
 Bidirectional sync for Home Assistant GUI YAML.
 
@@ -14,6 +15,10 @@ push: commit local clone edits, validate changed files, upload to lab, reload
 domains or restart HA for files without a hot reload, then advance the tag.
 push --dry-run: compare the host to the working tree, validate and print what
 would change, but do not write to the host or move git refs.
+
+Both pull and push bring the clone up to date with origin first, fast-forward
+only, so that `last_synced_to_host` stays unambiguous about what is running on
+lab. `--rebase` is the escape hatch for a clone that has diverged.
 """
 
 import getpass
@@ -24,6 +29,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NoReturn
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLONE = REPO_ROOT / "roles/homeassistant/files/ha_gui_config"
@@ -133,6 +139,53 @@ def sh(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subproces
     return subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
 
 
+def fail(message: str) -> NoReturn:
+    sys.exit(f"ha:sync: {message}")
+
+
+def indent_block(text: str) -> str:
+    return "\n".join(f"  {line}" for line in text.splitlines())
+
+
+def describe_process_error(error: subprocess.CalledProcessError) -> str:
+    """Render a failed subprocess as an operator-readable message.
+
+    sh() captures output, so an uncaught CalledProcessError prints a traceback
+    with the command's own diagnostics swallowed -- the one thing needed to
+    understand the failure. Surface the command and its stderr instead.
+    """
+    command = " ".join(str(part) for part in error.cmd)
+    detail = (error.stderr or error.stdout or "").strip()
+    rendered = f"command failed (exit {error.returncode}): {command}"
+    return f"{rendered}\n{indent_block(detail)}" if detail else rendered
+
+
+def sync_clone_with_origin(rebase: bool = False) -> None:
+    """Bring the clone up to date with origin before comparing it to the host.
+
+    Fast-forward only by default: a merge commit here would make
+    last_synced_to_host ambiguous about which tree is actually on lab. A clone
+    holding both local commits and new origin commits cannot fast-forward, and
+    that is the case --rebase exists for -- it replays the local commits on top.
+    """
+    strategy = "--rebase" if rebase else "--ff-only"
+    result = sh(["git", "pull", strategy, "--quiet"], cwd=CLONE, check=False)
+    if result.returncode == 0:
+        return
+    detail = indent_block((result.stderr or result.stdout or "").strip())
+    if rebase:
+        # Leave no half-applied rebase for the next invocation to trip over.
+        sh(["git", "rebase", "--abort"], cwd=CLONE, check=False)
+        fail(
+            f"rebasing the clone onto origin failed; it has been left unchanged.\n{detail}\nresolve {CLONE} by hand, then re-run."
+        )
+    fail(
+        f"the ha_gui_config clone has diverged from origin and cannot fast-forward.\n{detail}\n"
+        f"re-run with --rebase to replay the clone's local commits onto origin, "
+        f"or reconcile {CLONE} by hand."
+    )
+
+
 def blob_at(ref: str, filename: str) -> bytes | None:
     """File content at a Git ref, or None if the file does not exist there."""
     r = subprocess.run(
@@ -178,7 +231,13 @@ def commit_and_push(message: str) -> bool:
         return False
     sh(["git", "add", "-A"], cwd=CLONE)
     sh(["git", "commit", "-m", message], cwd=CLONE)
-    sh(["git", "push", "origin", "main"], cwd=CLONE)
+    result = sh(["git", "push", "origin", "main"], cwd=CLONE, check=False)
+    if result.returncode != 0:
+        detail = indent_block((result.stderr or result.stdout or "").strip())
+        fail(
+            f"the clone commit succeeded but `git push origin main` was rejected.\n{detail}\n"
+            f"the commit is safe locally; re-run with --rebase once origin is reconciled."
+        )
     return True
 
 
@@ -275,11 +334,11 @@ def show_push_diff(changed: dict[SyncFile, bytes | None]) -> None:
             )
 
 
-def do_pull() -> None:
+def do_pull(rebase: bool = False) -> None:
     assert_clone_present()
     assert_clean_working_tree()
     sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
-    sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
+    sync_clone_with_origin(rebase)
     if resolve_ref(f"refs/tags/{SYNCED_TAG}") is not None:
         pending = [file.rel for file in enumerate_files() if blob_at(SYNCED_TAG, file.rel) != blob_at("HEAD", file.rel)]
         if pending:
@@ -306,11 +365,11 @@ def do_pull() -> None:
     print("pull: committed GUI edits + pushed; tag advanced to HEAD")
 
 
-def do_push(dry_run: bool = False) -> None:
+def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     assert_clone_present()
     if not dry_run:
         sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
-        sh(["git", "pull", "--ff-only", "--quiet"], cwd=CLONE)
+        sync_clone_with_origin(rebase)
         # Auto-commit any working-tree edits so `ha:sync push` works straight
         # from a direct file edit in the clone without a manual git commit.
         if commit_and_push("push: local edits"):
@@ -391,22 +450,28 @@ def do_push(dry_run: bool = False) -> None:
 def main() -> None:
     raw = sys.argv[1:]
     dry_run = "--dry-run" in raw
-    positional = [a for a in raw if a != "--dry-run"]
+    rebase = "--rebase" in raw
+    positional = [a for a in raw if a not in ("--dry-run", "--rebase")]
     mode = (positional[0] if positional else "sync").strip()
     if dry_run and mode not in ("push", "sync"):
         sys.exit("--dry-run only applies to push")
+    if dry_run and rebase:
+        sys.exit("--rebase has no effect with --dry-run, which never updates the clone")
     if mode not in ("pull", "push", "sync"):
         sys.exit(f"unknown mode {mode!r}; use pull | push | sync")
-    if dry_run:
-        # Pull mutates by committing host edits, so dry-run previews push only.
-        if mode == "sync":
-            print("dry-run: skipping pull; previewing push only")
-        do_push(dry_run=True)
-        return
-    if mode in ("pull", "sync"):
-        do_pull()
-    if mode in ("push", "sync"):
-        do_push()
+    try:
+        if dry_run:
+            # Pull mutates by committing host edits, so dry-run previews push only.
+            if mode == "sync":
+                print("dry-run: skipping pull; previewing push only")
+            do_push(dry_run=True)
+            return
+        if mode in ("pull", "sync"):
+            do_pull(rebase)
+        if mode in ("push", "sync"):
+            do_push(rebase=rebase)
+    except subprocess.CalledProcessError as error:
+        fail(describe_process_error(error))
 
 
 if __name__ == "__main__":
