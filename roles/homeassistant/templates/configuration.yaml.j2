@@ -94,19 +94,19 @@ rest:
     method: GET
     scan_interval: 60
     sensor:
-      - name: CO2
+      - name: OpenCO2 CO2
         device_class: carbon_dioxide
         unique_id: d611314f-9010-4d0d-aa3b-37c7f350c82f
         value_template: >
           {{ '{{ value | regex_findall_index("(?:rco2.*})(\\d+)") }}' }}
         unit_of_measurement: ppm
-      - name: Temperature
+      - name: OpenCO2 Temperature
         unique_id: d611314f-9010-4d0d-aa3b-37c7f350c821
         device_class: temperature
         value_template: >
           {{ '{{ value | regex_findall_index("(?:atmp.*})((?:\\d|\\.)+)") }}' }}
         unit_of_measurement: "°C"
-      - name: Humidity
+      - name: OpenCO2 Humidity
         unique_id: d611314f-9010-4d0d-aa3b-37c7f350c822
         device_class: humidity
         value_template: >
