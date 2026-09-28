@@ -27,6 +27,7 @@ external_ips:
   udm:     "{{ network.sites.home.gateway }}"
   eaton:   "{{ network.static_leases.eaton_ups.ip }}"
   marantz: "{{ network.static_leases.marantz_receiver.ip }}"
+  open_co2: "{{ network.static_leases.open_co2.ip }}"
   printer: "{{ network.static_leases.printer.ip }}"
   siglent: "{{ network.static_leases.siglent.ip }}"
   tubeszb: "{{ network.static_leases.tubeszb.ip }}"

@@ -11,6 +11,9 @@
       - subdomain: marantz
         proxy_pass: "https://{{ external_ips.marantz }}:10443/"
         auth: true
+      - subdomain: openco2
+        proxy_pass: "http://{{ external_ips.open_co2 }}:9925/"
+        auth: true
       - subdomain: printer
         proxy_pass: "http://{{ external_ips.printer }}:80/"
         auth: true
