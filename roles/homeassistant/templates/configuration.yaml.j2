@@ -53,6 +53,10 @@ counter: !include counters.yaml
 # per-room dashboard thermostats wrapping the Daikin units.
 climate: !include climate.yaml
 
+# Provides the wake_on_lan.send_magic_packet action, which has no config flow.
+# The LG TV's webostv.turn_on trigger uses it to power the TV on from standby.
+wake_on_lan:
+
 # Default "Overview" dashboard stays storage-mode (UI-editable). Repo-owned
 # dashboards are YAML-mode: authored in the ha_gui_config clone under dashboards/
 # and deployed by `mise run ha:sync push` (read-only in the UI, re-read on load).
