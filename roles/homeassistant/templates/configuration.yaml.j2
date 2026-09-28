@@ -57,17 +57,23 @@ climate: !include climate.yaml
 # The LG TV's webostv.turn_on trigger uses it to power the TV on from standby.
 wake_on_lan:
 
-# Wake-on-LAN switch for the Windows PC on the home VLAN. HA sits behind the
+# Wake-on-LAN button for the Windows PC on the home VLAN. HA sits behind the
 # podman bridge and cannot broadcast on that segment, so the packet goes to the
 # management gateway, where udm_wol_relay rebroadcasts it onto the home VLAN.
-# Without `host` the switch keeps an assumed state: turning it on sends the
-# packet, turning it off does nothing.
-switch:
-  - platform: wake_on_lan
-    name: Windows
-    mac: "{{ mac_addresses.game }}"
-    broadcast_address: {{ network.sites.home.vlans.management.gateway }}
-    broadcast_port: 9
+# A template button rather than the wake_on_lan switch platform: the PC has no
+# state to poll and no off action. The labelled key merges with the `template:`
+# include above.
+template wake_on_lan:
+  - button:
+      - name: Wake Windows
+        unique_id: b228b38e-e4b5-4449-9b89-6ccf5610b865
+        icon: mdi:desktop-tower-monitor
+        press:
+          - action: wake_on_lan.send_magic_packet
+            data:
+              mac: "{{ mac_addresses.game }}"
+              broadcast_address: {{ network.sites.home.vlans.management.gateway }}
+              broadcast_port: 9
 
 # Default "Overview" dashboard stays storage-mode (UI-editable). Repo-owned
 # dashboards are YAML-mode: authored in the ha_gui_config clone under dashboards/

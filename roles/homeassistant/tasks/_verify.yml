@@ -296,10 +296,10 @@
   until: _homeassistant_hacs_loaded.stdout | length > 0
   become: true
 
-# check_config only proves the switch schema; the entity registry proves the
-# wake_on_lan platform set up the switch. Entities are keyed by their
-# normalised MAC, and HA flushes the registry on a short delay, hence the retry.
-- name: _verify | Homeassistant registered the wake-on-lan switch
+# check_config only proves the button schema; the entity registry proves the
+# template integration set it up. HA flushes the registry on a delay, which it
+# stretches while startup is still settling, hence the retry.
+- name: _verify | Homeassistant registered the wake-on-lan button
   command:
     argv:
       - python3
@@ -309,17 +309,16 @@
 
         with open(sys.argv[1]) as fh:
             entities = json.load(fh)["data"]["entities"]
-        registered = {e["unique_id"] for e in entities if e["platform"] == "wake_on_lan"}
-        mac = sys.argv[2].lower()
-        if mac not in registered:
-            sys.exit(f"no wake_on_lan switch for {mac}; registered: {sorted(registered)}")
+        buttons = {e["unique_id"]: e["entity_id"] for e in entities if e["platform"] == "template"}
+        if not buttons.get(sys.argv[2], "").startswith("button."):
+            sys.exit(f"no template button with unique_id {sys.argv[2]}")
       - /mnt/services/homeassistant/.storage/core.entity_registry
-      - "{{ mac_addresses.game }}"
-  register: _homeassistant_wol_switch
+      - b228b38e-e4b5-4449-9b89-6ccf5610b865
+  register: _homeassistant_wol_button
   changed_when: false
   retries: 15
   delay: 4
-  until: _homeassistant_wol_switch.rc == 0
+  until: _homeassistant_wol_button.rc == 0
   become: true
 
 - name: _verify | Exercise homeassistant fluent-bit record contracts
