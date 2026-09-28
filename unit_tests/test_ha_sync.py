@@ -9,7 +9,34 @@ from conftest import load_repo_module
 def test_plants_require_home_assistant_restart() -> None:
     sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_plants_test")
 
-    assert ("plants.yaml", "homeassistant.restart", True) in sync.SYNC_SPEC
+    assert ("plants.yaml", "homeassistant.restart", sync.Direction.BOTH) in sync.SYNC_SPEC
+
+
+def test_pull_only_files_are_captured_but_never_pushed(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_pull_only_test")
+    monkeypatch.setattr(sync, "CLONE", tmp_path)
+    monkeypatch.setattr(
+        sync,
+        "SYNC_SPEC",
+        [
+            ("automations.yaml", "automation.reload", sync.Direction.BOTH),
+            ("www/bubble/*", None, sync.Direction.PUSH),
+            (".storage/lovelace.dashboard_test", None, sync.Direction.PULL),
+        ],
+    )
+    (tmp_path / "automations.yaml").write_text("[]\n")
+    (tmp_path / "www/bubble").mkdir(parents=True)
+    (tmp_path / "www/bubble/bubble-modules.yaml").write_text("{}\n")
+
+    # Not yet in the clone: a literal pull path is still listed so the first
+    # pull can capture it.
+    pulled = [file.rel for file in sync.enumerate_files(for_pull=True)]
+    assert pulled == ["automations.yaml", ".storage/lovelace.dashboard_test"]
+
+    (tmp_path / ".storage").mkdir()
+    (tmp_path / ".storage/lovelace.dashboard_test").write_text("{}\n")
+    pushed = [file.rel for file in sync.enumerate_files()]
+    assert pushed == ["automations.yaml", "www/bubble/bubble-modules.yaml"]
 
 
 def test_upload_creates_only_nested_parent_directories(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -20,8 +47,8 @@ def test_upload_creates_only_nested_parent_directories(monkeypatch: pytest.Monke
 
     sync.upload_to_host(
         [
-            sync.SyncFile("automations.yaml", "automation.reload", True),
-            sync.SyncFile("dashboards/climate.yaml", None, False),
+            sync.SyncFile("automations.yaml", "automation.reload", sync.Direction.BOTH),
+            sync.SyncFile("dashboards/climate.yaml", None, sync.Direction.PUSH),
         ]
     )
 
@@ -67,7 +94,7 @@ def test_unresolved_op_reference_falls_back_to_keychain(monkeypatch: pytest.Monk
 
 def test_push_retries_reload_after_upload_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_retry_test")
-    file = sync.SyncFile("scripts.yaml", "script.reload", True)
+    file = sync.SyncFile("scripts.yaml", "script.reload", sync.Direction.BOTH)
     host_bytes = [b"old", b"new"]
     uploads: list[list[object]] = []
     reloads: list[tuple[str, str]] = []
@@ -106,7 +133,7 @@ def test_push_retries_reload_after_upload_failure(monkeypatch: pytest.MonkeyPatc
 
 def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> None:
     sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_missing_token_test")
-    file = sync.SyncFile("scripts.yaml", "script.reload", True)
+    file = sync.SyncFile("scripts.yaml", "script.reload", sync.Direction.BOTH)
     monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
     monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
     monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
@@ -125,7 +152,7 @@ def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_pull_refuses_to_erase_pending_push(monkeypatch: pytest.MonkeyPatch) -> None:
     sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_pull_pending_test")
-    file = sync.SyncFile("scripts.yaml", "script.reload", True)
+    file = sync.SyncFile("scripts.yaml", "script.reload", sync.Direction.BOTH)
     monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
     monkeypatch.setattr(sync, "assert_clean_working_tree", lambda: None)
     monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)

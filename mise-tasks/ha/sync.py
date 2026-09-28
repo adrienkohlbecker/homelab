@@ -21,7 +21,9 @@ only, so that `last_synced_to_host` stays unambiguous about what is running on
 lab. `--rebase` is the escape hatch for a clone that has diverged.
 """
 
+import enum
 import getpass
+import glob
 import os
 import subprocess
 import sys
@@ -40,56 +42,91 @@ SYNCED_TAG = "last_synced_to_host"
 KEYCHAIN_SERVICE = "homelab-homeassistant-api-token"
 
 
+class Direction(enum.Enum):
+    """Which way a file travels between the clone and lab."""
+
+    # Round-trip: GUI edits are pulled back, clone edits are pushed.
+    BOTH = "both"
+    # Repo-owned artifacts the HA UI can't edit, so a pull must not clobber the
+    # clone copy with the host's stub.
+    PUSH = "push"
+    # HA-owned `.storage` captured for history only. Never written back: HA holds
+    # these stores in memory and rewrites them on shutdown, so an upload to a
+    # running instance would be silently undone.
+    PULL = "pull"
+
+
 @dataclass(frozen=True)
 class SyncFile:
     rel: str
     reload_service: str | None
-    pull: bool
+    direction: Direction
+
+    @property
+    def pull(self) -> bool:
+        return self.direction is not Direction.PUSH
+
+    @property
+    def push(self) -> bool:
+        return self.direction is not Direction.PULL
 
 
-# Spec tuple: (glob, reload_service, pull).
+# Spec tuple: (glob, reload_service, direction).
 # An explicit homeassistant.restart covers every changed file; otherwise the
 # touched domains reload individually. None means no service call: YAML-mode
 # Lovelace dashboards are re-read on the next dashboard load.
-# `pull=False` makes a file push-only (repo -> host, never captured back): used
-# for repo-owned artifacts the HA UI can't edit, so a pull must not clobber the
-# clone copy with the host's stub.
 SYNC_SPEC = [
-    ("automations.yaml", "automation.reload", True),
-    ("scripts.yaml", "script.reload", True),
-    ("scenes.yaml", "scene.reload", True),
-    ("templates.yaml", "template.reload", True),
-    ("input_numbers.yaml", "input_number.reload", True),
-    ("input_selects.yaml", "input_select.reload", True),
-    ("timers.yaml", "timer.reload", True),
+    ("automations.yaml", "automation.reload", Direction.BOTH),
+    ("scripts.yaml", "script.reload", Direction.BOTH),
+    ("scenes.yaml", "scene.reload", Direction.BOTH),
+    ("templates.yaml", "template.reload", Direction.BOTH),
+    ("input_numbers.yaml", "input_number.reload", Direction.BOTH),
+    ("input_selects.yaml", "input_select.reload", Direction.BOTH),
+    ("timers.yaml", "timer.reload", Direction.BOTH),
     # The `counter` integration registers no reload service (only increment/
     # decrement/reset/set_value), so a new or changed counter only loads on
     # restart — homeassistant.restart covers the whole file.
-    ("counters.yaml", "homeassistant.restart", True),
+    ("counters.yaml", "homeassistant.restart", Direction.BOTH),
     # `statistics` sensors have no hot reload, so restart for the whole file.
-    ("sensors.yaml", "homeassistant.restart", True),
+    ("sensors.yaml", "homeassistant.restart", Direction.BOTH),
     # The legacy `plant:` integration has no hot reload service.
-    ("plants.yaml", "homeassistant.restart", True),
+    ("plants.yaml", "homeassistant.restart", Direction.BOTH),
     # climate_template is a legacy `climate:` platform — no hot reload, restart.
-    ("climate.yaml", "homeassistant.restart", True),
+    ("climate.yaml", "homeassistant.restart", Direction.BOTH),
     # HA returns a clear API warning if this reload service is unavailable.
-    ("custom_templates/*", "homeassistant.reload_custom_templates", True),
+    ("custom_templates/*", "homeassistant.reload_custom_templates", Direction.BOTH),
     # Reload automations so blueprint consumers re-read changed sources.
-    ("blueprints/automation/*", "automation.reload", True),
+    ("blueprints/automation/*", "automation.reload", Direction.BOTH),
     # YAML-mode Lovelace dashboards: repo-owned (read-only in the HA UI), so
     # push-only; HA re-reads them on the next load, so no reload service.
-    ("dashboards/*", None, False),
+    ("dashboards/*", None, Direction.PUSH),
+    # The household dashboard stays UI-edited; capture it (and the frontend
+    # resources its custom cards need) so edits have a history.
+    (".storage/lovelace.dashboard_test", None, Direction.PULL),
+    (".storage/lovelace_resources", None, Direction.PULL),
 ]
 
 
 def enumerate_files(for_pull: bool = False) -> list[SyncFile]:
-    return [
-        SyncFile(path.relative_to(CLONE).as_posix(), reload_service, pull)
-        for glob, reload_service, pull in SYNC_SPEC
-        if pull or not for_pull
-        for path in sorted(CLONE.glob(glob))
-        if path.is_file()
-    ]
+    """Clone files taking part in a pull (for_pull) or a push.
+
+    A literal pull path is listed even before its first capture creates it in
+    the clone; globs only match what the clone already holds.
+    """
+    files: list[SyncFile] = []
+    for pattern, reload_service, direction in SYNC_SPEC:
+        spec = SyncFile(pattern, reload_service, direction)
+        if not (spec.pull if for_pull else spec.push):
+            continue
+        if for_pull and not glob.has_magic(pattern):
+            files.append(spec)
+            continue
+        files += [
+            SyncFile(path.relative_to(CLONE).as_posix(), reload_service, direction)
+            for path in sorted(CLONE.glob(pattern))
+            if path.is_file()
+        ]
+    return files
 
 
 def host_file(rel: str) -> bytes | None:
