@@ -296,6 +296,32 @@
   until: _homeassistant_hacs_loaded.stdout | length > 0
   become: true
 
+# check_config only proves the switch schema; the entity registry proves the
+# wake_on_lan platform set up the switch. Entities are keyed by their
+# normalised MAC, and HA flushes the registry on a short delay, hence the retry.
+- name: _verify | Homeassistant registered the wake-on-lan switch
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json, sys
+
+        with open(sys.argv[1]) as fh:
+            entities = json.load(fh)["data"]["entities"]
+        registered = {e["unique_id"] for e in entities if e["platform"] == "wake_on_lan"}
+        mac = sys.argv[2].lower()
+        if mac not in registered:
+            sys.exit(f"no wake_on_lan switch for {mac}; registered: {sorted(registered)}")
+      - /mnt/services/homeassistant/.storage/core.entity_registry
+      - "{{ mac_addresses.game }}"
+  register: _homeassistant_wol_switch
+  changed_when: false
+  retries: 15
+  delay: 4
+  until: _homeassistant_wol_switch.rc == 0
+  become: true
+
 - name: _verify | Exercise homeassistant fluent-bit record contracts
   import_role:
     name: fluentbit
