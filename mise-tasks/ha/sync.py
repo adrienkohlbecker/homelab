@@ -100,6 +100,9 @@ SYNC_SPEC = [
     # YAML-mode Lovelace dashboards: repo-owned (read-only in the HA UI), so
     # push-only; HA re-reads them on the next load, so no reload service.
     ("dashboards/*", None, Direction.PUSH),
+    # Bubble Card modules: fetched by the browser from /local on every
+    # dashboard load, so no reload service.
+    ("www/bubble/*", None, Direction.PUSH),
     # The household dashboard stays UI-edited; capture it (and the frontend
     # resources its custom cards need) so edits have a history.
     (".storage/lovelace.dashboard_test", None, Direction.PULL),
