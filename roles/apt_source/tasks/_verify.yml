@@ -246,10 +246,12 @@
       - apt_source_removed_repo is not changed
       - apt_source_removed_refresh is skipped
       - apt_source_removed_key is not changed
+      - apt_source_removed_pin is not changed
 
 # A removal whose refresh exhausted its retries leaves the source gone but its
 # lists and key behind. Rebuild that state directly rather than waiting out the
 # retry backoff, then prove a rerun still refreshes and finishes the cleanup.
+# The source carries a pin so the removal must also clear its preferences.
 - name: _verify | Reconfigure the representative source
   import_role:
     name: apt_source
@@ -262,6 +264,9 @@
       uris: "{{ mirror_apt_docker }}"
       suites: "{{ ansible_distribution_release }}"
       components: stable
+      pin:
+        packages: docker-ce-cli
+        version: "0.*"
 
 - name: _verify | Drop the source as an interrupted removal would
   file:
@@ -289,6 +294,11 @@
     patterns: "{{ _apt_source_docker_lists }}"
   register: _apt_source_lists_recovered
 
+- name: _verify | Stat the docker pin after the recovering removal
+  stat:
+    path: /etc/apt/preferences.d/docker
+  register: _apt_source_pin_recovered
+
 - name: _verify | Rerun refreshed apt and finished the cleanup
   assert:
     that:
@@ -296,6 +306,8 @@
       - apt_source_removed_repo is not changed
       - apt_source_removed_refresh is changed
       - apt_source_removed_key is changed
+      - apt_source_removed_pin is changed
+      - not _apt_source_pin_recovered.stat.exists
       - _apt_source_lists_recovered.matched == 0
     fail_msg: >-
       stranded {{ _apt_source_lists_stranded.matched }} lists,

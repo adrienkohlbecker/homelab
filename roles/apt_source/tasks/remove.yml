@@ -1,5 +1,6 @@
-# Removes a third-party apt repository installed by configure.yml: the deb822
-# source, the package lists apt fetched from it, and its scoped signing key.
+# Removes a third-party apt repository installed by configure.yml: its package
+# pin, the deb822 source, the package lists apt fetched from it, and its scoped
+# signing key.
 #
 # Inputs: caller passes a single dict `apt_source_args` with keys
 #   name:          required; the identifier passed to configure.yml
@@ -21,6 +22,13 @@
     fail_msg: >-
       apt_source remove: name must be a [a-z0-9_-] slug;
       got {{ apt_source_args }}
+
+- name: remove | Remove package pin for {{ apt_source_args.name }}
+  file:
+    path: /etc/apt/preferences.d/{{ apt_source_args.name }}
+    state: absent
+  become: true
+  register: apt_source_removed_pin
 
 # state=absent resolves the same slugged .sources filename configure.yml wrote.
 # It also removes /etc/apt/keyrings/<slug>.{asc,gpg}, not the
