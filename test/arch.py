@@ -95,9 +95,10 @@ AARCH64 = ArchProfile(
         # Homebrew QEMU on macOS:
         "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
         "/usr/local/share/qemu/edk2-aarch64-code.fd",
-        # Debian/Ubuntu (qemu-efi-aarch64 package):
-        "/usr/share/AAVMF/AAVMF_CODE.fd",
-        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        # Debian/Ubuntu (qemu-efi-aarch64 package). AAVMF_CODE.fd is only a
+        # deprecated compatibility link to this image, and QEMU_EFI.fd is a
+        # 2 MiB build that cannot pair with the 64 MiB AAVMF_VARS.fd.
+        "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd",
     ),
     bios_boot_supported=False,
 )

@@ -192,7 +192,8 @@ sudo systemd-analyze verify /etc/systemd/system/homelab-ci-prehydrate.service
 sudo systemctl enable homelab-ci-prehydrate.service
 
 if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
-  firmware_code=/usr/share/AAVMF/AAVMF_CODE.fd
+  # AAVMF_CODE.fd is only a deprecated compatibility link to this image.
+  firmware_code=/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd
   firmware_vars=/usr/share/AAVMF/AAVMF_VARS.fd
 else
   firmware_code=/usr/share/OVMF/OVMF_CODE_4M.fd

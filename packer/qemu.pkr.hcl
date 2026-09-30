@@ -130,7 +130,8 @@ locals {
     }
     aarch64 = {
       linux = {
-        code = "/usr/share/AAVMF/AAVMF_CODE.fd"
+        # AAVMF_CODE.fd is only a deprecated compatibility link to this.
+        code = "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd"
         vars = "/usr/share/AAVMF/AAVMF_VARS.fd"
       }
       darwin = {
