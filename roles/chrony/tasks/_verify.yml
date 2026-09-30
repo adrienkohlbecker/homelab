@@ -1,10 +1,27 @@
 # QEMU-only functional checks. authdata proves chronyd is responsive and
-# exposes whether NTS-KE established keys and cookies for each source.
+# exposes whether NTS-KE established keys and cookies for each source. -N
+# reports each source under its configured name, so pool members keep the
+# pool hostname rather than a resolved address.
 - name: _verify | Read per-source authentication state (CSV)
-  command: chronyc -c authdata
+  command: chronyc -c -N authdata
   changed_when: false
   become: true
   register: chrony_verify_authdata
+
+# Resolute's packaged sources.d/ubuntu-ntp-pools.sources is NTS too, so the
+# all-NTS assertion alone cannot tell whether a sourcedir include pulled
+# Ubuntu's pools in beside the managed servers.
+- name: _verify | Loaded sources are exactly the managed servers
+  vars:
+    chrony_verify_loaded: "{{ chrony_verify_authdata.stdout_lines | map('split', ',') | map('first') | unique | sort }}"
+    chrony_verify_expected: "{{ lookup('file', 'chrony.conf') | regex_findall('(?m)^server\\s+(\\S+)') | sort }}"
+  assert:
+    that:
+      - chrony_verify_loaded == chrony_verify_expected
+    fail_msg: >-
+      chronyd loaded {{ chrony_verify_loaded }}, expected only the managed
+      servers {{ chrony_verify_expected }}
+    success_msg: chronyd loaded only the managed servers {{ chrony_verify_loaded }}
 
 - name: _verify | At least two sources complete NTS key establishment
   assert:
