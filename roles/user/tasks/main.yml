@@ -19,6 +19,18 @@
   tags:
     - user
 
+# systemd-sleep runs every hook in this package-owned directory, and sysstat's
+# writes a sleep marker, creating the day's data file, whatever ENABLED says.
+# A local diversion outside the directory survives package upgrades.
+- name: Divert the sysstat sleep hook away from systemd-sleep
+  community.general.dpkg_divert:
+    path: /usr/lib/systemd/system-sleep/sysstat.sleep
+    divert: /usr/lib/systemd/sysstat.sleep.distrib
+    rename: true
+  become: true
+  tags:
+    - user
+
 - name: Install packages
   apt:
     pkg:

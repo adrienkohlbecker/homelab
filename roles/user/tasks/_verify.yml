@@ -228,9 +228,10 @@
   changed_when: false
   failed_when: _user_sysstat_enabled.stdout | length > 0
 
-# The simulated upgrade wrote a boot record into today's file. Run the
-# collection path the host would, Noble's cron wrapper or Resolute's timer
-# unit; neither may add a record.
+# The simulated upgrade wrote a boot record into today's file. Run each
+# collection path the host would: Noble's cron wrapper or Resolute's timer
+# unit, then every hook as systemd-sleep does around a suspend. None may add a
+# record. run-parts would skip sysstat.sleep for its dotted name.
 - name: _verify | Disabled collectors add no records
   become: true
   block:
@@ -257,6 +258,14 @@
     - name: _verify | Run the Resolute timer collector  # noqa: command-instead-of-module
       when: not _user_debian_sa1.stat.exists
       command: systemctl start sysstat-collect.service
+      changed_when: false
+
+    - name: _verify | Run the sleep hooks around a suspend
+      command:
+        argv:
+          - sh
+          - -c
+          - for phase in pre post; do for hook in /usr/lib/systemd/system-sleep/*; do [ -x "$hook" ] && "$hook" "$phase" suspend; done; done; true
       changed_when: false
 
     - name: _verify | Record the data file after collecting
