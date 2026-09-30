@@ -1,0 +1,55 @@
+- name: _verify_policy | Exercise a policy change consumed before kdump
+  when: initramfs_use_dracut
+  block:
+    - name: _verify_policy | Create an image marker
+      copy:
+        content: "capture policy regression fixture\n"
+        dest: /etc/kdump/verify_policy_marker
+        mode: "0644"
+      become: true
+
+    - name: _verify_policy | Drift the normal boot policy
+      lineinfile:
+        path: /etc/dracut.conf.d/90_host.conf
+        line: 'install_items+=" /etc/kdump/verify_policy_marker "'
+      become: true
+
+    - name: _verify_policy | Build a capture image carrying the drift
+      command: /etc/kernel/postinst.d/kdump-tools {{ ansible_kernel }}
+      changed_when: true
+      become: true
+
+    - name: _verify_policy | The capture generator consumed the drift
+      command: lsinitrd /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+      register: _kdump_policy_before
+      changed_when: false
+      failed_when: _kdump_policy_before.stdout is not search('(?m)\setc/kdump/verify_policy_marker$')
+      become: true
+
+    - name: _verify_policy | An earlier role restores the provider policy
+      import_role:
+        name: boot
+        tasks_from: initramfs_provider
+
+    - name: _verify_policy | Another role observes the restored policy
+      import_role:
+        name: boot
+        tasks_from: initramfs_provider
+
+    - name: _verify_policy | Kdump reconciles the capture image and loader
+      import_role:
+        name: kdump
+        tasks_from: main
+
+    - name: _verify_policy | The capture image no longer carries the drift
+      command: lsinitrd /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+      register: _kdump_policy_after
+      changed_when: false
+      failed_when: _kdump_policy_after.stdout is search('(?m)\setc/kdump/verify_policy_marker$')
+      become: true
+  always:
+    - name: _verify_policy | Remove the image marker
+      file:
+        path: /etc/kdump/verify_policy_marker
+        state: absent
+      become: true

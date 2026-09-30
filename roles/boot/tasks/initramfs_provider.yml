@@ -38,6 +38,14 @@
   tags:
     - boot
 
+- name: initramfs_provider | Preserve changes across provider calls
+  set_fact:
+    boot_initramfs_changed: >-
+      {{ boot_initramfs_changed | default(false)
+         or boot_initramfs_apt.changed or boot_initramfs_config.changed }}
+  tags:
+    - boot
+
 - name: initramfs_provider | Rebuild boot images after provider changes
   when:
     - not ansible_check_mode

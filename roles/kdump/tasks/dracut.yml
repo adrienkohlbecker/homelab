@@ -120,7 +120,7 @@
     - initramfs_use_dracut
     - not ansible_check_mode
     - >-
-      kdump_apt_tools.changed or boot_initramfs_rebuild.changed
+      kdump_apt_tools.changed or boot_initramfs_changed
       or kdump_dracut_files.changed or kdump_dracut_diversion.changed
       or kdump_dracut_generator.changed or kdump_dracut_native_hook.changed
       or kdump_dracut_native_profile.changed

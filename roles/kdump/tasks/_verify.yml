@@ -26,6 +26,9 @@
       changed: false
   check_mode: true
 
+- name: _verify | Reconcile policy changes made by earlier roles
+  import_tasks: _verify_policy.yml
+
 - name: _verify | ZBM commandline includes crashkernel
   when: zfs_root and not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
