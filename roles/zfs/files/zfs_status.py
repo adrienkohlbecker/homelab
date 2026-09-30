@@ -112,7 +112,7 @@ def read_status(*pools: str, explain: bool = False) -> dict[str, Any]:
     if explain:
         args.append("-x")
     result = parse_status(run(*args, *pools))
-    if pools and set(result) != set(pools):
+    if pools and (not set(result) <= set(pools) or (not explain and set(result) != set(pools))):
         raise StatusError(f"Requested pools {pools!r}, received {tuple(result)!r}")
     return result
 
@@ -189,18 +189,23 @@ def health() -> int:
     except (OSError, subprocess.CalledProcessError) as error:
         report.append(f"Warning: zpool status report did not complete: {diagnostic(error)}")
     try:
-        if unhealthy := read_status(explain=True):
-            issues.append(f"zpool status -x reports a problem: {', '.join(unhealthy)}")
+        names = run("zpool", "list", "-H", "-o", "name").splitlines()
     except (OSError, subprocess.CalledProcessError, ValueError) as error:
-        issues.append(f"Cannot query pool health: {diagnostic(error)}")
-    try:
-        pools = read_status()
-    except (OSError, subprocess.CalledProcessError, ValueError) as error:
-        issues.append(f"Cannot query drive errors and scrub age: {diagnostic(error)}")
+        issues.append(f"Cannot list pools: {diagnostic(error)}")
     else:
         now = int(time.time())
         expire = int(os.environ.get("SCRUB_EXPIRE", "3456000"))
-        for name, pool in pools.items():
+        for name in names:
+            try:
+                if read_status(name, explain=True):
+                    issues.append(f"zpool status -x reports a problem: {name}")
+            except (OSError, subprocess.CalledProcessError, ValueError) as error:
+                issues.append(f"Cannot query pool health for {name}: {diagnostic(error)}")
+            try:
+                pool = read_status(name)[name]
+            except (OSError, subprocess.CalledProcessError, ValueError) as error:
+                issues.append(f"Cannot query drive errors and scrub age for {name}: {diagnostic(error)}")
+                continue
             if any(
                 vdev.get(field, 0) > 0
                 for _, vdev in pool_vdevs(pool)

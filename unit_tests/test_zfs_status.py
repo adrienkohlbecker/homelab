@@ -114,6 +114,17 @@ def test_rejects_missing_requested_pool(monkeypatch):
         status.read_status("tank")
 
 
+def test_explain_accepts_a_healthy_requested_pool_being_omitted(monkeypatch):
+    monkeypatch.setattr(status, "run", lambda *_: document({}))
+    assert status.read_status("tank", explain=True) == {}
+
+
+def test_explain_rejects_unrequested_pools(monkeypatch, pool):
+    monkeypatch.setattr(status, "run", lambda *_: document({"tank": pool}))
+    with pytest.raises(status.StatusError, match="Requested pools"):
+        status.read_status("other", explain=True)
+
+
 @pytest.mark.parametrize(
     ("function", "state", "pause", "active", "scrub_only"),
     [
@@ -223,9 +234,9 @@ def test_health_mails_faults_and_includes_slow_io_diagnostics(monkeypatch, pool,
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
     monkeypatch.setattr(status.time, "time", lambda: 100)
     monkeypatch.setenv("SCRUB_EXPIRE", "20")
-    monkeypatch.setattr(status, "run", lambda *_: "NAME STATE READ WRITE CKSUM SLOW\ndisk0 ONLINE 0 0 5 3")
+    monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "SLOW\ndisk0 ONLINE 0 0 5 3")
     monkeypatch.setattr(
-        status, "read_status", lambda **kwargs: {"tank": healthy} if kwargs.get("explain") else {"tank": pool}
+        status, "read_status", lambda *_, **kwargs: {"tank": healthy} if kwargs.get("explain") else {"tank": pool}
     )
     mail = []
     monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append((args, kwargs)))
@@ -238,9 +249,9 @@ def test_health_mails_faults_and_includes_slow_io_diagnostics(monkeypatch, pool,
 
 def test_health_query_failure_is_mailed(monkeypatch, capsys):
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(status, "run", lambda *_: "report")
+    monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "report")
 
-    def fail(**_):
+    def fail(*_, **__):
         raise status.StatusError("bad JSON schema")
 
     monkeypatch.setattr(status, "read_status", fail)
@@ -256,8 +267,8 @@ def test_health_accepts_feature_capped_pools_and_does_not_alarm_on_slow_io(monke
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
     monkeypatch.setattr(status.time, "time", lambda: 100)
     monkeypatch.setenv("SCRUB_EXPIRE", "20")
-    monkeypatch.setattr(status, "run", lambda *_: "SLOW 3")
-    monkeypatch.setattr(status, "read_status", lambda **kwargs: {} if kwargs.get("explain") else {"tank": pool})
+    monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "SLOW 3")
+    monkeypatch.setattr(status, "read_status", lambda *_, **kwargs: {} if kwargs.get("explain") else {"tank": pool})
     assert status.health() == 0
 
 
@@ -268,11 +279,38 @@ def test_health_reports_failed_spares_and_active_spare_errors(monkeypatch, pool)
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
     monkeypatch.setattr(status.time, "time", lambda: 100)
     monkeypatch.setenv("SCRUB_EXPIRE", "20")
-    monkeypatch.setattr(status, "run", lambda *_: "report")
-    monkeypatch.setattr(status, "read_status", lambda **kwargs: {} if kwargs.get("explain") else {"tank": pool})
+    monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "report")
+    monkeypatch.setattr(status, "read_status", lambda *_, **kwargs: {} if kwargs.get("explain") else {"tank": pool})
     mail = []
     monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
     assert status.health() == 1
     assert "Detected drive errors (READ/WRITE/CKSUM) on tank" in mail[0]
     assert "Unhealthy spare spare1 on tank: FAULTED" in mail[0]
     assert "Unhealthy spare spare0" not in mail[0]
+
+
+def test_bad_pool_does_not_hide_another_pools_errors_and_age(monkeypatch, pool):
+    pool["vdevs"]["disk0"]["checksum_errors"] = 5
+    pool["scan_stats"]["end_time"] = 70
+    bad = copy.deepcopy(pool)
+    bad["name"] = "broken"
+    bad["vdevs"]["disk0"]["read_errors"] = "bad counter"
+    monkeypatch.setattr(status.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(status.time, "time", lambda: 100)
+    monkeypatch.setenv("SCRUB_EXPIRE", "20")
+
+    def run(*args):
+        if "list" in args:
+            return "broken\ntank\n"
+        if "-j" in args:
+            name = args[-1]
+            return document({name: bad if name == "broken" else pool})
+        return "report"
+
+    monkeypatch.setattr(status, "run", run)
+    mail = []
+    monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
+    assert status.health() == 1
+    assert "Cannot query drive errors and scrub age for broken" in mail[0]
+    assert "Detected drive errors (READ/WRITE/CKSUM) on tank" in mail[0]
+    assert "Scrub expired on tank" in mail[0]
