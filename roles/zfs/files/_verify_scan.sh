@@ -11,7 +11,7 @@ cleanup() {
   printf '%s\n' "$saved_suspend" >"$scan_suspend"
   # The pool can be absent if creation failed; always remove the backing files.
   zpool destroy zfs_scan_test 2>/dev/null || true
-  rm -f /var/tmp/zfs_scan_test_{0,1}.img
+  rm -f /var/tmp/zfs_scan_test_{0,1,2}.img
   rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -19,8 +19,8 @@ trap cleanup EXIT
 for pool in $(zpool list -H -o name); do
   timeout -k 10 60 zpool wait -t scrub,resilver "$pool"
 done
-truncate -s 256M /var/tmp/zfs_scan_test_{0,1}.img
-zpool create -f zfs_scan_test mirror /var/tmp/zfs_scan_test_{0,1}.img
+truncate -s 256M /var/tmp/zfs_scan_test_{0,1,2}.img
+zpool create -f zfs_scan_test mirror /var/tmp/zfs_scan_test_{0,1}.img spare /var/tmp/zfs_scan_test_2.img
 dd if=/dev/urandom of=/zfs_scan_test/payload bs=1M count=64 conv=fsync status=none
 
 check_chart() {
@@ -62,6 +62,14 @@ printf '%s\n' "$saved_suspend" >"$scan_suspend"
 timeout -k 10 60 zpool scrub -w zfs_scan_test
 [[ $(/opt/zfs/zfs_status.py scan zfs_scan_test) == 0 ]]
 echo 'Active, paused, canceled, completed, resumed, and unprivileged chart checks passed'
+
+zpool offline zfs_scan_test /var/tmp/zfs_scan_test_0.img
+dd if=/dev/urandom of=/zfs_scan_test/payload bs=1M count=1 conv=notrunc,fsync status=none
+zpool online zfs_scan_test /var/tmp/zfs_scan_test_0.img
+timeout -k 10 60 zpool wait -t resilver zfs_scan_test
+LC_ALL=C zpool status zfs_scan_test | grep -F 'scan: resilvered'
+/usr/local/bin/zfs_health
+echo 'Health accepted a real completed resilver and an available spare'
 
 bad_pool=$(zpool list -H -o name | awk '$0 != "zfs_scan_test" {print; exit}')
 [[ -n "$bad_pool" ]]
