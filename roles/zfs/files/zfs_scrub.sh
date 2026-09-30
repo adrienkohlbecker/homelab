@@ -30,12 +30,17 @@ set -euo pipefail
 # zero it -- the CI fixture's img-backed pools can't thundering-herd a hard lock.
 stagger_sec="${ZFS_SCRUB_STAGGER_SEC:-120}"
 scrub_started=0
+failed=0
 pools=$(timeout -k 10 60 zpool list -H -o name)
 for pool in $pools; do
   # Skip a pool already scrubbing or resilvering: a fresh `zpool scrub` would
   # error out, and a long scrub spanning two monthly fires must not be
   # restarted from zero.
-  active=$(/opt/zfs/zfs_status.py scan "$pool")
+  active=$(/opt/zfs/zfs_status.py scan "$pool") || {
+    echo >&2 "Error: cannot read scan state on $pool, skipping."
+    ((failed += 1))
+    continue
+  }
   if [[ "$active" == 1 ]]; then
     echo "Scrub/resilver already running on $pool, skipping."
     continue
@@ -45,7 +50,14 @@ for pool in $pools; do
   fi
   scrub_started=1
   echo "Starting scrub on $pool"
-  zpool scrub "$pool"
+  zpool scrub "$pool" || {
+    echo >&2 "Error: failed to start scrub on $pool"
+    ((failed += 1))
+  }
 done
 
+if ((failed != 0)); then
+  echo >&2 "Error: Some pools could not be scrubbed"
+  exit 1
+fi
 echo "Done"

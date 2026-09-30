@@ -2,13 +2,17 @@
 set -euo pipefail
 
 chart_script=$1
+scratch=$(mktemp -d /var/tmp/zfs_scan_test.XXXXXX)
+cp -p /opt/zfs/zfs_status.py "$scratch/status.py"
 scan_suspend=/sys/module/zfs/parameters/zfs_scan_suspend_progress
 saved_suspend=$(cat "$scan_suspend")
 cleanup() {
+  cp -p "$scratch/status.py" /opt/zfs/zfs_status.py
   printf '%s\n' "$saved_suspend" >"$scan_suspend"
   # The pool can be absent if creation failed; always remove the backing files.
   zpool destroy zfs_scan_test 2>/dev/null || true
   rm -f /var/tmp/zfs_scan_test_{0,1}.img
+  rm -rf "$scratch"
 }
 trap cleanup EXIT
 
@@ -58,3 +62,22 @@ printf '%s\n' "$saved_suspend" >"$scan_suspend"
 timeout -k 10 60 zpool scrub -w zfs_scan_test
 [[ $(/opt/zfs/zfs_status.py scan zfs_scan_test) == 0 ]]
 echo 'Active, paused, canceled, completed, resumed, and unprivileged chart checks passed'
+
+bad_pool=$(zpool list -H -o name | awk '$0 != "zfs_scan_test" {print; exit}')
+[[ -n "$bad_pool" ]]
+cat >/opt/zfs/zfs_status.py <<'EOF'
+#!/bin/bash
+set -euo pipefail
+if [[ "$2" == "$ZFS_VERIFY_BAD_POOL" ]]; then
+  echo >&2 "Injected status failure on $2"
+  exit 2
+fi
+exec "$ZFS_VERIFY_STATUS_READER" "$@"
+EOF
+if output=$(ZFS_VERIFY_BAD_POOL="$bad_pool" ZFS_VERIFY_STATUS_READER="$scratch/status.py" ZFS_SCRUB_STAGGER_SEC=0 zfs_scrub 2>&1); then
+  echo >&2 'Expected a counted per-pool status failure'
+  exit 1
+fi
+[[ "$output" == *"Injected status failure on $bad_pool"* ]]
+[[ "$output" == *'Starting scrub on zfs_scan_test'* ]]
+echo 'The scheduler scrubbed another pool after a per-pool status failure'
