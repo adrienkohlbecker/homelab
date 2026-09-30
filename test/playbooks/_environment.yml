@@ -229,24 +229,6 @@
             validate: python3 -m json.tool "%s"
           diff: false
 
-    # Assert the running resolver state, not merely the drop-in written above.
-    # Scope it to the Global block controlled by resolved.conf.d.
-    - name: Verify DNS-over-TLS is enforced at the configured resolver
-      vars:
-        # Per-link DHCP resolvers must not satisfy the global drop-in contract.
-        _test_resolvectl_global: >-
-          {{ test_resolvectl.stdout.split('\nLink ') | first }}
-        _test_resolvectl_global_protocols: >-
-          {{ _test_resolvectl_global.splitlines()
-             | select('search', 'Protocols:') | list | first | default('') }}
-      command: resolvectl status
-      register: test_resolvectl
-      changed_when: false
-      failed_when: >-
-        '+DNSOverTLS' not in _test_resolvectl_global_protocols or
-        (test_dot_servers | select('in', _test_resolvectl_global) | list | length)
-        != (test_dot_servers | length)
-
     # Prove public resolution end-to-end; retry boundedly for a cold DoT handshake.
     - name: Verify public resolution over the enforced resolver
       command: resolvectl query --cache=no wikipedia.org
@@ -255,6 +237,39 @@
       retries: 5
       delay: 3
       until: test_public_resolve.rc == 0
+
+    # Assert the running resolver state, not merely the drop-in written above.
+    # Global DNS= servers take only the global mode. Server feature levels
+    # cannot tell strict from opportunistic DoT, which also reaches TLS when
+    # the handshake succeeds, so read the mode itself.
+    - name: Verify resolved enforces strict DNS-over-TLS
+      command: >-
+        busctl get-property --json=short org.freedesktop.resolve1
+        /org/freedesktop/resolve1 org.freedesktop.resolve1.Manager DNSOverTLS
+      register: test_resolved_dot_mode
+      changed_when: false
+      failed_when: >-
+        test_resolved_dot_mode.rc != 0 or
+        (test_resolved_dot_mode.stdout | from_json).data != 'yes'
+
+    # show-server-state keeps one JSON schema from systemd 255 through 259.
+    # Global DNS= servers are type "system"; a TLS verified level proves the
+    # query above negotiated DoT rather than only configuring it.
+    - name: Verify DNS-over-TLS carried the query to the configured resolver
+      become: true
+      vars:
+        _test_system_servers: >-
+          {{ test_resolved_servers.stdout | from_json
+             | selectattr('Type', '==', 'system') | list }}
+      command: resolvectl show-server-state --json=short
+      register: test_resolved_servers
+      changed_when: false
+      failed_when: >-
+        test_resolved_servers.rc != 0 or
+        (_test_system_servers | map(attribute='Server') | sort)
+        != (test_dot_servers | sort) or
+        (_test_system_servers | map(attribute='VerifiedFeatureLevel')
+         | select('match', 'TLS') | list | length) == 0
 
     - name: Configure shared base-role prerequisites
       when: test_base_prerequisites | default(false) | bool
