@@ -218,13 +218,42 @@ def test_scrub_watchdog_uses_integer_timestamps(pool, state, pause, end, expecte
     assert issue is None if expected is None else expected in issue
 
 
-@pytest.mark.parametrize("scan", [None, {"function": "RESILVER", "state": "FINISHED"}])
-def test_creation_baseline_without_a_recorded_full_scrub(monkeypatch, pool, scan):
+def test_creation_baseline_without_a_recorded_scan(monkeypatch, pool):
     pool.pop("scan_stats")
-    if scan:
-        pool["scan_stats"] = scan
     monkeypatch.setattr(status, "run", lambda *_: "70\n")
     assert status.scrub_issue("tank", pool, now=100, expire=20) == "Scrub expired on tank"
+
+
+@pytest.mark.parametrize(("end", "expected"), [(90, None), (70, "Scrub expired on tank")])
+def test_age_since_completed_resilver_replaces_creation_baseline(monkeypatch, pool, end, expected):
+    pool["scan_stats"].update(function="RESILVER", state="FINISHED", end_time=end)
+
+    def unexpected_creation_query(*_):
+        pytest.fail("A completed resilver must use its end_time, not pool creation")
+
+    monkeypatch.setattr(status, "run", unexpected_creation_query)
+    assert status.scrub_issue("tank", pool, now=100, expire=20) == expected
+
+
+@pytest.mark.parametrize(("end", "expected"), [(95, None), (70, "Scrub expired on tank")])
+def test_age_since_completed_sequential_resilver(pool, end, expected):
+    pool["scan_stats"] = {"rebuild_stats": {"mirror-0": {"state": "COMPLETE", "end_time": end}}}
+    parsed = status.parse_status(document({"tank": pool}))["tank"]
+    assert status.scrub_issue("tank", parsed, now=100, expire=20) == expected
+
+
+def test_latest_completion_wins_when_scan_and_rebuild_history_coexist(pool):
+    pool["scan_stats"]["end_time"] = 70
+    pool["scan_stats"]["rebuild_stats"] = {"mirror-0": {"state": "COMPLETE", "end_time": 95}}
+    assert status.scrub_issue("tank", pool, now=100, expire=20) is None
+    pool["scan_stats"]["end_time"] = 99
+    assert status.scrub_issue("tank", pool, now=110, expire=15) is None
+
+
+def test_paused_scrub_timestamp_is_not_hidden_by_old_rebuild_history(pool):
+    pool["scan_stats"].update(state="SCANNING", scrub_pause=95)
+    pool["scan_stats"]["rebuild_stats"] = {"mirror-0": {"state": "COMPLETE", "end_time": 70}}
+    assert status.scrub_issue("tank", pool, now=100, expire=20) is None
 
 
 def test_health_mails_faults_and_includes_slow_io_diagnostics(monkeypatch, pool, capsys):

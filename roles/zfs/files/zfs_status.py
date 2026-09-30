@@ -103,6 +103,8 @@ def parse_status(raw: str) -> dict[str, Any]:
             rebuild = mapping(value, device)
             if rebuild.get("state") not in ("NONE", "ACTIVE", "CANCELED", "COMPLETE"):
                 raise StatusError(f"Unknown rebuild state on {device}: {rebuild.get('state')!r}")
+            if rebuild["state"] == "COMPLETE":
+                integer(rebuild.get("end_time"), f"{device}.end_time")
     return pools
 
 
@@ -156,13 +158,16 @@ def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str |
         return f"Last scrub canceled on {name}"
     if scan_active(pool):
         return None
-    if scan.get("function") == "SCRUB" and scan.get("state") == "FINISHED":
-        scrub_date = scan["end_time"]
+    completed = [
+        rebuild["end_time"] for rebuild in scan.get("rebuild_stats", {}).values() if rebuild["state"] == "COMPLETE"
+    ]
+    if scan.get("function") in ("SCRUB", "RESILVER") and scan.get("state") == "FINISHED":
+        completed.append(scan["end_time"])
     elif scan.get("function") == "SCRUB" and scan.get("state") == "SCANNING":
-        scrub_date = scan["scrub_pause"]
+        completed.append(scan["scrub_pause"])
+    if completed:
+        scrub_date = max(completed)
     else:
-        # A resilver verifies the replaced device, not the whole pool. Without
-        # a recorded full scrub, retain the pool-creation watchdog baseline.
         scrub_date = int(run("zfs", "get", "creation", "-Hpo", "value", name).strip())
     if scrub_date <= 0:
         raise StatusError(f"Missing scrub or creation timestamp for {name}")

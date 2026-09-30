@@ -93,19 +93,19 @@ for volume in $ZFS_VOLUMES; do
     echo >&2 "ERROR :: Last scrub canceled on $volume"
     ((failed += 1))
     continue
-  elif [[ "$vol_status" == *"scrub in progress"* || "$vol_status" == *resilver* ]]; then
+  elif [[ "$vol_status" == *"scrub in progress"* || "$vol_status" == *"resilver in progress"* ]]; then
     echo "Scrub in progress for $volume, skipping."
     continue
   fi
 
-  if [[ "$vol_status" != *"scan: scrub"* || "$vol_status" == *"none requested"* ]]; then
+  if [[ "$vol_status" != *"scan: scrub"* && "$vol_status" != *"scan: resilvered"* ]]; then
     SCRUB_DATE=$(zfs get creation -Hpo value "$volume")
   else
     # Take the trailing 5 fields by position from the end ("Sun Mar 10 03:12:34
     # 2024"), independent of day-width padding and of however many words precede
     # the date on the scan line. A positional `cut` from the front would shift
     # whenever the wording or column count changes.
-    SCRUB_RAW_DATE=$(echo "$vol_status" | grep -e "scrub repaired" -e "scrub paused" | awk '{print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}')
+    SCRUB_RAW_DATE=$(echo "$vol_status" | grep -e "scrub repaired" -e "scrub paused" -e "scan: resilvered" | awk '{print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}')
     SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s" 2>/dev/null) || {
       echo >&2 "ERROR :: Cannot parse scrub date for $volume: $SCRUB_RAW_DATE"
       ((failed += 1))
