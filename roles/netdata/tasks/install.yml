@@ -1,7 +1,7 @@
 # Source is netdata's upstream stable repo (repo.netdata.cloud), which
 # carries the current 2.x series for noble across amd64 + arm64 +
 # armhf. Flat layout (trailing-slash Suites, no Components), signed with
-# Netdatabot's key (6E155DC1…). The apt_preferences pin holds netdata at
+# Netdatabot's key (6E155DC1…). The apt_source pin holds netdata at
 # 2.* so a fresh install lands on the latest 2.x and only a deliberate
 # pin bump moves to a future major. See notes/archive/netdata_v2_migration_analysis.md.
 
@@ -18,37 +18,14 @@
       key_url: https://repo.netdata.cloud/netdatabot.gpg.key
       uris: "{{ mirror_apt_netdata }}/"
       suites: "{{ ansible_distribution_release }}/"
-  tags:
-    - netdata
-
-# No validate: apt has no single-file preferences parser; apt-cache policy
-# reads the whole preferences.d set. Use a version pin because the mirrored
-# source URL has the proxy's hostname, not the upstream repository's hostname.
-- name: install | Pin netdata packages to the selected major  # noqa: require-validate
-  copy:
-    content: |
-      # Ansible managed
-      Package: netdata*
-      Pin: version {{ netdata_version }}
-      Pin-Priority: 999
-    dest: /etc/apt/preferences.d/netdata
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: netdata_apt_pin
-  become: true
-  tags:
-    - netdata
-
-- name: install | Export netdata apt source change signal
-  set_fact:
-    netdata_apt_source_changed: "{{ apt_source_netdata_changed or netdata_apt_pin.changed }}"
+      pin:
+        packages: netdata*
+        version: "{{ netdata_version }}"
   tags:
     - netdata
 
 - name: install | Install netdata
-  when: not (ansible_check_mode and netdata_apt_source_changed)
+  when: not (ansible_check_mode and apt_source_netdata_changed)
   apt:
     pkg:
       - netdata
@@ -63,7 +40,7 @@
   set_fact:
     netdata_package_ready: >-
       {{ not (ansible_check_mode and
-              (netdata_apt.changed | default(false) or netdata_apt_source_changed)) }}
+              (netdata_apt.changed | default(false) or apt_source_netdata_changed)) }}
   tags:
     - netdata
 
