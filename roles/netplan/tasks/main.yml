@@ -18,6 +18,23 @@
         cache_valid_time: 3600
       become: true
 
+    # Own the network-online wait so it does not depend on which NICs existed
+    # when Netplan's generator ran; see the drop-in for the failure mode.
+    - name: Install the systemd-networkd-wait-online drop-in
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: override_wait_online.conf.j2
+          for: systemd-networkd-wait-online.service
+
+    - name: Pull systemd-networkd-wait-online into network-online.target
+      systemd:
+        name: systemd-networkd-wait-online.service
+        enabled: true
+      become: true
+
     - name: Inspect the Ansible-managed netplan origin
       stat:
         path: /etc/netplan/01-netcfg.yaml

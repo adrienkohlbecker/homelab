@@ -137,3 +137,77 @@
   import_role:
     name: netplan
     tasks_from: main
+
+
+# The role's wait-online drop-in must gate network-online.target on the uplink
+# even when the NIC appears after Netplan's generator ran, as it does under the
+# Resolute Dracut initrd and on cloud images. network-online.target is passive,
+# so a probe unit pulls it into the boot like production services do and
+# records the routing table when network-online dependents start.
+# Wait-online's success proves it did not time out, and on Resolute that a DNS
+# server was also usable.
+- name: _verify boot | Install a network-online probe unit
+  copy:
+    dest: /etc/systemd/system/netplan_online_probe.service
+    content: |
+      [Unit]
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/ip -json route show default
+      StandardOutput=truncate:/run/netplan_online_probe.json
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify boot | Enable the network-online probe
+  systemd:
+    name: netplan_online_probe.service
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: _verify boot | Reboot to exercise boot-time wait-online generation
+  import_role:
+    name: reboot
+    tasks_from: reboot
+
+- name: _verify boot | Read the default route
+  command: ip -json route show default
+  register: netplan_verify_default_route
+  changed_when: false
+
+- name: _verify boot | Read the default route seen by network-online dependents
+  slurp:
+    src: /run/netplan_online_probe.json
+  register: netplan_verify_online_probe
+  become: true
+
+- name: _verify boot | Read the wait-online outcome  # noqa: command-instead-of-module
+  command: >-
+    systemctl show systemd-networkd-wait-online.service
+    --property=ConditionResult,ActiveState,Result,ExecStart
+  register: netplan_verify_wait_online
+  changed_when: false
+
+- name: _verify boot | Confirm network-online waited for the uplink
+  vars:
+    _netplan_uplink: "{{ (netplan_verify_default_route.stdout | from_json | first).dev }}"
+    _netplan_probe_routes: "{{ netplan_verify_online_probe.content | b64decode | from_json }}"
+  assert:
+    that:
+      - "'ConditionResult=yes' in netplan_verify_wait_online.stdout_lines"
+      - "'ActiveState=active' in netplan_verify_wait_online.stdout_lines"
+      - "'Result=success' in netplan_verify_wait_online.stdout_lines"
+      - _netplan_uplink in (_netplan_probe_routes | map(attribute='dev'))
+    fail_msg: |-
+      network-online.target was reached before {{ _netplan_uplink }} had its default route.
+      Routes seen by the probe: {{ _netplan_probe_routes }}
+      {{ netplan_verify_wait_online.stdout }}

@@ -1,0 +1,19 @@
+[Unit]
+# Netplan gates wait-online on a symlink its generator creates only when a
+# configured NIC already exists early in boot. A NIC whose driver loads after
+# the generators (a Dracut initrd, a cloud image) otherwise leaves
+# network-online.target satisfied before DHCP. The empty assignment resets
+# every condition, including the stock CAP_NET_ADMIN check that only matters
+# inside unprivileged containers.
+ConditionPathIsSymbolicLink=
+{% if ansible_distribution_version is version('24.10', '>=') %}
+# --dns queries resolved's DNS configuration.
+After=systemd-resolved.service
+{% endif %}
+
+[Service]
+# Replace Netplan's per-interface list, captured at generator time, with
+# "any managed link is routable". --dns (systemd 256+) additionally needs a
+# DNS server with a route to it, as Netplan 1.2 requests.
+ExecStart=
+ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --operational-state=routable{{ ' --dns' if ansible_distribution_version is version('24.10', '>=') else '' }}
