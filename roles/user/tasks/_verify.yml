@@ -228,11 +228,47 @@
   changed_when: false
   failed_when: _user_sysstat_enabled.stdout | length > 0
 
-# Noble's cron job and Resolute's unit conditions both source this file.
-- name: _verify | Collectors see collection disabled
-  command:
-    argv: [ sh, -c, '. /etc/default/sysstat && test "$ENABLED" = false' ]
-  changed_when: false
+# The simulated upgrade wrote a boot record into today's file. Run the
+# collection path the host would, Noble's cron wrapper or Resolute's timer
+# unit; neither may add a record.
+- name: _verify | Disabled collectors add no records
+  become: true
+  block:
+    - name: _verify | Locate today's sysstat data file
+      command: date +/var/log/sysstat/sa%d
+      register: _user_sa_file
+      changed_when: false
+
+    - name: _verify | Record the data file before collecting
+      stat:
+        path: "{{ _user_sa_file.stdout }}"
+      register: _user_sa_before
+
+    - name: _verify | Check for the Noble cron wrapper
+      stat:
+        path: /usr/lib/sysstat/debian-sa1
+      register: _user_debian_sa1
+
+    - name: _verify | Run the Noble cron collector
+      when: _user_debian_sa1.stat.exists
+      command: /usr/lib/sysstat/debian-sa1 1 1
+      changed_when: false
+
+    - name: _verify | Run the Resolute timer collector  # noqa: command-instead-of-module
+      when: not _user_debian_sa1.stat.exists
+      command: systemctl start sysstat-collect.service
+      changed_when: false
+
+    - name: _verify | Record the data file after collecting
+      stat:
+        path: "{{ _user_sa_file.stdout }}"
+      register: _user_sa_after
+
+    - name: _verify | The data file is unchanged
+      assert:
+        that:
+          - _user_sa_before.stat.exists
+          - _user_sa_after.stat.checksum == _user_sa_before.stat.checksum
 
 - name: _verify | Remove generated completions to exercise shell bootstrap
   file:
