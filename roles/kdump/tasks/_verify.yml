@@ -184,16 +184,31 @@
 
     # Loaded state alone cannot prove the capture image can mount root and
     # write a dump. This hook runs only against disposable QEMU fixtures.
+    - name: _verify | Record existing nonempty vmcores before the panic
+      find:
+        paths: /var/crash
+        recurse: true
+        patterns: dump.*
+        size: 1
+      register: kdump_verify_previous_vmcores
+      become: true
+
     - name: _verify | Capture a deliberate panic and return to normal boot
       reboot:
         reboot_command: '/usr/bin/sudo -n /bin/sh -c "echo c > /proc/sysrq-trigger"'
         reboot_timeout: 240
 
-    - name: _verify | Find a nonempty captured vmcore
-      command: find /var/crash -type f -name dump.* -size +0c
+    - name: _verify | Find a fresh nonempty captured vmcore
+      find:
+        paths: /var/crash
+        recurse: true
+        patterns: dump.*
+        size: 1
       register: kdump_verify_vmcores
-      changed_when: false
-      failed_when: kdump_verify_vmcores.stdout_lines | length == 0
+      failed_when: >-
+        kdump_verify_vmcores.files | length == 0
+        or (kdump_verify_vmcores.files | map(attribute='mtime') | max | default(0))
+           <= (kdump_verify_previous_vmcores.files | map(attribute='mtime') | max | default(0))
       become: true
 
     - name: _verify | Saved vmcore contains the deliberate panic
@@ -201,7 +216,7 @@
         set -euo pipefail
         tempdir=$(mktemp -d)
         trap "rm -rf -- \"$tempdir\"" EXIT
-        makedumpfile -R "$tempdir/vmcore" < {{ kdump_verify_vmcores.stdout_lines | first }}
+        makedumpfile -R "$tempdir/vmcore" < {{ (kdump_verify_vmcores.files | sort(attribute="mtime") | last).path | quote }}
         makedumpfile --dump-dmesg "$tempdir/vmcore" "$tempdir/dmesg"
         grep -F "sysrq triggered crash" "$tempdir/dmesg"
       args:
