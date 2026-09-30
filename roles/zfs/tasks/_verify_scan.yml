@@ -1,0 +1,19 @@
+- name: _verify | Scan | Copy the collector for unprivileged protocol checks
+  copy:
+    src: zfs_scan.chart.sh
+    dest: /var/tmp/zfs_scan_test.chart.sh
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Scan | Exercise real scan transitions and the scrub scheduler
+  script: _verify_scan.sh /var/tmp/zfs_scan_test.chart.sh
+  changed_when: false
+  become: true
+
+- name: _verify | Scan | Remove the test collector
+  file:
+    path: /var/tmp/zfs_scan_test.chart.sh
+    state: absent
+  become: true

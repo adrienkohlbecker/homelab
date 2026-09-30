@@ -30,11 +30,13 @@ set -euo pipefail
 # zero it -- the CI fixture's img-backed pools can't thundering-herd a hard lock.
 stagger_sec="${ZFS_SCRUB_STAGGER_SEC:-120}"
 scrub_started=0
-for pool in $(zpool list -H -o name); do
+pools=$(timeout -k 10 60 zpool list -H -o name)
+for pool in $pools; do
   # Skip a pool already scrubbing or resilvering: a fresh `zpool scrub` would
   # error out, and a long scrub spanning two monthly fires must not be
   # restarted from zero.
-  if zpool status "$pool" | grep -q -e "scrub in progress" -e "resilver in progress"; then
+  active=$(/opt/zfs/zfs_status.py scan "$pool")
+  if [[ "$active" == 1 ]]; then
     echo "Scrub/resilver already running on $pool, skipping."
     continue
   fi

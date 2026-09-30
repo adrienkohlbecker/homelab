@@ -44,8 +44,10 @@ resume_scrubs() {
   done
 }
 trap resume_scrubs EXIT
-for pool in $(zpool list -H -o name); do
-  if zpool status "$pool" | grep -q "scrub in progress"; then
+pools=$(timeout -k 10 60 zpool list -H -o name)
+for pool in $pools; do
+  active=$(/opt/zfs/zfs_status.py scan --scrub-only "$pool")
+  if [[ "$active" == 1 ]]; then
     if zpool scrub -p "$pool"; then
       paused_scrubs+=("$pool")
       echo "Paused in-progress scrub on $pool for the backup window"

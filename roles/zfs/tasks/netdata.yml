@@ -3,6 +3,12 @@
 # hdparm role's hdparm_drive_active alert to mute during scrubs (drives
 # are expected to spin throughout a multi-hour scrub, which would
 # otherwise pin the alert at crit on every pool member).
+- name: Install the ZFS status reader for metrics
+  when: zfs_netdata_condition | default(true)
+  import_tasks: status.yml
+  tags:
+    - zfs
+
 - name: Install zfs_scan charts.d collector
   import_role:
     name: netdata

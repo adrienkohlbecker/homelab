@@ -458,3 +458,7 @@
     fail_msg: >-
       zfs_health did not flag an expired scrub with SCRUB_EXPIRE=1.
       rc={{ _zfs_health_scrub_age.rc }} stderr={{ _zfs_health_scrub_age.stderr }}
+
+- name: _verify | Exercise structured and legacy scan readers
+  when: zfs_root
+  import_tasks: _verify_scan.yml

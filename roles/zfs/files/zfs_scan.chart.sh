@@ -29,8 +29,8 @@ zfs_scan_check() {
   # than as silent-zero readings. `zpool status` exits 0 with "no pools
   # available" when nothing is imported — that's fine, the chart stays
   # at active=0 forever, which is the truth.
-  zpool status >/dev/null 2>&1 || {
-    error "zfs_scan: 'zpool status' failed (permission denied or kmod missing)"
+  /opt/zfs/zfs_status.py scan >/dev/null || {
+    error "zfs_scan: cannot read scan state"
     return 1
   }
   return 0
@@ -45,10 +45,11 @@ EOF
 }
 
 zfs_scan_update() {
-  local active=0
-  if zpool status 2>/dev/null | grep -qE 'scrub in progress|resilver in progress'; then
-    active=1
-  fi
+  local active
+  active=$(/opt/zfs/zfs_status.py scan) || {
+    error "zfs_scan: cannot read scan state"
+    return 1
+  }
   cat <<EOF
 BEGIN zfs_scan.any_in_progress ${1}
 SET active = $active
