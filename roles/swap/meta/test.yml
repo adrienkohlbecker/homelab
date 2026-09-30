@@ -4,3 +4,11 @@ machines:
   lab:
   pug:
   minimal:
+# Resolute: zram-generator 1.2.1, zram in the base kernel module package, and
+# mdadm 4.5.
+ubuntu:
+  - resolute
+skip:
+  "pug:resolute": >-
+    Lab covers Resolute's mdadm and zram paths; Pug's raw partition is
+    release-independent.

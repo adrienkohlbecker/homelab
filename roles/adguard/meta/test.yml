@@ -1,0 +1,4 @@
+# Resolute: systemd 257 makes the reboot guard's root block lock bind root
+# callers, and Podman 5/Netavark 1.16 publish the DNS ports.
+ubuntu:
+  - resolute

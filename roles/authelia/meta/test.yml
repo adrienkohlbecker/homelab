@@ -1,0 +1,3 @@
+# Resolute: Podman 5 mounts its secrets (--secret type=mount).
+ubuntu:
+  - resolute

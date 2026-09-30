@@ -1,0 +1,4 @@
+# Resolute: Podman 5 healthcheck unit names and systemd 259 journal records
+# reach the parsers and Lua shapers.
+ubuntu:
+  - resolute
