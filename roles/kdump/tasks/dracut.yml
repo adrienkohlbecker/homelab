@@ -20,11 +20,6 @@
           {{ '/usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh'
              in kdump_dracut_package_files.stdout_lines }}
 
-    - name: dracut | Inspect the diverted package kernel hook
-      stat:
-        path: /etc/kernel/postinst.d/kdump-tools.distrib
-      register: kdump_dracut_diverted_hook
-
     - name: dracut | Create module and profile directories
       when: not kdump_dracut_native
       file:
@@ -57,18 +52,7 @@
           dest: /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
       register: kdump_dracut_files
 
-    # A diversion keeps package upgrades from restoring the mkinitramfs hook.
-    # The dot in the diverted filename also keeps run-parts from executing it.
-    - name: dracut | Divert the package capture image generator
-      when: not kdump_dracut_native
-      command: >-
-        dpkg-divert --local --add --rename
-        --divert /etc/kernel/postinst.d/kdump-tools.distrib
-        /etc/kernel/postinst.d/kdump-tools
-      args:
-        creates: /etc/kernel/postinst.d/kdump-tools.distrib
-      register: kdump_dracut_diversion
-
+    # This package conffile is preserved by dpkg during upgrades.
     - name: dracut | Install the Dracut capture image generator
       when: not kdump_dracut_native
       copy:
@@ -81,23 +65,34 @@
         validate: 'bash -n %s'
       register: kdump_dracut_generator
 
-    - name: dracut | Remove the local hook before restoring native support
+    - name: dracut | Inspect the native hook offered by dpkg
+      when: kdump_dracut_native
+      stat:
+        path: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
+      register: kdump_dracut_pending_hook
+
+    - name: dracut | Adopt the native package kernel hook
       when:
         - kdump_dracut_native
-        - kdump_dracut_diverted_hook.stat.exists
-      file:
-        path: /etc/kernel/postinst.d/kdump-tools
-        state: absent
-
-    - name: dracut | Restore the native package kernel hook
-      when: kdump_dracut_native
-      command: >-
-        dpkg-divert --local --remove --rename
-        --divert /etc/kernel/postinst.d/kdump-tools.distrib
-        /etc/kernel/postinst.d/kdump-tools
-      args:
-        removes: /etc/kernel/postinst.d/kdump-tools.distrib
+        - kdump_dracut_pending_hook.stat.exists
+      copy:
+        src: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
+        dest: /etc/kernel/postinst.d/kdump-tools
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+        validate: bash -n %s
       register: kdump_dracut_native_hook
+
+    - name: dracut | Remove the adopted package conffile candidate
+      when:
+        - kdump_dracut_native
+        - kdump_dracut_pending_hook.stat.exists
+      file:
+        path: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
+        state: absent
 
     # The module scripts are now package-owned; only remove our local preset.
     - name: dracut | Remove the backported capture preset
@@ -121,7 +116,7 @@
     - not ansible_check_mode
     - >-
       kdump_apt_tools.changed or boot_initramfs_changed
-      or kdump_dracut_files.changed or kdump_dracut_diversion.changed
+      or kdump_dracut_files.changed
       or kdump_dracut_generator.changed or kdump_dracut_native_hook.changed
       or kdump_dracut_native_profile.changed
   command: /etc/kernel/postinst.d/kdump-tools {{ item }}
