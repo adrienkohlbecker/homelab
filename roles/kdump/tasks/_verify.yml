@@ -22,6 +22,8 @@
   vars:
     kdump_apt_tools:
       changed: false
+    kdump_dracut_rebuild:
+      changed: false
   check_mode: true
 
 - name: _verify | ZBM commandline includes crashkernel
