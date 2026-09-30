@@ -13,6 +13,15 @@
   changed_when: false
   become: true
 
+- name: _verify | Exercise cached recovery artifacts through production tasks
+  import_tasks: artifacts.yml
+
+- name: _verify | Cached recovery image skips conversion and content verification
+  assert:
+    that:
+      - not macos_vm_basesystem_convert_result.changed
+      - macos_vm_basesystem_verify_result.skipped
+
 - name: _verify | Create unsupported recovery image fixture
   tempfile:
     state: directory
