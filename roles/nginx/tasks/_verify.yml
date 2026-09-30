@@ -182,6 +182,31 @@
   retries: 10
   delay: 1
 
+# ssl_ecdh_curve only admits groups; with ssl_prefer_server_ciphers off, the
+# client's preference picks among them. A client offering OpenSSL >= 3.5's
+# default groups must get the post-quantum hybrid, which the pre-3.5 curve list
+# excluded so the handshake silently fell back to X25519. A classical-only
+# client must still complete the handshake. s_client prints its -brief summary
+# on stderr, naming a hybrid as "Negotiated TLS1.3 group" and a classical
+# exchange as "Peer Temp Key" (OpenSSL 3.0: "Server Temp Key").
+- name: _verify | A default client negotiates the post-quantum hybrid group
+  command:
+    argv: [openssl, s_client, -connect, "127.0.0.1:443", -servername, "{{ nginx_verify_host }}", -brief]
+    stdin: Q
+  register: nginx_verify_tls_pq
+  changed_when: false
+  failed_when: "'Negotiated TLS1.3 group: X25519MLKEM768' not in nginx_verify_tls_pq.stderr"
+  when: ansible_distribution_release != 'noble'
+
+- name: _verify | A classical-only client still negotiates X25519
+  command:
+    argv: [openssl, s_client, -connect, "127.0.0.1:443", -servername, "{{ nginx_verify_host }}", -brief, -groups, X25519]
+    stdin: Q
+  register: nginx_verify_tls_classical
+  changed_when: false
+  failed_when: >-
+    nginx_verify_tls_classical.stderr is not search('^(Peer|Server) Temp Key: X25519,', multiline=True)
+
 # Access-log credential redaction rebuilds the request line from the method,
 # redacted URI, and protocol. The request is logged regardless of status, so
 # the gate-mode 302 exercises it. Poll until the buffered line reaches disk.
