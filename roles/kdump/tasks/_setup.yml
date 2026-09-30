@@ -2,3 +2,36 @@
   import_role:
     name: boot
     tasks_from: _setup_initramfs
+
+# Start from the installed package and a loaded mkinitramfs capture image,
+# rather than testing only a fresh kdump installation after the provider swap.
+- name: _setup | Arm the legacy capture path before migrating
+  when: ansible_distribution_release not in ['jammy', 'noble']
+  block:
+    - name: _setup | Configure kdump with initramfs-tools
+      import_role:
+        name: kdump
+        tasks_from: main
+      vars:
+        initramfs_use_dracut: false  # noqa: var-naming[no-role-prefix]
+
+    - name: _setup | Reboot to reserve capture memory
+      import_role:
+        name: reboot
+        tasks_from: reboot
+
+    - name: _setup | Wait for the legacy capture loader
+      command: kdump-config status
+      register: _kdump_legacy_status
+      changed_when: false
+      until: _kdump_legacy_status.stdout is search('current state\s*:\s*ready to kdump')
+      retries: 20
+      delay: 2
+      become: true
+
+    - name: _setup | The loaded legacy image carries the capture safety hook
+      command: lsinitramfs /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+      register: _kdump_legacy_image
+      changed_when: false
+      failed_when: "'scripts/local-bottom/kdump-sysctl' not in _kdump_legacy_image.stdout_lines"
+      become: true
