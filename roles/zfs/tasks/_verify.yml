@@ -1,6 +1,39 @@
 # ZFS role _verify: assert the role's converged state is live.
 # testrole.py / testall.py only (qemu); never site.yml or --tags zfs against prod.
 
+- name: _verify | Exercise automatic ARC sizing through production tasks
+  block:
+    - name: _verify | Clear both ARC limits
+      import_tasks: arc.yml
+      vars:
+        zfs_arc_min: 0
+        zfs_arc_max: 0
+        zfs_apt: { changed: false }
+
+    - name: _verify | Reboot with automatic ARC sizing
+      import_role:
+        name: reboot
+        tasks_from: reboot
+
+    - name: _verify | Load the automatically sized ZFS module
+      when: not zfs_root
+      command: modprobe zfs
+      changed_when: false
+      become: true
+
+    - name: _verify | No explicit ARC limit survives reboot
+      command: cat /sys/module/zfs/parameters/{{ item }}
+      loop: [ zfs_arc_min, zfs_arc_max ]
+      register: _zfs_verify_auto_arc
+      changed_when: false
+      failed_when: _zfs_verify_auto_arc.stdout | trim | int != 0
+      become: true
+  always:
+    - name: _verify | Restore the configured ARC limits
+      import_tasks: arc.yml
+      vars:
+        zfs_apt: { changed: false }
+
 - name: _verify | Reboot to load the configured ZFS module options
   import_role:
     name: reboot

@@ -90,39 +90,8 @@
   tags:
     - zfs
 
-- name: Configure ARC
-  template:
-    src: zfs.conf.j2
-    dest: /etc/modprobe.d/zfs.conf
-    mode: "0644"
-    owner: root
-    group: root
-    backup: true
-    validate: grep -qE '^options[[:space:]]+zfs[[:space:]]+' %s
-  register: zfs_module_conf
-  become: true
-  tags:
-    - zfs
-
-- name: Rebuild boot images with the ZFS module policy
-  when:
-    - zfs_module_conf.changed or zfs_apt.changed
-    - not ansible_check_mode
-  command: "{{ initramfs_rebuild_command }}"
-  become: true
-  changed_when: true
-  tags:
-    - zfs
-
-- name: Ask to reboot
-  when: zfs_module_conf.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+- name: Configure ARC module policy
+  import_tasks: arc.yml
   tags:
     - zfs
 
