@@ -44,9 +44,11 @@
       - apt_source_args.key_sha256 | default('') is match('^[0-9a-f]{64}\Z')
       - apt_source_args.suites | default('') is not search('[ ,]')
       - apt_source_args.components | default('') is not search('[ ,]')
-      # pin fields land verbatim on single preferences-file lines.
+      # pin fields land verbatim on single preferences-file lines. A bare
+      # `*` package is APT's general form, which rejects version pins.
       - apt_source_args.pin is not defined or
         (apt_source_args.pin.packages | default('') is match('^[a-z0-9.+*-]+\Z') and
+         apt_source_args.pin.packages != '*' and
          apt_source_args.pin.version | default('') is match('^[A-Za-z0-9.+~:*-]+\Z'))
     fail_msg: >-
       apt_source_args must define name, key_url, key_sha256, uris and suites,

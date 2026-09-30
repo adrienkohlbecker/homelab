@@ -125,6 +125,33 @@
       Expected no candidate for an unmatched pin;
       got policy: {{ _apt_source_unmatched_policy.stdout }}
 
+- name: _verify | Reject a bare wildcard package pin
+  block:
+    - name: _verify | Attempt a pin for every package (should raise)
+      import_role:
+        name: apt_source
+        tasks_from: configure
+      vars:
+        apt_source_args:
+          name: docker
+          key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+          key_url: https://download.docker.com/linux/ubuntu/gpg
+          uris: "{{ mirror_apt_docker }}"
+          suites: "{{ ansible_distribution_release }}"
+          components: stable
+          pin:
+            packages: "*"
+            version: "0.*"
+    - name: _verify | Sentinel fail if the bare wildcard pin was accepted
+      fail:
+        msg: a bare wildcard package pin should have been rejected but was not
+  rescue:
+    - name: _verify | The argument assertion rejected the bare wildcard
+      assert:
+        that:
+          - ansible_failed_task.name is search('^Assert apt_source args')
+        fail_msg: "Expected the argument assertion to fail; got {{ ansible_failed_task.name }}"
+
 - name: _verify | Drop the docker-ce-cli pin
   import_role:
     name: apt_source
