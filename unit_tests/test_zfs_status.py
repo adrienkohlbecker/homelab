@@ -1,0 +1,215 @@
+"""Health and scan regressions for both supported ZFS status formats."""
+
+import copy
+import json
+import subprocess
+
+import pytest
+from conftest import load_repo_module
+
+status = load_repo_module("roles/zfs/files/zfs_status.py")
+
+
+@pytest.fixture
+def pool():
+    return {
+        "name": "tank",
+        "state": "ONLINE",
+        "error_count": 0,
+        "vdevs": {
+            "mirror-0": {"read_errors": 0, "write_errors": 0, "checksum_errors": 0},
+            "disk0": {"read_errors": 0, "write_errors": 0, "checksum_errors": 0, "slow_ios": 0},
+        },
+        "scan_stats": {
+            "function": "SCRUB",
+            "state": "FINISHED",
+            "start_time": 80,
+            "end_time": 90,
+            "scrub_pause": 0,
+        },
+    }
+
+
+def document(pools):
+    return json.dumps({"output_version": {"command": "zpool status", "vers_major": 0, "vers_minor": 1}, "pools": pools})
+
+
+def test_parses_integer_counters_without_rounding(pool):
+    pool["vdevs"]["disk0"]["checksum_errors"] = 2**60 + 1
+    assert status.parse_status(document({"tank": pool}))["tank"]["vdevs"]["disk0"]["checksum_errors"] == 2**60 + 1
+
+
+def test_no_imported_pools_is_valid():
+    assert status.parse_status(document({})) == {}
+
+
+def test_never_scrubbed_pool_and_spare_are_valid(pool):
+    del pool["scan_stats"]
+    pool["vdevs"]["spare0"] = {"state": "AVAIL"}
+    assert status.parse_status(document({"tank": pool})) == {"tank": pool}
+
+
+@pytest.mark.parametrize("value", [None, "1K", "0", True, -1])
+def test_rejects_missing_or_inexact_counters(pool, value):
+    pool["vdevs"]["disk0"]["read_errors"] = value
+    with pytest.raises(status.StatusError, match="read_errors"):
+        status.parse_status(document({"tank": pool}))
+
+
+@pytest.mark.parametrize("value", [{}, {"output_version": {}}, {"output_version": {"vers_major": 1}, "pools": {}}])
+def test_rejects_malformed_or_unknown_schema(value):
+    with pytest.raises(status.StatusError):
+        status.parse_status(json.dumps(value))
+
+
+def test_rejects_missing_requested_pool(monkeypatch):
+    monkeypatch.setattr(status, "run", lambda *_: document({}))
+    with pytest.raises(status.StatusError, match="Requested pools"):
+        status.read_status("tank")
+
+
+@pytest.mark.parametrize(
+    ("function", "state", "pause", "active", "scrub_only"),
+    [
+        ("SCRUB", "SCANNING", 0, True, True),
+        ("SCRUB", "SCANNING", 95, False, True),
+        ("SCRUB", "CANCELED", 95, False, False),
+        ("SCRUB", "FINISHED", 0, False, False),
+        ("RESILVER", "SCANNING", 0, True, False),
+        ("RESILVER", "SCANNING", 0, False, True),
+        ("RESILVER", "FINISHED", 0, False, False),
+    ],
+)
+def test_scan_activity_distinguishes_pause_and_history(pool, function, state, pause, active, scrub_only):
+    pool["scan_stats"].update(function=function, state=state, scrub_pause=pause)
+    assert status.scan_active(pool, scrub_only=scrub_only) is active
+
+
+def test_sequential_resilver_is_active_but_not_a_scrub(pool):
+    pool["scan_stats"] = {"rebuild_stats": {"mirror-0": {"state": "ACTIVE"}}}
+    parsed = status.parse_status(document({"tank": pool}))["tank"]
+    assert status.scan_active(parsed)
+    assert not status.scan_active(parsed, scrub_only=True)
+
+
+@pytest.mark.parametrize("field", ["state", "function", "scrub_pause"])
+def test_rejects_unknown_or_incomplete_scan(pool, field):
+    pool["scan_stats"][field] = "unexpected"
+    with pytest.raises(status.StatusError):
+        status.parse_status(document({"tank": pool}))
+
+
+@pytest.mark.parametrize("value", [{}, [], None])
+def test_malformed_scan_state_is_a_countable_status_error(pool, value):
+    pool["scan_stats"]["state"] = value
+    with pytest.raises(status.StatusError, match="scan state"):
+        status.parse_status(document({"tank": pool}))
+
+
+@pytest.mark.parametrize(
+    ("version", "supported"), [("zfs-2.2.2-0ubuntu9.5", False), ("zfs-2.3.0", True), ("zfs-2.4.1-1ubuntu5.1", True)]
+)
+def test_selects_the_userspace_version(monkeypatch, version, supported):
+    monkeypatch.setattr(status, "run", lambda *_: version + "\nzfs-kmod-2.2.2\n")
+    assert status.supports_json() is supported
+
+
+def test_unknown_version_fails_closed(monkeypatch):
+    monkeypatch.setattr(status, "run", lambda *_: "unexpected")
+    with pytest.raises(status.StatusError, match="userspace version"):
+        status.supports_json()
+
+
+def test_noble_scan_fallback_pins_locale_and_does_not_request_json(monkeypatch):
+    monkeypatch.setattr(status, "supports_json", lambda: False)
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, stdout="scan: scrub in progress", stderr="")
+
+    monkeypatch.setattr(status.subprocess, "run", run)
+    assert status.scan_in_progress("tank")
+    assert calls[0][0] == ["timeout", "-k", "10", "60", "zpool", "status", "tank"]
+    assert calls[0][1]["env"]["LC_ALL"] == "C"
+
+
+def test_scan_query_failure_propagates(monkeypatch):
+    monkeypatch.setattr(status, "supports_json", lambda: True)
+
+    def fail(*_, **__):
+        raise subprocess.CalledProcessError(124, ["zpool"], stderr="pool wedged")
+
+    monkeypatch.setattr(status, "run", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        status.scan_in_progress(None)
+
+
+@pytest.mark.parametrize(
+    ("state", "pause", "end", "expected"),
+    [
+        ("FINISHED", 0, 90, None),
+        ("FINISHED", 0, 70, "expired"),
+        ("SCANNING", 70, 0, "expired"),
+        ("SCANNING", 0, 0, None),
+        ("CANCELED", 95, 0, "canceled"),
+    ],
+)
+def test_scrub_watchdog_uses_integer_timestamps(pool, state, pause, end, expected):
+    pool["scan_stats"].update(state=state, scrub_pause=pause, end_time=end)
+    issue = status.scrub_issue("tank", pool, now=100, expire=20)
+    assert issue is None if expected is None else expected in issue
+
+
+@pytest.mark.parametrize("scan", [None, {"function": "RESILVER", "state": "FINISHED"}])
+def test_creation_baseline_without_a_recorded_full_scrub(monkeypatch, pool, scan):
+    pool.pop("scan_stats")
+    if scan:
+        pool["scan_stats"] = scan
+    monkeypatch.setattr(status, "run", lambda *_: "70\n")
+    assert status.scrub_issue("tank", pool, now=100, expire=20) == "Scrub expired on tank"
+
+
+def test_health_mails_faults_and_includes_slow_io_diagnostics(monkeypatch, pool, capsys):
+    pool["vdevs"]["disk0"]["checksum_errors"] = 5
+    healthy = copy.deepcopy(pool)
+    healthy["vdevs"]["disk0"]["checksum_errors"] = 0
+    monkeypatch.setattr(status.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(status.time, "time", lambda: 100)
+    monkeypatch.setenv("SCRUB_EXPIRE", "20")
+    monkeypatch.setattr(status, "run", lambda *_: "NAME STATE READ WRITE CKSUM SLOW\ndisk0 ONLINE 0 0 5 3")
+    monkeypatch.setattr(
+        status, "read_status", lambda **kwargs: {"tank": healthy} if kwargs.get("explain") else {"tank": pool}
+    )
+    mail = []
+    monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append((args, kwargs)))
+    assert status.health() == 1
+    assert "Detected drive errors (READ/WRITE/CKSUM)" in capsys.readouterr().err
+    assert len(mail) == 1
+    assert mail[0][0][0][0] == "mail"
+    assert "SLOW" in mail[0][1]["input"]
+
+
+def test_health_query_failure_is_mailed(monkeypatch, capsys):
+    monkeypatch.setattr(status.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(status, "run", lambda *_: "report")
+
+    def fail(**_):
+        raise status.StatusError("bad JSON schema")
+
+    monkeypatch.setattr(status, "read_status", fail)
+    mail = []
+    monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
+    assert status.health() == 1
+    assert "bad JSON schema" in capsys.readouterr().err
+    assert len(mail) == 1
+
+
+def test_health_accepts_feature_capped_pools_and_does_not_alarm_on_slow_io(monkeypatch, pool):
+    pool["vdevs"]["disk0"]["slow_ios"] = 3
+    monkeypatch.setattr(status.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(status.time, "time", lambda: 100)
+    monkeypatch.setenv("SCRUB_EXPIRE", "20")
+    monkeypatch.setattr(status, "run", lambda *_: "SLOW 3")
+    monkeypatch.setattr(status, "read_status", lambda **kwargs: {} if kwargs.get("explain") else {"tank": pool})
+    assert status.health() == 0

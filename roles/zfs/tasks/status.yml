@@ -1,0 +1,23 @@
+- name: status | Create the ZFS tooling directory
+  file:
+    path: /opt/zfs
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - zfs
+
+- name: status | Install the status reader
+  copy:
+    src: zfs_status.py
+    dest: /opt/zfs/zfs_status.py
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' %s
+  become: true
+  tags:
+    - zfs

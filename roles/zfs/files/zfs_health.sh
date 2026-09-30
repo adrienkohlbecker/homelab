@@ -36,7 +36,7 @@ failed=0
 TMP_OUTPUT=$(mktemp)
 trap 'rm -f "$TMP_OUTPUT"' EXIT
 
-zpool_status | tee "$TMP_OUTPUT" || echo >&2 "Warning: zpool status dump for the report did not complete"
+zpool_status -s | tee "$TMP_OUTPUT" || echo >&2 "Warning: zpool status dump for the report did not complete"
 
 ZFS_VOLUMES=$(zpool list -H -o name)
 

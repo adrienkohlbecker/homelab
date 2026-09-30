@@ -4,3 +4,8 @@ machines:
   lab:
   pug:
   minimal:
+ubuntu:
+  - resolute
+skip:
+  "minimal:resolute": >-
+    Lab and Pug exercise JSON status; Minimal Noble covers non-root ZFS.
