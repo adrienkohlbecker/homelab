@@ -23,9 +23,38 @@
       all {{ chrony_verify_authdata.stdout_lines | length }} loaded source(s) use
       NTS and at least two hold negotiated cookies
 
-- name: _verify | Timesyncd is not competing for the clock  # noqa: command-instead-of-module -- is-active query, not a state change
-  command: systemctl is-active systemd-timesyncd
+# systemd's ntp-units.d registry names every installed synchronizer. Timesyncd
+# is queried explicitly because removing its package drops its registry entry
+# while an instance nobody stopped keeps steering the clock until reboot.
+- name: _verify | List active time synchronizers
+  shell: |
+    set -euo pipefail
+    units="$(grep -hE "^[^#[:space:]]" /usr/lib/systemd/ntp-units.d/*.list)"
+    systemctl list-units --state=active --plain --no-legend $units systemd-timesyncd.service
+  args:
+    executable: /bin/bash
   changed_when: false
-  register: chrony_verify_timesyncd
-  failed_when: chrony_verify_timesyncd.stdout == "active"
   become: true
+  register: chrony_verify_synchronizers
+
+- name: _verify | Chrony is the sole active synchronizer
+  assert:
+    that:
+      - chrony_verify_synchronizers.stdout_lines | map('split') | map('first') | list == ['chrony.service']
+    fail_msg: >-
+      expected only chrony.service among active time synchronizers, got
+      {{ chrony_verify_synchronizers.stdout_lines }}
+
+- name: _verify | Read the timesyncd boot state  # noqa: command-instead-of-module -- property query; the module rejects a not-found unit
+  command: systemctl show --property=LoadState,UnitFileState systemd-timesyncd.service
+  changed_when: false
+  become: true
+  register: chrony_verify_timesyncd
+
+- name: _verify | Timesyncd cannot start at next boot
+  vars:
+    timesyncd: "{{ dict(chrony_verify_timesyncd.stdout_lines | map('split', '=', 1)) }}"
+  assert:
+    that:
+      - timesyncd.LoadState == 'not-found' or timesyncd.UnitFileState in ['disabled', 'masked']
+    fail_msg: "systemd-timesyncd would start at next boot: {{ timesyncd }}"

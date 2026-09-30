@@ -1,0 +1,3 @@
+# Noble converts a stock timesyncd host; Resolute images ship chrony already.
+ubuntu:
+  - resolute
