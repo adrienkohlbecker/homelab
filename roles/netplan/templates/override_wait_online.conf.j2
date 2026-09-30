@@ -6,14 +6,14 @@
 # every condition, including the stock CAP_NET_ADMIN check that only matters
 # inside unprivileged containers.
 ConditionPathIsSymbolicLink=
-{% if ansible_distribution_version is version('24.10', '>=') %}
+{% if ansible_distribution_release != 'noble' %}
 # --dns queries resolved's DNS configuration.
 After=systemd-resolved.service
 {% endif %}
 
 [Service]
 # Replace Netplan's per-interface list, captured at generator time, with
-# "any managed link is routable". --dns (systemd 256+) additionally needs a
-# DNS server with a route to it, as Netplan 1.2 requests.
+# "any managed link is routable". --dns (systemd 258+, so not Noble's 255)
+# additionally needs a DNS server with a route to it, as Netplan 1.2 requests.
 ExecStart=
-ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --operational-state=routable{{ ' --dns' if ansible_distribution_version is version('24.10', '>=') else '' }}
+ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --operational-state=routable{{ ' --dns' if ansible_distribution_release != 'noble' else '' }}
