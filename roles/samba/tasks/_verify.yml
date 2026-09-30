@@ -86,7 +86,9 @@
       - ( sport = :137 or sport = :138 or sport = :139 )
   register: samba_netbios_listeners
   changed_when: false
-  failed_when: samba_netbios_listeners.stdout | trim | length > 0
+  failed_when: >-
+    samba_netbios_listeners.rc != 0
+    or samba_netbios_listeners.stdout | trim | length > 0
   become: true
 
 - name: _verify | Browse Samba services over mDNS
