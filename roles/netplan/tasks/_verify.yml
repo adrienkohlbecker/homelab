@@ -184,6 +184,18 @@
   register: netplan_verify_default_route
   changed_when: false
 
+# SSH readiness does not imply the probe ran: it queues behind wait-online,
+# which may still be waiting for a DNS server. Wait-online's own timeout is
+# 120 seconds, so this bound covers a timed-out wait as well.
+- name: _verify boot | Wait for the network-online probe to finish  # noqa: command-instead-of-module
+  command: systemctl show netplan_online_probe.service --property=ActiveState --value
+  register: netplan_verify_probe_state
+  until: netplan_verify_probe_state.stdout in ['active', 'failed']
+  retries: 30
+  delay: 5
+  changed_when: false
+  failed_when: netplan_verify_probe_state.stdout != 'active'
+
 - name: _verify boot | Read the default route seen by network-online dependents
   slurp:
     src: /run/netplan_online_probe.json
