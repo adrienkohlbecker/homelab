@@ -26,6 +26,10 @@ EOF
 cat >"$scratch/bin/zfs" <<'EOF'
 #!/bin/bash
 set -euo pipefail
+if [[ -n "${ZFS_VERIFY_CREATION:-}" ]]; then
+  echo "$ZFS_VERIFY_CREATION"
+  exit 0
+fi
 echo >&2 'Unexpected pool-creation fallback'
 exit 2
 EOF
@@ -67,4 +71,6 @@ scan: resilvered (mirror-0) 64M in 00:00:01 with 0 errors on $old_date"
 ZFS_VERIFY_NOW=1700000110 check_status 1 "scan: resilvered 0B in 00:00:01 with 0 errors on $recent_date" 'Scrub expired on tank'
 check_status 1 "scan: scrub repaired 0B in 00:00:01 with 0 errors on $recent_date
 scan: resilvered (mirror-0) 64M in 00:00:01 with 0 errors on an invalid date" 'Cannot parse scrub date for tank'
+ZFS_VERIFY_CREATION=1700000000 check_status 1 'scan: none requested' 'age since pool creation; no usable scan timestamp'
+ZFS_VERIFY_CREATION=1700000000 check_status 1 "scan: resilver canceled on $recent_date" 'age since pool creation; no usable scan timestamp'
 echo 'Legacy scan dates select the newest scrub, resilver, rebuild, or pause and reject malformed dates'

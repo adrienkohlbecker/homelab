@@ -287,10 +287,16 @@ def test_scrub_watchdog_uses_integer_timestamps(pool, state, pause, end, expecte
     assert issue is None if expected is None else expected in issue
 
 
-def test_creation_baseline_without_a_recorded_scan(monkeypatch, pool):
-    pool.pop("scan_stats")
+@pytest.mark.parametrize("canceled_resilver", [False, True])
+def test_creation_baseline_is_explained_without_a_usable_scan(monkeypatch, pool, canceled_resilver):
+    if canceled_resilver:
+        pool["scan_stats"].update(function="RESILVER", state="CANCELED")
+    else:
+        pool.pop("scan_stats")
     monkeypatch.setattr(status, "run", lambda *_: "70\n")
-    assert status.scrub_issue("tank", pool, now=100, expire=20) == "Scrub expired on tank"
+    assert status.scrub_issue("tank", pool, now=100, expire=20) == (
+        "Scrub expired on tank (age since pool creation; no usable scan timestamp)"
+    )
 
 
 @pytest.mark.parametrize(("end", "expected"), [(90, None), (70, "Scrub expired on tank")])

@@ -169,7 +169,9 @@ def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str |
     if scrub_date <= 0:
         raise StatusError(f"Missing scrub or creation timestamp for {name}")
     if now - scrub_date >= expire:
-        return f"Scrub expired on {name}"
+        return f"Scrub expired on {name}" + (
+            " (age since pool creation; no usable scan timestamp)" if not completed else ""
+        )
     return None
 
 

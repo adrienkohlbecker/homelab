@@ -22,8 +22,9 @@ EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 # Scrub expiration in seconds (40 days). Scrubs themselves are scheduled by the
 # zfs_scrub timer (monthly, second Sunday), not run here; this role also diverts
 # the distro's /etc/cron.d/zfsutils-linux aside so that timer is the sole
-# scheduler. This threshold is the watchdog -- it alarms if that monthly scrub
-# stops happening (40 days = one monthly cycle plus slack). Overridable via the
+# scheduler. The watchdog measures age since the latest completed scrub,
+# resilver/rebuild, or paused scrub, with pool creation as the fallback.
+# Forty days allows one monthly cycle plus slack. Overridable via the
 # environment so the _verify harness can force the expiry branch
 # (SCRUB_EXPIRE=1) without faking a scrub date or waiting 40 days; prod always
 # takes the default.
@@ -99,8 +100,10 @@ for volume in $ZFS_VOLUMES; do
   fi
 
   SCRUB_RAW_DATES=$(awk '/scan: (scrub repaired|scrub paused|resilvered)/ {print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}' <<<"$vol_status")
+  age_basis=""
   if [[ -z "$SCRUB_RAW_DATES" ]]; then
     SCRUB_DATE=$(zfs get creation -Hpo value "$volume")
+    age_basis=" (age since pool creation; no usable scan timestamp)"
   else
     # Sequential rebuilds add one scan line per vdev alongside scrub history.
     # Parse every trailing ctime date and select the latest valid timestamp.
@@ -118,7 +121,7 @@ for volume in $ZFS_VOLUMES; do
   fi
 
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge "$SCRUB_EXPIRE" ]; then
-    echo >&2 "ERROR :: Scrub expired on $volume"
+    echo >&2 "ERROR :: Scrub expired on $volume$age_basis"
     ((failed += 1))
   fi
 done
