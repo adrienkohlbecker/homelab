@@ -118,7 +118,7 @@
           grub_scope: all
 
 # Noble keeps its broad driver policy. Resolute's host-only image is exercised
-# by the normal-boot reboot checks below.
+# by the normal-boot reboot check above.
 - name: _verify | Find the host initramfs (cloud images may boot initrd-less)
   stat:
     path: /boot/initrd.img-{{ ansible_kernel }}

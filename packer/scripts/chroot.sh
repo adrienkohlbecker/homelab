@@ -229,7 +229,7 @@ systemctl enable zfs-import.target
 
 # Cap the ARC on small-RAM cloud VMs (hetzner cpx22 = 3.7 GB; default ARC
 # of ~50% of RAM would starve headscale). Written to modprobe.d so it applies
-# both at boot and inside the initramfs (the Dracut policy includes modprobe.d),
+# both at boot and inside the initramfs (both providers include modprobe.d),
 # which matters because zfs loads from the initramfs on a root-on-ZFS host.
 if [ "${ZFS_ARC_MAX:-0}" != "0" ]; then
   echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
