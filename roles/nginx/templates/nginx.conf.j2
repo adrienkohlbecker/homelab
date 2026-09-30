@@ -157,6 +157,11 @@ http {
         listen              [::]:80 default_server;
 {% endif %}
         server_name         _;
+{% if ansible_distribution_release != 'noble' %}
+        # The default server decides whether a :80 connection may speak
+        # cleartext HTTP/2 prior knowledge; keep the plaintext listener HTTP/1.x.
+        http2               off;
+{% endif %}
 
         # Status consumed by Netdata's local nginx collector.
         location = /nginx_status {
