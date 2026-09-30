@@ -25,6 +25,57 @@
   changed_when: false
   become: true
 
+- name: _verify | Check whether cron is installed
+  stat:
+    path: /usr/lib/systemd/system/cron.service
+  register: _user_cron_unit
+
+# The sysstat job runs its real command line so the filter sees the exact
+# announcement. The delayed marker job proves cron's syslog lines still reach
+# the journal and bounds the wait for the filtered lines.
+- name: _verify | Cron housekeeping stays out of the journal
+  when: _user_cron_unit.stat.exists
+  become: true
+  block:
+    - name: _verify | Record the journal start time
+      command: date +%s
+      register: _user_cron_since
+      changed_when: false
+
+    - name: _verify | Schedule housekeeping and marker cron jobs
+      copy:
+        dest: /etc/cron.d/user_verify_cron_filter
+        content: |
+          * * * * * root command -v debian-sa1 > /dev/null && debian-sa1 1 1
+          * * * * * root sleep 3 && logger -t user_verify_cron_filter done
+        mode: "0644"
+
+    - name: _verify | Wait for the marker job
+      command: journalctl -t user_verify_cron_filter --since @{{ _user_cron_since.stdout }} -o cat
+      register: _user_cron_marker
+      changed_when: false
+      until: "'done' in _user_cron_marker.stdout_lines"
+      retries: 30
+      delay: 5
+
+    - name: _verify | Read cron messages
+      command: journalctl -u cron.service --since @{{ _user_cron_since.stdout }} -o cat
+      register: _user_cron_journal
+      changed_when: false
+
+    - name: _verify | Only unfiltered cron messages were stored
+      assert:
+        that:
+          - "'(root) CMD (sleep 3 && logger -t user_verify_cron_filter done)' in _user_cron_journal.stdout_lines"
+          - "_user_cron_journal.stdout is not search('pam_unix[(]cron:session[)]')"
+          - "'debian-sa1' not in _user_cron_journal.stdout"
+        fail_msg: "{{ _user_cron_journal.stdout_lines }}"
+  always:
+    - name: _verify | Remove the verification cron jobs
+      file:
+        path: /etc/cron.d/user_verify_cron_filter
+        state: absent
+
 # Shell startup needs these binaries; verification must not install missing tools.
 - name: _verify | Mise tools execute without installing
   environment:

@@ -85,6 +85,17 @@
   tags:
     - user
 
+# journald reads a unit's filter patterns when the unit starts. Debian's
+# KillMode=process keeps running cron jobs alive across the restart.
+- name: Restart cron to apply log filters
+  when: cron_service_d_override_conf_result.changed
+  systemd:
+    name: cron.service
+    state: restarted
+  become: true
+  tags:
+    - user
+
 - name: Enable EDAC monitoring service
   when: not (ansible_check_mode and user_apt_packages.changed)
   systemd:
