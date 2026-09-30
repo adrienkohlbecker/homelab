@@ -65,6 +65,46 @@
       00-hardening.conf may not have landed, or /etc/ssh/sshd_config
       no longer Includes sshd_config.d.
 
+# Key exchange completes before authentication, so an unauthenticated loopback
+# client still records the algorithm sshd actually negotiated. Advertised
+# support alone does not prove a post-quantum hybrid wins the negotiation.
+- name: _verify | Negotiate a loopback SSH session
+  command:
+    argv:
+      - ssh
+      - -v
+      - -F
+      - /dev/null
+      - -o
+      - BatchMode=yes
+      - -o
+      - PreferredAuthentications=none
+      - -o
+      - StrictHostKeyChecking=no
+      - -o
+      - UserKnownHostsFile=/dev/null
+      - 127.0.0.1
+      - "true"
+  register: ssh_verify_loopback
+  changed_when: false
+  failed_when: false
+
+# ssh -v ends its debug lines with CRLF, hence the trim.
+- name: _verify | Sshd negotiates the release default post-quantum key exchange
+  vars:
+    ssh_verify_expected_kex: >-
+      {{ 'sntrup761x25519-sha512@openssh.com'
+         if ansible_distribution_release in ['noble']
+         else 'mlkem768x25519-sha256' }}
+  assert:
+    that:
+      - >-
+        ('debug1: kex: algorithm: ' ~ ssh_verify_expected_kex)
+        in (ssh_verify_loopback.stderr_lines | map('trim') | list)
+    fail_msg: >-
+      Expected key exchange {{ ssh_verify_expected_kex }}; ssh reported:
+      {{ ssh_verify_loopback.stderr_lines | select('search', 'kex: algorithm|Connection|Unable') | list }}
+
 # Divergence guard: a persisted identity that differs from the live one
 # (rebuilt host, restore step skipped) must HALT the converge instead of
 # silently overwriting the old identity. Corrupt the persisted copy, re-run
