@@ -44,9 +44,17 @@ resume_scrubs() {
   done
 }
 trap resume_scrubs EXIT
-pools=$(timeout -k 10 60 zpool list -H -o name)
+pools=$(timeout -k 10 60 zpool list -H -o name) || {
+  echo >&2 "Warning: cannot list pools; skipping scrub pauses"
+  ((failed += 1))
+  pools=
+}
 for pool in $pools; do
-  active=$(/opt/zfs/zfs_status.py scan --scrub-only "$pool")
+  active=$(/opt/zfs/zfs_status.py scan --scrub-only "$pool") || {
+    echo >&2 "Warning: cannot read scan state on $pool; skipping its scrub pause"
+    ((failed += 1))
+    continue
+  }
   if [[ "$active" == 1 ]]; then
     if zpool scrub -p "$pool"; then
       paused_scrubs+=("$pool")
@@ -56,6 +64,7 @@ for pool in $pools; do
 done
 
 # create local snapshots
+local_failed_before=$failed
 run_step zfs_backup_local "${zfs_backup_local_args[@]}"
 
 # Gate offsite replication on the local snapshot succeeding. The offsite leg
@@ -67,7 +76,7 @@ run_step zfs_backup_local "${zfs_backup_local_args[@]}"
 # consistent copy with a mixed one. So if the local step failed at all, skip
 # offsite and let the next run retry from a clean snapshot. (`failed` is already
 # bumped, so the run still exits 1 below for monitoring.)
-zfs_backup_local_ok=$((failed == 0))
+zfs_backup_local_ok=$((failed == local_failed_before))
 
 # pull each configured source host's snapshots onto this host
 # Unaffected by the gate above: each onsite leg pulls a *peer* host's own
