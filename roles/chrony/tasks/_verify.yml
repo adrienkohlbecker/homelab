@@ -1,9 +1,10 @@
 # QEMU-only functional checks. authdata proves chronyd is responsive and
 # exposes whether NTS-KE established keys and cookies for each source. -N
 # reports each source under its configured name, so pool members keep the
-# pool hostname rather than a resolved address.
+# pool hostname rather than a resolved address; -a includes sources whose
+# name has not resolved yet, which authdata otherwise omits.
 - name: _verify | Read per-source authentication state (CSV)
-  command: chronyc -c -N authdata
+  command: chronyc -c -N authdata -a
   changed_when: false
   become: true
   register: chrony_verify_authdata
