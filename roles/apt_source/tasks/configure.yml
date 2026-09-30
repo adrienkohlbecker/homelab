@@ -17,9 +17,11 @@
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
 #   pin:           optional {packages, version} -- holds the matching packages
-#                  at a version glob (e.g. netdata* at 2.*) with priority 999,
-#                  so installs and the fleet-wide safe-upgrade stay inside the
-#                  series. Omitting it removes a previously installed pin.
+#                  at a version glob (e.g. netdata* at 2.*) with priority 999
+#                  and refuses every other version, so installs and the
+#                  fleet-wide safe-upgrade stay inside the series and fail
+#                  when it vanishes from the index. Omitting it removes a
+#                  previously installed pin.
 #
 # Exposes apt_source_<name>_changed so callers can gate dependent installs until
 # the repository, signing key, and pin are ready.
@@ -94,6 +96,9 @@
 # No validate: apt has no single-file preferences parser; apt-cache policy
 # reads the whole preferences.d set. Pin by version rather than origin because
 # the mirrored source URL carries the proxy's hostname, not the vendor's.
+# APT applies the first record matching a version, so the second record only
+# catches versions outside the series; without it they keep their default
+# priority and install once the series leaves the index.
 - name: Pin packages for {{ apt_source_args.name }}  # noqa: require-validate
   when: apt_source_args.pin is defined
   copy:
@@ -102,6 +107,10 @@
       Package: {{ apt_source_args.pin.packages }}
       Pin: version {{ apt_source_args.pin.version }}
       Pin-Priority: 999
+
+      Package: {{ apt_source_args.pin.packages }}
+      Pin: version *
+      Pin-Priority: -1
     dest: /etc/apt/preferences.d/{{ apt_source_args.name }}
     owner: root
     group: root

@@ -94,6 +94,37 @@
       Expected the pin to select {{ _apt_source_versions | last }};
       got policy: {{ _apt_source_pinned_policy.stdout }}
 
+# Once the pinned series leaves the index, apt must refuse to install rather
+# than fall back to an out-of-series release.
+- name: _verify | Pin docker-ce-cli to a series absent from the index
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: docker
+      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+      key_url: https://download.docker.com/linux/ubuntu/gpg
+      uris: "{{ mirror_apt_docker }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: stable
+      pin:
+        packages: docker-ce-cli
+        version: "0.*"
+
+- name: _verify | Read the unmatched docker-ce-cli policy
+  command: apt-cache policy docker-ce-cli
+  changed_when: false
+  register: _apt_source_unmatched_policy
+
+- name: _verify | Apt offers no candidate outside the pinned series
+  assert:
+    that:
+      - _apt_source_unmatched_policy.stdout is search('(?m)^  Candidate. [(]none[)]$')
+    fail_msg: >-
+      Expected no candidate for an unmatched pin;
+      got policy: {{ _apt_source_unmatched_policy.stdout }}
+
 - name: _verify | Drop the docker-ce-cli pin
   import_role:
     name: apt_source
