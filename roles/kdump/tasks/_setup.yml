@@ -1,3 +1,7 @@
+- name: _setup | Preserve the selected provider before the legacy override
+  set_fact:
+    _kdump_use_dracut: '{{ initramfs_use_dracut | bool }}'
+
 - name: _setup | Recreate the boot image provider migration
   import_role:
     name: boot
@@ -6,7 +10,7 @@
 # Start from the installed package and a loaded mkinitramfs capture image,
 # rather than testing only a fresh kdump installation after the provider swap.
 - name: _setup | Arm the legacy capture path before migrating
-  when: ansible_distribution_release not in ['jammy', 'noble']
+  when: _kdump_use_dracut
   block:
     - name: _setup | Configure kdump with initramfs-tools
       import_role:
