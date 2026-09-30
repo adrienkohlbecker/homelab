@@ -2,6 +2,10 @@
   set_fact:
     _kdump_use_dracut: '{{ initramfs_use_dracut | bool }}'
 
+- name: _setup | Exercise installation on the selected provider
+  when: _kdump_use_dracut
+  import_tasks: _setup_fresh.yml
+
 - name: _setup | Recreate the boot image provider migration
   import_role:
     name: boot

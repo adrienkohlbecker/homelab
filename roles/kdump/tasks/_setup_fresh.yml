@@ -1,0 +1,28 @@
+- name: _setup_fresh | Start without an installed capture package
+  apt:
+    pkg: kdump-tools
+    state: absent
+    purge: true
+  become: true
+
+- name: _setup_fresh | Configure kdump directly on Dracut
+  import_role:
+    name: kdump
+    tasks_from: main
+
+- name: _setup_fresh | The installed capture image uses Dracut
+  command: lsinitrd /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+  register: _kdump_fresh_image
+  changed_when: false
+  failed_when: "'dracut modules:' not in _kdump_fresh_image.stdout"
+  become: true
+
+- name: _setup_fresh | Exercise the fresh capture image through a panic
+  import_tasks: _verify.yml
+
+- name: _setup_fresh | Reset the package conffile before the legacy fixture
+  apt:
+    pkg: kdump-tools
+    state: absent
+    purge: true
+  become: true
