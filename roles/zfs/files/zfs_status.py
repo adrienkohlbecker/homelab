@@ -37,9 +37,9 @@ def parse_status(raw: str) -> dict[str, Any]:
     """Validate the fields consumed from OpenZFS's flat, integer JSON schema."""
     document = mapping(json.loads(raw), "status")
     version = mapping(document.get("output_version"), "output_version")
-    integer(version.get("vers_major"), "vers_major")
-    integer(version.get("vers_minor"), "vers_minor")
-    if version != {"command": "zpool status", "vers_major": 0, "vers_minor": 1}:
+    major = integer(version.get("vers_major"), "vers_major")
+    minor = integer(version.get("vers_minor"), "vers_minor")
+    if version.get("command") != "zpool status" or major != 0 or minor < 1:
         raise StatusError(f"Unsupported zpool status schema: {version!r}")
     pools = mapping(document.get("pools"), "pools")
     for name, value in pools.items():

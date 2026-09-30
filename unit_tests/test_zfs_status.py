@@ -43,6 +43,21 @@ def test_no_imported_pools_is_valid():
     assert status.parse_status(document({})) == {}
 
 
+def test_accepts_additive_minor_schema_changes(pool):
+    payload = json.loads(document({"tank": pool}))
+    payload["output_version"].update(vers_minor=2, new_metadata="ignored")
+    payload["pools"]["tank"]["new_stat"] = 42
+    assert status.parse_status(json.dumps(payload)) == {"tank": pool | {"new_stat": 42}}
+
+
+@pytest.mark.parametrize(("field", "value"), [("vers_major", 1), ("vers_minor", 0), ("vers_minor", True)])
+def test_rejects_incompatible_or_malformed_schema_versions(field, value):
+    payload = json.loads(document({}))
+    payload["output_version"][field] = value
+    with pytest.raises(status.StatusError):
+        status.parse_status(json.dumps(payload))
+
+
 def test_never_scrubbed_pool_and_spare_are_valid(pool):
     del pool["scan_stats"]
     pool["vdevs"]["spare0"] = {"state": "AVAIL"}
