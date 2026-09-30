@@ -34,8 +34,10 @@
 
 - name: Install kdump-tools
   apt:
-    pkg:
-      - kdump-tools
+    pkg: >-
+      {{ ['kdump-tools', 'makedumpfile'] +
+         (initramfs_packages + ['3cpio'] if ansible_distribution_release == 'resolute' else []) }}
+    install_recommends: "{{ ansible_distribution_release != 'resolute' }}"
     policy_rc_d: 101
     cache_valid_time: 3600
   register: kdump_apt_tools
@@ -73,6 +75,11 @@
 
 - name: Configure kdump-tools defaults
   import_tasks: config.yml
+  tags:
+    - kdump
+
+- name: Configure Dracut capture images on Resolute
+  import_tasks: dracut.yml
   tags:
     - kdump
 

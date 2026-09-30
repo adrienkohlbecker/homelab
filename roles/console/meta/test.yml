@@ -5,3 +5,5 @@ machines:
   minimal:
 arm:
   - lab
+ubuntu:
+  - resolute

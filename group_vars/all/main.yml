@@ -34,6 +34,15 @@ zfs_has_data_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_minio_mount: "{{ not (qemu_test | bool) }}"
 zfs_root: true
 grub_bootloader: false
+# Switch ZFS support with the generator so root-on-ZFS hosts cannot build an
+# image without their root driver during the provider transition.
+initramfs_packages: >-
+  {{ (['dracut'] + (['zfs-dracut'] if zfs_root else []))
+     if ansible_distribution_release == 'resolute' else ['initramfs-tools'] }}
+initramfs_rebuild_command: >-
+  {{ 'dracut --force --regenerate-all' if ansible_distribution_release == 'resolute'
+     else 'update-initramfs -u -k all' }}
+initramfs_list_command: "{{ 'lsinitrd' if ansible_distribution_release == 'resolute' else 'lsinitramfs' }}"
 zfs_dozer_filesystem: rpool
 zfs_tank_filesystem: rpool
 zfs_trim_pools:

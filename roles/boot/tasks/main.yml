@@ -33,12 +33,9 @@
 # but the tooling belongs with the role that owns the boot chain.
 - name: Install ESP filesystem tools
   apt:
-    package:
-      - dosfstools
-      - efibootmgr
-      - initramfs-tools
-      - mdadm
+    package: "{{ ['dosfstools', 'efibootmgr', 'mdadm'] + initramfs_packages }}"
     cache_valid_time: 3600
+  register: boot_apt
   become: true
   tags:
     - boot
@@ -117,12 +114,10 @@
   tags:
     - boot
 
-# Pull all modules into the initramfs (not just the build host's loaded set) so
-# the image boots on bare-metal controllers/NICs the builder didn't have
-# (lab/pug carry server-class HBAs). MODULES=most is the default on these images
-# already; pin it so a regression to 'dep' can't silently strand a boot.
-# conf.d overrides the main initramfs.conf and survives package upgrades.
-- name: Build a portable initramfs (MODULES=most)
+# Lab/Pug carry server-class HBAs absent from the build VM. Each generator
+# must include the broad driver set rather than just the current hardware.
+- name: Configure portable initramfs-tools images on Noble
+  when: ansible_distribution_release == 'noble'
   copy:
     src: modules_most
     dest: /etc/initramfs-tools/conf.d/modules-most
@@ -131,23 +126,38 @@
     mode: "0644"
     backup: true
     validate: sh -n %s
-  register: boot_initramfs_modules
+  register: boot_initramfs_config
   become: true
   tags:
     - boot
 
-- name: Update initramfs
+- name: Configure portable Dracut images on Resolute
+  when: ansible_distribution_release == 'resolute'
+  copy:
+    src: dracut_portable.conf
+    dest: /etc/dracut.conf.d/90_portable.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: bash -n %s
+  register: boot_dracut_config
+  become: true
+  tags:
+    - boot
+
+- name: Rebuild boot images
   when:
-    - boot_initramfs_modules.changed
+    - boot_apt.changed or boot_initramfs_config.changed or boot_dracut_config.changed
     - not ansible_check_mode
-  command: update-initramfs -u -k all
+  command: "{{ initramfs_rebuild_command }}"
   changed_when: true
   become: true
   tags:
     - boot
 
 - name: Ask to reboot
-  when: boot_initramfs_modules.changed
+  when: boot_apt.changed or boot_initramfs_config.changed or boot_dracut_config.changed
   file:
     path: /var/run/reboot-required
     state: touch

@@ -1,8 +1,7 @@
 # Functional checks for the console role. The converge proves apt +
-# copy + update-initramfs exit-coded cleanly; these checks verify that
-# (a) the initramfs picked up both /etc/default/console-setup and
-# /etc/default/keyboard -- i.e. the console_setup initramfs hook fired
-# and bundled both configs into the initrd, and (b) the running kernel
+# copy + image generation exit-coded cleanly; these checks verify that
+# the generated image carries the console policy (source configuration on
+# Noble, a compiled AZERTY keymap on Resolute), and the running kernel
 # actually applied consoleblank=0 from whichever cmdline mechanism (ZBM
 # property / GRUB grub.d) the host uses. Live tty glyph output isn't
 # observable in a headless QEMU run, so the noblank service is checked
@@ -35,31 +34,43 @@
     | length == 0
   become: true
 
-# The console_setup initramfs hook
-# (/usr/share/initramfs-tools/hooks/console_setup, shipped by the
-# keyboard-configuration package, not console-setup) copies both
-# /etc/default/console-setup and /etc/default/keyboard into the initrd
-# at the same paths. If the hook didn't fire (package change, hook
-# disabled, update-initramfs no-op), either path is absent and this
-# fails.
+# initramfs-tools copies the policy files; Dracut console-setup compiles them
+# into a keymap and a small setupcon script without the source configuration.
 #
 # Minimal boots a pre-baked initrd outside /boot. Deployment-shaped fixtures
 # provide the per-kernel initrd inspected here.
 - name: _verify | List current kernel's initrd contents
-  when: not qemu_test_minimal
+  when:
+    - not qemu_test_minimal
+    - ansible_distribution_release == 'noble'
   command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
   register: _console_initrd
   changed_when: false
   become: true
 
 - name: _verify | Initrd bundles console-setup + keyboard configs
-  when: not qemu_test_minimal
+  when:
+    - not qemu_test_minimal
+    - ansible_distribution_release == 'noble'
   assert:
     that: item in _console_initrd.stdout_lines
     fail_msg: "initrd missing: {{ item }}"
   loop:
     - etc/default/console-setup
     - etc/default/keyboard
+
+- name: _verify | Dracut image contains a French AZERTY keymap
+  when:
+    - not qemu_test_minimal
+    - ansible_distribution_release == 'resolute'
+  command: >-
+    lsinitrd --file etc/console-setup/cached_UTF-8_del.kmap
+    /boot/initrd.img-{{ ansible_kernel }}
+  register: _console_dracut_keymap
+  changed_when: false
+  failed_when: >-
+    _console_dracut_keymap.stdout is not search('(?m)^keycode\\s+16\\s+=\\s+\\+?(a|U\\+0061)\\s')
+  become: true
 
 # console_noblank.service is Type=oneshot RemainAfterExit=true, so
 # `active` after the start means setterm's ExecStart returned 0 — the

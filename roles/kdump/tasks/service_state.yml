@@ -4,7 +4,7 @@
     name: kdump-tools.service
     enabled: true
     state: >-
-      {{ ('restarted' if kdump_tools_cfg.changed else 'started')
+      {{ ('restarted' if kdump_tools_cfg.changed or kdump_dracut_rebuild.changed else 'started')
          if (kdump_kexec_crash_size.stdout | trim | int) > 0
          else omit }}
   become: true

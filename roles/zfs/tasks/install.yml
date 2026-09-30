@@ -2,7 +2,7 @@
   apt:
     package:
       - zfsutils-linux
-      - zfs-initramfs
+      - "{{ 'zfs-dracut' if ansible_distribution_release == 'resolute' else 'zfs-initramfs' }}"
       - zfs-zed
     policy_rc_d: 101
     cache_valid_time: 3600

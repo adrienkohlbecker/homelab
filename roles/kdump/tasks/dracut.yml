@@ -1,0 +1,82 @@
+# Backport the capture profile and sysctl module from Ubuntu kdump-tools
+# 1:1.10.7ubuntu5 (LP #2042955). Resolute's package still uses mkinitramfs.
+- name: dracut | Install capture image integration
+  when:
+    - ansible_distribution_release == 'resolute'
+    - not (ansible_check_mode and kdump_apt_tools.changed)
+  become: true
+  tags:
+    - kdump
+  block:
+    - name: dracut | Create module and profile directories
+      file:
+        path: '{{ item }}'
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /usr/lib/dracut/modules.d/50kdump-tools
+        - /usr/lib/dracut/dracut.conf.d/kdump-tools
+
+    # Sort the capture preset after the normal boot role's portable policy.
+    - name: dracut | Install capture profile and sysctl hooks
+      copy:
+        src: dracut/{{ item.src }}
+        dest: '{{ item.dest }}'
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+        validate: 'bash -n %s'
+      loop:
+        - src: 99_kdump.conf
+          dest: /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+        - src: module-setup.sh
+          dest: /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
+        - src: kdump-sysctl.sh
+          dest: /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
+      register: kdump_dracut_files
+
+    # A diversion keeps package upgrades from restoring the mkinitramfs hook.
+    # The dot in the diverted filename also keeps run-parts from executing it.
+    - name: dracut | Divert the package capture image generator
+      command: >-
+        dpkg-divert --local --add --rename
+        --divert /etc/kernel/postinst.d/kdump-tools.distrib
+        /etc/kernel/postinst.d/kdump-tools
+      args:
+        creates: /etc/kernel/postinst.d/kdump-tools.distrib
+      register: kdump_dracut_diversion
+
+    - name: dracut | Install the Dracut capture image generator
+      copy:
+        src: kdump_dracut.sh
+        dest: /etc/kernel/postinst.d/kdump-tools
+        owner: root
+        group: root
+        mode: "0755"
+        backup: true
+        validate: 'bash -n %s'
+      register: kdump_dracut_generator
+
+    - name: dracut | Read installed kernel versions
+      command: linux-version list
+      changed_when: false
+      check_mode: false
+      register: kdump_dracut_kernels
+
+# Rebuild existing images during the provider migration, before the service
+# reloads them. Kernel upgrades use the same hook through run-parts.
+- name: dracut | Rebuild capture images when integration changes
+  when:
+    - ansible_distribution_release == 'resolute'
+    - not ansible_check_mode
+    - kdump_apt_tools.changed or kdump_dracut_files.changed or kdump_dracut_diversion.changed or kdump_dracut_generator.changed
+  command: /etc/kernel/postinst.d/kdump-tools {{ item }}
+  changed_when: true
+  loop: '{{ kdump_dracut_kernels.stdout_lines | default([]) }}'
+  register: kdump_dracut_rebuild
+  become: true
+  tags:
+    - kdump

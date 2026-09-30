@@ -117,36 +117,37 @@
           contents: ""
           grub_scope: all
 
-- name: _verify | MODULES=most is pinned in initramfs conf.d
-  command: grep -qxF MODULES=most /etc/initramfs-tools/conf.d/modules-most
-  changed_when: false
-  become: true
-
-# The conf.d check proves the pin landed; this proves it took effect. ahci (SATA)
-# and e1000 (Intel NIC) are the witnesses: both ship in stock kernels but a
-# virtio-only VM loads neither, so a MODULES=dep initramfs omits them while
-# MODULES=most pulls them in (with the rest of the broad driver set). Finding
-# either in the live image proves update-initramfs honoured the pin rather than
-# building the boot-critical minimum dep would. Two drivers (one storage, one
-# net) so a flavour that trims one -- a stripped -kvm cloud kernel might -- still
-# matches the other. grep reads to EOF (no -q) so an early close can't SIGPIPE
-# lsinitramfs under pipefail.
+# ahci (SATA) and e1000 (Intel NIC) ship in stock kernels but neither is loaded
+# by a virtio-only VM. Finding them in the image exercises the portable driver
+# policy. grep reads to EOF so the image lister cannot fail with SIGPIPE.
 - name: _verify | Find the host initramfs (cloud images may boot initrd-less)
   stat:
     path: /boot/initrd.img-{{ ansible_kernel }}
   register: _boot_verify_initrd
   become: true
 
-- name: _verify | MODULES=most pulled non-virtio drivers (ahci/e1000) into the initramfs
+- name: _verify | Boot image carries non-virtio drivers (ahci/e1000)
   # Skipped where the host boots without an initramfs at all (the arm64 cloud
-  # fixture has no /boot/initrd.img to inspect); the conf.d pin check stands in.
+  # fixture has no /boot/initrd.img to inspect).
   when: _boot_verify_initrd.stat.exists
   shell:
     cmd: >-
       set -euo pipefail;
-      lsinitramfs /boot/initrd.img-{{ ansible_kernel }} | grep -E '/(ahci|e1000)\.ko' >/dev/null
+      {{ initramfs_list_command }} /boot/initrd.img-{{ ansible_kernel }} | grep -E '/(ahci|e1000)\.ko' >/dev/null
     executable: /bin/bash
   changed_when: false
+  become: true
+
+- name: _verify | Resolute image includes the Dracut boot modules
+  when:
+    - ansible_distribution_release == 'resolute'
+    - _boot_verify_initrd.stat.exists
+  command: lsinitrd --mod /boot/initrd.img-{{ ansible_kernel }}
+  register: _boot_verify_dracut_modules
+  changed_when: false
+  failed_when: >-
+    'dracut modules:' not in _boot_verify_dracut_modules.stdout
+    or (zfs_root and 'zfs' not in _boot_verify_dracut_modules.stdout_lines)
   become: true
 
 # The 'default' fragment carries the base console args. On test VMs (qemu) this

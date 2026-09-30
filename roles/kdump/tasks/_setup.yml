@@ -1,0 +1,8 @@
+# Exercise kdump with the selected normal-boot provider even on fixtures baked
+# before the provider migration.
+- name: _setup | Select the normal boot image generator
+  apt:
+    pkg: "{{ initramfs_packages }}"
+    cache_valid_time: 3600
+    policy_rc_d: 101
+  become: true

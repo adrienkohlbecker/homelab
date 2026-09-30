@@ -1,9 +1,8 @@
 - name: Install console dependencies
   apt:
-    pkg:
-      - initramfs-tools
-      - console-setup
+    pkg: "{{ ['console-setup'] + initramfs_packages }}"
     cache_valid_time: 3600
+  register: console_apt
   become: true
   tags:
     - console
@@ -38,9 +37,11 @@
   tags:
     - console
 
-- name: Update initramfs
-  when: console_cfg.changed
-  command: update-initramfs -u -k all
+- name: Rebuild boot images with the console policy
+  when:
+    - console_cfg.changed or console_apt.changed
+    - not ansible_check_mode
+  command: "{{ initramfs_rebuild_command }}"
   changed_when: true
   become: true
   tags:

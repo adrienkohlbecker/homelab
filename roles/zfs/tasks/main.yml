@@ -104,9 +104,11 @@
   tags:
     - zfs
 
-- name: Update initramfs
-  when: zfs_module_conf.changed
-  command: update-initramfs -u -k all
+- name: Rebuild boot images with the ZFS module policy
+  when:
+    - zfs_module_conf.changed or zfs_apt.changed
+    - not ansible_check_mode
+  command: "{{ initramfs_rebuild_command }}"
   become: true
   changed_when: true
   tags:
