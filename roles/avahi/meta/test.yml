@@ -1,0 +1,3 @@
+# Exercise the wide-area DNS default on both sides of the release transition.
+ubuntu:
+  - resolute

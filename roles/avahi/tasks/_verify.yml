@@ -23,3 +23,30 @@
         | selectattr('family', 'defined')
         | selectattr('family', 'equalto', 'inet')
         | map(attribute='address') | list)
+
+# Flag 1 explicitly requests wide-area DNS, which the running daemon must reject.
+- name: _verify | Avahi refuses wide-area record browsers
+  command:
+    argv:
+      - busctl
+      - --timeout=5
+      - call
+      - --
+      - org.freedesktop.Avahi
+      - /
+      - org.freedesktop.Avahi.Server
+      - RecordBrowserNew
+      - iisqqu
+      - "-1"
+      - "0"
+      - example.invalid
+      - "1"
+      - "1"
+      - "1"
+  environment:
+    LC_ALL: C
+  register: _avahi_wide_area
+  changed_when: false
+  failed_when: >-
+    _avahi_wide_area.rc != 1
+    or _avahi_wide_area.stderr | trim != 'Call failed: Not supported'
