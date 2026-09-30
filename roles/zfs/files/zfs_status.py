@@ -179,7 +179,20 @@ def diagnostic(error: Exception) -> str:
     return str(error)
 
 
-def health() -> int:
+def finish_health(issues: list[str], report: list[str]) -> int:
+    """Print the health report and mail any failures, including startup errors."""
+    print("\n".join(report))
+    if issues:
+        failures = "\n".join(f"ERROR :: {issue}" for issue in issues)
+        print(failures, file=sys.stderr)
+        subject = f"[{socket.gethostname().split('.')[0]}] zfs health - {len(issues)} issue(s) detected"
+        subprocess.run(["mail", "-s", subject, "root"], input="\n".join([failures, *report]), text=True, check=True)
+        return 1
+    print("Done")
+    return 0
+
+
+def health(expire: int) -> int:
     """Mail counted failures while preserving zpool -x's feature-cap policy."""
     if os.geteuid() != 0:
         raise PermissionError("I require root")
@@ -196,7 +209,6 @@ def health() -> int:
         issues.append(f"Cannot list pools: {diagnostic(error)}")
     else:
         now = int(time.time())
-        expire = int(os.environ.get("SCRUB_EXPIRE", "3456000"))
         for name in names:
             try:
                 if read_status(name, explain=True):
@@ -222,15 +234,7 @@ def health() -> int:
                     issues.append(issue)
             except (OSError, subprocess.CalledProcessError, ValueError) as error:
                 issues.append(f"Cannot check scrub age for {name}: {diagnostic(error)}")
-    print("\n".join(report))
-    if issues:
-        failures = "\n".join(f"ERROR :: {issue}" for issue in issues)
-        print(failures, file=sys.stderr)
-        subject = f"[{socket.gethostname().split('.')[0]}] zfs health - {len(issues)} issue(s) detected"
-        subprocess.run(["mail", "-s", subject, "root"], input="\n".join([failures, *report]), text=True, check=True)
-        return 1
-    print("Done")
-    return 0
+    return finish_health(issues, report)
 
 
 def main() -> int:
@@ -243,8 +247,13 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command in {None, "health"}:
-            if supports_json():
-                return health()
+            try:
+                expire = integer(int(os.environ.get("SCRUB_EXPIRE", "3456000")), "SCRUB_EXPIRE")
+                json_supported = supports_json()
+            except (OSError, subprocess.CalledProcessError, ValueError) as error:
+                return finish_health([f"Cannot initialize health check: {diagnostic(error)}"], [])
+            if json_supported:
+                return health(expire)
             return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
         print(int(scan_in_progress(args.pool, scrub_only=args.scrub_only)))
         return 0

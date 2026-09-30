@@ -176,7 +176,7 @@ def test_health_launcher_selects_the_parser_at_runtime(monkeypatch, json_support
     monkeypatch.setattr(status.sys, "argv", ["zfs_health"])
     monkeypatch.setattr(status, "supports_json", lambda: json_supported)
     calls = []
-    monkeypatch.setattr(status, "health", lambda: calls.append("json") or 0)
+    monkeypatch.setattr(status, "health", lambda expire: calls.append(("json", expire)) or 0)
 
     def run(argv, **kwargs):
         calls.append(argv)
@@ -185,13 +185,65 @@ def test_health_launcher_selects_the_parser_at_runtime(monkeypatch, json_support
 
     monkeypatch.setattr(status.subprocess, "run", run)
     assert status.main() == (0 if json_supported else 7)
-    assert calls == (["json"] if json_supported else [["/opt/zfs/zfs_health_legacy.sh"]])
+    assert calls == ([("json", 3456000)] if json_supported else [["/opt/zfs/zfs_health_legacy.sh"]])
 
 
 def test_unknown_version_fails_closed(monkeypatch):
     monkeypatch.setattr(status, "run", lambda *_: "unexpected")
     with pytest.raises(status.StatusError, match="userspace version"):
         status.supports_json()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        status.StatusError("Cannot identify the ZFS userspace version"),
+        subprocess.CalledProcessError(124, ["zpool", "--version"], stderr="version query timed out"),
+        OSError("zpool is unavailable"),
+    ],
+)
+def test_health_startup_failures_are_mailed(monkeypatch, error, capsys):
+    monkeypatch.setattr(status.sys, "argv", ["zfs_health", "health"])
+
+    def fail():
+        raise error
+
+    monkeypatch.setattr(status, "supports_json", fail)
+    mail = []
+    monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append((args, kwargs)))
+    assert status.main() == 1
+    assert "Cannot initialize health check" in capsys.readouterr().err
+    assert len(mail) == 1
+    assert mail[0][0][0][0] == "mail"
+    assert status.diagnostic(error) in mail[0][1]["input"]
+
+
+@pytest.mark.parametrize("expire", ["invalid", "", "-1"])
+def test_invalid_expiration_is_mailed_before_selecting_either_parser(monkeypatch, expire):
+    monkeypatch.setattr(status.sys, "argv", ["zfs_health"])
+    monkeypatch.setenv("SCRUB_EXPIRE", expire)
+
+    def unexpected_version_query():
+        pytest.fail("Invalid expiration must be reported before running either health parser")
+
+    monkeypatch.setattr(status, "supports_json", unexpected_version_query)
+    mail = []
+    monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
+    assert status.main() == 1
+    assert len(mail) == 1
+    assert "Cannot initialize health check" in mail[0]
+
+
+def test_scan_version_failure_does_not_send_a_health_mail(monkeypatch, capsys):
+    monkeypatch.setattr(status.sys, "argv", ["zfs_status.py", "scan"])
+
+    def fail():
+        raise status.StatusError("Cannot identify the ZFS userspace version")
+
+    monkeypatch.setattr(status, "supports_json", fail)
+    monkeypatch.setattr(status.subprocess, "run", lambda *_, **__: pytest.fail("Scan queries must not mail"))
+    assert status.main() == 2
+    assert "Cannot identify" in capsys.readouterr().err
 
 
 def test_noble_scan_fallback_pins_locale_and_does_not_request_json(monkeypatch):
@@ -279,14 +331,13 @@ def test_health_mails_faults_and_includes_slow_io_diagnostics(monkeypatch, pool,
     healthy["vdevs"]["disk0"]["checksum_errors"] = 0
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
     monkeypatch.setattr(status.time, "time", lambda: 100)
-    monkeypatch.setenv("SCRUB_EXPIRE", "20")
     monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "SLOW\ndisk0 ONLINE 0 0 5 3")
     monkeypatch.setattr(
         status, "read_status", lambda *_, **kwargs: {"tank": healthy} if kwargs.get("explain") else {"tank": pool}
     )
     mail = []
     monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append((args, kwargs)))
-    assert status.health() == 1
+    assert status.health(20) == 1
     assert "Detected drive errors (READ/WRITE/CKSUM)" in capsys.readouterr().err
     assert len(mail) == 1
     assert mail[0][0][0][0] == "mail"
@@ -303,7 +354,7 @@ def test_health_query_failure_is_mailed(monkeypatch, capsys):
     monkeypatch.setattr(status, "read_status", fail)
     mail = []
     monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
-    assert status.health() == 1
+    assert status.health(20) == 1
     assert "bad JSON schema" in capsys.readouterr().err
     assert len(mail) == 1
 
@@ -312,10 +363,9 @@ def test_health_accepts_feature_capped_pools_and_does_not_alarm_on_slow_io(monke
     pool["vdevs"]["disk0"]["slow_ios"] = 3
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
     monkeypatch.setattr(status.time, "time", lambda: 100)
-    monkeypatch.setenv("SCRUB_EXPIRE", "20")
     monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "SLOW 3")
     monkeypatch.setattr(status, "read_status", lambda *_, **kwargs: {} if kwargs.get("explain") else {"tank": pool})
-    assert status.health() == 0
+    assert status.health(20) == 0
 
 
 def test_health_reports_failed_spares_and_active_spare_errors(monkeypatch, pool):
@@ -324,12 +374,11 @@ def test_health_reports_failed_spares_and_active_spare_errors(monkeypatch, pool)
     pool["spares"] = {"spare0": {"state": "INUSE"}, "spare1": {"state": "FAULTED"}}
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
     monkeypatch.setattr(status.time, "time", lambda: 100)
-    monkeypatch.setenv("SCRUB_EXPIRE", "20")
     monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "report")
     monkeypatch.setattr(status, "read_status", lambda *_, **kwargs: {} if kwargs.get("explain") else {"tank": pool})
     mail = []
     monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
-    assert status.health() == 1
+    assert status.health(20) == 1
     assert "Detected drive errors (READ/WRITE/CKSUM) on tank" in mail[0]
     assert "Unhealthy spare spare1 on tank: FAULTED" in mail[0]
     assert "Unhealthy spare spare0" not in mail[0]
@@ -343,7 +392,6 @@ def test_bad_pool_does_not_hide_another_pools_errors_and_age(monkeypatch, pool):
     bad["vdevs"]["disk0"]["read_errors"] = "bad counter"
     monkeypatch.setattr(status.os, "geteuid", lambda: 0)
     monkeypatch.setattr(status.time, "time", lambda: 100)
-    monkeypatch.setenv("SCRUB_EXPIRE", "20")
 
     def run(*args):
         if "list" in args:
@@ -356,7 +404,7 @@ def test_bad_pool_does_not_hide_another_pools_errors_and_age(monkeypatch, pool):
     monkeypatch.setattr(status, "run", run)
     mail = []
     monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
-    assert status.health() == 1
+    assert status.health(20) == 1
     assert "Cannot query drive errors and scrub age for broken" in mail[0]
     assert "Detected drive errors (READ/WRITE/CKSUM) on tank" in mail[0]
     assert "Scrub expired on tank" in mail[0]
