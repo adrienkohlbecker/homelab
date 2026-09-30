@@ -11,9 +11,6 @@
 - name: _setup_initramfs | Remove the baked Dracut configuration
   when: initramfs_use_dracut
   file:
-    path: '{{ item }}'
+    path: /etc/dracut.conf.d/90_host.conf
     state: absent
-  loop:
-    - /etc/dracut.conf.d/90_portable.conf
-    - /etc/dracut.conf.d/90_host.conf
   become: true

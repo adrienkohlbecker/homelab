@@ -28,16 +28,6 @@
   tags:
     - boot
 
-- name: initramfs_provider | Remove the generic Dracut policy
-  when: initramfs_use_dracut
-  file:
-    path: /etc/dracut.conf.d/90_portable.conf
-    state: absent
-  register: boot_initramfs_old_config
-  become: true
-  tags:
-    - boot
-
 - name: initramfs_provider | Install the release image generator and root support
   apt:
     pkg: '{{ initramfs_packages }}'
@@ -51,7 +41,7 @@
 - name: initramfs_provider | Rebuild boot images after provider changes
   when:
     - not ansible_check_mode
-    - boot_initramfs_apt.changed or boot_initramfs_config.changed or boot_initramfs_old_config.changed
+    - boot_initramfs_apt.changed or boot_initramfs_config.changed
   command: '{{ initramfs_rebuild_command }}'
   changed_when: true
   register: boot_initramfs_rebuild
@@ -60,7 +50,7 @@
     - boot
 
 - name: initramfs_provider | Request a reboot after provider changes
-  when: boot_initramfs_apt.changed or boot_initramfs_config.changed or boot_initramfs_old_config.changed
+  when: boot_initramfs_apt.changed or boot_initramfs_config.changed
   file:
     path: /var/run/reboot-required
     state: touch
