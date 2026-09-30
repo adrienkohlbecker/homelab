@@ -1,7 +1,6 @@
 - name: Apply qemu test fixture values
   when: qemu_test | bool
   set_fact:
-    macos_vm_install_mode: true
     macos_vm_domain_type: qemu
   tags:
     - macos_vm
