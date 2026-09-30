@@ -7,6 +7,18 @@
   tags:
     - user
 
+# sysstat is installed for its interactive tools; Netdata keeps metrics
+# history. Resolute collects by default, so preseed a fresh install off.
+- name: Preseed sysstat history collection off
+  debconf:
+    name: sysstat
+    question: sysstat/enable
+    vtype: boolean
+    value: false
+  become: true
+  tags:
+    - user
+
 - name: Install packages
   apt:
     pkg:
@@ -92,6 +104,46 @@
   systemd:
     name: cron.service
     state: restarted
+  become: true
+  tags:
+    - user
+
+# Resolute's postinst turns collection back on when upgrading from Noble
+# (LP: #2073285). Later package runs read this value back into debconf.
+- name: Keep sysstat history collection off
+  when: not (ansible_check_mode and user_apt_packages.changed)
+  lineinfile:
+    path: /etc/default/sysstat
+    regexp: ^ENABLED=
+    line: ENABLED="false"
+    backup: true
+    validate: sh -n %s
+  become: true
+  tags:
+    - user
+
+# Enabled timers fire regardless of ENABLED: Noble's units then collect anyway,
+# and Resolute's log a skipped condition every ten minutes. Resolute also adds
+# a rotation timer to Noble's set.
+- name: Find sysstat collection units
+  find:
+    paths: /usr/lib/systemd/system
+    patterns:
+      - sysstat.service
+      - sysstat*.timer
+  register: user_sysstat_units
+  tags:
+    - user
+
+- name: Stop sysstat collection units
+  when: not (ansible_check_mode and user_apt_packages.changed)
+  systemd:
+    name: "{{ item.path | basename }}"
+    enabled: false
+    state: stopped
+  loop: "{{ user_sysstat_units.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
   become: true
   tags:
     - user

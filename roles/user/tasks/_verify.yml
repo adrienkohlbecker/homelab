@@ -76,6 +76,13 @@
         path: /etc/cron.d/user_verify_cron_filter
         state: absent
 
+# Resolute's postinst takes one background sample when collection is enabled.
+- name: _verify | Sysstat keeps no activity history
+  command: sar
+  register: _user_sar
+  changed_when: false
+  failed_when: _user_sar.rc == 0 or (_user_sar.stdout + _user_sar.stderr) is not search('No such file')
+
 # Shell startup needs these binaries; verification must not install missing tools.
 - name: _verify | Mise tools execute without installing
   environment:
@@ -122,6 +129,21 @@
   command: /usr/bin/mise where zoxide
   register: _user_zoxide_path
   changed_when: false
+
+# Reproduce Resolute's postinst on upgrade from Noble (LP: #2073285); the Stow
+# reconverges below must turn collection back off.
+- name: _verify | Re-enable sysstat collection as the Noble upgrade does
+  become: true
+  block:
+    - name: _verify | Set collection on
+      lineinfile:
+        path: /etc/default/sysstat
+        regexp: ^ENABLED=
+        line: ENABLED="true"
+
+    - name: _verify | Enable and start the collection units  # noqa: command-instead-of-module
+      command: systemctl enable --now sysstat.service
+      changed_when: true
 
 # Stow must reject conflicts without installing tools ahead of the explicit installer.
 - name: _verify | Stow rejects conflicts and recovers incomplete deployment
@@ -176,6 +198,24 @@
     that:
       - user_dotfiles_stow.changed
       - user_mise_tools.changed
+
+- name: _verify | No sysstat timer is scheduled  # noqa: command-instead-of-module
+  command: systemctl list-timers --plain --no-legend sysstat*
+  register: _user_sysstat_timers
+  changed_when: false
+  failed_when: _user_sysstat_timers.stdout | length > 0
+
+- name: _verify | No sysstat unit starts at boot  # noqa: command-instead-of-module
+  command: systemctl list-unit-files --state=enabled --no-legend sysstat*
+  register: _user_sysstat_enabled
+  changed_when: false
+  failed_when: _user_sysstat_enabled.stdout | length > 0
+
+# Noble's cron job and Resolute's unit conditions both source this file.
+- name: _verify | Collectors see collection disabled
+  command:
+    argv: [ sh, -c, '. /etc/default/sysstat && test "$ENABLED" = false' ]
+  changed_when: false
 
 - name: _verify | Remove generated completions to exercise shell bootstrap
   file:
