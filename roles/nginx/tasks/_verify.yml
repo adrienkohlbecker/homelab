@@ -191,7 +191,14 @@
 # exchange as "Peer Temp Key" (OpenSSL 3.0: "Server Temp Key").
 - name: _verify | A default client negotiates the post-quantum hybrid group
   command:
-    argv: [openssl, s_client, -connect, "127.0.0.1:443", -servername, "{{ nginx_verify_host }}", -brief]
+    argv:
+      - openssl
+      - s_client
+      - -connect
+      - "127.0.0.1:443"
+      - -servername
+      - "{{ nginx_verify_host }}"
+      - -brief
     stdin: Q
   register: nginx_verify_tls_pq
   changed_when: false
@@ -200,7 +207,16 @@
 
 - name: _verify | A classical-only client still negotiates X25519
   command:
-    argv: [openssl, s_client, -connect, "127.0.0.1:443", -servername, "{{ nginx_verify_host }}", -brief, -groups, X25519]
+    argv:
+      - openssl
+      - s_client
+      - -connect
+      - "127.0.0.1:443"
+      - -servername
+      - "{{ nginx_verify_host }}"
+      - -brief
+      - -groups
+      - X25519
     stdin: Q
   register: nginx_verify_tls_classical
   changed_when: false
