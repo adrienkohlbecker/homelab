@@ -60,7 +60,7 @@
 
 # Ubuntu's Podman package globally enables these user units, so every login
 # starts a rootless API service even when the user never runs containers.
-# Rootless consumers such as gitlab_runner enable their own socket explicitly.
+# Rootless consumers enable their own user socket explicitly.
 - name: install | Remove package-wide rootless Podman activation
   file:
     path: "{{ item }}"
@@ -101,7 +101,7 @@
 # Pin the cross-role contracts that cannot follow Podman's defaults: netavark
 # provides service-name DNS; the network name and subnets match firewall,
 # AdGuard and Home Assistant policy; port 5333 avoids AdGuard's port 53; and
-# pasta backs rootless GitLab jobs. Noble's old netavark needs iptables, while
+# pasta backs rootless containers. Noble's old netavark needs iptables, while
 # newer releases use its native nftables driver. A host carrying legacy CNI
 # state needs a one-time `podman system reset --force` before switching.
 - name: install | Configure podman containers.conf

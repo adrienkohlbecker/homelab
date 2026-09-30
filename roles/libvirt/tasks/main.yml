@@ -93,7 +93,7 @@
     - libvirt
 
 # libvirt 10.4+ supports a native nftables firewall backend. Noble (10.0)
-# lacks the driver; resolute (11.x) and any
+# lacks the driver; resolute (12.0) and any
 # future release have it. The setting moves LIBVIRT_INP / LIBVIRT_FWX
 # / LIBVIRT_PRT chains out of `ip filter`/`ip nat` and into
 # `inet libvirt_*` tables. The service call below start-or-restarts on

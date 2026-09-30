@@ -23,10 +23,11 @@
     - zfs
 
 # Catches divergence between the userspace zfsutils and the loaded zfs.ko.
-# Ubuntu ships the kernel module inside linux-modules-*-generic, so its OpenZFS
-# release tracks the installed kernel independently of zfsutils-linux. Ubuntu's
-# package revisions can legitimately differ; only the upstream release matters
-# for kernel/userspace compatibility.
+# Ubuntu ships the kernel module with the kernel (linux-modules-<abi> on Noble,
+# linux-main-modules-zfs-<abi> on Resolute), so its OpenZFS release tracks the
+# installed kernel independently of zfsutils-linux. Ubuntu's package revisions
+# can legitimately differ; only the upstream release matters for
+# kernel/userspace compatibility.
 #
 # Gates — the assert is only meaningful in a settled state:
 #   - zfs_apt.changed: just upgraded userspace; the loaded kmod won't
