@@ -107,9 +107,13 @@
           become: true
 
         - name: _verify_forward | Read the DNS peer PID, IP, and gateway
-          command: >-
-            podman inspect firewall_verify_dns_peer --format
-            {% raw %}'{{ .State.Pid }} {{ (index .NetworkSettings.Networks "firewall_verify_named").IPAddress }} {{ (index .NetworkSettings.Networks "firewall_verify_named").Gateway }}'{% endraw %}
+          command:
+            argv:
+              - podman
+              - inspect
+              - firewall_verify_dns_peer
+              - --format
+              - '{% raw %}{{ .State.Pid }} {{ (index .NetworkSettings.Networks "firewall_verify_named").IPAddress }} {{ (index .NetworkSettings.Networks "firewall_verify_named").Gateway }}{% endraw %}'
           register: _firewall_dns_peer_net
           changed_when: false
           become: true

@@ -119,10 +119,20 @@
 # wildcard listener would steal the port from the named-bridge probes. Bind the
 # probe address instead, which exists only after the netns step above.
 - name: _verify_rig | Run aardvark-port TCP fixture listener on the probe address
-  command: >
-    podman run -d --replace --name firewall_verify_aardvark_tcp_listener
-      --network=host --pull=missing docker.io/library/busybox
-      sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p 192.0.2.1:5333 -h /www'
+  command:
+    argv:
+      - podman
+      - run
+      - -d
+      - --replace
+      - --name
+      - firewall_verify_aardvark_tcp_listener
+      - --network=host
+      - --pull=missing
+      - docker.io/library/busybox
+      - sh
+      - -c
+      - mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p 192.0.2.1:5333 -h /www
   changed_when: true
   become: true
 
