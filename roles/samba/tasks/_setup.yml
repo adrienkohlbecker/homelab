@@ -1,7 +1,11 @@
+- name: _setup | Configure Avahi
+  import_role:
+    name: avahi
+    tasks_from: main
+
 - name: _setup | Install dependencies
   apt:
     pkg:
-      - avahi-daemon
       - avahi-utils
       # smbclient is a separate package from the samba server; _verify uses it
       # to exercise the live share over the wire.
