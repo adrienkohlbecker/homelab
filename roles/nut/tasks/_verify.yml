@@ -184,3 +184,7 @@
 
 - name: _verify | Exercise monitoring and shutdown behavior
   import_tasks: _verify_monitor.yml
+
+# Last: it reboots the fixture.
+- name: _verify | Exercise SHUTDOWNCMD through a shutdown block lock
+  import_tasks: _verify_shutdown_inhibitor.yml

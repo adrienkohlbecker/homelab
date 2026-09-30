@@ -1,0 +1,70 @@
+# systemd 257+ logind refuses even root's shutdown while a block inhibitor is
+# held, and adguard_reboot_guard holds one on the last DNS server. SHUTDOWNCMD
+# must therefore get through such a lock. Powering off would end the fixture,
+# so this runs the configured command with only its final verb swapped for
+# reboot: the same flags, logind method, and polkit rule authorize it.
+- name: _verify | Read the configured SHUTDOWNCMD
+  set_fact:
+    nut_verify_shutdowncmd: >-
+      {{ lookup('template', 'upsmon.conf.j2')
+         | regex_search('^SHUTDOWNCMD "(.+)"$', '\1', multiline=True)
+         | first }}
+
+- name: _verify | SHUTDOWNCMD powers the host off
+  assert:
+    that:
+      - nut_verify_shutdowncmd is match('.* poweroff$')
+    fail_msg: "Expected a poweroff SHUTDOWNCMD, got: {{ nut_verify_shutdowncmd }}"
+
+- name: _verify | Hold a root shutdown block lock like the DNS reboot guard
+  command:
+    argv:
+      - systemd-run
+      - --unit=nut_verify_inhibitor
+      - --collect
+      - systemd-inhibit
+      - --what=shutdown
+      - --mode=block
+      - --who=nut_verify_inhibitor
+      - --why=Simulate the last-DNS-server reboot guard
+      - sleep
+      - infinity
+  changed_when: true
+  become: true
+
+# Plain grep (not -q): it consumes all input so systemd-inhibit never
+# takes a SIGPIPE under pipefail.
+- name: _verify | The block lock is held
+  shell:
+    cmd: >-
+      set -euo pipefail;
+      systemd-inhibit --list --no-legend | grep nut_verify_inhibitor
+    executable: /bin/bash
+  register: nut_verify_lock
+  changed_when: false
+  retries: 10
+  delay: 1
+  until: nut_verify_lock.rc == 0
+  become: true
+
+# Noble's logind ignores a lock held by the caller's own uid, so this control
+# would reboot there. On newer releases it proves the lock binds root, so the
+# reboot below can only succeed through SHUTDOWNCMD's bypass. The systemd
+# module cannot request a logind reboot.
+- name: _verify | An unflagged reboot is refused while the lock is held
+  when: ansible_distribution_release not in ['noble']
+  command: /usr/bin/systemctl reboot # noqa: command-instead-of-module
+  register: nut_verify_unflagged
+  changed_when: false
+  failed_when: >-
+    nut_verify_unflagged.rc == 0
+    or 'inhibitor' not in nut_verify_unflagged.stderr
+  become: true
+
+# Mitogen can retain a severed sudo.root context when a become-elevated reboot
+# severs SSH. Elevate only the command so Ansible polls through the base context.
+- name: _verify | SHUTDOWNCMD's flags reboot through the lock
+  reboot:
+    reboot_command: >-
+      /usr/bin/sudo -n {{ nut_verify_shutdowncmd | regex_replace(' poweroff$', ' reboot') }}
+    reboot_timeout: 240

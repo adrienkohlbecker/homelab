@@ -165,7 +165,11 @@ MINSUPPLIES 1
 # Or use the old DOS 8.3 file name, like this:
 # SHUTDOWNCMD "C:\\PROGRA~1\\SOMECO~1.bat -first_arg -second_arg"
 
-SHUTDOWNCMD "/sbin/shutdown -h +0"
+# systemd 257+ logind refuses even root's shutdown while a block inhibitor is
+# held, and adguard_reboot_guard holds one whenever this host is the last DNS
+# server. Skip inhibitors explicitly; Ubuntu's root-ignore-inhibitors polkit
+# rule authorizes that through polkitd.
+SHUTDOWNCMD "/usr/bin/systemctl --check-inhibitors=no poweroff"
 
 # --------------------------------------------------------------------------
 # SHUTDOWNEXIT <boolean|num>
