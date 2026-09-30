@@ -127,7 +127,7 @@
         argv:
           - dmg2img
           - "{{ macos_vm_workdir }}/BaseSystem.dmg"
-          - "{{ macos_vm_workdir }}/BaseSystem.img"
+          - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
         creates: "{{ macos_vm_workdir }}/BaseSystem.img"
       register: macos_vm_basesystem_convert_result
 
@@ -144,21 +144,33 @@
           - -F
           - raw
           - "{{ macos_vm_workdir }}/BaseSystem.dmg"
-          - "{{ macos_vm_workdir }}/BaseSystem.img"
+          - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
       changed_when: false
       register: macos_vm_basesystem_verify_result
+
+    - name: artifacts | Publish verified BaseSystem image
+      when:
+        - not ansible_check_mode
+        - macos_vm_basesystem_convert_result.changed | default(false)
+      ansible.builtin.command:
+        argv:
+          - mv
+          - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
+          - "{{ macos_vm_workdir }}/BaseSystem.img"
+        creates: "{{ macos_vm_workdir }}/BaseSystem.img"
+      register: macos_vm_basesystem_publish_result
 
   rescue:
     - name: artifacts | Remove rejected recovery image
       file:
-        path: "{{ macos_vm_workdir }}/BaseSystem.img"
+        path: "{{ macos_vm_workdir }}/BaseSystem.img.partial"
         state: absent
 
     - name: artifacts | Report recovery image failure
       fail:
         msg: >-
           Recovery image conversion or verification failed. The rejected
-          {{ macos_vm_workdir }}/BaseSystem.img was removed; the source DMG
+          {{ macos_vm_workdir }}/BaseSystem.img.partial was removed; the source DMG
           was retained. Re-run the role to retry, or replace the source DMG
           if its compression is unsupported.
           {{ ansible_failed_result.msg | default('') }}

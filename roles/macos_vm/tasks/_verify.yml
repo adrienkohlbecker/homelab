@@ -21,6 +21,7 @@
     that:
       - not macos_vm_basesystem_convert_result.changed
       - macos_vm_basesystem_verify_result.skipped
+      - macos_vm_basesystem_publish_result.skipped
 
 - name: _verify | Create unsupported recovery image fixture
   tempfile:
@@ -37,6 +38,13 @@
       copy:
         src: _verify_basesystem.dmg
         dest: "{{ macos_vm_recovery_fixture.path }}/BaseSystem.dmg"
+        mode: "0644"
+      become: true
+
+    - name: _verify | Seed partial output left by an interrupted conversion
+      copy:
+        content: "incomplete recovery image\n"
+        dest: "{{ macos_vm_recovery_fixture.path }}/BaseSystem.img.partial"
         mode: "0644"
       become: true
 
@@ -57,6 +65,7 @@
           assert:
             that:
               - "'Report recovery image failure' in ansible_failed_task.name"
+              - macos_vm_basesystem_convert_result.changed
               - macos_vm_basesystem_convert_result.rc == 0
               - macos_vm_basesystem_verify_result.rc != 0
               - "'was removed' in ansible_failed_result.msg"
@@ -66,6 +75,7 @@
         path: "{{ macos_vm_recovery_fixture.path }}/{{ item }}"
       loop:
         - BaseSystem.img
+        - BaseSystem.img.partial
         - BaseSystem.dmg
       register: macos_vm_rejected_recovery
       become: true
@@ -74,7 +84,8 @@
       assert:
         that:
           - not macos_vm_rejected_recovery.results[0].stat.exists
-          - macos_vm_rejected_recovery.results[1].stat.exists
+          - not macos_vm_rejected_recovery.results[1].stat.exists
+          - macos_vm_rejected_recovery.results[2].stat.exists
 
   always:
     - name: _verify | Remove unsupported recovery image fixture
