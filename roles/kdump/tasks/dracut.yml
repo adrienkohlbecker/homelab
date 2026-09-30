@@ -1,5 +1,5 @@
-# Backport the capture profile and sysctl module from Ubuntu kdump-tools
-# 1:1.10.7ubuntu5 (LP #2042955). Resolute's package still uses mkinitramfs.
+# Backport native capture support only while the installed package lacks it.
+# Inspect package ownership so a stable-release backport is recognized too.
 - name: dracut | Install capture image integration
   when:
     - ansible_distribution_release == 'resolute'
@@ -8,7 +8,25 @@
   tags:
     - kdump
   block:
+    - name: dracut | Read package-owned capture integration files
+      command: dpkg-query --listfiles kdump-tools
+      changed_when: false
+      check_mode: false
+      register: kdump_dracut_package_files
+
+    - name: dracut | Detect native package capture support
+      set_fact:
+        kdump_dracut_native: >-
+          {{ '/usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh'
+             in kdump_dracut_package_files.stdout_lines }}
+
+    - name: dracut | Inspect the diverted package kernel hook
+      stat:
+        path: /etc/kernel/postinst.d/kdump-tools.distrib
+      register: kdump_dracut_diverted_hook
+
     - name: dracut | Create module and profile directories
+      when: not kdump_dracut_native
       file:
         path: '{{ item }}'
         state: directory
@@ -19,8 +37,9 @@
         - /usr/lib/dracut/modules.d/50kdump-tools
         - /usr/lib/dracut/dracut.conf.d/kdump-tools
 
-    # Sort the capture preset after the normal boot role's portable policy.
+    # Keep the capture preset separate from normal boot configuration.
     - name: dracut | Install capture profile and sysctl hooks
+      when: not kdump_dracut_native
       copy:
         src: dracut/{{ item.src }}
         dest: '{{ item.dest }}'
@@ -41,6 +60,7 @@
     # A diversion keeps package upgrades from restoring the mkinitramfs hook.
     # The dot in the diverted filename also keeps run-parts from executing it.
     - name: dracut | Divert the package capture image generator
+      when: not kdump_dracut_native
       command: >-
         dpkg-divert --local --add --rename
         --divert /etc/kernel/postinst.d/kdump-tools.distrib
@@ -50,6 +70,7 @@
       register: kdump_dracut_diversion
 
     - name: dracut | Install the Dracut capture image generator
+      when: not kdump_dracut_native
       copy:
         src: kdump_dracut.sh
         dest: /etc/kernel/postinst.d/kdump-tools
@@ -59,6 +80,32 @@
         backup: true
         validate: 'bash -n %s'
       register: kdump_dracut_generator
+
+    - name: dracut | Remove the local hook before restoring native support
+      when:
+        - kdump_dracut_native
+        - kdump_dracut_diverted_hook.stat.exists
+      file:
+        path: /etc/kernel/postinst.d/kdump-tools
+        state: absent
+
+    - name: dracut | Restore the native package kernel hook
+      when: kdump_dracut_native
+      command: >-
+        dpkg-divert --local --remove --rename
+        --divert /etc/kernel/postinst.d/kdump-tools.distrib
+        /etc/kernel/postinst.d/kdump-tools
+      args:
+        removes: /etc/kernel/postinst.d/kdump-tools.distrib
+      register: kdump_dracut_native_hook
+
+    # The module scripts are now package-owned; only remove our local preset.
+    - name: dracut | Remove the backported capture preset
+      when: kdump_dracut_native
+      file:
+        path: /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+        state: absent
+      register: kdump_dracut_native_profile
 
     - name: dracut | Read installed kernel versions
       command: linux-version list
@@ -72,7 +119,11 @@
   when:
     - ansible_distribution_release == 'resolute'
     - not ansible_check_mode
-    - kdump_apt_tools.changed or kdump_dracut_files.changed or kdump_dracut_diversion.changed or kdump_dracut_generator.changed
+    - >-
+      kdump_apt_tools.changed or boot_initramfs_rebuild.changed
+      or kdump_dracut_files.changed or kdump_dracut_diversion.changed
+      or kdump_dracut_generator.changed or kdump_dracut_native_hook.changed
+      or kdump_dracut_native_profile.changed
   command: /etc/kernel/postinst.d/kdump-tools {{ item }}
   changed_when: true
   loop: '{{ kdump_dracut_kernels.stdout_lines | default([]) }}'
