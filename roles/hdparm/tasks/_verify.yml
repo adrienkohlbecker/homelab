@@ -19,7 +19,7 @@
             ["/usr/sbin/hdparm", "--Istdin"],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             user=account.pw_uid,
             group=account.pw_gid,
             extra_groups=[],
