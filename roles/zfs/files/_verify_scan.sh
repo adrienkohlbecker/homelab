@@ -76,12 +76,30 @@ scrub_epoch=$(date -d "$scrub_date" +%s)
 echo 'Active, paused, canceled, completed, resumed, and unprivileged chart checks passed'
 
 sleep 3
+printf '1\n' >"$scan_suspend"
 zpool offline zfs_scan_test /var/tmp/zfs_scan_test_0.img
 dd if=/dev/urandom of=/zfs_scan_test/payload bs=1M count=1 conv=notrunc,fsync status=none
+# Commit changed blocks to the remaining mirror leg, beyond the intent log.
+timeout -k 10 60 zpool sync zfs_scan_test
 zpool online zfs_scan_test /var/tmp/zfs_scan_test_0.img
+# Hold the scan until its asynchronous start is observable before waiting for
+# completion; an idle wait can otherwise return before a resilver is scheduled.
+# shellcheck disable=SC2016 # Variables expand in the child shell.
+timeout -k 10 60 bash -c '
+  set -euo pipefail
+  while true; do
+    active=$(/opt/zfs/zfs_status.py scan zfs_scan_test)
+    [[ "$active" == 1 ]] && break
+    sleep 0.1
+  done
+'
+printf '%s\n' "$saved_suspend" >"$scan_suspend"
 timeout -k 10 60 zpool wait -t resilver zfs_scan_test
 resilver_status=$(LC_ALL=C zpool status zfs_scan_test)
-grep -F 'scan: resilvered' <<<"$resilver_status"
+grep -F 'scan: resilvered' <<<"$resilver_status" || {
+  echo >&2 "$resilver_status"
+  exit 1
+}
 resilver_date=$(awk '/scan: resilvered/ {print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}' <<<"$resilver_status")
 resilver_epoch=$(date -d "$resilver_date" +%s)
 ((resilver_epoch - scrub_epoch >= 3))
