@@ -14,7 +14,7 @@
 # Ubuntu noble: openzfs ships /lib/udev/rules.d/90-zfs.rules
 # with `MODE="0666"` on /dev/zfs, so libzfs's ZFS_IOC_POOL_STATS
 # ioctl works unprivileged. If a host ever tightens /dev/zfs perms,
-# the check function will catch it via the trial `zpool status` call.
+# the check function catches it through the shared scan reader.
 
 zfs_scan_update_every=60
 zfs_scan_priority=90100
@@ -24,11 +24,9 @@ zfs_scan_check() {
     error "zfs_scan: 'zpool' binary missing"
     return 1
   }
-  # Probe once so a permission tightening on /dev/zfs (or missing kmod)
-  # surfaces here (collector disabled, visible in netdata log) rather
-  # than as silent-zero readings. `zpool status` exits 0 with "no pools
-  # available" when nothing is imported — that's fine, the chart stays
-  # at active=0 forever, which is the truth.
+  # Probe the reader so permission or kmod failures disable the collector
+  # visibly instead of producing false-zero readings. No imported pools
+  # is a successful query with active=0 in either supported status format.
   /opt/zfs/zfs_status.py scan >/dev/null || {
     error "zfs_scan: cannot read scan state"
     return 1
