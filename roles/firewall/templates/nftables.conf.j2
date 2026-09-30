@@ -164,8 +164,8 @@ table inet homelab {
         # the gateway IP of every DNS-enabled named bridge allocated from
         # podman_bridge_pool, so both source ranges are required. TCP
         # carries the truncated-answer fallback: aardvark-dns 1.12+ serves
-        # it and netavark DNATs both protocols, but its own tcp accept
-        # cannot survive this chain's policy drop.
+        # it and netavark DNATs both protocols to 5333, but netavark's
+        # accept-policy INPUT chain cannot override this chain's policy drop.
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 counter name "aardvark_accept" accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } tcp dport 5333 counter name "aardvark_tcp_accept" accept comment "aardvark-dns TCP fallback (post-DNAT from gateway:53, all podman bridges)"
         iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 counter name "mdns_accept" accept comment "mDNS (home LAN)"
