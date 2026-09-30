@@ -171,6 +171,23 @@ def test_selects_the_userspace_version(monkeypatch, version, supported):
     assert status.supports_json() is supported
 
 
+@pytest.mark.parametrize("json_supported", [True, False])
+def test_health_launcher_selects_the_parser_at_runtime(monkeypatch, json_supported):
+    monkeypatch.setattr(status.sys, "argv", ["zfs_health"])
+    monkeypatch.setattr(status, "supports_json", lambda: json_supported)
+    calls = []
+    monkeypatch.setattr(status, "health", lambda: calls.append("json") or 0)
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        assert kwargs == {"check": False}
+        return subprocess.CompletedProcess(argv, 7)
+
+    monkeypatch.setattr(status.subprocess, "run", run)
+    assert status.main() == (0 if json_supported else 7)
+    assert calls == (["json"] if json_supported else [["/opt/zfs/zfs_health_legacy.sh"]])
+
+
 def test_unknown_version_fails_closed(monkeypatch):
     monkeypatch.setattr(status, "run", lambda *_: "unexpected")
     with pytest.raises(status.StatusError, match="userspace version"):

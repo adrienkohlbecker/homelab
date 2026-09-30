@@ -246,7 +246,9 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command in {None, "health"}:
-            return health()
+            if supports_json():
+                return health()
+            return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
         print(int(scan_in_progress(args.pool, scrub_only=args.scrub_only)))
         return 0
     except (OSError, subprocess.CalledProcessError, ValueError) as error:

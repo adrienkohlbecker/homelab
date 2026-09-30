@@ -21,3 +21,16 @@
   become: true
   tags:
     - zfs
+
+- name: status | Install the Noble health parser
+  copy:
+    src: zfs_health_legacy.sh
+    dest: /opt/zfs/zfs_health_legacy.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs

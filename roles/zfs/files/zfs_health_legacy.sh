@@ -1,0 +1,130 @@
+#!/bin/bash
+set -euo pipefail
+((EUID == 0)) || {
+  echo >&2 "Error: I require root"
+  exit 1
+}
+
+# zpool status issues blocking I/O; on a SUSPENDED pool (too many devices lost,
+# all I/O wedged) it can hang indefinitely and stall the nightly timer. Bound
+# every call so a wedged pool surfaces as a counted failure plus email the same
+# night instead of a silent hang. 60s is far longer than a healthy status read
+# yet well inside the daily cadence. -k 10 escalates to SIGKILL 10s after the
+# SIGTERM if zpool ignores the term; a process stuck in uninterruptible I/O wait
+# can still outlast it, but the unit's systemd timeout remains the final backstop.
+zpool_status() {
+  timeout -k 10 60 zpool status "$@"
+}
+
+EMAIL_TO="root"
+EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
+
+# Scrub expiration in seconds (40 days). Scrubs themselves are scheduled by the
+# zfs_scrub timer (monthly, second Sunday), not run here; this role also diverts
+# the distro's /etc/cron.d/zfsutils-linux aside so that timer is the sole
+# scheduler. This threshold is the watchdog -- it alarms if that monthly scrub
+# stops happening (40 days = one monthly cycle plus slack). Overridable via the
+# environment so the _verify harness can force the expiry branch
+# (SCRUB_EXPIRE=1) without faking a scrub date or waiting 40 days; prod always
+# takes the default.
+SCRUB_EXPIRE="${SCRUB_EXPIRE:-3456000}"
+
+# Pool capacity is alarmed by netdata's zfspool collector (per-pool
+# netdata_zfspool_thresholds with escalating warn/crit), not duplicated here.
+
+failed=0
+TMP_OUTPUT=$(mktemp)
+trap 'rm -f "$TMP_OUTPUT"' EXIT
+
+zpool_status -s | tee "$TMP_OUTPUT" || echo >&2 "Warning: zpool status dump for the report did not complete"
+
+ZFS_VOLUMES=$(zpool list -H -o name)
+
+# Health — `zpool status -x` is the authoritative summary: it prints exactly
+# "all pools are healthy" when every imported pool is ONLINE with no known
+# errors, and the full status of any pool that is not. Trusting it (rather than
+# grepping zpool status for a hand-maintained keyword blocklist) catches any
+# future fault string automatically and stops pool/dataset names that happen to
+# contain words like "cannot" or "fail" from false-positiving.
+echo "Checking pool health condition..."
+if ! health_summary=$(zpool_status -x); then
+  echo >&2 "ERROR :: zpool status -x did not complete (pool wedged or zpool error)"
+  ((failed += 1))
+elif [ "$health_summary" != "all pools are healthy" ]; then
+  echo >&2 "ERROR :: zpool status -x reports a problem:"
+  echo >&2 "$health_summary"
+  ((failed += 1))
+fi
+
+# Drive errors — count READ/WRITE/CKSUM on every row whose last three columns
+# are integers, regardless of the row's STATE: a disk can rack up errors and
+# then flip to DEGRADED/FAULTED, and that error count is exactly what we want to
+# surface (the -x check above reports the state; this reports the counts). The
+# awk's own `> 0` guard already ignores healthy 0/0/0 rows, so we deliberately
+# do NOT pass `-e` (errored-vdevs-only): that flag is OpenZFS 2.3+, and on a 2.2
+# host `zpool status -e` aborts with "invalid option", which under pipefail
+# fails the pipe and silently kills the whole check. -p forces exact integers
+# (human-formatted 1.5K/2M would slip past the > 0 test). Capture into a var
+# first (rather than piping zpool straight into awk) so a timeout/zpool failure
+# is caught here instead of being masked by awk's own exit status under pipefail.
+echo "Checking drive errors..."
+if ! drive_status=$(zpool_status -p); then
+  echo >&2 "ERROR :: zpool status -p did not complete (pool wedged or zpool error)"
+  ((failed += 1))
+elif echo "$drive_status" | awk '$3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { if ($3 + $4 + $5 > 0) found = 1 } END { exit !found }'; then
+  echo >&2 "ERROR :: Detected drive errors (READ/WRITE/CKSUM)"
+  ((failed += 1))
+fi
+
+# Scrub age — check each volume independently.
+echo "Checking scrub age..."
+CURRENT_DATE=$(date +"%s")
+
+for volume in $ZFS_VOLUMES; do
+  # A suspended/UNAVAIL pool can make `zpool status` exit non-zero. Count it and
+  # keep going so a broken pool does not swallow the rest of the alert.
+  vol_status=$(zpool_status "$volume") || {
+    echo >&2 "ERROR :: Cannot query status for $volume"
+    ((failed += 1))
+    continue
+  }
+
+  if [[ "$vol_status" == *"scrub canceled"* ]]; then
+    echo >&2 "ERROR :: Last scrub canceled on $volume"
+    ((failed += 1))
+    continue
+  elif [[ "$vol_status" == *"scrub in progress"* || "$vol_status" == *"resilver in progress"* ]]; then
+    echo "Scrub in progress for $volume, skipping."
+    continue
+  fi
+
+  if [[ "$vol_status" != *"scan: scrub"* && "$vol_status" != *"scan: resilvered"* ]]; then
+    SCRUB_DATE=$(zfs get creation -Hpo value "$volume")
+  else
+    # Take the trailing 5 fields by position from the end ("Sun Mar 10 03:12:34
+    # 2024"), independent of day-width padding and of however many words precede
+    # the date on the scan line. A positional `cut` from the front would shift
+    # whenever the wording or column count changes.
+    SCRUB_RAW_DATE=$(echo "$vol_status" | grep -e "scrub repaired" -e "scrub paused" -e "scan: resilvered" | awk '{print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}')
+    SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s" 2>/dev/null) || {
+      echo >&2 "ERROR :: Cannot parse scrub date for $volume: $SCRUB_RAW_DATE"
+      ((failed += 1))
+      continue
+    }
+  fi
+
+  if [ $((CURRENT_DATE - SCRUB_DATE)) -ge "$SCRUB_EXPIRE" ]; then
+    echo >&2 "ERROR :: Scrub expired on $volume"
+    ((failed += 1))
+  fi
+done
+
+if ((failed > 0)); then
+  # `mail` comes from the postfix role, converged earlier in the layer ladder.
+  # The _verify dry-run never reaches this branch because clean fixture pools
+  # report no failures.
+  mail -s "$EMAIL_SUBJECT_PREFIX - $failed issue(s) detected" "$EMAIL_TO" <"$TMP_OUTPUT"
+  exit 1
+fi
+
+echo "Done"

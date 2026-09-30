@@ -143,25 +143,7 @@
   loop:
     - zfs_cull
     - zfs_scrub
-  become: true
-  tags:
-    - zfs
-
-- name: Install the health check for the ZFS userspace version
-  vars:
-    zfs_json_status: >-
-      {{ (zfs_version_out.stdout | default('') | regex_search('[0-9]+\.[0-9]+\.[0-9]+')
-          | default('0.0.0', true)) is version('2.3.0', '>=') }}
-  copy:
-    src: "{{ 'zfs_status.py' if zfs_json_status else 'zfs_health.sh' }}"
-    dest: /usr/local/bin/zfs_health
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
-    validate: >-
-      {{ "python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' %s"
-         if zfs_json_status else 'bash -n %s' }}
+    - zfs_health
   become: true
   tags:
     - zfs
