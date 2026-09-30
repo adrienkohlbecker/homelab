@@ -260,6 +260,22 @@ def test_noble_scan_fallback_pins_locale_and_does_not_request_json(monkeypatch):
     assert calls[0][1]["env"]["LC_ALL"] == "C"
 
 
+@pytest.mark.parametrize("scrub_only", [False, True])
+@pytest.mark.parametrize(
+    ("output", "active", "scrub_active"),
+    [
+        ("scan: resilver (mirror-0) in progress since Thu Oct 1 00:00:00 2026", True, False),
+        ("scan: resilver in progress since Thu Oct 1 00:00:00 2026", True, False),
+        ("scan: resilvered (mirror-0) 64M with 0 errors on Thu Oct 1 00:00:00 2026", False, False),
+        ("scan: scrub in progress since Thu Oct 1 00:00:00 2026", True, True),
+    ],
+)
+def test_noble_scan_fallback_distinguishes_active_rebuilds(monkeypatch, scrub_only, output, active, scrub_active):
+    monkeypatch.setattr(status, "supports_json", lambda: False)
+    monkeypatch.setattr(status.subprocess, "run", lambda argv, **_: subprocess.CompletedProcess(argv, 0, stdout=output))
+    assert status.scan_in_progress("tank", scrub_only=scrub_only) is (scrub_active if scrub_only else active)
+
+
 def test_scan_query_failure_propagates(monkeypatch):
     monkeypatch.setattr(status, "supports_json", lambda: True)
 

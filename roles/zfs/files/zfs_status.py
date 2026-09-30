@@ -149,7 +149,9 @@ def scan_in_progress(pool: str | None, *, scrub_only: bool = False) -> bool:
         text=True,
         env={**os.environ, "LC_ALL": "C"},
     ).stdout
-    return "scrub in progress" in output or (not scrub_only and "resilver in progress" in output)
+    return "scrub in progress" in output or (
+        not scrub_only and re.search(r"resilver(?: \([^)]*\))? in progress", output) is not None
+    )
 
 
 def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str | None:

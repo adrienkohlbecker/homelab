@@ -94,8 +94,8 @@ for volume in $ZFS_VOLUMES; do
     echo >&2 "ERROR :: Last scrub canceled on $volume"
     ((failed += 1))
     continue
-  elif [[ "$vol_status" == *"scrub in progress"* || "$vol_status" == *"resilver in progress"* ]]; then
-    echo "Scrub in progress for $volume, skipping."
+  elif [[ "$vol_status" == *"scrub in progress"* ]] || grep -Eq 'resilver( \([^)]*\))? in progress' <<<"$vol_status"; then
+    echo "Scrub/resilver in progress for $volume, skipping."
     continue
   fi
 

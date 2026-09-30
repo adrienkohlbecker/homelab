@@ -61,6 +61,9 @@ check_status() {
 }
 
 check_status 0 "scan: resilvered 0B in 00:00:01 with 0 errors on $recent_date"
+check_status 0 "scan: resilver (mirror-0) in progress since $recent_date"
+check_status 0 "scan: scrub repaired 0B in 00:00:01 with 0 errors on $old_date
+scan: resilver (mirror-0) in progress since $recent_date"
 check_status 0 "scan: scrub repaired 0B in 00:00:01 with 0 errors on $old_date
 scan: resilvered (mirror-0) 64M in 00:00:01 with 0 errors on $recent_date
 scan: resilvered (mirror-1) 64M in 00:00:01 with 0 errors on $middle_date"
