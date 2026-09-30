@@ -1663,7 +1663,7 @@ class Machine:
             cmd[cmd.index("-serial") + 1] = "mon:stdio"
 
         if self.launch.qmp_socket is not None:
-            cmd += ["-qmp", f"unix:{self.launch.qmp_socket},server,nowait"]
+            cmd += ["-qmp", f"unix:{self.launch.qmp_socket},server=on,wait=off"]
         for path, tag in self.launch.virtfs:
             cmd += [
                 "-virtfs",
