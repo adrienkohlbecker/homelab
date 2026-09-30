@@ -1,2 +1,3 @@
+# Resolute updates dmg2img; exercise its exit-zero unsupported-LZFSE path.
 ubuntu:
   - resolute
