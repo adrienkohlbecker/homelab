@@ -14,6 +14,55 @@
     cache_valid_time: 3600
   become: true
 
+# Stand in for a host upgraded with NetBIOS live: Samba 4.23 disables NetBIOS
+# only in the smb.conf it ships to fresh installs, so an upgraded host keeps its
+# old config and a running nmbd. Converge must take both away, which _verify
+# checks at the socket level. Skipping recommends also leaves Noble without
+# samba-vfs-modules, which the role must then request itself.
+- name: _setup | Install Samba with its services allowed to start
+  apt:
+    pkg:
+      - samba
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _setup | Write a legacy config that serves NetBIOS
+  copy:
+    dest: /etc/samba/smb.conf
+    content: |
+      [global]
+      disable netbios = no
+      smb ports = 445 139
+    mode: "0644"
+    validate: testparm -s %s
+  become: true
+
+- name: _setup | Run nmbd and smbd with the legacy config
+  systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: restarted
+  loop:
+    - nmbd
+    - smbd
+  become: true
+
+# Without live NetBIOS sockets here, the check in _verify would pass vacuously.
+- name: _setup | NetBIOS name and session ports are listening
+  command:
+    argv:
+      - ss
+      - -H
+      - -lntu
+      - ( sport = :137 or sport = :139 )
+  register: samba_setup_netbios_listeners
+  changed_when: false
+  failed_when: >-
+    samba_setup_netbios_listeners.stdout is not search(':137\s')
+    or samba_setup_netbios_listeners.stdout is not search(':139\s')
+  become: true
+
 # The smbtest share used by test/host_vars/lab.yml points here; create
 # it owned by the SMB login user so the valid-users / write path is exercisable.
 - name: _test | Create test share directory

@@ -74,6 +74,21 @@
   failed_when: samba_nmbd_enabled.stdout != 'masked'
   become: true
 
+# _setup left nmbd and smbd serving NetBIOS from a legacy config, as on an
+# upgraded host. Converge must close the name (137), datagram (138), and
+# session (139) ports.
+- name: _verify | No NetBIOS port is listening
+  command:
+    argv:
+      - ss
+      - -H
+      - -lntup
+      - ( sport = :137 or sport = :138 or sport = :139 )
+  register: samba_netbios_listeners
+  changed_when: false
+  failed_when: samba_netbios_listeners.stdout | trim | length > 0
+  become: true
+
 - name: _verify | Browse Samba services over mDNS
   command:
     argv:
