@@ -46,7 +46,8 @@ zfs_scan_update() {
   local active
   active=$(/opt/zfs/zfs_status.py scan) || {
     error "zfs_scan: cannot read scan state"
-    return 1
+    # Leave a gap while continuing retries; charts.d disables repeated failures.
+    return 0
   }
   cat <<EOF
 BEGIN zfs_scan.any_in_progress ${1}
