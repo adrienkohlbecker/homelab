@@ -107,6 +107,7 @@
       - not dns_vrrp_enabled or nft_counters.vrrp_accept.packets | int == 0
       - nft_counters.mosh_accept.packets | int >= 1
       - nft_counters.aardvark_accept.packets | int >= 2  # default + named bridge probes
+      - nft_counters.aardvark_tcp_accept.packets | int >= 2  # default + named bridge probes
       - nft_counters.wireguard_accept.packets | int >= 1
       - nft_counters.mdns_accept.packets | int == 0
       - nft_counters.input_public_tcp.packets | int >= 3  # SSH, HTTP, and HTTPS probes

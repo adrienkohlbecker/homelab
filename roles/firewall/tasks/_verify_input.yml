@@ -283,6 +283,7 @@
     - { label: Samba, port: "445" }
     - { label: nut, port: "{{ service_ports.nut }}" }
     - { label: transmission, port: "{{ service_ports.transmission_bt }}" }
+    - { label: aardvark-dns, port: "5333" }
   loop_control:
     label: "{{ item.label }}"
   register: _firewall_nonscope_tcp
@@ -291,8 +292,8 @@
   become: true
 
 # --- podman-source positives -----------------------------------------
-# Aardvark accepts both the default bridge and named-bridge pool; NUT accepts
-# the named pool used by Home Assistant.
+# Aardvark accepts UDP and TCP from both the default bridge and named-bridge
+# pool; NUT accepts the named pool used by Home Assistant.
 - name: _verify_input | INPUT — aardvark-dns reachable from podman source ranges
   command:
     argv:
@@ -315,6 +316,20 @@
   loop_control:
     label: "{{ item.label }}"
   changed_when: false
+  become: true
+
+- name: _verify_input | INPUT — aardvark-dns TCP fallback reachable from podman source ranges
+  command: >
+    ip netns exec extns curl --interface {{ item.source }}
+    --connect-timeout 3 --max-time 5 -sf http://192.0.2.1:5333/
+  loop:
+    - { label: default bridge, source: "{{ _firewall_probe_podman }}" }
+    - { label: named bridge pool, source: "{{ _firewall_probe_podman_pool }}" }
+  loop_control:
+    label: "{{ item.label }}"
+  register: _firewall_podman_aardvark_tcp
+  changed_when: false
+  failed_when: _firewall_podman_aardvark_tcp.rc != 0 or 'firewall-verify-ok' not in _firewall_podman_aardvark_tcp.stdout
   become: true
 
 - name: _verify_input | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source

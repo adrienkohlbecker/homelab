@@ -37,6 +37,7 @@ table inet homelab {
     counter icmp_overflow {}
     counter vrrp_accept {}
     counter aardvark_accept {}
+    counter aardvark_tcp_accept {}
     counter mdns_accept {}
     counter igmp_accept {}
     counter wireguard_accept {}
@@ -161,8 +162,12 @@ table inet homelab {
         # container DNS (aardvark-dns, consumers live on podman bridges);
         # 5353 mDNS is link-local on the home LAN. aardvark-dns binds
         # the gateway IP of every DNS-enabled named bridge allocated from
-        # podman_bridge_pool, so both source ranges are required.
+        # podman_bridge_pool, so both source ranges are required. TCP
+        # carries the truncated-answer fallback: aardvark-dns 1.12+ serves
+        # it and netavark DNATs both protocols, but its own tcp accept
+        # cannot survive this chain's policy drop.
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 counter name "aardvark_accept" accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
+        ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } tcp dport 5333 counter name "aardvark_tcp_accept" accept comment "aardvark-dns TCP fallback (post-DNAT from gateway:53, all podman bridges)"
         iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 counter name "mdns_accept" accept comment "mDNS (home LAN)"
 
         # IGMP is link-local (TTL=1) and required for hosts to answer the
