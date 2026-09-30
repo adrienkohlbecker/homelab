@@ -115,7 +115,13 @@ set -euo pipefail
 echo >&2 'Pool creation must not be queried after a completed resilver'
 exit 2
 EOF
+cat >"$scratch/bin/mail" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+cat >"$ZFS_VERIFY_MAIL"
+EOF
 chmod +x "$scratch/bin/"*
+export ZFS_VERIFY_MAIL="$scratch/mail"
 check_resilver_age() {
   PATH="$scratch/bin:$PATH" ZFS_VERIFY_NOW="$1" SCRUB_EXPIRE=2 python3 - <<'PY'
 import os
@@ -129,10 +135,14 @@ sys.exit(reader["main"]())
 PY
 }
 check_resilver_age "$((resilver_epoch + 1))"
-if output=$(check_resilver_age "$((resilver_epoch + 2))" 2>&1); then
-  echo >&2 'Expected the completed resilver to expire at the age threshold'
+[[ ! -e "$ZFS_VERIFY_MAIL" ]]
+rc=0
+output=$(check_resilver_age "$((resilver_epoch + 2))" 2>&1) || rc=$?
+if [[ "$rc" != 1 ]]; then
+  echo >&2 "Expected a counted expiry failure (exit 1), got $rc: $output"
   exit 1
 fi
+[[ -s "$ZFS_VERIFY_MAIL" ]]
 [[ "$output" == *'Scrub expired on zfs_scan_test'* ]]
 [[ "$output" != *'Pool creation must not be queried'* ]]
 echo 'Health measured age from the real completed resilver, accepted an available spare, and expired at the threshold'
