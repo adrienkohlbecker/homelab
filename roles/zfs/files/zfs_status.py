@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from typing import Any
 
 
@@ -33,8 +34,20 @@ def mapping(value: Any, field: str) -> dict[str, Any]:
     return value
 
 
+def iter_vdevs(devices: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    for name, value in devices.items():
+        device = mapping(value, name)
+        yield name, device
+        yield from iter_vdevs(mapping(device.get("vdevs", {}), f"{name}.vdevs"))
+
+
+def pool_vdevs(pool: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
+    for group in ("vdevs", "dedup", "special", "logs", "l2cache"):
+        yield from iter_vdevs(mapping(pool.get(group, {}), group))
+
+
 def parse_status(raw: str) -> dict[str, Any]:
-    """Validate the fields consumed from OpenZFS's flat, integer JSON schema."""
+    """Validate consumed fields while keeping active vdevs and spares separate."""
     document = mapping(json.loads(raw), "status")
     version = mapping(document.get("output_version"), "output_version")
     major = integer(version.get("vers_major"), "vers_major")
@@ -56,15 +69,26 @@ def parse_status(raw: str) -> dict[str, Any]:
         vdevs = mapping(pool.get("vdevs"), f"{name}.vdevs")
         if not vdevs:
             raise StatusError(f"Missing vdevs for pool {name}")
-        for device, value in vdevs.items():
-            vdev = mapping(value, device)
-            # Spare-only entries have availability state, not I/O counters.
-            if vdev.get("state") in ("AVAIL", "INUSE"):
-                continue
+        for device, vdev in pool_vdevs(pool):
             for field in ("read_errors", "write_errors", "checksum_errors"):
                 integer(vdev.get(field), f"{device}.{field}")
             if "slow_ios" in vdev:
                 integer(vdev["slow_ios"], f"{device}.slow_ios")
+        for device, value in mapping(pool.get("spares", {}), f"{name}.spares").items():
+            spare = mapping(value, device)
+            if spare.get("state") not in (
+                "AVAIL",
+                "INUSE",
+                "UNKNOWN",
+                "CLOSED",
+                "OFFLINE",
+                "REMOVED",
+                "CANT_OPEN",
+                "FAULTED",
+                "DEGRADED",
+                "ONLINE",
+            ):
+                raise StatusError(f"Unknown spare state on {device}: {spare.get('state')!r}")
         scan = mapping(pool.get("scan_stats", {}), f"{name}.scan_stats")
         if "function" in scan:
             if scan["function"] not in ("NONE", "SCRUB", "RESILVER", "ERRORSCRUB"):
@@ -83,7 +107,8 @@ def parse_status(raw: str) -> dict[str, Any]:
 
 
 def read_status(*pools: str, explain: bool = False) -> dict[str, Any]:
-    args = ["zpool", "status", "-j", "--json-int", "--json-flat-vdevs", "-p"]
+    # Flat output overwrites an active spare's counters with its spare entry.
+    args = ["zpool", "status", "-j", "--json-int", "-p"]
     if explain:
         args.append("-x")
     result = parse_status(run(*args, *pools))
@@ -178,10 +203,13 @@ def health() -> int:
         for name, pool in pools.items():
             if any(
                 vdev.get(field, 0) > 0
-                for vdev in pool["vdevs"].values()
+                for _, vdev in pool_vdevs(pool)
                 for field in ("read_errors", "write_errors", "checksum_errors")
             ):
                 issues.append(f"Detected drive errors (READ/WRITE/CKSUM) on {name}")
+            for device, spare in pool.get("spares", {}).items():
+                if spare["state"] not in ("AVAIL", "INUSE"):
+                    issues.append(f"Unhealthy spare {device} on {name}: {spare['state']}")
             try:
                 if issue := scrub_issue(name, pool, now, expire):
                     issues.append(issue)

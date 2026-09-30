@@ -60,8 +60,39 @@ def test_rejects_incompatible_or_malformed_schema_versions(field, value):
 
 def test_never_scrubbed_pool_and_spare_are_valid(pool):
     del pool["scan_stats"]
-    pool["vdevs"]["spare0"] = {"state": "AVAIL"}
+    pool["spares"] = {"spare0": {"state": "AVAIL"}}
     assert status.parse_status(document({"tank": pool})) == {"tank": pool}
+
+
+@pytest.mark.parametrize("state", ["AVAIL", "INUSE", "FAULTED", "REMOVED", "CANT_OPEN"])
+def test_spare_states_have_no_io_counters(pool, state):
+    pool["spares"] = {"spare0": {"state": state, "class": "spare"}}
+    assert status.parse_status(document({"tank": pool})) == {"tank": pool}
+
+
+@pytest.mark.parametrize("group", ["vdevs", "dedup", "special", "logs", "l2cache"])
+def test_nested_vdevs_preserve_active_spare_counters(pool, group):
+    device = pool["vdevs"].pop("disk0")
+    device["checksum_errors"] = 5
+    pool[group] = {"mirror-0": {**pool["vdevs"]["mirror-0"], "vdevs": {"spare0": device}}}
+    pool["spares"] = {"spare0": {"state": "INUSE"}}
+    parsed = status.parse_status(document({"tank": pool}))["tank"]
+    assert any(vdev["checksum_errors"] == 5 for _, vdev in status.pool_vdevs(parsed))
+    device["checksum_errors"] = "5"
+    with pytest.raises(status.StatusError, match="checksum_errors"):
+        status.parse_status(document({"tank": pool}))
+
+
+def test_status_keeps_the_vdev_tree_separate_from_spares(monkeypatch, pool):
+    calls = []
+
+    def run(*argv):
+        calls.append(argv)
+        return document({"tank": pool})
+
+    monkeypatch.setattr(status, "run", run)
+    assert status.read_status("tank") == {"tank": pool}
+    assert "--json-flat-vdevs" not in calls[0]
 
 
 @pytest.mark.parametrize("value", [None, "1K", "0", True, -1])
@@ -228,3 +259,20 @@ def test_health_accepts_feature_capped_pools_and_does_not_alarm_on_slow_io(monke
     monkeypatch.setattr(status, "run", lambda *_: "SLOW 3")
     monkeypatch.setattr(status, "read_status", lambda **kwargs: {} if kwargs.get("explain") else {"tank": pool})
     assert status.health() == 0
+
+
+def test_health_reports_failed_spares_and_active_spare_errors(monkeypatch, pool):
+    pool["vdevs"]["mirror-0"]["vdevs"] = {"spare0": pool["vdevs"].pop("disk0")}
+    pool["vdevs"]["mirror-0"]["vdevs"]["spare0"]["checksum_errors"] = 5
+    pool["spares"] = {"spare0": {"state": "INUSE"}, "spare1": {"state": "FAULTED"}}
+    monkeypatch.setattr(status.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(status.time, "time", lambda: 100)
+    monkeypatch.setenv("SCRUB_EXPIRE", "20")
+    monkeypatch.setattr(status, "run", lambda *_: "report")
+    monkeypatch.setattr(status, "read_status", lambda **kwargs: {} if kwargs.get("explain") else {"tank": pool})
+    mail = []
+    monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
+    assert status.health() == 1
+    assert "Detected drive errors (READ/WRITE/CKSUM) on tank" in mail[0]
+    assert "Unhealthy spare spare1 on tank: FAULTED" in mail[0]
+    assert "Unhealthy spare spare0" not in mail[0]
