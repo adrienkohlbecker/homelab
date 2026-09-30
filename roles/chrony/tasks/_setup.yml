@@ -1,0 +1,28 @@
+# Where the image already ships chrony (Resolute), start from a host converged
+# before tzdata-legacy joined the role: managed configuration, running daemon,
+# no right/UTC zone. Converge must then restart chronyd for the package alone.
+# Images without chrony (Noble) keep exercising the timesyncd conversion path.
+- name: _setup | Check for an image-provided chronyd
+  stat:
+    path: /usr/sbin/chronyd
+  register: chrony_setup_binary
+
+- name: _setup | Seed the pre-tzdata-legacy managed state
+  when: chrony_setup_binary.stat.exists
+  become: true
+  block:
+    - name: _setup | Remove tzdata-legacy
+      apt:
+        name: tzdata-legacy
+        state: absent
+
+    - name: _setup | Install the managed configuration
+      copy:
+        src: chrony.conf
+        dest: /etc/chrony/chrony.conf
+        mode: "0644"
+
+    - name: _setup | Restart chronyd on the managed configuration
+      systemd:
+        name: chrony.service
+        state: restarted
