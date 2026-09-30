@@ -122,6 +122,12 @@
   tags:
     - boot
 
+- name: Preserve boot dependency changes for capture images
+  set_fact:
+    boot_initramfs_changed: '{{ boot_initramfs_changed | default(false) or boot_apt.changed }}'
+  tags:
+    - boot
+
 - name: Rebuild boot images
   when:
     - boot_apt.changed

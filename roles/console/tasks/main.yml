@@ -44,6 +44,14 @@
   tags:
     - console
 
+- name: Preserve console changes for capture images # noqa: var-naming[no-role-prefix]
+  set_fact:
+    boot_initramfs_changed: >-
+      {{ boot_initramfs_changed | default(false)
+         or console_cfg.changed or console_apt.changed }}
+  tags:
+    - console
+
 - name: Rebuild boot images with the console policy
   when:
     - console_cfg.changed or console_apt.changed

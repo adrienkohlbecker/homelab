@@ -1,0 +1,51 @@
+- name: _verify_module_policy | Exercise an ARC change consumed before kdump
+  when: initramfs_use_dracut and zfs_root
+  block:
+    - name: _verify_module_policy | Select a distinct ARC minimum # noqa: var-naming[no-role-prefix]
+      set_fact:
+        _kdump_policy_arc_min: '{{ zfs_arc_min | int + 65536 }}'
+        boot_initramfs_changed: false
+
+    - name: _verify_module_policy | Inspect the existing capture module policy
+      command: lsinitrd --file etc/modprobe.d/zfs.conf /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+      register: _kdump_module_before
+      changed_when: false
+      failed_when: "('zfs_arc_min=' ~ _kdump_policy_arc_min) in _kdump_module_before.stdout"
+      become: true
+
+    - name: _verify_module_policy | Change ARC through production tasks
+      import_role:
+        name: zfs
+        tasks_from: arc
+      vars:
+        zfs_arc_min: '{{ _kdump_policy_arc_min }}'
+        zfs_apt: { changed: false }
+
+    - name: _verify_module_policy | A later role observes unchanged provider policy
+      import_role:
+        name: boot
+        tasks_from: initramfs_provider
+
+    - name: _verify_module_policy | Kdump reconciles the capture image and loader
+      import_role:
+        name: kdump
+        tasks_from: main
+
+    - name: _verify_module_policy | The capture image carries the new module policy
+      command: lsinitrd --file etc/modprobe.d/zfs.conf /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+      register: _kdump_module_after
+      changed_when: false
+      failed_when: "('zfs_arc_min=' ~ _kdump_policy_arc_min) not in _kdump_module_after.stdout"
+      become: true
+  always:
+    - name: _verify_module_policy | Restore the configured ARC policy
+      import_role:
+        name: zfs
+        tasks_from: arc
+      vars:
+        zfs_apt: { changed: false }
+
+    - name: _verify_module_policy | Restore the capture image and loader
+      import_role:
+        name: kdump
+        tasks_from: main
