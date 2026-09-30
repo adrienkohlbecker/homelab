@@ -23,13 +23,18 @@
       all {{ chrony_verify_authdata.stdout_lines | length }} loaded source(s) use
       NTS and at least two hold negotiated cookies
 
-# systemd's ntp-units.d registry names every installed synchronizer. Timesyncd
-# is queried explicitly because removing its package drops its registry entry
-# while an instance nobody stopped keeps steering the clock until reboot.
+# Read the ntp-units.d registries the way timedated does: every config
+# directory, entries trimmed, comments skipped. Timesyncd is queried
+# explicitly because removing its package drops its registry entry while an
+# instance nobody stopped keeps steering the clock until reboot.
 - name: _verify | List active time synchronizers
   shell: |
     set -euo pipefail
-    units="$(grep -hE "^[^#[:space:]]" /usr/lib/systemd/ntp-units.d/*.list)"
+    shopt -s nullglob
+    lists=(/etc/systemd/ntp-units.d/*.list /run/systemd/ntp-units.d/*.list
+           /usr/local/lib/systemd/ntp-units.d/*.list /usr/lib/systemd/ntp-units.d/*.list)
+    units="$(sed -e "s/^[[:space:]]*//" -e "s/[[:space:]]*$//" "${lists[@]}" </dev/null \
+      | grep -vE "^(#|$)" | sort -u)"
     systemctl list-units --state=active --plain --no-legend $units systemd-timesyncd.service
   args:
     executable: /bin/bash
