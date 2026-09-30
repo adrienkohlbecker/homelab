@@ -1,0 +1,60 @@
+# Removes a third-party apt repository installed by configure.yml: the deb822
+# source, the package lists apt fetched from it, and its scoped signing key.
+#
+# Inputs: caller passes a single dict `apt_source_args` with keys
+#   name:          required; the identifier passed to configure.yml
+#
+# Like configure.yml, requires the apt role to have run first:
+# deb822_repository needs python3-debian even for state=absent.
+# Packages installed from the source are the caller's to remove, before this
+# call.
+#
+# Order matters. The source goes first so apt never sees a source whose
+# signed-by key is missing. The key goes last, only after apt-get update has
+# pruned the removed source's lists: while the key remains, a rerun after a
+# failed refresh knows cleanup is still pending and refreshes again.
+
+- name: remove | Assert apt_source args for {{ apt_source_args.name | default('<unset>') }}
+  assert:
+    that:
+      - apt_source_args.name | default('') is match('^[a-z0-9_-]+\Z')
+    fail_msg: >-
+      apt_source remove: name must be a [a-z0-9_-] slug;
+      got {{ apt_source_args }}
+
+# state=absent resolves the same slugged .sources filename configure.yml wrote.
+# It also removes /etc/apt/keyrings/<slug>.{asc,gpg}, not the
+# /usr/share/keyrings key configure.yml fetched, so that one is deleted below.
+- name: remove | Remove repository for {{ apt_source_args.name }}
+  when: apt_deb822_available | default(true)
+  deb822_repository:
+    name: "{{ apt_source_args.name }}"
+    state: absent
+  become: true
+  register: apt_source_removed_repo
+
+- name: remove | Check for a pending key removal for {{ apt_source_args.name }}
+  stat:
+    path: /usr/share/keyrings/{{ apt_source_args.name }}.asc
+  register: apt_source_removed_key_stat
+
+# apt-get update prunes the removed source's lists from /var/lib/apt/lists.
+# Strict, as in configure.yml, so a broken remaining source fails here.
+- name: remove | Refresh apt cache after repository removal for {{ apt_source_args.name }}  # noqa: command-instead-of-module
+  when:
+    - apt_source_removed_repo is changed or apt_source_removed_key_stat.stat.exists
+    - not ansible_check_mode
+  command: apt-get update --error-on=any
+  register: apt_source_removed_refresh
+  retries: 5
+  delay: 30
+  until: apt_source_removed_refresh.rc == 0
+  changed_when: apt_source_removed_refresh.rc == 0
+  become: true
+
+- name: remove | Remove repository key for {{ apt_source_args.name }}
+  file:
+    path: /usr/share/keyrings/{{ apt_source_args.name }}.asc
+    state: absent
+  become: true
+  register: apt_source_removed_key

@@ -1,3 +1,4 @@
-# apt_source is a helper role accessed only via `tasks_from: configure`.
-# main.yml exists so testrole.py can target this role; the actual logic lives
-# in configure.yml and the standalone test scenario in _verify.yml.
+# apt_source is a helper role accessed only via `tasks_from: configure` or
+# `tasks_from: remove`. main.yml exists so testrole.py can target this role;
+# the actual logic lives in configure.yml / remove.yml and the standalone test
+# scenario in _verify.yml.

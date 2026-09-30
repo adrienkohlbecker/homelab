@@ -42,3 +42,123 @@
           uris: "{{ mirror_apt_docker }}"
           suites: "{{ ansible_distribution_release }}"
           components: stable
+
+# Removal consumes the standalone source configured above: its package must
+# stop resolving and its lists must be pruned once the source is gone, and a
+# repeat call must be a no-op. apt names each list file after its URI, with
+# the scheme dropped and slashes turned into underscores.
+- name: _verify | Derive the docker source list-file pattern
+  set_fact:
+    _apt_source_docker_lists: "{{ mirror_apt_docker | regex_replace('^https://', '') | replace('/', '_') }}_*"
+
+- name: _verify | Query docker-ce candidate while the source is configured
+  command: apt-cache policy docker-ce
+  register: _apt_source_policy_configured
+  changed_when: false
+
+- name: _verify | Find docker lists while the source is configured
+  find:
+    paths: /var/lib/apt/lists
+    patterns: "{{ _apt_source_docker_lists }}"
+  register: _apt_source_lists_configured
+
+- name: _verify | Remove the representative source
+  import_role:
+    name: apt_source
+    tasks_from: remove
+  vars:
+    apt_source_args:
+      name: docker
+
+- name: _verify | Query docker-ce candidate after removal
+  command: apt-cache policy docker-ce
+  register: _apt_source_policy_removed
+  changed_when: false
+
+- name: _verify | Find docker lists after removal
+  find:
+    paths: /var/lib/apt/lists
+    patterns: "{{ _apt_source_docker_lists }}"
+  register: _apt_source_lists_removed
+
+- name: _verify | Removal dropped the package candidate and pruned its lists
+  assert:
+    that:
+      - "_apt_source_policy_configured.stdout is search('Candidate: [0-9]')"
+      - "_apt_source_policy_removed.stdout is not search('Candidate: [0-9]')"
+      - _apt_source_lists_configured.matched > 0
+      - _apt_source_lists_removed.matched == 0
+    fail_msg: >-
+      configured: {{ _apt_source_policy_configured.stdout }}
+      ({{ _apt_source_lists_configured.matched }} lists);
+      removed: {{ _apt_source_policy_removed.stdout }}
+      ({{ _apt_source_lists_removed.matched }} lists)
+
+- name: _verify | Remove the representative source again
+  import_role:
+    name: apt_source
+    tasks_from: remove
+  vars:
+    apt_source_args:
+      name: docker
+
+- name: _verify | Repeat removal reported no change
+  assert:
+    that:
+      - apt_source_removed_repo is not changed
+      - apt_source_removed_refresh is skipped
+      - apt_source_removed_key is not changed
+
+# A removal whose refresh exhausted its retries leaves the source gone but its
+# lists and key behind. Rebuild that state directly rather than waiting out the
+# retry backoff, then prove a rerun still refreshes and finishes the cleanup.
+- name: _verify | Reconfigure the representative source
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: docker
+      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+      key_url: https://download.docker.com/linux/ubuntu/gpg
+      uris: "{{ mirror_apt_docker }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: stable
+
+- name: _verify | Drop the source as an interrupted removal would
+  file:
+    path: /etc/apt/sources.list.d/docker.sources
+    state: absent
+  become: true
+
+- name: _verify | Find docker lists stranded by the interrupted removal
+  find:
+    paths: /var/lib/apt/lists
+    patterns: "{{ _apt_source_docker_lists }}"
+  register: _apt_source_lists_stranded
+
+- name: _verify | Rerun removal after the interrupted one
+  import_role:
+    name: apt_source
+    tasks_from: remove
+  vars:
+    apt_source_args:
+      name: docker
+
+- name: _verify | Find docker lists after the recovering removal
+  find:
+    paths: /var/lib/apt/lists
+    patterns: "{{ _apt_source_docker_lists }}"
+  register: _apt_source_lists_recovered
+
+- name: _verify | Rerun refreshed apt and finished the cleanup
+  assert:
+    that:
+      - _apt_source_lists_stranded.matched > 0
+      - apt_source_removed_repo is not changed
+      - apt_source_removed_refresh is changed
+      - apt_source_removed_key is changed
+      - _apt_source_lists_recovered.matched == 0
+    fail_msg: >-
+      stranded {{ _apt_source_lists_stranded.matched }} lists,
+      {{ _apt_source_lists_recovered.matched }} left after the rerun
