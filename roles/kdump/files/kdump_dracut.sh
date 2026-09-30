@@ -25,11 +25,13 @@ echo "kdump-tools: Generating $target (dracut)"
 dracut --force --add-confdir kdump-tools "$target.new" "$version"
 
 # The package's crashkernel estimator consumes the decompressed size in MiB.
-measure_bytes="$(3cpio --examine --raw "$target.new" | awk -F '\t' '{ total += $5 } END { print total + 0 }')"
-if [ "$measure_bytes" -le 0 ]; then
-  echo "kdump-tools: Cannot determine the capture image size" >&2
-  exit 1
+if measure_bytes="$(3cpio --examine --raw "$target.new" | awk -F '\t' '{ total += $5 } END { print total + 0 }')" &&
+  [ "$measure_bytes" -gt 0 ]; then
+  echo $(((measure_bytes + 1024 * 1024 - 1) / (1024 * 1024))) >"$kdumpdir/size_initrd.img-$version"
+  sync "$kdumpdir/size_initrd.img-$version"
+else
+  # The estimator tolerates a missing size; keep the valid capture image.
+  rm -f "$kdumpdir/size_initrd.img-$version"
+  echo "W: kdump-tools: Cannot determine the capture image size; the crashkernel estimator may be unavailable" >&2
 fi
-echo $(((measure_bytes + 1024 * 1024 - 1) / (1024 * 1024))) >"$kdumpdir/size_initrd.img-$version"
-sync "$kdumpdir/size_initrd.img-$version"
 mv "$target.new" "$target"
