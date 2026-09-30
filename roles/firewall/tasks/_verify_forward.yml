@@ -90,7 +90,71 @@
       changed_when: false
       failed_when: _firewall_podman_isolation_probe.rc == 0
       become: true
+
+    # The INPUT probes reach tcp/5333 directly; this one follows the real
+    # path, container -> gateway:53 -> netavark DNAT -> aardvark's tcp/5333,
+    # with netavark's accept and this ruleset's policy drop both loaded.
+    # Aardvark-dns serves TCP from 1.12 (Noble ships 1.4). busybox nslookup
+    # cannot force TCP, so the host dig runs in the peer's network namespace.
+    - name: _verify_forward | Named-bridge DNS over TCP passes the INPUT policy
+      when: ansible_distribution_release != 'noble'
+      block:
+        - name: _verify_forward | Start a named DNS peer on the probe network
+          command: >
+            podman run -d --replace --name firewall_verify_dns_peer
+            --network firewall_verify_named docker.io/library/busybox sleep 300
+          changed_when: true
+          become: true
+
+        - name: _verify_forward | Read the DNS peer PID, IP, and gateway
+          command: >-
+            podman inspect firewall_verify_dns_peer --format
+            {% raw %}'{{ .State.Pid }} {{ (index .NetworkSettings.Networks "firewall_verify_named").IPAddress }} {{ (index .NetworkSettings.Networks "firewall_verify_named").Gateway }}'{% endraw %}
+          register: _firewall_dns_peer_net
+          changed_when: false
+          become: true
+
+        - name: _verify_forward | Capture nftables counters before the TCP DNS probe
+          command: nft -j list table inet homelab
+          register: _firewall_counters_before_tcp_dns
+          changed_when: false
+          become: true
+
+        - name: _verify_forward | A TCP dig from the peer netns resolves the peer
+          vars:
+            _fields: "{{ _firewall_dns_peer_net.stdout.split() }}"
+          command: >-
+            nsenter --target {{ _fields[0] }} --net
+            dig +tcp +short +tries=1 +time=2 @{{ _fields[2] }}
+            firewall_verify_dns_peer.dns.podman A
+          register: _firewall_tcp_dns_probe
+          until: _firewall_tcp_dns_probe.stdout | trim == _fields[1]
+          retries: 5
+          delay: 2
+          changed_when: false
+          become: true
+
+        - name: _verify_forward | Capture nftables counters after the TCP DNS probe
+          command: nft -j list table inet homelab
+          register: _firewall_counters_after_tcp_dns
+          changed_when: false
+          become: true
+
+        - name: _verify_forward | The TCP DNS probe matched the aardvark TCP accept
+          vars:
+            _before: "{{ _firewall_counters_before_tcp_dns.stdout | nft_counters_by_name }}"
+            _after: "{{ _firewall_counters_after_tcp_dns.stdout | nft_counters_by_name }}"
+          assert:
+            that:
+              - _after.aardvark_tcp_accept.packets | int > _before.aardvark_tcp_accept.packets | int
   always:
+    - name: _verify_forward | Remove the named DNS peer
+      command: podman rm -f firewall_verify_dns_peer
+      register: _firewall_dns_peer_rm
+      changed_when: _firewall_dns_peer_rm.rc == 0
+      failed_when: false
+      become: true
+
     - name: _verify_forward | Remove named podman probe network
       command: podman network rm firewall_verify_named
       register: _firewall_named_network_rm

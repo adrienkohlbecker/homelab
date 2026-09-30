@@ -1,4 +1,11 @@
 # Lab exercises the full LAN/VIP fixture; Minimal covers the cloud-image base.
+# Lab Resolute runs the aardvark-dns TCP path, which needs aardvark-dns 1.12+.
 machines:
   lab:
   minimal:
+ubuntu:
+  - resolute
+skip:
+  "minimal:resolute": >-
+    Lab Resolute covers the release-divergent Podman DNS path; Minimal Noble
+    covers the cloud-image base.
