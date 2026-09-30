@@ -103,6 +103,15 @@
       /etc/containers/seccomp-fchmodat2.json is missing augmented syscalls --
       the template's match found nothing to extend.
 
+# Install before the server starts: its sleep bounds how long the TCP probe
+# further down can still enter its network namespace.
+- name: _verify | Install dig for the TCP DNS probe
+  when: ansible_distribution_release != 'noble'
+  apt:
+    name: bind9-dnsutils
+    cache_valid_time: 3600
+  become: true
+
 # Inter-container DNS is the load-bearing reason netavark + dns_bind_port are
 # pinned: a peer resolves another container by its <name>.dns.podman FQDN via
 # aardvark-dns (the path every service role uses). A throwaway DNS-enabled
@@ -146,12 +155,6 @@
 - name: _verify | A container resolves <name>.dns.podman over TCP
   when: ansible_distribution_release != 'noble'
   block:
-    - name: _verify | Install dig for the TCP DNS probe
-      apt:
-        name: bind9-dnsutils
-        cache_valid_time: 3600
-      become: true
-
     - name: _verify | Read the DNS probe server PID, IP, and gateway
       command: >-
         podman inspect podman_verify_server --format
