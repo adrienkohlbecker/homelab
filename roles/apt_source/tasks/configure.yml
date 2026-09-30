@@ -16,9 +16,13 @@
 #   suites:        apt suite -- e.g. nodistro, or the release codename
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
+#   pin:           optional {packages, version} -- holds the matching packages
+#                  at a version glob (e.g. netdata* at 2.*) with priority 999,
+#                  so installs and the fleet-wide safe-upgrade stay inside the
+#                  series. Omitting it removes a previously installed pin.
 #
 # Exposes apt_source_<name>_changed so callers can gate dependent installs until
-# the repository and signing key are ready.
+# the repository, signing key, and pin are ready.
 # The apt role publishes apt_deb822_available=false when a fresh check-mode run
 # can only predict installation of deb822_repository's Python dependency.
 
@@ -38,10 +42,15 @@
       - apt_source_args.key_sha256 | default('') is match('^[0-9a-f]{64}\Z')
       - apt_source_args.suites | default('') is not search('[ ,]')
       - apt_source_args.components | default('') is not search('[ ,]')
+      # pin fields land verbatim on single preferences-file lines.
+      - apt_source_args.pin is not defined or
+        (apt_source_args.pin.packages | default('') is match('^[a-z0-9.+*-]+\Z') and
+         apt_source_args.pin.version | default('') is match('^[A-Za-z0-9.+~:*-]+\Z'))
     fail_msg: >-
       apt_source_args must define name, key_url, key_sha256, uris and suites,
-      with name a [a-z0-9_-] slug, key_url an https URL, and key_sha256 a
-      lowercase SHA-256 digest;
+      with name a [a-z0-9_-] slug, key_url an https URL, key_sha256 a
+      lowercase SHA-256 digest, and an optional pin carrying a package glob
+      and a version glob;
       got {{ apt_source_args }}
 
 - name: Fetch repository key (armored) for {{ apt_source_args.name }}
@@ -82,9 +91,38 @@
   changed_when: apt_source_refresh.rc == 0
   become: true
 
+# No validate: apt has no single-file preferences parser; apt-cache policy
+# reads the whole preferences.d set. Pin by version rather than origin because
+# the mirrored source URL carries the proxy's hostname, not the vendor's.
+- name: Pin packages for {{ apt_source_args.name }}  # noqa: require-validate
+  when: apt_source_args.pin is defined
+  copy:
+    content: |
+      # Ansible managed
+      Package: {{ apt_source_args.pin.packages }}
+      Pin: version {{ apt_source_args.pin.version }}
+      Pin-Priority: 999
+    dest: /etc/apt/preferences.d/{{ apt_source_args.name }}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: apt_source_pin
+
+- name: Remove package pin for {{ apt_source_args.name }}
+  when: apt_source_args.pin is not defined
+  file:
+    path: /etc/apt/preferences.d/{{ apt_source_args.name }}
+    state: absent
+  become: true
+  register: apt_source_unpin
+
 - name: Export change signal for {{ apt_source_args.name }}
   set_fact:
     "apt_source_{{ apt_source_args.name }}_changed": >-
       {{ apt_source_repo is changed
          or apt_source_key is changed
-         or apt_source_repo is skipped }}
+         or apt_source_repo is skipped
+         or apt_source_pin is changed
+         or apt_source_unpin is changed }}

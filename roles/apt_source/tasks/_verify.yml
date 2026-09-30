@@ -43,6 +43,86 @@
           suites: "{{ ansible_distribution_release }}"
           components: stable
 
+# Pin to the oldest indexed release so apt must choose it over newer candidates;
+# a pin that merely matched the newest version would prove nothing.
+- name: _verify | List indexed docker-ce-cli versions
+  command: apt-cache madison docker-ce-cli
+  changed_when: false
+  register: _apt_source_madison
+
+- name: _verify | Select the newest and oldest indexed versions
+  set_fact:
+    _apt_source_versions: >-
+      {{ _apt_source_madison.stdout_lines
+         | map('split', '|') | map(attribute=1) | map('trim') | unique }}
+
+- name: _verify | The index offers more than one version to choose between
+  assert:
+    that:
+      - _apt_source_versions | length > 1
+    fail_msg: "Expected several docker-ce-cli versions; got {{ _apt_source_versions }}"
+
+- name: _verify | Pin docker-ce-cli to its oldest indexed version
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: docker
+      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+      key_url: https://download.docker.com/linux/ubuntu/gpg
+      uris: "{{ mirror_apt_docker }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: stable
+      pin:
+        packages: docker-ce-cli
+        version: "{{ _apt_source_versions | last }}"
+
+- name: _verify | Read the pinned docker-ce-cli policy
+  command: apt-cache policy docker-ce-cli
+  changed_when: false
+  register: _apt_source_pinned_policy
+
+- name: _verify | Apt selects the pinned version over newer candidates
+  vars:
+    _apt_source_candidate_re: "(?m)^  Candidate: {{ _apt_source_versions | last | regex_escape }}$"
+  assert:
+    that:
+      - apt_source_docker_changed
+      - _apt_source_pinned_policy.stdout is search(_apt_source_candidate_re)
+    fail_msg: >-
+      Expected the pin to select {{ _apt_source_versions | last }};
+      got policy: {{ _apt_source_pinned_policy.stdout }}
+
+- name: _verify | Drop the docker-ce-cli pin
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args:
+      name: docker
+      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+      key_url: https://download.docker.com/linux/ubuntu/gpg
+      uris: "{{ mirror_apt_docker }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: stable
+
+- name: _verify | Read the unpinned docker-ce-cli policy
+  command: apt-cache policy docker-ce-cli
+  changed_when: false
+  register: _apt_source_unpinned_policy
+
+- name: _verify | Apt returns to the newest version once the pin is removed
+  vars:
+    _apt_source_candidate_re: "(?m)^  Candidate: {{ _apt_source_versions | first | regex_escape }}$"
+  assert:
+    that:
+      - apt_source_docker_changed
+      - _apt_source_unpinned_policy.stdout is search(_apt_source_candidate_re)
+    fail_msg: >-
+      Expected the unpinned candidate {{ _apt_source_versions | first }};
+      got policy: {{ _apt_source_unpinned_policy.stdout }}
+
 # Removal consumes the standalone source configured above: its package must
 # stop resolving and its lists must be pruned once the source is gone, and a
 # repeat call must be a no-op. apt names each list file after its URI, with
