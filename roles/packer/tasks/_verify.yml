@@ -2,6 +2,11 @@
 # Run automatically by test/testrole.py after the role-apply +
 # idempotence passes. Add new assertions here as packer code grows.
 
+- name: _verify | Reboot the shipped image before checking its boot support
+  import_role:
+    name: reboot
+    tasks_from: reboot
+
 # --- ESP fundamentals (universal across Lab and Pug) ---
 
 - name: _verify | Required boot artifacts are present and non-empty
@@ -239,25 +244,10 @@
   register: packer_verify_swapon
   failed_when: packer_verify_swapon.rc != 0 or packer_verify_swapon.stdout_lines | length == 0
 
-# chroot.sh installs the boot role's modules-most file under
-# /etc/initramfs-tools/conf.d right before the final update-initramfs, so the
-# shipped image
-# boots on bare-metal hardware whose controllers/NICs the build host
-# didn't happen to have loaded. The real failure mode --
-# "image fails to mount root on a server with hardware X" -- only
-# surfaces on first-bare-metal-boot, too late to recover.
-#
-# Check functionally: list the contents of the built initrd and
-# confirm it carries server-class drivers that wouldn't be in
-# MODULES=dep on a virtio-root QEMU build. megaraid_sas (LSI/Avago
-# MegaRAID HBA) and mpt3sas (Avago/Broadcom SAS HBA) are both
-# upstream scsi modules that initramfs-tools' `most-modules` hook
-# bundles unconditionally; if MODULES=most regressed to MODULES=dep
-# the grep below fails. Asserting the built initrd directly catches
-# regressions in the modules-most file, in the update-initramfs invocation,
-# and in the dpkg trigger ordering (a stale initrd built before the
-# canonical file was installed would still pass a file-content check).
-- name: _verify | Initramfs carries server-class HBA drivers (functional MODULES=most check)
+# The baked image must carry server-class storage drivers absent from the
+# virtio-only build VM. Inspecting the final image exercises the generator and
+# its configuration rather than just checking that the source file was copied.
+- name: _verify | Boot image carries server-class HBA drivers
   shell:
     # Plain `grep -E` rather than `grep -qE`: with `set -o pipefail`,
     # grep -q's early-exit-on-first-match SIGPIPEs lsinitramfs (rc=141)
@@ -267,7 +257,7 @@
     # the task output.
     cmd: >-
       set -euo pipefail;
-      lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
+      {{ initramfs_list_command }} /boot/initrd.img-{{ ansible_kernel }}
       | grep -E '/(megaraid_sas|mpt3sas)\.ko' >/dev/null
     executable: /bin/bash
   changed_when: false

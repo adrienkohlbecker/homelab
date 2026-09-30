@@ -191,20 +191,34 @@ apt-get upgrade --yes
 
 apt-mark hold 'grub*'
 
-# Defer initramfs generation to the single explicit rebuild further down:
-# the kernel, zfs-initramfs, and (on mirror variants) mdadm postinsts would
-# otherwise each regenerate it — four builds per bake, all discarded by the
-# final one. The divert survives package installs, so every postinst hits
-# the /bin/true stand-in until the divert is removed.
-dpkg-divert --local --rename --add /usr/sbin/update-initramfs
-ln -s /bin/true /usr/sbin/update-initramfs
+# Defer image generation until the storage and console configuration is ready.
+# Dracut kernel hooks invoke dracut directly, while initramfs-tools hooks use
+# update-initramfs; divert the selected backend so every postinst is deferred.
+case "$UBUNTU_NAME" in
+noble)
+  initramfs_generator=initramfs-tools
+  initramfs_command=/usr/sbin/update-initramfs
+  zfs_initramfs_package=zfs-initramfs
+  ;;
+resolute)
+  initramfs_generator=dracut
+  initramfs_command=/usr/bin/dracut
+  zfs_initramfs_package=zfs-dracut
+  ;;
+*)
+  echo "Unsupported initramfs release: $UBUNTU_NAME" >&2
+  exit 1
+  ;;
+esac
+dpkg-divert --local --rename --add "$initramfs_command"
+ln -s /bin/true "$initramfs_command"
 
 # Bootstrap the release GA kernel.
-apt-get install --yes linux-generic
+apt-get install --yes "$initramfs_generator" linux-generic
 
 # Install required packages
 
-apt-get install --yes curl dosfstools zfs-initramfs zfsutils-linux
+apt-get install --yes curl dosfstools "$zfs_initramfs_package" zfsutils-linux
 
 # Enable systemd ZFS services
 
@@ -215,7 +229,7 @@ systemctl enable zfs-import.target
 
 # Cap the ARC on small-RAM cloud VMs (hetzner cpx22 = 3.7 GB; default ARC
 # of ~50% of RAM would starve headscale). Written to modprobe.d so it applies
-# both at boot and inside the initramfs (initramfs-tools bundles modprobe.d),
+# both at boot and inside the initramfs (both generators bundle modprobe.d),
 # which matters because zfs loads from the initramfs on a root-on-ZFS host.
 if [ "${ZFS_ARC_MAX:-0}" != "0" ]; then
   echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
@@ -314,21 +328,24 @@ fi
 echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
-# Pull all available modules into initramfs (rather than just the build host's
-# currently-loaded set) so the shipped image boots on bare-metal hardware whose
-# controllers/NICs the builder didn't have. Install the boot role's canonical
-# conf.d file before the one-and-only build below.
-install -m 0644 \
-  "${CHROOT_ROLE_FILES}/modules_most" \
-  /etc/initramfs-tools/conf.d/modules-most
+# Install the boot role portable-driver policy before the single final build.
+if [ "$UBUNTU_NAME" = resolute ]; then
+  install -dm 0755 /etc/dracut.conf.d
+  install -m 0644 "${CHROOT_ROLE_FILES}/dracut_portable.conf" /etc/dracut.conf.d/90_portable.conf
+else
+  install -m 0644 "${CHROOT_ROLE_FILES}/modules_most" /etc/initramfs-tools/conf.d/modules-most
+fi
 
-# Restore the real update-initramfs and generate the initramfs once, now
-# that MODULES=most and every package is in place. -c (not -u): the divert
-# means no initramfs exists yet to update.
+# Restore the backend and create images for every installed kernel. Noble uses
+# -c because the diverted package hooks have not created any images yet.
 
-rm /usr/sbin/update-initramfs
-dpkg-divert --local --rename --remove /usr/sbin/update-initramfs
-update-initramfs -c -k all
+rm "$initramfs_command"
+dpkg-divert --local --rename --remove "$initramfs_command"
+if [ "$UBUNTU_NAME" = resolute ]; then
+  dracut --force --regenerate-all
+else
+  update-initramfs -c -k all
+fi
 
 # Mount EFI filesystem
 

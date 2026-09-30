@@ -336,6 +336,7 @@ build {
   provisioner "file" {
     sources = [
       "${path.cwd}/roles/boot/files/modules_most",
+      "${path.cwd}/roles/boot/files/dracut_portable.conf",
       "${path.cwd}/roles/console/files/console-setup",
       "${path.cwd}/roles/console/files/keyboard",
     ]

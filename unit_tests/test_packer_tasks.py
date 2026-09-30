@@ -315,6 +315,7 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
 
     expected = {
         "roles/boot/files/modules_most",
+        "roles/boot/files/dracut_portable.conf",
         "roles/console/files/console-setup",
         "roles/console/files/keyboard",
     }
