@@ -130,11 +130,37 @@ end
 
 do
     local cid = "75ca2e2b110c2a3e6af421033e99bc1dbc8f58d3eacf929cb2b395377d63e4bc"
-    local rec = shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = cid .. ".service", log = cid }, "info")
-    check("healthcheck.service", rec.service, "podman_healthcheck")
-    check("healthcheck.no_cid_full", rec.fields.CONTAINER_ID_FULL, nil)
-    check("healthcheck.cid_short", rec.fields.CONTAINER_ID, string.sub(cid, 1, 12))
-    check("healthcheck.unit", rec.fields.UNIT, cid .. ".service")
+    for _, suffix in ipairs({ "", "-startup", "-123abc", "-startup-123abc" }) do
+        local unit = cid .. suffix .. ".service"
+        local rec = shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = unit, log = cid }, "info")
+        check("healthcheck.service " .. unit, rec.service, "podman_healthcheck")
+        check("healthcheck.no_cid_full " .. unit, rec.fields.CONTAINER_ID_FULL, nil)
+        check("healthcheck.cid_short " .. unit, rec.fields.CONTAINER_ID, string.sub(cid, 1, 12))
+        check("healthcheck.unit " .. unit, rec.fields.UNIT, unit)
+    end
+
+    for _, unit in ipairs({
+        string.sub(cid, 1, 63) .. ".service",
+        cid .. "a.service",
+        string.upper(cid) .. ".service",
+        "prefix-" .. cid .. ".service",
+        cid .. "-.service",
+        cid .. "-xyz.service",
+        cid .. "-startup-.service",
+        cid .. "-startup-xyz.service",
+        cid .. "-startup-123abc-extra.service",
+        cid .. "-123abc-extra.service",
+        cid .. ".service.extra",
+        cid .. ".timer",
+        cid .. "-123abc.timer",
+        cid .. "-startup-123abc.timer",
+    }) do
+        local rec = shape("svc.init.scope", { SYSLOG_IDENTIFIER = "systemd", UNIT = unit, log = cid }, "info")
+        check("other_unit.service " .. unit, rec.service, "systemd")
+        check("other_unit.no_cid " .. unit, rec.fields.CONTAINER_ID, nil)
+        check("other_unit.no_cid_full " .. unit, rec.fields.CONTAINER_ID_FULL, nil)
+        check("other_unit.unit " .. unit, rec.fields.UNIT, unit)
+    end
 end
 
 do

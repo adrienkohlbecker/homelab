@@ -130,6 +130,9 @@ function shape_lnav(tag, ts, record)
     local healthcheck_unit = record["UNIT"]
     if type(healthcheck_unit) == "string" then
         local cid = healthcheck_unit:match("^([0-9a-f]+)%.service$")
+            or healthcheck_unit:match("^([0-9a-f]+)%-startup%.service$")
+            or healthcheck_unit:match("^([0-9a-f]+)%-[0-9a-f]+%.service$")
+            or healthcheck_unit:match("^([0-9a-f]+)%-startup%-[0-9a-f]+%.service$")
         if cid and #cid == 64 then
             service = "podman_healthcheck"
             record["CONTAINER_ID_FULL"] = cid
