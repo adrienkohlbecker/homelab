@@ -444,14 +444,14 @@ else
   done
 fi
 
-# Enable tmp mount. Noble ships tmp.mount as a template under
-# /usr/share/systemd/ and leave it disabled — copy + enable. resolute's
-# systemd ships /usr/lib/systemd/system/tmp.mount and pre-symlinks it into
-# local-fs.target.wants/, so it's enabled out of the box; skip the copy.
+# Enable tmp mount. Noble ships tmp.mount as a disabled template under
+# /usr/share/systemd/; enable it by path, which links it rather than copying so
+# that Resolute's systemd preinst removes the links on upgrade and its vendor
+# unit takes over. Resolute ships /usr/lib/systemd/system/tmp.mount already
+# enabled, so there is nothing to do.
 
 if [ -f /usr/share/systemd/tmp.mount ]; then
-  cp /usr/share/systemd/tmp.mount /etc/systemd/system/
-  systemctl enable tmp.mount
+  systemctl enable /usr/share/systemd/tmp.mount
 fi
 
 # Add more packages

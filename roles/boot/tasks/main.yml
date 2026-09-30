@@ -184,13 +184,12 @@
   tags:
     - boot
 
-# tmpfs /tmp -- the twin of chroot.sh's `systemctl enable tmp.mount` in the
-# baked image, reproduced so an ansible-from-stock-Ubuntu host gets the same
-# RAM-backed /tmp (it pages out to swap under pressure). Noble ships it as
-# a disabled template under /usr/share/systemd/ -- stage it into place first;
-# resolute ships + pre-enables /usr/lib/systemd/system/tmp.mount, so the stage
-# no-ops there. Enabling only takes effect at the next boot (a live /tmp can't
-# be remounted), so touch reboot-required on a change.
+# tmpfs /tmp -- the twin of chroot.sh's tmp.mount enablement in the baked image,
+# reproduced so an ansible-from-stock-Ubuntu host gets the same RAM-backed /tmp
+# (it pages out to swap under pressure). Resolute's systemd ships and
+# pre-enables /usr/lib/systemd/system/tmp.mount with the same size, mode, and
+# ordering, so this only acts on Noble, where the unit is a disabled template
+# under /usr/share/systemd/.
 - name: Probe for the systemd tmp.mount template
   stat:
     path: /usr/share/systemd/tmp.mount
@@ -199,25 +198,24 @@
   tags:
     - boot
 
-- name: Stage tmp.mount from the systemd template
+# Link rather than copy, as `systemctl enable /usr/share/systemd/tmp.mount`
+# would: Resolute's systemd preinst removes that link and its wants link on
+# upgrade, so the vendor unit takes over. A copied unit would survive the
+# upgrade and shadow it. force converts the copy older runs installed.
+- name: Link tmp.mount to the systemd template
   when: boot_tmp_mount_template.stat.exists
-  copy:
+  file:
     src: /usr/share/systemd/tmp.mount
     dest: /etc/systemd/system/tmp.mount
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: >-
-      sh -c 'd=$(mktemp -d); trap "rm -rf $d" EXIT; cp "%s" "$d/tmp.mount"; systemd-analyze verify "$d/tmp.mount"'
-  register: boot_tmp_mount_staged
+    state: link
+    force: true
+  register: boot_tmp_mount_linked
   become: true
   tags:
     - boot
 
-- name: Reload systemd for the staged tmp.mount
-  when: boot_tmp_mount_staged.changed and not ansible_check_mode
+- name: Reload systemd for the linked tmp.mount
+  when: boot_tmp_mount_linked.changed and not ansible_check_mode
   systemd:
     daemon_reload: true
   become: true
@@ -225,10 +223,10 @@
     - boot
 
 - name: Enable tmpfs /tmp via tmp.mount
-  # In check mode on a fresh host the staging copy above only *reports* it would
-  # create tmp.mount, so systemd can't find the unit to enable. Skip enabling
-  # when the unit is merely pending -- the staging task already covers the diff.
-  when: not (ansible_check_mode and boot_tmp_mount_staged.changed | default(false))
+  # In check mode on a fresh host the link above only *reports* it would be
+  # created, so systemd can't find the unit to enable. Skip enabling when the
+  # unit is merely pending -- the link task already covers the diff.
+  when: not (ansible_check_mode and boot_tmp_mount_linked.changed | default(false))
   systemd:
     name: tmp.mount
     enabled: true
@@ -237,6 +235,7 @@
   tags:
     - boot
 
+# Enabling only takes effect at the next boot: a live /tmp can't be remounted.
 - name: Ask to reboot after enabling tmp.mount
   when: boot_tmp_mount.changed
   file:
