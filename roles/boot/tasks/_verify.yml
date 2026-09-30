@@ -117,9 +117,8 @@
           contents: ""
           grub_scope: all
 
-# ahci (SATA) and e1000 (Intel NIC) ship in stock kernels but neither is loaded
-# by a virtio-only VM. Finding them in the image exercises the portable driver
-# policy. grep reads to EOF so the image lister cannot fail with SIGPIPE.
+# Noble keeps its broad driver policy. Resolute's host-only image is exercised
+# by the normal-boot reboot checks below.
 - name: _verify | Find the host initramfs (cloud images may boot initrd-less)
   stat:
     path: /boot/initrd.img-{{ ansible_kernel }}
@@ -129,7 +128,9 @@
 - name: _verify | Boot image carries non-virtio drivers (ahci/e1000)
   # Skipped where the host boots without an initramfs at all (the arm64 cloud
   # fixture has no /boot/initrd.img to inspect).
-  when: _boot_verify_initrd.stat.exists
+  when:
+    - ansible_distribution_release == 'noble'
+    - _boot_verify_initrd.stat.exists
   shell:
     cmd: >-
       set -euo pipefail;

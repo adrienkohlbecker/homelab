@@ -16,3 +16,6 @@
   systemd:
     daemon_reload: true
   become: true
+
+- name: _setup | Recreate the boot image provider migration
+  import_tasks: _setup_initramfs.yml

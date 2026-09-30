@@ -1,6 +1,13 @@
+- name: Configure the boot image provider
+  import_role:
+    name: boot
+    tasks_from: initramfs_provider
+  tags:
+    - console
+
 - name: Install console dependencies
   apt:
-    pkg: "{{ ['console-setup'] + initramfs_packages }}"
+    pkg: console-setup
     cache_valid_time: 3600
   register: console_apt
   become: true

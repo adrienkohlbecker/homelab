@@ -32,11 +32,18 @@
   tags:
     - kdump
 
+- name: Configure the boot image provider
+  import_role:
+    name: boot
+    tasks_from: initramfs_provider
+  tags:
+    - kdump
+
 - name: Install kdump-tools
   apt:
     pkg: >-
       {{ ['kdump-tools', 'makedumpfile'] +
-         (initramfs_packages + ['3cpio'] if ansible_distribution_release == 'resolute' else []) }}
+         (['3cpio'] if ansible_distribution_release == 'resolute' else []) }}
     install_recommends: "{{ ansible_distribution_release != 'resolute' }}"
     policy_rc_d: 101
     cache_valid_time: 3600

@@ -1,3 +1,10 @@
+- name: install | Configure the boot image provider
+  import_role:
+    name: boot
+    tasks_from: initramfs_provider
+  tags:
+    - zfs
+
 - name: install | Install ZoL
   apt:
     package:

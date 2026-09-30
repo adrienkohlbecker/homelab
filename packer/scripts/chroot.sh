@@ -229,7 +229,7 @@ systemctl enable zfs-import.target
 
 # Cap the ARC on small-RAM cloud VMs (hetzner cpx22 = 3.7 GB; default ARC
 # of ~50% of RAM would starve headscale). Written to modprobe.d so it applies
-# both at boot and inside the initramfs (both generators bundle modprobe.d),
+# both at boot and inside the initramfs (the Dracut policy includes modprobe.d),
 # which matters because zfs loads from the initramfs on a root-on-ZFS host.
 if [ "${ZFS_ARC_MAX:-0}" != "0" ]; then
   echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
@@ -328,10 +328,10 @@ fi
 echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
-# Install the boot role portable-driver policy before the single final build.
+# Install the boot role image policy before the single final build.
 if [ "$UBUNTU_NAME" = resolute ]; then
   install -dm 0755 /etc/dracut.conf.d
-  install -m 0644 "${CHROOT_ROLE_FILES}/dracut_portable.conf" /etc/dracut.conf.d/90_portable.conf
+  install -m 0644 "${CHROOT_ROLE_FILES}/dracut_host.conf" /etc/dracut.conf.d/90_host.conf
 else
   install -m 0644 "${CHROOT_ROLE_FILES}/modules_most" /etc/initramfs-tools/conf.d/modules-most
 fi
@@ -342,7 +342,9 @@ fi
 rm "$initramfs_command"
 dpkg-divert --local --rename --remove "$initramfs_command"
 if [ "$UBUNTU_NAME" = resolute ]; then
-  dracut --force --regenerate-all
+  # The installer chroot cannot detect the booted target hardware. The first
+  # image is generic; later on-host builds use the host-only policy above.
+  dracut --no-hostonly --force --regenerate-all
 else
   update-initramfs -c -k all
 fi

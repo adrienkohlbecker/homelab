@@ -42,7 +42,7 @@ set -euxo pipefail
 # callers can point both variables at their staged bundle.
 SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
 ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
-ROLE_FILES=(console-setup keyboard modules_most dracut_portable.conf)
+ROLE_FILES=(console-setup keyboard modules_most dracut_host.conf)
 
 preflight() {
   local name disk role_file

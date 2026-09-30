@@ -1,55 +1,28 @@
 # ZFS role _verify: assert the role's converged state is live.
 # testrole.py / testall.py only (qemu); never site.yml or --tags zfs against prod.
 
-- name: _verify | Render the production module config with an ARC limit
-  template:
-    src: zfs.conf.j2
-    dest: /tmp/zfs-arc-limit.conf
-    mode: "0644"
-  vars:
-    zfs_arc_max: 1073741824
-  become: true
+- name: _verify | Reboot to load the configured ZFS module options
+  import_role:
+    name: reboot
+    tasks_from: reboot
 
-- name: _verify | Verify the alternate ARC limit
-  command:
-    argv:
-      - grep
-      - --fixed-strings
-      - --line-regexp
-      - options zfs zfs_arc_max=1073741824
-      - /tmp/zfs-arc-limit.conf
+- name: _verify | Load ZFS on hosts without a ZFS root
+  when: not zfs_root
+  command: modprobe zfs
   changed_when: false
   become: true
 
-- name: _verify | Render the production module config without ARC limits
-  template:
-    src: zfs.conf.j2
-    dest: /tmp/zfs-no-arc-limits.conf
-    mode: "0644"
-  vars:
-    zfs_arc_min: 0
-    zfs_arc_max: 0
-  become: true
-
-- name: _verify | Verify zero ARC limits emit no module options
-  command:
-    argv:
-      - grep
-      - --fixed-strings
-      - options zfs
-      - /tmp/zfs-no-arc-limits.conf
-  register: _zfs_no_arc_limits
-  changed_when: false
-  failed_when: _zfs_no_arc_limits.rc != 1
-  become: true
-
-- name: _verify | Remove the alternate ARC config
-  file:
-    path: "/tmp/{{ item }}"
-    state: absent
+- name: _verify | Live ARC parameters match the configured limits
+  when: item.value | int > 0
+  command: cat /sys/module/zfs/parameters/{{ item.name }}
   loop:
-    - zfs-arc-limit.conf
-    - zfs-no-arc-limits.conf
+    - { name: zfs_arc_min, value: '{{ zfs_arc_min }}' }
+    - { name: zfs_arc_max, value: '{{ zfs_arc_max }}' }
+  loop_control:
+    label: '{{ item.name }}'
+  register: _zfs_verify_arc
+  changed_when: false
+  failed_when: _zfs_verify_arc.stdout | trim | int != item.value | int
   become: true
 
 # --- Pool properties ---

@@ -29,11 +29,19 @@
   tags:
     - boot
 
+- name: Configure the boot image provider
+  import_tasks: initramfs_provider.yml
+  tags:
+    - boot
+
 # fsck.vfat (ESP integrity) + mkdosfs. The ESP itself is created at bootstrap,
 # but the tooling belongs with the role that owns the boot chain.
 - name: Install ESP filesystem tools
   apt:
-    package: "{{ ['dosfstools', 'efibootmgr', 'mdadm'] + initramfs_packages }}"
+    package:
+      - dosfstools
+      - efibootmgr
+      - mdadm
     cache_valid_time: 3600
   register: boot_apt
   become: true
@@ -114,41 +122,9 @@
   tags:
     - boot
 
-# Lab/Pug carry server-class HBAs absent from the build VM. Each generator
-# must include the broad driver set rather than just the current hardware.
-- name: Configure portable initramfs-tools images on Noble
-  when: ansible_distribution_release == 'noble'
-  copy:
-    src: modules_most
-    dest: /etc/initramfs-tools/conf.d/modules-most
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: sh -n %s
-  register: boot_initramfs_config
-  become: true
-  tags:
-    - boot
-
-- name: Configure portable Dracut images on Resolute
-  when: ansible_distribution_release == 'resolute'
-  copy:
-    src: dracut_portable.conf
-    dest: /etc/dracut.conf.d/90_portable.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: bash -n %s
-  register: boot_dracut_config
-  become: true
-  tags:
-    - boot
-
 - name: Rebuild boot images
   when:
-    - boot_apt.changed or boot_initramfs_config.changed or boot_dracut_config.changed
+    - boot_apt.changed
     - not ansible_check_mode
   command: "{{ initramfs_rebuild_command }}"
   changed_when: true
@@ -157,7 +133,7 @@
     - boot
 
 - name: Ask to reboot
-  when: boot_apt.changed or boot_initramfs_config.changed or boot_dracut_config.changed
+  when: boot_apt.changed
   file:
     path: /var/run/reboot-required
     state: touch

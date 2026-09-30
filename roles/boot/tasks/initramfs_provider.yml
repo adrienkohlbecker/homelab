@@ -1,0 +1,72 @@
+# Configure the selected provider before its package hooks can generate images.
+- name: initramfs_provider | Create the provider configuration directory
+  file:
+    path: "{{ '/etc/dracut.conf.d' if ansible_distribution_release == 'resolute' else '/etc/initramfs-tools/conf.d' }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  register: boot_initramfs_directory
+  become: true
+  tags:
+    - boot
+
+- name: initramfs_provider | Configure the release boot image policy
+  when: not (ansible_check_mode and boot_initramfs_directory.changed)
+  copy:
+    src: "{{ 'dracut_host.conf' if ansible_distribution_release == 'resolute' else 'modules_most' }}"
+    dest: >-
+      {{ '/etc/dracut.conf.d/90_host.conf' if ansible_distribution_release == 'resolute'
+         else '/etc/initramfs-tools/conf.d/modules-most' }}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: bash -n %s
+  register: boot_initramfs_config
+  become: true
+  tags:
+    - boot
+
+- name: initramfs_provider | Remove the generic Dracut policy
+  when: ansible_distribution_release == 'resolute'
+  file:
+    path: /etc/dracut.conf.d/90_portable.conf
+    state: absent
+  register: boot_initramfs_old_config
+  become: true
+  tags:
+    - boot
+
+- name: initramfs_provider | Install the release image generator and root support
+  apt:
+    pkg: '{{ initramfs_packages }}'
+    cache_valid_time: 3600
+    policy_rc_d: 101
+  register: boot_initramfs_apt
+  become: true
+  tags:
+    - boot
+
+- name: initramfs_provider | Rebuild boot images after provider changes
+  when:
+    - not ansible_check_mode
+    - boot_initramfs_apt.changed or boot_initramfs_config.changed or boot_initramfs_old_config.changed
+  command: '{{ initramfs_rebuild_command }}'
+  changed_when: true
+  register: boot_initramfs_rebuild
+  become: true
+  tags:
+    - boot
+
+- name: initramfs_provider | Request a reboot after provider changes
+  when: boot_initramfs_apt.changed or boot_initramfs_config.changed or boot_initramfs_old_config.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - boot
