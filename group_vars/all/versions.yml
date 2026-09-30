@@ -241,8 +241,12 @@ zfsbootmenu_release:
 
 # === Package-manager pins ====================================================
 
-# netdata apt repository pin: track the 2.x series (priority 999 in
-# roles/netdata/tasks/install.yml's apt_source pin). A wildcard, not a point
-# release -- netdata ships frequently and the 2.x line is agent/dashboard
-# stable for us.
+# Vendor apt suites are rolling and roles/apt_upgrade safe-upgrades on every
+# converge, so these series pins (apt_source's priority-999 pin) are what stop
+# a new major from landing unreviewed. Wildcards, not point releases: the
+# vendors ship frequently, patch releases carry the security fixes, and the
+# netdata index prunes old releases and publishes each architecture on its own
+# schedule, so an exact pin can silently stop matching. mise stays unpinned:
+# its suite retains only the newest release.
 netdata_version: "2.*"  # 2.x series; 2.0 GA 2024-11-07
+fluentbit_version: "5.*"  # 5.x series; 5.0 GA 2026-03
