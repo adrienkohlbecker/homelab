@@ -34,7 +34,10 @@ ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_
 {% else %}
   -cpu Penryn,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check \
 {% endif %}
-  -machine q35 \
+{# Versioned, not the moving q35 alias: macOS sees the machine model as
+   hardware, so QEMU upgrades must not change it implicitly. 8.2 is Noble's
+   q35 and remains available on Resolute. #}
+  -machine pc-q35-8.2 \
   -smp {{ macos_vm_vcpus }},cores={{ macos_vm_vcpus }},sockets=1,threads=1 \
   -device qemu-xhci,id=xhci \
   -device usb-kbd,id=kbd_xhci,bus=xhci.0 \
@@ -57,7 +60,7 @@ ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_
   -device virtio-net-pci,netdev=net0,id=net0,mac={{ macos_vm_resolved_mac }} \
   -k {{ macos_vm_vnc_keymap }} \
   -vnc {{ macos_vm_vnc_listen }}:0 \
-  -monitor unix:/run/macos-vm/{{ macos_vm_name }}.monitor,server,nowait \
+  -monitor unix:/run/macos-vm/{{ macos_vm_name }}.monitor,server=on,wait=off \
   -device vmware-svga
 
 [Install]

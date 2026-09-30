@@ -255,3 +255,6 @@
       file:
         path: "{{ macos_vm_firmware_fixture.path }}"
         state: absent
+
+- name: _verify | Start the rendered unit under this release's QEMU
+  import_tasks: _verify_qemu_start.yml
