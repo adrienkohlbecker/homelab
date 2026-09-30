@@ -15,7 +15,7 @@
         from pathlib import Path
 
         account = pwd.getpwnam("netdata")
-        with subprocess.Popen(
+        process = subprocess.Popen(
             ["/usr/sbin/hdparm", "--Istdin"],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
@@ -23,18 +23,18 @@
             user=account.pw_uid,
             group=account.pw_gid,
             extra_groups=[],
-        ) as process:
-            try:
-                status = dict(
-                    line.split(":", 1)
-                    for line in Path(f"/proc/{process.pid}/status").read_text().splitlines()
-                )
-                assert {int(uid) for uid in status["Uid"].split()} == {account.pw_uid}, status["Uid"]
-                for field in ("CapPrm", "CapEff"):
-                    assert int(status[field], 16) == 1 << 17, f"Expected only CAP_SYS_RAWIO in {field}: {status[field]}"
-            finally:
-                process.kill()
-                process.wait(timeout=5)
+        )
+        try:
+            status = dict(
+                line.split(":", 1)
+                for line in Path(f"/proc/{process.pid}/status").read_text().splitlines()
+            )
+            assert {int(uid) for uid in status["Uid"].split()} == {account.pw_uid}, status["Uid"]
+            for field in ("CapPrm", "CapEff"):
+                assert int(status[field], 16) == 1 << 17, f"Expected only CAP_SYS_RAWIO in {field}: {status[field]}"
+        finally:
+            process.kill()
+            process.communicate(timeout=5)
   changed_when: false
   become: true
 
