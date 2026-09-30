@@ -31,11 +31,15 @@
   register: _user_cron_unit
 
 # The sysstat job runs its real command line so the filter sees the exact
-# announcement. The delayed marker job proves cron's syslog lines still reach
-# the journal and bounds the wait for the filtered lines.
+# announcement. The delayed marker job runs outside cron's cgroup, so it bounds
+# the wait without passing through the filter. A PAM session error must still
+# get through; journald attributes it to cron by the sender's cgroup, read from
+# /proc on receipt, so logger stays alive on open stdin until then.
 - name: _verify | Cron housekeeping stays out of the journal
   when: _user_cron_unit.stat.exists
   become: true
+  vars:
+    _user_pam_error: "pam_unix(cron:session): close_session - error recovering username"
   block:
     - name: _verify | Record the journal start time
       command: date +%s
@@ -58,16 +62,29 @@
       retries: 30
       delay: 5
 
+    - name: _verify | Log a PAM session error from cron's cgroup
+      command:
+        argv:
+          - sh
+          - -c
+          - echo $$ > /sys/fs/cgroup/system.slice/cron.service/cgroup.procs && { echo "$0"; sleep 2; } | logger -t CRON
+          - "{{ _user_pam_error }}"
+      changed_when: false
+
     - name: _verify | Read cron messages
       command: journalctl -u cron.service --since @{{ _user_cron_since.stdout }} -o cat
       register: _user_cron_journal
       changed_when: false
+      until: _user_pam_error in _user_cron_journal.stdout_lines
+      retries: 5
+      delay: 1
 
-    - name: _verify | Only unfiltered cron messages were stored
+    - name: _verify | Only housekeeping cron messages were dropped
       assert:
         that:
-          - "'(root) CMD (sleep 3 && logger -t user_verify_cron_filter done)' in _user_cron_journal.stdout_lines"
-          - "_user_cron_journal.stdout is not search('pam_unix[(]cron:session[)]')"
+          - _user_cron_journal.stdout is search('(?m)^[(]root[)] CMD [(]sleep 3 && logger ')
+          - _user_pam_error in _user_cron_journal.stdout_lines
+          - "_user_cron_journal.stdout is not search('pam_unix[(]cron:session[)]: session (opened|closed)')"
           - "'debian-sa1' not in _user_cron_journal.stdout"
         fail_msg: "{{ _user_cron_journal.stdout_lines }}"
   always:
