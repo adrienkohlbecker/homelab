@@ -1,7 +1,7 @@
 # Configure the selected provider before its package hooks can generate images.
 - name: initramfs_provider | Create the provider configuration directory
   file:
-    path: "{{ '/etc/dracut.conf.d' if ansible_distribution_release == 'resolute' else '/etc/initramfs-tools/conf.d' }}"
+    path: "{{ '/etc/dracut.conf.d' if initramfs_use_dracut else '/etc/initramfs-tools/conf.d' }}"
     state: directory
     owner: root
     group: root
@@ -14,9 +14,9 @@
 - name: initramfs_provider | Configure the release boot image policy
   when: not (ansible_check_mode and boot_initramfs_directory.changed)
   copy:
-    src: "{{ 'dracut_host.conf' if ansible_distribution_release == 'resolute' else 'modules_most' }}"
+    src: "{{ 'dracut_host.conf' if initramfs_use_dracut else 'modules_most' }}"
     dest: >-
-      {{ '/etc/dracut.conf.d/90_host.conf' if ansible_distribution_release == 'resolute'
+      {{ '/etc/dracut.conf.d/90_host.conf' if initramfs_use_dracut
          else '/etc/initramfs-tools/conf.d/modules-most' }}
     owner: root
     group: root
@@ -29,7 +29,7 @@
     - boot
 
 - name: initramfs_provider | Remove the generic Dracut policy
-  when: ansible_distribution_release == 'resolute'
+  when: initramfs_use_dracut
   file:
     path: /etc/dracut.conf.d/90_portable.conf
     state: absent

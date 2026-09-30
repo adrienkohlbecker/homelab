@@ -129,7 +129,7 @@
   # Skipped where the host boots without an initramfs at all (the arm64 cloud
   # fixture has no /boot/initrd.img to inspect).
   when:
-    - ansible_distribution_release == 'noble'
+    - not initramfs_use_dracut
     - _boot_verify_initrd.stat.exists
   shell:
     cmd: >-
@@ -139,9 +139,9 @@
   changed_when: false
   become: true
 
-- name: _verify | Resolute image includes the Dracut boot modules
+- name: _verify | Dracut image includes the boot modules
   when:
-    - ansible_distribution_release == 'resolute'
+    - initramfs_use_dracut
     - _boot_verify_initrd.stat.exists
   command: lsinitrd --mod /boot/initrd.img-{{ ansible_kernel }}
   register: _boot_verify_dracut_modules

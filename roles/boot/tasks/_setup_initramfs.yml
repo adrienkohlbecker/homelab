@@ -1,7 +1,7 @@
 # A fresh Resolute bake already carries the new policy. Recreate the provider
 # transition so tag-limited callers must configure Dracut before installing it.
 - name: _setup_initramfs | Restore the initramfs-tools migration source
-  when: ansible_distribution_release == 'resolute'
+  when: initramfs_use_dracut
   apt:
     pkg: "{{ ['initramfs-tools'] + (['zfs-initramfs'] if zfs_root else []) }}"
     cache_valid_time: 3600
@@ -9,7 +9,7 @@
   become: true
 
 - name: _setup_initramfs | Remove the baked Dracut configuration
-  when: ansible_distribution_release == 'resolute'
+  when: initramfs_use_dracut
   file:
     path: '{{ item }}'
     state: absent

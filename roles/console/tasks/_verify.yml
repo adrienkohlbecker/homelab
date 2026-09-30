@@ -42,7 +42,7 @@
 - name: _verify | List current kernel's initrd contents
   when:
     - not qemu_test_minimal
-    - ansible_distribution_release == 'noble'
+    - not initramfs_use_dracut
   command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
   register: _console_initrd
   changed_when: false
@@ -51,7 +51,7 @@
 - name: _verify | Initrd bundles console-setup + keyboard configs
   when:
     - not qemu_test_minimal
-    - ansible_distribution_release == 'noble'
+    - not initramfs_use_dracut
   assert:
     that: item in _console_initrd.stdout_lines
     fail_msg: "initrd missing: {{ item }}"
@@ -62,7 +62,7 @@
 - name: _verify | Dracut image contains a French AZERTY keymap
   when:
     - not qemu_test_minimal
-    - ansible_distribution_release == 'resolute'
+    - initramfs_use_dracut
   command: >-
     lsinitrd --file etc/console-setup/cached_UTF-8_del.kmap
     /boot/initrd.img-{{ ansible_kernel }}

@@ -43,8 +43,9 @@
   apt:
     pkg: >-
       {{ ['kdump-tools', 'makedumpfile'] +
-         (['3cpio'] if ansible_distribution_release == 'resolute' else []) }}
-    install_recommends: "{{ ansible_distribution_release != 'resolute' }}"
+         (['3cpio'] if initramfs_use_dracut else []) }}
+    # The legacy package recommends initramfs-tools, conflicting with Dracut.
+    install_recommends: '{{ not initramfs_use_dracut }}'
     policy_rc_d: 101
     cache_valid_time: 3600
   register: kdump_apt_tools
@@ -85,7 +86,7 @@
   tags:
     - kdump
 
-- name: Configure Dracut capture images on Resolute
+- name: Configure Dracut capture images
   import_tasks: dracut.yml
   tags:
     - kdump

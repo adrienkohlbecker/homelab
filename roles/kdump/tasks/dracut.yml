@@ -2,7 +2,7 @@
 # Inspect package ownership so a stable-release backport is recognized too.
 - name: dracut | Install capture image integration
   when:
-    - ansible_distribution_release == 'resolute'
+    - initramfs_use_dracut
     - not (ansible_check_mode and kdump_apt_tools.changed)
   become: true
   tags:
@@ -117,7 +117,7 @@
 # reloads them. Kernel upgrades use the same hook through run-parts.
 - name: dracut | Rebuild capture images when integration changes
   when:
-    - ansible_distribution_release == 'resolute'
+    - initramfs_use_dracut
     - not ansible_check_mode
     - >-
       kdump_apt_tools.changed or boot_initramfs_rebuild.changed
