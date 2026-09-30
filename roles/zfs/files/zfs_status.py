@@ -165,10 +165,7 @@ def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str |
         completed.append(scan["end_time"])
     elif scan.get("function") == "SCRUB" and scan.get("state") == "SCANNING":
         completed.append(scan["scrub_pause"])
-    if completed:
-        scrub_date = max(completed)
-    else:
-        scrub_date = int(run("zfs", "get", "creation", "-Hpo", "value", name).strip())
+    scrub_date = max(completed) if completed else int(run("zfs", "get", "creation", "-Hpo", "value", name).strip())
     if scrub_date <= 0:
         raise StatusError(f"Missing scrub or creation timestamp for {name}")
     if now - scrub_date >= expire:
