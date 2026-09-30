@@ -2,6 +2,42 @@
 # the Netdata integration. A small direct protocol check covers every parser
 # arm; one live chart proves the collector-to-Netdata boundary.
 
+# --Istdin blocks on an open pipe without touching a disk, so the real binary
+# stays alive long enough to inspect the capabilities granted by exec.
+- name: _verify | Hdparm grants CAP_SYS_RAWIO to netdata
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import pwd
+        import subprocess
+        from pathlib import Path
+
+        account = pwd.getpwnam("netdata")
+        with subprocess.Popen(
+            ["/usr/sbin/hdparm", "--Istdin"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            user=account.pw_uid,
+            group=account.pw_gid,
+            extra_groups=[],
+        ) as process:
+            try:
+                status = dict(
+                    line.split(":", 1)
+                    for line in Path(f"/proc/{process.pid}/status").read_text().splitlines()
+                )
+                assert {int(uid) for uid in status["Uid"].split()} == {account.pw_uid}, status["Uid"]
+                for field in ("CapPrm", "CapEff"):
+                    assert int(status[field], 16) == 1 << 17, f"Expected only CAP_SYS_RAWIO in {field}: {status[field]}"
+            finally:
+                process.kill()
+                process.wait(timeout=5)
+  changed_when: false
+  become: true
+
 - name: _verify | Start netdata
   systemd:
     name: netdata
