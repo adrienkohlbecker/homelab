@@ -1,9 +1,12 @@
 # Suppress the postinst auto-start so chronyd first loads the managed NTS-only
-# configuration, never the stock unauthenticated pools.
+# configuration, never the stock unauthenticated pools. tzdata-legacy ships the
+# right/UTC zone behind leapsectz; fresh installs no longer pull it in. Noble's
+# chrony 4.5 predates the leapseclist alternative.
 - name: Install chrony
   apt:
     pkg:
       - chrony
+      - tzdata-legacy
     cache_valid_time: 3600
     policy_rc_d: 101
   register: chrony_apt
