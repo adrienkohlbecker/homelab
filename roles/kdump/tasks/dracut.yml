@@ -94,6 +94,45 @@
         path: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
         state: absent
 
+    # dpkg writes a .dpkg-dist only when the upgrade changed the packaged hook;
+    # otherwise it keeps the backported hook silently. Without one to adopt,
+    # require the packaged hook before retiring anything.
+    - name: dracut | Read the packaged kernel hook checksum
+      when:
+        - kdump_dracut_native
+        - not kdump_dracut_pending_hook.stat.exists
+      command:
+        argv:
+          - dpkg-query
+          - --showformat=${Conffiles}
+          - --show
+          - kdump-tools
+      changed_when: false
+      check_mode: false
+      register: kdump_dracut_conffiles
+
+    - name: dracut | Read the installed kernel hook checksum
+      when:
+        - kdump_dracut_native
+        - not kdump_dracut_pending_hook.stat.exists
+      stat:
+        path: /etc/kernel/postinst.d/kdump-tools
+        checksum_algorithm: md5
+      register: kdump_dracut_hook
+
+    - name: dracut | Kernel hook is the packaged native version
+      when:
+        - kdump_dracut_native
+        - not kdump_dracut_pending_hook.stat.exists
+      assert:
+        that: >-
+          kdump_dracut_conffiles.stdout is search('(?m)^ /etc/kernel/postinst[.]d/kdump-tools '
+          ~ kdump_dracut_hook.stat.checksum | default('missing') ~ '( |$)')
+        fail_msg: >-
+          kdump-tools ships native Dracut support, but /etc/kernel/postinst.d/kdump-tools
+          is still the backported hook and dpkg left no .dpkg-dist to adopt. Restore
+          the packaged hook per notes/runbooks/kdump.md, then rerun.
+
     # The module scripts are now package-owned; only remove our local preset.
     - name: dracut | Remove the backported capture preset
       when: kdump_dracut_native

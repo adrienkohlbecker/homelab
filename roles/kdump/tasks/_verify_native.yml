@@ -1,0 +1,64 @@
+# kdump-tools does not ship native Dracut support yet. Claiming its module files
+# for the package in the dpkg file list, the signal dracut.yml reads, exercises
+# the handover against the installed backport.
+- name: _verify_native | Exercise the native package handover
+  when: initramfs_use_dracut
+  become: true
+  block:
+    # The file list sits next to the control files, which dpkg-query reports.
+    - name: _verify_native | Locate the package control files
+      command:
+        argv:
+          - dpkg-query
+          - --control-path
+          - kdump-tools
+          - md5sums
+      register: _kdump_native_control
+      changed_when: false
+
+    - name: _verify_native | Locate the package file list
+      set_fact:
+        _kdump_native_list: "{{ _kdump_native_control.stdout | trim | regex_replace('[.]md5sums$', '.list') }}"
+
+    - name: _verify_native | Claim the module files for the package
+      lineinfile:
+        path: '{{ _kdump_native_list }}'
+        line: '{{ item }}'
+      loop:
+        - /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
+        - /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
+
+    - name: _verify_native | Hand over without a packaged hook to adopt
+      block:
+        - name: _verify_native | Reconcile the capture integration
+          import_tasks: dracut.yml
+          vars:
+            kdump_apt_tools:
+              changed: false
+
+        - name: _verify_native | The backported hook was not kept silently
+          fail:
+            msg: The handover kept the backported hook without a packaged one to adopt.
+      rescue:
+        - name: _verify_native | The handover stopped at the packaged hook check
+          assert:
+            that: ansible_failed_task.name == 'dracut | Kernel hook is the packaged native version'
+            fail_msg: '{{ ansible_failed_task.name }}: {{ ansible_failed_result.msg | default("") }}'
+
+        - name: _verify_native | The stopped handover kept the backported preset
+          stat:
+            path: /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+          register: _kdump_native_preset
+          failed_when: not _kdump_native_preset.stat.exists
+  always:
+    - name: _verify_native | Release the claimed files
+      lineinfile:
+        path: '{{ _kdump_native_list }}'
+        line: '{{ item }}'
+        state: absent
+      loop:
+        - /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
+        - /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
+
+    - name: _verify_native | Restore the backported integration
+      import_tasks: main.yml
