@@ -34,12 +34,18 @@
 # announcement. The delayed marker job runs outside cron's cgroup, so it bounds
 # the wait without passing through the filter. A PAM session error must still
 # get through; journald attributes it to cron by the sender's cgroup, read from
-# /proc on receipt, so logger stays alive on open stdin until then.
+# /proc on receipt, so logger stays alive on open stdin until then. The jobs
+# run as nobody embed both filtered phrases in their command text, which any
+# crontab user controls; their CMD records must still be logged. They sleep so
+# the logging cron child is still alive when journald attributes the record to
+# cron.service, where the filter applies.
 - name: _verify | Cron housekeeping stays out of the journal
   when: _user_cron_unit.stat.exists
   become: true
   vars:
     _user_pam_error: "pam_unix(cron:session): close_session - error recovering username"
+    _user_pam_mimic: "(nobody) CMD (sleep 3 # : pam_unix(cron:session): session opened for user)"
+    _user_sa1_mimic: "(nobody) CMD (sleep 3 #: (root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1)"
   block:
     - name: _verify | Record the journal start time
       command: date +%s
@@ -52,6 +58,8 @@
         content: |
           * * * * * root command -v debian-sa1 > /dev/null && debian-sa1 1 1
           * * * * * root sleep 3 && logger -t user_verify_cron_filter done
+          * * * * * nobody sleep 3 # : pam_unix(cron:session): session opened for user
+          * * * * * nobody sleep 3 #: (root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1
         mode: "0644"
 
     - name: _verify | Wait for the marker job
@@ -84,8 +92,10 @@
         that:
           - _user_cron_journal.stdout is search('(?m)^[(]root[)] CMD [(]sleep 3 && logger ')
           - _user_pam_error in _user_cron_journal.stdout_lines
-          - "_user_cron_journal.stdout is not search('pam_unix[(]cron:session[)]: session (opened|closed)')"
-          - "'debian-sa1' not in _user_cron_journal.stdout"
+          - _user_pam_mimic in _user_cron_journal.stdout_lines
+          - _user_sa1_mimic in _user_cron_journal.stdout_lines
+          - "_user_cron_journal.stdout is not search('(?m)^pam_unix[(]cron:session[)]: session (opened|closed)')"
+          - "_user_cron_journal.stdout is not search('(?m)^[(]root[)] CMD [(]command -v debian-sa1')"
         fail_msg: "{{ _user_cron_journal.stdout_lines }}"
   always:
     - name: _verify | Remove the verification cron jobs

@@ -1,6 +1,10 @@
 # Minimal retains cloud-init sudoers residue and covers its cleanup path.
+# Resolute's journald strips the syslog prefix before applying cron's
+# LogFilterPatterns, and its sysstat collects through a timer.
 machines:
   lab:
   minimal:
 arm:
   - lab
+ubuntu:
+  - resolute
