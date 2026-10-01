@@ -194,20 +194,25 @@ apt-mark hold 'grub*'
 # Defer image generation until the storage and console configuration is ready.
 # Dracut kernel hooks invoke dracut directly, while initramfs-tools hooks use
 # update-initramfs; divert the selected backend so every postinst is deferred.
+# Twin of initramfs_use_dracut in group_vars/all/main.yml: every release after
+# Noble uses Dracut.
 case "$UBUNTU_NAME" in
 noble)
   initramfs_generator=initramfs-tools
   initramfs_command=/usr/sbin/update-initramfs
   zfs_initramfs_package=zfs-initramfs
+  initramfs_policy=(modules_most /etc/initramfs-tools/conf.d/modules-most)
+  # -c because the diverted package hooks have not created any images yet.
+  initramfs_build=(update-initramfs -c -k all)
   ;;
-resolute)
+*)
   initramfs_generator=dracut
   initramfs_command=/usr/bin/dracut
   zfs_initramfs_package=zfs-dracut
-  ;;
-*)
-  echo "Unsupported initramfs release: $UBUNTU_NAME" >&2
-  exit 1
+  initramfs_policy=(dracut_host.conf /etc/dracut.conf.d/90_host.conf)
+  # The installer chroot cannot detect the booted target hardware. The first
+  # image is generic; later on-host builds use the host-only policy.
+  initramfs_build=(dracut --no-hostonly --force --regenerate-all)
   ;;
 esac
 dpkg-divert --local --rename --add "$initramfs_command"
@@ -329,25 +334,13 @@ echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
 # Install the boot role image policy before the single final build.
-if [ "$UBUNTU_NAME" = resolute ]; then
-  install -dm 0755 /etc/dracut.conf.d
-  install -m 0644 "${CHROOT_ROLE_FILES}/dracut_host.conf" /etc/dracut.conf.d/90_host.conf
-else
-  install -m 0644 "${CHROOT_ROLE_FILES}/modules_most" /etc/initramfs-tools/conf.d/modules-most
-fi
+install -Dm 0644 "${CHROOT_ROLE_FILES}/${initramfs_policy[0]}" "${initramfs_policy[1]}"
 
-# Restore the backend and create images for every installed kernel. Noble uses
-# -c because the diverted package hooks have not created any images yet.
+# Restore the backend and create images for every installed kernel.
 
 rm "$initramfs_command"
 dpkg-divert --local --rename --remove "$initramfs_command"
-if [ "$UBUNTU_NAME" = resolute ]; then
-  # The installer chroot cannot detect the booted target hardware. The first
-  # image is generic; later on-host builds use the host-only policy above.
-  dracut --no-hostonly --force --regenerate-all
-else
-  update-initramfs -c -k all
-fi
+"${initramfs_build[@]}"
 
 # Mount EFI filesystem
 
