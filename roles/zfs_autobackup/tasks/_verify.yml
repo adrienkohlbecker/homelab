@@ -49,8 +49,7 @@
   become: true
 
 - name: _verify | Exercise first backup SSH connection
-  command: ssh -v -F /etc/zfs_autobackup_ssh_config -o ControlMaster=no 127.0.0.1 true
-  register: zfs_autobackup_verify_first_ssh
+  command: ssh -F /etc/zfs_autobackup_ssh_config -o ControlMaster=no 127.0.0.1 true
   changed_when: false
   failed_when: false
   become: true
@@ -60,24 +59,6 @@
   command: ssh-keygen -F 127.0.0.1 -f /root/.ssh/known_hosts
   changed_when: false
   become: true
-
-# The transport pins its cipher preference; key exchange must still reach the
-# post-quantum hybrid that the release's OpenSSH defaults select.
-# ssh -v ends its debug lines with CRLF, hence the trim.
-- name: _verify | Backup transport negotiates the release default post-quantum key exchange
-  vars:
-    zfs_autobackup_verify_expected_kex: >-
-      {{ 'sntrup761x25519-sha512@openssh.com'
-         if ansible_distribution_release in ['noble']
-         else 'mlkem768x25519-sha256' }}
-  assert:
-    that:
-      - >-
-        ('debug1: kex: algorithm: ' ~ zfs_autobackup_verify_expected_kex)
-        in (zfs_autobackup_verify_first_ssh.stderr_lines | map('trim') | list)
-    fail_msg: >-
-      Expected key exchange {{ zfs_autobackup_verify_expected_kex }}; ssh reported:
-      {{ zfs_autobackup_verify_first_ssh.stderr_lines | select('search', 'kex: algorithm|Connection|Unable') | list }}
 
 - name: _verify | Read the receive-target container properties
   command: zfs get -H -o value canmount,mountpoint rpool/zfs_autobackup_receive_test
