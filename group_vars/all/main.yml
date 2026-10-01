@@ -36,10 +36,12 @@ zfs_root: true
 grub_bootloader: false
 initramfs_use_dracut: "{{ ansible_distribution_release not in ['jammy', 'noble'] }}"
 # Switch ZFS support with the generator so root-on-ZFS hosts cannot build an
-# image without their root driver during the provider transition.
+# image without their root driver during a provider change. Hosts whose root
+# is not on ZFS import their pools after switch-root and need no image support.
 initramfs_packages: >-
   {{ (['dracut'] + (['zfs-dracut'] if zfs_root else []))
-     if initramfs_use_dracut else ['initramfs-tools'] }}
+     if initramfs_use_dracut
+     else (['initramfs-tools'] + (['zfs-initramfs'] if zfs_root else [])) }}
 initramfs_rebuild_command: >-
   {{ 'dracut --force --regenerate-all' if initramfs_use_dracut
      else 'update-initramfs -u -k all' }}

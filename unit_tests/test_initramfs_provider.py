@@ -24,7 +24,7 @@ def test_release_provider_contract(release: str, zfs_root: bool) -> None:
 
     if release in {"jammy", "noble"}:
         assert variables["initramfs_use_dracut"] is False
-        assert variables["initramfs_packages"] == ["initramfs-tools"]
+        assert variables["initramfs_packages"] == ["initramfs-tools", *(["zfs-initramfs"] if zfs_root else [])]
     else:
         assert variables["initramfs_use_dracut"] is True
         assert variables["initramfs_packages"] == ["dracut", *(["zfs-dracut"] if zfs_root else [])]

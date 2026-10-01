@@ -1,3 +1,4 @@
+# The provider also installs root-pool image support on ZFS-root hosts.
 - name: install | Configure the boot image provider
   import_role:
     name: boot
@@ -9,7 +10,6 @@
   apt:
     package:
       - zfsutils-linux
-      - "{{ 'zfs-dracut' if initramfs_use_dracut else 'zfs-initramfs' }}"
       - zfs-zed
     policy_rc_d: 101
     cache_valid_time: 3600
