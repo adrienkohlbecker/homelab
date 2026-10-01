@@ -165,11 +165,13 @@ MINSUPPLIES 1
 # Or use the old DOS 8.3 file name, like this:
 # SHUTDOWNCMD "C:\\PROGRA~1\\SOMECO~1.bat -first_arg -second_arg"
 
-# systemd 257+ logind refuses even root's shutdown while a block inhibitor is
-# held, and adguard_reboot_guard holds one whenever this host is the last DNS
-# server. Skip inhibitors explicitly; Ubuntu's root-ignore-inhibitors polkit
-# rule authorizes that through polkitd.
-SHUTDOWNCMD "/usr/bin/systemctl --check-inhibitors=no poweroff"
+# Start poweroff.target through PID1, not logind. Since systemd 257, logind
+# refuses root's shutdown while a block inhibitor is held, and
+# adguard_reboot_guard holds one whenever this host is the last DNS server;
+# skipping it through logind needs polkit. PID1 has no inhibitors, and root
+# reaches it over its private socket without polkit or D-Bus. Delay-lock
+# holders get no PrepareForShutdown signal, only the normal unit stop.
+SHUTDOWNCMD "/usr/bin/systemctl start --no-block --job-mode=replace-irreversibly poweroff.target"
 
 # --------------------------------------------------------------------------
 # SHUTDOWNEXIT <boolean|num>

@@ -1,5 +1,5 @@
 # upsmon.conf.j2's NOTIFYFLAG block and one-shot mode ride the default noble
-# cell. resolute adds no distinct template branch; it covers the role against
-# the newer nut runtime the next prod release will carry.
+# cell. resolute's logind enforces root-held shutdown block locks, which
+# _verify_shutdown_inhibitor drives SHUTDOWNCMD through.
 ubuntu:
   - resolute

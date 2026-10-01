@@ -1,10 +1,9 @@
-# systemd 257+ logind refuses even root's shutdown while a block inhibitor is
-# held, and adguard_reboot_guard holds one on the last DNS server. SHUTDOWNCMD
-# must therefore get through such a lock. Powering off would end the fixture,
-# so this runs the configured command with only its final verb swapped for
-# reboot. That exercises the same flags and inhibitor-bypass path; logind
-# authorizes it through reboot-ignore-inhibit, the sibling of poweroff's
-# action in the same Ubuntu polkit rule.
+# SHUTDOWNCMD must power off even while a root shutdown block lock is held:
+# adguard_reboot_guard holds one on the last DNS server, and systemd 257+
+# logind enforces it against root. Powering off would end the fixture, so this
+# runs the configured command with only its target swapped for reboot.target,
+# the way upsmon runs it: /bin/sh -c from a system service, outside any logind
+# session, and with polkit unavailable.
 - name: _verify | Read the configured SHUTDOWNCMD
   set_fact:
     nut_verify_shutdowncmd: >-
@@ -15,8 +14,8 @@
 - name: _verify | SHUTDOWNCMD powers the host off
   assert:
     that:
-      - nut_verify_shutdowncmd is match('.* poweroff$')
-    fail_msg: "Expected a poweroff SHUTDOWNCMD, got: {{ nut_verify_shutdowncmd }}"
+      - nut_verify_shutdowncmd is match('.* poweroff[.]target$')
+    fail_msg: "Expected a poweroff.target SHUTDOWNCMD, got: {{ nut_verify_shutdowncmd }}"
 
 - name: _verify | Hold a root shutdown block lock like the DNS reboot guard
   command:
@@ -49,10 +48,16 @@
   until: nut_verify_lock.rc == 0
   become: true
 
+# A runtime mask also blocks D-Bus activation and lasts until the reboot below.
+- name: _verify | Make polkit unavailable
+  command: systemctl mask --runtime --now polkit.service # noqa: command-instead-of-module
+  changed_when: true
+  become: true
+
 # Noble's logind ignores a lock held by the caller's own uid, so this control
 # would reboot there. On newer releases it proves the lock binds root, so the
-# reboot below can only succeed through SHUTDOWNCMD's bypass. The systemd
-# module cannot request a logind reboot.
+# reboot below can only succeed by bypassing logind. The systemd module cannot
+# request a logind reboot.
 - name: _verify | An unflagged reboot is refused while the lock is held
   when: ansible_distribution_release not in ['noble']
   command: /usr/bin/systemctl reboot # noqa: command-instead-of-module
@@ -65,8 +70,9 @@
 
 # Mitogen can retain a severed sudo.root context when a become-elevated reboot
 # severs SSH. Elevate only the command so Ansible polls through the base context.
-- name: _verify | SHUTDOWNCMD's flags reboot through the lock
+- name: _verify | SHUTDOWNCMD reboots through the lock from a service context
   reboot:
     reboot_command: >-
-      /usr/bin/sudo -n {{ nut_verify_shutdowncmd | regex_replace(' poweroff$', ' reboot') }}
+      /usr/bin/sudo -n /usr/bin/systemd-run --unit=nut_verify_shutdowncmd --collect
+      /bin/sh -c {{ nut_verify_shutdowncmd | regex_replace(' poweroff[.]target$', ' reboot.target') | quote }}
     reboot_timeout: 240

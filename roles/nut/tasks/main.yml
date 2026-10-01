@@ -22,8 +22,6 @@
       - nut-snmp
       - nut-cgi
       - fcgiwrap
-      # Authorizes SHUTDOWNCMD's inhibitor bypass (upsmon.conf.j2).
-      - polkitd
     cache_valid_time: 3600
     # Configure and start the full chain only after every NUT file is in place.
     policy_rc_d: 101
