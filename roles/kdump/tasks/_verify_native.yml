@@ -50,6 +50,41 @@
             path: /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
           register: _kdump_native_preset
           failed_when: not _kdump_native_preset.stat.exists
+
+    # A package that ships a file at a backported path owns it from then on.
+    - name: _verify_native | Claim the preset path for the package too
+      lineinfile:
+        path: '{{ _kdump_native_list }}'
+        line: /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+
+    - name: _verify_native | Offer a packaged hook for adoption
+      copy:
+        src: /etc/kernel/postinst.d/kdump-tools
+        dest: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
+        remote_src: true
+        mode: "0755"
+
+    - name: _verify_native | Hand over with a packaged hook to adopt
+      import_tasks: dracut.yml
+      vars:
+        kdump_apt_tools:
+          changed: false
+
+    - name: _verify_native | The handover consumed the offered hook
+      stat:
+        path: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
+      register: _kdump_native_offer
+      failed_when: _kdump_native_offer.stat.exists
+
+    - name: _verify_native | The handover kept the package-owned files
+      stat:
+        path: '{{ item }}'
+      loop:
+        - /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+        - /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
+        - /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
+      register: _kdump_native_owned
+      failed_when: not _kdump_native_owned.stat.exists
   always:
     - name: _verify_native | Release the claimed files
       lineinfile:
@@ -59,6 +94,12 @@
       loop:
         - /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
         - /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
+        - /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+
+    - name: _verify_native | Remove the offered package hook
+      file:
+        path: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
+        state: absent
 
     - name: _verify_native | Restore the backported integration
       import_tasks: main.yml

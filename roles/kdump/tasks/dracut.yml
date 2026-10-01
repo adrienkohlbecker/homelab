@@ -133,12 +133,19 @@
           is still the backported hook and dpkg left no .dpkg-dist to adopt. Restore
           the packaged hook per notes/runbooks/kdump.md, then rerun.
 
-    # The module scripts are now package-owned; only remove our local preset.
-    - name: dracut | Remove the backported capture preset
-      when: kdump_dracut_native
+    # Remove the backported files the native package does not own; an owned
+    # path now holds the package's own file.
+    - name: dracut | Remove the backported capture integration
+      when:
+        - kdump_dracut_native
+        - item not in kdump_dracut_package_files.stdout_lines
       file:
-        path: /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+        path: '{{ item }}'
         state: absent
+      loop:
+        - /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
+        - /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
+        - /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
       register: kdump_dracut_native_profile
 
     - name: dracut | Read installed kernel versions
