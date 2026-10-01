@@ -1,6 +1,14 @@
 - name: _verify_policy | Exercise a policy change consumed before kdump
   when: initramfs_use_dracut
   block:
+    # Without reserved memory the role only enables kdump-tools, so the reload
+    # check below would prove nothing.
+    - name: _verify_policy | Crash memory is reserved, so kdump reloads in place
+      command: cat /sys/kernel/kexec_crash_size
+      register: _kdump_policy_crash_size
+      changed_when: false
+      failed_when: _kdump_policy_crash_size.stdout | int == 0
+
     - name: _verify_policy | Create an image marker
       copy:
         content: "capture policy regression fixture\n"
@@ -55,6 +63,22 @@
       changed_when: false
       failed_when: _kdump_policy_after.stdout is search('(?m)\setc/kdump/verify_policy_marker$')
       become: true
+
+    # The loader keeps the image it loaded until kdump-tools restarts; a reboot
+    # would hide a missing restart.
+    - name: _verify_policy | Read the capture image rebuild time
+      stat:
+        path: /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+        get_checksum: false
+      register: _kdump_policy_image
+      become: true
+
+    # The systemd module reports timestamps only in the local display format.
+    - name: _verify_policy | Loader restarted after the capture image rebuild  # noqa: command-instead-of-module
+      command: systemctl show --property=ExecMainStartTimestamp --timestamp=unix --value kdump-tools.service
+      register: _kdump_policy_loader_start
+      changed_when: false
+      failed_when: (_kdump_policy_loader_start.stdout | trim)[1:] | int < _kdump_policy_image.stat.mtime | int
   always:
     - name: _verify_policy | Remove the image marker
       file:

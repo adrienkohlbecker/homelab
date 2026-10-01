@@ -1,31 +1,5 @@
 # Verify the bootloader integration and post-reboot capture state.
 
-- name: _verify | Provide a reserved-memory result through Ansible
-  command: printf 1
-  register: kdump_kexec_crash_size
-  changed_when: false
-
-- name: _verify | Drift the kdump config before production reconciliation
-  lineinfile:
-    path: /etc/default/kdump-tools
-    line: '# coverage fixture'
-  become: true
-
-- name: _verify | Reconcile kdump config through production tasks
-  import_tasks: config.yml
-  vars:
-    kdump_apt_tools:
-      changed: false
-
-- name: _verify | Exercise changed kdump service lifecycle
-  import_tasks: service_state.yml
-  vars:
-    kdump_apt_tools:
-      changed: false
-    kdump_dracut_rebuild:
-      changed: false
-  check_mode: true
-
 - name: _verify | Reconcile policy changes made by earlier roles
   import_tasks: _verify_policy.yml
 
@@ -63,6 +37,33 @@
 
 - name: _verify | Exercise the capture path through a deliberate panic
   import_tasks: _verify_capture.yml
+
+# Crash memory is reserved now, so a configuration change must reload the
+# loaded capture kernel rather than wait for the next boot.
+- name: _verify | Exercise a kdump configuration reload
+  block:
+    - name: _verify | Drift the kdump config
+      lineinfile:
+        path: /etc/default/kdump-tools
+        line: '# reload fixture'
+      become: true
+
+    - name: _verify | Kdump reconciles the config and loader
+      import_tasks: main.yml
+
+    - name: _verify | Read the reconciled config time
+      stat:
+        path: /etc/default/kdump-tools
+        get_checksum: false
+      register: kdump_verify_cfg
+      become: true
+
+    # The systemd module reports timestamps only in the local display format.
+    - name: _verify | Loader restarted after the config change  # noqa: command-instead-of-module
+      command: systemctl show --property=ExecMainStartTimestamp --timestamp=unix --value kdump-tools.service
+      register: kdump_verify_cfg_loader
+      changed_when: false
+      failed_when: (kdump_verify_cfg_loader.stdout | trim)[1:] | int < kdump_verify_cfg.stat.mtime | int
 
 - name: _verify | Detect a perf PMU for the NMI watchdog
   when: ansible_architecture == 'x86_64'
