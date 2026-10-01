@@ -2,7 +2,9 @@
 # held, and adguard_reboot_guard holds one on the last DNS server. SHUTDOWNCMD
 # must therefore get through such a lock. Powering off would end the fixture,
 # so this runs the configured command with only its final verb swapped for
-# reboot: the same flags, logind method, and polkit rule authorize it.
+# reboot. That exercises the same flags and inhibitor-bypass path; logind
+# authorizes it through reboot-ignore-inhibit, the sibling of poweroff's
+# action in the same Ubuntu polkit rule.
 - name: _verify | Read the configured SHUTDOWNCMD
   set_fact:
     nut_verify_shutdowncmd: >-
