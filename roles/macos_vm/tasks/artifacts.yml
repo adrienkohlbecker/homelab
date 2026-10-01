@@ -171,9 +171,10 @@
         msg: >-
           Recovery image conversion or verification failed. The rejected
           {{ macos_vm_workdir }}/BaseSystem.img.partial was removed; the source DMG
-          was retained. Re-run the role to retry a transient failure. Delete
-          {{ macos_vm_workdir }}/BaseSystem.dmg before rerunning to download a
-          fresh source, or replace it if its compression is unsupported.
+          was retained. Re-run the role to retry a transient failure. To fetch a
+          fresh, chunklist-verified source, delete {{ macos_vm_workdir }}/BaseSystem.dmg
+          and rerun; never replace it by hand, since an existing DMG skips the
+          download and its verification.
           {{ ansible_failed_result.msg | default('') }}
           {{ ansible_failed_result.stdout | default('') }}
           {{ ansible_failed_result.stderr | default('') }}
