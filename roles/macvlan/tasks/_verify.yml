@@ -158,15 +158,27 @@
       - --network
       - "{{ item.name }}"
       - docker.io/library/busybox
-      - ping
+      - sh
       - -c
-      - '1'
-      - -W
-      - '3'
+      - ping -c 1 -W 3 "$1" && ip route
+      - sh
       - "{{ _macvlan_block | ansible.utils.ipmath(0) }}"
   loop: "{{ macvlan_blocks }}"
   loop_control:
     label: "{{ item.name }}"
   when: item.podman_network | default(false)
+  register: macvlan_verify_container
   changed_when: false
   become: true
+
+# Netavark >= 1.7 honours the networks' no_default_route, leaving a macvlan-only
+# container with its on-link route; Noble's 1.4 installs a default anyway.
+- name: _verify | Macvlan networks give containers no default route
+  when: ansible_distribution_release not in ['noble']
+  vars:
+    _routes: "{{ macvlan_verify_container.results | selectattr('stdout', 'defined') | map(attribute='stdout') | list }}"
+  assert:
+    that:
+      - _routes | length > 0
+      - _routes | select('search', '^default', multiline=True) | list | length == 0
+    fail_msg: "Container routes: {{ _routes }}"
