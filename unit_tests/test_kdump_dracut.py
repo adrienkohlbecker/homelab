@@ -26,7 +26,10 @@ def test_capture_image_installation(tmp_path: Path, measurement: str) -> None:
         "kdump-config": "exit 0",
         "linux-version": f"printf '%s\\n' {kernel}",
         "ischroot": "exit 1",
-        "dracut": 'printf "new image" >"$4"' + ("\nexit 1" if measurement == "generation_failure" else ""),
+        # dracut tries --add-confdir as a path before its configuration
+        # directories; the caller's planted directory must not resolve.
+        "dracut": '[ ! -d "$3" ] || exit 97\nprintf "new image" >"$4"'
+        + ("\nexit 1" if measurement == "generation_failure" else ""),
         "3cpio": {
             "failure": "exit 1",
             "zero": "exit 0",
@@ -49,7 +52,10 @@ def test_capture_image_installation(tmp_path: Path, measurement: str) -> None:
     env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
     env.pop("DEB_MAINT_PARAMS", None)
     env.pop("INITRD", None)
-    result = subprocess.run(["bash", str(hook), kernel], env=env, text=True, capture_output=True)
+    # apt runs the hook from its caller's working directory.
+    caller = tmp_path / "caller"
+    (caller / "kdump-tools").mkdir(parents=True)
+    result = subprocess.run(["bash", str(hook), kernel], cwd=caller, env=env, text=True, capture_output=True)
 
     if measurement == "generation_failure":
         assert result.returncode != 0

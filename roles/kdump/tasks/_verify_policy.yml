@@ -15,7 +15,9 @@
       become: true
 
     - name: _verify_policy | Build a capture image carrying the drift
-      command: /etc/kernel/postinst.d/kdump-tools {{ ansible_kernel }}
+      command:
+        cmd: /etc/kernel/postinst.d/kdump-tools {{ ansible_kernel }}
+        chdir: /
       changed_when: true
       become: true
 

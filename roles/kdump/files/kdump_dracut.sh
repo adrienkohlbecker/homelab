@@ -22,6 +22,9 @@ target="$kdumpdir/initrd.img-$version"
 mkdir -p "$kdumpdir"
 trap 'rm -f "$target.new"' EXIT
 echo "kdump-tools: Generating $target (dracut)"
+# dracut tries --add-confdir as a path before its configuration directories,
+# and apt runs this hook from the caller's working directory.
+cd /
 dracut --force --add-confdir kdump-tools "$target.new" "$version"
 
 # The package's crashkernel estimator consumes the decompressed size in MiB.

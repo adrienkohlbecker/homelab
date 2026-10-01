@@ -119,7 +119,9 @@
       or kdump_dracut_files.changed
       or kdump_dracut_generator.changed or kdump_dracut_native_hook.changed
       or kdump_dracut_native_profile.changed
-  command: /etc/kernel/postinst.d/kdump-tools {{ item }}
+  command:
+    cmd: /etc/kernel/postinst.d/kdump-tools {{ item }}
+    chdir: /
   changed_when: true
   loop: '{{ kdump_dracut_kernels.stdout_lines | default([]) }}'
   register: kdump_dracut_rebuild
