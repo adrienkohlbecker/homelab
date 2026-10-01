@@ -26,3 +26,14 @@
     state: absent
     purge: true
   become: true
+
+# A Noble host has never carried the backported integration, so the migration
+# converge must install it as production does.
+- name: _setup_fresh | Remove the backported capture integration before the legacy fixture
+  file:
+    path: '{{ item }}'
+    state: absent
+  loop:
+    - /usr/lib/dracut/modules.d/50kdump-tools
+    - /usr/lib/dracut/dracut.conf.d/kdump-tools
+  become: true
