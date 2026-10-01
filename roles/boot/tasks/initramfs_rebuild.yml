@@ -4,12 +4,10 @@
 #   import_role: { name: boot, tasks_from: initramfs_rebuild }
 #   vars:
 #     boot_initramfs_args:
-#       changed: <bool>  # an image input changed; false publishes no change
+#       changed: <bool>  # an image input changed; false skips the rebuild
 #       reboot: <bool>   # also request a reboot so the next boot loads the image
 #
-# Publishes boot_initramfs_changed, accumulated across calls in the play. Kdump
-# builds its capture images from the same inputs and refreshes them while it is
-# true, so the record task must run unconditionally.
+# Kdump detects these rebuilds from the image mtimes (roles/kdump/tasks/dracut.yml).
 
 - name: initramfs_rebuild | Validate inputs
   assert:
@@ -17,10 +15,6 @@
       - boot_initramfs_args.changed is boolean
       - boot_initramfs_args.reboot is boolean
     fail_msg: boot_initramfs_args requires boolean 'changed' and 'reboot'.
-
-- name: initramfs_rebuild | Record the image input change
-  set_fact:
-    boot_initramfs_changed: '{{ boot_initramfs_changed | default(false) or boot_initramfs_args.changed }}'
 
 - name: initramfs_rebuild | Rebuild boot images
   when:
