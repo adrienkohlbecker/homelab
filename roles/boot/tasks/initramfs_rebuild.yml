@@ -1,0 +1,43 @@
+# Rebuild every installed kernel's boot image after a caller changes one of
+# its inputs (generator, image policy, module options, console keymap, mdadm):
+#
+#   import_role: { name: boot, tasks_from: initramfs_rebuild }
+#   vars:
+#     boot_initramfs_args:
+#       changed: <bool>  # an image input changed; false publishes no change
+#       reboot: <bool>   # also request a reboot so the next boot loads the image
+#
+# Publishes boot_initramfs_changed, accumulated across calls in the play. Kdump
+# builds its capture images from the same inputs and refreshes them while it is
+# true, so the record task must run unconditionally.
+
+- name: initramfs_rebuild | Validate inputs
+  assert:
+    that:
+      - boot_initramfs_args.changed is boolean
+      - boot_initramfs_args.reboot is boolean
+    fail_msg: boot_initramfs_args requires boolean 'changed' and 'reboot'.
+
+- name: initramfs_rebuild | Record the image input change
+  set_fact:
+    boot_initramfs_changed: '{{ boot_initramfs_changed | default(false) or boot_initramfs_args.changed }}'
+
+- name: initramfs_rebuild | Rebuild boot images
+  when:
+    - boot_initramfs_args.changed
+    - not ansible_check_mode
+  command: '{{ initramfs_rebuild_command }}'
+  changed_when: true
+  become: true
+
+- name: initramfs_rebuild | Request a reboot
+  when:
+    - boot_initramfs_args.changed
+    - boot_initramfs_args.reboot
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

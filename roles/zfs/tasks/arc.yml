@@ -12,32 +12,15 @@
   tags:
     - zfs
 
-- name: arc | Preserve module changes for capture images # noqa: var-naming[no-role-prefix]
-  set_fact:
-    boot_initramfs_changed: >-
-      {{ boot_initramfs_changed | default(false)
-         or zfs_module_conf.changed or zfs_apt.changed }}
-  tags:
-    - zfs
-
+# Module options take effect only when zfs.ko loads at boot. A userspace
+# update refreshes the image's tools but leaves the loaded module unchanged.
 - name: arc | Rebuild boot images with the ZFS module policy
-  when:
-    - zfs_module_conf.changed or zfs_apt.changed
-    - not ansible_check_mode
-  command: '{{ initramfs_rebuild_command }}'
-  become: true
-  changed_when: true
-  tags:
-    - zfs
-
-- name: arc | Ask to reboot
-  when: zfs_module_conf.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+  import_role:
+    name: boot
+    tasks_from: initramfs_rebuild
+  vars:
+    boot_initramfs_args:
+      changed: '{{ zfs_module_conf.changed or zfs_apt.changed }}'
+      reboot: '{{ zfs_module_conf.changed }}'
   tags:
     - zfs

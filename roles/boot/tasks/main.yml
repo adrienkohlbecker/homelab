@@ -122,31 +122,12 @@
   tags:
     - boot
 
-- name: Preserve boot dependency changes for capture images
-  set_fact:
-    boot_initramfs_changed: '{{ boot_initramfs_changed | default(false) or boot_apt.changed }}'
-  tags:
-    - boot
-
-- name: Rebuild boot images
-  when:
-    - boot_apt.changed
-    - not ansible_check_mode
-  command: "{{ initramfs_rebuild_command }}"
-  changed_when: true
-  become: true
-  tags:
-    - boot
-
-- name: Ask to reboot
-  when: boot_apt.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+- name: Rebuild boot images with the boot dependencies
+  import_tasks: initramfs_rebuild.yml
+  vars:
+    boot_initramfs_args:
+      changed: '{{ boot_apt.changed }}'
+      reboot: true
   tags:
     - boot
 

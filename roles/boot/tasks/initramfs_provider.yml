@@ -38,33 +38,12 @@
   tags:
     - boot
 
-- name: initramfs_provider | Preserve changes across provider calls
-  set_fact:
-    boot_initramfs_changed: >-
-      {{ boot_initramfs_changed | default(false)
-         or boot_initramfs_apt.changed or boot_initramfs_config.changed }}
-  tags:
-    - boot
-
+# A provider switch changes how the host boots; prove it with a reboot.
 - name: initramfs_provider | Rebuild boot images after provider changes
-  when:
-    - not ansible_check_mode
-    - boot_initramfs_apt.changed or boot_initramfs_config.changed
-  command: '{{ initramfs_rebuild_command }}'
-  changed_when: true
-  register: boot_initramfs_rebuild
-  become: true
-  tags:
-    - boot
-
-- name: initramfs_provider | Request a reboot after provider changes
-  when: boot_initramfs_apt.changed or boot_initramfs_config.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+  import_tasks: initramfs_rebuild.yml
+  vars:
+    boot_initramfs_args:
+      changed: '{{ boot_initramfs_apt.changed or boot_initramfs_config.changed }}'
+      reboot: true
   tags:
     - boot

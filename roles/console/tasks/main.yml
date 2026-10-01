@@ -44,21 +44,16 @@
   tags:
     - console
 
-- name: Preserve console changes for capture images # noqa: var-naming[no-role-prefix]
-  set_fact:
-    boot_initramfs_changed: >-
-      {{ boot_initramfs_changed | default(false)
-         or console_cfg.changed or console_apt.changed }}
-  tags:
-    - console
-
+# setupcon already applied the policy to the live VTs; only the next boot's
+# image needs it.
 - name: Rebuild boot images with the console policy
-  when:
-    - console_cfg.changed or console_apt.changed
-    - not ansible_check_mode
-  command: "{{ initramfs_rebuild_command }}"
-  changed_when: true
-  become: true
+  import_role:
+    name: boot
+    tasks_from: initramfs_rebuild
+  vars:
+    boot_initramfs_args:
+      changed: '{{ console_cfg.changed or console_apt.changed }}'
+      reboot: false
   tags:
     - console
 
