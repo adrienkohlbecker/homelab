@@ -174,7 +174,7 @@
             ('scripts/zfs' in kdump_verify_initrd.stdout_lines)
             if not initramfs_use_dracut
             else ('zfs' in kdump_verify_initrd.stdout_lines)
-          - kdump_verify_initrd.stdout is search('(usr/)?sbin/zpool')
+          - kdump_verify_initrd.stdout is search('(?m)(^|\s)(usr/)?sbin/zpool$')
         fail_msg: >-
           The capture image needs ZFS root support and the zpool tool;
           loading zfs.ko alone cannot import and mount the root dataset.
