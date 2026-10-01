@@ -1,6 +1,13 @@
 # Mitogen can retain a severed sudo.root context when a become-elevated reboot
 # severs SSH. Elevate only systemctl so Ansible polls through the base context.
+#
+# Production reboots through logind so the DNS reboot guard's block lock can
+# stop them. Fixtures run that guard on their only DNS server, so they start
+# reboot.target through PID1, which has no inhibitors and needs no polkit.
 - name: Reboot and wait for the host to return
   reboot:
-    reboot_command: "/usr/bin/sudo -n /usr/bin/systemctl{{ ' --check-inhibitors=no' if qemu_test | default(false) else '' }} reboot"
+    reboot_command: >-
+      /usr/bin/sudo -n /usr/bin/systemctl
+      {{ 'start --no-block --job-mode=replace-irreversibly reboot.target'
+         if qemu_test | default(false) else 'reboot' }}
     reboot_timeout: 240

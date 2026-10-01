@@ -89,7 +89,7 @@ def test_converge_poweroff_ignores_fixture_inhibitor(
 
     asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
 
-    assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") in machine.ssh_calls
+    assert site_test.POWEROFF_COMMAND in machine.ssh_calls
 
 
 def test_converge_profiles_settled_boot_before_poweroff(
@@ -114,7 +114,9 @@ def test_reboot_bypasses_inhibitor_only_in_qemu() -> None:
     task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())[0]
     command = jinja2.Template(task["reboot"]["reboot_command"])
 
-    assert command.render(qemu_test=True) == "/usr/bin/sudo -n /usr/bin/systemctl --check-inhibitors=no reboot"
+    assert command.render(qemu_test=True) == (
+        "/usr/bin/sudo -n /usr/bin/systemctl start --no-block --job-mode=replace-irreversibly reboot.target"
+    )
     assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
 
 
@@ -184,7 +186,7 @@ def test_a_recovered_unit_fails_the_converge_after_the_guest_powered_off(
         asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
 
     # The shutdown path is still exercised, so a wedged stop job is not hidden.
-    assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") in machine.ssh_calls
+    assert site_test.POWEROFF_COMMAND in machine.ssh_calls
 
 
 def test_a_fleet_that_never_settles_fails_before_the_poweroff(
@@ -197,7 +199,7 @@ def test_a_fleet_that_never_settles_fails_before_the_poweroff(
     with pytest.raises(site_test.SettleTimeoutError):
         asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
 
-    assert ("sudo", "systemctl", "--check-inhibitors=no", "poweroff") not in machine.ssh_calls
+    assert site_test.POWEROFF_COMMAND not in machine.ssh_calls
 
 
 @pytest.mark.parametrize(

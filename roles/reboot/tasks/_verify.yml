@@ -1,3 +1,44 @@
+# Fixtures run the DNS reboot guard, which holds a root shutdown block lock
+# whenever its host is the last DNS server; systemd 257+ logind enforces that
+# lock against root. Hold one the same way, with polkit unavailable, so the
+# fixture reboot must get through without logind's or polkit's consent.
+- name: _verify | Hold a root shutdown block lock like the DNS reboot guard
+  command:
+    argv:
+      - systemd-run
+      - --unit=reboot_verify_inhibitor
+      - --collect
+      - systemd-inhibit
+      - --what=shutdown
+      - --mode=block
+      - --who=reboot_verify_inhibitor
+      - --why=Simulate the last-DNS-server reboot guard
+      - sleep
+      - infinity
+  changed_when: true
+  become: true
+
+# Plain grep (not -q): it consumes all input so systemd-inhibit never
+# takes a SIGPIPE under pipefail.
+- name: _verify | The block lock is held
+  shell:
+    cmd: >-
+      set -euo pipefail;
+      systemd-inhibit --list --no-legend | grep reboot_verify_inhibitor
+    executable: /bin/bash
+  register: _reboot_verify_lock
+  changed_when: false
+  retries: 10
+  delay: 1
+  until: _reboot_verify_lock.rc == 0
+  become: true
+
+# A runtime mask also blocks D-Bus activation and lasts until the reboot below.
+- name: _verify | Make polkit unavailable
+  command: systemctl mask --runtime --now polkit.service # noqa: command-instead-of-module
+  changed_when: true
+  become: true
+
 - name: _verify | Reboot through the helper
   import_role:
     name: reboot

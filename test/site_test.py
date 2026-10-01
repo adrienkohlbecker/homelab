@@ -49,6 +49,11 @@ from utils import (
 # serial console (boot.ansi) records which stop jobs hung.
 POWEROFF_TIMEOUT = 120
 
+# The fixture's DNS reboot guard holds a root shutdown block lock on its only
+# DNS server. Start poweroff.target through PID1, which has no inhibitors and
+# needs no polkit, rather than asking logind to skip the lock.
+POWEROFF_COMMAND = ("sudo", "systemctl", "start", "--no-block", "--job-mode=replace-irreversibly", "poweroff.target")
+
 # The converge runs dozens of services; its 12-GiB guest books three cells'
 # worth of a shared 16-vCPU/32-GiB CI worker (capacity_per_instance). Check
 # mode renders the same site without starting them.
@@ -249,7 +254,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                 print_line(f"Fleet settled as {settle_state!r}; failed units:\n{failed_units}")
             restarted = await print_boot_profile(m)
 
-            await m.ssh_command("sudo", "systemctl", "--check-inhibitors=no", "poweroff", check=False)
+            await m.ssh_command(*POWEROFF_COMMAND, check=False)
             # Bound the shutdown wait separately from the converge
             # budget: a wedged stop job must surface as a failure,
             # not eat the remaining --timeout. collect_failure_
