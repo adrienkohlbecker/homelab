@@ -151,6 +151,58 @@
     or (zfs_root and 'zfs' not in _boot_verify_dracut_modules.stdout_lines)
   become: true
 
+# The shared Dracut policy keeps the pool cache and the kdump panic policy out
+# of every image. Seed the sysctl paths, plus a control file that the image must
+# carry, then rebuild so the archive reflects them. A ZFS-root fixture must
+# already have a nonempty cache, or its absence from the image would prove
+# nothing.
+- name: _verify | Exercise the Dracut image exclusions
+  when:
+    - initramfs_use_dracut
+    - _boot_verify_initrd.stat.exists
+  block:
+    - name: _verify | ZFS-root fixture has a nonempty pool cache
+      when: zfs_root
+      stat:
+        path: /etc/zfs/zpool.cache
+      register: _boot_verify_zpool_cache
+      failed_when: not _boot_verify_zpool_cache.stat.exists or _boot_verify_zpool_cache.stat.size == 0
+      become: true
+
+    - name: _verify | Seed the early-boot sysctl fixtures
+      copy:
+        content: "# boot _verify fixture\n"
+        dest: /etc/sysctl.d/{{ item }}
+        mode: "0644"
+      loop:
+        - 30-kdump.conf
+        - 31_boot_verify_control.conf
+      become: true
+
+    - name: _verify | Rebuild boot images with the fixtures
+      command: '{{ initramfs_rebuild_command }}'
+      changed_when: true
+      become: true
+
+    - name: _verify | Image carries the control but not the excluded files
+      command: lsinitrd /boot/initrd.img-{{ ansible_kernel }}
+      register: _boot_verify_dracut_files
+      changed_when: false
+      failed_when: >-
+        _boot_verify_dracut_files.stdout is not search('(?m)\setc/sysctl.d/31_boot_verify_control\.conf$')
+        or _boot_verify_dracut_files.stdout is search('(?m)\setc/sysctl.d/30-kdump\.conf$')
+        or _boot_verify_dracut_files.stdout is search('(?m)\setc/zfs/zpool\.cache$')
+      become: true
+  always:
+    - name: _verify | Remove the sysctl fixtures
+      file:
+        path: /etc/sysctl.d/{{ item }}
+        state: absent
+      loop:
+        - 30-kdump.conf
+        - 31_boot_verify_control.conf
+      become: true
+
 # The 'default' fragment carries the base console args. On test VMs (qemu) this
 # includes earlycon + serial for harness output capture; on prod (no legacy UART)
 # it's just console=tty0.

@@ -183,13 +183,12 @@
       when:
         - initramfs_use_dracut
         - not qemu_test_minimal
-      command: lsinitrd /boot/initrd.img-{{ ansible_kernel }}
+      command: lsinitrd --mod /boot/initrd.img-{{ ansible_kernel }}
       register: kdump_verify_boot_initrd
       changed_when: false
       failed_when: >-
         'dracut modules:' not in kdump_verify_boot_initrd.stdout
         or (zfs_root and 'zfs' not in kdump_verify_boot_initrd.stdout_lines)
-        or kdump_verify_boot_initrd.stdout is search('(?m)\setc/sysctl.d/30-kdump\.conf$')
       become: true
 
     # Loaded state alone cannot prove the capture image can mount root and
