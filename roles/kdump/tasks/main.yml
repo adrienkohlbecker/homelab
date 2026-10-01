@@ -9,6 +9,8 @@
   ansible.posix.sysctl:
     name: kernel.{{ item.name }}
     value: '{{ item.value }}'
+    # roles/boot/files/dracut_host.conf excludes this file from every Dracut
+    # image by name; rename both together.
     sysctl_file: /etc/sysctl.d/30-kdump.conf
   loop:
     - { name: hardlockup_panic, value: '1' }

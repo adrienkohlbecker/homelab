@@ -151,6 +151,16 @@
             and 'hooks/pre-pivot/99-kdump-sysctl.sh' not in kdump_verify_initrd.stdout)
       become: true
 
+    # Without the host file the archive check below would pass vacuously, for
+    # example after renaming it in the converge but not in the image policy.
+    - name: _verify | Host panic policy exists for the image check
+      when: initramfs_use_dracut
+      stat:
+        path: /etc/sysctl.d/30-kdump.conf
+      register: kdump_verify_panic_sysctl
+      failed_when: not kdump_verify_panic_sysctl.stat.exists
+      become: true
+
     - name: _verify | Capture initramfs defers host panic policy until the real root
       when: initramfs_use_dracut
       assert:
