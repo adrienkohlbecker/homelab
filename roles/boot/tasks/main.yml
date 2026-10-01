@@ -41,9 +41,18 @@
     package:
       - dosfstools
       - efibootmgr
-      - mdadm
     cache_valid_time: 3600
-  register: boot_apt
+  become: true
+  tags:
+    - boot
+
+# mdadm assembles the mirrored ESP and swap arrays; its image hook carries
+# mdadm.conf into the boot image.
+- name: Install mdadm
+  apt:
+    package: mdadm
+    cache_valid_time: 3600
+  register: boot_mdadm_apt
   become: true
   tags:
     - boot
@@ -122,12 +131,14 @@
   tags:
     - boot
 
-- name: Rebuild boot images with the boot dependencies
+# The real root assembles the arrays itself, so the running host needs no
+# reboot to pick up the rebuilt image.
+- name: Rebuild boot images with mdadm support
   import_tasks: initramfs_rebuild.yml
   vars:
     boot_initramfs_args:
-      changed: '{{ boot_apt.changed }}'
-      reboot: true
+      changed: '{{ boot_mdadm_apt.changed }}'
+      reboot: false
   tags:
     - boot
 
