@@ -134,6 +134,19 @@
   tags:
     - user
 
+# Noble's cron job runs debian-sa1 every ten minutes, which exits at once on a
+# systemd host and leaves only cron's CMD record. That record comes from a
+# process often gone before journald attributes it to cron.service, so no unit
+# log filter reliably drops it. dpkg keeps a deleted conffile deleted across
+# upgrades, and Resolute ships no such job.
+- name: Remove the no-op sysstat cron job
+  file:
+    path: /etc/cron.d/sysstat
+    state: absent
+  become: true
+  tags:
+    - user
+
 # Enabled timers fire regardless of ENABLED: Noble's units then collect anyway,
 # and Resolute's log a skipped condition every ten minutes. Resolute also adds
 # a rotation timer to Noble's set.

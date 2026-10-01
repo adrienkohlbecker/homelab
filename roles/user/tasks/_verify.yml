@@ -30,36 +30,33 @@
     path: /usr/lib/systemd/system/cron.service
   register: _user_cron_unit
 
-# The sysstat job runs its real command line so the filter sees the exact
-# announcement. The delayed marker job runs outside cron's cgroup, so it bounds
-# the wait without passing through the filter. A PAM session error must still
-# get through; journald attributes it to cron by the sender's cgroup, read from
-# /proc on receipt, so logger stays alive on open stdin until then. The jobs
-# run as nobody embed both filtered phrases in their command text, which any
-# crontab user controls; their CMD records must still be logged. They sleep so
-# the logging cron child is still alive when journald attributes the record to
-# cron.service, where the filter applies.
-- name: _verify | Cron housekeeping stays out of the journal
+# The delayed marker job runs outside cron's cgroup, so it bounds the wait
+# without passing through the filter. A PAM session error must still get
+# through; journald attributes it to cron by the sender's cgroup, read from
+# /proc on receipt, so logger stays alive on open stdin until then. The job run
+# as nobody embeds the filtered phrase in its command text, which any crontab
+# user controls; its CMD record must still be logged. It sleeps so the logging
+# cron child is still alive when journald attributes the record to
+# cron.service, where the filter applies. Records are read by the CRON
+# identifier, not the unit, so one journald could not attribute still counts.
+- name: _verify | Cron PAM session records stay out of the journal
   when: _user_cron_unit.stat.exists
   become: true
   vars:
     _user_pam_error: "pam_unix(cron:session): close_session - error recovering username"
     _user_pam_mimic: "(nobody) CMD (sleep 3 # : pam_unix(cron:session): session opened for user)"
-    _user_sa1_mimic: "(nobody) CMD (sleep 3 #: (root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1)"
   block:
     - name: _verify | Record the journal start time
       command: date +%s
       register: _user_cron_since
       changed_when: false
 
-    - name: _verify | Schedule housekeeping and marker cron jobs
+    - name: _verify | Schedule PAM-session and marker cron jobs
       copy:
         dest: /etc/cron.d/user_verify_cron_filter
         content: |
-          * * * * * root command -v debian-sa1 > /dev/null && debian-sa1 1 1
           * * * * * root sleep 3 && logger -t user_verify_cron_filter done
           * * * * * nobody sleep 3 # : pam_unix(cron:session): session opened for user
-          * * * * * nobody sleep 3 #: (root) CMD (command -v debian-sa1 > /dev/null && debian-sa1 1 1
         mode: "0644"
 
     - name: _verify | Wait for the marker job
@@ -80,22 +77,20 @@
       changed_when: false
 
     - name: _verify | Read cron messages
-      command: journalctl -u cron.service --since @{{ _user_cron_since.stdout }} -o cat
+      command: journalctl -t CRON --since @{{ _user_cron_since.stdout }} -o cat
       register: _user_cron_journal
       changed_when: false
       until: _user_pam_error in _user_cron_journal.stdout_lines
       retries: 5
       delay: 1
 
-    - name: _verify | Only housekeeping cron messages were dropped
+    - name: _verify | Only PAM session records were dropped
       assert:
         that:
           - _user_cron_journal.stdout is search('(?m)^[(]root[)] CMD [(]sleep 3 && logger ')
           - _user_pam_error in _user_cron_journal.stdout_lines
           - _user_pam_mimic in _user_cron_journal.stdout_lines
-          - _user_sa1_mimic in _user_cron_journal.stdout_lines
           - "_user_cron_journal.stdout is not search('(?m)^pam_unix[(]cron:session[)]: session (opened|closed)')"
-          - "_user_cron_journal.stdout is not search('(?m)^[(]root[)] CMD [(]command -v debian-sa1')"
         fail_msg: "{{ _user_cron_journal.stdout_lines }}"
   always:
     - name: _verify | Remove the verification cron jobs
@@ -109,6 +104,41 @@
   register: _user_sar
   changed_when: false
   failed_when: _user_sar.rc == 0 or (_user_sar.stdout + _user_sar.stderr) is not search('No such file')
+
+# Noble ships the removed cron job as a conffile. A reinstall must leave it
+# deleted, as an upgrade does, rather than bring its CMD records back.
+- name: _verify | The sysstat cron job stays removed across a reinstall
+  become: true
+  block:
+    - name: _verify | Read the sysstat conffiles
+      command:
+        argv:
+          - dpkg-query
+          - --showformat=${Conffiles}
+          - --show
+          - sysstat
+      register: _user_sysstat_conffiles
+      changed_when: false
+
+    # The apt module cannot reinstall an installed package.
+    - name: _verify | Reinstall sysstat  # noqa: command-instead-of-module
+      when: _user_sysstat_conffiles.stdout is search('(?m)^ /etc/cron[.]d/sysstat ')
+      command: apt-get install --reinstall --yes sysstat
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      changed_when: true
+
+    - name: _verify | Read the sysstat cron job
+      when: _user_sysstat_conffiles.stdout is search('(?m)^ /etc/cron[.]d/sysstat ')
+      stat:
+        path: /etc/cron.d/sysstat
+      register: _user_sysstat_cron
+
+    - name: _verify | Dpkg left the sysstat cron job deleted
+      when: _user_sysstat_conffiles.stdout is search('(?m)^ /etc/cron[.]d/sysstat ')
+      assert:
+        that:
+          - not _user_sysstat_cron.stat.exists
 
 # Shell startup needs these binaries; verification must not install missing tools.
 - name: _verify | Mise tools execute without installing
@@ -238,10 +268,10 @@
   changed_when: false
   failed_when: _user_sysstat_enabled.stdout | length > 0
 
-# The simulated upgrade wrote a boot record into today's file. Run each
-# collection path the host would: Noble's cron wrapper or Resolute's timer
-# unit, then every hook as systemd-sleep does around a suspend. None may add a
-# record. run-parts would skip sysstat.sleep for its dotted name.
+# The simulated upgrade wrote a boot record into today's file. Run Resolute's
+# timer unit, which gates on ENABLED (Noble's collects whenever its disabled
+# timers fire), then every hook as systemd-sleep does around a suspend. None
+# may add a record. run-parts would skip sysstat.sleep for its dotted name.
 - name: _verify | Disabled collectors add no records
   become: true
   block:
@@ -259,11 +289,6 @@
       stat:
         path: /usr/lib/sysstat/debian-sa1
       register: _user_debian_sa1
-
-    - name: _verify | Run the Noble cron collector
-      when: _user_debian_sa1.stat.exists
-      command: /usr/lib/sysstat/debian-sa1 1 1
-      changed_when: false
 
     - name: _verify | Run the Resolute timer collector  # noqa: command-instead-of-module
       when: not _user_debian_sa1.stat.exists
