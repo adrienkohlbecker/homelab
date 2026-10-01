@@ -22,7 +22,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: bash -n %s
+    validate: "{{ 'bash' if initramfs_use_dracut else 'sh' }} -n %s"
   register: boot_initramfs_config
   become: true
   tags:
