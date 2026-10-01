@@ -205,6 +205,29 @@
   failed_when: "'Negotiated TLS1.3 group: X25519MLKEM768' not in nginx_verify_tls_pq.stderr"
   when: ansible_distribution_release != 'noble'
 
+# The hybrid alone fills the server's first group tuple, so a client that
+# supports it but key-shares only X25519 must be retried onto it. Without a
+# "*" prefix, s_client sends a key share for the first listed group only.
+- name: _verify | A client key-sharing only X25519 is retried onto the hybrid
+  command:
+    argv:
+      - timeout
+      - 10s
+      - openssl
+      - s_client
+      - -connect
+      - "127.0.0.1:443"
+      - -servername
+      - "{{ nginx_verify_host }}"
+      - -brief
+      - -groups
+      - X25519:X25519MLKEM768
+    stdin: Q
+  register: nginx_verify_tls_hrr
+  changed_when: false
+  failed_when: "'Negotiated TLS1.3 group: X25519MLKEM768' not in nginx_verify_tls_hrr.stderr"
+  when: ansible_distribution_release != 'noble'
+
 - name: _verify | A classical-only client still negotiates X25519
   command:
     argv:
