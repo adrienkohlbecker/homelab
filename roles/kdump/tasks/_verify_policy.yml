@@ -28,15 +28,21 @@
       failed_when: _kdump_policy_before.stdout is not search('(?m)\setc/kdump/verify_policy_marker$')
       become: true
 
-    - name: _verify_policy | An earlier role restores the provider policy
-      import_role:
-        name: boot
-        tasks_from: initramfs_provider
+    # A tagged or interrupted run, or a package trigger, can rebuild the boot
+    # images without kdump running. Kdump must still refresh its capture image.
+    - name: _verify_policy | Restore the normal boot policy outside the role
+      lineinfile:
+        path: /etc/dracut.conf.d/90_host.conf
+        line: 'install_items+=" /etc/kdump/verify_policy_marker "'
+        state: absent
+      become: true
 
-    - name: _verify_policy | Another role observes the restored policy
-      import_role:
-        name: boot
-        tasks_from: initramfs_provider
+    - name: _verify_policy | An earlier run rebuilds the boot images without kdump
+      command:
+        cmd: '{{ initramfs_rebuild_command }}'
+        chdir: /
+      changed_when: true
+      become: true
 
     - name: _verify_policy | Kdump reconciles the capture image and loader
       import_role:
