@@ -18,7 +18,7 @@
   become: true
 
 - name: _setup_fresh | Exercise the fresh capture image through a panic
-  import_tasks: _verify.yml
+  import_tasks: _verify_capture.yml
 
 - name: _setup_fresh | Reset the package conffile before the legacy fixture
   apt:

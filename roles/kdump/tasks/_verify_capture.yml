@@ -1,0 +1,112 @@
+# Reboot into reserved crash memory, then prove the loaded capture image can
+# mount root and save a vmcore of a deliberate panic.
+
+- name: _verify_capture | Reboot to exercise crashkernel reservation
+  import_role:
+    name: reboot
+    tasks_from: reboot
+
+# Wait for the oneshot loader to finish before inspecting its image.
+- name: _verify_capture | Wait for the capture loader to finish
+  systemd:
+    name: kdump-tools.service
+  register: kdump_verify_loader
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: kdump_verify_loader.status.ActiveState == 'active'
+  become: true
+
+# Wait for the package-native loaded-state check after reboot.
+- name: _verify_capture | Kdump-config status reports ready to kdump
+  command: kdump-config status
+  register: kdump_verify_config
+  changed_when: false
+  retries: 30
+  delay: 4
+  until: kdump_verify_config.stdout is search('(?m)^current state\s*:\s*ready to kdump\s*$')
+  failed_when: kdump_verify_config.stdout is not search('(?m)^current state\s*:\s*ready to kdump\s*$')
+  become: true
+
+- name: _verify_capture | Capture image contains the kdump safety hooks
+  # Noble's unmkinitramfs probes zstd without following symlinks, so list
+  # the regular per-kernel image rather than kdump-config's initrd symlink.
+  command: '{{ initramfs_list_command }} /var/lib/kdump/initrd.img-{{ ansible_kernel }}'
+  register: kdump_verify_initrd
+  changed_when: false
+  failed_when: >-
+    (not initramfs_use_dracut
+     and 'scripts/local-bottom/kdump-sysctl' not in kdump_verify_initrd.stdout_lines)
+    or (initramfs_use_dracut
+        and 'hooks/pre-pivot/99-kdump-sysctl.sh' not in kdump_verify_initrd.stdout)
+  become: true
+
+# Without the host file the archive check below would pass vacuously, for
+# example after renaming it in the converge but not in the image policy.
+- name: _verify_capture | Host panic policy exists for the image check
+  when: initramfs_use_dracut
+  stat:
+    path: /etc/sysctl.d/30-kdump.conf
+  register: kdump_verify_panic_sysctl
+  failed_when: not kdump_verify_panic_sysctl.stat.exists
+  become: true
+
+- name: _verify_capture | Capture initramfs defers host panic policy until the real root
+  when: initramfs_use_dracut
+  assert:
+    that: kdump_verify_initrd.stdout is not search('(?m)\setc/sysctl.d/30-kdump\.conf$')
+
+- name: _verify_capture | Capture image can mount its ZFS root
+  when: zfs_root
+  assert:
+    that:
+      - >-
+        ('scripts/zfs' in kdump_verify_initrd.stdout_lines)
+        if not initramfs_use_dracut
+        else ('zfs' in kdump_verify_initrd.stdout_lines)
+      - kdump_verify_initrd.stdout is search('(?m)(^|\s)(usr/)?sbin/zpool$')
+    fail_msg: >-
+      The capture image needs ZFS root support and the zpool tool;
+      loading zfs.ko alone cannot import and mount the root dataset.
+
+# Loaded state alone cannot prove the capture image can mount root and
+# write a dump. This hook runs only against disposable QEMU fixtures.
+- name: _verify_capture | Record existing nonempty vmcores before the panic
+  find:
+    paths: /var/crash
+    recurse: true
+    patterns: dump.*
+    size: 1
+  register: kdump_verify_previous_vmcores
+  become: true
+
+- name: _verify_capture | Capture a deliberate panic and return to normal boot
+  reboot:
+    reboot_command: '/usr/bin/sudo -n /bin/sh -c "echo c > /proc/sysrq-trigger"'
+    reboot_timeout: 240
+
+- name: _verify_capture | Find a fresh nonempty captured vmcore
+  find:
+    paths: /var/crash
+    recurse: true
+    patterns: dump.*
+    size: 1
+  register: kdump_verify_vmcores
+  failed_when: >-
+    kdump_verify_vmcores.files | length == 0
+    or (kdump_verify_vmcores.files | map(attribute='mtime') | max | default(0))
+       <= (kdump_verify_previous_vmcores.files | map(attribute='mtime') | max | default(0))
+  become: true
+
+- name: _verify_capture | Saved vmcore contains the deliberate panic
+  shell: |
+    set -euo pipefail
+    tempdir=$(mktemp -d)
+    trap "rm -rf -- \"$tempdir\"" EXIT
+    makedumpfile -R "$tempdir/vmcore" < {{ (kdump_verify_vmcores.files | sort(attribute="mtime") | last).path | quote }}
+    makedumpfile --dump-dmesg "$tempdir/vmcore" "$tempdir/dmesg"
+    grep -F "sysrq triggered crash" "$tempdir/dmesg"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: true
