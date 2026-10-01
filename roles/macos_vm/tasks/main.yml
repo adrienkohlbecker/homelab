@@ -35,7 +35,6 @@
 - name: Install QEMU runtime dependencies
   apt:
     pkg:
-      - dmg2img
       - fdisk
       - mtools
       - ovmf

@@ -1,3 +1,4 @@
-# Resolute updates dmg2img; exercise its exit-zero unsupported-LZFSE path.
+# Resolute ships QEMU 10.2: exercise the pinned pc-q35-8.2 machine model and
+# its DMG decoder's rejection of unsupported LZFSE blocks under that release.
 ubuntu:
   - resolute
