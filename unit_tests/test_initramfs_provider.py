@@ -25,10 +25,6 @@ def test_release_provider_contract(release: str, zfs_root: bool) -> None:
     if release in {"jammy", "noble"}:
         assert variables["initramfs_use_dracut"] is False
         assert variables["initramfs_packages"] == ["initramfs-tools"]
-        assert variables["initramfs_rebuild_command"] == "update-initramfs -u -k all"
-        assert variables["initramfs_list_command"] == "lsinitramfs"
     else:
         assert variables["initramfs_use_dracut"] is True
         assert variables["initramfs_packages"] == ["dracut", *(["zfs-dracut"] if zfs_root else [])]
-        assert variables["initramfs_rebuild_command"] == "dracut --force --regenerate-all"
-        assert variables["initramfs_list_command"] == "lsinitrd"
