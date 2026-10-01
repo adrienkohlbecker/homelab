@@ -1,43 +1,64 @@
-"""Exercise capture-image installation when the optional size estimator fails."""
+"""Exercise the Dracut capture-image hook with command doubles."""
 
 from __future__ import annotations
 
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 HOOK = Path(__file__).resolve().parents[1] / "roles/kdump/files/kdump_dracut.sh"
+KERNEL = "7.0-test"
 
 
-@pytest.mark.parametrize("measurement", ["failure", "zero", "valid", "generation_failure"])
-def test_capture_image_installation(tmp_path: Path, measurement: str) -> None:
+@dataclass
+class Hook:
+    """The production hook staged against command doubles and a scratch kdump dir."""
+
+    path: Path
+    bin_dir: Path
+    target: Path
+    size_file: Path
+
+    def run(self, **env_extra: str) -> subprocess.CompletedProcess[str]:
+        env = dict(os.environ, PATH=f"{self.bin_dir}:{os.environ['PATH']}")
+        env.pop("DEB_MAINT_PARAMS", None)
+        env.pop("INITRD", None)
+        env.update(env_extra)
+        # apt runs the hook from its caller's working directory.
+        caller = self.path.parent / "caller"
+        (caller / "kdump-tools").mkdir(parents=True, exist_ok=True)
+        return subprocess.run(["bash", str(self.path), KERNEL], cwd=caller, env=env, text=True, capture_output=True)
+
+    @property
+    def dracut_ran(self) -> bool:
+        return (self.bin_dir / "dracut.ran").exists()
+
+
+def _hook(tmp_path: Path, **bodies: str | None) -> Hook:
+    """Stage the hook; each body replaces a command double, and None omits it."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     kdump_dir = tmp_path / "kdump"
     kdump_dir.mkdir()
-    kernel = "7.0-test"
-    target = kdump_dir / f"initrd.img-{kernel}"
+    target = kdump_dir / f"initrd.img-{KERNEL}"
     target.write_text("old image")
-    size_file = kdump_dir / f"size_initrd.img-{kernel}"
+    size_file = kdump_dir / f"size_initrd.img-{KERNEL}"
     size_file.write_text("999\n")
-    commands = {
+    commands: dict[str, str | None] = {
         "kdump-config": "exit 0",
-        "linux-version": f"printf '%s\\n' {kernel}",
+        "linux-version": f"printf '%s\\n' {KERNEL}",
         "ischroot": "exit 1",
         # dracut tries --add-confdir as a path before its configuration
         # directories; the caller's planted directory must not resolve.
-        "dracut": '[ ! -d "$3" ] || exit 97\nprintf "new image" >"$4"'
-        + ("\nexit 1" if measurement == "generation_failure" else ""),
-        "3cpio": {
-            "failure": "exit 1",
-            "zero": "exit 0",
-            "valid": "printf 'archive\\t0\\t0\\t0\\t1048577\\n'",
-            "generation_failure": "exit 0",
-        }[measurement],
-    }
+        "dracut": '[ ! -d "$3" ] || exit 97\ntouch "$0.ran"\nprintf "new image" >"$4"',
+        "3cpio": "exit 0",
+    } | bodies
     for name, body in commands.items():
+        if body is None:
+            continue
         executable = bin_dir / name
         executable.write_text(f"#!/bin/bash\nset -euo pipefail\n{body}\n")
         executable.chmod(0o755)
@@ -49,24 +70,77 @@ def test_capture_image_installation(tmp_path: Path, measurement: str) -> None:
         .replace("/usr/sbin/kdump-config", str(bin_dir / "kdump-config"))
         .replace("/var/lib/kdump", str(kdump_dir))
     )
-    env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
-    env.pop("DEB_MAINT_PARAMS", None)
-    env.pop("INITRD", None)
-    # apt runs the hook from its caller's working directory.
-    caller = tmp_path / "caller"
-    (caller / "kdump-tools").mkdir(parents=True)
-    result = subprocess.run(["bash", str(hook), kernel], cwd=caller, env=env, text=True, capture_output=True)
+    return Hook(hook, bin_dir, target, size_file)
+
+
+@pytest.mark.parametrize("measurement", ["failure", "zero", "valid", "generation_failure"])
+def test_capture_image_installation(tmp_path: Path, measurement: str) -> None:
+    hook = _hook(
+        tmp_path,
+        dracut='[ ! -d "$3" ] || exit 97\nprintf "new image" >"$4"'
+        + ("\nexit 1" if measurement == "generation_failure" else ""),
+        **{
+            "3cpio": {
+                "failure": "exit 1",
+                "zero": "exit 0",
+                "valid": "printf 'archive\\t0\\t0\\t0\\t1048577\\n'",
+                "generation_failure": "exit 0",
+            }[measurement]
+        },
+    )
+    result = hook.run()
 
     if measurement == "generation_failure":
         assert result.returncode != 0
-        assert target.read_text() == "old image"
-        assert size_file.read_text() == "999\n"
+        assert hook.target.read_text() == "old image"
+        assert hook.size_file.read_text() == "999\n"
     else:
         assert result.returncode == 0, result.stderr
-        assert target.read_text() == "new image"
+        assert hook.target.read_text() == "new image"
         if measurement == "valid":
-            assert size_file.read_text() == "2\n"
+            assert hook.size_file.read_text() == "2\n"
         else:
             assert "estimator may be unavailable" in result.stderr
-            assert not size_file.exists()
-    assert not Path(f"{target}.new").exists()
+            assert not hook.size_file.exists()
+    assert not Path(f"{hook.target}.new").exists()
+
+
+@pytest.mark.parametrize(
+    ("bodies", "env"),
+    [
+        pytest.param({"kdump-config": None}, {}, id="no_kdump_config"),
+        pytest.param({"linux-version": "printf 'other\\n'"}, {}, id="unknown_kernel"),
+        pytest.param({}, {"INITRD": "No"}, id="initrd_disabled"),
+        pytest.param({"ischroot": "exit 0"}, {}, id="chroot"),
+        pytest.param({}, {"DEB_MAINT_PARAMS": f"'remove' '{KERNEL}'"}, id="remove_action"),
+    ],
+)
+def test_hook_skips_without_building(tmp_path: Path, bodies: dict[str, str | None], env: dict[str, str]) -> None:
+    hook = _hook(tmp_path, **bodies)
+
+    result = hook.run(**env)
+
+    assert result.returncode == 0, result.stderr
+    assert not hook.dracut_ran
+    assert hook.target.read_text() == "old image"
+    assert hook.size_file.read_text() == "999\n"
+
+
+def test_configure_action_builds(tmp_path: Path) -> None:
+    hook = _hook(tmp_path)
+
+    result = hook.run(DEB_MAINT_PARAMS="'configure' ''")
+
+    assert result.returncode == 0, result.stderr
+    assert hook.dracut_ran
+    assert hook.target.read_text() == "new image"
+
+
+def test_size_sums_every_archive_segment(tmp_path: Path) -> None:
+    # Early microcode and the main archive are separate cpio segments.
+    hook = _hook(tmp_path, **{"3cpio": "printf 'early\\t0\\t0\\t0\\t1048576\\nmain\\t0\\t0\\t0\\t1048577\\n'"})
+
+    result = hook.run()
+
+    assert result.returncode == 0, result.stderr
+    assert hook.size_file.read_text() == "3\n"
