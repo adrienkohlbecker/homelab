@@ -118,7 +118,7 @@
           grub_scope: all
 
 # Noble keeps its broad driver policy. Resolute's host-only image is exercised
-# by the normal-boot reboot check above.
+# by the normal-boot reboot check above and the NVMe driver check below.
 - name: _verify | Find the host initramfs (cloud images may boot initrd-less)
   stat:
     path: /boot/initrd.img-{{ ansible_kernel }}
@@ -193,6 +193,17 @@
         or _boot_verify_dracut_files.stdout is search('(?m)\setc/sysctl.d/30-kdump\.conf$')
         or _boot_verify_dracut_files.stdout is search('(?m)\setc/zfs/zpool\.cache$')
       become: true
+
+    # Sloppy host-only mode keeps the NVMe and Intel VMD drivers even on this
+    # virtio-only fixture, so a board swap that keeps rpool on NVMe still boots.
+    - name: _verify | Host-only image keeps the NVMe root drivers
+      when: zfs_root
+      assert:
+        that:
+          - _boot_verify_dracut_files.stdout is search('(?m)/nvme\.ko(\.(zst|xz|gz))?$')
+          - >-
+            ansible_architecture != 'x86_64'
+            or _boot_verify_dracut_files.stdout is search('(?m)/vmd\.ko(\.(zst|xz|gz))?$')
   always:
     - name: _verify | Remove the sysctl fixtures
       file:
