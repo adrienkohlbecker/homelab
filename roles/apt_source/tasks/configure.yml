@@ -22,6 +22,8 @@
 #                  fleet-wide safe-upgrade stay inside the series and fail
 #                  when it vanishes from the index. Omitting it removes a
 #                  previously installed pin.
+#   condition:     default true; false skips the call and publishes
+#                  apt_source_<name>_changed as false
 #
 # Exposes apt_source_<name>_changed so callers can gate dependent installs until
 # the repository, signing key, and pin are ready.
@@ -34,7 +36,7 @@
       - apt_source_args is mapping
       # A mistyped key is dropped silently otherwise, and a mistyped pin
       # reads as no pin, which deletes the series hold below.
-      - apt_source_args.keys() | difference(['name', 'key_url', 'key_sha256', 'uris', 'suites', 'components', 'pin']) | length == 0
+      - apt_source_args.keys() | difference(['name', 'key_url', 'key_sha256', 'uris', 'suites', 'components', 'pin', 'condition']) | length == 0
       - apt_source_args.name is defined
       - apt_source_args.key_url is defined
       - apt_source_args.key_sha256 is defined
@@ -63,7 +65,12 @@
       and a version glob; no other keys are accepted;
       got {{ apt_source_args }}
 
+- name: configure | Resolve the condition for {{ apt_source_args.name }}
+  set_fact:
+    _apt_source_condition: "{{ apt_source_args.condition | default(true) }}"
+
 - name: configure | Fetch repository key (armored) for {{ apt_source_args.name }}
+  when: _apt_source_condition
   get_url:
     url: "{{ apt_source_args.key_url }}"
     dest: /usr/share/keyrings/{{ apt_source_args.name }}.asc
@@ -75,7 +82,9 @@
   register: apt_source_key
 
 - name: configure | Configure repository for {{ apt_source_args.name }}
-  when: apt_deb822_available | default(true)
+  when:
+    - _apt_source_condition
+    - apt_deb822_available | default(true)
   deb822_repository:
     name: "{{ apt_source_args.name }}"
     uris: "{{ apt_source_args.uris }}"
@@ -108,7 +117,9 @@
 # catches versions outside the series; without it they keep their default
 # priority and install once the series leaves the index.
 - name: configure | Pin packages for {{ apt_source_args.name }}  # noqa: require-validate
-  when: apt_source_args.pin is defined
+  when:
+    - _apt_source_condition
+    - apt_source_args.pin is defined
   copy:
     content: |
       # Ansible managed
@@ -128,7 +139,9 @@
   register: apt_source_pin
 
 - name: configure | Remove package pin for {{ apt_source_args.name }}
-  when: apt_source_args.pin is not defined
+  when:
+    - _apt_source_condition
+    - apt_source_args.pin is not defined
   file:
     path: /etc/apt/preferences.d/{{ apt_source_args.name }}
     state: absent
@@ -138,8 +151,9 @@
 - name: configure | Export change signal for {{ apt_source_args.name }}
   set_fact:
     "apt_source_{{ apt_source_args.name }}_changed": >-
-      {{ apt_source_repo is changed
-         or apt_source_key is changed
-         or apt_source_repo is skipped
-         or apt_source_pin is changed
-         or apt_source_unpin is changed }}
+      {{ _apt_source_condition
+         and (apt_source_repo is changed
+              or apt_source_key is changed
+              or apt_source_repo is skipped
+              or apt_source_pin is changed
+              or apt_source_unpin is changed) }}
