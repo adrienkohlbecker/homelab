@@ -47,7 +47,10 @@ fail() {
 
 zpool_status -s | tee "$TMP_OUTPUT" || echo "Warning: zpool status report did not complete" | tee -a "$TMP_OUTPUT" >&2
 
-ZFS_VOLUMES=$(zpool list -H -o name)
+if ! ZFS_VOLUMES=$(timeout -k 10 60 zpool list -H -o name); then
+  fail "Cannot list pools"
+  ZFS_VOLUMES=
+fi
 
 # Health — `zpool status -x` is the authoritative summary: it prints exactly
 # "all pools are healthy" when every imported pool is ONLINE with no known
@@ -103,7 +106,10 @@ for volume in $ZFS_VOLUMES; do
   SCRUB_RAW_DATES=$(awk '/scan: (scrub repaired|scrub paused|resilvered)/ {print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}' <<<"$vol_status")
   age_basis=""
   if [[ -z "$SCRUB_RAW_DATES" ]]; then
-    SCRUB_DATE=$(zfs get creation -Hpo value "$volume")
+    SCRUB_DATE=$(timeout -k 10 60 zfs get creation -Hpo value "$volume") || {
+      fail "Cannot check scrub age for $volume"
+      continue
+    }
     age_basis=" (age since pool creation; no usable scan timestamp)"
   else
     # Sequential rebuilds add one scan line per vdev alongside scrub history.

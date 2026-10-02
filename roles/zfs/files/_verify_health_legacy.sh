@@ -8,7 +8,10 @@ cat >"$scratch/bin/zpool" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 case "$*" in
-  "list -H -o name") echo tank ;;
+  "list -H -o name")
+    [[ -z "${ZFS_VERIFY_LIST_FAIL:-}" ]] || exit 2
+    echo tank
+    ;;
   "status -x") echo 'all pools are healthy' ;;
   "status "*) cat "$ZFS_VERIFY_STATUS" ;;
   *) exit 2 ;;
@@ -26,6 +29,10 @@ EOF
 cat >"$scratch/bin/zfs" <<'EOF'
 #!/bin/bash
 set -euo pipefail
+if [[ -n "${ZFS_VERIFY_CREATION_FAIL:-}" ]]; then
+  echo >&2 'Injected creation query failure'
+  exit 2
+fi
 if [[ -n "${ZFS_VERIFY_CREATION:-}" ]]; then
   echo "$ZFS_VERIFY_CREATION"
   exit 0
@@ -85,4 +92,6 @@ check_status 1 "scan: scrub repaired 0B in 00:00:01 with 0 errors on $recent_dat
 scan: resilvered (mirror-0) 64M in 00:00:01 with 0 errors on an invalid date" 'Cannot parse scrub date for tank'
 ZFS_VERIFY_CREATION=1700000000 check_status 1 'scan: none requested' 'age since pool creation; no usable scan timestamp'
 ZFS_VERIFY_CREATION=1700000000 check_status 1 "scan: resilver canceled on $recent_date" 'age since pool creation; no usable scan timestamp'
-echo 'Legacy scan dates select the newest scrub, resilver, rebuild, or pause and reject malformed dates'
+ZFS_VERIFY_LIST_FAIL=1 check_status 1 "scan: scrub repaired 0B in 00:00:01 with 0 errors on $recent_date" 'Cannot list pools'
+ZFS_VERIFY_CREATION_FAIL=1 check_status 1 'scan: none requested' 'Cannot check scrub age for tank'
+echo 'Legacy scan dates select the newest scrub, resilver, rebuild, or pause and reject malformed dates; failed pool and creation queries are counted and mailed'
