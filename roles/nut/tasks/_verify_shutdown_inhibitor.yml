@@ -59,7 +59,7 @@
 # reboot below can only succeed by bypassing logind. The systemd module cannot
 # request a logind reboot.
 - name: _verify | An unflagged reboot is refused while the lock is held
-  when: ansible_distribution_release not in ['noble']
+  when: ansible_distribution_release != 'noble'
   command: /usr/bin/systemctl reboot # noqa: command-instead-of-module
   register: nut_verify_unflagged
   changed_when: false

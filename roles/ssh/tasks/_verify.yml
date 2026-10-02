@@ -94,7 +94,7 @@
   vars:
     ssh_verify_expected_kex: >-
       {{ 'sntrup761x25519-sha512@openssh.com'
-         if ansible_distribution_release in ['noble']
+         if ansible_distribution_release == 'noble'
          else 'mlkem768x25519-sha256' }}
   assert:
     that:
