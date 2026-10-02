@@ -28,7 +28,7 @@
 # The apt role publishes apt_deb822_available=false when a fresh check-mode run
 # can only predict installation of deb822_repository's Python dependency.
 
-- name: Assert apt_source args for {{ apt_source_args.name }}
+- name: configure | Assert apt_source args for {{ apt_source_args.name }}
   assert:
     that:
       - apt_source_args.name is defined
@@ -57,7 +57,7 @@
       and a version glob;
       got {{ apt_source_args }}
 
-- name: Fetch repository key (armored) for {{ apt_source_args.name }}
+- name: configure | Fetch repository key (armored) for {{ apt_source_args.name }}
   get_url:
     url: "{{ apt_source_args.key_url }}"
     dest: /usr/share/keyrings/{{ apt_source_args.name }}.asc
@@ -68,7 +68,7 @@
   become: true
   register: apt_source_key
 
-- name: Configure repository for {{ apt_source_args.name }}
+- name: configure | Configure repository for {{ apt_source_args.name }}
   when: apt_deb822_available | default(true)
   deb822_repository:
     name: "{{ apt_source_args.name }}"
@@ -83,7 +83,7 @@
 # deb822_repository writes the .sources file but does not refresh apt. Use a
 # strict refresh after changing the repo so a broken source fails here rather
 # than as a missing package in the caller.
-- name: Refresh apt cache after repository change for {{ apt_source_args.name }}  # noqa: command-instead-of-module
+- name: configure | Refresh apt cache after repository change for {{ apt_source_args.name }}  # noqa: command-instead-of-module
   when:
     - apt_source_repo is changed
     - not ansible_check_mode
@@ -101,7 +101,7 @@
 # APT applies the first record matching a version, so the second record only
 # catches versions outside the series; without it they keep their default
 # priority and install once the series leaves the index.
-- name: Pin packages for {{ apt_source_args.name }}  # noqa: require-validate
+- name: configure | Pin packages for {{ apt_source_args.name }}  # noqa: require-validate
   when: apt_source_args.pin is defined
   copy:
     content: |
@@ -121,7 +121,7 @@
   become: true
   register: apt_source_pin
 
-- name: Remove package pin for {{ apt_source_args.name }}
+- name: configure | Remove package pin for {{ apt_source_args.name }}
   when: apt_source_args.pin is not defined
   file:
     path: /etc/apt/preferences.d/{{ apt_source_args.name }}
@@ -129,7 +129,7 @@
   become: true
   register: apt_source_unpin
 
-- name: Export change signal for {{ apt_source_args.name }}
+- name: configure | Export change signal for {{ apt_source_args.name }}
   set_fact:
     "apt_source_{{ apt_source_args.name }}_changed": >-
       {{ apt_source_repo is changed

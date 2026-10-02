@@ -118,7 +118,7 @@
     - name: _verify | The argument assertion rejected the bare wildcard
       assert:
         that:
-          - ansible_failed_task.name is search('^Assert apt_source args')
+          - ansible_failed_task.name is search('^configure [|] Assert apt_source args')
         fail_msg: "Expected the argument assertion to fail; got {{ ansible_failed_task.name }}"
 
 - name: _verify | Drop the docker-ce-cli pin
