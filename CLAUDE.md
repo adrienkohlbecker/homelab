@@ -178,6 +178,7 @@ skipped import cannot uphold the result-variable contract for its callers.
 | `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.gid`; `/mnt/services/<svc>` dir |
 | `systemd_unit` | `tasks_from: {install,unit,remove}` | unit/drop-in install results; repository-owned unit lifecycle and removal |
 | `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` units |
+| `apt_source` | `tasks_from: {configure,remove}` | deb822 source + scoped signing key + optional series pin; `apt_source_<name>_changed` |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
 | `boot` | `import_role: name: boot, tasks_from: {cmdline,initramfs_provider,initramfs_rebuild}` | kernel cmdline fragment; release image generator + policy; image rebuild with an optional reboot request (boot's `main.yml` is a real role entry point) |
 | `zfs_dataset` | `tasks_from: dataset` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts |
