@@ -35,13 +35,13 @@
           "swap_used"
         ]
       },
-      "disk": {
+      "diskio": {
         "resources": [
-          "/",
-          "/mnt/scratch"
+          "nvme*n1",
+          "md*"
         ],
         "measurement": [
-          "used_percent"
+          "io_time"
         ]
       }
     }
