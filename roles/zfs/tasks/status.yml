@@ -22,6 +22,10 @@
   tags:
     - zfs
 
+# Transitional: OpenZFS 2.2 has no `zpool status -j`. When noble leaves
+# data/ubuntu_releases.yml, delete this script, _verify_health_legacy.sh, the
+# text branch in zfs_status.py and the _verify_scan.sh date and `status -p`
+# stubs, and replace this task with `state: absent`.
 - name: status | Install the Noble health parser
   copy:
     src: zfs_health_legacy.sh
