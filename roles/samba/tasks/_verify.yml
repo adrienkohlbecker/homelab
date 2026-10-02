@@ -128,8 +128,8 @@
 
 # Proves the critical per-share-key fix: the smbtest share renders, and its
 # `valid users` restriction is present (the regression that silently dropped it
-# would leave the share world-accessible with this line absent). Samba 4.23
-# reports `smb ports` as `server smb transports`, so accept either label.
+# would leave the share world-accessible with this line absent). The NetBIOS
+# policy is proven at the socket level above.
 - name: _verify | Effective Samba config preserves share and hardening policy
   assert:
     that:
@@ -141,11 +141,9 @@
       - samba_testparm_verbose.stdout is search('server smb encrypt = required')
       - samba_testparm_verbose.stdout is search('disable spoolss = Yes')
       - samba_testparm_verbose.stdout is search('load printers = No')
-      - samba_testparm_verbose.stdout is search('disable netbios = Yes')
-      - samba_testparm_verbose.stdout is search('(?:smb ports|server smb transports) = 445')
     fail_msg: >-
       testparm -v does not report the expected share, Time Machine, encryption,
-      printing, or NetBIOS policy.
+      or printing policy.
 
 - name: _verify | Printing helper is not running
   command: pgrep -x samba-bgqd
