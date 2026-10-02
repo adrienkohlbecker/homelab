@@ -268,48 +268,6 @@
   changed_when: false
   failed_when: nginx_verify_h2.stdout != '2'
 
-# Liveness for the refusal below: the same listener still serves HTTP/1.1.
-- name: _verify | The cleartext listener serves HTTP/1.1
-  command:
-    argv:
-      - curl
-      - --silent
-      - --show-error
-      - --max-time
-      - '5'
-      - --http1.1
-      - --output
-      - /dev/null
-      - --write-out
-      - "%{http_version} %{http_code}"
-      - http://127.0.0.1/nginx_status
-  register: nginx_verify_h1
-  changed_when: false
-  failed_when: nginx_verify_h1.stdout != '1.1 200'
-
-# nginx >= 1.25.1 accepts cleartext HTTP/2 prior knowledge on any listener
-# whose default server enables http2, so only the TLS vhosts may enable it,
-# never the public :80 catch-all. A refused preface surfaces as curl's HTTP/2
-# framing error (16, Resolute) or receive failure (56, Noble); success or any
-# other error fails the check.
-- name: _verify | The cleartext listener refuses HTTP/2 prior knowledge
-  command:
-    argv:
-      - curl
-      - --silent
-      - --show-error
-      - --max-time
-      - '5'
-      - --http2-prior-knowledge
-      - --output
-      - /dev/null
-      - --write-out
-      - "%{http_version}"
-      - http://127.0.0.1/nginx_status
-  register: nginx_verify_h2c
-  changed_when: false
-  failed_when: nginx_verify_h2c.rc not in [16, 56]
-
 # Access-log credential redaction rebuilds the request line from the method,
 # redacted URI, and protocol. The request is logged regardless of status, so
 # the gate-mode 302 exercises it. Poll until the buffered line reaches disk.
@@ -390,6 +348,30 @@
     status_code: 200
   register: nginx_verify_stub
   failed_when: "'Active connections' not in (nginx_verify_stub.content | default(''))"
+
+# nginx >= 1.25.1 accepts cleartext HTTP/2 prior knowledge on any listener
+# whose default server enables http2, so only the TLS vhosts may enable it,
+# never the public :80 catch-all. stub_status above proves this listener is
+# live, so a refused preface surfaces as curl's HTTP/2 framing error (16,
+# Resolute) or receive failure (56, Noble); success or any other error fails
+# the check.
+- name: _verify | The cleartext listener refuses HTTP/2 prior knowledge
+  command:
+    argv:
+      - curl
+      - --silent
+      - --show-error
+      - --max-time
+      - '5'
+      - --http2-prior-knowledge
+      - --output
+      - /dev/null
+      - --write-out
+      - "%{http_version}"
+      - http://127.0.0.1/nginx_status
+  register: nginx_verify_h2c
+  changed_when: false
+  failed_when: nginx_verify_h2c.rc not in [16, 56]
 
 # HTTP Basic service accounts need their Authorization header on the Authelia
 # subrequest, while the protected application should not receive the reusable
