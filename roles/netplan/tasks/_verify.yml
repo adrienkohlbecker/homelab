@@ -187,14 +187,14 @@
 # SSH readiness does not imply the probe ran: it queues behind wait-online,
 # which may still be waiting for a DNS server. Wait-online's own timeout is
 # 120 seconds, so this bound covers a timed-out wait as well.
-- name: _verify boot | Wait for the network-online probe to finish  # noqa: command-instead-of-module
-  command: systemctl show netplan_online_probe.service --property=ActiveState --value
+- name: _verify boot | Wait for the network-online probe to finish
+  systemd:
+    name: netplan_online_probe.service
   register: netplan_verify_probe_state
-  until: netplan_verify_probe_state.stdout in ['active', 'failed']
+  until: netplan_verify_probe_state.status.ActiveState in ['active', 'failed']
   retries: 30
   delay: 5
-  changed_when: false
-  failed_when: netplan_verify_probe_state.stdout != 'active'
+  failed_when: netplan_verify_probe_state.status.ActiveState != 'active'
 
 - name: _verify boot | Read the default route seen by network-online dependents
   slurp:
@@ -202,24 +202,25 @@
   register: netplan_verify_online_probe
   become: true
 
-- name: _verify boot | Read the wait-online outcome  # noqa: command-instead-of-module
-  command: >-
-    systemctl show systemd-networkd-wait-online.service
-    --property=ConditionResult,ActiveState,Result,ExecStart
+- name: _verify boot | Read the wait-online outcome
+  systemd:
+    name: systemd-networkd-wait-online.service
   register: netplan_verify_wait_online
-  changed_when: false
 
 - name: _verify boot | Confirm network-online waited for the uplink
   vars:
     _netplan_uplink: "{{ (netplan_verify_default_route.stdout | from_json | first).dev }}"
     _netplan_probe_routes: "{{ netplan_verify_online_probe.content | b64decode | from_json }}"
+    _netplan_wait_online: "{{ netplan_verify_wait_online.status }}"
   assert:
     that:
-      - "'ConditionResult=yes' in netplan_verify_wait_online.stdout_lines"
-      - "'ActiveState=active' in netplan_verify_wait_online.stdout_lines"
-      - "'Result=success' in netplan_verify_wait_online.stdout_lines"
+      - _netplan_wait_online.ConditionResult == 'yes'
+      - _netplan_wait_online.ActiveState == 'active'
+      - _netplan_wait_online.Result == 'success'
       - _netplan_uplink in (_netplan_probe_routes | map(attribute='dev'))
     fail_msg: |-
       network-online.target was reached before {{ _netplan_uplink }} had its default route.
       Routes seen by the probe: {{ _netplan_probe_routes }}
-      {{ netplan_verify_wait_online.stdout }}
+      wait-online: ConditionResult={{ _netplan_wait_online.ConditionResult }}
+      ActiveState={{ _netplan_wait_online.ActiveState }} Result={{ _netplan_wait_online.Result }}
+      ExecStart={{ _netplan_wait_online.ExecStart }}
