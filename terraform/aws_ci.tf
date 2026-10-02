@@ -353,6 +353,62 @@ resource "aws_ecr_pull_through_cache_rule" "ci" {
   depends_on = [aws_secretsmanager_secret_version.ci_ecr]
 }
 
+# Cache eviction. ECR cannot expire by last pull (sinceImagePulled only
+# archives, with a 90-day floor and no pulls from archive), so recency is
+# approximated: each repo keeps its newest tag, the role's current pin, and
+# superseded pins go at once; a cache miss re-imports from upstream. Untagged
+# images are an index's per-arch children (protected while it is referenced),
+# indexes orphaned by an upstream re-tag, and digest-pinned pulls such as
+# wolweb, which the 30-day window keeps from re-importing on every run.
+locals {
+  ci_ecr_lifecycle_policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep the newest tag"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 1
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Expire untagged images after 30 days"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 30
+        }
+        action = { type = "expire" }
+      },
+    ]
+  })
+}
+
+# Pull-through cache creates repositories on first pull; the template gives
+# each new one the policy.
+resource "aws_ecr_repository_creation_template" "ci" {
+  prefix           = "ROOT"
+  description      = "homelab CI pull-through cache"
+  applied_for      = ["PULL_THROUGH_CACHE"]
+  lifecycle_policy = local.ci_ecr_lifecycle_policy
+}
+
+# The template only reaches repositories created after it, so the policy is
+# also attached to every existing one.
+data "aws_ecr_repositories" "ci" {}
+
+resource "aws_ecr_lifecycle_policy" "ci" {
+  for_each = data.aws_ecr_repositories.ci.names
+
+  repository = each.value
+  policy     = local.ci_ecr_lifecycle_policy
+}
+
 # ─── Networking ──────────────────────────────────────────────────────────────
 # Dedicated CI VPC: public IPv4 subnets across 3 AZs, IGW only — no NAT
 # gateway (a ~$32/mo standing trap). Each qemu host gets an ephemeral public
