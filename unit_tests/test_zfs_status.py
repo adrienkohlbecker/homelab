@@ -34,6 +34,19 @@ def document(pools):
     return json.dumps({"output_version": {"command": "zpool status", "vers_major": 0, "vers_minor": 1}, "pools": pools})
 
 
+def test_run_pins_the_c_locale(monkeypatch):
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, stdout="zfs-2.4.1\n")
+
+    monkeypatch.setattr(status.subprocess, "run", run)
+    assert status.run("zpool", "--version") == "zfs-2.4.1\n"
+    assert calls[0][0] == ["timeout", "-k", "10", "60", "zpool", "--version"]
+    assert calls[0][1]["env"]["LC_ALL"] == "C"
+
+
 def test_parses_integer_counters_without_rounding(pool):
     pool["vdevs"]["disk0"]["checksum_errors"] = 2**60 + 1
     assert status.parse_status(document({"tank": pool}))["tank"]["vdevs"]["disk0"]["checksum_errors"] == 2**60 + 1

@@ -18,8 +18,14 @@ class StatusError(ValueError):
 
 
 def run(*args: str) -> str:
-    """Bound ZFS queries, including SIGKILL escalation for a wedged pool."""
-    return subprocess.run(["timeout", "-k", "10", "60", *args], check=True, capture_output=True, text=True).stdout
+    """Bound ZFS queries in the C locale, with SIGKILL escalation for a wedged pool."""
+    return subprocess.run(
+        ["timeout", "-k", "10", "60", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "LC_ALL": "C"},
+    ).stdout
 
 
 def integer(value: Any, field: str) -> int:
@@ -141,14 +147,8 @@ def scan_in_progress(pool: str | None, *, scrub_only: bool = False) -> bool:
     pools = [pool] if pool else []
     if supports_json():
         return any(scan_active(status, scrub_only=scrub_only) for status in read_status(*pools).values())
-    # OpenZFS 2.2 has no JSON status. Pin its text fallback to the C locale.
-    output = subprocess.run(
-        ["timeout", "-k", "10", "60", "zpool", "status", *pools],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={**os.environ, "LC_ALL": "C"},
-    ).stdout
+    # OpenZFS 2.2 has no JSON status; run() pins its prose to the C locale.
+    output = run("zpool", "status", *pools)
     return "scrub in progress" in output or (
         not scrub_only and re.search(r"resilver(?: \([^)]*\))? in progress", output) is not None
     )

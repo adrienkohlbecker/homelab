@@ -5,6 +5,10 @@ set -euo pipefail
   exit 1
 }
 
+# The checks below match zpool prose and parse its dates; pin the locale as
+# zfs_status.py does for its own queries.
+export LC_ALL=C
+
 # zpool status issues blocking I/O; on a SUSPENDED pool (too many devices lost,
 # all I/O wedged) it can hang indefinitely and stall the nightly timer. Bound
 # every call so a wedged pool surfaces as a counted failure plus email the same
