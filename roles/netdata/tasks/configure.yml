@@ -243,7 +243,8 @@
     enabled: true
     state: >-
       {{ 'restarted'
-         if netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed
+         if netdata_apt.changed
+            or netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed
             or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed
             or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed
             or netdata_intelgpu_absent.changed
