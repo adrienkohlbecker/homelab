@@ -88,15 +88,20 @@ def parse_status(raw: str) -> dict[str, Any]:
             ):
                 raise StatusError(f"Unknown spare state on {device}: {spare.get('state')!r}")
         scan = mapping(pool.get("scan_stats", {}), f"{name}.scan_stats")
+        # OpenZFS reports error scrubs only in the err_scrub_* fields below.
         if "function" in scan:
-            if scan["function"] not in ("NONE", "SCRUB", "RESILVER", "ERRORSCRUB"):
+            if scan["function"] not in ("NONE", "SCRUB", "RESILVER"):
                 raise StatusError(f"Unknown scan function on {name}: {scan['function']!r}")
-            if scan.get("state") not in ("NONE", "SCANNING", "FINISHED", "CANCELED", "ERRORSCRUBBING"):
+            if scan.get("state") not in ("NONE", "SCANNING", "FINISHED", "CANCELED"):
                 raise StatusError(f"Unknown scan state on {name}: {scan.get('state')!r}")
             for field in ("end_time", "scrub_pause"):
                 integer(scan.get(field), f"{name}.{field}")
         elif scan and "rebuild_stats" not in scan:
             raise StatusError(f"Missing scan function on {name}")
+        if "err_scrub_state" in scan:
+            if scan["err_scrub_state"] not in ("NONE", "SCANNING", "FINISHED", "CANCELED", "ERRORSCRUBBING"):
+                raise StatusError(f"Unknown err_scrub_state on {name}: {scan['err_scrub_state']!r}")
+            integer(scan.get("err_scrub_pause"), f"{name}.err_scrub_pause")
         for device, value in mapping(scan.get("rebuild_stats", {}), "rebuild_stats").items():
             rebuild = mapping(value, device)
             if rebuild.get("state") not in ("NONE", "ACTIVE", "CANCELED", "COMPLETE"):
@@ -131,7 +136,11 @@ def scan_active(pool: dict[str, Any], *, scrub_only: bool = False) -> bool:
             return scan["scrub_pause"] == 0
         if scan.get("function") == "RESILVER" and not scrub_only:
             return True
-    return not scrub_only and any(rebuild["state"] == "ACTIVE" for rebuild in scan.get("rebuild_stats", {}).values())
+    if scrub_only:
+        return False
+    if scan.get("err_scrub_state") == "ERRORSCRUBBING" and scan["err_scrub_pause"] == 0:
+        return True
+    return any(rebuild["state"] == "ACTIVE" for rebuild in scan.get("rebuild_stats", {}).values())
 
 
 def scan_in_progress(pool: str | None, *, scrub_only: bool = False) -> bool:

@@ -172,6 +172,36 @@ def test_scan_activity_distinguishes_pause_and_history(pool, function, state, pa
     assert status.scan_active(pool, scrub_only=scrub_only) is active
 
 
+@pytest.mark.parametrize(
+    ("err_state", "err_pause", "active", "scrub_only"),
+    [
+        pytest.param("ERRORSCRUBBING", 0, True, False, id="active_error_scrub"),
+        pytest.param("ERRORSCRUBBING", 0, False, True, id="error_scrub_not_pausable"),
+        pytest.param("ERRORSCRUBBING", 95, False, False, id="paused_error_scrub"),
+        pytest.param("FINISHED", 0, False, False, id="finished_error_scrub"),
+    ],
+)
+def test_error_scrub_activity_comes_from_its_own_fields(pool, err_state, err_pause, active, scrub_only):
+    pool["scan_stats"].update(err_scrub_func="ERRORSCRUB", err_scrub_state=err_state, err_scrub_pause=err_pause)
+    parsed = status.parse_status(document({"tank": pool}))["tank"]
+    assert status.scan_active(parsed, scrub_only=scrub_only) is active
+
+
+@pytest.mark.parametrize(("field", "value"), [("function", "ERRORSCRUB"), ("state", "ERRORSCRUBBING")])
+def test_error_scrub_never_appears_in_the_main_scan_fields(pool, field, value):
+    pool["scan_stats"][field] = value
+    with pytest.raises(status.StatusError):
+        status.parse_status(document({"tank": pool}))
+
+
+@pytest.mark.parametrize(("field", "value"), [("err_scrub_state", "unexpected"), ("err_scrub_pause", "0")])
+def test_rejects_unknown_or_incomplete_error_scrub(pool, field, value):
+    pool["scan_stats"].update(err_scrub_func="ERRORSCRUB", err_scrub_state="ERRORSCRUBBING", err_scrub_pause=0)
+    pool["scan_stats"][field] = value
+    with pytest.raises(status.StatusError, match="err_scrub"):
+        status.parse_status(document({"tank": pool}))
+
+
 def test_sequential_resilver_is_active_but_not_a_scrub(pool):
     pool["scan_stats"] = {"rebuild_stats": {"mirror-0": {"state": "ACTIVE"}}}
     parsed = status.parse_status(document({"tank": pool}))["tank"]
