@@ -17,7 +17,7 @@
     group: root
     mode: "0755"
     backup: true
-    validate: python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' %s
+    validate: python3 -m py_compile %s
   become: true
   tags:
     - zfs
