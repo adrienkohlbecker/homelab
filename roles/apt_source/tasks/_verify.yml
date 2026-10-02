@@ -192,10 +192,18 @@
       got changed={{ apt_source_docker_changed }} and policy:
       {{ _apt_source_skipped_policy.stdout }}
 
-# Removal consumes the standalone source configured above: its package must
-# stop resolving and its lists must be pruned once the source is gone, and a
-# repeat call must be a no-op. apt names each list file after its URI, with
+# Removal consumes the standalone source configured above: its pin and package
+# must stop resolving and its lists must be pruned once the source is gone, and
+# a repeat call must be a no-op. apt names each list file after its URI, with
 # the scheme dropped and slashes turned into underscores.
+- name: _verify | Pin docker-ce-cli before removing the source
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args: >-
+      {{ _apt_source_docker | combine({'pin': {'package': 'docker-ce-cli', 'version': '0.*'}}) }}
+
 - name: _verify | Derive the docker source list-file pattern
   set_fact:
     _apt_source_docker_lists: "{{ mirror_apt_docker | regex_replace('^https://', '') | replace('/', '_') }}_*"
@@ -230,9 +238,10 @@
     patterns: "{{ _apt_source_docker_lists }}"
   register: _apt_source_lists_removed
 
-- name: _verify | Removal dropped the package candidate and pruned its lists
+- name: _verify | Removal dropped the pin and package candidate and pruned its lists
   assert:
     that:
+      - apt_source_removed_pin is changed
       - "_apt_source_policy_configured.stdout is search('Candidate: [0-9]')"
       - "_apt_source_policy_removed.stdout is not search('Candidate: [0-9]')"
       - _apt_source_lists_configured.matched > 0
@@ -259,17 +268,16 @@
       - apt_source_removed_key is not changed
       - apt_source_removed_pin is not changed
 
-# A removal whose refresh exhausted its retries leaves the source gone but its
-# lists and key behind. Rebuild that state directly rather than waiting out the
-# retry backoff, then prove a rerun still refreshes and finishes the cleanup.
-# The source carries a pin so the removal must also clear its preferences.
+# A removal whose refresh exhausted its retries leaves its pin and source gone
+# but its lists and key behind. Rebuild that state directly rather than waiting
+# out the retry backoff, then prove a rerun still refreshes and finishes the
+# cleanup.
 - name: _verify | Reconfigure the representative source
   import_role:
     name: apt_source
     tasks_from: configure
   vars:
-    apt_source_args: >-
-      {{ _apt_source_docker | combine({'pin': {'package': 'docker-ce-cli', 'version': '0.*'}}) }}
+    apt_source_args: "{{ _apt_source_docker }}"
 
 - name: _verify | Drop the source as an interrupted removal would
   file:
@@ -297,11 +305,6 @@
     patterns: "{{ _apt_source_docker_lists }}"
   register: _apt_source_lists_recovered
 
-- name: _verify | Stat the docker pin after the recovering removal
-  stat:
-    path: /etc/apt/preferences.d/docker
-  register: _apt_source_pin_recovered
-
 - name: _verify | Rerun refreshed apt and finished the cleanup
   assert:
     that:
@@ -309,8 +312,7 @@
       - apt_source_removed_repo is not changed
       - apt_source_removed_refresh is changed
       - apt_source_removed_key is changed
-      - apt_source_removed_pin is changed
-      - not _apt_source_pin_recovered.stat.exists
+      - apt_source_removed_pin is not changed
       - _apt_source_lists_recovered.matched == 0
     fail_msg: >-
       stranded {{ _apt_source_lists_stranded.matched }} lists,
