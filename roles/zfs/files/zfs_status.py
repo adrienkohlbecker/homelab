@@ -63,23 +63,15 @@ def parse_status(raw: str) -> dict[str, Any]:
     pools = mapping(document.get("pools"), "pools")
     for name, value in pools.items():
         pool = mapping(value, name)
-        if pool.get("name") != name or pool.get("state") not in (
-            "ONLINE",
-            "DEGRADED",
-            "FAULTED",
-            "UNAVAIL",
-            "SUSPENDED",
-        ):
-            raise StatusError(f"Invalid name or state for pool {name}")
-        integer(pool.get("error_count"), f"{name}.error_count")
+        # Pool state is left to `zpool status -x`, which owns the health verdict.
+        if pool.get("name") != name:
+            raise StatusError(f"Mismatched name for pool {name}")
         vdevs = mapping(pool.get("vdevs"), f"{name}.vdevs")
         if not vdevs:
             raise StatusError(f"Missing vdevs for pool {name}")
         for device, vdev in pool_vdevs(pool):
             for field in ("read_errors", "write_errors", "checksum_errors"):
                 integer(vdev.get(field), f"{device}.{field}")
-            if "slow_ios" in vdev:
-                integer(vdev["slow_ios"], f"{device}.slow_ios")
         for device, value in mapping(pool.get("spares", {}), f"{name}.spares").items():
             spare = mapping(value, device)
             if spare.get("state") not in (
@@ -101,7 +93,7 @@ def parse_status(raw: str) -> dict[str, Any]:
                 raise StatusError(f"Unknown scan function on {name}: {scan['function']!r}")
             if scan.get("state") not in ("NONE", "SCANNING", "FINISHED", "CANCELED", "ERRORSCRUBBING"):
                 raise StatusError(f"Unknown scan state on {name}: {scan.get('state')!r}")
-            for field in ("start_time", "end_time", "scrub_pause"):
+            for field in ("end_time", "scrub_pause"):
                 integer(scan.get(field), f"{name}.{field}")
         elif scan and "rebuild_stats" not in scan:
             raise StatusError(f"Missing scan function on {name}")

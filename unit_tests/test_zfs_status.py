@@ -108,6 +108,23 @@ def test_status_keeps_the_vdev_tree_separate_from_spares(monkeypatch, pool):
     assert "--json-flat-vdevs" not in calls[0]
 
 
+@pytest.mark.parametrize("state", ["OFFLINE", "REMOVED", "SPLIT", "UNKNOWN", pytest.param("DÉGRADÉ", id="translated")])
+def test_unconsumed_pool_fields_are_left_to_zpool_x(pool, state):
+    pool["state"] = state
+    del pool["error_count"]
+    del pool["scan_stats"]["start_time"]
+    pool["vdevs"]["disk0"]["slow_ios"] = "unconsumed"
+    assert status.parse_status(document({"tank": pool}))["tank"]["state"] == state
+
+
+def test_one_unusual_pool_does_not_blank_the_host_scan(monkeypatch, pool):
+    removed = copy.deepcopy(pool) | {"name": "removed", "state": "REMOVED"}
+    pool["scan_stats"].update(state="SCANNING")
+    monkeypatch.setattr(status, "supports_json", lambda: True)
+    monkeypatch.setattr(status, "run", lambda *_: document({"removed": removed, "tank": pool}))
+    assert status.scan_in_progress(None)
+
+
 @pytest.mark.parametrize("value", [None, "1K", "0", True, -1])
 def test_rejects_missing_or_inexact_counters(pool, value):
     pool["vdevs"]["disk0"]["read_errors"] = value
