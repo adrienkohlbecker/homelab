@@ -197,6 +197,9 @@ resource "aws_s3_bucket_versioning" "ci_qemu_images" {
   }
 }
 
+# On this versioned bucket an expiration only hides the current object behind a
+# delete marker; prune-old-versions frees its bytes once it is noncurrent. Both
+# windows stay at one day so a superseded build is billed for about two.
 resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_images" {
   bucket = aws_s3_bucket.ci_qemu_images.id
 
@@ -239,7 +242,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_images" {
     }
 
     expiration {
-      days = 7
+      days = 1
     }
   }
 
@@ -271,7 +274,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "ci_qemu_images" {
     }
 
     noncurrent_version_expiration {
-      noncurrent_days = 14
+      noncurrent_days = 1
     }
   }
 }

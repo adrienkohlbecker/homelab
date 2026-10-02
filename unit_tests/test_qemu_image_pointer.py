@@ -633,10 +633,10 @@ class TestRetention:
             }
         }
 
-    def test_selects_promoted_and_three_newest_rollbacks(self) -> None:
+    def test_selects_promoted_and_newest_rollback(self) -> None:
         builds = {f"b{index}": {"last_modified": f"2026-01-0{index}T00:00:00Z", "keys": []} for index in range(1, 7)}
 
-        assert upload.select_retained_builds(builds, "b4") == ["b4", "b6", "b5", "b3"]
+        assert upload.select_retained_builds(builds, "b4") == ["b4", "b6"]
 
     def test_tags_every_object_in_selected_builds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls = []

@@ -35,9 +35,9 @@ The lab target does not read S3: lab bakes write the artifacts into lab's local
 /mnt/scratch/homelab_ci and its cells boot them in place, so only the aws_qemu
 cells hydrate from these objects. The lab bake still uploads here so S3 stays
 the canonical promoted store. Uploaded objects start as candidates. Promotion
-tags the current build and three rollback builds as retained, marks older builds
-expirable, and records the rollback ids in the pointer. S3 lifecycle performs
-the eventual deletion after the seven-day recovery window.
+tags the current build and one rollback build as retained, marks older builds
+expirable, and records the rollback id in the pointer. S3 lifecycle deletes
+expirable builds within a day.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ IMAGE_STATE_TAG = "qemu_image_state"
 CANDIDATE_STATE = "candidate"
 RETAINED_STATE = "retained"
 EXPIRABLE_STATE = "expirable"
-RETAINED_BUILD_COUNT = 4
+RETAINED_BUILD_COUNT = 2
 sys.path.insert(0, str(REPO_ROOT / "mise-tasks" / "ci"))
 sys.path.insert(0, str(REPO_ROOT / "test"))
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES  # noqa: E402
