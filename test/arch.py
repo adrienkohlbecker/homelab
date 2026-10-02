@@ -62,13 +62,10 @@ X86_64 = ArchProfile(
     serial_console_token="console=ttyS",
     serial_console_default="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200",
     keep_vm_extra_devices=("-device", "usb-tablet"),
-    # x86_64 harness hosts are Ubuntu KVM runners (ovmf package). Ubuntu 24.04
-    # dropped the legacy non-4M OVMF_CODE.fd in favour of the 4M variant;
-    # older releases still ship the legacy name. Try both.
-    uefi_code_candidates=(
-        "/usr/share/OVMF/OVMF_CODE_4M.fd",
-        "/usr/share/OVMF/OVMF_CODE.fd",
-    ),
+    # x86_64 harness hosts are Ubuntu KVM runners (ovmf package). Packer bakes
+    # OVMF_VARS_4M.fd into every image and pflash needs CODE and VARS the same
+    # size, so only the 4 MiB CODE build pairs with it.
+    uefi_code_candidates=("/usr/share/OVMF/OVMF_CODE_4M.fd",),
     bios_boot_supported=True,
 )
 
