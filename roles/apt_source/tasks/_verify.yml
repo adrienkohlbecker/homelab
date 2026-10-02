@@ -1,16 +1,21 @@
 # The standalone apt_source:lab cell configures a representative real source.
-- name: _verify | Standalone — configure a representative source under test
-  import_role:
-    name: apt_source
-    tasks_from: configure
-  vars:
-    apt_source_args:
+# Every case below derives its arguments from this one docker source.
+- name: _verify | Define the representative docker source
+  set_fact:
+    _apt_source_docker:
       name: docker
       key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
       key_url: https://download.docker.com/linux/ubuntu/gpg
       uris: "{{ mirror_apt_docker }}"
       suites: "{{ ansible_distribution_release }}"
       components: stable
+
+- name: _verify | Standalone — configure a representative source under test
+  import_role:
+    name: apt_source
+    tasks_from: configure
+  vars:
+    apt_source_args: "{{ _apt_source_docker }}"
 
 - name: _verify | Resolve both repository architecture variants through the production helper
   check_mode: true
@@ -21,13 +26,7 @@
         tasks_from: configure
       vars:
         ansible_architecture: x86_64  # noqa: var-naming[no-role-prefix]
-        apt_source_args:
-          name: docker
-          key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-          key_url: https://download.docker.com/linux/ubuntu/gpg
-          uris: "{{ mirror_apt_docker }}"
-          suites: "{{ ansible_distribution_release }}"
-          components: stable
+        apt_source_args: "{{ _apt_source_docker }}"
 
     - name: _verify | Resolve the ARM repository source
       import_role:
@@ -35,13 +34,7 @@
         tasks_from: configure
       vars:
         ansible_architecture: aarch64  # noqa: var-naming[no-role-prefix]
-        apt_source_args:
-          name: docker
-          key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-          key_url: https://download.docker.com/linux/ubuntu/gpg
-          uris: "{{ mirror_apt_docker }}"
-          suites: "{{ ansible_distribution_release }}"
-          components: stable
+        apt_source_args: "{{ _apt_source_docker }}"
 
 # Pin to the oldest indexed release so apt must choose it over newer candidates;
 # a pin that merely matched the newest version would prove nothing.
@@ -67,16 +60,8 @@
     name: apt_source
     tasks_from: configure
   vars:
-    apt_source_args:
-      name: docker
-      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-      key_url: https://download.docker.com/linux/ubuntu/gpg
-      uris: "{{ mirror_apt_docker }}"
-      suites: "{{ ansible_distribution_release }}"
-      components: stable
-      pin:
-        packages: docker-ce-cli
-        version: "{{ _apt_source_versions | last }}"
+    apt_source_args: >-
+      {{ _apt_source_docker | combine({'pin': {'packages': 'docker-ce-cli', 'version': _apt_source_versions | last}}) }}
 
 - name: _verify | Read the pinned docker-ce-cli policy
   command: apt-cache policy docker-ce-cli
@@ -101,16 +86,8 @@
     name: apt_source
     tasks_from: configure
   vars:
-    apt_source_args:
-      name: docker
-      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-      key_url: https://download.docker.com/linux/ubuntu/gpg
-      uris: "{{ mirror_apt_docker }}"
-      suites: "{{ ansible_distribution_release }}"
-      components: stable
-      pin:
-        packages: docker-ce-cli
-        version: "0.*"
+    apt_source_args: >-
+      {{ _apt_source_docker | combine({'pin': {'packages': 'docker-ce-cli', 'version': '0.*'}}) }}
 
 - name: _verify | Read the unmatched docker-ce-cli policy
   command: apt-cache policy docker-ce-cli
@@ -132,16 +109,8 @@
         name: apt_source
         tasks_from: configure
       vars:
-        apt_source_args:
-          name: docker
-          key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-          key_url: https://download.docker.com/linux/ubuntu/gpg
-          uris: "{{ mirror_apt_docker }}"
-          suites: "{{ ansible_distribution_release }}"
-          components: stable
-          pin:
-            packages: "*"
-            version: "0.*"
+        apt_source_args: >-
+          {{ _apt_source_docker | combine({'pin': {'packages': '*', 'version': '0.*'}}) }}
     - name: _verify | Sentinel fail if the bare wildcard pin was accepted
       fail:
         msg: a bare wildcard package pin should have been rejected but was not
@@ -157,13 +126,7 @@
     name: apt_source
     tasks_from: configure
   vars:
-    apt_source_args:
-      name: docker
-      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-      key_url: https://download.docker.com/linux/ubuntu/gpg
-      uris: "{{ mirror_apt_docker }}"
-      suites: "{{ ansible_distribution_release }}"
-      components: stable
+    apt_source_args: "{{ _apt_source_docker }}"
 
 - name: _verify | Read the unpinned docker-ce-cli policy
   command: apt-cache policy docker-ce-cli
@@ -257,16 +220,8 @@
     name: apt_source
     tasks_from: configure
   vars:
-    apt_source_args:
-      name: docker
-      key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
-      key_url: https://download.docker.com/linux/ubuntu/gpg
-      uris: "{{ mirror_apt_docker }}"
-      suites: "{{ ansible_distribution_release }}"
-      components: stable
-      pin:
-        packages: docker-ce-cli
-        version: "0.*"
+    apt_source_args: >-
+      {{ _apt_source_docker | combine({'pin': {'packages': 'docker-ce-cli', 'version': '0.*'}}) }}
 
 - name: _verify | Drop the source as an interrupted removal would
   file:
