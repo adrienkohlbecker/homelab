@@ -188,6 +188,22 @@ def test_health_launcher_selects_the_parser_at_runtime(monkeypatch, json_support
     assert calls == ([("json", 3456000)] if json_supported else [["/opt/zfs/zfs_health_legacy.sh"]])
 
 
+def test_legacy_launch_failure_is_mailed(monkeypatch):
+    monkeypatch.setattr(status.sys, "argv", ["zfs_health"])
+    monkeypatch.setattr(status, "supports_json", lambda: False)
+    mail = []
+
+    def run(argv, **kwargs):
+        if argv[0] == "/opt/zfs/zfs_health_legacy.sh":
+            raise OSError("Exec format error")
+        mail.append(kwargs["input"])
+
+    monkeypatch.setattr(status.subprocess, "run", run)
+    assert status.main() == 1
+    assert len(mail) == 1
+    assert "Cannot start legacy health parser: Exec format error" in mail[0]
+
+
 def test_unknown_version_fails_closed(monkeypatch):
     monkeypatch.setattr(status, "run", lambda *_: "unexpected")
     with pytest.raises(status.StatusError, match="userspace version"):

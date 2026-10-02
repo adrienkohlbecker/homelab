@@ -258,7 +258,10 @@ def main() -> int:
                 return finish_health([f"Cannot initialize health check: {diagnostic(error)}"], [])
             if json_supported:
                 return health(expire)
-            return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
+            try:
+                return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
+            except OSError as error:
+                return finish_health([f"Cannot start legacy health parser: {diagnostic(error)}"], [])
         print(int(scan_in_progress(args.pool, scrub_only=args.scrub_only)))
         return 0
     except (OSError, subprocess.CalledProcessError, ValueError) as error:
