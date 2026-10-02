@@ -247,7 +247,7 @@
     stdin: Q
   changed_when: false
 
-# Noble enables HTTP/2 per listener and newer releases per http{} block; a
+# Noble enables HTTP/2 per listener and newer releases per vhost server; a
 # broken release gate would silently fall back to HTTP/1.1.
 - name: _verify | TLS clients negotiate HTTP/2
   command:
@@ -288,10 +288,10 @@
   failed_when: nginx_verify_h1.stdout != '1.1 200'
 
 # nginx >= 1.25.1 accepts cleartext HTTP/2 prior knowledge on any listener
-# whose default server enables http2, which the http{}-level directive would
-# otherwise extend to the public :80 catch-all. A refused preface surfaces as
-# curl's HTTP/2 framing error (16, Resolute) or receive failure (56, Noble);
-# success or any other error fails the check.
+# whose default server enables http2, so only the TLS vhosts may enable it,
+# never the public :80 catch-all. A refused preface surfaces as curl's HTTP/2
+# framing error (16, Resolute) or receive failure (56, Noble); success or any
+# other error fails the check.
 - name: _verify | The cleartext listener refuses HTTP/2 prior knowledge
   command:
     argv:

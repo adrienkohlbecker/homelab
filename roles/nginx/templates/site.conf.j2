@@ -1,5 +1,6 @@
-{# Noble needs the legacy listen parameter; newer nginx uses the
-   http-scope `http2 on` in nginx.conf.j2. #}
+{# Noble needs the legacy listen parameter; newer nginx enables HTTP/2 per
+   server below. The :80 default server in nginx.conf.j2 leaves it off, and it
+   alone decides whether a cleartext connection may speak HTTP/2. #}
 {% set _http2_listen = ' http2' if ansible_distribution_release == 'noble' else '' %}
 server {
   listen              443 ssl{{ _http2_listen }};
@@ -7,6 +8,9 @@ server {
 {% if nginx_ipv6 %}
   listen              [::]:443 ssl{{ _http2_listen }};
   listen              [::]:80;
+{% endif %}
+{% if ansible_distribution_release != 'noble' %}
+  http2               on;
 {% endif %}
 
   server_name         {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};

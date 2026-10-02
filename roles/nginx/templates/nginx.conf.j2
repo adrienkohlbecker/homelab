@@ -1,7 +1,8 @@
-{# HTTP/2: nginx >= 1.25.1 takes the `http2 on;` directive (set in http{}
-   below) and warns on the legacy `listen ... http2` parameter; noble/1.24
-   only understands the listen parameter. Blacklist-gate both so a
-   future release flips to the directive automatically. #}
+{# HTTP/2: nginx >= 1.25.1 takes the per-server `http2 on;` directive (set
+   in each TLS vhost by site.conf.j2) and warns on the legacy
+   `listen ... http2` parameter; noble/1.24 only understands the listen
+   parameter. Blacklist-gate both so a future release flips to the directive
+   automatically. #}
 {% set _http2_listen = ' http2' if ansible_distribution_release == 'noble' else '' %}
 user                 www-data;
 pid                  /run/nginx.pid;
@@ -22,9 +23,6 @@ http {
     tcp_nopush             on;
     tcp_nodelay            on;
     server_tokens          off;
-{% if ansible_distribution_release != 'noble' %}
-    http2                  on;
-{% endif %}
     log_not_found          off;
     types_hash_max_size    2048;
     types_hash_bucket_size 64;
@@ -160,11 +158,6 @@ http {
         listen              [::]:80 default_server;
 {% endif %}
         server_name         _;
-{% if ansible_distribution_release != 'noble' %}
-        # The default server decides whether a :80 connection may speak
-        # cleartext HTTP/2 prior knowledge; keep the plaintext listener HTTP/1.x.
-        http2               off;
-{% endif %}
 
         # Status consumed by Netdata's local nginx collector.
         location = /nginx_status {
