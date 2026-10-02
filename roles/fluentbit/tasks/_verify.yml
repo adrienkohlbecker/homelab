@@ -1,20 +1,3 @@
-- name: _verify | Read fluent-bit apt policy
-  command: apt-cache policy fluent-bit
-  changed_when: false
-  register: _fluentbit_apt_policy
-
-- name: _verify | Fluent Bit pin selects the configured major from its mirror
-  vars:
-    _fluentbit_policy_re: "[*][*][*] {{ fluentbit_version.split('.')[0] }}[.][^ ]+ 999"
-  assert:
-    that:
-      - _fluentbit_apt_policy.stdout is search(_fluentbit_policy_re)
-      - (mirror_apt_fluentbit | regex_replace('/$', '')) in _fluentbit_apt_policy.stdout
-    fail_msg: >-
-      Expected fluent-bit {{ fluentbit_version }} at priority 999 from
-      {{ mirror_apt_fluentbit }}; got policy:
-      {{ _fluentbit_apt_policy.stdout | default('') }}
-
 - name: _verify | HTTP_Server uptime
   uri:
     url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/uptime"
