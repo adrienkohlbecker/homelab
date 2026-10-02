@@ -64,6 +64,7 @@ class TestClassifyChangedFiles:
             ("data/network_topology.yml", True),
             ("data/network_topology.schema.json", True),
             ("data/architectures.yml", True),
+            ("data/ubuntu_releases.yml", True),
             ("mise-tasks/ci/detect.py", True),
             ("test/host_vars/lab.yml", True),
             ("test/host_vars/minimal.yml", False),
