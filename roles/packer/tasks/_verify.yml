@@ -250,9 +250,9 @@
 - name: _verify | Boot image carries server-class HBA drivers
   shell:
     # Plain `grep -E` rather than `grep -qE`: with `set -o pipefail`,
-    # grep -q's early-exit-on-first-match SIGPIPEs lsinitramfs (rc=141)
-    # and the pipeline reports failure even when the modules are
-    # present. Without -q, grep reads to EOF; rc is just the match/
+    # grep -q's early-exit-on-first-match SIGPIPEs the image lister
+    # (rc=141) and the pipeline reports failure even when the modules
+    # are present. Without -q, grep reads to EOF; rc is just the match/
     # no-match signal we want. >/dev/null keeps the matches out of
     # the task output.
     cmd: >-
