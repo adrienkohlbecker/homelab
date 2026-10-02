@@ -111,13 +111,16 @@
   changed_when: apt_source_refresh.rc == 0
   become: true
 
-# No validate: apt has no single-file preferences parser; apt-cache policy
-# reads the whole preferences.d set. Pin by version rather than origin because
-# the mirrored source URL carries the proxy's hostname, not the vendor's.
+# The validate reads the candidate as the only preferences file and fails on
+# records apt rejects (no Package, zero or out-of-range priority). An unknown
+# pin type, including a version pin on `Package: *`, only warns, so the
+# argument assertion stays the guard for that.
+# Pin by version: the hold is a property of the version series, which origin
+# or release pins cannot express.
 # APT applies the first record matching a version, so the second record only
 # catches versions outside the series; without it they keep their default
 # priority and install once the series leaves the index.
-- name: configure | Pin packages for {{ apt_source_args.name }}  # noqa: require-validate
+- name: configure | Pin packages for {{ apt_source_args.name }}
   when:
     - _apt_source_condition
     - apt_source_args.pin is defined
@@ -136,6 +139,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: apt-cache -o Dir::Etc::Preferences=%s -o Dir::Etc::PreferencesParts=/dev/null policy
   become: true
   register: apt_source_pin
 

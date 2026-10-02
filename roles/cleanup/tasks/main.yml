@@ -2,9 +2,7 @@
 # Packer-built ZFS hosts start clean, so the same tasks converge as no-ops there.
 
 # Prevent later package installs from silently pulling snapd back in.
-# Apt has no single-file preferences parser, so this static policy is exempt
-# from pre-write validation.
-- name: Pin snapd against reinstallation  # noqa: require-validate
+- name: Pin snapd against reinstallation
   copy:
     content: |
       Package: snapd
@@ -15,6 +13,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: apt-cache -o Dir::Etc::Preferences=%s -o Dir::Etc::PreferencesParts=/dev/null policy
   become: true
   tags:
     - cleanup
