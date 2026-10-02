@@ -191,6 +191,8 @@
 - name: _verify | A default client negotiates the post-quantum hybrid group
   command:
     argv:
+      - timeout
+      - 10s
       - openssl
       - s_client
       - -connect
@@ -231,6 +233,8 @@
 - name: _verify | A classical-only client still negotiates X25519
   command:
     argv:
+      - timeout
+      - 10s
       - openssl
       - s_client
       - -connect
