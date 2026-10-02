@@ -254,6 +254,7 @@
     argv:
       - curl
       - --silent
+      - --show-error
       - --max-time
       - '5'
       - --insecure
@@ -273,6 +274,7 @@
     argv:
       - curl
       - --silent
+      - --show-error
       - --max-time
       - '5'
       - --http1.1
@@ -295,6 +297,7 @@
     argv:
       - curl
       - --silent
+      - --show-error
       - --max-time
       - '5'
       - --http2-prior-knowledge
