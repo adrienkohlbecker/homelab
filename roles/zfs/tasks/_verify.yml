@@ -371,16 +371,8 @@
       changed_when: false
 
     - name: _verify | Health fault | Scrub to surface the checksum errors
-      command: zpool scrub zfs_health_test
+      command: timeout -k 10 60 zpool scrub -w zfs_health_test
       changed_when: true
-
-    - name: _verify | Health fault | Wait for the scrub to finish
-      command: zpool status zfs_health_test
-      register: _zfs_health_scrub
-      until: "'scrub in progress' not in _zfs_health_scrub.stdout"
-      retries: 30
-      delay: 2
-      changed_when: false
 
     - name: _verify | Health fault | Run the health script against the damaged pool
       command: /usr/local/bin/zfs_health
