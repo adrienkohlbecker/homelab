@@ -929,11 +929,6 @@ resource "aws_launch_template" "ci_qemu_host" {
 
   instance_initiated_shutdown_behavior = "terminate"
 
-  # One-minute EC2 metrics; the in-guest agent adds memory and swap.
-  monitoring {
-    enabled = true
-  }
-
   iam_instance_profile {
     arn = aws_iam_instance_profile.ci_qemu_host.arn
   }
@@ -1060,11 +1055,6 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
   instance_type = local.ci_qemu_pools.arm.instance_type_overrides[0]
 
   instance_initiated_shutdown_behavior = "terminate"
-
-  # One-minute EC2 metrics; the in-guest agent adds memory and swap.
-  monitoring {
-    enabled = true
-  }
 
   iam_instance_profile {
     arn = aws_iam_instance_profile.ci_qemu_host.arn

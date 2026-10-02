@@ -35,28 +35,6 @@
           "swap_used"
         ]
       },
-      "diskio": {
-        "resources": [
-          "nvme*n1",
-          "md*"
-        ],
-        "measurement": [
-          "reads",
-          "writes",
-          "read_bytes",
-          "write_bytes",
-          "read_time",
-          "write_time",
-          "io_time",
-          "iops_in_progress"
-        ]
-      },
-      "processes": {
-        "measurement": [
-          "running",
-          "blocked"
-        ]
-      },
       "disk": {
         "resources": [
           "/",
@@ -65,26 +43,7 @@
         "measurement": [
           "used_percent"
         ]
-      },
-      "net": {
-        "resources": [
-          "*"
-        ],
-        "measurement": [
-          "bytes_recv",
-          "bytes_sent"
-        ]
-      },
-      "procstat": [
-        {
-          "pattern": "qemu-system",
-          "measurement": [
-            "pid_count",
-            "memory_rss",
-            "cpu_usage"
-          ]
-        }
-      ]
+      }
     }
   }
 }
