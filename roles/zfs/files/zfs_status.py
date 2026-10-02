@@ -123,6 +123,12 @@ def read_status(*pools: str, explain: bool = False) -> dict[str, Any]:
 
 
 def supports_json() -> bool:
+    """Select the parser from the zpool userspace version, not the loaded module.
+
+    Userspace renders `zpool status -j` from the kernel's pool config, so the
+    userspace release decides even while an older module is loaded until the
+    next reboot. An unrecognized version banner raises rather than guessing.
+    """
     version = re.match(r"zfs-(\d+)\.(\d+)\.", run("zpool", "--version"))
     if version is None:
         raise StatusError("Cannot identify the ZFS userspace version")
@@ -130,6 +136,12 @@ def supports_json() -> bool:
 
 
 def scan_active(pool: dict[str, Any], *, scrub_only: bool = False) -> bool:
+    """Return whether the pool is doing scan I/O right now.
+
+    A paused scrub stays SCANNING with a nonzero scrub_pause and counts as
+    inactive. scrub_only limits the answer to scrubs the backup window can
+    pause with `zpool scrub -p`, excluding resilvers, rebuilds and error scrubs.
+    """
     scan = pool.get("scan_stats", {})
     if scan.get("state") == "SCANNING":
         if scan.get("function") == "SCRUB":
@@ -156,6 +168,13 @@ def scan_in_progress(pool: str | None, *, scrub_only: bool = False) -> bool:
 
 
 def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str | None:
+    """Return the scrub-watchdog alert for one pool, or None.
+
+    A canceled scrub always alerts and an active scan never does. Age runs from
+    the newest completed scrub or resilver, completed sequential rebuild, or
+    paused scrub. Only when none exists does it query `zfs get creation`, and
+    the alert then says the age is measured from pool creation.
+    """
     scan = pool.get("scan_stats", {})
     if scan.get("function") == "SCRUB" and scan.get("state") == "CANCELED":
         return f"Last scrub canceled on {name}"
