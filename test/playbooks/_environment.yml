@@ -79,13 +79,12 @@
         ansible_architecture: x86_64
         bootstrap_dns_resolver: [ 1.1.1.1, 1.0.0.1 ]
         nexus_url: ""
-        test_aws_region: eu-test-1
         test_ecr_registry: registry.fixture.invalid
         test_in_aws: true
       assert:
         that:
-          - mirror_apt_ubuntu_archive == 'http://eu-test-1.ec2.archive.ubuntu.com/ubuntu'
-          - mirror_apt_ubuntu_security == 'http://eu-test-1.ec2.archive.ubuntu.com/ubuntu'
+          - mirror_apt_ubuntu_archive == 'http://archive.ubuntu.com/ubuntu'
+          - mirror_apt_ubuntu_security == 'http://security.ubuntu.com/ubuntu'
           - mirror_apt_ubuntu_ports == 'http://ports.ubuntu.com/ubuntu-ports'
           - mirror_apt_netdata == 'https://repo.netdata.cloud/repos/stable/ubuntu'
           - mirror_apt_fluentbit == 'https://packages.fluentbit.io/ubuntu'

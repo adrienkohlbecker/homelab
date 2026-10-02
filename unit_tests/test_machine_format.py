@@ -169,7 +169,7 @@ def test_format_ansible_cmd_in_aws_env_sets_flag_and_clears_nexus(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The aws_qemu cell runs the qemu backend on an AWS host: HOMELAB_TEST_IN_AWS
-    # flips test_in_aws true (so roles pick the regional mirrors / public DNS)
+    # flips test_in_aws true (so roles pick the upstream mirrors / public DNS)
     # and clears nexus_url even without --upstream-mirrors, because the LAN
     # Nexus is unreachable from AWS.
     monkeypatch.setenv("HOMELAB_TEST_IN_AWS", "true")
