@@ -1,5 +1,13 @@
 ---
 # Minimal has no persistent services dataset and covers ephemeral host keys.
+# Resolute's OpenSSH 10 defaults to the mlkem768x25519-sha256 hybrid key
+# exchange; Noble's 9.6 picks sntrup761x25519-sha512.
 machines:
   lab:
   minimal:
+ubuntu:
+  - resolute
+skip:
+  "minimal:resolute": >-
+    Lab Resolute covers the release-divergent key exchange; Minimal Noble
+    covers ephemeral host keys.
