@@ -71,6 +71,8 @@
 - name: _verify | Negotiate a loopback SSH session
   command:
     argv:
+      - timeout
+      - 10s
       - ssh
       - -v
       - -F
