@@ -18,9 +18,11 @@
 - name: remove | Assert apt_source args for {{ apt_source_args.name | default('<unset>') }}
   assert:
     that:
+      - apt_source_args is mapping
+      - apt_source_args.keys() | difference(['name']) | length == 0
       - apt_source_args.name | default('') is match('^[a-z0-9_-]+\Z')
     fail_msg: >-
-      apt_source remove: name must be a [a-z0-9_-] slug;
+      apt_source remove: name must be a [a-z0-9_-] slug and the only key;
       got {{ apt_source_args }}
 
 - name: remove | Remove package pin for {{ apt_source_args.name }}

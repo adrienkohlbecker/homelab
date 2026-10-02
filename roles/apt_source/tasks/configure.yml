@@ -31,6 +31,10 @@
 - name: configure | Assert apt_source args for {{ apt_source_args.name }}
   assert:
     that:
+      - apt_source_args is mapping
+      # A mistyped key is dropped silently otherwise, and a mistyped pin
+      # reads as no pin, which deletes the series hold below.
+      - apt_source_args.keys() | difference(['name', 'key_url', 'key_sha256', 'uris', 'suites', 'components', 'pin']) | length == 0
       - apt_source_args.name is defined
       - apt_source_args.key_url is defined
       - apt_source_args.key_sha256 is defined
@@ -47,14 +51,16 @@
       # pin fields land verbatim on single preferences-file lines. A bare
       # `*` package is APT's general form, which rejects version pins.
       - apt_source_args.pin is not defined or
-        (apt_source_args.pin.package | default('') is match('^[a-z0-9.+*-]+\Z') and
+        (apt_source_args.pin is mapping and
+         apt_source_args.pin.keys() | difference(['package', 'version']) | length == 0 and
+         apt_source_args.pin.package | default('') is match('^[a-z0-9.+*-]+\Z') and
          apt_source_args.pin.package != '*' and
          apt_source_args.pin.version | default('') is match('^[A-Za-z0-9.+~:*-]+\Z'))
     fail_msg: >-
       apt_source_args must define name, key_url, key_sha256, uris and suites,
       with name a [a-z0-9_-] slug, key_url an https URL, key_sha256 a
       lowercase SHA-256 digest, and an optional pin carrying a package glob
-      and a version glob;
+      and a version glob; no other keys are accepted;
       got {{ apt_source_args }}
 
 - name: configure | Fetch repository key (armored) for {{ apt_source_args.name }}
