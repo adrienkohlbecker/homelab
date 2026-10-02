@@ -207,6 +207,19 @@
     name: systemd-networkd-wait-online.service
   register: netplan_verify_wait_online
 
+# Separate from the uplink check below: its uplink lookup fails to template
+# on an empty route list, which would hide these diagnostics.
+- name: _verify boot | Confirm the host has a default route after boot
+  assert:
+    that:
+      - netplan_verify_default_route.stdout | from_json | length > 0
+    fail_msg: |-
+      No default route after boot, so the uplink cannot be identified.
+      Probe unit: {{ netplan_verify_probe_state.status.ActiveState }}
+      Routes seen by the probe: {{ netplan_verify_online_probe.content | b64decode }}
+      wait-online: ConditionResult={{ netplan_verify_wait_online.status.ConditionResult }}
+      ActiveState={{ netplan_verify_wait_online.status.ActiveState }} Result={{ netplan_verify_wait_online.status.Result }}
+
 - name: _verify boot | Confirm network-online waited for the uplink
   vars:
     _netplan_uplink: "{{ (netplan_verify_default_route.stdout | from_json | first).dev }}"
