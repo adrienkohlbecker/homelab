@@ -49,17 +49,18 @@
   become: true
 
 # Without live NetBIOS sockets here, the check in _verify would pass vacuously.
-- name: _setup | NetBIOS name and session ports are listening
+- name: _setup | NetBIOS name, datagram, and session ports are listening
   command:
     argv:
       - ss
       - -H
-      - -lntu
-      - ( sport = :137 or sport = :139 )
+      - -lntup
+      - ( sport = :137 or sport = :138 or sport = :139 )
   register: samba_setup_netbios_listeners
   changed_when: false
   failed_when: >-
     samba_setup_netbios_listeners.stdout is not search(':137\s')
+    or samba_setup_netbios_listeners.stdout is not search(':138\s')
     or samba_setup_netbios_listeners.stdout is not search(':139\s')
   become: true
 
