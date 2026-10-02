@@ -61,7 +61,7 @@
     tasks_from: configure
   vars:
     apt_source_args: >-
-      {{ _apt_source_docker | combine({'pin': {'packages': 'docker-ce-cli', 'version': _apt_source_versions | last}}) }}
+      {{ _apt_source_docker | combine({'pin': {'package': 'docker-ce-cli', 'version': _apt_source_versions | last}}) }}
 
 - name: _verify | Read the pinned docker-ce-cli policy
   command: apt-cache policy docker-ce-cli
@@ -87,7 +87,7 @@
     tasks_from: configure
   vars:
     apt_source_args: >-
-      {{ _apt_source_docker | combine({'pin': {'packages': 'docker-ce-cli', 'version': '0.*'}}) }}
+      {{ _apt_source_docker | combine({'pin': {'package': 'docker-ce-cli', 'version': '0.*'}}) }}
 
 - name: _verify | Read the unmatched docker-ce-cli policy
   command: apt-cache policy docker-ce-cli
@@ -110,7 +110,7 @@
         tasks_from: configure
       vars:
         apt_source_args: >-
-          {{ _apt_source_docker | combine({'pin': {'packages': '*', 'version': '0.*'}}) }}
+          {{ _apt_source_docker | combine({'pin': {'package': '*', 'version': '0.*'}}) }}
     - name: _verify | Sentinel fail if the bare wildcard pin was accepted
       fail:
         msg: a bare wildcard package pin should have been rejected but was not
@@ -221,7 +221,7 @@
     tasks_from: configure
   vars:
     apt_source_args: >-
-      {{ _apt_source_docker | combine({'pin': {'packages': 'docker-ce-cli', 'version': '0.*'}}) }}
+      {{ _apt_source_docker | combine({'pin': {'package': 'docker-ce-cli', 'version': '0.*'}}) }}
 
 - name: _verify | Drop the source as an interrupted removal would
   file:

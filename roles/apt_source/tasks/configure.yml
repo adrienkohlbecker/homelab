@@ -16,7 +16,7 @@
 #   suites:        apt suite -- e.g. nodistro, or the release codename
 #   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
-#   pin:           optional {packages, version} -- holds the matching packages
+#   pin:           optional {package, version} -- holds the matching packages
 #                  at a version glob (e.g. netdata* at 2.*) with priority 999
 #                  and refuses every other version, so installs and the
 #                  fleet-wide safe-upgrade stay inside the series and fail
@@ -47,8 +47,8 @@
       # pin fields land verbatim on single preferences-file lines. A bare
       # `*` package is APT's general form, which rejects version pins.
       - apt_source_args.pin is not defined or
-        (apt_source_args.pin.packages | default('') is match('^[a-z0-9.+*-]+\Z') and
-         apt_source_args.pin.packages != '*' and
+        (apt_source_args.pin.package | default('') is match('^[a-z0-9.+*-]+\Z') and
+         apt_source_args.pin.package != '*' and
          apt_source_args.pin.version | default('') is match('^[A-Za-z0-9.+~:*-]+\Z'))
     fail_msg: >-
       apt_source_args must define name, key_url, key_sha256, uris and suites,
@@ -106,11 +106,11 @@
   copy:
     content: |
       # Ansible managed
-      Package: {{ apt_source_args.pin.packages }}
+      Package: {{ apt_source_args.pin.package }}
       Pin: version {{ apt_source_args.pin.version }}
       Pin-Priority: 999
 
-      Package: {{ apt_source_args.pin.packages }}
+      Package: {{ apt_source_args.pin.package }}
       Pin: version *
       Pin-Priority: -1
     dest: /etc/apt/preferences.d/{{ apt_source_args.name }}

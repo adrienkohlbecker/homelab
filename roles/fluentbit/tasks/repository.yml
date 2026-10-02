@@ -11,7 +11,7 @@
       suites: "{{ ansible_distribution_release }}"
       components: main
       pin:
-        packages: fluent-bit
+        package: fluent-bit
         version: "{{ fluentbit_version }}"
   tags:
     - fluentbit

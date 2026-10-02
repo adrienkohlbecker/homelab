@@ -19,7 +19,7 @@
       uris: "{{ mirror_apt_netdata }}/"
       suites: "{{ ansible_distribution_release }}/"
       pin:
-        packages: netdata*
+        package: netdata*
         version: "{{ netdata_version }}"
   tags:
     - netdata
