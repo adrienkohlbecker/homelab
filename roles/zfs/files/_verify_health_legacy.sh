@@ -36,10 +36,10 @@ EOF
 cat >"$scratch/bin/mail" <<'EOF'
 #!/bin/bash
 set -euo pipefail
-cat >/dev/null
+cat >"$ZFS_VERIFY_MAIL"
 EOF
 chmod +x "$scratch/bin/"*
-export ZFS_VERIFY_STATUS="$scratch/status" ZFS_VERIFY_NOW=1700000105
+export ZFS_VERIFY_STATUS="$scratch/status" ZFS_VERIFY_MAIL="$scratch/mail" ZFS_VERIFY_NOW=1700000105
 old_date=$(LC_ALL=C date -d @1700000000 '+%a %b %e %T %Y')
 recent_date=$(LC_ALL=C date -d @1700000100 '+%a %b %e %T %Y')
 middle_date=$(LC_ALL=C date -d @1700000050 '+%a %b %e %T %Y')
@@ -47,6 +47,7 @@ middle_date=$(LC_ALL=C date -d @1700000050 '+%a %b %e %T %Y')
 check_status() {
   local expected=$1 output rc=0
   printf '%s\n' "$2" >"$ZFS_VERIFY_STATUS"
+  rm -f "$ZFS_VERIFY_MAIL"
   output=$(PATH="$scratch/bin:$PATH" LC_ALL=C SCRUB_EXPIRE=10 /opt/zfs/zfs_health_legacy.sh 2>&1) || rc=$?
   [[ "$rc" == "$expected" ]] || {
     echo >&2 "$output"
@@ -55,8 +56,16 @@ check_status() {
   [[ "$output" != *'Unexpected pool-creation fallback'* ]]
   if [[ "$expected" == 0 ]]; then
     [[ "$output" == *Done* ]]
+    [[ ! -e "$ZFS_VERIFY_MAIL" ]]
   else
     [[ "$output" == *"$3"* ]]
+    # The mail carries the ERROR lines ahead of the status report.
+    grep -qF -- "ERROR :: " "$ZFS_VERIFY_MAIL" || {
+      echo >&2 'Mail lacks the ERROR lines:'
+      cat >&2 "$ZFS_VERIFY_MAIL"
+      return 1
+    }
+    grep -qF -- "$3" "$ZFS_VERIFY_MAIL"
   fi
 }
 

@@ -160,7 +160,7 @@ if [[ "$rc" != 1 ]]; then
   echo >&2 "Expected a counted expiry failure (exit 1), got $rc: $output"
   exit 1
 fi
-[[ -s "$ZFS_VERIFY_MAIL" ]]
+grep -qF 'ERROR :: Scrub expired on zfs_scan_test' "$ZFS_VERIFY_MAIL"
 [[ "$output" == *'Scrub expired on zfs_scan_test'* ]]
 [[ "$output" != *'Pool creation must not be queried'* ]]
 echo 'Health measured age from the real completed resilver, accepted an available spare, and expired at the threshold'
