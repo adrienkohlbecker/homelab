@@ -1,11 +1,12 @@
+# Resolute: zram-generator 1.2.1, zram in the base kernel module package, and
+# mdadm 4.5.
+#
 # Lab exercises mdadm RAID1 swap, Pug a labelled raw partition, and minimal
 # zram-only installation.
 machines:
   lab:
   pug:
   minimal:
-# Resolute: zram-generator 1.2.1, zram in the base kernel module package, and
-# mdadm 4.5.
 ubuntu:
   - resolute
 skip:

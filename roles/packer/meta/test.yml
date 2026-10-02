@@ -1,3 +1,6 @@
+# Resolute ships a different image: Dracut builds the generic boot image with
+# zfs-dracut, and rEFInd comes from the archive. ARM Lab boots the shipped
+# rEFInd a second time under stock edk2 (see tasks/_verify.yml).
 base_prerequisites: false
 arm:
   - lab
