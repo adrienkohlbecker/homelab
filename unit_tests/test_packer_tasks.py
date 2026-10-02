@@ -312,15 +312,11 @@ def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(
 
 def test_qemu_build_uploads_only_required_role_files() -> None:
     template = QEMU_TEMPLATE.read_text()
+    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", QEMU_PROVISION_SH.read_text(), re.MULTILINE)
+    assert role_files is not None
 
-    expected = {
-        "roles/boot/files/modules_most",
-        "roles/boot/files/dracut_host.conf",
-        "roles/console/files/console-setup",
-        "roles/console/files/keyboard",
-    }
-    uploaded_role_files = {match.group(1) for match in re.finditer(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)}
-    assert uploaded_role_files == expected
+    uploaded_role_files = re.findall(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)
+    assert sorted(Path(path).name for path in uploaded_role_files) == sorted(role_files.group(1).split())
     assert "homelab-source.tar" not in template
 
 
