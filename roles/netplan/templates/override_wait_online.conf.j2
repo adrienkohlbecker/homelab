@@ -15,6 +15,9 @@ After=systemd-resolved.service
 # Replace Netplan's per-interface list, captured at generator time, with
 # "any managed link is routable". --dns (systemd 258+, so not Noble's 255)
 # additionally needs a DNS server with a route to it, as Netplan 1.2 requests.
+# Without it a statically addressed link (lab's iot VLAN) satisfies the wait
+# at carrier, before DHCP configures the uplink; Netplan 1.1.2's own
+# "--any -o routable" wait shares that gap on Noble.
 # --timeout pins the upstream default (systemd-networkd-wait-online.service(8)):
 # the oneshot unit has no start timeout of its own, and _verify sizes its boot
 # poll against this bound.
