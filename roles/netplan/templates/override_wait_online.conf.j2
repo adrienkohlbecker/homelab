@@ -15,5 +15,8 @@ After=systemd-resolved.service
 # Replace Netplan's per-interface list, captured at generator time, with
 # "any managed link is routable". --dns (systemd 258+, so not Noble's 255)
 # additionally needs a DNS server with a route to it, as Netplan 1.2 requests.
+# --timeout pins the upstream default (systemd-networkd-wait-online.service(8)):
+# the oneshot unit has no start timeout of its own, and _verify sizes its boot
+# poll against this bound.
 ExecStart=
-ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --operational-state=routable{{ ' --dns' if ansible_distribution_release != 'noble' else '' }}
+ExecStart=/usr/lib/systemd/systemd-networkd-wait-online --any --operational-state=routable --timeout=120{{ ' --dns' if ansible_distribution_release != 'noble' else '' }}

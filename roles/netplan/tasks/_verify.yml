@@ -185,8 +185,8 @@
   changed_when: false
 
 # SSH readiness does not imply the probe ran: it queues behind wait-online,
-# which may still be waiting for a DNS server. Wait-online's own timeout is
-# 120 seconds, so this bound covers a timed-out wait as well.
+# which may still be waiting for a DNS server. The drop-in pins wait-online's
+# --timeout=120, so this 150-second bound covers a timed-out wait as well.
 - name: _verify boot | Wait for the network-online probe to finish
   systemd:
     name: netplan_online_probe.service
