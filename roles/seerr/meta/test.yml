@@ -1,0 +1,4 @@
+# Resolute: Podman 5 and crun 1.21 apply its +1000 --uidmap override, which
+# routes the image's non-root user to the host seerr user.
+ubuntu:
+  - resolute
