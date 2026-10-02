@@ -246,7 +246,9 @@ zfsbootmenu_release:
 # a new major from landing unreviewed. Wildcards, not point releases: the
 # vendors ship frequently, patch releases carry the security fixes, and the
 # netdata index prunes old releases and publishes each architecture on its own
-# schedule, so an exact pin would soon match nothing and block installs. mise
+# schedule, so an exact pin would soon match nothing: fresh installs would fail
+# and installed hosts would silently stop receiving updates. A vendor retiring
+# a pinned series freezes hosts the same way, so bump the series then. mise
 # stays unpinned: its suite retains only the newest release.
 netdata_version: "2.*"  # 2.x series; 2.0 GA 2024-11-07
 fluentbit_version: "5.*"  # 5.x series; 5.0 GA 2026-03
