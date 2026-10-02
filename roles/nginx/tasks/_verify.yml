@@ -1,13 +1,15 @@
 # Functional verification of the nginx role. Stand up a throwaway upstream
 # stub + a transient nginx_site pointing at it, then probe the live vhost
 # through nginx for the contracts the ~46 nginx_site consumers depend on:
-# TLS termination + Host routing, the security headers, the Authelia 401->302
-# redirect, the access-log credential redaction, the http->https redirect, the
-# default-server catch-all, and stub_status's loopback binding. Probe idiom:
-# map test FQDNs to loopback in
-# /etc/hosts, then probe https://<fqdn>/ (validate_certs:false) so TLS SNI
-# matches the vhost on every OpenSSL version (noble/resolute 3.x reject
-# SNI=localhost with TLSV1_UNRECOGNIZED_NAME). The upstream stub via
+# TLS termination + Host routing, key exchange (on OpenSSL >= 3.5 the
+# post-quantum hybrid, including a HelloRetryRequest onto it for X25519-first
+# clients; X25519 for classical ones), HTTP/2 over TLS but never cleartext on
+# :80, the security headers, the Authelia 401->302 redirect, the access-log
+# credential redaction, the http->https redirect, the default-server
+# catch-all, and stub_status's loopback binding. Probe idiom: map test FQDNs
+# to loopback in /etc/hosts, then probe https://<fqdn>/ (validate_certs:false)
+# so TLS SNI matches the vhost on every OpenSSL version (noble/resolute 3.x
+# reject SNI=localhost with TLSV1_UNRECOGNIZED_NAME). The upstream stub via
 # systemd-run (transient unit, no install-time side-effects). The VM is fresh
 # per harness run and _verify runs after the idempotence check, so standing up
 # fixtures here is safe (no when: qemu_test gate needed).
