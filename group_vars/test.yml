@@ -2,6 +2,8 @@ qemu_test: true
 _role_under_test: "{{ _test_role_under_test }}"
 # Recovery downloads belong to macos_vm role cells; site fixtures omit them.
 macos_vm_install_mode: "{{ _role_under_test == 'macos_vm' }}"
+# Fixtures have no nested KVM; render and start the TCG unit.
+macos_vm_domain_type: qemu
 
 # Every test guest is disposable and uses the insecure fixture key. Keep these
 # environment properties independent from the selected storage image.

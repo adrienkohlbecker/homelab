@@ -91,6 +91,10 @@
       changed: false
   check_mode: true
 
+- name: _verify | Converged unit is unchanged
+  assert:
+    that: not macos_vm_chi_service_result.changed
+
 - name: _verify | Create missing firmware fixture
   tempfile:
     state: directory

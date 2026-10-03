@@ -9,9 +9,8 @@ macos_vm_vcpus: 4
 macos_vm_cpu_pinset: ""  # comma-separated list, e.g. "0,2,4,6". Empty = no pinning.
 macos_vm_memory_mib: 12288  # 12 GiB
 
-# QEMU accelerator: kvm for production on a real x86 host. The role switches
-# this to qemu under qemu_test so systemd-analyze can validate the unit without
-# needing nested KVM.
+# QEMU accelerator: kvm for production on a real x86 host. The test inventory
+# sets qemu (TCG) because fixtures have no nested KVM.
 macos_vm_domain_type: kvm
 
 # Disk source. The role creates a sparse ZFS volume and passes its /dev/zvol

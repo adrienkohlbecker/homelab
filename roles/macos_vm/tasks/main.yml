@@ -1,10 +1,3 @@
-- name: Apply qemu test fixture values
-  when: qemu_test | bool
-  set_fact:
-    macos_vm_domain_type: qemu
-  tags:
-    - macos_vm
-
 - name: Validate inputs
   assert:
     that:
