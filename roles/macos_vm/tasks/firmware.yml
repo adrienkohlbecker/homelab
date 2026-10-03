@@ -1,0 +1,40 @@
+- name: firmware | Check per-VM OVMF vars file
+  stat:
+    path: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+  register: macos_vm_ovmf_vars
+  become: true
+
+- name: firmware | Check packaged OVMF vars template
+  stat:
+    path: /usr/share/OVMF/OVMF_VARS_4M.fd
+  register: macos_vm_ovmf_vars_pkg
+  become: true
+
+- name: firmware | Require compatible OVMF vars before changing the service
+  when: not ansible_check_mode or macos_vm_ovmf_vars_pkg.stat.exists
+  assert:
+    that:
+      - macos_vm_ovmf_vars_pkg.stat.exists
+      - not macos_vm_ovmf_vars.stat.exists or macos_vm_ovmf_vars.stat.size == macos_vm_ovmf_vars_pkg.stat.size
+    fail_msg: >-
+      {{ macos_vm_workdir }}/OVMF_VARS.fd must match the packaged
+      /usr/share/OVMF/OVMF_VARS_4M.fd layout. Existing firmware is never
+      overwritten automatically. Stop macos-vm-{{ macos_vm_name }}.service,
+      back up the vars file, and follow the firmware repair procedure in
+      notes/macos-vm-design.md before retrying. Preserve OpenCore.qcow2.
+
+- name: firmware | Seed missing OVMF vars
+  when:
+    - not macos_vm_ovmf_vars.stat.exists
+    - not (ansible_check_mode and (macos_vm_workdir_result.changed or not macos_vm_ovmf_vars_pkg.stat.exists))
+  copy:
+    src: /usr/share/OVMF/OVMF_VARS_4M.fd
+    dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+    remote_src: true
+    owner: root
+    group: kvm
+    mode: "0644"
+    force: false
+    backup: true
+  register: macos_vm_ovmf_vars_result
+  become: true
