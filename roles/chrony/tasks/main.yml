@@ -35,17 +35,6 @@
   tags:
     - chrony
 
-# The package conflict removes timesyncd but keeps its conffiles and
-# enablement links, which would re-enable it if chrony were ever removed.
-- name: Purge systemd-timesyncd leftovers
-  apt:
-    name: systemd-timesyncd
-    state: absent
-    purge: true
-  become: true
-  tags:
-    - chrony
-
 # AppArmor blocks chronyd from parsing Ansible's temporary file, so _verify
 # exercises the installed configuration through chronyc instead.
 - name: Configure chrony for NTS-only time sync  # noqa: require-validate

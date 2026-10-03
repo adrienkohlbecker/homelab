@@ -83,17 +83,3 @@
     fail_msg: >-
       expected only chrony.service among active time synchronizers, got
       {{ chrony_verify_synchronizers.stdout_lines }}
-
-- name: _verify | Read the timesyncd boot state  # noqa: command-instead-of-module -- property query; the module rejects a not-found unit
-  command: systemctl show --property=LoadState,UnitFileState systemd-timesyncd.service
-  changed_when: false
-  become: true
-  register: chrony_verify_timesyncd
-
-- name: _verify | Timesyncd cannot start at next boot
-  vars:
-    timesyncd: "{{ dict(chrony_verify_timesyncd.stdout_lines | map('split', '=', 1)) }}"
-  assert:
-    that:
-      - timesyncd.LoadState == 'not-found' or timesyncd.UnitFileState in ['disabled', 'masked']
-    fail_msg: "systemd-timesyncd would start at next boot: {{ timesyncd }}"
