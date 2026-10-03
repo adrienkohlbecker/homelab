@@ -50,6 +50,9 @@
             that:
               - "'Report recovery image failure' in ansible_failed_task.name"
               - macos_vm_basesystem_convert_result is failed
+              # A read error, not an open or probe failure, proves qemu-img
+              # parsed the image and refused the undecodable block.
+              - "'Input/output error' in macos_vm_basesystem_convert_result.stderr"
               - "'was removed' in ansible_failed_result.msg"
 
     - name: _verify | Read rejected recovery image state
