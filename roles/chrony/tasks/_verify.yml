@@ -67,8 +67,8 @@
     shopt -s nullglob
     lists=(/etc/systemd/ntp-units.d/*.list /run/systemd/ntp-units.d/*.list
            /usr/local/lib/systemd/ntp-units.d/*.list /usr/lib/systemd/ntp-units.d/*.list)
-    units="$(sed -e "s/^[[:space:]]*//" -e "s/[[:space:]]*$//" "${lists[@]}" </dev/null \
-      | grep -vE "^(#|$)" | sort -u)"
+    units="$(sed -e "s/^[[:space:]]*//" -e "s/[[:space:]]*$//" -e "/^#/d" -e "/^$/d" \
+      "${lists[@]}" </dev/null | sort -u)"
     systemctl list-units --state=active --plain --no-legend $units systemd-timesyncd.service
   args:
     executable: /bin/bash
