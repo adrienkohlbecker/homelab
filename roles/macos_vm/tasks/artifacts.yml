@@ -78,12 +78,15 @@
   ansible.builtin.command:
     # fetch-macOS-v2.py calls os.get_terminal_size() while verifying the
     # chunklist, so give it a pseudo-terminal even though Ansible is non-TTY.
+    # timeout runs inside that terminal, so the bound kills the download on
+    # the host and script -e reports the 124 exit status.
     argv:
       - script
       - -q
       - -e
       - -c
       - >-
+        timeout --kill-after=30 {{ macos_vm_recovery_fetch_timeout }}
         python3 {{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py
         --action download
         --board-id {{ macos_vm_recovery_product.board_id }}

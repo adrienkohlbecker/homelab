@@ -52,6 +52,10 @@ macos_vm_opencore_boot_args: "keepsyms=1 -v"
 # flip to false (and re-run the role) after macOS is installed and booting.
 macos_vm_install_mode: true
 
+# Upper bound on the ~700 MB recovery download, in seconds. fetch-macOS-v2.py
+# sets no socket timeouts, so a stalled transfer would otherwise hang.
+macos_vm_recovery_fetch_timeout: 900
+
 # Autostart on host boot. Leave false until first install completes; flip
 # afterwards. Independent of install_mode so they don't interfere.
 macos_vm_autostart: false

@@ -79,6 +79,44 @@
         state: absent
       become: true
 
+- name: _verify | Create stalled recovery download fixture
+  tempfile:
+    state: directory
+    # Not tmpfs: a download that outlives its bound writes the full image.
+    path: /var/tmp
+    suffix: macos_vm_fetch
+  register: macos_vm_fetch_fixture
+  become: true
+
+- name: _verify | Bound the recovery download
+  block:
+    - name: _verify | Exercise the download bound through production tasks
+      block:
+        - name: _verify | Apply artifacts with a one-second download bound
+          import_tasks: artifacts.yml
+          vars:
+            macos_vm_install_mode: true
+            macos_vm_workdir: "{{ macos_vm_fetch_fixture.path }}"
+            macos_vm_recovery_fetch_timeout: 1
+
+        - name: _verify | Reject a download that outlived its bound
+          fail:
+            msg: Recovery download outlived its one-second bound
+
+      rescue:
+        - name: _verify | Require the download to time out
+          assert:
+            that:
+              - "'Fetch BaseSystem recovery image' in ansible_failed_task.name"
+              - macos_vm_basesystem_result.rc == 124
+
+  always:
+    - name: _verify | Remove stalled recovery download fixture
+      file:
+        path: "{{ macos_vm_fetch_fixture.path }}"
+        state: absent
+      become: true
+
 - name: _verify | Preserve the explicit MAC address
   vars:
     macos_vm_mac_address: 02:00:00:00:00:02
