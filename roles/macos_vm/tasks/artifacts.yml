@@ -93,6 +93,7 @@
         --mlb {{ macos_vm_recovery_product.mlb }}
         --os-type {{ macos_vm_recovery_product.os_type }}
         --outdir {{ macos_vm_workdir }}
+        --basename BaseSystem.partial
       - /dev/null
     chdir: "{{ macos_vm_workdir }}"
     creates: "{{ macos_vm_workdir }}/BaseSystem.dmg"
@@ -117,6 +118,25 @@
         board_id: Mac-4B682C642B45593E
         mlb: "00000000000000000"
         os_type: latest
+
+# fetch-macOS-v2.py exits non-zero on a chunklist mismatch but keeps the
+# file, and an interrupted download leaves a truncated one. Only a verified
+# download takes the name that skips the fetch on later runs; the image moves
+# last because it is that sentinel.
+- name: artifacts | Publish verified BaseSystem download
+  when:
+    - not ansible_check_mode
+    - macos_vm_basesystem_result.changed | default(false)
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ macos_vm_workdir }}/BaseSystem.partial.{{ item }}"
+      - "{{ macos_vm_workdir }}/BaseSystem.{{ item }}"
+    creates: "{{ macos_vm_workdir }}/BaseSystem.{{ item }}"
+  loop:
+    - chunklist
+    - dmg
+  become: true
 
 - name: artifacts | Prepare BaseSystem recovery image
   when: macos_vm_install_mode

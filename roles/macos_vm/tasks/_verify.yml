@@ -92,16 +92,18 @@
   block:
     - name: _verify | Exercise the download bound through production tasks
       block:
-        - name: _verify | Apply artifacts with a one-second download bound
+        # Five seconds passes the session and chunklist requests but is far
+        # too short for the image, so the bound fires mid-download.
+        - name: _verify | Apply artifacts with a five-second download bound
           import_tasks: artifacts.yml
           vars:
             macos_vm_install_mode: true
             macos_vm_workdir: "{{ macos_vm_fetch_fixture.path }}"
-            macos_vm_recovery_fetch_timeout: 1
+            macos_vm_recovery_fetch_timeout: 5
 
         - name: _verify | Reject a download that outlived its bound
           fail:
-            msg: Recovery download outlived its one-second bound
+            msg: Recovery download outlived its five-second bound
 
       rescue:
         - name: _verify | Require the download to time out
@@ -109,6 +111,24 @@
             that:
               - "'Fetch BaseSystem recovery image' in ansible_failed_task.name"
               - macos_vm_basesystem_result.rc == 124
+
+    - name: _verify | Read timed-out recovery download state
+      stat:
+        path: "{{ macos_vm_fetch_fixture.path }}/{{ item }}"
+      loop:
+        - BaseSystem.dmg
+        - BaseSystem.partial.dmg
+      register: macos_vm_timed_out_recovery
+      become: true
+
+    # The fetch is skipped while BaseSystem.dmg exists, so an interrupted
+    # download must never take that name. The partial image proves the bound
+    # fired after the image transfer began.
+    - name: _verify | Require no published recovery image
+      assert:
+        that:
+          - not macos_vm_timed_out_recovery.results[0].stat.exists
+          - macos_vm_timed_out_recovery.results[1].stat.exists
 
   always:
     - name: _verify | Remove stalled recovery download fixture
