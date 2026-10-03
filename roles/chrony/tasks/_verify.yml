@@ -8,6 +8,15 @@
   changed_when: false
   become: true
   register: chrony_verify_authdata
+  # chronyd reloads saved NTS cookies at start, but a first start or a new
+  # server must finish NTS-KE first. Not waitsync: syncing needs NTP over UDP,
+  # which SLIRP egress drops under load; NTS-KE runs over TCP.
+  until: >-
+    chrony_verify_authdata.stdout_lines
+    | select('match', '^[^,]+,NTS,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[1-9][0-9]*,[^,]+$')
+    | list | length >= 2
+  retries: 15
+  delay: 2
 
 # Resolute's packaged sources.d/ubuntu-ntp-pools.sources is NTS too, so the
 # all-NTS assertion alone cannot tell whether a sourcedir include pulled
