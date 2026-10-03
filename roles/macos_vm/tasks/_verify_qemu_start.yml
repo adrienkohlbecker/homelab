@@ -1,8 +1,9 @@
 # Start the rendered unit's QEMU command, paused, under this release's QEMU.
 # QEMU validates every option, device, and drive before the guest runs, so
 # this proves the release accepts the unit and records the machine model the
-# guest would see. TCG keeps the check independent of nested KVM, and a small
-# guest RAM fits the fixture: -S still allocates it up front.
+# guest would see. Install mode attaches every drive, so it also covers the
+# post-install command line. TCG keeps the check independent of nested KVM,
+# and a small guest RAM fits the fixture: -S still allocates it up front.
 - name: _verify | Create a QEMU start fixture
   tempfile:
     state: directory
@@ -17,7 +18,7 @@
     macos_vm_name: verify
     macos_vm_workdir: "{{ macos_vm_start_fixture.path }}"
     macos_vm_disk_source: "{{ macos_vm_start_fixture.path }}/disk.raw"
-    macos_vm_install_mode: false
+    macos_vm_install_mode: true
     macos_vm_cpu_pinset: ""
     macos_vm_domain_type: qemu
     macos_vm_memory_mib: 512
@@ -36,6 +37,8 @@
           path: "{{ macos_vm_workdir }}/OpenCore.qcow2"
         - format: raw
           path: "{{ macos_vm_disk_source }}"
+        - format: raw
+          path: "{{ macos_vm_workdir }}/BaseSystem.img"
       changed_when: true
       become: true
 
@@ -71,6 +74,12 @@
             unit = open(sys.argv[1]).read().replace("\\\n", " ")
             exec_start = next(line for line in unit.splitlines() if line.startswith("ExecStart="))
             argv = shlex.split(exec_start.removeprefix("ExecStart="))
+            env = dict(os.environ)
+            env.update(
+                line.removeprefix("Environment=").split("=", 1)
+                for line in unit.splitlines()
+                if line.startswith("Environment=")
+            )
             os.makedirs("/run/macos-vm", exist_ok=True)
             commands = [
                 {"execute": "qmp_capabilities"},
@@ -82,6 +91,7 @@
                 input="".join(json.dumps(command) + "\n" for command in commands),
                 capture_output=True,
                 text=True,
+                env=env,
                 timeout=120,
             )
             replies = [json.loads(line) for line in proc.stdout.splitlines() if line.startswith("{")]
