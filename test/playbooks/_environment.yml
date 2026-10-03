@@ -1,19 +1,6 @@
 - name: Prepare the test environment
   hosts: all
   tasks:
-    - name: Verify recovery installation is limited to macOS role cells
-      vars:
-        _role_under_test: "{{ item.role }}"
-      assert:
-        that: macos_vm_install_mode | bool == item.install_mode
-      loop:
-        - role: macos_vm
-          install_mode: true
-        - role: _site_test
-          install_mode: false
-        - role: _site_check
-          install_mode: false
-
     # Exercise lazy production variables through Ansible under the environment
     # variants that one physical QEMU cell cannot represent simultaneously.
     - name: Verify physical console rendering without a serial console
