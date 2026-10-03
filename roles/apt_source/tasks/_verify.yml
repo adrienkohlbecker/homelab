@@ -17,25 +17,6 @@
   vars:
     apt_source_args: "{{ _apt_source_docker }}"
 
-- name: _verify | Resolve both repository architecture variants through the production helper
-  check_mode: true
-  block:
-    - name: _verify | Resolve the x86 repository source
-      import_role:
-        name: apt_source
-        tasks_from: configure
-      vars:
-        ansible_architecture: x86_64  # noqa: var-naming[no-role-prefix]
-        apt_source_args: "{{ _apt_source_docker }}"
-
-    - name: _verify | Resolve the ARM repository source
-      import_role:
-        name: apt_source
-        tasks_from: configure
-      vars:
-        ansible_architecture: aarch64  # noqa: var-naming[no-role-prefix]
-        apt_source_args: "{{ _apt_source_docker }}"
-
 # Pin to the oldest indexed release so apt must choose it over newer candidates;
 # a pin that merely matched the newest version would prove nothing.
 - name: _verify | List indexed docker-ce-cli versions
