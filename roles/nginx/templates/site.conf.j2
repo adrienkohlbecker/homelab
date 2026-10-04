@@ -1,10 +1,5 @@
-{# HTTP/2: nginx >= 1.25.1 takes the per-server `http2 on;` directive below
-   and warns on the legacy `listen ... http2` parameter; noble/1.24 only
-   understands the listen parameter, which applies to every server sharing the
-   addr:port (including the ssl_reject_handshake catch-all in nginx.conf.j2).
-   Blacklist-gate both so a future release flips to the directive
-   automatically. The :80 default server in nginx.conf.j2 leaves HTTP/2 off,
-   and it alone decides whether a cleartext connection may speak HTTP/2. #}
+{# HTTP/2: Noble's nginx 1.24 only knows the `listen ... http2` parameter;
+   newer releases take the per-server `http2 on;` directive. #}
 {% set _http2_listen = ' http2' if ansible_distribution_release == 'noble' else '' %}
 server {
   listen              443 ssl{{ _http2_listen }};
