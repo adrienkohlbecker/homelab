@@ -6,25 +6,24 @@ set -euo pipefail
 }
 
 # Start a scrub on every imported pool. Scheduled monthly by the zfs_scrub timer
-# (second Sunday), replacing the distro's /etc/cron.d/zfsutils-linux which the
-# zfs role diverts aside. Iterating `zpool list` rather than a hand-maintained
-# pool list means a newly-added pool is scrubbed automatically and no per-host
-# config can drift.
+# (second Sunday), replacing the distro's /etc/cron.d/zfsutils-linux, which the
+# zfs role deletes. Iterating `zpool list` rather than a hand-maintained pool
+# list means a newly-added pool is scrubbed automatically and no per-host config
+# can drift.
 #
 # Deliberately no -w: a multi-TB pool scrubs for hours (lab tank ~8h, pug rpool
-# ~18h), so a blocking oneshot would fight TimeoutStartSec. The outcome is
-# watched out-of-band: zfs_health alarms on canceled or stale scrubs
-# (zfs_status.py scrub_issue); ZED's scrub_finish zedlet mails on scrubs with
-# errors.
-# Stagger the per-pool kick-offs. lab hard-locked ~12s into this run on
+# ~18h), so a blocking oneshot, or one serializing the pools, would fight
+# TimeoutStartSec. The outcome is watched out-of-band: zfs_health alarms on
+# canceled or stale scrubs (zfs_status.py scrub_issue); ZED's scrub_finish
+# zedlet mails on scrubs with errors.
+#
+# Stagger the per-pool kick-offs instead. lab hard-locked ~12s into this run on
 # 2026-06-14, during scrub initiation rather than steady state, so spacing the
 # starts keeps every pool from entering its metadata-read burst in the same
-# instant. A short gap (not full `-w` serialization -- deliberately avoided per
-# the note above) leaves the unit non-blocking. Skipped (already-scrubbing)
-# pools don't consume a slot, so the first pool actually kicked off waits for
-# nothing.
-# The stagger is overridable (ZFS_SCRUB_STAGGER_SEC) so the role's _verify can
-# zero it -- the CI fixture's img-backed pools can't thundering-herd a hard lock.
+# instant. Skipped (already-scrubbing) pools don't consume a slot, so the first
+# pool actually kicked off waits for nothing. The stagger is overridable
+# (ZFS_SCRUB_STAGGER_SEC) so the role's _verify can zero it -- the CI fixture's
+# img-backed pools can't thundering-herd a hard lock.
 stagger_sec="${ZFS_SCRUB_STAGGER_SEC:-120}"
 scrub_started=0
 failed=0
