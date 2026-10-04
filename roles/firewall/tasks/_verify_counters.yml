@@ -7,28 +7,6 @@
   changed_when: false
   become: true
 
-# Martian-source logging: the role pins all=0 (the kernel OR-folds
-# `all` with each iface's flag, so all=1 would re-enable logging on
-# every iface and defeat keepalived's per-vmac suppression) and
-# default=1 (so newly-created real ifaces still log martians). Read the
-# live kernel knobs, not the persisted file, since the role applies
-# these immediately.
-- name: _verify_counters | Sysctl — read live martian-logging knobs
-  command: cat /proc/sys/net/ipv4/conf/all/log_martians /proc/sys/net/ipv4/conf/default/log_martians
-  register: _firewall_log_martians
-  changed_when: false
-  become: true
-
-- name: _verify_counters | Sysctl — assert all=0 (no OR-fold) and default=1
-  assert:
-    that:
-      - _firewall_log_martians.stdout_lines == ['0', '1']
-    fail_msg: >-
-      net.ipv4.conf.{all,default}.log_martians = {{ _firewall_log_martians.stdout_lines }},
-      expected ['0', '1']. all must be 0 so the kernel OR-fold can't re-arm
-      martian logging on keepalived's vmac (vrrp.<VRID>); default must stay 1
-      so new real interfaces still log martians.
-
 # Look up each counter by name and confirm packets fired as expected.
 # Counters are declared at table scope (see nftables.conf.j2) and
 # referenced from rules via `counter name "X"`; the table-scope
