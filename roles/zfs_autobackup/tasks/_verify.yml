@@ -132,30 +132,15 @@
       zfs_backup_local created no @bak- snapshot on rpool/zfs_autobackup_test
       ({{ zfs_autobackup_verify_snaps.stdout }})
 
-# The fixture has no bunk endpoint. Its self-referential onsite source cannot
-# authenticate, so render the same script without that source to exercise the
-# local snapshot path and prove the paused offsite leg does not fail the run.
-- name: _verify | Render nightly backup without the fixture onsite source
-  template:
-    src: zfs_autosnapshot.sh.j2
-    dest: /tmp/zfs_autosnapshot_no_onsite
-    mode: "0755"
-    validate: bash -n %s
-  vars:
-    zfs_autobackup_sources: []
-  become: true
-
+# The fixture has no bunk endpoint and its self-referential onsite source cannot
+# authenticate, so the script stubs the pull. Its real nightly backups prove the
+# local snapshot path and that the paused offsite leg does not fail the run.
 - name: _verify | Wait out the snapshot-name second before nightly backup
   pause:
     seconds: 2
 
-- name: _verify | Run nightly backup without bunk
-  command: /tmp/zfs_autosnapshot_no_onsite
-  changed_when: false
-  become: true
-
 - name: _verify | Exercise scrub pause ownership during real nightly backups
-  script: _verify_scrub_pause.sh /tmp/zfs_autosnapshot_no_onsite /usr/local/bin/zfs_autosnapshot
+  script: _verify_scrub_pause.sh
   changed_when: false
   become: true
 
