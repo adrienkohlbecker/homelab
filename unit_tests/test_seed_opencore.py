@@ -41,8 +41,7 @@ def test_malformed_plist_is_not_overwritten(tmp_path):
 
 
 @pytest.fixture
-def destination(tmp_path, monkeypatch):
-    monkeypatch.setattr(seed.shutil, "chown", lambda *args, **kwargs: None)
+def destination(tmp_path):
     return tmp_path / "OpenCore.qcow2"
 
 

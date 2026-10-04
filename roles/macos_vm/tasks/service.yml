@@ -5,7 +5,7 @@
     dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
     remote_src: true
     owner: root
-    group: kvm
+    group: root
     mode: "0644"
     force: false
     backup: true

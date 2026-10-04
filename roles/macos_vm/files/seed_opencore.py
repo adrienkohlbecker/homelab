@@ -6,7 +6,6 @@ import fcntl
 import json
 import os
 import plistlib
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -65,7 +64,6 @@ def seed_image(source: Path, destination: Path, prev_lang_kbd: str, apple_locale
         with tempfile.TemporaryDirectory(prefix=".opencore_", dir=destination.parent) as scratch:
             image = Path(scratch) / "OpenCore.qcow2"
             build_image(source, image, prev_lang_kbd, apple_locale, boot_args)
-            shutil.chown(image, user="root", group="kvm")
             image.chmod(0o644)
             with image.open("rb") as stream:
                 os.fsync(stream.fileno())

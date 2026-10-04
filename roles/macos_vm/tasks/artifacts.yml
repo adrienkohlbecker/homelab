@@ -5,7 +5,7 @@
     path: "{{ macos_vm_artifacts_dir }}"
     state: directory
     owner: root
-    group: kvm
+    group: root
     mode: "0755"
   become: true
   register: macos_vm_artifacts_dir_result
@@ -15,7 +15,7 @@
     path: "{{ macos_vm_workdir }}"
     state: directory
     owner: root
-    group: kvm
+    group: root
     mode: "0755"
   become: true
   register: macos_vm_workdir_result
@@ -30,7 +30,7 @@
     dest: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
     checksum: "sha256:{{ macos_vm_opencore_artifact.sha256 }}"
     owner: root
-    group: kvm
+    group: root
     mode: "0644"
   become: true
 
@@ -171,21 +171,3 @@
           - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
           - "{{ macos_vm_workdir }}/BaseSystem.img"
         creates: "{{ macos_vm_workdir }}/BaseSystem.img"
-
-- name: artifacts | Set BaseSystem ownership for QEMU
-  when:
-    - macos_vm_install_mode
-    - >-
-      not (ansible_check_mode and (macos_vm_workdir_result.changed
-      or macos_vm_basesystem_result.changed | default(false)
-      or macos_vm_basesystem_convert_result.changed | default(false)))
-  file:
-    path: "{{ item }}"
-    owner: root
-    group: kvm
-    mode: "0644"
-  loop:
-    - "{{ macos_vm_workdir }}/BaseSystem.dmg"
-    - "{{ macos_vm_workdir }}/BaseSystem.img"
-    - "{{ macos_vm_workdir }}/BaseSystem.chunklist"
-  become: true
