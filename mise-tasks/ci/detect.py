@@ -78,7 +78,6 @@ _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, 
 
 
 PACKER_PATH_PREFIXES = ("packer/", "mise-tasks/packer/")
-QEMU_TEMPLATE = Path(__file__).resolve().parents[2] / "packer" / "qemu.pkr.hcl"
 
 
 @cache
@@ -89,8 +88,8 @@ def packer_baked_repo_files() -> frozenset[str]:
     the template: editing one of these files changes the baked fixture image
     just as an edit under packer/ does.
     """
-    template = hcl2.load(
-        QEMU_TEMPLATE.open(),
+    template = hcl2.loads(
+        (Path(__file__).resolve().parents[2] / "packer" / "qemu.pkr.hcl").read_text(),
         serialization_options=hcl2.SerializationOptions(strip_string_quotes=True),
     )
     prefix = "${path.cwd}/"
