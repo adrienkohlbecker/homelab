@@ -301,21 +301,17 @@
   set_fact:
     fluentbit_lnav_healthcheck_cid: "{{ fluentbit_lnav_healthcheck_marker | hash('sha256') }}"
 
-- name: _verify | Podman_healthcheck | build legacy and suffixed unit names
+# The Lua unit tests cover every healthcheck unit-name form; one suffixed
+# Podman 5 name proves the rewrite runs in the live pipeline.
+- name: _verify | Podman_healthcheck | name the unit like a healthcheck
   set_fact:
-    fluentbit_lnav_healthcheck_units:
-      podman_healthcheck: "{{ fluentbit_lnav_healthcheck_cid }}.service"
-      podman_healthcheck_suffixed: "{{ fluentbit_lnav_healthcheck_cid }}-123abc.service"
-      podman_healthcheck_startup: "{{ fluentbit_lnav_healthcheck_cid }}-startup-123abc.service"
+    fluentbit_lnav_healthcheck_unit: "{{ fluentbit_lnav_healthcheck_cid }}-123abc.service"
 
-- name: _verify | Podman_healthcheck | run failing transient units named like healthchecks
+- name: _verify | Podman_healthcheck | run a failing transient unit named like a healthcheck
   command: >-
-    systemd-run --unit={{ item.value }}
+    systemd-run --unit={{ fluentbit_lnav_healthcheck_unit }}
     --quiet
     /bin/sh -c "exit 1"
-  loop: "{{ fluentbit_lnav_healthcheck_units | dict2items }}"
-  loop_control:
-    label: "{{ item.value }}"
   changed_when: false
   become: true
 
@@ -388,13 +384,7 @@
       marker: "{{ fluentbit_lnav_podman_event_marker }}"
       service: podman
     - name: podman_healthcheck
-      marker: "{{ fluentbit_lnav_healthcheck_units.podman_healthcheck }}"
-      service: podman_healthcheck
-    - name: podman_healthcheck_suffixed
-      marker: "{{ fluentbit_lnav_healthcheck_units.podman_healthcheck_suffixed }}"
-      service: podman_healthcheck
-    - name: podman_healthcheck_startup
-      marker: "{{ fluentbit_lnav_healthcheck_units.podman_healthcheck_startup }}"
+      marker: "{{ fluentbit_lnav_healthcheck_unit }}"
       service: podman_healthcheck
   loop_control:
     label: "{{ item.name }}"
@@ -596,18 +586,15 @@
 
 - name: _verify | Podman_healthcheck | assert rewrite shape
   vars:
-    row: "{{ _fluentbit_lnav_by_name[item.key] }}"
+    row: "{{ _fluentbit_lnav_by_name.podman_healthcheck }}"
   assert:
     that:
       - "row.service == 'podman_healthcheck'"
       - "'CONTAINER_ID_FULL' not in row.fields"
       - "row.fields.CONTAINER_ID == fluentbit_lnav_healthcheck_cid[:12]"
-      - "row.fields.UNIT == item.value"
-      - "item.value in row.message"
+      - "row.fields.UNIT == fluentbit_lnav_healthcheck_unit"
+      - "fluentbit_lnav_healthcheck_unit in row.message"
     fail_msg: "podman_healthcheck rewrite did not fire: {{ row }}"
-  loop: "{{ fluentbit_lnav_healthcheck_units | dict2items }}"
-  loop_control:
-    label: "{{ item.value }}"
 
 - name: _verify | Fluent Bit journal has no Lua warnings
   command:
