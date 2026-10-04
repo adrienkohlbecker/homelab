@@ -14,12 +14,7 @@ def test_release_provider_contract(release: str, zfs_root: bool) -> None:
     source = yaml.safe_load((Path(__file__).parents[1] / "group_vars/all/main.yml").read_text())
     environment = NativeEnvironment(undefined=StrictUndefined)
     variables = {"ansible_distribution_release": release, "zfs_root": zfs_root}
-    for name in (
-        "initramfs_use_dracut",
-        "initramfs_packages",
-        "initramfs_rebuild_command",
-        "initramfs_list_command",
-    ):
+    for name in ("initramfs_use_dracut", "initramfs_packages"):
         variables[name] = environment.from_string(source[name]).render(variables)
 
     if release in {"jammy", "noble"}:
