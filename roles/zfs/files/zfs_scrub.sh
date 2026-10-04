@@ -16,9 +16,9 @@ set -euo pipefail
 # the unit "running" across the nightly zfs_autosnapshot window -- which pauses
 # in-progress scrubs to avoid I/O contention (see zfs_autosnapshot). Kicking the
 # scrub off and returning leaves that pause/resume free to operate. The outcome
-# is watched out-of-band: zfs_health alarms on canceled scrubs or 40 days since
-# the latest completed scrub/resilver or paused scrub (pool creation when no
-# timestamp exists). ZED's scrub_finish zedlet mails on scrubs with errors.
+# is watched out-of-band: zfs_health alarms on canceled or stale scrubs
+# (zfs_status.py scrub_issue); ZED's scrub_finish zedlet mails on scrubs with
+# errors.
 # Stagger the per-pool kick-offs. lab hard-locked ~12s into this run on
 # 2026-06-14, during scrub initiation rather than steady state, so spacing the
 # starts keeps every pool from entering its metadata-read burst in the same
