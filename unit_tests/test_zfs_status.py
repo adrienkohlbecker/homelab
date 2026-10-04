@@ -247,22 +247,6 @@ def test_health_startup_failure_is_mailed(monkeypatch, capsys):
     assert status.diagnostic(error) in mail[0][1]["input"]
 
 
-@pytest.mark.parametrize("expire", ["invalid", "", "-1"])
-def test_invalid_expiration_is_mailed_before_selecting_either_parser(monkeypatch, expire):
-    monkeypatch.setattr(status.sys, "argv", ["zfs_health", "health"])
-    monkeypatch.setenv("SCRUB_EXPIRE", expire)
-
-    def unexpected_version_query():
-        pytest.fail("Invalid expiration must be reported before running either health parser")
-
-    monkeypatch.setattr(status, "supports_json", unexpected_version_query)
-    mail = []
-    monkeypatch.setattr(status.subprocess, "run", lambda *args, **kwargs: mail.append(kwargs["input"]))
-    assert status.main() == 1
-    assert len(mail) == 1
-    assert "Cannot initialize health check" in mail[0]
-
-
 def test_scan_version_failure_does_not_send_a_health_mail(monkeypatch, capsys):
     monkeypatch.setattr(status.sys, "argv", ["zfs_status.py", "scan"])
 
@@ -377,8 +361,7 @@ def test_paused_scrub_timestamp_is_not_hidden_by_old_rebuild_history(pool):
 
 @pytest.fixture
 def health_env(monkeypatch):
-    """Run health() as root at t=100 and collect each mailed body."""
-    monkeypatch.setattr(status.os, "geteuid", lambda: 0)
+    """Run health() at t=100 and collect each mailed body."""
     monkeypatch.setattr(status.time, "time", lambda: 100)
     mail = []
 

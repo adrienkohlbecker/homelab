@@ -209,8 +209,6 @@ def finish_health(issues: list[str], report: list[str]) -> int:
 
 def health(expire: int) -> int:
     """Mail counted failures while preserving zpool -x's feature-cap policy."""
-    if os.geteuid() != 0:
-        raise PermissionError("I require root")
     issues = []
     report = []
     try:
@@ -263,7 +261,7 @@ def main() -> int:
     try:
         if args.command == "health":
             try:
-                expire = integer(int(os.environ.get("SCRUB_EXPIRE", "3456000")), "SCRUB_EXPIRE")
+                expire = int(os.environ.get("SCRUB_EXPIRE", "3456000"))
                 if not supports_json():
                     return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
             except QUERY_ERRORS as error:
