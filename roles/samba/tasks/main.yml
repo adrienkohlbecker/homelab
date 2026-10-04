@@ -46,13 +46,10 @@
   tags:
     - samba
 
-# Noble ships the catia, fruit, and streams_xattr VFS modules the config loads
-# in samba-vfs-modules, which samba only recommends; a host that installed
-# samba without recommends would fail every tree connect. Resolute moves them
-# into samba itself.
 - name: Install samba package
   apt:
-    pkg: "{{ ['samba'] + (['samba-vfs-modules'] if ansible_distribution_major_version | int < 26 else []) }}"
+    pkg:
+      - samba
     policy_rc_d: 101
     cache_valid_time: 3600
   register: samba_apt

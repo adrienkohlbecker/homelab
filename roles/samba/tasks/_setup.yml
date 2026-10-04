@@ -16,15 +16,12 @@
 
 # Start from a host serving NetBIOS, as Noble's stock Samba does: a config that
 # enables it and a running nmbd. Converge must take both away, which _verify
-# checks at the socket level. Skipping recommends also leaves Noble without
-# samba-vfs-modules, which the role must then request itself. Pre-installing
-# trades away the fresh-install path in these cells; the SITE converge covers
-# it on a fresh fixture.
+# checks at the socket level. Pre-installing trades away the fresh-install
+# path in these cells; the SITE converge covers it on a fresh fixture.
 - name: _setup | Install Samba with its services allowed to start
   apt:
     pkg:
       - samba
-    install_recommends: false
     cache_valid_time: 3600
   become: true
 
