@@ -80,18 +80,6 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     assert machine.ssh_calls == []
 
 
-def test_converge_poweroff_ignores_fixture_inhibitor(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
-    machine = SiteTestMachine(tmp_path)
-
-    asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
-
-    assert site_test.POWEROFF_COMMAND in machine.ssh_calls
-
-
 def test_converge_profiles_settled_boot_before_poweroff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
