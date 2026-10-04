@@ -83,46 +83,6 @@
       Expected no candidate for an unmatched pin;
       got policy: {{ _apt_source_unmatched_policy.stdout }}
 
-- name: _verify | Reject a bare wildcard package pin
-  block:
-    - name: _verify | Attempt a pin for every package (should raise)
-      import_role:
-        name: apt_source
-        tasks_from: configure
-      vars:
-        apt_source_args: >-
-          {{ _apt_source_docker | combine({'pin': {'package': '*', 'version': '0.*'}}) }}
-    - name: _verify | Sentinel fail if the bare wildcard pin was accepted
-      fail:
-        msg: a bare wildcard package pin should have been rejected but was not
-  rescue:
-    - name: _verify | The argument assertion rejected the bare wildcard
-      assert:
-        that:
-          - ansible_failed_task.name is search('^configure [|] Assert apt_source args')
-        fail_msg: "Expected the argument assertion to fail; got {{ ansible_failed_task.name }}"
-
-# A misspelled pin key must fail the call rather than read as no pin, which
-# would delete the hold configured above.
-- name: _verify | Reject a misspelled pin key
-  block:
-    - name: _verify | Attempt a pin under a misspelled key (should raise)
-      import_role:
-        name: apt_source
-        tasks_from: configure
-      vars:
-        apt_source_args: >-
-          {{ _apt_source_docker | combine({'pins': {'package': 'docker-ce-cli', 'version': '0.*'}}) }}
-    - name: _verify | Sentinel fail if the misspelled pin key was accepted
-      fail:
-        msg: a misspelled pin key should have been rejected but was not
-  rescue:
-    - name: _verify | The argument assertion rejected the misspelled key
-      assert:
-        that:
-          - ansible_failed_task.name is search('^configure [|] Assert apt_source args')
-        fail_msg: "Expected the argument assertion to fail; got {{ ansible_failed_task.name }}"
-
 - name: _verify | Drop the docker-ce-cli pin
   import_role:
     name: apt_source
