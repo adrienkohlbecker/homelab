@@ -185,37 +185,14 @@
   changed_when: false
 
 # TCP is the truncated-answer fallback, served by aardvark-dns 1.12+ (Noble
-# ships 1.4, UDP-only). busybox nslookup cannot force TCP, so run the host dig
-# inside the server's network namespace: the query leaves the container IP for
-# gateway:53, and netavark must DNAT it to aardvark's TCP listener.
+# ships 1.4, UDP-only).
 - name: _verify | A container resolves <name>.dns.podman over TCP
   when: ansible_distribution_release != 'noble'
-  block:
-    - name: _verify | Read the DNS probe server PID, IP, and gateway
-      command:
-        argv:
-          - podman
-          - inspect
-          - podman_verify_server
-          - --format
-          - '{% raw %}{{ .State.Pid }} {{ (index .NetworkSettings.Networks "podman_verify_dns").IPAddress }} {{ (index .NetworkSettings.Networks "podman_verify_dns").Gateway }}{% endraw %}'
-      register: podman_dns_server_net
-      changed_when: false
-      become: true
-
-    - name: _verify | A TCP dig from the container netns resolves the server
-      vars:
-        _fields: "{{ podman_dns_server_net.stdout.split() }}"
-      command: >-
-        nsenter --target {{ _fields[0] }} --net
-        dig +tcp +short +tries=1 +time=2 @{{ _fields[2] }}
-        podman_verify_server.dns.podman A
-      register: podman_dns_tcp_probe
-      until: podman_dns_tcp_probe.stdout | trim == _fields[1]
-      retries: 5
-      delay: 2
-      changed_when: false
-      become: true
+  import_tasks: _verify_tcp_dns.yml
+  vars:
+    podman_tcp_dns_args:
+      container: podman_verify_server
+      network: podman_verify_dns
 
 - name: _verify | Tear down the DNS probe container + network
   command: "{{ item }}"

@@ -96,7 +96,7 @@
     # The dig resolving through this ruleset's policy-drop INPUT is the proof;
     # _verify_counters.yml pins the aardvark_tcp_accept counter itself.
     # Aardvark-dns serves TCP from 1.12 (Noble ships 1.4). busybox nslookup
-    # cannot force TCP, so the host dig runs in the peer's network namespace.
+    # cannot force TCP, so the shared podman probe digs from the peer's netns.
     - name: _verify_forward | Named-bridge DNS over TCP passes the INPUT policy
       when: ansible_distribution_release != 'noble'
       block:
@@ -107,32 +107,14 @@
           changed_when: true
           become: true
 
-        - name: _verify_forward | Read the DNS peer PID, IP, and gateway
-          command:
-            argv:
-              - podman
-              - inspect
-              - firewall_verify_dns_peer
-              - --format
-              - '{% raw %}{{ .State.Pid }} {{ (index .NetworkSettings.Networks "firewall_verify_named").IPAddress }} {{ (index .NetworkSettings.Networks "firewall_verify_named").Gateway }}{% endraw %}'
-          register: _firewall_dns_peer_net
-          changed_when: false
-          become: true
-
         - name: _verify_forward | A TCP dig from the peer netns resolves the peer
+          import_role:
+            name: podman
+            tasks_from: _verify_tcp_dns
           vars:
-            _fields: "{{ _firewall_dns_peer_net.stdout.split() }}"
-          command: >-
-            nsenter --target {{ _fields[0] }} --net
-            dig +tcp +short +tries=1 +time=2 @{{ _fields[2] }}
-            firewall_verify_dns_peer.dns.podman A
-          register: _firewall_tcp_dns_probe
-          until: _firewall_tcp_dns_probe.stdout | trim == _fields[1]
-          retries: 5
-          delay: 2
-          changed_when: false
-          become: true
-
+            podman_tcp_dns_args:
+              container: firewall_verify_dns_peer
+              network: firewall_verify_named
   always:
     - name: _verify_forward | Remove the named DNS peer
       command: podman rm -f firewall_verify_dns_peer

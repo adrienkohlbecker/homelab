@@ -1,0 +1,29 @@
+# Shared TCP DNS probe: prove a running container resolves its own
+# <name>.dns.podman FQDN over TCP through gateway:53. busybox nslookup cannot
+# force TCP, so the host dig (installed by the caller) runs inside the
+# container's network namespace: the query leaves the container IP for
+# gateway:53, and netavark must DNAT it to aardvark's TCP listener.
+#
+# Inputs (podman_tcp_dns_args):
+#   container: running container attached to `network`, queried by FQDN
+#   network:   DNS-enabled podman network carrying the query
+- name: _verify_tcp_dns | Inspect the probe container
+  command: podman inspect {{ podman_tcp_dns_args.container }}
+  register: podman_tcp_dns_inspect
+  changed_when: false
+  become: true
+
+- name: _verify_tcp_dns | A TCP dig from the container netns resolves the container
+  vars:
+    _container: "{{ podman_tcp_dns_inspect.stdout | from_json | first }}"
+    _network: "{{ _container.NetworkSettings.Networks[podman_tcp_dns_args.network] }}"
+  command: >-
+    nsenter --target {{ _container.State.Pid }} --net
+    dig +tcp +short +tries=1 +time=2 @{{ _network.Gateway }}
+    {{ podman_tcp_dns_args.container }}.dns.podman A
+  register: podman_tcp_dns_probe
+  until: podman_tcp_dns_probe.stdout | trim == _network.IPAddress
+  retries: 5
+  delay: 2
+  changed_when: false
+  become: true
