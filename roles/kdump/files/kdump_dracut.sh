@@ -3,7 +3,9 @@ set -euo pipefail
 
 # Dracut capture-image generation from Ubuntu kdump-tools 1:1.10.7ubuntu5
 # (LP #2042955), for Resolute's package-owned kernel hook and kdump-config.
-# Noble retains its package hook and mkinitramfs capture path.
+# Noble retains its package hook and mkinitramfs capture path. The
+# decompressed-size file is omitted: it only feeds the advisory crashkernel
+# estimate of kdump-config show, and crash memory is reserved statically.
 [ -x /usr/sbin/kdump-config ] || exit 0
 version="${1:?A kernel version is required}"
 linux-version list | grep -Fx "$version" >/dev/null || exit 0
@@ -26,15 +28,4 @@ echo "kdump-tools: Generating $target (dracut)"
 # and apt runs this hook from the caller's working directory.
 cd /
 dracut --force --add-confdir kdump-tools "$target.new" "$version"
-
-# The package's crashkernel estimator consumes the decompressed size in MiB.
-if measure_bytes="$(3cpio --examine --raw "$target.new" | awk -F '\t' '{ total += $5 } END { print total + 0 }')" &&
-  [ "$measure_bytes" -gt 0 ]; then
-  echo $(((measure_bytes + 1024 * 1024 - 1) / (1024 * 1024))) >"$kdumpdir/size_initrd.img-$version"
-  sync "$kdumpdir/size_initrd.img-$version"
-else
-  # The estimator tolerates a missing size; keep the valid capture image.
-  rm -f "$kdumpdir/size_initrd.img-$version"
-  echo "W: kdump-tools: Cannot determine the capture image size; the crashkernel estimator may be unavailable" >&2
-fi
 mv "$target.new" "$target"

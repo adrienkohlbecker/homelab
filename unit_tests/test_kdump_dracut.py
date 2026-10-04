@@ -20,7 +20,6 @@ class Hook:
     path: Path
     bin_dir: Path
     target: Path
-    size_file: Path
 
     def run(self, **env_extra: str) -> subprocess.CompletedProcess[str]:
         env = dict(os.environ, PATH=f"{self.bin_dir}:{os.environ['PATH']}")
@@ -45,8 +44,6 @@ def _hook(tmp_path: Path, **bodies: str | None) -> Hook:
     kdump_dir.mkdir()
     target = kdump_dir / f"initrd.img-{KERNEL}"
     target.write_text("old image")
-    size_file = kdump_dir / f"size_initrd.img-{KERNEL}"
-    size_file.write_text("999\n")
     commands: dict[str, str | None] = {
         "kdump-config": "exit 0",
         "linux-version": f"printf '%s\\n' {KERNEL}",
@@ -54,7 +51,6 @@ def _hook(tmp_path: Path, **bodies: str | None) -> Hook:
         # dracut tries --add-confdir as a path before its configuration
         # directories; the caller's planted directory must not resolve.
         "dracut": '[ ! -d "$3" ] || exit 97\ntouch "$0.ran"\nprintf "new image" >"$4"',
-        "3cpio": "exit 0",
     } | bodies
     for name, body in commands.items():
         if body is None:
@@ -70,34 +66,16 @@ def _hook(tmp_path: Path, **bodies: str | None) -> Hook:
         .replace("/usr/sbin/kdump-config", str(bin_dir / "kdump-config"))
         .replace("/var/lib/kdump", str(kdump_dir))
     )
-    return Hook(hook, bin_dir, target, size_file)
+    return Hook(hook, bin_dir, target)
 
 
-@pytest.mark.parametrize(
-    ("measurement", "size"),
-    [
-        pytest.param("exit 1", None, id="failure"),
-        pytest.param("exit 0", None, id="zero"),
-        # Early microcode and the main archive are separate cpio segments.
-        pytest.param(
-            "printf 'early\\t0\\t0\\t0\\t1048576\\nmain\\t0\\t0\\t0\\t1048577\\n'",
-            "3\n",
-            id="valid",
-        ),
-    ],
-)
-def test_capture_image_installation(tmp_path: Path, measurement: str, size: str | None) -> None:
-    hook = _hook(tmp_path, **{"3cpio": measurement})
+def test_capture_image_installation(tmp_path: Path) -> None:
+    hook = _hook(tmp_path)
 
     result = hook.run()
 
     assert result.returncode == 0, result.stderr
     assert hook.target.read_text() == "new image"
-    if size is None:
-        assert "estimator may be unavailable" in result.stderr
-        assert not hook.size_file.exists()
-    else:
-        assert hook.size_file.read_text() == size
     assert not Path(f"{hook.target}.new").exists()
 
 
@@ -108,7 +86,6 @@ def test_generation_failure_keeps_the_installed_image(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert hook.target.read_text() == "old image"
-    assert hook.size_file.read_text() == "999\n"
     assert not Path(f"{hook.target}.new").exists()
 
 
@@ -130,7 +107,6 @@ def test_hook_skips_without_building(tmp_path: Path, bodies: dict[str, str | Non
     assert result.returncode == 0, result.stderr
     assert not hook.dracut_ran
     assert hook.target.read_text() == "old image"
-    assert hook.size_file.read_text() == "999\n"
 
 
 def test_configure_action_builds(tmp_path: Path) -> None:

@@ -43,9 +43,9 @@
 
 - name: Install kdump-tools
   apt:
-    pkg: >-
-      {{ ['kdump-tools', 'makedumpfile'] +
-         (['3cpio'] if initramfs_use_dracut else []) }}
+    pkg:
+      - kdump-tools
+      - makedumpfile
     # The legacy package recommends initramfs-tools, conflicting with Dracut.
     install_recommends: '{{ not initramfs_use_dracut }}'
     policy_rc_d: 101
