@@ -98,48 +98,6 @@
         path: /etc/cron.d/user_verify_cron_filter
         state: absent
 
-# Resolute's postinst takes one background sample when collection is enabled.
-- name: _verify | Sysstat keeps no activity history
-  command: sar
-  register: _user_sar
-  changed_when: false
-  failed_when: _user_sar.rc == 0 or (_user_sar.stdout + _user_sar.stderr) is not search('No such file')
-
-# Noble ships the removed cron job as a conffile. A reinstall must leave it
-# deleted, as an upgrade does, rather than bring its CMD records back.
-- name: _verify | The sysstat cron job stays removed across a reinstall
-  become: true
-  block:
-    - name: _verify | Read the sysstat conffiles
-      command:
-        argv:
-          - dpkg-query
-          - --showformat=${Conffiles}
-          - --show
-          - sysstat
-      register: _user_sysstat_conffiles
-      changed_when: false
-
-    # The apt module cannot reinstall an installed package.
-    - name: _verify | Reinstall sysstat  # noqa: command-instead-of-module
-      when: _user_sysstat_conffiles.stdout is search('(?m)^ /etc/cron[.]d/sysstat ')
-      command: apt-get install --reinstall --yes sysstat
-      environment:
-        DEBIAN_FRONTEND: noninteractive
-      changed_when: true
-
-    - name: _verify | Read the sysstat cron job
-      when: _user_sysstat_conffiles.stdout is search('(?m)^ /etc/cron[.]d/sysstat ')
-      stat:
-        path: /etc/cron.d/sysstat
-      register: _user_sysstat_cron
-
-    - name: _verify | Dpkg left the sysstat cron job deleted
-      when: _user_sysstat_conffiles.stdout is search('(?m)^ /etc/cron[.]d/sysstat ')
-      assert:
-        that:
-          - not _user_sysstat_cron.stat.exists
-
 # Shell startup needs these binaries; verification must not install missing tools.
 - name: _verify | Mise tools execute without installing
   environment:
@@ -187,20 +145,14 @@
   register: _user_zoxide_path
   changed_when: false
 
-# Reproduce Resolute's postinst on upgrade from Noble (LP: #2073285); the Stow
-# reconverges below must turn collection back off.
-- name: _verify | Re-enable sysstat collection as the Noble upgrade does
+# Recreate the diversion earlier converges installed; the reconverges below
+# must hand the packaged hook back to systemd-sleep.
+- name: _verify | Divert the sysstat sleep hook as earlier converges did
+  community.general.dpkg_divert:
+    path: /usr/lib/systemd/system-sleep/sysstat.sleep
+    divert: /usr/lib/systemd/sysstat.sleep.distrib
+    rename: true
   become: true
-  block:
-    - name: _verify | Set collection on
-      lineinfile:
-        path: /etc/default/sysstat
-        regexp: ^ENABLED=
-        line: ENABLED="true"
-
-    - name: _verify | Enable and start the collection units  # noqa: command-instead-of-module
-      command: systemctl enable --now sysstat.service
-      changed_when: true
 
 # Stow must reject conflicts without installing tools ahead of the explicit installer.
 - name: _verify | Stow rejects conflicts and recovers incomplete deployment
@@ -256,63 +208,22 @@
       - user_dotfiles_stow.changed
       - user_mise_tools.changed
 
-- name: _verify | No sysstat timer is scheduled  # noqa: command-instead-of-module
-  command: systemctl list-timers --plain --no-legend sysstat*
-  register: _user_sysstat_timers
+- name: _verify | List dpkg diversions
+  command: dpkg-divert --list
+  register: _user_diversions
   changed_when: false
-  failed_when: _user_sysstat_timers.stdout | length > 0
 
-- name: _verify | No sysstat unit starts at boot  # noqa: command-instead-of-module
-  command: systemctl list-unit-files --state=enabled --no-legend sysstat*
-  register: _user_sysstat_enabled
-  changed_when: false
-  failed_when: _user_sysstat_enabled.stdout | length > 0
+- name: _verify | Check the packaged sysstat sleep hook
+  stat:
+    path: /usr/lib/systemd/system-sleep/sysstat.sleep
+  register: _user_sysstat_sleep_hook
 
-# The simulated upgrade wrote a boot record into today's file. Run Resolute's
-# timer unit, which gates on ENABLED (Noble's collects whenever its disabled
-# timers fire), then every hook as systemd-sleep does around a suspend. None
-# may add a record. run-parts would skip sysstat.sleep for its dotted name.
-- name: _verify | Disabled collectors add no records
-  become: true
-  block:
-    - name: _verify | Locate today's sysstat data file
-      command: date +/var/log/sysstat/sa%d
-      register: _user_sa_file
-      changed_when: false
-
-    - name: _verify | Record the data file before collecting
-      stat:
-        path: "{{ _user_sa_file.stdout }}"
-      register: _user_sa_before
-
-    - name: _verify | Check for the Noble cron wrapper
-      stat:
-        path: /usr/lib/sysstat/debian-sa1
-      register: _user_debian_sa1
-
-    - name: _verify | Run the Resolute timer collector  # noqa: command-instead-of-module
-      when: not _user_debian_sa1.stat.exists
-      command: systemctl start sysstat-collect.service
-      changed_when: false
-
-    - name: _verify | Run the sleep hooks around a suspend
-      command:
-        argv:
-          - sh
-          - -c
-          - for phase in pre post; do for hook in /usr/lib/systemd/system-sleep/*; do [ -x "$hook" ] && "$hook" "$phase" suspend; done; done; true
-      changed_when: false
-
-    - name: _verify | Record the data file after collecting
-      stat:
-        path: "{{ _user_sa_file.stdout }}"
-      register: _user_sa_after
-
-    - name: _verify | The data file is unchanged
-      assert:
-        that:
-          - _user_sa_before.stat.exists
-          - _user_sa_after.stat.checksum == _user_sa_before.stat.checksum
+- name: _verify | The sleep hook diversion is gone and the hook restored
+  assert:
+    that:
+      - "'sysstat.sleep' not in _user_diversions.stdout"
+      - _user_sysstat_sleep_hook.stat.exists
+    fail_msg: "{{ _user_diversions.stdout_lines }}"
 
 - name: _verify | Remove generated completions to exercise shell bootstrap
   file:

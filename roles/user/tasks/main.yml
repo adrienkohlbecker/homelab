@@ -7,26 +7,13 @@
   tags:
     - user
 
-# sysstat is installed for its interactive tools; Netdata keeps metrics
-# history. Resolute collects by default, so preseed a fresh install off.
-- name: Preseed sysstat history collection off
-  debconf:
-    name: sysstat
-    question: sysstat/enable
-    vtype: boolean
-    value: false
-  become: true
-  tags:
-    - user
-
-# systemd-sleep runs every hook in this package-owned directory, and sysstat's
-# writes a sleep marker, creating the day's data file, whatever ENABLED says.
-# A local diversion outside the directory survives package upgrades.
-- name: Divert the sysstat sleep hook away from systemd-sleep
+# Undo the sleep-hook diversion earlier converges installed.
+- name: Remove the sysstat sleep hook diversion
   community.general.dpkg_divert:
     path: /usr/lib/systemd/system-sleep/sysstat.sleep
     divert: /usr/lib/systemd/sysstat.sleep.distrib
     rename: true
+    state: absent
   become: true
   tags:
     - user
@@ -74,7 +61,6 @@
       - stow
       - strace
       - stress
-      - sysstat
       - tcpdump
       - telnet
       - tig
@@ -116,59 +102,6 @@
   systemd:
     name: cron.service
     state: restarted
-  become: true
-  tags:
-    - user
-
-# Resolute's postinst turns collection back on when upgrading from Noble
-# (LP: #2073285). Later package runs read this value back into debconf.
-- name: Keep sysstat history collection off
-  when: not (ansible_check_mode and user_apt_packages.changed)
-  lineinfile:
-    path: /etc/default/sysstat
-    regexp: ^ENABLED=
-    line: ENABLED="false"
-    backup: true
-    validate: sh -n %s
-  become: true
-  tags:
-    - user
-
-# Noble's cron job runs debian-sa1 every ten minutes, which exits at once on a
-# systemd host and leaves only cron's CMD record. That record comes from a
-# process often gone before journald attributes it to cron.service, so no unit
-# log filter reliably drops it. dpkg keeps a deleted conffile deleted across
-# upgrades, and Resolute ships no such job.
-- name: Remove the no-op sysstat cron job
-  file:
-    path: /etc/cron.d/sysstat
-    state: absent
-  become: true
-  tags:
-    - user
-
-# Enabled timers fire regardless of ENABLED: Noble's units then collect anyway,
-# and Resolute's log a skipped condition every ten minutes. Resolute also adds
-# a rotation timer to Noble's set.
-- name: Find sysstat collection units
-  find:
-    paths: /usr/lib/systemd/system
-    patterns:
-      - sysstat.service
-      - sysstat*.timer
-  register: user_sysstat_units
-  tags:
-    - user
-
-- name: Stop sysstat collection units
-  when: not (ansible_check_mode and user_apt_packages.changed)
-  systemd:
-    name: "{{ item.path | basename }}"
-    enabled: false
-    state: stopped
-  loop: "{{ user_sysstat_units.files }}"
-  loop_control:
-    label: "{{ item.path | basename }}"
   become: true
   tags:
     - user
