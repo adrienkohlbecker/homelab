@@ -11,16 +11,13 @@ ConditionPathExists={{ macos_vm_workdir }}/BaseSystem.img
 {% endif %}
 
 [Service]
-Type=simple
 RuntimeDirectory=macos-vm
-RuntimeDirectoryMode=0755
 WorkingDirectory={{ macos_vm_workdir }}
 Restart=on-failure
 RestartSec=5
 RestartSteps=6
 RestartMaxDelaySec=10min
 TimeoutStopSec=45
-KillSignal=SIGTERM
 {% if macos_vm_install_mode %}
 Environment=TMPDIR={{ macos_vm_workdir }}
 {% endif %}
