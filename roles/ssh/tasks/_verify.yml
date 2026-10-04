@@ -91,15 +91,13 @@
   changed_when: false
   failed_when: false
 
-# ssh -v ends its debug lines with CRLF, hence the trim. Which hybrid wins is
-# upstream's per-release default; either one keeps the session post-quantum.
+# ssh -v ends its debug lines with CRLF. Which hybrid wins is upstream's
+# per-release default; either one keeps the session post-quantum.
 - name: _verify | Sshd negotiates a post-quantum hybrid key exchange
   assert:
     that:
       - >-
-        ssh_verify_loopback.stderr_lines | map('trim')
-        | select('match', '^debug1: kex: algorithm: (mlkem768x25519-sha256|sntrup761x25519-sha512(@openssh\.com)?)$')
-        | list | length == 1
+        ssh_verify_loopback.stderr is search('(?m)^debug1: kex: algorithm: (mlkem768x25519-sha256|sntrup761x25519-sha512(@openssh\.com)?)\r?$')
     fail_msg: >-
       Expected a post-quantum hybrid key exchange; ssh reported:
       {{ ssh_verify_loopback.stderr_lines | select('search', 'kex: algorithm|Connection|Unable') | list }}
