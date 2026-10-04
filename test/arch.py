@@ -44,9 +44,9 @@ class ArchProfile:
     # for absolute-coordinate mouse; aarch64 virt has no default graphics
     # or input and needs the full virtio-gpu + xhci + kbd + tablet set.
     keep_vm_extra_devices: tuple[str, ...]
-    # Ordered candidate paths for the packaged EDK2/OVMF CODE blob. First
-    # existing path wins.
-    uefi_code_candidates: tuple[str, ...]
+    # UEFI CODE/VARS pair keyed by lowercase platform.system(); see
+    # data/architectures.yml.
+    uefi_firmware: dict[str, dict[str, str]]
     # x86_64's q35 falls back to SeaBIOS off the OS disk, so the cloud-image
     # minimal variant doesn't need UEFI pflash. aarch64 virt only boots via
     # UEFI -- pflash must be attached even on minimal.
@@ -62,8 +62,7 @@ X86_64 = ArchProfile(
     serial_console_token="console=ttyS",
     serial_console_default="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200",
     keep_vm_extra_devices=("-device", "usb-tablet"),
-    # x86_64 harness hosts are Ubuntu KVM runners (ovmf package).
-    uefi_code_candidates=(_X86_64_GUEST["uefi_firmware"]["code"],),
+    uefi_firmware=_X86_64_GUEST["uefi_firmware"],
     bios_boot_supported=True,
 )
 
@@ -86,13 +85,7 @@ AARCH64 = ArchProfile(
         "-device",
         "usb-tablet",
     ),
-    uefi_code_candidates=(
-        # Homebrew QEMU on macOS:
-        "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
-        "/usr/local/share/qemu/edk2-aarch64-code.fd",
-        # Debian/Ubuntu (qemu-efi-aarch64 package).
-        _AARCH64_GUEST["uefi_firmware"]["code"],
-    ),
+    uefi_firmware=_AARCH64_GUEST["uefi_firmware"],
     bios_boot_supported=False,
 )
 
@@ -115,14 +108,9 @@ def detect_host_arch() -> ArchProfile:
 
 
 def uefi_code_path_for(profile: ArchProfile) -> Path:
-    """Locate the packaged EDK2/OVMF CODE blob matching *profile* on this host.
-
-    Searches uefi_code_candidates in order; first existing path wins.
-    """
-    for c in profile.uefi_code_candidates:
-        if Path(c).exists():
-            return Path(c)
-    raise RuntimeError(
-        f"No {profile.name} UEFI firmware found in {list(profile.uefi_code_candidates)}. "
-        "Install `ovmf` (x86_64) or `qemu-efi-aarch64` (aarch64), or Homebrew's qemu on macOS."
-    )
+    """Return the EDK2/OVMF CODE blob *profile* uses on this host's OS."""
+    host_os = platform.system().lower()
+    firmware = profile.uefi_firmware.get(host_os)
+    if firmware is None:
+        raise RuntimeError(f"No {profile.name} UEFI firmware is defined for {host_os} hosts")
+    return Path(firmware["code"])

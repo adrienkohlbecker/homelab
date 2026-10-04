@@ -32,39 +32,14 @@ class TestDetectHostArch:
 
 
 class TestUefiCodePath:
-    def test_finds_first_existing(self, tmp_path: Path) -> None:
-        profile = arch.ArchProfile(
-            name="test",
-            qemu_binary="qemu-system-test",
-            machine_type="virt",
-            net_device="virtio-net",
-            cloud_image_suffix="test",
-            serial_console_token="console=tty",
-            serial_console_default="console=tty0",
-            keep_vm_extra_devices=(),
-            uefi_code_candidates=(
-                str(tmp_path / "nonexistent.fd"),
-                str(tmp_path / "found.fd"),
-                str(tmp_path / "also_found.fd"),
-            ),
-            bios_boot_supported=False,
-        )
-        (tmp_path / "found.fd").write_bytes(b"uefi")
-        (tmp_path / "also_found.fd").write_bytes(b"uefi2")
-        assert arch.uefi_code_path_for(profile) == tmp_path / "found.fd"
+    @pytest.mark.parametrize(("system", "host_os"), [("Linux", "linux"), ("Darwin", "darwin")])
+    def test_selects_the_host_os_pair(self, system: str, host_os: str) -> None:
+        with mock.patch.object(arch.platform, "system", return_value=system):
+            assert arch.uefi_code_path_for(arch.AARCH64) == Path(arch.AARCH64.uefi_firmware[host_os]["code"])
 
-    def test_raises_when_none_exist(self) -> None:
-        profile = arch.ArchProfile(
-            name="test",
-            qemu_binary="qemu-system-test",
-            machine_type="virt",
-            net_device="virtio-net",
-            cloud_image_suffix="test",
-            serial_console_token="console=tty",
-            serial_console_default="console=tty0",
-            keep_vm_extra_devices=(),
-            uefi_code_candidates=("/nonexistent/a.fd", "/nonexistent/b.fd"),
-            bios_boot_supported=False,
-        )
-        with pytest.raises(RuntimeError, match="No test UEFI firmware"):
-            arch.uefi_code_path_for(profile)
+    def test_raises_for_an_unsupported_host_os(self) -> None:
+        with (
+            mock.patch.object(arch.platform, "system", return_value="Darwin"),
+            pytest.raises(RuntimeError, match="No x86_64 UEFI firmware is defined for darwin hosts"),
+        ):
+            arch.uefi_code_path_for(arch.X86_64)

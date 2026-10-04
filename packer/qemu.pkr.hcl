@@ -117,22 +117,9 @@ locals {
   }
   host_os_cfg = local.host_os_table[local.host_os]
 
-  # UEFI firmware. Linux builders use the packaged pair from
-  # data/architectures.yml. x86_64's only supported native builder is
-  # Linux/KVM; aarch64 also builds on a Mac (Homebrew qemu).
-  firmware_table = {
-    x86_64 = {
-      linux = local.architectures.x86_64.guest.uefi_firmware
-    }
-    aarch64 = {
-      linux = local.architectures.aarch64.guest.uefi_firmware
-      darwin = {
-        code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
-        vars = "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
-      }
-    }
-  }
-  firmware_cfg = local.firmware_table[local.arch][local.host_os]
+  # UEFI firmware for this host OS; unsupported pairs (x86_64 on darwin) have
+  # no entry and fail the lookup.
+  firmware_cfg = local.guest.uefi_firmware[local.host_os]
 
   # Each qemu source below has one entry. disk_sizes covers every attached disk
   # in device order; the space-delimited disks prefix becomes rpool and
