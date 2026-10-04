@@ -9,20 +9,14 @@
   tags:
     - kdump
   block:
-    - name: dracut | Read package-owned capture integration files
-      command: dpkg-query --listfiles kdump-tools
+    # Exit 1 means no package owns the native module path; 0 means a package
+    # ships native support, and anything else is a dpkg error.
+    - name: dracut | Package lacks native capture support (else retire the backport per notes/runbooks/kdump.md)
+      command: dpkg-query --search /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
+      register: kdump_dracut_native
       changed_when: false
+      failed_when: kdump_dracut_native.rc != 1
       check_mode: false
-      register: kdump_dracut_package_files
-
-    - name: dracut | Package lacks native capture support
-      assert:
-        that: >-
-          '/usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh'
-          not in kdump_dracut_package_files.stdout_lines
-        fail_msg: >-
-          kdump-tools now ships native Dracut support. Retire the backported
-          capture integration per notes/runbooks/kdump.md, then rerun.
 
     - name: dracut | Create capture profile directory
       file:
