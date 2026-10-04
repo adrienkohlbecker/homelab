@@ -92,8 +92,9 @@
       become: true
 
     # The INPUT probes reach tcp/5333 directly; this one follows the real
-    # path, container -> gateway:53 -> netavark DNAT -> aardvark's tcp/5333,
-    # with netavark's accept and this ruleset's policy drop both loaded.
+    # path, container -> gateway:53 -> netavark DNAT -> aardvark's tcp/5333.
+    # The dig resolving through this ruleset's policy-drop INPUT is the proof;
+    # _verify_counters.yml pins the aardvark_tcp_accept counter itself.
     # Aardvark-dns serves TCP from 1.12 (Noble ships 1.4). busybox nslookup
     # cannot force TCP, so the host dig runs in the peer's network namespace.
     - name: _verify_forward | Named-bridge DNS over TCP passes the INPUT policy
@@ -118,12 +119,6 @@
           changed_when: false
           become: true
 
-        - name: _verify_forward | Capture nftables counters before the TCP DNS probe
-          command: nft -j list table inet homelab
-          register: _firewall_counters_before_tcp_dns
-          changed_when: false
-          become: true
-
         - name: _verify_forward | A TCP dig from the peer netns resolves the peer
           vars:
             _fields: "{{ _firewall_dns_peer_net.stdout.split() }}"
@@ -138,19 +133,6 @@
           changed_when: false
           become: true
 
-        - name: _verify_forward | Capture nftables counters after the TCP DNS probe
-          command: nft -j list table inet homelab
-          register: _firewall_counters_after_tcp_dns
-          changed_when: false
-          become: true
-
-        - name: _verify_forward | The TCP DNS probe matched the aardvark TCP accept
-          vars:
-            _before: "{{ _firewall_counters_before_tcp_dns.stdout | nft_counters_by_name }}"
-            _after: "{{ _firewall_counters_after_tcp_dns.stdout | nft_counters_by_name }}"
-          assert:
-            that:
-              - _after.aardvark_tcp_accept.packets | int > _before.aardvark_tcp_accept.packets | int
   always:
     - name: _verify_forward | Remove the named DNS peer
       command: podman rm -f firewall_verify_dns_peer
