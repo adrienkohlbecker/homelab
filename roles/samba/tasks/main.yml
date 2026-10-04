@@ -117,9 +117,9 @@
 
 # nmbd (NetBIOS name service / LAN browsing) is intentionally not run:
 # clients reach SMB3 directly over TCP 445 and discover shares via Samba's
-# built-in mDNS registration. Mask it so neither a prior enable (lab ran it
-# before this) nor a package reconfigure can bring the legacy NetBIOS
-# listener back. smbd has no dependency on nmbd, so this is safe.
+# built-in mDNS registration. Mask it so neither a prior enable nor a
+# package reconfigure can bring the legacy NetBIOS listener back. smbd has
+# no dependency on nmbd, so this is safe.
 - name: Mask the unused nmbd service
   # In check mode against a host without samba yet installed, nmbd.service
   # doesn't exist (the package install above only reported it would happen),
