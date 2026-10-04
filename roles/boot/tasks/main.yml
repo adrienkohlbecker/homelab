@@ -182,10 +182,8 @@
   tags:
     - boot
 
-# Link rather than copy, as `systemctl enable /usr/share/systemd/tmp.mount`
-# would: Resolute's systemd preinst removes that link and its wants link on
-# upgrade, so the vendor unit takes over. A copied unit would survive the
-# upgrade and shadow it. force converts the copy older runs installed.
+# Link the template, as `systemctl enable /usr/share/systemd/tmp.mount` would,
+# so the unit follows package updates. force replaces a copied unit file.
 - name: Link tmp.mount to the systemd template
   when: boot_tmp_mount_template.stat.exists
   file:

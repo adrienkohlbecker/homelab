@@ -459,10 +459,8 @@ else
 fi
 
 # Enable tmp mount. Noble ships tmp.mount as a disabled template under
-# /usr/share/systemd/; enable it by path, which links it rather than copying so
-# that Resolute's systemd preinst removes the links on upgrade and its vendor
-# unit takes over. Resolute ships /usr/lib/systemd/system/tmp.mount already
-# enabled, so there is nothing to do.
+# /usr/share/systemd/; enable it by path, which links it. Resolute ships
+# /usr/lib/systemd/system/tmp.mount already enabled, so there is nothing to do.
 
 if [ -f /usr/share/systemd/tmp.mount ]; then
   systemctl enable /usr/share/systemd/tmp.mount
