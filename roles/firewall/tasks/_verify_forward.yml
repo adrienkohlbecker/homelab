@@ -36,9 +36,9 @@
   become: true
 
 # Named-bridge coverage: most real services live on named podman bridges, not
-# podman0. Prove three separate contracts from one throwaway bridge:
-# external egress is allowed, host-published DNAT to a different bridge works,
-# and raw container-IP lateral movement remains blocked.
+# podman0. Prove separate contracts from one long-lived peer on a throwaway
+# bridge: external egress is allowed, host-published DNAT to a different
+# bridge works, and raw container-IP lateral movement remains blocked.
 - name: _verify_forward | FORWARD — named podman bridge contracts
   block:
     - name: _verify_forward | Create named podman probe network
@@ -48,10 +48,15 @@
         state: present
       become: true
 
-    - name: _verify_forward | Named bridge egress through netavark MASQUERADE works
+    - name: _verify_forward | Start a peer on the named probe network
       command: >
-        podman run --rm --network firewall_verify_named docker.io/library/busybox
-        nc -z -w 10 1.1.1.1 80
+        podman run -d --replace --name firewall_verify_named_peer
+        --network firewall_verify_named docker.io/library/busybox sleep 300
+      changed_when: true
+      become: true
+
+    - name: _verify_forward | Named bridge egress through netavark MASQUERADE works
+      command: podman exec firewall_verify_named_peer nc -z -w 10 1.1.1.1 80
       changed_when: false
       become: true
 
@@ -75,7 +80,7 @@
 
     - name: _verify_forward | Cross-bridge DNAT reaches the published container
       command: >
-        podman run --rm --network firewall_verify_named docker.io/library/busybox
+        podman exec firewall_verify_named_peer
         wget -q -O - -T 5 http://{{ _firewall_named_gateway_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
       register: _firewall_cross_bridge_dnat
       changed_when: false
@@ -84,7 +89,7 @@
 
     - name: _verify_forward | Probe direct cross-network container-IP path
       command: >
-        podman run --rm --network firewall_verify_named docker.io/library/busybox
+        podman exec firewall_verify_named_peer
         wget -q -O - -T 3 http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
       register: _firewall_podman_isolation_probe
       changed_when: false
@@ -106,26 +111,19 @@
             cache_valid_time: 3600
           become: true
 
-        - name: _verify_forward | Start a named DNS peer on the probe network
-          command: >
-            podman run -d --replace --name firewall_verify_dns_peer
-            --network firewall_verify_named docker.io/library/busybox sleep 300
-          changed_when: true
-          become: true
-
-        - name: _verify_forward | Inspect the named DNS peer
-          command: podman inspect firewall_verify_dns_peer
-          register: _firewall_dns_peer
+        - name: _verify_forward | Inspect the named peer
+          command: podman inspect firewall_verify_named_peer
+          register: _firewall_named_peer
           changed_when: false
           become: true
 
         - name: _verify_forward | A TCP dig from the peer netns resolves the peer
           vars:
-            _container: "{{ _firewall_dns_peer.stdout | from_json | first }}"
+            _container: "{{ _firewall_named_peer.stdout | from_json | first }}"
           command: >-
             nsenter --target {{ _container.State.Pid }} --net
             dig +tcp +short +tries=1 +time=2 @{{ _firewall_named_gateway_ip.stdout | trim }}
-            firewall_verify_dns_peer.dns.podman A
+            firewall_verify_named_peer.dns.podman A
           register: _firewall_tcp_dns_probe
           until: >-
             _firewall_tcp_dns_probe.stdout | trim
@@ -135,10 +133,10 @@
           changed_when: false
           become: true
   always:
-    - name: _verify_forward | Remove the named DNS peer
-      command: podman rm -f firewall_verify_dns_peer
-      register: _firewall_dns_peer_rm
-      changed_when: _firewall_dns_peer_rm.rc == 0
+    - name: _verify_forward | Remove the named peer
+      command: podman rm -f firewall_verify_named_peer
+      register: _firewall_named_peer_rm
+      changed_when: _firewall_named_peer_rm.rc == 0
       failed_when: false
       become: true
 
