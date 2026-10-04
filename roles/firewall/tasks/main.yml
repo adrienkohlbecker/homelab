@@ -46,14 +46,9 @@
   tags:
     - firewall
 
-# Pin nf_conntrack at boot so /proc/sys/net/netfilter/nf_conntrack_*
-# is populated before systemd-sysctl reads /etc/sysctl.d/. Deliberately
-# not modprobed mid-run: loading conntrack on a live host classifies
-# every existing TCP connection (no state, no SYN history) as INVALID
-# under loose=0 — our `ct state invalid drop` rule then kills SSH
-# along with everything else. Settings take effect at next reboot;
-# until then the nftables non-SYN drop rules are the only protection.
-- name: Pin nf_conntrack at boot  # noqa: require-validate
+# Register flowtable support at boot, before nftables.service parses the
+# ruleset's `bulk` flowtable.
+- name: Load flowtable modules at boot  # noqa: require-validate
   copy:
     src: modules-load.conf
     dest: /etc/modules-load.d/30-firewall-hardening.conf
@@ -61,7 +56,6 @@
     group: root
     mode: "0644"
     backup: true
-  register: firewall_conntrack_module
   become: true
   tags:
     - firewall
@@ -74,12 +68,6 @@
 #
 # The 90- prefix is load-bearing: systemd-sysctl applies files in
 # basename order, so this file must sort after 50-default.conf.
-#
-# nf_conntrack_tcp_loose handled separately below: the module isn't
-# loaded at first-apply time so its live write would fail; if we
-# inline it here with `ignoreerrors: true` the sysctl module reports
-# changed=true every run (couldn't apply live → marks as changed)
-# and the rerun never converges.
 - name: Install network-stack hardening sysctls
   ansible.posix.sysctl:
     name: "{{ item.name }}"
@@ -155,73 +143,21 @@
     - { name: net.ipv4.conf.default.arp_announce, value: '2' }
   loop_control:
     label: "{{ item.name }}"
-  register: firewall_sysctl
   become: true
   tags:
     - firewall
 
-# Strict conntrack: classify mid-stream non-SYN TCP as INVALID rather
-# than NEW. Pinned at boot via modules-load.d (already in this role)
-# so subsequent reboots have nf_conntrack loaded, with the value
-# written from /etc/sysctl.d/ by systemd-sysctl at startup.
-#
-# Split from the main loop because we need different handling for
-# "module not loaded" (first-apply on a fresh host): the conf line
-# always goes in the file via lineinfile (kernel reads it at next
-# boot once modules-load.d fires), but the live sysctl is gated on
-# the module being present so we don't trigger the EINVAL that
-# inline `ignoreerrors: true` would silently turn into perpetual
-# changed=true.
-- name: Check whether nf_conntrack is loaded (gates live sysctl + reboot signal)
-  stat:
-    path: /sys/module/nf_conntrack
-  register: firewall_nf_conntrack_loaded
-  tags:
-    - firewall
-
-- name: Pin nf_conntrack_tcp_loose in sysctl.d (idempotent file write)
-  when: not (ansible_check_mode and firewall_sysctl.changed)
-  lineinfile:
-    path: /etc/sysctl.d/90-firewall-hardening.conf
-    regexp: '^net\.netfilter\.nf_conntrack_tcp_loose\s*='
-    # No spaces around `=` to match ansible.posix.sysctl's on-disk
-    # shape -- _verify_counters' grep asserts the no-space form.
-    line: 'net.netfilter.nf_conntrack_tcp_loose=0'
-    create: false
-    backup: true
-  register: firewall_conntrack_pinned
-  become: true
-  tags:
-    - firewall
-
-- name: Apply nf_conntrack_tcp_loose live (only when module is loaded)
-  when:
-    - firewall_nf_conntrack_loaded.stat.exists
-    - not (ansible_check_mode and firewall_sysctl.changed)
+# Retired pins leave the persisted file without a live write, so each
+# reverts to its kernel default at the next boot. The nftables non-SYN
+# drop rules cover what nf_conntrack_tcp_loose=0 did.
+- name: Remove retired network-stack sysctl pins
   ansible.posix.sysctl:
-    name: net.netfilter.nf_conntrack_tcp_loose
-    value: '0'
+    name: "{{ item }}"
+    state: absent
     sysctl_file: /etc/sysctl.d/90-firewall-hardening.conf
     reload: false
-  become: true
-  tags:
-    - firewall
-
-# Signal site.yml's tail reboot block when the module boot pin or its deferred
-# sysctl changed while nf_conntrack is not loaded. After the resulting reboot,
-# modules-load.d loads conntrack and systemd-sysctl writes the desired value at
-# boot. Subsequent runs (module persistent) reapply without needing another
-# reboot.
-- name: Signal reboot required (conntrack sysctl deferred to boot)
-  when:
-    - firewall_conntrack_module.changed or firewall_conntrack_pinned.changed
-    - not firewall_nf_conntrack_loaded.stat.exists
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
+  loop:
+    - net.netfilter.nf_conntrack_tcp_loose
   become: true
   tags:
     - firewall

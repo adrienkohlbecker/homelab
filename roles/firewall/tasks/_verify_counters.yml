@@ -1,44 +1,11 @@
 # Capture nft counters at end-of-probe state, assert each one fired
-# (or stayed at 0 for negative-only rules). Also confirms sysctl
-# persistence (the conntrack tcp_loose=0 fact is bootloader-only)
-# and the reboot signal the role writes when nf_conntrack wasn't
-# loaded at sysctl-write time.
+# (or stayed at 0 for negative-only rules).
 
 - name: _verify_counters | Capture nftables counters after crafted-packet probes
   command: nft -j list table inet homelab
   register: _firewall_counters_after_crafted
   changed_when: false
   become: true
-
-# nf_conntrack_tcp_loose=0 makes the kernel itself classify mid-stream
-# non-SYN TCP as INVALID rather than NEW. Can't apply mid-flight (would
-# break live SSH), so the value persists in /etc/sysctl.d/ and the
-# module is pinned via /etc/modules-load.d/ to load at next boot. The
-# nftables non-SYN drop rules above remain the runtime protection
-# until then.
-- name: _verify_counters | Sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
-  slurp:
-    src: /etc/sysctl.d/90-firewall-hardening.conf
-  register: _firewall_sysctl_persist
-  become: true
-
-- name: _verify_counters | Sysctl — nf_conntrack module pinned in modules-load.d
-  slurp:
-    src: /etc/modules-load.d/30-firewall-hardening.conf
-  register: _firewall_modload_persist
-  become: true
-
-- name: _verify_counters | Sysctl — assert persistence
-  assert:
-    that:
-      # ansible.posix.sysctl writes the canonical no-spaces form.
-      - "'net.netfilter.nf_conntrack_tcp_loose=0' in (_firewall_sysctl_persist.content | b64decode)"
-      - "'nf_conntrack' in (_firewall_modload_persist.content | b64decode)"
-    fail_msg: >-
-      Either /etc/sysctl.d/90-firewall-hardening.conf doesn't pin
-      nf_conntrack_tcp_loose=0, or /etc/modules-load.d/30-firewall-
-      hardening.conf doesn't pin nf_conntrack. Without both,
-      loose=0 won't take effect at next boot.
 
 # Martian-source logging: the role pins all=0 (the kernel OR-folds
 # `all` with each iface's flag, so all=1 would re-enable logging on
@@ -61,28 +28,6 @@
       expected ['0', '1']. all must be 0 so the kernel OR-fold can't re-arm
       martian logging on keepalived's vmac (vrrp.<VRID>); default must stay 1
       so new real interfaces still log martians.
-
-# First-apply path: nf_conntrack wasn't loaded at sysctl-write time,
-# so the role should have created /var/run/reboot-required to let
-# site.yml's tail block schedule a reboot.
-- name: _verify_counters | Reboot signal — /var/run/reboot-required exists
-  stat:
-    path: /var/run/reboot-required
-  register: _firewall_reboot_required_stat
-  become: true
-
-# Require a recent mtime so a cross-session --keep rerun cannot pass
-# on a stale signal.
-- name: _verify_counters | Reboot signal — assert reboot was signaled this run
-  assert:
-    that:
-      - _firewall_reboot_required_stat.stat.exists
-      - _firewall_reboot_required_stat.stat.mtime > (ansible_date_time.epoch | int) - 3600
-    fail_msg: >-
-      /var/run/reboot-required is missing or stale (mtime older than
-      1 hour). With nf_conntrack not pre-loaded, the conntrack sysctl
-      can't take effect until reboot — the role should have signaled
-      this run.
 
 # Look up each counter by name and confirm packets fired as expected.
 # Counters are declared at table scope (see nftables.conf.j2) and
