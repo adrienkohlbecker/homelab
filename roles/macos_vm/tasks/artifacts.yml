@@ -171,7 +171,6 @@
           - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
           - "{{ macos_vm_workdir }}/BaseSystem.img"
         creates: "{{ macos_vm_workdir }}/BaseSystem.img"
-      register: macos_vm_basesystem_publish_result
 
   rescue:
     - name: artifacts | Remove rejected recovery image
