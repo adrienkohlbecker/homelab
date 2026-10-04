@@ -1,28 +1,33 @@
 # Configure the selected provider before its package hooks can generate images.
-- name: initramfs_provider | Create the provider configuration directory
-  file:
-    path: "{{ '/etc/dracut.conf.d' if initramfs_use_dracut else '/etc/initramfs-tools/conf.d' }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  register: boot_initramfs_directory
-  become: true
+- name: initramfs_provider | Install the provider configuration
+  vars:
+    boot_initramfs_policy: >-
+      {{ {'src': 'dracut_host.conf', 'dest': '/etc/dracut.conf.d/90_host.conf'}
+         if initramfs_use_dracut
+         else {'src': 'modules_most', 'dest': '/etc/initramfs-tools/conf.d/modules-most'} }}
+  block:
+    - name: initramfs_provider | Create the provider configuration directory
+      file:
+        path: "{{ boot_initramfs_policy.dest | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      register: boot_initramfs_directory
+      become: true
 
-- name: initramfs_provider | Configure the release boot image policy
-  when: not (ansible_check_mode and boot_initramfs_directory.changed)
-  copy:
-    src: "{{ 'dracut_host.conf' if initramfs_use_dracut else 'modules_most' }}"
-    dest: >-
-      {{ '/etc/dracut.conf.d/90_host.conf' if initramfs_use_dracut
-         else '/etc/initramfs-tools/conf.d/modules-most' }}
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: "{{ 'bash' if initramfs_use_dracut else 'sh' }} -n %s"
-  register: boot_initramfs_config
-  become: true
+    - name: initramfs_provider | Configure the release boot image policy
+      when: not (ansible_check_mode and boot_initramfs_directory.changed)
+      copy:
+        src: "{{ boot_initramfs_policy.src }}"
+        dest: "{{ boot_initramfs_policy.dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+        validate: "{{ 'bash' if initramfs_use_dracut else 'sh' }} -n %s"
+      register: boot_initramfs_config
+      become: true
 
 - name: initramfs_provider | Install the release image generator and root support
   apt:
