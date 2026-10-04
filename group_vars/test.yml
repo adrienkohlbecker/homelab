@@ -279,6 +279,7 @@ authelia_host: "{{ inventory_hostname }}"
 # disabled and tests never send notification mail.
 authelia_storage_encryption_key: StubQemuStorageKey_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 authelia_smtp_password: changeme
+authelia_session_secret: StubQemuSessionSecret_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 # Test-fixture OIDC provider secrets. HMAC mirrors the other stub
 # secrets (64+ alphanumeric to satisfy Authelia's minimum). The

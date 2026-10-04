@@ -71,6 +71,11 @@ session:
     - domain: '{{ authelia_cookie_domain }}'
       authelia_url: 'https://auth.{{ authelia_cookie_domain }}'
       default_redirection_url: 'https://homepage.{{ inventory_hostname }}.{{ domain }}/'
+  # Persist sessions in roles/redis so restarting Authelia keeps everyone
+  # signed in. AUTHELIA_SESSION_SECRET_FILE supplies the key that encrypts
+  # session data at rest; AUTHELIA_SESSION_REDIS_PASSWORD_FILE the password.
+  redis:
+    host: 'redis.dns.podman'
 
 # Brute-force regulation: 5 failed attempts in 2 min → 5 min lockout.
 # Per-user (not per-IP) so a single misbehaving client doesn't

@@ -87,6 +87,31 @@
     validate_certs: false
     status_code: 401
 
+# Sessions live in Redis, so a signed-in cookie must stay authenticated across
+# an Authelia restart (an in-memory store would log everyone out) and across a
+# Redis restart (the store persists to disk, not only memory).
+- name: _verify | Sign in to obtain a session cookie
+  uri:
+    url: https://auth.{{ authelia_cookie_domain }}/api/firstfactor
+    method: POST
+    body_format: json
+    body:
+      username: homepage_alerts
+      password: "{{ homepage_alerts_authelia_password }}"
+    validate_certs: false
+  register: authelia_verify_login
+  failed_when: >-
+    authelia_verify_login.status != 200
+    or 'authelia_session' not in authelia_verify_login.cookies
+
+- name: _verify | Session survives restarting each service
+  include_tasks: _verify_session.yml
+  loop:
+    - authelia
+    - redis
+  loop_control:
+    loop_var: authelia_verify_restart
+
 - name: _verify | Wait for normalized authelia record in lnav store
   command:
     argv:
