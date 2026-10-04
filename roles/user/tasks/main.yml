@@ -76,28 +76,20 @@
   tags:
     - user
 
-- name: Check whether cron is installed
-  stat:
-    path: /usr/lib/systemd/system/cron.service
-  register: user_cron_unit
-  tags:
-    - user
-
-- name: Install cron log filters
+# Undo the cron log filter drop-in earlier converges installed.
+- name: Remove the cron log filters
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: remove
   vars:
     systemd_unit_args:
       for: cron.service
-      src: cron_override.conf
-      condition: "{{ user_cron_unit.stat.exists }}"
   tags:
     - user
 
 # journald reads a unit's filter patterns when the unit starts. Debian's
 # KillMode=process keeps running cron jobs alive across the restart.
-- name: Restart cron to apply log filters
+- name: Restart cron to drop its log filters
   when: cron_service_d_override_conf_result.changed
   systemd:
     name: cron.service
