@@ -46,6 +46,22 @@ check_chart() {
   [[ "$output" == *"SET active = $expected"* ]]
 }
 
+# Confine the scheduler and the health check to the test pool while keeping
+# real pool reads.
+mkdir "$scratch/bin"
+export ZFS_VERIFY_ZPOOL
+ZFS_VERIFY_ZPOOL=$(command -v zpool)
+cat >"$scratch/bin/zpool" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+case "$*" in
+  "list -H -o name") echo zfs_scan_test ;;
+  "status -s" | "status -p") exec "$ZFS_VERIFY_ZPOOL" "$@" zfs_scan_test ;;
+  *) exec "$ZFS_VERIFY_ZPOOL" "$@" ;;
+esac
+EOF
+chmod +x "$scratch/bin/zpool"
+
 # Print the epoch of the end date closing the status line that matches $1.
 scan_end_epoch() {
   local end
@@ -59,18 +75,12 @@ zpool scrub zfs_scan_test
 [[ $(/opt/zfs/zfs_status.py scan zfs_scan_test) == 1 ]]
 [[ $(/opt/zfs/zfs_status.py scan --scrub-only zfs_scan_test) == 1 ]]
 check_chart 1
-ZFS_SCRUB_STAGGER_SEC=0 zfs_scrub | grep -F 'Scrub/resilver already running on zfs_scan_test, skipping.'
+PATH="$scratch/bin:$PATH" ZFS_SCRUB_STAGGER_SEC=0 zfs_scrub | grep -F 'Scrub/resilver already running on zfs_scan_test, skipping.'
 
 zpool scrub -p zfs_scan_test
 [[ $(/opt/zfs/zfs_status.py scan zfs_scan_test) == 0 ]]
-# The scheduler started other pools; pause them so the global chart can be 0.
-for pool in $(zpool list -H -o name); do
-  if [[ $(/opt/zfs/zfs_status.py scan --scrub-only "$pool") == 1 ]]; then
-    zpool scrub -p "$pool"
-  fi
-done
 check_chart 0
-ZFS_SCRUB_STAGGER_SEC=0 zfs_scrub >/dev/null
+PATH="$scratch/bin:$PATH" ZFS_SCRUB_STAGGER_SEC=0 zfs_scrub >/dev/null
 [[ $(/opt/zfs/zfs_status.py scan zfs_scan_test) == 1 ]]
 
 zpool scrub -s zfs_scan_test
@@ -102,20 +112,8 @@ grep -F 'scan: resilvered' <<<"$resilver_status" || {
 resilver_epoch=$(scan_end_epoch 'scan: resilvered' "$resilver_status")
 ((resilver_epoch - scrub_epoch >= 3))
 
-# Keep real pool reads, isolate the age assertion, and freeze both parser clocks
-# so command latency cannot turn a two-second age threshold into a flaky test.
-mkdir "$scratch/bin"
-export ZFS_VERIFY_ZPOOL
-ZFS_VERIFY_ZPOOL=$(command -v zpool)
-cat >"$scratch/bin/zpool" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-case "$*" in
-  "list -H -o name") echo zfs_scan_test ;;
-  "status -s" | "status -p") exec "$ZFS_VERIFY_ZPOOL" "$@" zfs_scan_test ;;
-  *) exec "$ZFS_VERIFY_ZPOOL" "$@" ;;
-esac
-EOF
+# Freeze both parser clocks so command latency cannot turn a two-second age
+# threshold into a flaky test.
 cat >"$scratch/bin/date" <<'EOF'
 #!/bin/bash
 set -euo pipefail
