@@ -1,5 +1,5 @@
 # Rebuild every installed kernel's boot image after a caller changes one of
-# its inputs (generator, image policy, module options, console keymap, mdadm):
+# its inputs (generator, image policy, module options, console keymap):
 #
 #   import_role: { name: boot, tasks_from: initramfs_rebuild }
 #   vars:

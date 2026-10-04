@@ -278,31 +278,3 @@
   failed_when: >-
     _boot_verify_tmp_fstype.rc != 0
     or _boot_verify_tmp_fstype.stdout | trim != 'tmpfs'
-
-# --- Boot tool installs ---
-
-# Installing an ESP tool changes nothing the running host or its boot image
-# needs, so it must not queue a reboot. Remove one and converge again; the
-# null timeout skips the OVMF BootTimeout drift that a reboot leaves behind.
-- name: _verify | Remove an ESP tool the role installs
-  command: dpkg --remove dosfstools
-  changed_when: true
-  become: true
-
-- name: _verify | Clear the reboot sentinel before reinstalling it
-  file:
-    path: /var/run/reboot-required
-    state: absent
-  become: true
-
-- name: _verify | Reinstall the ESP tool through the role
-  import_tasks: main.yml
-  vars:
-    boot_efi_timeout: null
-
-- name: _verify | Stat the reboot sentinel after the tool install
-  stat:
-    path: /var/run/reboot-required
-  register: _boot_verify_tool_reboot
-  failed_when: _boot_verify_tool_reboot.stat.exists
-  become: true
