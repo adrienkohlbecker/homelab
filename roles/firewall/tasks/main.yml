@@ -221,12 +221,11 @@
 
 # The ExecReload drop-in installed above maps `state: reloaded` to atomic
 # `nft -f` (per-table flush+rebuild inside the file replaces only our
-# table; netavark and libvirt tables in iptables-nft compat
-# are untouched). On an inactive unit, Ansible starts it instead of
-# reloading; otherwise a changed ruleset fires ExecReload with no
-# stop/start window. The condition skips
-# check-mode runs where the apt install reported changed but didn't
-# actually run (nft isn't on disk yet for the unit's ExecStart).
+# table; netavark and libvirt tables are untouched). On an inactive
+# unit, Ansible starts it instead of reloading; otherwise a changed
+# ruleset fires ExecReload with no stop/start window. The condition
+# skips check-mode runs where the apt install reported changed but
+# didn't actually run (nft isn't on disk yet for the unit's ExecStart).
 - name: Apply nftables.service ruleset and lifecycle
   when: not (ansible_check_mode and firewall_apt_nftables.changed)
   systemd:
