@@ -233,7 +233,7 @@ def test_selects_the_userspace_version(monkeypatch, version, supported):
 
 @pytest.mark.parametrize("json_supported", [True, False])
 def test_health_launcher_selects_the_parser_at_runtime(monkeypatch, json_supported):
-    monkeypatch.setattr(status.sys, "argv", ["zfs_health"])
+    monkeypatch.setattr(status.sys, "argv", ["zfs_health", "health"])
     monkeypatch.setattr(status, "supports_json", lambda: json_supported)
     calls = []
     monkeypatch.setattr(status, "health", lambda expire: calls.append(("json", expire)) or 0)
@@ -249,7 +249,7 @@ def test_health_launcher_selects_the_parser_at_runtime(monkeypatch, json_support
 
 
 def test_legacy_launch_failure_is_mailed(monkeypatch):
-    monkeypatch.setattr(status.sys, "argv", ["zfs_health"])
+    monkeypatch.setattr(status.sys, "argv", ["zfs_health", "health"])
     monkeypatch.setattr(status, "supports_json", lambda: False)
     mail = []
 
@@ -296,7 +296,7 @@ def test_health_startup_failures_are_mailed(monkeypatch, error, capsys):
 
 @pytest.mark.parametrize("expire", ["invalid", "", "-1"])
 def test_invalid_expiration_is_mailed_before_selecting_either_parser(monkeypatch, expire):
-    monkeypatch.setattr(status.sys, "argv", ["zfs_health"])
+    monkeypatch.setattr(status.sys, "argv", ["zfs_health", "health"])
     monkeypatch.setenv("SCRUB_EXPIRE", expire)
 
     def unexpected_version_query():

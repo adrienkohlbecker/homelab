@@ -250,14 +250,14 @@ def health(expire: int) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="command")
+    commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("health")
     scan = commands.add_parser("scan")
     scan.add_argument("pool", nargs="?")
     scan.add_argument("--scrub-only", action="store_true")
     args = parser.parse_args()
     try:
-        if args.command in {None, "health"}:
+        if args.command == "health":
             try:
                 expire = integer(int(os.environ.get("SCRUB_EXPIRE", "3456000")), "SCRUB_EXPIRE")
                 if not supports_json():
