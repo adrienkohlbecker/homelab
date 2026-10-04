@@ -21,19 +21,29 @@
   changed_when: false
   become: true
 
-- name: _verify | Read configured upsd users
-  slurp:
-    path: /etc/nut/upsd.users
-  register: nut_upsd_users_file
-  become: true
+# WinNUT logs in the way a remote upsmon does. upsd grants LOGIN only to
+# users with an upsmon role, so OK to all three proves the account, its
+# password and its monitor role.
+- name: _verify | WinNUT account logs in to upsd as a remote monitor
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import socket
+        import sys
 
-- name: _verify | WinNUT account is configured as a remote monitor
-  assert:
-    that:
-      - "'[winnut]' in (nut_upsd_users_file.content | b64decode)"
-      - "'password = ' ~ nut_winnut_password in (nut_upsd_users_file.content | b64decode)"
-      - "'upsmon secondary' in (nut_upsd_users_file.content | b64decode)"
-    quiet: true
+        with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5) as conn:
+            stream = conn.makefile("rw")
+            for line in ("USERNAME winnut", f"PASSWORD {sys.argv[2]}", "LOGIN eaton"):
+                stream.write(line + "\n")
+                stream.flush()
+                print(stream.readline().strip())
+      - "{{ service_ports.nut }}"
+      - "{{ nut_winnut_password }}"
+  register: nut_winnut_login
+  changed_when: false
+  failed_when: nut_winnut_login.stdout_lines != ['OK', 'OK', 'OK']
 
 - name: _verify | Map the nut vhost FQDN to loopback for SNI-correct probing
   import_role:
