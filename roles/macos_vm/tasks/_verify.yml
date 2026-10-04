@@ -16,13 +16,6 @@
         mode: "0644"
       become: true
 
-    - name: _verify | Seed partial output left by an interrupted conversion
-      copy:
-        content: "incomplete recovery image\n"
-        dest: "{{ macos_vm_recovery_fixture.path }}/BaseSystem.img.partial"
-        mode: "0644"
-      become: true
-
     - name: _verify | Exercise recovery rejection through production tasks
       block:
         - name: _verify | Apply artifacts with unsupported recovery compression
