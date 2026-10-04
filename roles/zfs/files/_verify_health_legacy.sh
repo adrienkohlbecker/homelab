@@ -55,7 +55,7 @@ check_status() {
   local expected=$1 output rc=0
   printf '%s\n' "$2" >"$ZFS_VERIFY_STATUS"
   rm -f "$ZFS_VERIFY_MAIL"
-  output=$(PATH="$scratch/bin:$PATH" LC_ALL=C SCRUB_EXPIRE=10 /opt/zfs/zfs_health_legacy.sh 2>&1) || rc=$?
+  output=$(PATH="$scratch/bin:$PATH" SCRUB_EXPIRE=10 /opt/zfs/zfs_health_legacy.sh 2>&1) || rc=$?
   [[ "$rc" == "$expected" ]] || {
     echo >&2 "$output"
     return 1
