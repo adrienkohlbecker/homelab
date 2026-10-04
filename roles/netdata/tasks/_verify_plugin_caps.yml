@@ -1,0 +1,35 @@
+# Reinstalling netdata together with a capability-bearing plugin replays the
+# upgrade race: netdata's postinst restarts the daemon before the plugin's
+# postinst reapplies setcap. The apt hook must restart netdata afterwards so
+# the running go.d.plugin holds cap_net_admin (needed by the wireguard
+# collector) rather than an empty capability set.
+- name: _verify | Reinstall netdata with its go.d plugin  # noqa: command-instead-of-module
+  command: >-
+    apt-get install --yes --reinstall
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+    netdata netdata-plugin-go
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  changed_when: true
+  become: true
+
+- name: _verify | Read the running go.d.plugin capabilities
+  shell: |
+    set -euo pipefail
+    getpcaps "$(pgrep --oldest --exact go.d.plugin)"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: _netdata_go_d_caps
+  until: _netdata_go_d_caps.rc == 0
+  retries: 12
+  delay: 5
+  become: true
+
+- name: _verify | The running go.d.plugin holds its file capabilities
+  assert:
+    that:
+      - "'cap_net_admin' in _netdata_go_d_caps.stdout"
+    fail_msg: >-
+      Expected go.d.plugin to run with cap_net_admin after a reinstall; got
+      {{ _netdata_go_d_caps.stdout }}

@@ -24,6 +24,35 @@
   tags:
     - netdata
 
+# An upgrade restarts the daemon before the plugin packages reapply their file
+# capabilities, leaving the respawned plugins without them. The apt hook
+# restarts netdata once dpkg finishes; see the script for the race.
+- name: install | Install the stale-plugin restart script
+  copy:
+    src: netdata_restart_stale_plugins
+    dest: /usr/local/sbin/netdata_restart_stale_plugins
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - netdata
+
+- name: install | Restart netdata after package runs replace its plugins
+  copy:
+    src: 80netdata_plugin_caps.conf
+    dest: /etc/apt/apt.conf.d/80netdata_plugin_caps
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: apt-config dump -c %s
+  become: true
+  tags:
+    - netdata
+
 # A source or pin change upgrades within the series here, so a series bump
 # restarts through this role rather than through the next apt_upgrade. Every
 # plugin depends on netdata at its exact version, so apt moves the installed
