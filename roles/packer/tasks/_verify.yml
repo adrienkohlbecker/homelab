@@ -7,6 +7,7 @@
 # stock aarch64 edk2 with rEFInd 0.13.2 (see refind_noble_release and
 # chroot.sh). The checks below do not depend on it.
 - name: _verify | Boot the shipped rEFInd a second time
+  when: ansible_architecture == 'aarch64'
   import_role:
     name: reboot
     tasks_from: reboot
