@@ -57,16 +57,15 @@
     | list | length > 0
   become: true
 
-# _setup installs an lvm2-monitor.service fixture; ZFS-root converge must mask
-# it rather than leave an unused storage monitor enabled.
-- name: _verify | Unused storage monitor fixture was masked and stopped
+# A masked unit cannot be started, whether or not its package is installed.
+- name: _verify | Unused multipath monitor refuses to start # noqa: command-instead-of-module
   when: zfs_root | bool
-  systemd:
-    name: lvm2-monitor.service
-  register: _boot_verify_lvm_monitor
+  command: systemctl start multipathd.service
+  register: _boot_verify_multipathd
+  changed_when: false
   failed_when: >-
-    _boot_verify_lvm_monitor.status.UnitFileState != 'masked'
-    or _boot_verify_lvm_monitor.status.ActiveState != 'inactive'
+    _boot_verify_multipathd.rc == 0
+    or 'is masked' not in _boot_verify_multipathd.stderr
   become: true
 
 # Exercise the helper's removal direction on both bootloader families. The

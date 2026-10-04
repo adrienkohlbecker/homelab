@@ -82,11 +82,15 @@
     - boot
 
 # These units are useful only when the host has LVM or multipath state to
-# monitor. The packages may remain installed as dependencies, so manage the
-# systemd entry points instead of purging shared storage tooling.
-- name: Probe unused LVM and multipath unit files # noqa: command-instead-of-module
+# monitor. The packages may remain installed as dependencies, so mask the
+# systemd entry points instead of purging shared storage tooling. Masking also
+# covers units that are not installed, and a running monitor stops at the next
+# boot.
+- name: Mask unused LVM and multipath monitor units
   when: zfs_root | bool
-  command: systemctl list-unit-files {{ item }}
+  systemd:
+    name: "{{ item }}"
+    masked: true
   loop:
     - lvm2-monitor.service
     - lvm2-lvmpolld.service
@@ -95,27 +99,6 @@
     - lvm2-lvmpolld.socket
     - dm-event.socket
     - multipathd.socket
-  register: boot_lvm_unit_files
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - boot
-
-- name: Disable unused LVM and multipath monitor units
-  when:
-    - zfs_root | bool
-    - item.rc == 0
-    - item.stdout_lines | select('match', '^' ~ (item.item | regex_escape) ~ '\s') | list | length > 0
-  systemd:
-    name: "{{ item.item }}"
-    enabled: false
-    masked: true
-    state: stopped
-  loop: "{{ boot_lvm_unit_files.results }}"
-  loop_control:
-    label: "{{ item.item }}"
   become: true
   tags:
     - boot
