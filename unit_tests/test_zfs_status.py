@@ -475,12 +475,13 @@ def test_health_accepts_feature_capped_pools_and_does_not_alarm_on_slow_io(monke
 def test_health_reports_failed_spares_and_active_spare_errors(monkeypatch, pool, health_env):
     pool["vdevs"]["mirror-0"]["vdevs"] = {"spare0": pool["vdevs"].pop("disk0")}
     pool["vdevs"]["mirror-0"]["vdevs"]["spare0"]["checksum_errors"] = 5
-    pool["spares"] = {"spare0": {"state": "INUSE"}, "spare1": {"state": "FAULTED"}}
+    pool["spares"] = {"spare0": {"state": "INUSE"}, "spare1": {"state": "FAULTED"}, "spare2": {"state": "FUTURE"}}
     monkeypatch.setattr(status, "run", lambda *args: "tank\n" if "list" in args else "report")
     monkeypatch.setattr(status, "read_status", lambda *_, **kwargs: {} if kwargs.get("explain") else {"tank": pool})
     assert status.health(20) == 1
     assert "Detected drive errors (READ/WRITE/CKSUM) on tank" in health_env[0]
     assert "Unhealthy spare spare1 on tank: FAULTED" in health_env[0]
+    assert "Unhealthy spare spare2 on tank: FUTURE" in health_env[0]
     assert "Unhealthy spare spare0" not in health_env[0]
 
 

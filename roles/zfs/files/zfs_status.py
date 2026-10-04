@@ -73,20 +73,7 @@ def parse_status(raw: str) -> dict[str, Any]:
             for field in ("read_errors", "write_errors", "checksum_errors"):
                 integer(vdev.get(field), f"{device}.{field}")
         for device, value in mapping(pool.get("spares", {}), f"{name}.spares").items():
-            spare = mapping(value, device)
-            if spare.get("state") not in (
-                "AVAIL",
-                "INUSE",
-                "UNKNOWN",
-                "CLOSED",
-                "OFFLINE",
-                "REMOVED",
-                "CANT_OPEN",
-                "FAULTED",
-                "DEGRADED",
-                "ONLINE",
-            ):
-                raise StatusError(f"Unknown spare state on {device}: {spare.get('state')!r}")
+            mapping(value, device)
         scan = mapping(pool.get("scan_stats", {}), f"{name}.scan_stats")
         # OpenZFS reports error scrubs only in the err_scrub_* fields below.
         if "function" in scan:
@@ -251,8 +238,8 @@ def health(expire: int) -> int:
             ):
                 issues.append(f"Detected drive errors (READ/WRITE/CKSUM) on {name}")
             for device, spare in pool.get("spares", {}).items():
-                if spare["state"] not in ("AVAIL", "INUSE"):
-                    issues.append(f"Unhealthy spare {device} on {name}: {spare['state']}")
+                if spare.get("state") not in ("AVAIL", "INUSE"):
+                    issues.append(f"Unhealthy spare {device} on {name}: {spare.get('state')}")
             try:
                 if issue := scrub_issue(name, pool, now, expire):
                     issues.append(issue)
