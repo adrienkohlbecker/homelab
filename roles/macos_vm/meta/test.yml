@@ -1,4 +1,4 @@
 # Resolute ships QEMU 10.2: exercise the pinned pc-q35-8.2 machine model and
-# its DMG decoder's rejection of unsupported LZFSE blocks under that release.
+# its DMG conversion of the real recovery image under that release.
 ubuntu:
   - resolute

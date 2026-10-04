@@ -172,25 +172,6 @@
           - "{{ macos_vm_workdir }}/BaseSystem.img"
         creates: "{{ macos_vm_workdir }}/BaseSystem.img"
 
-  rescue:
-    - name: artifacts | Remove rejected recovery image
-      file:
-        path: "{{ macos_vm_workdir }}/BaseSystem.img.partial"
-        state: absent
-
-    - name: artifacts | Report recovery image failure
-      fail:
-        msg: >-
-          Recovery image conversion failed. The rejected
-          {{ macos_vm_workdir }}/BaseSystem.img.partial was removed; the source DMG
-          was retained. Re-run the role to retry a transient failure. To fetch a
-          fresh, chunklist-verified source, delete {{ macos_vm_workdir }}/BaseSystem.dmg
-          and rerun; never replace it by hand, since an existing DMG skips the
-          download and its verification.
-          {{ ansible_failed_result.msg | default('') }}
-          {{ ansible_failed_result.stdout | default('') }}
-          {{ ansible_failed_result.stderr | default('') }}
-
 - name: artifacts | Set BaseSystem ownership for QEMU
   when:
     - macos_vm_install_mode
