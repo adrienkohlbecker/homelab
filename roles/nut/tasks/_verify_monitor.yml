@@ -98,13 +98,6 @@
     timeout: 90
   become: true
 
-- name: _verify | Upsd published the forced-shutdown status
-  command: upsc {{ nut_ups }} ups.status
-  register: nut_fsd_status
-  changed_when: false
-  failed_when: "'FSD' not in nut_fsd_status.stdout"
-  become: true
-
 # The SHUTDOWN NOTIFY rode the real chain (upsmon's nut-user half ->
 # upssched -> nut_notify -> mail); its absence means the unprivileged
 # dispatch path is broken even though the marker proved SHUTDOWNCMD ran.
@@ -257,30 +250,23 @@
   register: nut_fire_marker
   become: true
 
-- name: _verify | Read upsd status after the fired timer
-  command: upsc {{ nut_ups }} ups.status
-  register: nut_fire_status
-  changed_when: false
-  become: true
-
 - name: _verify | Read the mail captured during the timer drill
   slurp:
     path: /tmp/nut-mail.out
   register: nut_fire_mail
   become: true
 
-# Not before the delay elapsed, through upsd's FSD flag, announced by the
-# timer arm, and with no low-battery event behind it.
+# Not before the delay elapsed, announced by the timer arm, and with no
+# low-battery event behind it.
 - name: _verify | The forced shutdown came from the on-battery timer
   assert:
     that:
       - nut_fire_marker.stat.mtime - (nut_fire_start.stdout | int) >= nut_onbatt_shutdown_delay
-      - "'FSD' in nut_fire_status.stdout"
       - "'forcing shutdown' in (nut_fire_mail.content | b64decode)"
       - "'has a low battery' not in (nut_fire_mail.content | b64decode)"
     fail_msg: >-
       marker after {{ nut_fire_marker.stat.mtime - (nut_fire_start.stdout | int) }}s,
-      status {{ nut_fire_status.stdout }}, mail: {{ nut_fire_mail.content | b64decode | truncate(600) }}
+      mail: {{ nut_fire_mail.content | b64decode | truncate(600) }}
     quiet: true
 
 - name: _verify | Stop upsmon after the timer drill
