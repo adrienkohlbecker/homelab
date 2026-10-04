@@ -4,11 +4,9 @@ set -euo pipefail
 backup_script=$1
 peer_backup_script=$2
 scratch=$(mktemp -d /var/tmp/zfs_backup_scan_test.XXXXXX)
-cp -p /opt/zfs/zfs_status.py "$scratch/status.py"
 scan_suspend=/sys/module/zfs/parameters/zfs_scan_suspend_progress
 saved_suspend=$(cat "$scan_suspend")
 cleanup() {
-  cp -p "$scratch/status.py" /opt/zfs/zfs_status.py
   printf '%s\n' "$saved_suspend" >"$scan_suspend"
   # Creation can fail before the pool exists; the backing files still need removal.
   zpool destroy zfs_backup_scan_test 2>/dev/null || true
@@ -38,47 +36,41 @@ output=$("$backup_script")
 LC_ALL=C zpool status zfs_backup_scan_test | grep -F 'scrub paused since'
 echo 'Backup paused and resumed its running scrub and preserved an already-paused scrub'
 
-cat >/opt/zfs/zfs_status.py <<'EOF'
+# Fail the bounded ZFS query that starts with ZFS_VERIFY_FAIL.
+cat >"$scratch/timeout" <<'EOF'
 #!/bin/bash
 set -euo pipefail
-echo >&2 'Injected scan reader failure'
-exit 2
+if [[ "$*" == "-k 10 60 $ZFS_VERIFY_FAIL"* ]]; then
+  echo >&2 "Injected $ZFS_VERIFY_FAIL failure"
+  exit 2
+fi
+exec /usr/bin/timeout "$@"
 EOF
 cat >"$scratch/zfs_backup_onsite" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 echo "Verified onsite pull after scan failure: $*"
 EOF
-chmod +x "$scratch/zfs_backup_onsite"
+chmod +x "$scratch/timeout" "$scratch/zfs_backup_onsite"
 
 before=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
 sleep 2
-if output=$(PATH="$scratch:$PATH" "$peer_backup_script" 2>&1); then
+if output=$(PATH="$scratch:$PATH" ZFS_VERIFY_FAIL='zpool status' "$peer_backup_script" 2>&1); then
   echo >&2 'Expected a counted scan-query failure'
   exit 1
 fi
-[[ "$output" == *'Injected scan reader failure'* ]]
+[[ "$output" == *'Injected zpool status failure'* ]]
 [[ "$output" == *'Verified onsite pull after scan failure:'* ]]
 after=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
 [[ "$after" != "$before" && "$after" == *'@bak-'* ]]
 
-cat >"$scratch/timeout" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-if [[ "$*" == '-k 10 60 zpool list -H -o name' ]]; then
-  echo >&2 'Injected pool-list failure'
-  exit 124
-fi
-exec /usr/bin/timeout "$@"
-EOF
-chmod +x "$scratch/timeout"
 before=$after
 sleep 2
-if output=$(PATH="$scratch:$PATH" "$peer_backup_script" 2>&1); then
+if output=$(PATH="$scratch:$PATH" ZFS_VERIFY_FAIL='zpool list -H -o name' "$peer_backup_script" 2>&1); then
   echo >&2 'Expected a counted pool-list failure'
   exit 1
 fi
-[[ "$output" == *'Injected pool-list failure'* ]]
+[[ "$output" == *'Injected zpool list -H -o name failure'* ]]
 [[ "$output" == *'Verified onsite pull after scan failure:'* ]]
 after=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
 [[ "$after" != "$before" && "$after" == *'@bak-'* ]]
