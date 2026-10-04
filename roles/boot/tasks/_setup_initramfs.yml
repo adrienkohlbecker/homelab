@@ -1,16 +1,17 @@
 # A fresh Resolute bake already carries the new policy. Recreate the provider
 # transition so tag-limited callers must configure Dracut before installing it.
-- name: _setup_initramfs | Restore the initramfs-tools migration source
+- name: _setup_initramfs | Recreate the provider transition
   when: initramfs_use_dracut
-  apt:
-    pkg: "{{ ['initramfs-tools'] + (['zfs-initramfs'] if zfs_root else []) }}"
-    cache_valid_time: 3600
-    policy_rc_d: 101
-  become: true
+  block:
+    - name: _setup_initramfs | Restore the initramfs-tools migration source
+      apt:
+        pkg: "{{ ['initramfs-tools'] + (['zfs-initramfs'] if zfs_root else []) }}"
+        cache_valid_time: 3600
+        policy_rc_d: 101
+      become: true
 
-- name: _setup_initramfs | Remove the baked Dracut configuration
-  when: initramfs_use_dracut
-  file:
-    path: /etc/dracut.conf.d/90_host.conf
-    state: absent
-  become: true
+    - name: _setup_initramfs | Remove the baked Dracut configuration
+      file:
+        path: /etc/dracut.conf.d/90_host.conf
+        state: absent
+      become: true
