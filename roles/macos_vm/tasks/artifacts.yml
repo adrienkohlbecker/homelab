@@ -46,8 +46,6 @@
       --boot-args={{ macos_vm_opencore_boot_args | quote }}
     executable: /usr/bin/python3
     creates: "{{ macos_vm_workdir }}/OpenCore.qcow2"
-  register: macos_vm_opencore_seed
-  changed_when: "'changed' in macos_vm_opencore_seed.stdout | default('')"
   become: true
 
 - name: artifacts | Stage fetch-macOS script

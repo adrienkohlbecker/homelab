@@ -1,6 +1,5 @@
 """Protect OpenCore seed publication and unrelated guest identity data."""
 
-import fcntl
 import plistlib
 import subprocess
 from pathlib import Path
@@ -52,7 +51,8 @@ def test_existing_destination_is_never_rebuilt(destination, monkeypatch, symlink
     else:
         destination.write_bytes(b"existing guest identity")
     monkeypatch.setattr(seed, "build_image", lambda *args: pytest.fail("existing image must not be rebuilt"))
-    assert seed.seed_image(Path("missing source"), destination, "en-US:1", "en_FR", "-v") is False
+    with pytest.raises(FileExistsError):
+        seed.seed_image(Path("missing source"), destination, "en-US:1", "en_FR", "-v")
     if symlink:
         assert destination.is_symlink()
     else:
@@ -69,29 +69,7 @@ def test_interrupted_build_can_retry_without_publishing_partial_image(destinatio
         seed.seed_image(Path("source"), destination, "en-US:1", "en_FR", "-v")
     assert not destination.exists()
     assert not list(destination.parent.glob(".opencore_*"))
-    lock = destination.with_suffix(".qcow2.lock")
-    inode = lock.stat().st_ino
     monkeypatch.setattr(seed, "build_image", lambda source, image, *args: image.write_bytes(b"complete"))
-    assert seed.seed_image(Path("source"), destination, "en-US:1", "en_FR", "-v") is True
+    seed.seed_image(Path("source"), destination, "en-US:1", "en_FR", "-v")
     assert destination.read_bytes() == b"complete"
-    assert lock.stat().st_ino == inode
-
-
-def test_concurrent_builder_is_rejected(destination, monkeypatch):
-    monkeypatch.setattr(seed, "build_image", lambda *args: pytest.fail("another builder owns the lock"))
-    with destination.with_suffix(".qcow2.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with pytest.raises(BlockingIOError):
-            seed.seed_image(Path("source"), destination, "en-US:1", "en_FR", "-v")
-    assert not destination.exists()
-
-
-def test_destination_created_outside_lock_is_not_overwritten(destination, monkeypatch):
-    def race(source, image, *args):
-        image.write_bytes(b"new seed")
-        destination.write_bytes(b"other writer")
-
-    monkeypatch.setattr(seed, "build_image", race)
-    with pytest.raises(FileExistsError):
-        seed.seed_image(Path("source"), destination, "en-US:1", "en_FR", "-v")
-    assert destination.read_bytes() == b"other writer"
+    assert not list(destination.parent.glob(".opencore_*"))

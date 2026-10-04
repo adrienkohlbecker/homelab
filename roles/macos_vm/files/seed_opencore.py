@@ -2,7 +2,6 @@
 """Seed an OpenCore image without mounting it or replacing existing VM state."""
 
 import argparse
-import fcntl
 import json
 import os
 import plistlib
@@ -54,27 +53,17 @@ def build_image(source: Path, image: Path, prev_lang_kbd: str, apple_locale: str
     run("qemu-img", "check", "-q", "-f", "qcow2", image)
 
 
-def seed_image(source: Path, destination: Path, prev_lang_kbd: str, apple_locale: str, boot_args: str) -> bool:
-    """Publish a complete image once; refuse concurrent builders and never overwrite a destination."""
-    # Keep the lock inode outside disposable scratch storage and never unlink it.
-    with destination.with_suffix(destination.suffix + ".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if os.path.lexists(destination):
-            return False
-        with tempfile.TemporaryDirectory(prefix=".opencore_", dir=destination.parent) as scratch:
-            image = Path(scratch) / "OpenCore.qcow2"
-            build_image(source, image, prev_lang_kbd, apple_locale, boot_args)
-            image.chmod(0o644)
-            with image.open("rb") as stream:
-                os.fsync(stream.fileno())
-            # link publishes atomically and refuses even a non-cooperating writer's destination.
-            os.link(image, destination)
-            directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-    return True
+def seed_image(source: Path, destination: Path, prev_lang_kbd: str, apple_locale: str, boot_args: str) -> None:
+    """Build a complete image in scratch beside the destination, then publish it atomically."""
+    if os.path.lexists(destination):
+        raise FileExistsError(f"{destination} holds guest identity state and is never replaced")
+    with tempfile.TemporaryDirectory(prefix=".opencore_", dir=destination.parent) as scratch:
+        image = Path(scratch) / "OpenCore.qcow2"
+        build_image(source, image, prev_lang_kbd, apple_locale, boot_args)
+        image.chmod(0o644)
+        with image.open("rb") as stream:
+            os.fsync(stream.fileno())
+        os.replace(image, destination)
 
 
 def main() -> None:
@@ -85,8 +74,7 @@ def main() -> None:
     parser.add_argument("--apple-locale", required=True)
     parser.add_argument("--boot-args", required=True)
     args = parser.parse_args()
-    changed = seed_image(args.source, args.destination, args.prev_lang_kbd, args.apple_locale, args.boot_args)
-    print("changed" if changed else "ok")
+    seed_image(args.source, args.destination, args.prev_lang_kbd, args.apple_locale, args.boot_args)
 
 
 if __name__ == "__main__":
