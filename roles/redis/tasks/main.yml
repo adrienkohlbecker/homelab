@@ -52,17 +52,9 @@
   tags:
     - redis
 
-# Redis forks for RDB snapshots (copy-on-write); with overcommit_memory=0 the
-# kernel may refuse that fork under memory pressure, and Redis warns about it
-# at every startup.
-- name: Enable memory overcommit
-  ansible.posix.sysctl:
-    name: vm.overcommit_memory
-    value: '1'
-    sysctl_file: /etc/sysctl.d/30-redis.conf
-  become: true
-  tags:
-    - redis
+# vm.overcommit_memory stays at the kernel default despite the startup warning:
+# the heuristic never refuses the RDB fork of a 64mb maxmemory store, and the
+# host-wide sysctl would drop the oversized-allocation check for every process.
 
 # No validate: -- redis-server has no offline config-parse mode; it validates
 # only at full startup, which the unit's Type=notify/--sdnotify=healthy gate
