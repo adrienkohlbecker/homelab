@@ -25,7 +25,6 @@
   retries: 30
   delay: 4
   until: kdump_verify_config.stdout is search('(?m)^current state\s*:\s*ready to kdump\s*$')
-  failed_when: kdump_verify_config.stdout is not search('(?m)^current state\s*:\s*ready to kdump\s*$')
   become: true
 
 - name: _verify_capture | Capture image contains the kdump safety hooks
