@@ -61,10 +61,9 @@
     - firewall
 
 # Network-stack hardening sysctls. Ubuntu's defaults are inconsistent
-# (log_martians=0, send_redirects=1) — pin the secure values explicitly
-# so /etc/sysctl.d/90-firewall-hardening.conf is the single source of
-# truth for the host's network posture. Module writes the .conf file
-# AND applies each key live.
+# (log_martians=0, send_redirects=1) — pin the secure values where they
+# differ. The module writes /etc/sysctl.d/90-firewall-hardening.conf AND
+# applies each key live.
 #
 # The 90- prefix is load-bearing: systemd-sysctl applies files in
 # basename order, so this file must sort after 50-default.conf.
@@ -123,15 +122,9 @@
     # log via their own default-inherited flag, only the vrrp vmac goes quiet.
     - { name: net.ipv4.conf.all.log_martians, value: '0' }
     - { name: net.ipv4.conf.default.log_martians, value: '1' }
-    # SYN-flood mitigation. Default on in modern Ubuntu; pin anyway.
-    - { name: net.ipv4.tcp_syncookies, value: '1' }
     # Drop RSTs in TIME-WAIT (RFC 1337) — closes a narrow TCP-hijack
     # window.
     - { name: net.ipv4.tcp_rfc1337, value: '1' }
-    # Ignore ICMP echo to broadcast/multicast (smurf amplification);
-    # silently drop malformed ICMP error responses (martians noise).
-    - { name: net.ipv4.icmp_echo_ignore_broadcasts, value: '1' }
-    - { name: net.ipv4.icmp_ignore_bogus_error_responses, value: '1' }
     # Strict ARP for a multi-homed host. arp_ignore=1: reply only if
     # the target IP is on the receiving interface. arp_announce=2:
     # source ARPs with the local address best-matched for the dest
@@ -149,7 +142,8 @@
 
 # Retired pins leave the persisted file without a live write, so each
 # reverts to its kernel default at the next boot. The nftables non-SYN
-# drop rules cover what nf_conntrack_tcp_loose=0 did.
+# drop rules cover what nf_conntrack_tcp_loose=0 did; the others already
+# equal the kernel default.
 - name: Remove retired network-stack sysctl pins
   ansible.posix.sysctl:
     name: "{{ item }}"
@@ -158,6 +152,9 @@
     reload: false
   loop:
     - net.netfilter.nf_conntrack_tcp_loose
+    - net.ipv4.tcp_syncookies
+    - net.ipv4.icmp_echo_ignore_broadcasts
+    - net.ipv4.icmp_ignore_bogus_error_responses
   become: true
   tags:
     - firewall
