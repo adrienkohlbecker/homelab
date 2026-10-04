@@ -103,25 +103,12 @@ class TestClassifyChangedFiles:
         assert detect.classify_changed_files([path]).packer_changed is expected
 
     def test_role_files_baked_by_packer_are_packer_inputs(self) -> None:
-        """Every role file the image install reads must trigger the packer cell.
-
-        The expected set comes from the install scripts rather than the
-        template detect.py parses, so a role file wired into the build but
-        missed by detection fails here.
-        """
-        provision = (REPO_ROOT / "packer" / "scripts" / "provision.sh").read_text()
-        chroot = (REPO_ROOT / "packer" / "scripts" / "chroot.sh").read_text()
-        role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", provision, re.MULTILINE)
-        assert role_files is not None
-        staged = set(role_files.group(1).split())
-        consumed = set(re.findall(r"\$\{CHROOT_ROLE_FILES\}/([\w.-]+)", chroot))
-        assert consumed, "chroot.sh no longer names any role file"
-        assert consumed <= staged
-
-        for name in sorted(staged):
-            matches = [path.relative_to(REPO_ROOT).as_posix() for path in REPO_ROOT.glob(f"roles/*/files/{name}")]
-            assert len(matches) == 1, f"{name}: expected one owning role file, found {matches}"
-            assert detect.classify_changed_files(matches).packer_changed, f"{matches[0]} is not a packer input"
+        """Every role file the fixture build uploads must trigger the packer cell."""
+        template = (REPO_ROOT / "packer" / "qemu.pkr.hcl").read_text()
+        uploaded = re.findall(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)
+        assert uploaded, "qemu.pkr.hcl no longer uploads any role file"
+        for path in uploaded:
+            assert detect.classify_changed_files([path]).packer_changed, f"{path} is not a packer input"
 
     @pytest.mark.parametrize("path", ["roles/console/tasks/main.yml", "roles/boot/files/efi_entries.py"])
     def test_unbaked_role_files_are_not_packer_inputs(self, path: str) -> None:

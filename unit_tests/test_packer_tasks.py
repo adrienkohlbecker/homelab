@@ -315,9 +315,15 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", QEMU_PROVISION_SH.read_text(), re.MULTILINE)
     assert role_files is not None
 
+    staged = role_files.group(1).split()
     uploaded_role_files = re.findall(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)
-    assert sorted(Path(path).name for path in uploaded_role_files) == sorted(role_files.group(1).split())
+    assert sorted(Path(path).name for path in uploaded_role_files) == sorted(staged)
     assert "homelab-source.tar" not in template
+
+    # Every role file the chroot install reads must be staged by provision.sh.
+    consumed = set(re.findall(r"\$\{CHROOT_ROLE_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
+    assert consumed, "chroot.sh no longer names any role file"
+    assert consumed <= set(staged)
 
 
 def test_qemu_build_uses_one_install_target() -> None:
