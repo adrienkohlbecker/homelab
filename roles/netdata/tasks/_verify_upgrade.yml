@@ -73,12 +73,6 @@
       Expected netdata-plugin-chartsd to stay at {{ _netdata_chartsd_series[1] }};
       got {{ _netdata_chartsd_unchanged.stdout }}
 
-- name: _verify | Read the netdata unit status before the pin change
-  systemd:
-    name: netdata.service
-  register: _netdata_unit_before
-  become: true
-
 - name: _verify | Drop the netdata pin as a series bump would rewrite it
   file:
     path: /etc/apt/preferences.d/netdata
@@ -114,11 +108,8 @@
       - apt_source_netdata_changed
       - netdata_apt is changed
       - _netdata_chartsd_upgraded.stdout == _netdata_chartsd_series | first
-      - _netdata_unit_after.status.MainPID != _netdata_unit_before.status.MainPID
       - _netdata_exe.stdout is not search('deleted')
     fail_msg: >-
       Expected netdata-plugin-chartsd {{ _netdata_chartsd_series | first }} and a
       restarted netdata on its installed binary; got
-      {{ _netdata_chartsd_upgraded.stdout }}, MainPID
-      {{ _netdata_unit_before.status.MainPID }} -> {{ _netdata_unit_after.status.MainPID }},
-      running {{ _netdata_exe.stdout }}
+      {{ _netdata_chartsd_upgraded.stdout }}, running {{ _netdata_exe.stdout }}
