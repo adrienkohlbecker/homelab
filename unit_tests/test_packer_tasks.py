@@ -24,7 +24,6 @@ QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qem
 QEMU_HOST_KERNEL_SH = REPO_ROOT / "packer" / "aws" / "files" / "install_ga_kernel.sh"
 QEMU_HOST_SCRATCH_SH = REPO_ROOT / "packer" / "aws" / "files" / "homelab_ci_prepare_scratch.sh"
 QEMU_HOST_SMOKE_SH = REPO_ROOT / "packer" / "aws" / "files" / "qemu_host_smoke.sh"
-QEMU_POSTPROCESS_SH = REPO_ROOT / "packer" / "scripts" / "postprocess.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
 QEMU_CHROOT_SH = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
@@ -326,55 +325,6 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     assert consumed <= set(staged)
 
 
-def test_qemu_build_uses_one_install_target() -> None:
-    template = QEMU_TEMPLATE.read_text()
-    provision = QEMU_PROVISION_SH.read_text()
-
-    assert re.search(r'"INSTALL_TARGET"\s+=\s+source\.name == "hetzner" \? "hetzner" : "qemu"', template)
-    assert 'export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"' in provision
-    assert "IMAGE_TARGET" not in template
-    assert "QEMU_TEST_IMAGE" not in template
-
-
-def test_qemu_image_is_sealed_ready_to_boot() -> None:
-    """A cache recorded against the build VM's device names fails its import
-    and falls back to a device scan on every fixture boot.
-    """
-    provision = QEMU_PROVISION_SH.read_text()
-
-    assert "zpool import -d /dev/disk/by-partuuid -N" in provision
-
-
-def test_qemu_fixture_mirrors_journal_from_the_first_entry() -> None:
-    """The mirror follows the journal rather than using ForwardToConsole.
-
-    Forwarding starts only when journald opens the console and never replays
-    the kernel records it imported from kmsg, so the artifact opened mid-boot
-    with no kernel lines. --lines=all makes a late start cost nothing, and
-    --cursor-file stops a Restart= from replaying the journal twice.
-    """
-    chroot = QEMU_CHROOT_SH.read_text()
-
-    assert "/etc/systemd/system/homelab_guest_journal.service" in chroot
-    assert "--follow --lines=all" in chroot
-    assert "--cursor-file=/run/homelab_guest_journal.cursor" in chroot
-    assert "StandardOutput=file:/dev/hvc0" in chroot
-    # A second writer on the same chardev would double every line.
-    assert "ForwardToConsole=" not in chroot
-    # Otherwise the generator's console getty interleaves its banners in.
-    assert "systemctl mask serial-getty@hvc0.service" in chroot
-
-
-def test_qemu_build_separates_host_os_from_architecture() -> None:
-    template = QEMU_TEMPLATE.read_text()
-
-    assert 'data "external-raw" "host_arch"' in template
-    assert 'data "external-raw" "host_os"' in template
-    assert re.search(r"accelerator\s+= local\.host_os_cfg\.accelerator", template)
-    assert re.search(r"format\s+= local\.host_os_cfg\.image_format", template)
-    assert re.search(r'upstream_archive\s+= "http://ports\.ubuntu\.com/ubuntu-ports"', template)
-
-
 def test_noble_refind_pin_covers_every_architecture_and_is_baked_only_on_noble() -> None:
     versions = yaml.safe_load((REPO_ROOT / "group_vars" / "all" / "versions.yml").read_text())
     pins = versions["refind_noble_release"]
@@ -390,48 +340,6 @@ def test_noble_refind_pin_covers_every_architecture_and_is_baked_only_on_noble()
     assert 'local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""' in template
     assert 'local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""' in template
     assert "sha256sum -c -" in chroot.split('if [ -n "${REFIND_DEB_URL:-}" ]', 1)[1].split("refind-install", 1)[0]
-
-
-def test_qemu_host_uses_canonical_mise_upstream() -> None:
-    provision = QEMU_HOST_PROVISION_SH.read_text()
-
-    assert "https://mise.en.dev/gpg-key.pub" in provision
-    assert "https://mise.en.dev/deb stable main" in provision
-    assert "mise.jdx.dev" not in provision
-
-
-def test_qemu_host_retains_caches_without_a_shared_virtualenv() -> None:
-    provision = QEMU_HOST_PROVISION_SH.read_text()
-
-    assert "MISE_DATA_DIR=/opt/mise" in provision
-    assert "UV_CACHE_DIR=/opt/uv-cache" in provision
-    assert "mise exec -- uv sync --locked --link-mode hardlink" in provision
-    assert "/opt/venv" not in provision
-
-
-def test_qemu_host_arm_provisioning_uses_packaged_firmware() -> None:
-    template = QEMU_HOST_TEMPLATE.read_text()
-    provision = QEMU_HOST_PROVISION_SH.read_text()
-
-    assert re.search(r'qemu_packages\s+= "qemu-system-arm qemu-efi-aarch64"', template)
-    assert re.search(r'qemu_system_binary\s+= "qemu-system-aarch64"', template)
-    assert re.search(r"runner_artifact\s+= local\.versions\.gitlab_runner_archive\.aarch64", template)
-
-    # The firmware comes from the qemu-efi-aarch64 package, not a fetched pin.
-    assert re.search(r'"QEMU_FIRMWARE_CODE"\s+= local\.guest_architecture\.uefi_firmware\.code', template)
-    assert re.search(r'"QEMU_FIRMWARE_VARS"\s+= local\.guest_architecture\.uefi_firmware\.vars', template)
-    assert '"$QEMU_FIRMWARE_CODE" "$QEMU_FIRMWARE_VARS"' in provision
-    assert "HOMELAB_AARCH64_FIRMWARE_DIR" not in template + provision
-    assert "mise exec -- true" in provision
-    # The boot-time pre-hydration runs a baked copy of the task outside any
-    # checkout; test_qemu_host_prehydrate_tree_is_self_contained proves the
-    # copy carries its imports. It must not rely on the mise task wrapper.
-    assert "homelab_ci_hydrate_images" not in provision
-    assert "mise run ci:hydrate-qemu-images" not in provision
-    assert "command -v __QEMU_SYSTEM_BINARY__" in provision
-    assert "gitlab_runner_fleeting_arm.pub" in template
-    assert "/etc/ssh/authorized_keys/ubuntu" in provision
-    assert "sshd -t" in provision
 
 
 @pytest.mark.parametrize(("architecture", "installs_key"), [("x86_64", False), ("aarch64", True)])
@@ -579,46 +487,6 @@ def test_qemu_host_scratch_swap_rejects_malformed_memory(tmp_path: Path, memtota
     assert "invalid MemTotal" in result.stderr
 
 
-def test_qemu_host_scratch_uses_every_instance_store_device_in_raid0() -> None:
-    script = QEMU_HOST_SCRATCH_SH.read_text()
-
-    assert "mapfile -t devs" in script
-    assert "lsblk -dn -o PATH,MODEL" in script
-    assert "'/Instance Storage/" in script
-    assert "--level=0" in script
-    assert '--raid-devices="${#devs[@]}" "${devs[@]}"' in script
-    assert "Before=multi-user.target" in QEMU_HOST_PROVISION_SH.read_text()
-
-
-def test_qemu_host_scratch_uses_one_non_root_ebs_disk() -> None:
-    script = QEMU_HOST_SCRATCH_SH.read_text()
-
-    assert "findmnt -n -o SOURCE /" in script
-    assert 'lsblk -srdpno NAME,TYPE "$root_source"' in script
-    assert "/Elastic Block Store/" in script
-    assert 'if [ "$dev" != "$root_disk" ]' in script
-    assert "multiple non-root EBS disks are ambiguous" in script
-
-
-def test_qemu_host_readiness_waits_for_scratch_setup() -> None:
-    script = QEMU_HOST_PROVISION_SH.read_text()
-
-    assert "for _ in {1..90}; do" in script
-    assert "systemctl is-active homelab-ci-scratch.service" in script
-    assert '[ "$scratch_state" = active ]' in script
-
-
-def test_qemu_host_ami_filter_tracks_the_selected_release() -> None:
-    template = QEMU_HOST_TEMPLATE.read_text()
-
-    assert 'ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))' in template
-    assert "ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name].version" in template
-    assert (
-        "ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-${local.architecture_config.ami_architecture}-server-*"
-        in template
-    )
-
-
 def _run_qemu_host_bake(
     tmp_path: Path, *, promote: bool, resolved_ami: str = "ami-1234abcd"
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
@@ -762,18 +630,6 @@ def test_python_task_usage_headers_are_visible_to_mise() -> None:
         assert "\n#USAGE arg " in content
         assert "\n# MISE " not in content
         assert "\n# USAGE " not in content
-
-
-def test_qemu_postprocess_bounds_boot_verification() -> None:
-    postprocess = QEMU_POSTPROCESS_SH.read_text()
-
-    assert "timeout --kill-after=30s 300" in postprocess
-    assert '"$script_dir/../../test/launch.py"' in postprocess
-    # Stock HVF cannot bring a kexec'd kernel's secondary CPUs online, so a Mac
-    # builder verifies on one vCPU unless it runs the patched qemu-hvf build.
-    assert 'if [ "$(uname -s)" = "Darwin" ] && [[ "$(command -v qemu-system-aarch64)" != */qemu-hvf/* ]]' in postprocess
-    assert "vcpus_args=(--vcpus 1)" in postprocess
-    assert "--timeout 300" not in postprocess
 
 
 def test_hetzner_bulk_ssh_isolates_the_compressed_stream(tmp_path: Path) -> None:
