@@ -139,18 +139,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Dracut image includes the boot modules
-  when:
-    - initramfs_use_dracut
-    - _boot_verify_initrd.stat.exists
-  command: lsinitrd --mod /boot/initrd.img-{{ ansible_kernel }}
-  register: _boot_verify_dracut_modules
-  changed_when: false
-  failed_when: >-
-    'dracut modules:' not in _boot_verify_dracut_modules.stdout
-    or (zfs_root and 'zfs' not in _boot_verify_dracut_modules.stdout_lines)
-  become: true
-
 # The shared Dracut policy keeps the pool cache and the kdump panic policy out
 # of every image. Seed the sysctl paths, plus a control file that the image must
 # carry, then rebuild so the archive reflects them. A ZFS-root fixture must
@@ -184,12 +172,13 @@
       changed_when: true
       become: true
 
-    - name: _verify | Image carries the control but not the excluded files
+    - name: _verify | Image carries the boot modules and control but not the excluded files
       command: lsinitrd /boot/initrd.img-{{ ansible_kernel }}
       register: _boot_verify_dracut_files
       changed_when: false
       failed_when: >-
-        _boot_verify_dracut_files.stdout is not search('(?m)\setc/sysctl.d/31_boot_verify_control\.conf$')
+        (zfs_root and 'zfs' not in _boot_verify_dracut_files.stdout_lines)
+        or _boot_verify_dracut_files.stdout is not search('(?m)\setc/sysctl.d/31_boot_verify_control\.conf$')
         or _boot_verify_dracut_files.stdout is search('(?m)\setc/sysctl.d/30-kdump\.conf$')
         or _boot_verify_dracut_files.stdout is search('(?m)\setc/zfs/zpool\.cache$')
       become: true
