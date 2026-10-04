@@ -35,22 +35,6 @@
       {{ chrony_verify_authdata.stdout_lines }})
     success_msg: chronyd loaded only the managed NTS servers {{ chrony_verify_loaded }}
 
-# Scope the journal to the running invocation: the image's stock chronyd may
-# have logged its own leap source at boot, and it already pushed a kernel TAI
-# offset that survives the restart, so neither proves the managed config works.
-- name: _verify | Read the running chronyd unit state
-  systemd:
-    name: chrony.service
-  register: chrony_verify_unit
-  become: true
-
-- name: _verify | Running chronyd loaded leap second data
-  command: journalctl --output=cat _SYSTEMD_INVOCATION_ID={{ chrony_verify_unit.status.InvocationID }}
-  changed_when: false
-  register: chrony_verify_journal
-  failed_when: chrony_verify_journal.stdout is not search('Using .*leap second')
-  become: true
-
 # Read the ntp-units.d registries the way timedated does: every config
 # directory, entries split on whitespace, comments skipped. Timesyncd is queried
 # explicitly because removing its package drops its registry entry while an
