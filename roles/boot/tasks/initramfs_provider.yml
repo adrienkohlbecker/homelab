@@ -8,8 +8,6 @@
     mode: "0755"
   register: boot_initramfs_directory
   become: true
-  tags:
-    - boot
 
 - name: initramfs_provider | Configure the release boot image policy
   when: not (ansible_check_mode and boot_initramfs_directory.changed)
@@ -25,8 +23,6 @@
     validate: "{{ 'bash' if initramfs_use_dracut else 'sh' }} -n %s"
   register: boot_initramfs_config
   become: true
-  tags:
-    - boot
 
 - name: initramfs_provider | Install the release image generator and root support
   apt:
@@ -35,8 +31,6 @@
     policy_rc_d: 101
   register: boot_initramfs_apt
   become: true
-  tags:
-    - boot
 
 # A provider switch changes how the host boots; prove it with a reboot.
 - name: initramfs_provider | Rebuild boot images after provider changes
@@ -45,5 +39,3 @@
     boot_initramfs_args:
       changed: '{{ boot_initramfs_apt.changed or boot_initramfs_config.changed }}'
       reboot: true
-  tags:
-    - boot
