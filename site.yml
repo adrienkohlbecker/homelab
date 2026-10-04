@@ -112,6 +112,7 @@
     - z2m
     - homeassistant
     - kuma
+    - redis
     - authelia
     - spouse
     - profilarr

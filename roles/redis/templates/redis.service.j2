@@ -1,0 +1,67 @@
+#jinja2: lstrip_blocks: True
+# redis.service #######################################################################
+[Unit]
+Description=redis
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+RestartSteps=6
+RestartMaxDelaySec=10min
+Type=notify
+# NotifyAccess=all (not main): with --sdnotify=healthy the readiness ping comes
+# from conmon relaying the container healthcheck, not the unit's main PID.
+NotifyAccess=all
+SyslogIdentifier=%N
+
+# The sh wrapper reads the password from the mounted secret so it never lands
+# on disk in redis.conf. It also bypasses the image entrypoint's redis-server
+# branch, which would otherwise --loadmodule every bundled Redis 8 module.
+# `exec` leaves redis-server as the container's main process, hence --init.
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name redis \
+    --init \
+    --security-opt=no-new-privileges \
+    --log-driver journald \
+    --log-opt tag="redis" \
+    --volume /mnt/services/redis:/data \
+    --secret=redis_password,type=mount,target=redis_password \
+    --user {{ redis_user.uid }}:{{ redis_user.gid }} \
+    --network authelia \
+    --health-cmd {{ ["sh", "-c", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli -e ping"] | json_argv }} \
+    --health-startup-cmd {{ ["sh", "-c", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli -e ping"] | json_argv }} \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "100s" \
+    --stop-timeout 120 \
+    {{ redis_image }} \
+    sh -c 'exec redis-server /data/redis.conf --requirepass "$$(cat /run/secrets/redis_password)"'
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=multi-user.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

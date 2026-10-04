@@ -25,6 +25,7 @@ static_service_ids:
   nexus: 60725
   profilarr: 60729
   radarr: 60730
+  redis: 60741
   sabnzbd: 60731
   seerr: 60732
   sonarr: 60733

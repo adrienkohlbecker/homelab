@@ -1,0 +1,94 @@
+- name: Assert redis password is provided
+  assert:
+    that:
+      - redis_password | default('') | length > 0
+    fail_msg: >-
+      redis_password must be set in group_vars/{prod,test}.yml (a required
+      input; role vars sit above inventory vars and must not default it).
+  tags:
+    - redis
+
+# Redis is Authelia's session store, so it joins Authelia's network and Authelia
+# reaches it at `redis.dns.podman` without a host port. Both roles create the
+# network independently (idempotent); whichever converges first wins.
+- name: Create authelia podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: authelia
+    disable_dns: false
+    state: present
+  become: true
+  tags:
+    - redis
+
+- name: Set up redis system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: redis
+  tags:
+    - redis
+
+- name: Pull redis image
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: redis
+      image: "{{ redis_image }}"
+  tags:
+    - redis
+
+- name: Create redis password secret
+  when: not ansible_check_mode or redis_podman_available
+  containers.podman.podman_secret:
+    name: redis_password
+    data: "{{ redis_password }}"
+  register: redis_secret
+  become: true
+  tags:
+    - redis
+
+# Redis forks for RDB snapshots (copy-on-write); with overcommit_memory=0 the
+# kernel may refuse that fork under memory pressure, and Redis warns about it
+# at every startup.
+- name: Enable memory overcommit
+  ansible.posix.sysctl:
+    name: vm.overcommit_memory
+    value: '1'
+    sysctl_file: /etc/sysctl.d/30-redis.conf
+  become: true
+  tags:
+    - redis
+
+# No validate: -- redis-server has no offline config-parse mode; it validates
+# only at full startup, which the unit's Type=notify/--sdnotify=healthy gate
+# catches.
+- name: Configure redis  # noqa: require-validate
+  when: not ansible_check_mode or redis_user.uid is defined
+  copy:
+    src: redis.conf
+    dest: /mnt/services/redis/redis.conf
+    owner: redis
+    group: redis
+    mode: "0640"
+    backup: true
+  register: redis_conf
+  become: true
+  tags:
+    - redis
+
+- name: Manage redis service
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: redis.service.j2
+      condition: "{{ not ansible_check_mode or redis_user.uid is defined }}"
+      restart: "{{ redis_conf.changed or (redis_secret.changed | default(false)) }}"
+  tags:
+    - redis
