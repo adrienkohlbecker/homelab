@@ -23,12 +23,11 @@
       - boot_cmdline_args.name is defined
       - boot_cmdline_args.contents is defined
       - boot_cmdline_args.grub_scope | default('default') in ['default', 'all']
-      - grub_bootloader is defined
-      - grub_bootloader or (zfs_root is defined and zfs_root)
+      - grub_bootloader or zfs_root
     fail_msg: >-
       boot_cmdline_args requires 'name' and 'contents';
       optional 'grub_scope' must be 'default' or 'all'.
-      grub_bootloader must be defined; non-grub hosts require zfs_root=true
+      Non-grub hosts require zfs_root=true.
 
 # ---- grub hosts ----
 - name: cmdline | Create /etc/default/grub.d directory

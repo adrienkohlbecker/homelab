@@ -7,13 +7,6 @@
 # disk/ESP creation stays one-time bootstrap, while this role owns its mount
 # policy.
 
-- name: Assert grub_bootloader is set
-  assert:
-    that: grub_bootloader is defined
-    fail_msg: boot requires grub_bootloader (bool) in host/group vars.
-  tags:
-    - boot
-
 # We boot via rEFInd -> ZFSBootMenu, never grub. linux-generic Recommends a
 # grub-* alternation; hold the whole grub family, including packages not yet
 # installed, so a later kernel upgrade cannot pull it in.
