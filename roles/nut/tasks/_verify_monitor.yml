@@ -53,12 +53,14 @@
   become: true
 
 # ---- Forced-shutdown drill ----------------------------------------------
-# End-to-end exercise of the real shutdown chain: dummy driver -> upsd ->
-# upsmon -> FSD -> SHUTDOWNCMD. SHUTDOWNCMD is first re-pointed at a marker
-# file so the fixture survives to assert the outcome; then the dummy UPS flips
-# to on-battery low-battery and upsmon must declare FSD and run the
-# (re-pointed) shutdown. Destructive to the converged upsmon.conf -- fine,
-# the fixture is torn down afterwards.
+# End-to-end exercise of the real shutdown chain on the primary ladder step:
+# dummy driver -> upsd -> upsmon -> upssched's onbatt_shutdown timer ->
+# nut_notify -> `upsmon -c fsd` -> SHUTDOWNCMD. ONLINE cancels the timer, and
+# the dummy keeps a healthy charge and runtime until the shutdown, so only the
+# timer can produce it. group_vars/test.yml shortens the delay. SHUTDOWNCMD
+# is re-pointed at a marker file so the fixture survives to assert the
+# outcome. Destructive to the converged upsmon.conf -- fine, the fixture is
+# torn down afterwards.
 - name: _verify | Re-point SHUTDOWNCMD at a marker instead of halting the fixture
   replace:
     path: /etc/nut/upsmon.conf
@@ -66,113 +68,21 @@
     replace: 'SHUTDOWNCMD "/usr/bin/touch /tmp/nut_fsd_marker"'
   become: true
 
-# converge leaves the unit enabled but unstarted under qemu (no UPS);
-# start it here against the dummy upsd, on the still-benign OL
-# frame, so it is connected and polling before the critical flip below.
-- name: _verify | Start upsmon against the dummy upsd
-  systemd:
-    name: nut-monitor.service
-    state: restarted
-  become: true
-
-# dummy-ups accepts live variable writes via upsrw -- no frame-file rewrite,
-# driver restart, or reconnect window inside the FSD wait. Lowering the battery
-# metrics matters on NUT 2.8.4, which derives LB from the configured thresholds
-# instead of trusting LB in a direct status write. The qemu upsd.users grants
-# actions = SET.
-- name: _verify | Flip the dummy UPS to on-battery low-battery
-  command: upsrw -s "{{ item }}" -u upsmon -p {{ nut_upsmon_password }} {{ nut_ups }}
-  loop:
-    - battery.charge=1
-    - battery.runtime=60
-    - ups.status=OB
-  changed_when: false
-  become: true
-
-# upsmon polls every 5s (POLLFREQALERT once on battery), HOSTSYNC has no
-# secondaries to wait on, then FINALDELAY 5 before SHUTDOWNCMD; 90s bounds
-# both delays with wide margin.
-- name: _verify | Upsmon declared FSD and ran SHUTDOWNCMD
-  wait_for:
-    path: /tmp/nut_fsd_marker
-    timeout: 90
-  become: true
-
-# The SHUTDOWN NOTIFY rode the real chain (upsmon's nut-user half ->
-# upssched -> nut_notify -> mail); its absence means the unprivileged
-# dispatch path is broken even though the marker proved SHUTDOWNCMD ran.
-# SHUTDOWN, not FSD: a primary declaring FSD notifies itself with SHUTDOWN
-# ("Auto logout and shutdown proceeding") -- the FSD notify type is what
-# secondaries receive when they observe the flag.
-- name: _verify | The shutdown notification reached the mail
-  command: grep -qF "The system is being shutdown" /tmp/nut-mail.out
-  register: nut_shutdown_mail
-  until: nut_shutdown_mail.rc == 0
-  retries: 10
-  delay: 1
-  changed_when: false
-  become: true
-
-# Stop upsmon before the unreachable-UPS tests below take upsd down, so
-# its NOCOMM reactions don't interleave mail-shim writes with the greps.
-- name: _verify | Stop upsmon after the drill
-  systemd:
-    name: nut-monitor.service
-    state: stopped
-  become: true
-
-# ---- On-battery timer drill -----------------------------------------------
-# The time-based ladder step: ONBATT starts upssched's onbatt_shutdown timer,
-# ONLINE cancels it, and expiry makes nut_notify ask upsmon for FSD. The dummy
-# keeps a healthy charge and runtime throughout, so only the timer can produce
-# the FSD. group_vars/test.yml shortens the delay.
-
-# The low-battery drill's ONBATT left timers pending in the upssched daemon;
-# one firing `upsmon -c fsd` mid-drill would fake a pass.
-- name: _verify | Stop the upssched timer daemon left by the low-battery drill
-  command: pkill -x upssched
-  register: nut_pkill_upssched
-  failed_when: nut_pkill_upssched.rc not in [0, 1]
-  changed_when: false
-  become: true
-
-# upsd holds the FSD flag until it restarts; the driver restart reloads the
-# benign OL frame over the drill's upsrw writes.
-- name: _verify | Restart the dummy driver and upsd to clear the drill FSD
-  systemd:
-    name: "{{ item }}"
-    state: restarted
-  loop:
-    - nut-driver@eaton.service
-    - nut-server.service
-  become: true
-
-- name: _verify | Dummy UPS is back on line without FSD
-  command: upsc {{ nut_ups }} ups.status
-  register: nut_timer_status
-  until: nut_timer_status.stdout == 'OL'
-  retries: 15
-  delay: 1
-  changed_when: false
-  become: true
-
-- name: _verify | Remove the forced-shutdown marker
-  file:
-    path: /tmp/nut_fsd_marker
-    state: absent
-  become: true
-
-- name: _verify | Clear the mail capture before the timer drill
+# The dispatch test above mailed a low-battery event.
+- name: _verify | Clear the mail capture before the drill
   copy:
     dest: /tmp/nut-mail.out
     mode: "0666"
     content: ""
   become: true
 
-- name: _verify | Start upsmon for the timer drill
+# converge leaves the unit enabled but unstarted under qemu (no UPS);
+# start it here against the dummy upsd, on the still-benign OL
+# frame, so it is connected and polling before the on-battery flips below.
+- name: _verify | Start upsmon against the dummy upsd
   systemd:
     name: nut-monitor.service
-    state: started
+    state: restarted
   become: true
 
 - name: _verify | Mark the start of the cancel leg
@@ -180,6 +90,9 @@
   register: nut_cancel_start
   changed_when: false
 
+# dummy-ups accepts live variable writes via upsrw -- no frame-file rewrite,
+# driver restart, or reconnect window inside the drill. The qemu upsd.users
+# grants actions = SET.
 - name: _verify | Put the dummy UPS on battery for the cancel leg
   command: upsrw -s ups.status=OB -u upsmon -p {{ nut_upsmon_password }} {{ nut_ups }}
   changed_when: false
@@ -244,13 +157,28 @@
     timeout: "{{ nut_onbatt_shutdown_delay + 40 }}"
   become: true
 
+# The SHUTDOWN NOTIFY rode the real chain (upsmon's nut-user half ->
+# upssched -> nut_notify -> mail); its absence means the unprivileged
+# dispatch path is broken even though the marker proved SHUTDOWNCMD ran.
+# SHUTDOWN, not FSD: a primary declaring FSD notifies itself with SHUTDOWN
+# ("Auto logout and shutdown proceeding") -- the FSD notify type is what
+# secondaries receive when they observe the flag.
+- name: _verify | The shutdown notification reached the mail
+  command: grep -qF "The system is being shutdown" /tmp/nut-mail.out
+  register: nut_shutdown_mail
+  until: nut_shutdown_mail.rc == 0
+  retries: 10
+  delay: 1
+  changed_when: false
+  become: true
+
 - name: _verify | Read the marker after the fired timer
   stat:
     path: /tmp/nut_fsd_marker
   register: nut_fire_marker
   become: true
 
-- name: _verify | Read the mail captured during the timer drill
+- name: _verify | Read the mail captured during the drill
   slurp:
     path: /tmp/nut-mail.out
   register: nut_fire_mail
@@ -268,6 +196,28 @@
       marker after {{ nut_fire_marker.stat.mtime - (nut_fire_start.stdout | int) }}s,
       mail: {{ nut_fire_mail.content | b64decode | truncate(600) }}
     quiet: true
+
+# The charge/runtime backstop: with `ignorelb`, the driver flags LB from this
+# host's override.battery.*.low thresholds instead of the UPS's own flag, and
+# upsmon shuts down on OB+LB by itself. dummy-ups re-derives the flags when
+# the status is written, so the metrics go first.
+- name: _verify | Drain the dummy battery below the backstop thresholds
+  command: upsrw -s "{{ item }}" -u upsmon -p {{ nut_upsmon_password }} {{ nut_ups }}
+  loop:
+    - battery.charge=1
+    - battery.runtime=60
+    - ups.status=OB
+  changed_when: false
+  become: true
+
+- name: _verify | The backstop thresholds raised low battery
+  command: upsc {{ nut_ups }} ups.status
+  register: nut_backstop_status
+  until: "'LB' in nut_backstop_status.stdout.split()"
+  retries: 10
+  delay: 1
+  changed_when: false
+  become: true
 
 - name: _verify | Stop upsmon after the timer drill
   systemd:
