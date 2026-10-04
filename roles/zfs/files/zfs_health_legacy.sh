@@ -9,15 +9,16 @@ set -euo pipefail
 # zfs_status.py does for its own queries.
 export LC_ALL=C
 
-# zpool status issues blocking I/O; on a SUSPENDED pool (too many devices lost,
-# all I/O wedged) it can hang indefinitely and stall the nightly timer. Bound
-# every call so a wedged pool surfaces as a counted failure plus email the same
-# night instead of a silent hang. 60s is far longer than a healthy status read
-# yet well inside the daily cadence. -k 10 escalates to SIGKILL 10s after the
-# SIGTERM if zpool ignores the term; a process stuck in uninterruptible I/O wait
-# can still outlast it, but the unit's systemd timeout remains the final backstop.
-zpool_status() {
-  timeout -k 10 60 zpool status "$@"
+# zpool and zfs queries issue blocking I/O; on a SUSPENDED pool (too many
+# devices lost, all I/O wedged) they can hang indefinitely and stall the
+# nightly timer. Bound every query so a wedged pool surfaces as a counted
+# failure plus email the same night instead of a silent hang. 60s is far longer
+# than a healthy status read yet well inside the daily cadence. -k 10 escalates
+# to SIGKILL 10s after the SIGTERM if the query ignores the term; a process
+# stuck in uninterruptible I/O wait can still outlast it, but the unit's systemd
+# timeout remains the final backstop.
+bounded() {
+  timeout -k 10 60 "$@"
 }
 
 EMAIL_TO="root"
@@ -49,9 +50,9 @@ fail() {
   ((failed += 1))
 }
 
-zpool_status -s | tee "$TMP_OUTPUT" || echo "Warning: zpool status report did not complete" | tee -a "$TMP_OUTPUT" >&2
+bounded zpool status -s | tee "$TMP_OUTPUT" || echo "Warning: zpool status report did not complete" | tee -a "$TMP_OUTPUT" >&2
 
-if ! ZFS_VOLUMES=$(timeout -k 10 60 zpool list -H -o name); then
+if ! ZFS_VOLUMES=$(bounded zpool list -H -o name); then
   fail "Cannot list pools"
   ZFS_VOLUMES=
 fi
@@ -63,7 +64,7 @@ fi
 # future fault string automatically and stops pool/dataset names that happen to
 # contain words like "cannot" or "fail" from false-positiving.
 echo "Checking pool health condition..."
-if ! health_summary=$(zpool_status -x); then
+if ! health_summary=$(bounded zpool status -x); then
   fail "zpool status -x did not complete (pool wedged or zpool error)"
 elif [ "$health_summary" != "all pools are healthy" ]; then
   fail "zpool status -x reports a problem:"$'\n'"$health_summary"
@@ -81,7 +82,7 @@ fi
 # first (rather than piping zpool straight into awk) so a timeout/zpool failure
 # is caught here instead of being masked by awk's own exit status under pipefail.
 echo "Checking drive errors..."
-if ! drive_status=$(zpool_status -p); then
+if ! drive_status=$(bounded zpool status -p); then
   fail "zpool status -p did not complete (pool wedged or zpool error)"
 elif echo "$drive_status" | awk '$3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { if ($3 + $4 + $5 > 0) found = 1 } END { exit !found }'; then
   fail "Detected drive errors (READ/WRITE/CKSUM)"
@@ -94,7 +95,7 @@ CURRENT_DATE=$(date +"%s")
 for volume in $ZFS_VOLUMES; do
   # A suspended/UNAVAIL pool can make `zpool status` exit non-zero. Count it and
   # keep going so a broken pool does not swallow the rest of the alert.
-  vol_status=$(zpool_status "$volume") || {
+  vol_status=$(bounded zpool status "$volume") || {
     fail "Cannot query status for $volume"
     continue
   }
@@ -110,7 +111,7 @@ for volume in $ZFS_VOLUMES; do
   SCRUB_RAW_DATES=$(awk '/scan: (scrub repaired|scrub paused|resilvered)/ {print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}' <<<"$vol_status")
   age_basis=""
   if [[ -z "$SCRUB_RAW_DATES" ]]; then
-    SCRUB_DATE=$(timeout -k 10 60 zfs get creation -Hpo value "$volume") || {
+    SCRUB_DATE=$(bounded zfs get creation -Hpo value "$volume") || {
       fail "Cannot check scrub age for $volume"
       continue
     }
