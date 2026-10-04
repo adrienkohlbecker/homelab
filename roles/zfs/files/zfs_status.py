@@ -260,15 +260,11 @@ def main() -> int:
         if args.command in {None, "health"}:
             try:
                 expire = integer(int(os.environ.get("SCRUB_EXPIRE", "3456000")), "SCRUB_EXPIRE")
-                json_supported = supports_json()
+                if not supports_json():
+                    return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
             except (OSError, subprocess.CalledProcessError, ValueError) as error:
                 return finish_health([f"Cannot initialize health check: {diagnostic(error)}"], [])
-            if json_supported:
-                return health(expire)
-            try:
-                return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
-            except OSError as error:
-                return finish_health([f"Cannot start legacy health parser: {diagnostic(error)}"], [])
+            return health(expire)
         print(int(scan_in_progress(args.pool, scrub_only=args.scrub_only)))
         return 0
     except (OSError, subprocess.CalledProcessError, ValueError) as error:

@@ -261,7 +261,7 @@ def test_legacy_launch_failure_is_mailed(monkeypatch):
     monkeypatch.setattr(status.subprocess, "run", run)
     assert status.main() == 1
     assert len(mail) == 1
-    assert "Cannot start legacy health parser: Exec format error" in mail[0]
+    assert "Cannot initialize health check: Exec format error" in mail[0]
 
 
 def test_unknown_version_fails_closed(monkeypatch):
