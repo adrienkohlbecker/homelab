@@ -12,9 +12,6 @@ ALLOWLIST_PATTERNS = (
     "mise-tasks/worktree/lib.sh",
     "mise-tasks/zbm/lib.sh",
     "zbm/dracut-modules/89zbm-power-commands/module-setup.sh",
-    # Dracut sources these hooks; strict mode would alter its caller's shell.
-    "roles/kdump/files/dracut/module-setup.sh",
-    "roles/kdump/files/dracut/kdump-sysctl.sh",
     "roles/netdata/files/*.chart.sh",
     "roles/hdparm/files/*.chart.sh",
     "roles/systemd_timer/files/*.chart.sh",

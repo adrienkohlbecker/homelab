@@ -24,19 +24,16 @@
           kdump-tools now ships native Dracut support. Retire the backported
           capture integration per notes/runbooks/kdump.md, then rerun.
 
-    - name: dracut | Create module and profile directories
+    - name: dracut | Create capture profile directory
       file:
-        path: '{{ item }}'
+        path: /usr/lib/dracut/dracut.conf.d/kdump-tools
         state: directory
         owner: root
         group: root
         mode: "0755"
-      loop:
-        - /usr/lib/dracut/modules.d/50kdump-tools
-        - /usr/lib/dracut/dracut.conf.d/kdump-tools
 
     # Keep the capture preset separate from normal boot configuration.
-    - name: dracut | Install capture profile, sysctl hooks and image generator
+    - name: dracut | Install capture profile and image generator
       copy:
         src: '{{ item.src }}'
         dest: '{{ item.dest }}'
@@ -48,10 +45,6 @@
       loop:
         - src: dracut/99_kdump.conf
           dest: /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
-        - src: dracut/module-setup.sh
-          dest: /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
-        - src: dracut/kdump-sysctl.sh
-          dest: /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
         # This package conffile is preserved by dpkg during upgrades.
         - src: kdump_dracut.sh
           dest: /etc/kernel/postinst.d/kdump-tools

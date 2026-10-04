@@ -16,19 +16,16 @@
   until: kdump_verify_config.stdout is search('(?m)^current state\s*:\s*ready to kdump\s*$')
   become: true
 
-# Dracut images exclude the host panic policy, which starts in the real root.
-- name: _verify_capture | Capture image contains the kdump safety hooks and defers host panic policy
-  # Noble's unmkinitramfs probes zstd without following symlinks, so list
-  # the regular per-kernel image rather than kdump-config's initrd symlink.
-  command: '{{ initramfs_list_command }} /var/lib/kdump/initrd.img-{{ ansible_kernel }}'
+# Dracut images snapshot the host sysctl files but exclude the panic policy,
+# which starts in the real root once the capture loader can run.
+- name: _verify_capture | Capture image defers host panic policy until the real root
+  when: initramfs_use_dracut
+  command: lsinitrd /var/lib/kdump/initrd.img-{{ ansible_kernel }}
   register: kdump_verify_initrd
   changed_when: false
   failed_when: >-
-    (not initramfs_use_dracut
-     and 'scripts/local-bottom/kdump-sysctl' not in kdump_verify_initrd.stdout_lines)
-    or (initramfs_use_dracut
-        and ('hooks/pre-pivot/99-kdump-sysctl.sh' not in kdump_verify_initrd.stdout
-             or kdump_verify_initrd.stdout is search('(?m)\setc/sysctl.d/30-kdump\.conf$')))
+    kdump_verify_initrd.stdout is not search('(?m)\s(etc|usr/lib)/sysctl.d/[^/]+\.conf$')
+    or kdump_verify_initrd.stdout is search('(?m)\setc/sysctl.d/30-kdump\.conf$')
   become: true
 
 # Loaded state alone cannot prove the capture image can mount root and
