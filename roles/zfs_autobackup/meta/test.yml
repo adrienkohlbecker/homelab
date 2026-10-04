@@ -1,2 +1,4 @@
+# Resolute: pipx installs zfs-autobackup on the newer Python, and the backup,
+# pull, and restore paths drive OpenZFS 2.4 send/receive.
 ubuntu:
   - resolute

@@ -130,35 +130,33 @@ def test_explain_rejects_unrequested_pools(monkeypatch, pool):
 
 
 @pytest.mark.parametrize(
-    ("function", "state", "pause", "active", "scrub_only"),
+    ("function", "state", "pause", "active"),
     [
-        pytest.param("SCRUB", "SCANNING", 0, True, True, id="active_scrub"),
-        pytest.param("SCRUB", "SCANNING", 95, False, True, id="paused_scrub"),
-        pytest.param("SCRUB", "CANCELED", 95, False, False, id="canceled_scrub"),
-        pytest.param("SCRUB", "FINISHED", 0, False, False, id="finished_scrub"),
-        pytest.param("RESILVER", "SCANNING", 0, True, False, id="active_resilver"),
-        pytest.param("RESILVER", "SCANNING", 0, False, True, id="resilver_is_not_a_scrub"),
-        pytest.param("RESILVER", "FINISHED", 0, False, False, id="finished_resilver"),
+        pytest.param("SCRUB", "SCANNING", 0, True, id="active_scrub"),
+        pytest.param("SCRUB", "SCANNING", 95, False, id="paused_scrub"),
+        pytest.param("SCRUB", "CANCELED", 95, False, id="canceled_scrub"),
+        pytest.param("SCRUB", "FINISHED", 0, False, id="finished_scrub"),
+        pytest.param("RESILVER", "SCANNING", 0, True, id="active_resilver"),
+        pytest.param("RESILVER", "FINISHED", 0, False, id="finished_resilver"),
     ],
 )
-def test_scan_activity_distinguishes_pause_and_history(pool, function, state, pause, active, scrub_only):
+def test_scan_activity_distinguishes_pause_and_history(pool, function, state, pause, active):
     pool["scan_stats"].update(function=function, state=state, scrub_pause=pause)
-    assert status.scan_active(pool, scrub_only=scrub_only) is active
+    assert status.scan_active(pool) is active
 
 
 @pytest.mark.parametrize(
-    ("err_state", "err_pause", "active", "scrub_only"),
+    ("err_state", "err_pause", "active"),
     [
-        pytest.param("ERRORSCRUBBING", 0, True, False, id="active_error_scrub"),
-        pytest.param("ERRORSCRUBBING", 0, False, True, id="error_scrub_not_pausable"),
-        pytest.param("ERRORSCRUBBING", 95, False, False, id="paused_error_scrub"),
-        pytest.param("FINISHED", 0, False, False, id="finished_error_scrub"),
+        pytest.param("ERRORSCRUBBING", 0, True, id="active_error_scrub"),
+        pytest.param("ERRORSCRUBBING", 95, False, id="paused_error_scrub"),
+        pytest.param("FINISHED", 0, False, id="finished_error_scrub"),
     ],
 )
-def test_error_scrub_activity_comes_from_its_own_fields(pool, err_state, err_pause, active, scrub_only):
+def test_error_scrub_activity_comes_from_its_own_fields(pool, err_state, err_pause, active):
     pool["scan_stats"].update(err_scrub_func="ERRORSCRUB", err_scrub_state=err_state, err_scrub_pause=err_pause)
     parsed = status.parse_status(document({"tank": pool}))["tank"]
-    assert status.scan_active(parsed, scrub_only=scrub_only) is active
+    assert status.scan_active(parsed) is active
 
 
 @pytest.mark.parametrize(("field", "value"), [("err_scrub_state", "unexpected"), ("err_scrub_pause", "0")])
@@ -169,11 +167,10 @@ def test_rejects_unknown_or_incomplete_error_scrub(pool, field, value):
         status.parse_status(document({"tank": pool}))
 
 
-def test_sequential_resilver_is_active_but_not_a_scrub(pool):
+def test_sequential_resilver_is_active(pool):
     pool["scan_stats"] = {"rebuild_stats": {"mirror-0": {"state": "ACTIVE"}}}
     parsed = status.parse_status(document({"tank": pool}))["tank"]
     assert status.scan_active(parsed)
-    assert not status.scan_active(parsed, scrub_only=True)
 
 
 @pytest.mark.parametrize("field", ["state", "function", "scrub_pause"])
@@ -272,20 +269,19 @@ def test_noble_scan_fallback_does_not_request_json(monkeypatch):
     assert calls == [("zpool", "status", "tank")]
 
 
-@pytest.mark.parametrize("scrub_only", [False, True])
 @pytest.mark.parametrize(
-    ("output", "active", "scrub_active"),
+    ("output", "active"),
     [
-        ("scan: resilver (mirror-0) in progress since Thu Oct 1 00:00:00 2026", True, False),
-        ("scan: resilver in progress since Thu Oct 1 00:00:00 2026", True, False),
-        ("scan: resilvered (mirror-0) 64M with 0 errors on Thu Oct 1 00:00:00 2026", False, False),
-        ("scan: scrub in progress since Thu Oct 1 00:00:00 2026", True, True),
+        ("scan: resilver (mirror-0) in progress since Thu Oct 1 00:00:00 2026", True),
+        ("scan: resilver in progress since Thu Oct 1 00:00:00 2026", True),
+        ("scan: resilvered (mirror-0) 64M with 0 errors on Thu Oct 1 00:00:00 2026", False),
+        ("scan: scrub in progress since Thu Oct 1 00:00:00 2026", True),
     ],
 )
-def test_noble_scan_fallback_distinguishes_active_rebuilds(monkeypatch, scrub_only, output, active, scrub_active):
+def test_noble_scan_fallback_distinguishes_active_rebuilds(monkeypatch, output, active):
     monkeypatch.setattr(status, "supports_json", lambda: False)
     monkeypatch.setattr(status.subprocess, "run", lambda argv, **_: subprocess.CompletedProcess(argv, 0, stdout=output))
-    assert status.scan_in_progress("tank", scrub_only=scrub_only) is (scrub_active if scrub_only else active)
+    assert status.scan_in_progress("tank") is active
 
 
 def test_scan_query_failure_propagates(monkeypatch):

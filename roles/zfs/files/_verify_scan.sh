@@ -44,7 +44,6 @@ scrub_test_pool() {
 printf '1\n' >"$scan_suspend"
 zpool scrub zfs_scan_test
 [[ $(scan_state) == 1 ]]
-[[ $(/opt/zfs/zfs_status.py scan --scrub-only zfs_scan_test) == 1 ]]
 scrub_test_pool | grep -F 'Scrub/resilver already running on zfs_scan_test, skipping.'
 
 zpool scrub -p zfs_scan_test

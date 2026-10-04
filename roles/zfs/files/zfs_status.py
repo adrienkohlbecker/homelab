@@ -126,36 +126,31 @@ def supports_json() -> bool:
     return tuple(map(int, version.groups())) >= (2, 3)
 
 
-def scan_active(pool: dict[str, Any], *, scrub_only: bool = False) -> bool:
+def scan_active(pool: dict[str, Any]) -> bool:
     """Return whether the pool is doing scan I/O right now.
 
     A paused scrub stays SCANNING with a nonzero scrub_pause and counts as
-    inactive. scrub_only limits the answer to scrubs the backup window can
-    pause with `zpool scrub -p`, excluding resilvers, rebuilds and error scrubs.
+    inactive.
     """
     scan = pool.get("scan_stats", {})
     if scan.get("state") == "SCANNING":
         if scan.get("function") == "SCRUB":
             return scan["scrub_pause"] == 0
-        if scan.get("function") == "RESILVER" and not scrub_only:
+        if scan.get("function") == "RESILVER":
             return True
-    if scrub_only:
-        return False
     if scan.get("err_scrub_state") == "ERRORSCRUBBING" and scan["err_scrub_pause"] == 0:
         return True
     return any(rebuild["state"] == "ACTIVE" for rebuild in scan.get("rebuild_stats", {}).values())
 
 
-def scan_in_progress(pool: str | None, *, scrub_only: bool = False) -> bool:
+def scan_in_progress(pool: str | None) -> bool:
     """Return actual I/O activity; a query failure must never become False."""
     pools = [pool] if pool else []
     if supports_json():
-        return any(scan_active(status, scrub_only=scrub_only) for status in read_status(*pools).values())
+        return any(scan_active(status) for status in read_status(*pools).values())
     # OpenZFS 2.2 has no JSON status; run() pins its prose to the C locale.
     output = run("zpool", "status", *pools)
-    return "scrub in progress" in output or (
-        not scrub_only and re.search(r"resilver(?: \([^)]*\))? in progress", output) is not None
-    )
+    return "scrub in progress" in output or re.search(r"resilver(?: \([^)]*\))? in progress", output) is not None
 
 
 def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str | None:
@@ -256,7 +251,6 @@ def main() -> int:
     commands.add_parser("health")
     scan = commands.add_parser("scan")
     scan.add_argument("pool", nargs="?")
-    scan.add_argument("--scrub-only", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "health":
@@ -267,7 +261,7 @@ def main() -> int:
             except QUERY_ERRORS as error:
                 return finish_health([f"Cannot initialize health check: {diagnostic(error)}"], [])
             return health(expire)
-        print(int(scan_in_progress(args.pool, scrub_only=args.scrub_only)))
+        print(int(scan_in_progress(args.pool)))
         return 0
     except QUERY_ERRORS as error:
         print(f"ERROR :: {diagnostic(error)}", file=sys.stderr)

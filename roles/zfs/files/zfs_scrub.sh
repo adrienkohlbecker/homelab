@@ -12,20 +12,17 @@ set -euo pipefail
 # config can drift.
 #
 # Deliberately no -w: a multi-TB pool scrubs for hours (lab tank ~8h, pug rpool
-# ~18h), so a blocking oneshot would fight TimeoutStartSec and would also keep
-# the unit "running" across the nightly zfs_autosnapshot window -- which pauses
-# in-progress scrubs to avoid I/O contention (see zfs_autosnapshot). Kicking the
-# scrub off and returning leaves that pause/resume free to operate. The outcome
-# is watched out-of-band: zfs_health alarms on canceled or stale scrubs
+# ~18h), so a blocking oneshot would fight TimeoutStartSec. The outcome is
+# watched out-of-band: zfs_health alarms on canceled or stale scrubs
 # (zfs_status.py scrub_issue); ZED's scrub_finish zedlet mails on scrubs with
 # errors.
 # Stagger the per-pool kick-offs. lab hard-locked ~12s into this run on
 # 2026-06-14, during scrub initiation rather than steady state, so spacing the
 # starts keeps every pool from entering its metadata-read burst in the same
 # instant. A short gap (not full `-w` serialization -- deliberately avoided per
-# the note above) leaves the unit non-blocking and finishes well before the
-# nightly zfs_autosnapshot window. Skipped (already-scrubbing) pools don't
-# consume a slot, so the first pool actually kicked off waits for nothing.
+# the note above) leaves the unit non-blocking. Skipped (already-scrubbing)
+# pools don't consume a slot, so the first pool actually kicked off waits for
+# nothing.
 # The stagger is overridable (ZFS_SCRUB_STAGGER_SEC) so the role's _verify can
 # zero it -- the CI fixture's img-backed pools can't thundering-herd a hard lock.
 stagger_sec="${ZFS_SCRUB_STAGGER_SEC:-120}"

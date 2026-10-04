@@ -110,13 +110,6 @@
   tags:
     - zfs_autobackup
 
-- name: Install the ZFS status reader for backup coordination
-  import_role:
-    name: zfs
-    tasks_from: status
-  tags:
-    - zfs_autobackup
-
 - name: Copy the backup scripts
   copy:
     src: "{{ item }}.sh"
