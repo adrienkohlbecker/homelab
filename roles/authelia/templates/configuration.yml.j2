@@ -64,9 +64,13 @@ access_control:
     - domain: '*.{{ authelia_cookie_domain }}'
       policy: 'two_factor'
 
+# Long-lived sessions: every protected domain is two_factor, so each fresh
+# login costs a TOTP prompt. Ticking "Remember me" stretches the cookie to
+# remember_me and ignores inactivity; Authelia requires it above expiration.
 session:
-  inactivity: '4h'
-  expiration: '24h'
+  inactivity: '1w'
+  expiration: '1M'
+  remember_me: '3M'
   cookies:
     - domain: '{{ authelia_cookie_domain }}'
       authelia_url: 'https://auth.{{ authelia_cookie_domain }}'
