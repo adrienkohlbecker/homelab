@@ -1,13 +1,8 @@
-# Source is netdata's upstream stable repo (repo.netdata.cloud), which
-# carries the current 2.x series for noble across amd64 + arm64 +
-# armhf. Flat layout (trailing-slash Suites, no Components), signed with
-# Netdatabot's key (6E155DC1…). The apt_source pin holds netdata at the
-# netdata_version series in versions.yml, so a fresh install lands on the
-# newest release of that series and only a deliberate pin bump moves to a
-# future major. See notes/archive/netdata_v2_migration_analysis.md.
-
-# Flat repo (no components). The apt_source helper pins the armored key payload
-# in the scoped /usr/share/keyrings/netdata.asc (not the global trust store).
+# netdata's upstream stable repo (repo.netdata.cloud): a flat repo
+# (trailing-slash suite, no components) whose Netdatabot key is trusted only
+# through the scoped /usr/share/keyrings/netdata.asc. The pin holds netdata* at
+# the netdata_version series in versions.yml; see
+# notes/archive/netdata_v2_migration_analysis.md.
 - name: install | Configure netdata apt repository
   import_role:
     name: apt_source
@@ -54,6 +49,9 @@
   tags:
     - netdata
 
+# The base package pulls the whole plugin suite and the local dashboard, so
+# there is no netdata-plugin-* list. netdata-plugin-ebpf has no arm64 build and
+# is skipped there; on amd64 it stays idle (`[plugins] ebpf = no`).
 - name: install | Install netdata
   when: not (ansible_check_mode and apt_source_netdata_changed)
   apt:
@@ -111,13 +109,3 @@
   become: true
   tags:
     - netdata
-
-# No explicit netdata-plugin-* list: the v2 base `netdata` package pulls the
-# whole suite + the local dashboard (go, chartsd, apps, debugfs, nfacct, perf,
-# pythond, slabinfo, otel, netdata-dashboard, …), so apt resolves them. The
-# only amd64-only piece is netdata-plugin-ebpf, which simply has no arm64 build
-# and is skipped there (everything else, slabinfo included, is multi-arch), so
-# `apt install netdata` resolves on the Apple-Silicon test host too. On amd64
-# ebpf.plugin lands but stays idle (`[plugins] ebpf = no` in main.yml).
-# Verified by testrole.py netdata on arm64 (netdata 2.10.3).
-# See notes/archive/netdata_v2_migration_analysis.md.
