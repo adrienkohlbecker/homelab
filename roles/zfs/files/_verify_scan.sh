@@ -84,15 +84,8 @@ timeout -k 10 60 zpool sync zfs_scan_test
 zpool online zfs_scan_test /var/tmp/zfs_scan_test_0.img
 # Hold the scan until its asynchronous start is observable before waiting for
 # completion; an idle wait can otherwise return before a resilver is scheduled.
-# shellcheck disable=SC2016 # Variables expand in the child shell.
-timeout -k 10 60 bash -c '
-  set -euo pipefail
-  while true; do
-    active=$(/opt/zfs/zfs_status.py scan zfs_scan_test)
-    [[ "$active" == 1 ]] && break
-    sleep 0.1
-  done
-'
+# shellcheck disable=SC2016 # The substitution runs in the child shell.
+timeout -k 10 60 bash -c 'until [[ $(/opt/zfs/zfs_status.py scan zfs_scan_test) == 1 ]]; do sleep 0.1; done'
 printf '%s\n' "$saved_suspend" >"$scan_suspend"
 timeout -k 10 60 zpool wait -t resilver zfs_scan_test
 resilver_status=$(LC_ALL=C zpool status zfs_scan_test)
