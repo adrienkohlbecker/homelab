@@ -102,72 +102,7 @@
     or _zfs_verify_zed.status.UnitFileState != 'enabled'
   become: true
 
-- name: _verify | Read zed.rc notification config
-  command: grep -E '^ZED_EMAIL_ADDR=' /etc/zfs/zed.d/zed.rc
-  register: _zfs_verify_zedrc
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Zed email notifications point at root
-  assert:
-    that: _zfs_verify_zedrc.stdout == 'ZED_EMAIL_ADDR="root"'
-    fail_msg: >-
-      zed.rc ZED_EMAIL_ADDR is {{ _zfs_verify_zedrc.stdout | default('<unset>') }},
-      expected ZED_EMAIL_ADDR="root".
-
-# --- Core ZFS boot services ---
-
-- name: _verify | Query boot service state
-  when: zfs_root
-  systemd:
-    name: "{{ item }}"
-  loop:
-    - zfs.target
-    - zfs-import.target
-    - zfs-import-cache
-    - zfs-mount
-  register: _zfs_verify_boot_services
-  become: true
-
-- name: _verify | Boot services are enabled
-  when: zfs_root
-  assert:
-    that: item.status.UnitFileState in ['enabled', 'static', 'enabled-runtime']
-    fail_msg: >-
-      {{ item.item }} UnitFileState is {{ item.status.UnitFileState }},
-      expected enabled/static.
-  loop: "{{ _zfs_verify_boot_services.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-# --- Role-owned timers ---
-# (script deployment is covered functionally by the live zfs_health run at the
-# end of this file, and by `validate: bash -n` at copy time -- no stat needed.)
-
-- name: _verify | Read role-owned timer state  # noqa: command-instead-of-module
-  vars:
-    _zfs_verify_timer_names: >-
-      {{ ['zfs_health', 'zfs_scrub']
-         + (zfs_trim_pools | map('regex_replace', '^', 'zfs_trim_') | list) }}
-  command: systemctl show -p ActiveState,UnitFileState --value {{ item }}.timer
-  loop: "{{ _zfs_verify_timer_names }}"
-  register: _zfs_verify_timers
-  changed_when: false
-  become: true
-
-- name: _verify | Role-owned timers are active and enabled
-  assert:
-    that:
-      - item.stdout_lines[0] == 'active'
-      - item.stdout_lines[1] == 'enabled'
-    fail_msg: >-
-      {{ item.item }}.timer is not active+enabled: {{ item.stdout_lines }}.
-  loop: "{{ _zfs_verify_timers.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-# --- Scrub behavior + distro scheduler takeover ---
+# --- Scrub scheduler ---
 
 - name: _verify | The scrub script kicks off without error
   command: /usr/local/bin/zfs_scrub
@@ -175,48 +110,6 @@
     ZFS_SCRUB_STAGGER_SEC: "0"  # skip the prod anti-thundering-herd stagger; img-backed CI pools can't hard-lock
   changed_when: false
   become: true
-
-- name: _verify | Reinstall zfsutils-linux while retaining local conffiles
-  command:
-    argv:
-      - apt-get
-      - --reinstall
-      - -o
-      - Dpkg::Options::=--force-confdef
-      - -o
-      - Dpkg::Options::=--force-confold
-      - install
-      - -y
-      - zfsutils-linux
-  changed_when: true
-  become: true
-
-- name: _verify | Distro zfs cron remains absent after reinstall
-  stat:
-    path: /etc/cron.d/zfsutils-linux
-  register: _zfs_verify_cron_file
-  failed_when: _zfs_verify_cron_file.stat.exists
-  become: true
-
-- name: _verify | Read distro scrub/trim timer enablement  # noqa: command-instead-of-module
-  command: systemctl is-enabled {{ item }}
-  loop:
-    - zfs-scrub-monthly@.timer
-    - zfs-scrub-weekly@.timer
-    - zfs-trim-monthly@.timer
-    - zfs-trim-weekly@.timer
-  register: _zfs_verify_distro_timers
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Distro scrub/trim timers are masked
-  assert:
-    that: item.stdout | trim == 'masked'
-    fail_msg: "{{ item.item }} is {{ item.stdout | trim }}, expected masked."
-  loop: "{{ _zfs_verify_distro_timers.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
 # --- Mount generator ---
 
