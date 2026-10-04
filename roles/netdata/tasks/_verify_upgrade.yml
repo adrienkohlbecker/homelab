@@ -34,9 +34,8 @@
 - name: _verify | Downgrade the installed netdata packages to the previous in-series release  # noqa: command-instead-of-module
   vars:
     _netdata_downgrade: >-
-      {{ _netdata_installed_packages.stdout_lines
-         | select('match', 'ii ')
-         | map('regex_replace', '^ii ', '')
+      {{ _netdata_installed_packages.stdout
+         | regex_findall('(?m)^ii ([^ ]+)$')
          | map('regex_replace', '$', '=' ~ _netdata_chartsd_series[1])
          | join(' ') }}
   command: >-
