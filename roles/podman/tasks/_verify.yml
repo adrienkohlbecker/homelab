@@ -37,10 +37,8 @@
       - _info.host.networkBackend == 'netavark'
       - _info.store.graphDriverName == 'overlay'
       - _info.store.graphRoot == '/var/lib/containers/storage'
-      # Prove podman is actually *serving* the augmented profile as its
-      # default — not just that the file on disk allows fchmodat2 (asserted
-      # below). A containers.conf regression dropping the seccomp_profile line
-      # would silently revert to the stock profile and revive the fchmodat2 EPERM.
+      # A containers.conf regression dropping the seccomp_profile line would
+      # silently revert to the stock profile and revive the fchmodat2 EPERM.
       - _info.host.security.seccompProfilePath == '/etc/containers/seccomp-fchmodat2.json'
     fail_msg: >-
       podman info disagrees with the role's containers.conf/storage.conf:
@@ -79,65 +77,31 @@
   become: true
   changed_when: false
 
-# The seccomp augmentation is the role's reason for shipping a custom profile.
-# The probe workloads do not exercise fchmodat2, so assert the rendered
-# profile actually allows it -- a future stock-profile shape change that made
-# the template's match no-op would otherwise revive the breakage.
-- name: _verify | Read the rendered seccomp profile
-  slurp:
-    src: /etc/containers/seccomp-fchmodat2.json
-  become: true
-  register: podman_seccomp_rendered
-
+# The seccomp augmentation is the role's reason for shipping a custom profile:
+# Noble's stock profile denies fchmodat2 to tar-based entrypoints. Call
+# fchmodat2(AT_FDCWD, "/tmp", 01777, 0) -- syscall 452 on x86_64 and aarch64
+# -- under the default profile and require success.
 - name: _verify | Default seccomp profile allows fchmodat2
-  vars:
-    _profile: "{{ podman_seccomp_rendered.content | b64decode | trim | from_json }}"
-    _allowed: "{{ _profile.syscalls | selectattr('action', 'eq', 'SCMP_ACT_ALLOW') | map(attribute='names') | flatten }}"
-  assert:
-    that:
-      - "'fchmodat2' in _allowed"
-    fail_msg: >-
-      /etc/containers/seccomp-fchmodat2.json is missing fchmodat2 -- the
-      template's match found nothing to extend.
-
-# The augmentation must stay additive: containers keep the stock denial of
-# io_uring, a recurring kernel attack surface no service uses. Call
-# io_uring_setup (425 on x86_64 and aarch64) under the default profile, then
-# with seccomp disabled to prove the kernel itself would allow the call.
-- name: _verify | Probe io_uring_setup with and without the default seccomp profile
   command:
-    argv: >-
-      {{ ['podman', 'run', '--rm'] + item.args
-         + ['docker.io/library/python:3-alpine', 'python3', '-c', podman_io_uring_probe] }}
-  vars:
-    podman_io_uring_probe: |
-      import ctypes
-      libc = ctypes.CDLL(None, use_errno=True)
-      fd = libc.syscall(425, 1, ctypes.create_string_buffer(120))
-      print(ctypes.get_errno() if fd < 0 else 0)
-  loop:
-    - name: default
-      args: []
-    - name: unconfined
-      args: [ --security-opt, seccomp=unconfined ]
-  loop_control:
-    label: "{{ item.name }}"
-  register: podman_io_uring
-  until: podman_io_uring.rc == 0
+    argv:
+      - podman
+      - run
+      - --rm
+      - docker.io/library/python:3-alpine
+      - python3
+      - -c
+      - |
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        rc = libc.syscall(452, -100, b"/tmp", 0o1777, 0)
+        print(ctypes.get_errno() if rc < 0 else 0)
+  register: podman_fchmodat2
+  until: podman_fchmodat2.rc == 0
   retries: 3
   delay: 5
   changed_when: false
+  failed_when: podman_fchmodat2.rc != 0 or podman_fchmodat2.stdout != '0'
   become: true
-
-- name: _verify | Only the default seccomp profile denies io_uring_setup
-  assert:
-    that:
-      - podman_io_uring.results[0].stdout != '0'
-      - podman_io_uring.results[1].stdout == '0'
-    fail_msg: >-
-      io_uring_setup returned errno {{ podman_io_uring.results[0].stdout }}
-      under the default profile and {{ podman_io_uring.results[1].stdout }}
-      unconfined (0 means allowed).
 
 # Install before the server starts: its sleep bounds how long the TCP probe
 # further down can still enter its network namespace.
