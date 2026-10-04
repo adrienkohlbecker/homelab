@@ -38,9 +38,6 @@
       # A mistyped key is dropped silently otherwise, and a mistyped pin
       # reads as no pin, which deletes the series hold below.
       - apt_source_args.keys() | difference(['name', 'key_url', 'key_sha256', 'uris', 'suites', 'components', 'pin', 'condition']) | length == 0
-      - apt_source_args.name is defined
-      - apt_source_args.key_url is defined
-      - apt_source_args.key_sha256 is defined
       - apt_source_args.uris is defined
       - apt_source_args.suites is defined
       # name lands in the keyring / .sources / preferences file paths --
