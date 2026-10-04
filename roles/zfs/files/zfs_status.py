@@ -17,6 +17,10 @@ class StatusError(ValueError):
     """ZFS returned a status document that cannot safely drive monitoring."""
 
 
+# A ZFS query can fail to launch, exit nonzero or time out, or return unusable output.
+QUERY_ERRORS = (OSError, subprocess.CalledProcessError, ValueError)
+
+
 def run(*args: str) -> str:
     """Bound ZFS queries in the C locale, with SIGKILL escalation for a wedged pool."""
     return subprocess.run(
@@ -216,7 +220,7 @@ def health(expire: int) -> int:
         report.append(f"Warning: zpool status report did not complete: {diagnostic(error)}")
     try:
         names = run("zpool", "list", "-H", "-o", "name").splitlines()
-    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+    except QUERY_ERRORS as error:
         issues.append(f"Cannot list pools: {diagnostic(error)}")
     else:
         now = int(time.time())
@@ -224,11 +228,11 @@ def health(expire: int) -> int:
             try:
                 if read_status(name, explain=True):
                     issues.append(f"zpool status -x reports a problem: {name}")
-            except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            except QUERY_ERRORS as error:
                 issues.append(f"Cannot query pool health for {name}: {diagnostic(error)}")
             try:
                 pool = read_status(name)[name]
-            except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            except QUERY_ERRORS as error:
                 issues.append(f"Cannot query drive errors and scrub age for {name}: {diagnostic(error)}")
                 continue
             if any(
@@ -243,7 +247,7 @@ def health(expire: int) -> int:
             try:
                 if issue := scrub_issue(name, pool, now, expire):
                     issues.append(issue)
-            except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            except QUERY_ERRORS as error:
                 issues.append(f"Cannot check scrub age for {name}: {diagnostic(error)}")
     return finish_health(issues, report)
 
@@ -262,12 +266,12 @@ def main() -> int:
                 expire = integer(int(os.environ.get("SCRUB_EXPIRE", "3456000")), "SCRUB_EXPIRE")
                 if not supports_json():
                     return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
-            except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            except QUERY_ERRORS as error:
                 return finish_health([f"Cannot initialize health check: {diagnostic(error)}"], [])
             return health(expire)
         print(int(scan_in_progress(args.pool, scrub_only=args.scrub_only)))
         return 0
-    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+    except QUERY_ERRORS as error:
         print(f"ERROR :: {diagnostic(error)}", file=sys.stderr)
         return 2
 
