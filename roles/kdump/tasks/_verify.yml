@@ -1,8 +1,5 @@
 # Verify the bootloader integration and post-reboot capture state.
 
-- name: _verify | Reconcile policy changes made by earlier roles
-  import_tasks: _verify_policy.yml
-
 - name: _verify | ZBM commandline includes crashkernel
   when: zfs_root and not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
@@ -22,6 +19,9 @@
 
 - name: _verify | Exercise the capture path through a deliberate panic
   import_tasks: _verify_capture.yml
+
+- name: _verify | Exercise a boot policy change consumed before kdump
+  import_tasks: _verify_policy.yml
 
 # Crash memory is reserved now, so a configuration change must reload the
 # loaded capture kernel rather than wait for the next boot.
