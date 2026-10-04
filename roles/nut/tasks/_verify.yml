@@ -1,46 +1,17 @@
+- name: _verify | Physical UPS configs poll the SNMP card without SET rights
+  vars:
+    qemu_test: false
+    nut_verify_physical_ups: "{{ lookup('template', 'ups.conf.j2') }}"
+    nut_verify_physical_users: "{{ lookup('template', 'upsd.users.j2') }}"
+  assert:
+    that:
+      - "'driver = snmp-ups' in nut_verify_physical_ups"
+      - "'driver = dummy-ups' not in nut_verify_physical_ups"
+      - nut_verify_physical_users is not search('(?m)^actions = SET$')
+
 # Qemu convergence runs the packaged driver and server units against a static
 # dummy-ups frame. Reaching OL through upsc therefore exercises the normal
 # systemd lifecycle as well as the driver -> upsd path.
-- name: _verify | Render physical UPS configs
-  template:
-    src: "{{ item.src }}"
-    dest: "/tmp/{{ item.dest }}"
-    mode: "0600"
-  vars:
-    qemu_test: false
-  loop:
-    - src: ups.conf.j2
-      dest: nut-physical-ups.conf
-    - src: upsd.users.j2
-      dest: nut-physical-upsd.users
-  diff: false
-  become: true
-
-- name: _verify | Verify physical UPS configs
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-
-        ups = pathlib.Path("/tmp/nut-physical-ups.conf").read_text()
-        assert "driver = snmp-ups" in ups
-        assert "driver = dummy-ups" not in ups
-        users = pathlib.Path("/tmp/nut-physical-upsd.users").read_text()
-        assert not any(line.strip() == "actions = SET" for line in users.splitlines())
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate NUT configs
-  file:
-    path: "/tmp/{{ item }}"
-    state: absent
-  loop:
-    - nut-physical-ups.conf
-    - nut-physical-upsd.users
-  become: true
-
 - name: _verify | Wait for the dummy UPS to publish OL over upsc
   command: upsc eaton@localhost ups.status
   register: nut_upsc
