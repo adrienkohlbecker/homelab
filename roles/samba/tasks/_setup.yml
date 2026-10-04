@@ -14,9 +14,8 @@
     cache_valid_time: 3600
   become: true
 
-# Stand in for a host upgraded with NetBIOS live: Samba 4.23 disables NetBIOS
-# only in the smb.conf it ships to fresh installs, so an upgraded host keeps its
-# old config and a running nmbd. Converge must take both away, which _verify
+# Start from a host serving NetBIOS, as Noble's stock Samba does: a config that
+# enables it and a running nmbd. Converge must take both away, which _verify
 # checks at the socket level. Skipping recommends also leaves Noble without
 # samba-vfs-modules, which the role must then request itself. Pre-installing
 # trades away the fresh-install path in these cells; the SITE converge covers
@@ -29,7 +28,7 @@
     cache_valid_time: 3600
   become: true
 
-- name: _setup | Write a legacy config that serves NetBIOS
+- name: _setup | Write a config that serves NetBIOS
   copy:
     dest: /etc/samba/smb.conf
     content: |
@@ -40,7 +39,7 @@
     validate: testparm -s %s
   become: true
 
-- name: _setup | Run nmbd and smbd with the legacy config
+- name: _setup | Run nmbd and smbd with the NetBIOS config
   systemd:
     name: "{{ item }}"
     enabled: true
