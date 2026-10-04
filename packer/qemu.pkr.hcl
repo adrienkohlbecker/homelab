@@ -117,23 +117,15 @@ locals {
   }
   host_os_cfg = local.host_os_table[local.host_os]
 
-  # Packaged UEFI firmware. x86_64's only supported native builder is
-  # Linux/KVM; aarch64 builds on Linux (qemu-efi-aarch64) and on a Mac
-  # (Homebrew qemu).
+  # UEFI firmware. Linux builders use the packaged pair from
+  # data/architectures.yml. x86_64's only supported native builder is
+  # Linux/KVM; aarch64 also builds on a Mac (Homebrew qemu).
   firmware_table = {
     x86_64 = {
-      linux = {
-        # Ubuntu 24.04 dropped the legacy non-4M names.
-        code = "/usr/share/OVMF/OVMF_CODE_4M.fd"
-        vars = "/usr/share/OVMF/OVMF_VARS_4M.fd"
-      }
+      linux = local.architectures.x86_64.guest.uefi_firmware
     }
     aarch64 = {
-      linux = {
-        # AAVMF_CODE.fd is only a deprecated compatibility link to this.
-        code = "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd"
-        vars = "/usr/share/AAVMF/AAVMF_VARS.fd"
-      }
+      linux = local.architectures.aarch64.guest.uefi_firmware
       darwin = {
         code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
         vars = "/opt/homebrew/share/qemu/edk2-arm-vars.fd"

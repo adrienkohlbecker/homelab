@@ -9,6 +9,8 @@ set -euxo pipefail
 : "${QEMU_PACKAGES:?qemu_packages is required}"
 : "${QEMU_SYSTEM_BINARY:?qemu_system_binary is required}"
 : "${QEMU_MACHINE_TYPE:?qemu_machine_type is required}"
+: "${QEMU_FIRMWARE_CODE:?qemu_firmware_code is required}"
+: "${QEMU_FIRMWARE_VARS:?qemu_firmware_vars is required}"
 : "${PREHYDRATE_UBUNTU:?prehydrate_ubuntu is required}"
 
 case "$TARGET_ARCHITECTURE" in
@@ -191,17 +193,9 @@ UNIT
 sudo systemd-analyze verify /etc/systemd/system/homelab-ci-prehydrate.service
 sudo systemctl enable homelab-ci-prehydrate.service
 
-if [ "$TARGET_ARCHITECTURE" = aarch64 ]; then
-  # AAVMF_CODE.fd is only a deprecated compatibility link to this image.
-  firmware_code=/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd
-  firmware_vars=/usr/share/AAVMF/AAVMF_VARS.fd
-else
-  firmware_code=/usr/share/OVMF/OVMF_CODE_4M.fd
-  firmware_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
-fi
 bash /tmp/qemu_host_smoke.sh kernel
 bash /tmp/qemu_host_smoke.sh toolchain
-bash /tmp/qemu_host_smoke.sh firmware "$QEMU_SYSTEM_BINARY" "$QEMU_MACHINE_TYPE" "$firmware_code" "$firmware_vars"
+bash /tmp/qemu_host_smoke.sh firmware "$QEMU_SYSTEM_BINARY" "$QEMU_MACHINE_TYPE" "$QEMU_FIRMWARE_CODE" "$QEMU_FIRMWARE_VARS"
 
 sudo apt-get clean
 sudo rm -rf \

@@ -51,7 +51,7 @@ locals {
   # Terraform's launch templates.
   architecture_data = yamldecode(file("${path.cwd}/data/architectures.yml"))[var.architecture]
   ci_architecture   = local.architecture_data.ci
-  # The image smoke test boots the harness's guest machine type.
+  # The image smoke test boots the harness's guest machine type and firmware.
   guest_architecture = local.architecture_data.guest
 
   architecture_table = {
@@ -174,6 +174,8 @@ build {
       "QEMU_PACKAGES"           = local.architecture_config.qemu_packages
       "QEMU_SYSTEM_BINARY"      = local.architecture_config.qemu_system_binary
       "QEMU_MACHINE_TYPE"       = local.guest_architecture.machine_type
+      "QEMU_FIRMWARE_CODE"      = local.guest_architecture.uefi_firmware.code
+      "QEMU_FIRMWARE_VARS"      = local.guest_architecture.uefi_firmware.vars
       "GITLAB_RUNNER_URL"       = local.architecture_config.runner_artifact.url
       "GITLAB_RUNNER_SHA256"    = local.architecture_config.runner_artifact.sha256
       "CLOUDWATCH_AGENT_URL"    = local.architecture_config.cloudwatch_agent.url

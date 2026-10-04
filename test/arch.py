@@ -62,10 +62,8 @@ X86_64 = ArchProfile(
     serial_console_token="console=ttyS",
     serial_console_default="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200",
     keep_vm_extra_devices=("-device", "usb-tablet"),
-    # x86_64 harness hosts are Ubuntu KVM runners (ovmf package). Packer bakes
-    # OVMF_VARS_4M.fd into every image and pflash needs CODE and VARS the same
-    # size, so only the 4 MiB CODE build pairs with it.
-    uefi_code_candidates=("/usr/share/OVMF/OVMF_CODE_4M.fd",),
+    # x86_64 harness hosts are Ubuntu KVM runners (ovmf package).
+    uefi_code_candidates=(_X86_64_GUEST["uefi_firmware"]["code"],),
     bios_boot_supported=True,
 )
 
@@ -92,10 +90,8 @@ AARCH64 = ArchProfile(
         # Homebrew QEMU on macOS:
         "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
         "/usr/local/share/qemu/edk2-aarch64-code.fd",
-        # Debian/Ubuntu (qemu-efi-aarch64 package). AAVMF_CODE.fd is only a
-        # deprecated compatibility link to this image, and QEMU_EFI.fd is a
-        # 2 MiB build that cannot pair with the 64 MiB AAVMF_VARS.fd.
-        "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd",
+        # Debian/Ubuntu (qemu-efi-aarch64 package).
+        _AARCH64_GUEST["uefi_firmware"]["code"],
     ),
     bios_boot_supported=False,
 )

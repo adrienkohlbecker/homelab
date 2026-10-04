@@ -412,7 +412,9 @@ def test_qemu_host_arm_provisioning_uses_packaged_firmware() -> None:
     assert re.search(r"runner_artifact\s+= local\.versions\.gitlab_runner_archive\.aarch64", template)
 
     # The firmware comes from the qemu-efi-aarch64 package, not a fetched pin.
-    assert "/usr/share/AAVMF/AAVMF_CODE.no-secboot.fd" in provision
+    assert re.search(r'"QEMU_FIRMWARE_CODE"\s+= local\.guest_architecture\.uefi_firmware\.code', template)
+    assert re.search(r'"QEMU_FIRMWARE_VARS"\s+= local\.guest_architecture\.uefi_firmware\.vars', template)
+    assert '"$QEMU_FIRMWARE_CODE" "$QEMU_FIRMWARE_VARS"' in provision
     assert "HOMELAB_AARCH64_FIRMWARE_DIR" not in template + provision
     assert "mise exec -- true" in provision
     # The boot-time pre-hydration runs a baked copy of the task outside any

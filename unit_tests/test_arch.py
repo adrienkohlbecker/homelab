@@ -35,15 +35,6 @@ class TestProfiles:
         # harness must be able to boot each one.
         assert set(arch._ARCHITECTURES) == {profile.name for profile in arch._BY_PLATFORM_MACHINE.values()}
 
-    def test_linux_code_candidates_match_the_packer_firmware(self) -> None:
-        # Fixtures boot with the VARS store Packer baked, so the harness must
-        # load the CODE build Packer paired it with.
-        template = (Path(__file__).resolve().parents[1] / "packer" / "qemu.pkr.hcl").read_text()
-        for profile in (arch.X86_64, arch.AARCH64):
-            for code in profile.uefi_code_candidates:
-                if code.startswith("/usr/share/"):
-                    assert f'code = "{code}"' in template
-
     def test_profiles_are_frozen(self) -> None:
         with pytest.raises(AttributeError):
             arch.X86_64.name = "changed"  # type: ignore[misc]
