@@ -46,6 +46,13 @@ check_chart() {
   [[ "$output" == *"SET active = $expected"* ]]
 }
 
+# Print the epoch of the end date closing the status line that matches $1.
+scan_end_epoch() {
+  local end
+  end=$(awk -v pattern="$1" '$0 ~ pattern {print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}' <<<"$2")
+  date -d "${end:?no scan end date matching $1}" +%s
+}
+
 # Hold real scan state long enough to test it without racing a tiny scrub.
 printf '1\n' >"$scan_suspend"
 zpool scrub zfs_scan_test
@@ -71,8 +78,7 @@ zpool scrub -s zfs_scan_test
 printf '%s\n' "$saved_suspend" >"$scan_suspend"
 timeout -k 10 60 zpool scrub -w zfs_scan_test
 [[ $(/opt/zfs/zfs_status.py scan zfs_scan_test) == 0 ]]
-scrub_date=$(LC_ALL=C zpool status zfs_scan_test | awk '/scan: scrub repaired/ {print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}')
-scrub_epoch=$(date -d "$scrub_date" +%s)
+scrub_epoch=$(scan_end_epoch 'scan: scrub repaired' "$(LC_ALL=C zpool status zfs_scan_test)")
 echo 'Active, paused, canceled, completed, resumed, and unprivileged chart checks passed'
 
 sleep 3
@@ -93,8 +99,7 @@ grep -F 'scan: resilvered' <<<"$resilver_status" || {
   echo >&2 "$resilver_status"
   exit 1
 }
-resilver_date=$(awk '/scan: resilvered/ {print $(NF - 4), $(NF - 3), $(NF - 2), $(NF - 1), $NF}' <<<"$resilver_status")
-resilver_epoch=$(date -d "$resilver_date" +%s)
+resilver_epoch=$(scan_end_epoch 'scan: resilvered' "$resilver_status")
 ((resilver_epoch - scrub_epoch >= 3))
 
 # Keep real pool reads, isolate the age assertion, and freeze both parser clocks
