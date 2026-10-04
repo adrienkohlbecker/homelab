@@ -5,32 +5,6 @@
 # console/_verify.yml. The non-GRUB aarch64 fixture bypasses ZBM, so the command
 # line staged outside this role cannot reflect its writes yet.
 
-- name: _verify | Load production boot defaults for x86
-  include_vars:
-    file: "{{ role_path }}/defaults/main.yml"
-    name: _boot_defaults_x86
-  vars:
-    ansible_architecture: x86_64
-
-- name: _verify | Resolve the x86 rEFInd loader default
-  assert:
-    that: _boot_defaults_x86.boot_efi_entries[0].loader == '\\EFI\\refind\\refind_x64.efi'
-  vars:
-    ansible_architecture: x86_64
-
-- name: _verify | Load production boot defaults for ARM
-  include_vars:
-    file: "{{ role_path }}/defaults/main.yml"
-    name: _boot_defaults_arm
-  vars:
-    ansible_architecture: aarch64
-
-- name: _verify | Resolve the ARM rEFInd loader default
-  assert:
-    that: _boot_defaults_arm.boot_efi_entries[0].loader == '\\EFI\\refind\\refind_aa64.efi'
-  vars:
-    ansible_architecture: aarch64
-
 - name: _verify | Reboot to apply boot-chain changes
   import_role:
     name: reboot
@@ -234,6 +208,17 @@
     that: not _efi_result.changed
     fail_msg: >-
       EFI boot entries need changes: {{ _efi_result.actions | join(', ') }}
+
+# The first managed entry must name the arch's rEFInd binary on the ESP, or the
+# firmware falls through to the next entry. Ansible keeps both backslashes of
+# the Jinja literal, so the regex matches one backslash.
+- name: _verify | First EFI entry loader exists on the ESP
+  when: not grub_bootloader
+  stat:
+    path: '/boot/efi{{ boot_efi_entries[0].loader | regex_replace("\\", "/") }}'
+  register: _boot_verify_loader
+  failed_when: not _boot_verify_loader.stat.exists
+  become: true
 
 # --- /tmp mount ---
 
