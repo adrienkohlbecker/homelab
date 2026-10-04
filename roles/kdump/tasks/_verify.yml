@@ -6,9 +6,6 @@
 - name: _verify | Reconcile module changes made by earlier roles
   import_tasks: _verify_module_policy.yml
 
-- name: _verify | Hand the capture integration over to a native package
-  import_tasks: _verify_native.yml
-
 - name: _verify | ZBM commandline includes crashkernel
   when: zfs_root and not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT

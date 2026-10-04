@@ -49,10 +49,6 @@
     # The legacy package recommends initramfs-tools, conflicting with Dracut.
     install_recommends: '{{ not initramfs_use_dracut }}'
     policy_rc_d: 101
-    # The module default, pinned because the native handover in dracut.yml
-    # relies on it: dpkg keeps the role's kernel hook and leaves the package's
-    # version as .dpkg-dist.
-    dpkg_options: force-confdef,force-confold
     cache_valid_time: 3600
   register: kdump_apt_tools
   become: true

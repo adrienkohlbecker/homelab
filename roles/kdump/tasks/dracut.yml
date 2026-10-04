@@ -1,5 +1,6 @@
-# Backport native capture support only while the installed package lacks it.
-# Inspect package ownership so a stable-release backport is recognized too.
+# Backport the capture integration the installed package lacks. Inspect
+# package ownership so native support, even in a stable-release backport,
+# stops the converge instead of overwriting package-owned files.
 - name: dracut | Install capture image integration
   when:
     - initramfs_use_dracut
@@ -14,14 +15,16 @@
       check_mode: false
       register: kdump_dracut_package_files
 
-    - name: dracut | Detect native package capture support
-      set_fact:
-        kdump_dracut_native: >-
-          {{ '/usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh'
-             in kdump_dracut_package_files.stdout_lines }}
+    - name: dracut | Package lacks native capture support
+      assert:
+        that: >-
+          '/usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh'
+          not in kdump_dracut_package_files.stdout_lines
+        fail_msg: >-
+          kdump-tools now ships native Dracut support. Retire the backported
+          capture integration per notes/runbooks/kdump.md, then rerun.
 
     - name: dracut | Create module and profile directories
-      when: not kdump_dracut_native
       file:
         path: '{{ item }}'
         state: directory
@@ -34,7 +37,6 @@
 
     # Keep the capture preset separate from normal boot configuration.
     - name: dracut | Install capture profile and sysctl hooks
-      when: not kdump_dracut_native
       copy:
         src: dracut/{{ item.src }}
         dest: '{{ item.dest }}'
@@ -54,7 +56,6 @@
 
     # This package conffile is preserved by dpkg during upgrades.
     - name: dracut | Install the Dracut capture image generator
-      when: not kdump_dracut_native
       copy:
         src: kdump_dracut.sh
         dest: /etc/kernel/postinst.d/kdump-tools
@@ -64,89 +65,6 @@
         backup: true
         validate: 'bash -n %s'
       register: kdump_dracut_generator
-
-    - name: dracut | Inspect the native hook offered by dpkg
-      when: kdump_dracut_native
-      stat:
-        path: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
-      register: kdump_dracut_pending_hook
-
-    - name: dracut | Adopt the native package kernel hook
-      when:
-        - kdump_dracut_native
-        - kdump_dracut_pending_hook.stat.exists
-      copy:
-        src: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
-        dest: /etc/kernel/postinst.d/kdump-tools
-        remote_src: true
-        owner: root
-        group: root
-        mode: "0755"
-        backup: true
-        validate: bash -n %s
-      register: kdump_dracut_native_hook
-
-    - name: dracut | Remove the adopted package conffile candidate
-      when:
-        - kdump_dracut_native
-        - kdump_dracut_pending_hook.stat.exists
-      file:
-        path: /etc/kernel/postinst.d/kdump-tools.dpkg-dist
-        state: absent
-
-    # dpkg writes a .dpkg-dist only when the upgrade changed the packaged hook;
-    # otherwise it keeps the backported hook silently. Without one to adopt,
-    # require the packaged hook before retiring anything.
-    - name: dracut | Read the packaged kernel hook checksum
-      when:
-        - kdump_dracut_native
-        - not kdump_dracut_pending_hook.stat.exists
-      command:
-        argv:
-          - dpkg-query
-          - --showformat=${Conffiles}
-          - --show
-          - kdump-tools
-      changed_when: false
-      check_mode: false
-      register: kdump_dracut_conffiles
-
-    - name: dracut | Read the installed kernel hook checksum
-      when:
-        - kdump_dracut_native
-        - not kdump_dracut_pending_hook.stat.exists
-      stat:
-        path: /etc/kernel/postinst.d/kdump-tools
-        checksum_algorithm: md5
-      register: kdump_dracut_hook
-
-    - name: dracut | Kernel hook is the packaged native version
-      when:
-        - kdump_dracut_native
-        - not kdump_dracut_pending_hook.stat.exists
-      assert:
-        that: >-
-          kdump_dracut_conffiles.stdout is search('(?m)^ /etc/kernel/postinst[.]d/kdump-tools '
-          ~ kdump_dracut_hook.stat.checksum | default('missing') ~ '( |$)')
-        fail_msg: >-
-          kdump-tools ships native Dracut support, but /etc/kernel/postinst.d/kdump-tools
-          is still the backported hook and dpkg left no .dpkg-dist to adopt. Restore
-          the packaged hook per notes/runbooks/kdump.md, then rerun.
-
-    # Remove the backported files the native package does not own; an owned
-    # path now holds the package's own file.
-    - name: dracut | Remove the backported capture integration
-      when:
-        - kdump_dracut_native
-        - item not in kdump_dracut_package_files.stdout_lines
-      file:
-        path: '{{ item }}'
-        state: absent
-      loop:
-        - /usr/lib/dracut/dracut.conf.d/kdump-tools/99_kdump.conf
-        - /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
-        - /usr/lib/dracut/modules.d/50kdump-tools/kdump-sysctl.sh
-      register: kdump_dracut_native_profile
 
     - name: dracut | Read installed kernel versions
       command: linux-version list
@@ -189,8 +107,7 @@
   loop: >-
     {{ (kdump_dracut_kernels.stdout_lines
         if kdump_apt_tools.changed or kdump_dracut_files.changed
-           or kdump_dracut_generator.changed or kdump_dracut_native_hook.changed
-           or kdump_dracut_native_profile.changed
+           or kdump_dracut_generator.changed
         else kdump_dracut_stale.stdout_lines) | default([]) }}
   register: kdump_dracut_rebuild
   become: true
