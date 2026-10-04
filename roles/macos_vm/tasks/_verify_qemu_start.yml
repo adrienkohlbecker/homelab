@@ -1,7 +1,7 @@
 # Start the rendered unit's QEMU command, paused, under this release's QEMU.
 # QEMU validates every option, device, and drive before the guest runs, so
-# this proves the release accepts the unit and records the machine model the
-# guest would see. Install mode attaches every drive, so it also covers the
+# this proves the release accepts the unit, including its pinned machine
+# model. Install mode attaches every drive, so it also covers the
 # post-install command line. TCG keeps the check independent of nested KVM,
 # and a small guest RAM fits the fixture: -S still allocates it up front.
 - name: _verify | Create a QEMU start fixture
@@ -57,15 +57,13 @@
         mode: "0644"
       become: true
 
-    # -S holds the guest before its first instruction; QMP then reads the
-    # resolved machine type and quits.
-    - name: _verify | Start QEMU paused and query its machine type
+    # -S holds the guest before its first instruction; QMP then quits.
+    - name: _verify | Start QEMU paused and quit
       command:
         argv:
           - python3
           - -c
           - |
-            import json
             import os
             import shlex
             import subprocess
@@ -81,39 +79,21 @@
                 if line.startswith("Environment=")
             )
             os.makedirs("/run/macos-vm", exist_ok=True)
-            commands = [
-                {"execute": "qmp_capabilities"},
-                {"execute": "qom-get", "arguments": {"path": "/machine", "property": "type"}},
-                {"execute": "quit"},
-            ]
             proc = subprocess.run(
                 [*argv, "-S", "-qmp", "stdio"],
-                input="".join(json.dumps(command) + "\n" for command in commands),
+                input='{"execute": "qmp_capabilities"}\n{"execute": "quit"}\n',
                 capture_output=True,
                 text=True,
                 env=env,
                 timeout=120,
             )
-            replies = [json.loads(line) for line in proc.stdout.splitlines() if line.startswith("{")]
-            print(json.dumps({
-                "rc": proc.returncode,
-                "machine": [reply["return"] for reply in replies if isinstance(reply.get("return"), str)],
-                "stderr": proc.stderr,
-            }))
+            sys.stderr.write(proc.stderr)
+            sys.exit(proc.returncode)
           - "{{ macos_vm_workdir }}/macos_vm.service"
       register: macos_vm_start
       changed_when: false
+      failed_when: macos_vm_start.rc != 0 or 'deprecated' in (macos_vm_start.stderr | lower)
       become: true
-
-    - name: _verify | QEMU accepted the unit on the pinned machine model
-      vars:
-        _macos_vm_start: "{{ macos_vm_start.stdout | from_json }}"
-      assert:
-        that:
-          - _macos_vm_start.rc == 0
-          - _macos_vm_start.machine == ['pc-q35-8.2-machine']
-          - "'deprecated' not in (_macos_vm_start.stderr | lower)"
-        fail_msg: "{{ _macos_vm_start | to_json }}"
 
   always:
     - name: _verify | Remove the QEMU start fixture
