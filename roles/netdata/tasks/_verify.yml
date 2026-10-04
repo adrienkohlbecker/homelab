@@ -41,6 +41,3 @@
 
 - name: _verify | Probe a pin-change upgrade
   import_tasks: _verify_upgrade.yml
-
-- name: _verify | Probe plugin capabilities after a package run
-  import_tasks: _verify_plugin_caps.yml

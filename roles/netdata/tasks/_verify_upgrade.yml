@@ -48,6 +48,9 @@
   changed_when: true
   become: true
 
+- name: _verify | Plugins keep their capabilities across the downgrade
+  import_tasks: _verify_plugin_caps.yml
+
 # With the source unchanged, converge leaves the installed version to
 # apt_upgrade.
 - name: _verify | Converge the netdata package with its source unchanged
