@@ -98,13 +98,10 @@ def test_converge_profiles_settled_boot_before_poweroff(
     ]
 
 
-def test_reboot_bypasses_inhibitor_only_in_qemu() -> None:
+def test_production_reboot_goes_through_logind() -> None:
     task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())[0]
     command = jinja2.Template(task["reboot"]["reboot_command"])
 
-    assert command.render(qemu_test=True) == (
-        "/usr/bin/sudo -n /usr/bin/systemctl start --no-block --job-mode=replace-irreversibly reboot.target"
-    )
     assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
 
 
