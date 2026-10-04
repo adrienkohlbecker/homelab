@@ -19,10 +19,8 @@
 #   pin:           optional {package, version} -- holds the matching packages
 #                  at a version glob (e.g. netdata* at 2.*) with priority 999
 #                  and refuses every other version, so installs and the
-#                  fleet-wide safe-upgrade stay inside the series. If the
-#                  series leaves the index, fresh installs fail and installed
-#                  hosts silently stop receiving updates. Omitting it removes
-#                  a previously installed pin.
+#                  fleet-wide safe-upgrade stay inside the series. Omitting
+#                  it removes a previously installed pin.
 #   condition:     default true; false skips the call and publishes
 #                  apt_source_<name>_changed as false
 #
