@@ -54,17 +54,11 @@
   tags:
     - netdata
 
-# A source or pin change upgrades within the series here, so a series bump
-# restarts through this role rather than through the next apt_upgrade. Every
-# plugin depends on netdata at its exact version, so apt moves the installed
-# plugins with it. If the install fails after the pin rewrite, the next
-# converge sees no source change and leaves the move to apt_upgrade.
 - name: install | Install netdata
   when: not (ansible_check_mode and apt_source_netdata_changed)
   apt:
     pkg:
       - netdata
-    state: "{{ 'latest' if apt_source_netdata_changed else 'present' }}"
     policy_rc_d: 101
     cache_valid_time: 3600
   register: netdata_apt

@@ -1,8 +1,6 @@
-# A pin change (a series bump in versions.yml) must move the installed netdata
-# packages to the newest in-series release in the same converge and restart
-# netdata onto it; otherwise apt_upgrade moves them a converge later, outside
-# the role's policy_rc_d and restart path. A plugin package proves that apt
-# moves the plugins along with netdata.
+# A package version change must leave the running plugins with their file
+# capabilities. Move the installed netdata packages to another in-series
+# release, as a series bump through apt_upgrade would.
 - name: _verify | Read the chartsd plugin apt policy
   command: apt-cache policy netdata-plugin-chartsd
   changed_when: false
@@ -12,7 +10,7 @@
   set_fact:
     _netdata_chartsd_series: "{{ _netdata_chartsd_policy.stdout | regex_findall('(?m)^ [* ]{3} ([^ ]+) 999$') }}"
 
-- name: _verify | The index offers an older in-series release to start from
+- name: _verify | The index offers an older in-series release to move to
   assert:
     that:
       - _netdata_chartsd_series | length > 1
@@ -49,67 +47,3 @@
 
 - name: _verify | Plugins keep their capabilities across the downgrade
   import_tasks: _verify_plugin_caps.yml
-
-# With the source unchanged, converge leaves the installed version to
-# apt_upgrade.
-- name: _verify | Converge the netdata package with its source unchanged
-  import_tasks: install.yml
-
-- name: _verify | Converge the netdata service with its source unchanged
-  import_tasks: configure.yml
-
-- name: _verify | Read the chartsd plugin version after the unchanged converge
-  command: dpkg-query --show --showformat=${Version} netdata-plugin-chartsd
-  changed_when: false
-  register: _netdata_chartsd_unchanged
-
-- name: _verify | The unchanged converge left the downgraded packages alone
-  assert:
-    that:
-      - not apt_source_netdata_changed
-      - netdata_apt is not changed
-      - _netdata_chartsd_unchanged.stdout == _netdata_chartsd_series[1]
-    fail_msg: >-
-      Expected netdata-plugin-chartsd to stay at {{ _netdata_chartsd_series[1] }};
-      got {{ _netdata_chartsd_unchanged.stdout }}
-
-- name: _verify | Drop the netdata pin as a series bump would rewrite it
-  file:
-    path: /etc/apt/preferences.d/netdata
-    state: absent
-  become: true
-
-- name: _verify | Converge the netdata package after the pin change
-  import_tasks: install.yml
-
-- name: _verify | Converge the netdata service after the pin change
-  import_tasks: configure.yml
-
-- name: _verify | Read the chartsd plugin version after the pin change
-  command: dpkg-query --show --showformat=${Version} netdata-plugin-chartsd
-  changed_when: false
-  register: _netdata_chartsd_upgraded
-
-- name: _verify | Read the netdata unit status after the pin change
-  systemd:
-    name: netdata.service
-  register: _netdata_unit_after
-  become: true
-
-- name: _verify | Read the binary the running netdata executes
-  command: readlink /proc/{{ _netdata_unit_after.status.MainPID }}/exe
-  changed_when: false
-  register: _netdata_exe
-  become: true
-
-- name: _verify | The pin change moved the plugin to the newest in-series release and restarted netdata
-  assert:
-    that:
-      - apt_source_netdata_changed
-      - netdata_apt is changed
-      - _netdata_chartsd_upgraded.stdout == _netdata_chartsd_series | first
-      - _netdata_exe.stdout is not search('deleted')
-    fail_msg: >-
-      Expected netdata-plugin-chartsd {{ _netdata_chartsd_series | first }} and a
-      restarted netdata on its installed binary; got
-      {{ _netdata_chartsd_upgraded.stdout }}, running {{ _netdata_exe.stdout }}

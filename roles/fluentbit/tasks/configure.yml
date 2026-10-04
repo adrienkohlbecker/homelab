@@ -6,15 +6,10 @@
 # policy_rc_d=101 blocks the package's postinst auto-start. The default
 # config logs to stdout and would harmlessly start, but skipping that
 # saves a noisy systemd restart cycle.
-# A source or pin change upgrades within the series here, so a series bump
-# restarts through this role rather than through the next apt_upgrade. If the
-# install fails after the pin rewrite, the next converge sees no source change
-# and leaves the move to apt_upgrade.
 - name: Install fluent-bit
   when: not (ansible_check_mode and apt_source_fluentbit_changed)
   apt:
     pkg: fluent-bit
-    state: "{{ 'latest' if apt_source_fluentbit_changed else 'present' }}"
     policy_rc_d: 101
     cache_valid_time: 3600
   register: fluentbit_apt

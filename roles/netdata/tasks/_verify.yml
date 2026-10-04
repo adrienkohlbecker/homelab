@@ -39,5 +39,5 @@
 - name: _verify | Probe lighter-than-restart config application
   import_tasks: _verify_reload.yml
 
-- name: _verify | Probe a pin-change upgrade
+- name: _verify | Probe a package version change
   import_tasks: _verify_upgrade.yml
