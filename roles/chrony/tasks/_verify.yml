@@ -18,9 +18,9 @@
   retries: 15
   delay: 2
 
-# Resolute's packaged sources.d/ubuntu-ntp-pools.sources is NTS too, so the
-# all-NTS assertion alone cannot tell whether a sourcedir include pulled
-# Ubuntu's pools in beside the managed servers.
+# Every loaded source must use NTS, but Resolute's packaged
+# sources.d/ubuntu-ntp-pools.sources is NTS too, so the names must also match
+# to tell whether a sourcedir include pulled Ubuntu's pools in.
 - name: _verify | Loaded sources are exactly the managed servers
   vars:
     chrony_verify_loaded: "{{ chrony_verify_authdata.stdout_lines | map('split', ',') | map('first') | unique | sort }}"
@@ -28,27 +28,12 @@
   assert:
     that:
       - chrony_verify_loaded == chrony_verify_expected
+      - chrony_verify_authdata.stdout_lines | select('match', '^[^,]+,(?!NTS,)') | list | length == 0
     fail_msg: >-
       chronyd loaded {{ chrony_verify_loaded }}, expected only the managed
-      servers {{ chrony_verify_expected }}
-    success_msg: chronyd loaded only the managed servers {{ chrony_verify_loaded }}
-
-- name: _verify | At least two sources complete NTS key establishment
-  assert:
-    that:
-      - chrony_verify_authdata.stdout_lines | length >= 2
-      - chrony_verify_authdata.stdout_lines | select('match', '^[^,]+,(?!NTS,)') | list | length == 0
-      - >-
-        chrony_verify_authdata.stdout_lines
-        | select('match', '^[^,]+,NTS,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[1-9][0-9]*,[^,]+$')
-        | list
-        | length >= 2
-    fail_msg: >-
-      chrony lacks two NTS sources with negotiated cookies (authdata rows:
+      NTS servers {{ chrony_verify_expected }} (authdata rows:
       {{ chrony_verify_authdata.stdout_lines }})
-    success_msg: >-
-      all {{ chrony_verify_authdata.stdout_lines | length }} loaded source(s) use
-      NTS and at least two hold negotiated cookies
+    success_msg: chronyd loaded only the managed NTS servers {{ chrony_verify_loaded }}
 
 # Scope the journal to the running invocation: the image's stock chronyd may
 # have logged its own leap source at boot, and it already pushed a kernel TAI
