@@ -232,7 +232,7 @@ def health(expire: int) -> int:
                 issues.append(f"Cannot query drive errors and scrub age for {name}: {diagnostic(error)}")
                 continue
             if any(
-                vdev.get(field, 0) > 0
+                vdev[field] > 0
                 for _, vdev in pool_vdevs(pool)
                 for field in ("read_errors", "write_errors", "checksum_errors")
             ):
