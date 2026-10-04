@@ -37,8 +37,9 @@
   register: boot_initramfs_apt
   become: true
 
-# A provider switch changes how the host boots; prove it with a reboot.
-- name: initramfs_provider | Rebuild boot images after provider changes
+# A new generator or policy changes the image the host boots; load it with a
+# reboot.
+- name: initramfs_provider | Rebuild boot images after generator or policy changes
   import_tasks: initramfs_rebuild.yml
   vars:
     boot_initramfs_args:

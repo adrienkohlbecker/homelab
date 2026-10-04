@@ -1,4 +1,0 @@
-- name: _setup | Recreate the boot image provider migration
-  import_role:
-    name: boot
-    tasks_from: _setup_initramfs
