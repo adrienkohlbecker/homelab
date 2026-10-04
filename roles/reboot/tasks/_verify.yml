@@ -1,9 +1,3 @@
-# Fixtures run the DNS reboot guard, which holds a root shutdown block lock
-# whenever its host is the last DNS server. The fixture reboot must get
-# through such a lock without logind's or polkit's consent.
-- name: _verify | Hold a shutdown block lock with polkit unavailable
-  import_tasks: _verify_shutdown_block_lock.yml
-
 - name: _verify | Reboot through the helper
   import_role:
     name: reboot
