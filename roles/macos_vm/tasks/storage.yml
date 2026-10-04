@@ -39,25 +39,6 @@
       to {{ macos_vm_zvol_size | human_to_bytes }} bytes. Shrinking would corrupt APFS.
       Create a new smaller zvol and reinstall/restore instead.
 
-- name: storage | Read current macOS zvol block size
-  when: macos_vm_zvol_current.rc == 0
-  ansible.builtin.command:
-    cmd: "zfs get -Hp -o value volblocksize {{ macos_vm_zvol_dataset }}"
-  register: macos_vm_zvol_current_volblocksize
-  changed_when: false
-  check_mode: false
-  become: true
-
-- name: storage | Assert existing macOS zvol block size is correct
-  when: macos_vm_zvol_current.rc == 0
-  assert:
-    that: (macos_vm_zvol_volblocksize | human_to_bytes) == (macos_vm_zvol_current_volblocksize.stdout | int)
-    fail_msg: >-
-      {{ macos_vm_zvol_dataset }} already exists with volblocksize
-      {{ macos_vm_zvol_current_volblocksize.stdout }} bytes, but this role
-      requires {{ macos_vm_zvol_volblocksize | human_to_bytes }} bytes.
-      volblocksize is immutable; destroy and recreate the zvol before applying.
-
 - name: storage | Create or update macOS zvol
   community.general.zfs:
     name: "{{ macos_vm_zvol_dataset }}"
