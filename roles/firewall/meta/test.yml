@@ -1,5 +1,6 @@
 # Lab exercises the full LAN/VIP fixture; Minimal covers the cloud-image base.
-# Lab Resolute runs the aardvark-dns TCP path, which needs aardvark-dns 1.12+.
+# Lab Resolute pairs the ruleset with netavark's native nftables driver (Noble
+# uses iptables-nft) and runs the aardvark-dns 1.12+ TCP DNS path.
 machines:
   lab:
   minimal:
@@ -7,5 +8,5 @@ ubuntu:
   - resolute
 skip:
   "minimal:resolute": >-
-    Lab Resolute covers the release-divergent Podman DNS path; Minimal Noble
-    covers the cloud-image base.
+    Lab Resolute covers the release-divergent netavark firewall driver; Minimal
+    Noble covers the cloud-image base.

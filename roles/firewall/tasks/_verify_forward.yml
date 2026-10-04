@@ -96,10 +96,16 @@
     # The dig resolving through this ruleset's policy-drop INPUT is the proof;
     # _verify_counters.yml pins the aardvark_tcp_accept counter itself.
     # Aardvark-dns serves TCP from 1.12 (Noble ships 1.4). busybox nslookup
-    # cannot force TCP, so the shared podman probe digs from the peer's netns.
+    # cannot force TCP, so the host dig runs inside the peer's netns.
     - name: _verify_forward | Named-bridge DNS over TCP passes the INPUT policy
       when: ansible_distribution_release != 'noble'
       block:
+        - name: _verify_forward | Install dig for the TCP DNS probe
+          apt:
+            name: bind9-dnsutils
+            cache_valid_time: 3600
+          become: true
+
         - name: _verify_forward | Start a named DNS peer on the probe network
           command: >
             podman run -d --replace --name firewall_verify_dns_peer
@@ -107,14 +113,27 @@
           changed_when: true
           become: true
 
+        - name: _verify_forward | Inspect the named DNS peer
+          command: podman inspect firewall_verify_dns_peer
+          register: _firewall_dns_peer
+          changed_when: false
+          become: true
+
         - name: _verify_forward | A TCP dig from the peer netns resolves the peer
-          import_role:
-            name: podman
-            tasks_from: _verify_tcp_dns
           vars:
-            podman_tcp_dns_args:
-              container: firewall_verify_dns_peer
-              network: firewall_verify_named
+            _container: "{{ _firewall_dns_peer.stdout | from_json | first }}"
+          command: >-
+            nsenter --target {{ _container.State.Pid }} --net
+            dig +tcp +short +tries=1 +time=2 @{{ _firewall_named_gateway_ip.stdout | trim }}
+            firewall_verify_dns_peer.dns.podman A
+          register: _firewall_tcp_dns_probe
+          until: >-
+            _firewall_tcp_dns_probe.stdout | trim
+            == _container.NetworkSettings.Networks.firewall_verify_named.IPAddress
+          retries: 5
+          delay: 2
+          changed_when: false
+          become: true
   always:
     - name: _verify_forward | Remove the named DNS peer
       command: podman rm -f firewall_verify_dns_peer

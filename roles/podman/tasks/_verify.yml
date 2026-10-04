@@ -103,15 +103,6 @@
   failed_when: podman_fchmodat2.rc != 0 or podman_fchmodat2.stdout != '0'
   become: true
 
-# Install before the server starts: its sleep bounds how long the TCP probe
-# further down can still enter its network namespace.
-- name: _verify | Install dig for the TCP DNS probe
-  when: ansible_distribution_release != 'noble'
-  apt:
-    name: bind9-dnsutils
-    cache_valid_time: 3600
-  become: true
-
 # Inter-container DNS is the load-bearing reason netavark + dns_bind_port are
 # pinned: a peer resolves another container by its <name>.dns.podman FQDN via
 # aardvark-dns (the path every service role uses). A throwaway DNS-enabled
@@ -147,16 +138,6 @@
   retries: 10
   delay: 2
   changed_when: false
-
-# TCP is the truncated-answer fallback, served by aardvark-dns 1.12+ (Noble
-# ships 1.4, UDP-only).
-- name: _verify | A container resolves <name>.dns.podman over TCP
-  when: ansible_distribution_release != 'noble'
-  import_tasks: _verify_tcp_dns.yml
-  vars:
-    podman_tcp_dns_args:
-      container: podman_verify_server
-      network: podman_verify_dns
 
 - name: _verify | Tear down the DNS probe container + network
   command: "{{ item }}"
