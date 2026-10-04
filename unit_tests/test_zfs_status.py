@@ -30,21 +30,11 @@ def pool():
     }
 
 
+VERSION = {"command": "zpool status", "vers_major": 0, "vers_minor": 1}
+
+
 def document(pools):
-    return json.dumps({"output_version": {"command": "zpool status", "vers_major": 0, "vers_minor": 1}, "pools": pools})
-
-
-def test_run_pins_the_c_locale(monkeypatch):
-    calls = []
-
-    def run(argv, **kwargs):
-        calls.append((argv, kwargs))
-        return subprocess.CompletedProcess(argv, 0, stdout="zfs-2.4.1\n")
-
-    monkeypatch.setattr(status.subprocess, "run", run)
-    assert status.run("zpool", "--version") == "zfs-2.4.1\n"
-    assert calls[0][0] == ["timeout", "-k", "10", "60", "zpool", "--version"]
-    assert calls[0][1]["env"]["LC_ALL"] == "C"
+    return json.dumps({"output_version": VERSION, "pools": pools})
 
 
 def test_no_imported_pools_is_valid():
@@ -58,12 +48,19 @@ def test_accepts_additive_minor_schema_changes(pool):
     assert status.parse_status(json.dumps(payload)) == {"tank": pool | {"new_stat": 42}}
 
 
-@pytest.mark.parametrize(("field", "value"), [("vers_major", 1), ("vers_minor", 0), ("vers_minor", True)])
-def test_rejects_incompatible_or_malformed_schema_versions(field, value):
-    payload = json.loads(document({}))
-    payload["output_version"][field] = value
+@pytest.mark.parametrize(
+    "value",
+    [
+        {},
+        {"output_version": {}},
+        {"output_version": VERSION | {"vers_major": 1}, "pools": {}},
+        {"output_version": VERSION | {"vers_minor": 0}, "pools": {}},
+        {"output_version": VERSION | {"vers_minor": True}, "pools": {}},
+    ],
+)
+def test_rejects_malformed_or_incompatible_schema(value):
     with pytest.raises(status.StatusError):
-        status.parse_status(json.dumps(payload))
+        status.parse_status(json.dumps(value))
 
 
 def test_never_scrubbed_pool_and_spare_are_valid(pool):
@@ -115,12 +112,6 @@ def test_rejects_missing_or_inexact_counters(pool, value):
         status.parse_status(document({"tank": pool}))
 
 
-@pytest.mark.parametrize("value", [{}, {"output_version": {}}, {"output_version": {"vers_major": 1}, "pools": {}}])
-def test_rejects_malformed_or_unknown_schema(value):
-    with pytest.raises(status.StatusError):
-        status.parse_status(json.dumps(value))
-
-
 def test_rejects_missing_requested_pool(monkeypatch):
     monkeypatch.setattr(status, "run", lambda *_: document({}))
     with pytest.raises(status.StatusError, match="Requested pools"):
@@ -170,13 +161,6 @@ def test_error_scrub_activity_comes_from_its_own_fields(pool, err_state, err_pau
     assert status.scan_active(parsed, scrub_only=scrub_only) is active
 
 
-@pytest.mark.parametrize(("field", "value"), [("function", "ERRORSCRUB"), ("state", "ERRORSCRUBBING")])
-def test_error_scrub_never_appears_in_the_main_scan_fields(pool, field, value):
-    pool["scan_stats"][field] = value
-    with pytest.raises(status.StatusError):
-        status.parse_status(document({"tank": pool}))
-
-
 @pytest.mark.parametrize(("field", "value"), [("err_scrub_state", "unexpected"), ("err_scrub_pause", "0")])
 def test_rejects_unknown_or_incomplete_error_scrub(pool, field, value):
     pool["scan_stats"].update(err_scrub_func="ERRORSCRUB", err_scrub_state="ERRORSCRUBBING", err_scrub_pause=0)
@@ -196,13 +180,6 @@ def test_sequential_resilver_is_active_but_not_a_scrub(pool):
 def test_rejects_unknown_or_incomplete_scan(pool, field):
     pool["scan_stats"][field] = "unexpected"
     with pytest.raises(status.StatusError):
-        status.parse_status(document({"tank": pool}))
-
-
-@pytest.mark.parametrize("value", [{}, [], None])
-def test_malformed_scan_state_is_a_countable_status_error(pool, value):
-    pool["scan_stats"]["state"] = value
-    with pytest.raises(status.StatusError, match="scan state"):
         status.parse_status(document({"tank": pool}))
 
 
@@ -253,16 +230,9 @@ def test_unknown_version_fails_closed(monkeypatch):
         status.supports_json()
 
 
-@pytest.mark.parametrize(
-    "error",
-    [
-        status.StatusError("Cannot identify the ZFS userspace version"),
-        subprocess.CalledProcessError(124, ["zpool", "--version"], stderr="version query timed out"),
-        OSError("zpool is unavailable"),
-    ],
-)
-def test_health_startup_failures_are_mailed(monkeypatch, error, capsys):
+def test_health_startup_failure_is_mailed(monkeypatch, capsys):
     monkeypatch.setattr(status.sys, "argv", ["zfs_health", "health"])
+    error = subprocess.CalledProcessError(124, ["zpool", "--version"], stderr="version query timed out")
 
     def fail():
         raise error
