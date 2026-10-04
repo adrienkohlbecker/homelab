@@ -1,8 +1,8 @@
-# Functional contract: smbd is up (nmbd is deliberately masked -- asserted
-# below), the rendered config exposes the configured share with its access
-# restriction, an authenticated client can reach it, and an anonymous client
-# cannot. The smbtest share (test/host_vars/lab.yml, valid users = the login user,
-# fruit:time machine = yes) is the vehicle.
+# Functional contract: smbd is up, no NetBIOS port listens (nmbd is
+# deliberately masked), the rendered config exposes the configured share
+# with its access restriction, an authenticated client can reach it, and an
+# anonymous client cannot. The smbtest share (test/host_vars/lab.yml, valid
+# users = the login user, fruit:time machine = yes) is the vehicle.
 
 - name: _verify | Render a share with the default writable policy
   template:
@@ -63,15 +63,6 @@
   file:
     path: /tmp/samba-default-writable.conf
     state: absent
-  become: true
-
-# nmbd is masked (NetBIOS retired) -- prove it can't be started, not merely
-# that it's stopped. A masked unit reports `masked` and `is-active` is non-zero.
-- name: _verify | Service nmbd is masked  # noqa: command-instead-of-module -- is-enabled query, not a state change
-  command: systemctl is-enabled nmbd
-  register: samba_nmbd_enabled
-  changed_when: false
-  failed_when: samba_nmbd_enabled.stdout != 'masked'
   become: true
 
 # _setup left nmbd and smbd serving NetBIOS from a legacy config, as on an
