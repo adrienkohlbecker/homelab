@@ -20,10 +20,6 @@ zfs_scan_update_every=60
 zfs_scan_priority=90100
 
 zfs_scan_check() {
-  command -v zpool >/dev/null 2>&1 || {
-    error "zfs_scan: 'zpool' binary missing"
-    return 1
-  }
   # Probe the reader so permission or kmod failures disable the collector
   # visibly instead of producing false-zero readings. No imported pools
   # is a successful query with active=0 in either supported status format.
