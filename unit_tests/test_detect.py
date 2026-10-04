@@ -103,7 +103,7 @@ class TestClassifyChangedFiles:
         assert detect.classify_changed_files([path]).packer_changed is expected
 
     def test_role_files_baked_by_packer_are_packer_inputs(self) -> None:
-        """Every role file the fixture build uploads must trigger the packer cell."""
+        """Every role file the fixture build uploads must flag a fixture rebuild."""
         template = (REPO_ROOT / "packer" / "qemu.pkr.hcl").read_text()
         uploaded = re.findall(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)
         assert uploaded, "qemu.pkr.hcl no longer uploads any role file"

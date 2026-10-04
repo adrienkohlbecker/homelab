@@ -733,9 +733,6 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     universe = set(list_testable_roles())
     roles: set[str] = set()
 
-    if classification.packer_changed:
-        roles.add("packer")
-
     if classification.machine_universe:
         for machine in sorted(classification.machine_universe):
             machine_roles = [r for r in universe if machine in load_role_test_config(r).machines]
