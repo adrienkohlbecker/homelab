@@ -12,7 +12,6 @@
 KDUMP_SYSCTL_CONF="/etc/kdump/sysctl.conf"
 
 check() {
-  # Opt-in: selected by the kdump-tools preset, never auto-included.
   return 255
 }
 
