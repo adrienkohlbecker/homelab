@@ -53,25 +53,20 @@ echo "Verified onsite pull after scan failure: $*"
 EOF
 chmod +x "$scratch/timeout" "$scratch/zfs_backup_onsite"
 
-before=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
-sleep 2
-if output=$(PATH="$scratch:$PATH" ZFS_VERIFY_FAIL='zpool status' "$peer_backup_script" 2>&1); then
-  echo >&2 'Expected a counted scan-query failure'
-  exit 1
-fi
-[[ "$output" == *'Injected zpool status failure'* ]]
-[[ "$output" == *'Verified onsite pull after scan failure:'* ]]
-after=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
-[[ "$after" != "$before" && "$after" == *'@bak-'* ]]
-
-before=$after
-sleep 2
-if output=$(PATH="$scratch:$PATH" ZFS_VERIFY_FAIL='zpool list -H -o name' "$peer_backup_script" 2>&1); then
-  echo >&2 'Expected a counted pool-list failure'
-  exit 1
-fi
-[[ "$output" == *'Injected zpool list -H -o name failure'* ]]
-[[ "$output" == *'Verified onsite pull after scan failure:'* ]]
-after=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
-[[ "$after" != "$before" && "$after" == *'@bak-'* ]]
+# A failed scan query ($1) must be counted without stopping snapshots or pulls.
+expect_continued_backup() {
+  local before after output
+  before=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
+  sleep 2
+  if output=$(PATH="$scratch:$PATH" ZFS_VERIFY_FAIL="$1" "$peer_backup_script" 2>&1); then
+    echo >&2 "Expected a counted $1 failure"
+    exit 1
+  fi
+  [[ "$output" == *"Injected $1 failure"* ]]
+  [[ "$output" == *'Verified onsite pull after scan failure:'* ]]
+  after=$(zfs list -H -t snapshot -o name zfs_backup_scan_test)
+  [[ "$after" != "$before" && "$after" == *'@bak-'* ]]
+}
+expect_continued_backup 'zpool status'
+expect_continued_backup 'zpool list -H -o name'
 echo 'Real snapshots and peer pulls continued after scan-reader and pool-list failures'
