@@ -115,7 +115,6 @@ class TestClassifyChangedFiles:
         assert role_files is not None
         staged = set(role_files.group(1).split())
         consumed = set(re.findall(r"\$\{CHROOT_ROLE_FILES\}/([\w.-]+)", chroot))
-        consumed.update(re.findall(r"^\s*initramfs_policy=\((\S+) ", chroot, re.MULTILINE))
         assert consumed, "chroot.sh no longer names any role file"
         assert consumed <= staged
 

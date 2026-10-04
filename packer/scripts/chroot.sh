@@ -201,7 +201,8 @@ noble)
   initramfs_generator=initramfs-tools
   initramfs_command=/usr/sbin/update-initramfs
   zfs_initramfs_package=zfs-initramfs
-  initramfs_policy=(modules_most /etc/initramfs-tools/conf.d/modules-most)
+  initramfs_policy_source="${CHROOT_ROLE_FILES}/modules_most"
+  initramfs_policy_target=/etc/initramfs-tools/conf.d/modules-most
   # -c because the diverted package hooks have not created any images yet.
   initramfs_build=(update-initramfs -c -k all)
   ;;
@@ -209,7 +210,8 @@ noble)
   initramfs_generator=dracut
   initramfs_command=/usr/bin/dracut
   zfs_initramfs_package=zfs-dracut
-  initramfs_policy=(dracut_host.conf /etc/dracut.conf.d/90_host.conf)
+  initramfs_policy_source="${CHROOT_ROLE_FILES}/dracut_host.conf"
+  initramfs_policy_target=/etc/dracut.conf.d/90_host.conf
   # The installer chroot cannot detect the booted target hardware. The first
   # image is generic; later on-host builds use the host-only policy.
   initramfs_build=(dracut --no-hostonly --force --regenerate-all)
@@ -334,7 +336,7 @@ echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
 # Install the boot role image policy before the single final build.
-install -Dm 0644 "${CHROOT_ROLE_FILES}/${initramfs_policy[0]}" "${initramfs_policy[1]}"
+install -Dm 0644 "$initramfs_policy_source" "$initramfs_policy_target"
 
 # Restore the backend and create images for every installed kernel.
 
