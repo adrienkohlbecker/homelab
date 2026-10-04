@@ -37,9 +37,9 @@ ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_
 {# Versioned, not the moving q35 alias: macOS sees the machine model as
    hardware, so QEMU upgrades must not change it implicitly. 8.2 is Noble's
    q35 and remains available on Resolute. QEMU deprecates versioned machine
-   types after three years and removes them after six; _verify_qemu_start.yml
-   fails on the deprecation warning, so a bump, which the guest sees as new
-   hardware, must be deliberate. #}
+   types after three years and removes them after six; _verify.yml fails on
+   the deprecation warning, so a bump, which the guest sees as new hardware,
+   must be deliberate. #}
   -machine pc-q35-8.2 \
   -smp {{ macos_vm_vcpus }},cores={{ macos_vm_vcpus }},sockets=1,threads=1 \
   -device qemu-xhci,id=xhci \

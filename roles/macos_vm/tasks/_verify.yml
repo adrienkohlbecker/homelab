@@ -1,38 +1,106 @@
-- name: _verify | Preserve the explicit MAC address
-  vars:
-    macos_vm_mac_address: 02:00:00:00:00:02
-  assert:
-    that: macos_vm_resolved_mac == '02:00:00:00:00:02'
+# Start the rendered unit's QEMU command, paused, under this release's QEMU.
+# QEMU validates every option, device, and drive before the guest runs, so
+# this proves the release accepts the unit, including its pinned machine
+# model. Install mode attaches every drive, so it also covers the
+# post-install command line. TCG keeps the check independent of nested KVM,
+# and a small guest RAM fits the fixture: -S still allocates it up front.
+- name: _verify | Create a QEMU start fixture
+  tempfile:
+    state: directory
+    # Not tmpfs: the unit's cache=none disk needs O_DIRECT.
+    path: /var/tmp
+    suffix: macos_vm_start
+  register: macos_vm_start_fixture
+  become: true
 
-- name: _verify | Verify both macOS VM execution modes
+- name: _verify | Start the rendered QEMU command
   vars:
     macos_vm_name: verify
-    macos_vm_workdir: /mnt/services/macos_vm
-    macos_vm_disk_source: /dev/zvol/tank/macos_vm
+    macos_vm_workdir: "{{ macos_vm_start_fixture.path }}"
+    macos_vm_disk_source: "{{ macos_vm_start_fixture.path }}/disk.raw"
+    macos_vm_install_mode: true
+    macos_vm_cpu_pinset: ""
+    macos_vm_domain_type: qemu
+    macos_vm_memory_mib: 512
   block:
-    - name: _verify | Verify install-mode KVM unit
-      vars:
-        macos_vm_install_mode: true
-        macos_vm_cpu_pinset: 0,1
-        macos_vm_domain_type: kvm
-        _macos_vm_unit: "{{ lookup('template', role_path ~ '/templates/macos_vm.service.j2') }}"
-      assert:
-        that:
-          - "'ConditionPathExists=/mnt/services/macos_vm/BaseSystem.img' in _macos_vm_unit"
-          - "'ExecStart=/usr/bin/taskset -c 0,1 /usr/bin/qemu-system-x86_64' in _macos_vm_unit"
-          - "'-enable-kvm' in _macos_vm_unit"
+    - name: _verify | Create the QEMU start disks
+      command:
+        argv:
+          - qemu-img
+          - create
+          - -f
+          - "{{ item.format }}"
+          - "{{ item.path }}"
+          - 64M
+      loop:
+        - format: qcow2
+          path: "{{ macos_vm_workdir }}/OpenCore.qcow2"
+        - format: raw
+          path: "{{ macos_vm_disk_source }}"
+        - format: raw
+          path: "{{ macos_vm_workdir }}/BaseSystem.img"
+      changed_when: true
+      become: true
 
-    - name: _verify | Verify running TCG unit
-      vars:
-        macos_vm_install_mode: false
-        macos_vm_cpu_pinset: ""
-        macos_vm_domain_type: qemu
-        _macos_vm_unit: "{{ lookup('template', role_path ~ '/templates/macos_vm.service.j2') }}"
-      assert:
-        that:
-          - "'BaseSystem.img' not in _macos_vm_unit"
-          - "'taskset' not in _macos_vm_unit"
-          - "'-enable-kvm' not in _macos_vm_unit"
+    - name: _verify | Seed the QEMU start firmware vars
+      copy:
+        src: /usr/share/OVMF/OVMF_VARS_4M.fd
+        dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+        remote_src: true
+        mode: "0600"
+      become: true
 
-- name: _verify | Start the rendered unit under this release's QEMU
-  import_tasks: _verify_qemu_start.yml
+    - name: _verify | Render the QEMU start unit
+      template:
+        src: macos_vm.service.j2
+        dest: "{{ macos_vm_workdir }}/macos_vm.service"
+        mode: "0644"
+      become: true
+
+    # -S holds the guest before its first instruction; QMP then quits.
+    - name: _verify | Start QEMU paused and quit
+      command:
+        argv:
+          - python3
+          - -c
+          - |
+            import os
+            import shlex
+            import subprocess
+            import sys
+
+            unit = open(sys.argv[1]).read().replace("\\\n", " ")
+            exec_start = next(line for line in unit.splitlines() if line.startswith("ExecStart="))
+            argv = shlex.split(exec_start.removeprefix("ExecStart="))
+            env = dict(os.environ)
+            env.update(
+                line.removeprefix("Environment=").split("=", 1)
+                for line in unit.splitlines()
+                if line.startswith("Environment=")
+            )
+            os.makedirs("/run/macos-vm", exist_ok=True)
+            proc = subprocess.run(
+                [*argv, "-S", "-qmp", "stdio"],
+                input='{"execute": "qmp_capabilities"}\n{"execute": "quit"}\n',
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=120,
+            )
+            sys.stderr.write(proc.stderr)
+            sys.exit(proc.returncode)
+          - "{{ macos_vm_workdir }}/macos_vm.service"
+      register: macos_vm_start
+      changed_when: false
+      failed_when: macos_vm_start.rc != 0 or 'deprecated' in (macos_vm_start.stderr | lower)
+      become: true
+
+  always:
+    - name: _verify | Remove the QEMU start fixture
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ macos_vm_start_fixture.path }}"
+        - /run/macos-vm/verify.monitor
+      become: true
