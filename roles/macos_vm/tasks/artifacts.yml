@@ -63,14 +63,6 @@
     mode: "0755"
   become: true
 
-- name: artifacts | Install python deps for fetch-macOS
-  when: macos_vm_install_mode
-  apt:
-    pkg:
-      - python3-requests
-    cache_valid_time: 3600
-  become: true
-
 - name: artifacts | Fetch BaseSystem recovery image
   when:
     - macos_vm_install_mode
