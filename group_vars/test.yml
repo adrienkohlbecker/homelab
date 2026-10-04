@@ -176,6 +176,9 @@ telegram_home_chat_id: changeme
 nut_upsmon_password: changeme
 nut_homeassistant_password: changeme
 nut_winnut_password: changeme
+# Keeps the _verify on-battery timer drill (cancel + fire) to well under a
+# minute; prod hosts use the role default or their physical_* override.
+nut_onbatt_shutdown_delay: 20
 sabnzbd_api_key: changeme
 sabnzbd_smtp_from: changeme@example.com
 sabnzbd_smtp_username: apikey

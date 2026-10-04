@@ -38,6 +38,17 @@ replbatt)
 noparent)
   MSG="upsmon parent process died - shutdown impossible"
   ;;
+# The time-based ladder step. upsmon's pidfile names its unprivileged nut-user
+# half, so this script (run as nut by upssched) may signal it; upsmon then
+# declares FSD and runs SHUTDOWNCMD exactly as for a low battery. A failed
+# request still mails, saying so, rather than aborting under errexit.
+onbatt_shutdown)
+  if upsmon -c fsd; then
+    MSG="UPS on battery for {{ nut_onbatt_shutdown_delay }}s - forcing shutdown"
+  else
+    MSG="UPS on battery for {{ nut_onbatt_shutdown_delay }}s - forced shutdown request FAILED"
+  fi
+  ;;
 # Both recovery legs wake peers three times; a failed round must not prevent
 # later packets from landing after the network recovers.
 wake_peers)

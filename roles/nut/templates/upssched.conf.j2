@@ -143,6 +143,9 @@ AT NOTBYPASS * EXECUTE notbypass
 AT CAL * EXECUTE cal
 AT OFF * EXECUTE off
 AT NOTOFF * EXECUTE notoff
+{# Time-based ladder step; mains return cancels it (nut_onbatt_shutdown_delay). #}
+AT ONBATT * START-TIMER onbatt_shutdown {{ nut_onbatt_shutdown_delay }}
+AT ONLINE * CANCEL-TIMER onbatt_shutdown
 {# Delay for network recovery and cancel if mains fails again. #}
 AT ONLINE * START-TIMER wake_peers 60
 AT ONBATT * CANCEL-TIMER wake_peers

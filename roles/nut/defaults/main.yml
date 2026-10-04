@@ -6,3 +6,12 @@
 # seconds, whichever trips first.
 nut_battery_charge_low: 20
 nut_battery_runtime_low: 300
+
+# Primary ladder trigger: seconds of continuous on-battery time after which
+# upssched forces this host's shutdown (`upsmon -c fsd`), regardless of what
+# the UPS reports. The charge/runtime thresholds above are only the backstop:
+# the Eaton's gauge is model-based and, on an aged battery, collapses late and
+# in one step (2026-10-04: 81% -> 20% in a single poll, seven minutes in), so
+# percentage gaps between hosts and card sheds give no reliable time margin.
+# A mains return cancels the timer; flapping power restarts it from zero.
+nut_onbatt_shutdown_delay: 180

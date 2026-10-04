@@ -160,6 +160,167 @@
     state: stopped
   become: true
 
+# ---- On-battery timer drill -----------------------------------------------
+# The time-based ladder step: ONBATT starts upssched's onbatt_shutdown timer,
+# ONLINE cancels it, and expiry makes nut_notify ask upsmon for FSD. The dummy
+# keeps a healthy charge and runtime throughout, so only the timer can produce
+# the FSD. group_vars/test.yml shortens the delay.
+
+# The low-battery drill's ONBATT left timers pending in the upssched daemon;
+# one firing `upsmon -c fsd` mid-drill would fake a pass.
+- name: _verify | Stop the upssched timer daemon left by the low-battery drill
+  command: pkill -x upssched
+  register: nut_pkill_upssched
+  failed_when: nut_pkill_upssched.rc not in [0, 1]
+  changed_when: false
+  become: true
+
+# upsd holds the FSD flag until it restarts; the driver restart reloads the
+# benign OL frame over the drill's upsrw writes.
+- name: _verify | Restart the dummy driver and upsd to clear the drill FSD
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - nut-driver@eaton.service
+    - nut-server.service
+  become: true
+
+- name: _verify | Dummy UPS is back on line without FSD
+  command: upsc {{ nut_ups }} ups.status
+  register: nut_timer_status
+  until: nut_timer_status.stdout == 'OL'
+  retries: 15
+  delay: 1
+  changed_when: false
+  become: true
+
+- name: _verify | Remove the forced-shutdown marker
+  file:
+    path: /tmp/nut_fsd_marker
+    state: absent
+  become: true
+
+- name: _verify | Clear the mail capture before the timer drill
+  copy:
+    dest: /tmp/nut-mail.out
+    mode: "0666"
+    content: ""
+  become: true
+
+- name: _verify | Start upsmon for the timer drill
+  systemd:
+    name: nut-monitor.service
+    state: started
+  become: true
+
+- name: _verify | Mark the start of the cancel leg
+  command: date +%s
+  register: nut_cancel_start
+  changed_when: false
+
+- name: _verify | Put the dummy UPS on battery for the cancel leg
+  command: upsrw -s ups.status=OB -u upsmon -p {{ nut_upsmon_password }} {{ nut_ups }}
+  changed_when: false
+  become: true
+
+# upsmon logs each transition it acts on, so the journal proves it saw OB
+# (and so started the timer) before mains returns.
+- name: _verify | Upsmon saw the on-battery transition
+  command: journalctl -u nut-monitor.service --since @{{ nut_cancel_start.stdout }} --no-pager
+  register: nut_cancel_journal
+  until: "'on battery' in nut_cancel_journal.stdout"
+  retries: 20
+  delay: 1
+  changed_when: false
+  become: true
+
+- name: _verify | Return the dummy UPS to mains
+  command: upsrw -s ups.status=OL -u upsmon -p {{ nut_upsmon_password }} {{ nut_ups }}
+  changed_when: false
+  become: true
+
+- name: _verify | Upsmon saw mains return
+  command: journalctl -u nut-monitor.service --since @{{ nut_cancel_start.stdout }} --no-pager
+  register: nut_cancel_journal
+  until: "'on line power' in nut_cancel_journal.stdout"
+  retries: 20
+  delay: 1
+  changed_when: false
+  become: true
+
+- name: _verify | Outlive the cancelled timer
+  wait_for:
+    timeout: "{{ nut_onbatt_shutdown_delay + 10 }}"
+
+- name: _verify | Read the marker after the cancelled timer
+  stat:
+    path: /tmp/nut_fsd_marker
+  register: nut_cancel_marker
+  become: true
+
+- name: _verify | Mains return cancelled the forced shutdown
+  assert:
+    that:
+      - not nut_cancel_marker.stat.exists
+    fail_msg: An on-battery blip shorter than the delay still forced a shutdown
+    quiet: true
+
+- name: _verify | Mark the start of the fire leg
+  command: date +%s
+  register: nut_fire_start
+  changed_when: false
+
+- name: _verify | Put the dummy UPS on battery for the fire leg
+  command: upsrw -s ups.status=OB -u upsmon -p {{ nut_upsmon_password }} {{ nut_ups }}
+  changed_when: false
+  become: true
+
+# The delay, plus one 5s poll to see OB, FINALDELAY 5, and margin.
+- name: _verify | The timer forced the shutdown
+  wait_for:
+    path: /tmp/nut_fsd_marker
+    timeout: "{{ nut_onbatt_shutdown_delay + 40 }}"
+  become: true
+
+- name: _verify | Read the marker after the fired timer
+  stat:
+    path: /tmp/nut_fsd_marker
+  register: nut_fire_marker
+  become: true
+
+- name: _verify | Read upsd status after the fired timer
+  command: upsc {{ nut_ups }} ups.status
+  register: nut_fire_status
+  changed_when: false
+  become: true
+
+- name: _verify | Read the mail captured during the timer drill
+  slurp:
+    path: /tmp/nut-mail.out
+  register: nut_fire_mail
+  become: true
+
+# Not before the delay elapsed, through upsd's FSD flag, announced by the
+# timer arm, and with no low-battery event behind it.
+- name: _verify | The forced shutdown came from the on-battery timer
+  assert:
+    that:
+      - nut_fire_marker.stat.mtime - (nut_fire_start.stdout | int) >= nut_onbatt_shutdown_delay
+      - "'FSD' in nut_fire_status.stdout"
+      - "'forcing shutdown' in (nut_fire_mail.content | b64decode)"
+      - "'has a low battery' not in (nut_fire_mail.content | b64decode)"
+    fail_msg: >-
+      marker after {{ nut_fire_marker.stat.mtime - (nut_fire_start.stdout | int) }}s,
+      status {{ nut_fire_status.stdout }}, mail: {{ nut_fire_mail.content | b64decode | truncate(600) }}
+    quiet: true
+
+- name: _verify | Stop upsmon after the timer drill
+  systemd:
+    name: nut-monitor.service
+    state: stopped
+  become: true
+
 - name: _verify | Stop upsd to simulate an unreachable UPS
   command: pkill -x upsd
   register: nut_pkill

@@ -130,13 +130,16 @@ nginx_static_proxies_enabled: true
 # upsmon), with the UPS card owning every power cut and restart natively --
 # load-shed Group 1 at 15% / Group 2 at 2%, forced reboot on AC return,
 # staggered group restarts; see notes/ups_shutdown_ladder.md. The windows box
-# (unmanaged, vendor IPP, Group 1) drops out first on a short on-battery
-# delay, lab (Group 1) at the 20%/300s role defaults, pug (Group 2) last:
+# (unmanaged, WinNUT, Group 1) drops out first on a short on-battery delay,
+# lab (Group 1) after the 180s on-battery role default, pug (Group 2) last.
+# 480s stays well inside the ~15 min the aged battery actually delivered on
+# 2026-10-04 (lab still loading it for the first 8); 5%/180s is the backstop:
+nut_onbatt_shutdown_delay: 480
 nut_battery_charge_low: 5
 nut_battery_runtime_low: 180
-# Wake lab when a short outage ends before its Group 1 cut ever fired (the
-# 20%->15% window; lab's own outlet kept power, so BIOS restore-on-AC has
-# nothing to do). The windows box is deliberately NOT listed: its equivalent
+# Wake lab when an outage ends after its on-battery timer fired but before its
+# Group 1 cut (lab's own outlet kept power, so BIOS restore-on-AC has nothing
+# to do). The windows box is deliberately NOT listed: its equivalent
 # gap is recovered manually by sending WoL to the UDM relay for the home VLAN.
 nut_wake_peers:
   - "{{ mac_addresses.lab_i210 }}"

@@ -1,6 +1,8 @@
-# Upsmon completes the staged shutdown ladder: the windows box (unmanaged, on
-# Eaton's vendor IPP agent) drops first on a short on-battery timer, lab at
-# 20%/300s, pug last at 5%/180s. Power cuts and restarts are card-native
+# Upsmon completes the staged shutdown ladder: the windows box (unmanaged,
+# WinNUT) drops first on a short on-battery timer, then each host after its
+# own on-battery time (upssched's onbatt_shutdown timer: lab 180s, pug 480s),
+# with the per-host charge/runtime thresholds (lab 20%/300s, pug 5%/180s) as
+# the backstop. Power cuts and restarts are card-native
 # (per-group load shedding below each trigger, forced reboot on AC return;
 # notes/ups_shutdown_ladder.md); the wake_peers hooks cover the hosts an
 # outage strands shut-down-but-still-powered.
