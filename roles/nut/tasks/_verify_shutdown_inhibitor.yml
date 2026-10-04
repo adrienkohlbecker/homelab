@@ -17,42 +17,10 @@
       - nut_verify_shutdowncmd is match('.* poweroff[.]target$')
     fail_msg: "Expected a poweroff.target SHUTDOWNCMD, got: {{ nut_verify_shutdowncmd }}"
 
-- name: _verify | Hold a root shutdown block lock like the DNS reboot guard
-  command:
-    argv:
-      - systemd-run
-      - --unit=nut_verify_inhibitor
-      - --collect
-      - systemd-inhibit
-      - --what=shutdown
-      - --mode=block
-      - --who=nut_verify_inhibitor
-      - --why=Simulate the last-DNS-server reboot guard
-      - sleep
-      - infinity
-  changed_when: true
-  become: true
-
-# Plain grep (not -q): it consumes all input so systemd-inhibit never
-# takes a SIGPIPE under pipefail.
-- name: _verify | The block lock is held
-  shell:
-    cmd: >-
-      set -euo pipefail;
-      systemd-inhibit --list --no-legend | grep nut_verify_inhibitor
-    executable: /bin/bash
-  register: nut_verify_lock
-  changed_when: false
-  retries: 10
-  delay: 1
-  until: nut_verify_lock.rc == 0
-  become: true
-
-# A runtime mask also blocks D-Bus activation and lasts until the reboot below.
-- name: _verify | Make polkit unavailable
-  command: systemctl mask --runtime --now polkit.service # noqa: command-instead-of-module
-  changed_when: true
-  become: true
+- name: _verify | Hold a shutdown block lock with polkit unavailable
+  import_role:
+    name: reboot
+    tasks_from: _verify_shutdown_block_lock
 
 # Noble's logind ignores a lock held by the caller's own uid, so this control
 # would reboot there. On newer releases it proves the lock binds root, so the
