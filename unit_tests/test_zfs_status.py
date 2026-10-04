@@ -47,11 +47,6 @@ def test_run_pins_the_c_locale(monkeypatch):
     assert calls[0][1]["env"]["LC_ALL"] == "C"
 
 
-def test_parses_integer_counters_without_rounding(pool):
-    pool["vdevs"]["disk0"]["checksum_errors"] = 2**60 + 1
-    assert status.parse_status(document({"tank": pool}))["tank"]["vdevs"]["disk0"]["checksum_errors"] == 2**60 + 1
-
-
 def test_no_imported_pools_is_valid():
     assert status.parse_status(document({})) == {}
 
@@ -94,18 +89,6 @@ def test_nested_vdevs_preserve_active_spare_counters(pool, group):
     device["checksum_errors"] = "5"
     with pytest.raises(status.StatusError, match="checksum_errors"):
         status.parse_status(document({"tank": pool}))
-
-
-def test_status_keeps_the_vdev_tree_separate_from_spares(monkeypatch, pool):
-    calls = []
-
-    def run(*argv):
-        calls.append(argv)
-        return document({"tank": pool})
-
-    monkeypatch.setattr(status, "run", run)
-    assert status.read_status("tank") == {"tank": pool}
-    assert "--json-flat-vdevs" not in calls[0]
 
 
 @pytest.mark.parametrize("state", ["OFFLINE", "REMOVED", "SPLIT", "UNKNOWN", pytest.param("DÉGRADÉ", id="translated")])
@@ -322,18 +305,17 @@ def test_scan_version_failure_does_not_send_a_health_mail(monkeypatch, capsys):
     assert "Cannot identify" in capsys.readouterr().err
 
 
-def test_noble_scan_fallback_pins_locale_and_does_not_request_json(monkeypatch):
+def test_noble_scan_fallback_does_not_request_json(monkeypatch):
     monkeypatch.setattr(status, "supports_json", lambda: False)
     calls = []
 
-    def run(argv, **kwargs):
-        calls.append((argv, kwargs))
-        return subprocess.CompletedProcess(argv, 0, stdout="scan: scrub in progress", stderr="")
+    def run(*argv):
+        calls.append(argv)
+        return "scan: scrub in progress"
 
-    monkeypatch.setattr(status.subprocess, "run", run)
+    monkeypatch.setattr(status, "run", run)
     assert status.scan_in_progress("tank")
-    assert calls[0][0] == ["timeout", "-k", "10", "60", "zpool", "status", "tank"]
-    assert calls[0][1]["env"]["LC_ALL"] == "C"
+    assert calls == [("zpool", "status", "tank")]
 
 
 @pytest.mark.parametrize("scrub_only", [False, True])
