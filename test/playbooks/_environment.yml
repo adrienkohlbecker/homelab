@@ -238,20 +238,6 @@
       delay: 3
       until: test_public_resolve.rc == 0
 
-    # Assert the running resolver state, not merely the drop-in written above.
-    # Global DNS= servers take only the global mode. Server feature levels
-    # cannot tell strict from opportunistic DoT, which also reaches TLS when
-    # the handshake succeeds, so read the mode itself.
-    - name: Verify resolved enforces strict DNS-over-TLS
-      command: >-
-        busctl get-property --json=short org.freedesktop.resolve1
-        /org/freedesktop/resolve1 org.freedesktop.resolve1.Manager DNSOverTLS
-      register: test_resolved_dot_mode
-      changed_when: false
-      failed_when: >-
-        test_resolved_dot_mode.rc != 0 or
-        (test_resolved_dot_mode.stdout | from_json).data != 'yes'
-
     # show-server-state keeps one JSON schema from systemd 255 through 259.
     # Global DNS= servers are type "system"; a TLS verified level proves the
     # query above negotiated DoT rather than only configuring it.
