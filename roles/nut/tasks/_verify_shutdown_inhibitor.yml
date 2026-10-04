@@ -4,18 +4,14 @@
 # runs the configured command with only its target swapped for reboot.target,
 # the way upsmon runs it: /bin/sh -c from a system service, outside any logind
 # session, and with polkit unavailable.
-- name: _verify | Read the configured SHUTDOWNCMD
+#
+# A SHUTDOWNCMD that does not power off matches nothing and fails this task.
+- name: _verify | Read the configured SHUTDOWNCMD up to its poweroff target
   set_fact:
-    nut_verify_shutdowncmd: >-
+    nut_verify_shutdowncmd_prefix: >-
       {{ lookup('template', 'upsmon.conf.j2')
-         | regex_search('^SHUTDOWNCMD "(.+)"$', '\1', multiline=True)
+         | regex_search('^SHUTDOWNCMD "(.+) poweroff[.]target"$', '\1', multiline=True)
          | first }}
-
-- name: _verify | SHUTDOWNCMD powers the host off
-  assert:
-    that:
-      - nut_verify_shutdowncmd is match('.* poweroff[.]target$')
-    fail_msg: "Expected a poweroff.target SHUTDOWNCMD, got: {{ nut_verify_shutdowncmd }}"
 
 - name: _verify | Hold a shutdown block lock with polkit unavailable
   import_role:
@@ -42,5 +38,5 @@
   reboot:
     reboot_command: >-
       /usr/bin/sudo -n /usr/bin/systemd-run --unit=nut_verify_shutdowncmd --collect
-      /bin/sh -c {{ nut_verify_shutdowncmd | regex_replace(' poweroff[.]target$', ' reboot.target') | quote }}
+      /bin/sh -c {{ (nut_verify_shutdowncmd_prefix ~ ' reboot.target') | quote }}
     reboot_timeout: 240
