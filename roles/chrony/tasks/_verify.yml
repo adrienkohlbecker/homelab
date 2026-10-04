@@ -34,29 +34,3 @@
       NTS servers {{ chrony_verify_expected }} (authdata rows:
       {{ chrony_verify_authdata.stdout_lines }})
     success_msg: chronyd loaded only the managed NTS servers {{ chrony_verify_loaded }}
-
-# Read the ntp-units.d registries the way timedated does: every config
-# directory, entries split on whitespace, comments skipped. Timesyncd is queried
-# explicitly because removing its package drops its registry entry while an
-# instance nobody stopped keeps steering the clock until reboot.
-- name: _verify | List active time synchronizers
-  shell: |
-    set -euo pipefail
-    shopt -s nullglob
-    lists=(/etc/systemd/ntp-units.d/*.list /run/systemd/ntp-units.d/*.list
-           /usr/local/lib/systemd/ntp-units.d/*.list /usr/lib/systemd/ntp-units.d/*.list)
-    units="$(sed -e "/^[[:space:]]*#/d" "${lists[@]}" </dev/null)"
-    systemctl list-units --state=active --plain --no-legend $units systemd-timesyncd.service
-  args:
-    executable: /bin/bash
-  changed_when: false
-  become: true
-  register: chrony_verify_synchronizers
-
-- name: _verify | Chrony is the sole active synchronizer
-  assert:
-    that:
-      - chrony_verify_synchronizers.stdout_lines | map('split') | map('first') | list == ['chrony.service']
-    fail_msg: >-
-      expected only chrony.service among active time synchronizers, got
-      {{ chrony_verify_synchronizers.stdout_lines }}

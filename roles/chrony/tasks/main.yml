@@ -1,32 +1,8 @@
-# Suppress the postinst auto-start so chronyd first loads the managed NTS-only
-# configuration, never the stock unauthenticated pools.
 - name: Install chrony
   apt:
     pkg: chrony
     cache_valid_time: 3600
-    policy_rc_d: 101
   register: chrony_apt
-  become: true
-  tags:
-    - chrony
-
-# Installing chrony can leave the removed timesyncd unit active because
-# policy_rc_d suppresses its postinst stop. Query and stop the loaded unit
-# directly; the systemd module cannot act after its unit file is removed.
-- name: Query systemd-timesyncd active state # noqa: command-instead-of-module -- is-active query, not a state change
-  command: systemctl is-active systemd-timesyncd
-  register: chrony_timesyncd_active
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - chrony
-
-- name: Stop systemd-timesyncd (chrony owns the clock) # noqa: command-instead-of-module -- module fails on a removed-but-lingering unit
-  command: systemctl stop systemd-timesyncd
-  when: chrony_timesyncd_active.stdout == "active"
-  changed_when: true
   become: true
   tags:
     - chrony
