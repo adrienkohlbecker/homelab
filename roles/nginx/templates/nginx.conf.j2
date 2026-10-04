@@ -1,9 +1,3 @@
-{# HTTP/2: nginx >= 1.25.1 takes the per-server `http2 on;` directive (set
-   in each TLS vhost by site.conf.j2) and warns on the legacy
-   `listen ... http2` parameter; noble/1.24 only understands the listen
-   parameter. Blacklist-gate both so a future release flips to the directive
-   automatically. #}
-{% set _http2_listen = ' http2' if ansible_distribution_release == 'noble' else '' %}
 user                 www-data;
 pid                  /run/nginx.pid;
 worker_processes     auto;
@@ -172,9 +166,9 @@ http {
         }
     }
     server {
-        listen              443 default_server ssl{{ _http2_listen }};
+        listen              443 default_server ssl;
 {% if nginx_ipv6 %}
-        listen              [::]:443 default_server ssl{{ _http2_listen }};
+        listen              [::]:443 default_server ssl;
 {% endif %}
         # Reject the TLS handshake for absent/unmatched SNI rather than
         # completing it with the host cert and returning 404 — keeps the
