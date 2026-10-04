@@ -65,15 +65,6 @@
   tags:
     - nut
 
-- name: Install wakeonlan
-  apt:
-    pkg:
-      - wakeonlan
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - nut
-
 - name: Manage the boot-time peer wake unit
   import_role:
     name: systemd_unit
