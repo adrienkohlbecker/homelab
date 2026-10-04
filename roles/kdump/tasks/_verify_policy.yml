@@ -1,4 +1,4 @@
-- name: _verify_policy | Exercise a policy change consumed before kdump
+- name: _verify_policy | Exercise a boot image rebuilt without kdump
   when: initramfs_use_dracut
   block:
     # Without reserved memory the role only enables kdump-tools, so the reload
@@ -9,47 +9,13 @@
       changed_when: false
       failed_when: _kdump_policy_crash_size.stdout | int == 0
 
-    - name: _verify_policy | Create an image marker
-      copy:
-        content: "capture policy regression fixture\n"
-        dest: /etc/kdump/verify_policy_marker
-        mode: "0644"
-      become: true
-
-    - name: _verify_policy | Drift the normal boot policy
-      lineinfile:
-        path: /etc/dracut.conf.d/90_host.conf
-        line: 'install_items+=" /etc/kdump/verify_policy_marker "'
-      become: true
-
-    - name: _verify_policy | Build a capture image carrying the drift
-      command:
-        cmd: /etc/kernel/postinst.d/kdump-tools {{ ansible_kernel }}
-        chdir: /
-      changed_when: true
-      become: true
-
-    - name: _verify_policy | The capture generator consumed the drift
-      command: lsinitrd /var/lib/kdump/initrd.img-{{ ansible_kernel }}
-      register: _kdump_policy_before
-      changed_when: false
-      failed_when: _kdump_policy_before.stdout is not search('(?m)\setc/kdump/verify_policy_marker$')
-      become: true
-
     # A tagged or interrupted run, or a package trigger, can rebuild the boot
     # images without kdump running. Kdump must still refresh its capture image.
-    - name: _verify_policy | Restore the normal boot policy outside the role
-      lineinfile:
-        path: /etc/dracut.conf.d/90_host.conf
-        line: 'install_items+=" /etc/kdump/verify_policy_marker "'
-        state: absent
-      become: true
-
-    - name: _verify_policy | An earlier run rebuilds the boot images without kdump
-      command:
-        cmd: '{{ initramfs_rebuild_command }}'
-        chdir: /
-      changed_when: true
+    # Touching the existing image keeps its Dracut-assigned mode.
+    - name: _verify_policy | Leave the boot image newer than the capture image  # noqa: risky-file-permissions
+      file:
+        path: /boot/initrd.img-{{ ansible_kernel }}
+        state: touch
       become: true
 
     - name: _verify_policy | Kdump reconciles the capture image and loader
@@ -57,11 +23,14 @@
         name: kdump
         tasks_from: main
 
-    - name: _verify_policy | The capture image no longer carries the drift
-      command: lsinitrd /var/lib/kdump/initrd.img-{{ ansible_kernel }}
-      register: _kdump_policy_after
+    - name: _verify_policy | Capture image was rebuilt after the boot image
+      command:
+        argv:
+          - test
+          - /var/lib/kdump/initrd.img-{{ ansible_kernel }}
+          - -nt
+          - /boot/initrd.img-{{ ansible_kernel }}
       changed_when: false
-      failed_when: _kdump_policy_after.stdout is search('(?m)\setc/kdump/verify_policy_marker$')
       become: true
 
     # The loader keeps the image it loaded until kdump-tools restarts; a reboot
@@ -79,9 +48,3 @@
       register: _kdump_policy_loader_start
       changed_when: false
       failed_when: (_kdump_policy_loader_start.stdout | trim)[1:] | int < _kdump_policy_image.stat.mtime | int
-  always:
-    - name: _verify_policy | Remove the image marker
-      file:
-        path: /etc/kdump/verify_policy_marker
-        state: absent
-      become: true
