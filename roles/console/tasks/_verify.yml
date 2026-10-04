@@ -39,38 +39,29 @@
 #
 # Minimal boots a pre-baked initrd outside /boot. Deployment-shaped fixtures
 # provide the per-kernel initrd inspected here.
-- name: _verify | List current kernel's initrd contents
-  when:
-    - not qemu_test_minimal
-    - not initramfs_use_dracut
-  command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
-  register: _console_initrd
-  changed_when: false
-  become: true
+- name: _verify | Inspect the current kernel's initrd
+  when: not qemu_test_minimal
+  block:
+    - name: _verify | Initrd bundles console-setup + keyboard configs
+      when: not initramfs_use_dracut
+      command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
+      register: _console_initrd
+      changed_when: false
+      failed_when: >-
+        not (['etc/default/console-setup', 'etc/default/keyboard']
+             is subset(_console_initrd.stdout_lines))
+      become: true
 
-- name: _verify | Initrd bundles console-setup + keyboard configs
-  when:
-    - not qemu_test_minimal
-    - not initramfs_use_dracut
-  assert:
-    that: item in _console_initrd.stdout_lines
-    fail_msg: "initrd missing: {{ item }}"
-  loop:
-    - etc/default/console-setup
-    - etc/default/keyboard
-
-- name: _verify | Dracut image contains a French AZERTY keymap
-  when:
-    - not qemu_test_minimal
-    - initramfs_use_dracut
-  command: >-
-    lsinitrd --file etc/console-setup/cached_UTF-8_del.kmap
-    /boot/initrd.img-{{ ansible_kernel }}
-  register: _console_dracut_keymap
-  changed_when: false
-  failed_when: >-
-    _console_dracut_keymap.stdout is not search('(?m)^keycode\\s+16\\s+=\\s+\\+?(a|U\\+0061)\\s')
-  become: true
+    - name: _verify | Dracut image contains a French AZERTY keymap
+      when: initramfs_use_dracut
+      command: >-
+        lsinitrd --file etc/console-setup/cached_UTF-8_del.kmap
+        /boot/initrd.img-{{ ansible_kernel }}
+      register: _console_dracut_keymap
+      changed_when: false
+      failed_when: >-
+        _console_dracut_keymap.stdout is not search('(?m)^keycode\\s+16\\s+=\\s+\\+?(a|U\\+0061)\\s')
+      become: true
 
 # console_noblank.service is Type=oneshot RemainAfterExit=true, so
 # `active` after the start means setterm's ExecStart returned 0 — the
