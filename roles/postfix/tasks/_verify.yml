@@ -73,7 +73,7 @@
   register: _postfix_smtp_listener
   failed_when: >-
     _postfix_smtp_listener.rc != 0
-    or _postfix_smtp_listener.stdout | trim | length > 0
+    or _postfix_smtp_listener.stdout | length > 0
   changed_when: false
   become: true
 
