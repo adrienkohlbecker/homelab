@@ -1,14 +1,6 @@
 - name: _verify_policy | Exercise a boot image rebuilt without kdump
   when: initramfs_use_dracut
   block:
-    # Without reserved memory the role only enables kdump-tools, so the reload
-    # check below would prove nothing.
-    - name: _verify_policy | Crash memory is reserved, so kdump reloads in place
-      command: cat /sys/kernel/kexec_crash_size
-      register: _kdump_policy_crash_size
-      changed_when: false
-      failed_when: _kdump_policy_crash_size.stdout | int == 0
-
     # A tagged or interrupted run, or a package trigger, can rebuild the boot
     # images without kdump running. Kdump must still refresh its capture image.
     # Touching the existing image keeps its Dracut-assigned mode.

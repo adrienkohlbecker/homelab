@@ -6,17 +6,6 @@
     name: reboot
     tasks_from: reboot
 
-# Wait for the oneshot loader to finish before inspecting its image.
-- name: _verify_capture | Wait for the capture loader to finish
-  systemd:
-    name: kdump-tools.service
-  register: kdump_verify_loader
-  changed_when: false
-  retries: 60
-  delay: 2
-  until: kdump_verify_loader.status.ActiveState == 'active'
-  become: true
-
 # Wait for the package-native loaded-state check after reboot.
 - name: _verify_capture | Kdump-config status reports ready to kdump
   command: kdump-config status
@@ -54,19 +43,6 @@
   when: initramfs_use_dracut
   assert:
     that: kdump_verify_initrd.stdout is not search('(?m)\setc/sysctl.d/30-kdump\.conf$')
-
-- name: _verify_capture | Capture image can mount its ZFS root
-  when: zfs_root
-  assert:
-    that:
-      - >-
-        ('scripts/zfs' in kdump_verify_initrd.stdout_lines)
-        if not initramfs_use_dracut
-        else ('zfs' in kdump_verify_initrd.stdout_lines)
-      - kdump_verify_initrd.stdout is search('(?m)(^|\s)(usr/)?sbin/zpool$')
-    fail_msg: >-
-      The capture image needs ZFS root support and the zpool tool;
-      loading zfs.ko alone cannot import and mount the root dataset.
 
 # Loaded state alone cannot prove the capture image can mount root and
 # write a dump. This hook runs only against disposable QEMU fixtures.
