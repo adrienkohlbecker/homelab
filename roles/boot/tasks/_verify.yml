@@ -134,7 +134,7 @@
   shell:
     cmd: >-
       set -euo pipefail;
-      {{ initramfs_list_command }} /boot/initrd.img-{{ ansible_kernel }} | grep -E '/(ahci|e1000)\.ko' >/dev/null
+      lsinitramfs /boot/initrd.img-{{ ansible_kernel }} | grep -E '/(ahci|e1000)\.ko' >/dev/null
     executable: /bin/bash
   changed_when: false
   become: true
