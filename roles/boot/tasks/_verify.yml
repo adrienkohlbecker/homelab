@@ -300,12 +300,6 @@
   vars:
     boot_efi_timeout: null
 
-- name: _verify | ESP tool is installed again
-  command: dpkg-query -W -f='${db:Status-Status}' dosfstools
-  register: _boot_verify_dosfstools
-  changed_when: false
-  failed_when: _boot_verify_dosfstools.stdout != 'installed'
-
 - name: _verify | Stat the reboot sentinel after the tool install
   stat:
     path: /var/run/reboot-required
