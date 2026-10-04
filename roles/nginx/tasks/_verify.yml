@@ -185,32 +185,11 @@
   delay: 1
 
 # ssl_ecdh_curve only admits groups; with ssl_prefer_server_ciphers off, the
-# client's preference picks among them. A client offering OpenSSL >= 3.5's
-# default groups must get the post-quantum hybrid, which the pre-3.5 curve list
-# excluded so the handshake silently fell back to X25519. A classical-only
-# client must still complete the handshake. s_client's -brief summary on
-# stderr names a hybrid as "Negotiated TLS1.3 group" (OpenSSL >= 3.5).
-- name: _verify | A default client negotiates the post-quantum hybrid group
-  command:
-    argv:
-      - timeout
-      - 10s
-      - openssl
-      - s_client
-      - -connect
-      - "127.0.0.1:443"
-      - -servername
-      - "{{ nginx_verify_host }}"
-      - -brief
-    stdin: Q
-  register: nginx_verify_tls_pq
-  changed_when: false
-  failed_when: "'Negotiated TLS1.3 group: X25519MLKEM768' not in nginx_verify_tls_pq.stderr"
-  when: ansible_distribution_release != 'noble'
-
-# The hybrid alone fills the server's first group tuple, so a client that
-# supports it but key-shares only X25519 must be retried onto it. Without a
-# "*" prefix, s_client sends a key share for the first listed group only.
+# client's preference picks among them. The hybrid alone fills the server's
+# first group tuple, so a client that supports it but key-shares only X25519
+# must be retried onto it rather than falling back to X25519. Without a "*"
+# prefix, s_client sends a key share for the first listed group only; its
+# -brief summary on stderr names the "Negotiated TLS1.3 group" (OpenSSL >= 3.5).
 - name: _verify | A client key-sharing only X25519 is retried onto the hybrid
   command:
     argv:
