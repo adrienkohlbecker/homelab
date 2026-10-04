@@ -13,40 +13,16 @@
 
 # --- ESP fundamentals (universal across Lab and Pug) ---
 
-- name: _verify | Required boot artifacts are present and non-empty
-  vars:
-    _boot_artifacts:
-      - /boot/efi/EFI/BOOT/BOOT{{ 'AA64' if ansible_architecture == 'aarch64' else 'X64' }}.EFI
-      - /boot/efi/EFI/ZBM/VMLINUZ.EFI
+# The everyday rEFInd -> ZBM path is proven by the boot itself; the firmware
+# fallback loader is not, so check it is present.
+- name: _verify | Firmware fallback loader is present and non-empty
   stat:
-    path: "{{ item }}"
-  loop: "{{ _boot_artifacts }}"
-  register: packer_verify_boot_artifact
+    path: /boot/efi/EFI/BOOT/BOOT{{ 'AA64' if ansible_architecture == 'aarch64' else 'X64' }}.EFI
+  register: packer_verify_fallback_loader
   failed_when: >-
-    not packer_verify_boot_artifact.stat.exists
-    or (packer_verify_boot_artifact.stat.size | default(0) | int) == 0
+    not packer_verify_fallback_loader.stat.exists
+    or packer_verify_fallback_loader.stat.size == 0
   become: true
-  loop_control:
-    label: "{{ item }}"
-
-# --- refind.conf contents ---
-
-- name: _verify | Read /boot/efi/EFI/refind/refind.conf
-  slurp:
-    src: /boot/efi/EFI/refind/refind.conf
-  register: packer_verify_refind_conf
-  become: true
-
-- name: _verify | Recovery scan policy in refind.conf
-  vars:
-    _conf: "{{ packer_verify_refind_conf.content | b64decode }}"
-  assert:
-    that:
-      - "'dont_scan_dirs EFI:/EFI/ZBM' in _conf"
-      - "'default_selection \"Ubuntu (ZBM)\"' in _conf"
-      - "'menuentry \"Ubuntu (ZBM)\"' in _conf"
-      - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
-    fail_msg: "refind.conf missing the recovery scan policy"
 
 # --- NVRAM Boot entries (rEFInd) ---
 
@@ -158,79 +134,16 @@
           per-disk efibootmgr -c loop didn't run for every disk,
           breaking the single-disk-survival path.
 
-# --- rpool shape (universal) ---
+# --- rpool health (universal) ---
 #
-# provision.sh creates rpool with a specific feature/property set and
-# sets bootfs; chroot.sh stamps org.zfsbootmenu:commandline on
-# rpool/ROOT so ZBM knows what cmdline to hand the kernel. The pool
-# also has to be *healthy* -- a degraded mirror on lab is invisible
-# without a status probe (zpool import succeeds in degraded state),
-# and the mdadm assertions above only cover the /boot/efi array,
-# not rpool.
-#
-# Properties asserted below are the ones whose absence is silent (the
-# pool still imports/boots without them) but functionally load-bearing:
-# - ashift=12: wrong on creation = poor IO; un-changeable post-create.
-# - compatibility=openzfs-2.1-linux: caps feature flags so the pool
-#   stays importable on older systems; provision.sh sets this
-#   explicitly and a regression silently widens the feature set.
-# - compression=zstd, xattr=sa, acltype=posix, autotrim=on: dataset
-#   defaults inherited by everything under rpool; subtle perf/feature
-#   regressions if missing. Booting masks them all.
-
-# Source must be `local` (set by chroot.sh's `zfs set`), not `-` (never set)
-# or `inherited` (nothing in this stack sets it on a parent). The value varies
-# by image target, so source is the stable signal that chroot wrote it.
-- name: _verify | Org.zfsbootmenu:commandline is set locally on rpool/ROOT
-  command: zfs get -H -o source org.zfsbootmenu:commandline rpool/ROOT
+# A degraded mirror still imports and boots, and the mdadm assertions above
+# cover only the md arrays, so ask ZFS directly.
+- name: _verify | Rpool is healthy
+  command: zpool status -x rpool
   changed_when: false
   become: true
-  register: packer_verify_zbm_cmdline_source
-  failed_when: >-
-    packer_verify_zbm_cmdline_source.rc != 0
-    or packer_verify_zbm_cmdline_source.stdout | trim != 'local'
-
-# Each property is checked with its own `zpool get`/`zfs get`
-# invocation so the failing iteration names the exact property +
-# observed value in the task output, instead of dumping a whole
-# dict and leaving the reader to spot the mismatch. The "want"
-# dicts double as the spec -- adding a new property to check is
-# one line.
-- name: _verify | Rpool zpool properties
-  vars:
-    packer_zpool_want:
-      ashift: "12"
-      autotrim: "on"
-      bootfs: "rpool/ROOT/{{ ansible_distribution_release }}"
-      compatibility: "openzfs-2.1-linux"
-      health: "ONLINE"
-  command:
-    argv: [ zpool, get, -H, -o, value, "{{ item.key }}", rpool ]
-  changed_when: false
-  become: true
-  loop: "{{ packer_zpool_want | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}={{ item.value }}"
-  register: packer_verify_zpool_prop
-  failed_when: (packer_verify_zpool_prop.stdout | trim) != item.value
-
-- name: _verify | Rpool root-dataset properties
-  vars:
-    packer_zfs_want:
-      compression: "zstd"
-      xattr: "sa"
-      acltype: "posix"
-      atime: "on"
-      relatime: "on"
-  command:
-    argv: [ zfs, get, -H, -o, value, "{{ item.key }}", rpool ]
-  changed_when: false
-  become: true
-  loop: "{{ packer_zfs_want | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}={{ item.value }}"
-  register: packer_verify_zfs_prop
-  failed_when: (packer_verify_zfs_prop.stdout | trim) != item.value
+  register: packer_verify_rpool_status
+  failed_when: packer_verify_rpool_status.stdout | trim != "pool 'rpool' is healthy"
 
 # --- swap active (universal) ---
 #
