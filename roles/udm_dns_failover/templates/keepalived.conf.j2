@@ -29,13 +29,13 @@ vrrp_script dnsmasq_healthcheck {
   init_fail
 }
 
-# The instance name matches roles/adguard's (`dns`) for uniform journal
+# The instance name matches roles/keepalived's (`dns`) for uniform journal
 # greps, though VRRP interop is keyed on vrid/advert_int/VIP, not names.
-# Same VRRP group as roles/adguard, so the vrid/advert_int/VIP here MUST
-# stay equal to roles/adguard/templates/keepalived.conf.j2. Only priority,
-# use_vmac, and interface legitimately differ per peer. The healthcheck
-# identifiers carry the dnsmasq_ prefix: they probe the UDM's own dnsmasq,
-# this node's last-resort resolver.
+# Same VRRP group as roles/keepalived, so the vrid/advert_int/VIP here MUST
+# stay equal to roles/keepalived/templates/keepalived.conf.j2. Only priority,
+# preempt_delay, use_vmac, and interface legitimately differ per peer. The
+# healthcheck identifiers carry the dnsmasq_ prefix: they probe the UDM's own
+# dnsmasq, this node's last-resort resolver.
 vrrp_instance dns {
   state     BACKUP
   interface {{ udm_dns_failover_interface }}
@@ -66,7 +66,7 @@ vrrp_instance dns {
   # `interface` (above) for link state, so re-listing it is redundant --
   # keepalived ignores it ("since own interface") and that warning makes
   # `keepalived -t` exit non-zero, failing the validate gate. The lab/pug
-  # config omits it for the same reason; see roles/adguard's template.
+  # config omits it for the same reason; see roles/keepalived's template.
 
   virtual_ipaddress {
     {{ network.virtual_ips.dns }}/32
