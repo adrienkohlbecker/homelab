@@ -235,6 +235,21 @@ def test_pull_conflict_keeps_capture_and_local_branch(synced_clone) -> None:
     assert _git(clone, "rev-parse", sync.SYNCED_TAG) == _git(clone, "rev-parse", "origin/main")
 
 
+def test_push_publishes_hand_made_commits_before_tagging(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync, clone, _host = synced_clone
+    (clone / "scripts.yaml").write_text("local: edit\n")
+    _git(clone, "commit", "--quiet", "-am", "hand-made commit")
+    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
+    monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
+    monkeypatch.setattr(sync, "_ha_post", lambda service, token: None)
+
+    sync.do_push()
+
+    head = _git(clone, "rev-parse", "HEAD")
+    assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    assert _git(clone, "ls-remote", "origin", f"refs/tags/{sync.SYNCED_TAG}").split()[0] == head
+
+
 def test_pull_refuses_while_origin_awaits_push(synced_clone) -> None:
     sync, clone, host = synced_clone
     (clone / "scripts.yaml").write_text("pushed: but not deployed\n")

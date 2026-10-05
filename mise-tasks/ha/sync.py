@@ -268,19 +268,23 @@ def assert_clean_working_tree() -> None:
 
 
 def commit_and_push(message: str) -> bool:
-    """Stage, commit, and push clone changes. Returns True if anything changed."""
-    if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
-        return False
-    sh(["git", "add", "-A"], cwd=CLONE)
-    sh(["git", "commit", "-m", message], cwd=CLONE)
+    """Commit any working-tree edits, then publish main. Returns True if it committed.
+
+    main is pushed even from a clean tree: hand-made commits must reach origin
+    before the tag names them, or a later pull would see origin lagging the tag.
+    """
+    committed = bool(sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip())
+    if committed:
+        sh(["git", "add", "-A"], cwd=CLONE)
+        sh(["git", "commit", "-m", message], cwd=CLONE)
     result = sh(["git", "push", "origin", "main"], cwd=CLONE, check=False)
     if result.returncode != 0:
         detail = indent_block((result.stderr or result.stdout or "").strip())
         fail(
-            f"the clone commit succeeded but `git push origin main` was rejected.\n{detail}\n"
-            f"the commit is safe locally; re-run with --rebase once origin is reconciled."
+            f"`git push origin main` was rejected.\n{detail}\n"
+            f"the clone's commits are safe locally; re-run with --rebase once origin is reconciled."
         )
-    return True
+    return committed
 
 
 def resolve_ref(ref: str) -> str | None:
