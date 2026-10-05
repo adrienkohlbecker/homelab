@@ -125,6 +125,31 @@
     - refind
     - zfsbootmenu
 
+# Every ZBM version gets its own cache directory, so superseded ones pile up.
+# Only the current one is read again; the ESP holds independent copies of the
+# primary and backup loaders.
+- name: Find superseded ZBM cache directories
+  find:
+    paths: /var/cache/zfsbootmenu
+    file_type: directory
+    excludes: "{{ refind_zbm_artifact.version }}"
+  register: refind_zbm_stale_caches
+  tags:
+    - refind
+    - zfsbootmenu
+
+- name: Remove superseded ZBM cache directories
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ refind_zbm_stale_caches.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - refind
+    - zfsbootmenu
+
 - name: Ask to reboot for the new ZFSBootMenu image
   when:
     - refind_zbm_artifact_install is changed
