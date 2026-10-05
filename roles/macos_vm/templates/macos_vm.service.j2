@@ -1,7 +1,6 @@
 [Unit]
 Description=macOS VM {{ macos_vm_name }}
-Wants=network-online.target
-After=network-online.target zfs-volumes.target
+After=zfs-volumes.target
 StartLimitIntervalSec=0
 ConditionPathExists={{ macos_vm_workdir }}/OpenCore.qcow2
 ConditionPathExists={{ macos_vm_workdir }}/OVMF_VARS.fd
