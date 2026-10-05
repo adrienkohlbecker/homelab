@@ -70,12 +70,25 @@
     - retired_services
     - zfs
 
+- name: Remove the retired zfs_health timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: zfs_health
+  tags:
+    - retired_services
+    - zfs
+
 - name: Remove retired ZFS scripts
   file:
     path: "{{ item }}"
     state: absent
   loop:
     - /usr/local/bin/zfs_update_mount_cache
+    - /usr/local/bin/zfs_health
+    - /opt/zfs
   become: true
   tags:
     - retired_services

@@ -38,41 +38,6 @@
   assert:
     that: _zfs_verify_root_mount_unit.status.ActiveState == 'active'
 
-# --- Scrub scheduler ---
-
-# Every imported pool must end up with a completed scrub, so the later health
-# runs see real scan history.
-- name: _verify | The scrub script scrubs every pool
-  shell: |
-    set -euo pipefail
-    /usr/local/bin/zfs_scrub
-    for pool in $(zpool list -H -o name); do
-      timeout -k 10 300 zpool wait -t scrub "$pool"
-      LC_ALL=C zpool status "$pool" | grep -q "scan: scrub repaired"
-    done
-  args:
-    executable: /bin/bash
-  environment:
-    ZFS_SCRUB_STAGGER_SEC: "0"  # skip the prod anti-thundering-herd stagger; img-backed CI pools can't hard-lock
-  changed_when: false
-  become: true
-
-# --- Trim scheduler ---
-
-# Run the unit the weekly timer triggers. It is not a oneshot, so --wait holds
-# until the trim ends and fails if the unit failed; zpool then confirms the trim
-# completed rather than being skipped by a unit condition.
-- name: _verify | The stock trim unit trims each scheduled pool
-  shell: |
-    set -euo pipefail
-    timeout -k 10 300 systemctl start --wait zfs-trim@{{ item }}.service
-    LC_ALL=C zpool status -t {{ item }} | grep -q "trimmed, completed"
-  args:
-    executable: /bin/bash
-  loop: "{{ zfs_trim_pools }}"
-  changed_when: false
-  become: true
-
 # --- Mount generator ---
 
 # Check the initial refresh before child creation triggers another zed update.
@@ -113,132 +78,164 @@
   delay: 1
   become: true
 
-# --- Dry-run health script ---
+# --- Trim scheduler ---
 
-- name: _verify | Health script runs without error
-  when: zfs_root
-  command: /usr/local/bin/zfs_health
+# Run the unit the weekly timer triggers. It is not a oneshot, so --wait holds
+# until the trim ends and fails if the unit failed; zpool then confirms the trim
+# completed rather than being skipped by a unit condition.
+- name: _verify | The stock trim unit trims each scheduled pool
+  shell: |
+    set -euo pipefail
+    timeout -k 10 300 systemctl start --wait zfs-trim@{{ item }}.service
+    [[ "$(LC_ALL=C zpool status -t {{ item }})" == *"trimmed, completed"* ]]
+  args:
+    executable: /bin/bash
+  loop: "{{ zfs_trim_pools }}"
   changed_when: false
   become: true
 
-# --- Health script fault detection (functional) ---
-# zfs_health's checks only mean something if they actually fire on a damaged
-# pool -- asserting the script merely "ran" proves nothing, and is exactly how
-# the `zpool status -e` regression hid: the drive-error check silently never
-# executed yet the script still exited 0. Build a throwaway mirror over two
-# backing files, corrupt one leg's data region underneath ZFS, scrub to surface
-# the checksum errors, and assert the script flags them via the drive-error
-# branch. Clear those repaired errors and use the just-completed scrub to assert
-# the scrub-age branch, then offline one leg to assert the pool-state branch.
-# qemu-only (gated on zfs_root); never prod, and fully torn down at the end of
-# the block.
-- name: _verify | Health fault detection
+# --- Scrub scheduler ---
+
+# The unit is a oneshot, so start blocks until every pool's scrub is done and
+# fails with the unit.
+- name: _verify | The scrub unit scrubs every pool
+  shell: |
+    set -euo pipefail
+    timeout -k 10 600 systemctl start zfs_scrub.service
+    for pool in $(zpool list -H -o name); do
+      [[ "$(LC_ALL=C zpool status "$pool")" == *"scan: scrub repaired"* ]]
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: true
+
+# Build a throwaway mirror over two backing files and corrupt one leg's data
+# region underneath ZFS. The scrub repairs the damage from the other leg, but
+# the checksum errors leave the pool unhealthy, so the scrub unit must fail and
+# ZED must mail the scrub_finish report. A stand-in mail command records what
+# ZED sends. Then cancel scrubs mid-run (scan progress suspended so they cannot
+# finish first) and require the unit to fail on the incomplete scrub. Torn down
+# at the end of the block.
+- name: _verify | Scrub failure drill
   when: zfs_root
   become: true
   block:
-    - name: _verify | Health fault | Create backing files for a throwaway pool
-      command: truncate -s 64M /var/tmp/zfs_health_test_{{ item }}.img
+    - name: _verify | Scrub drill | Record ZED mail instead of sending it
+      copy:
+        content: |
+          #!/bin/sh
+          { echo "mail $*"; cat; } >>/var/tmp/zfs_scrub_test_mail.log
+        dest: /usr/bin/mail
+        force: false
+        mode: "0755"
+
+    - name: _verify | Scrub drill | Create backing files for a throwaway pool
+      command: truncate -s 64M /var/tmp/zfs_scrub_test_{{ item }}.img
       loop: [ 0, 1 ]
       changed_when: true
 
-    - name: _verify | Health fault | Create a mirror pool over the files
+    - name: _verify | Scrub drill | Create a mirror pool over the files
       command: >-
-        zpool create -f zfs_health_test mirror
-        /var/tmp/zfs_health_test_0.img /var/tmp/zfs_health_test_1.img
+        zpool create -f zfs_scrub_test mirror
+        /var/tmp/zfs_scrub_test_0.img /var/tmp/zfs_scrub_test_1.img
       changed_when: true
 
-    - name: _verify | Health fault | Write incompressible data into the pool
-      command: dd if=/dev/urandom of=/zfs_health_test/payload bs=1M count=16 conv=fsync
+    - name: _verify | Scrub drill | Write incompressible data into the pool
+      command: dd if=/dev/urandom of=/zfs_scrub_test/payload bs=1M count=16 conv=fsync
       changed_when: true
 
     # Overwrite the data region of one leg (4-60 MiB) with random bytes, leaving
     # the four vdev labels (first/last ~512 KiB) intact so the leg stays ONLINE
     # and the damage surfaces as checksum errors rather than a missing device.
-    - name: _verify | Health fault | Corrupt one mirror leg underneath ZFS
+    - name: _verify | Scrub drill | Corrupt one mirror leg underneath ZFS
       command: >-
-        dd if=/dev/urandom of=/var/tmp/zfs_health_test_0.img
-        bs=1M seek=4 count=56 conv=notrunc
+        dd if=/dev/urandom of=/var/tmp/zfs_scrub_test_0.img
+        bs=1M seek=4 count=56 conv=notrunc,fsync
       changed_when: true
 
-    - name: _verify | Health fault | Flush the corruption to disk
-      command: sync
+    - name: _verify | Scrub drill | Scrub through the unit
+      command: timeout -k 10 600 systemctl start zfs_scrub.service
+      register: _zfs_scrub_damaged_run
+      changed_when: true
+      failed_when: _zfs_scrub_damaged_run.rc == 0
+
+    - name: _verify | Scrub drill | Read the failed run's log
+      shell: |
+        set -euo pipefail
+        journalctl -o cat _SYSTEMD_INVOCATION_ID="$(systemctl show -P InvocationID zfs_scrub.service)"
+      args:
+        executable: /bin/bash
+      register: _zfs_scrub_damaged_log
       changed_when: false
 
-    - name: _verify | Health fault | Scrub to surface the checksum errors
-      command: timeout -k 10 60 zpool scrub -w zfs_health_test
+    - name: _verify | Scrub drill | The unit failed on the unhealthy pool
+      assert:
+        that: "'zfs_scrub_test is not healthy after its scrub' in _zfs_scrub_damaged_log.stdout"
+        fail_msg: "{{ _zfs_scrub_damaged_log.stdout }}"
+
+    - name: _verify | Scrub drill | ZED mails the scrub report to root
+      command: cat /var/tmp/zfs_scrub_test_mail.log
+      register: _zfs_scrub_mail
+      changed_when: false
+      until: >-
+        'ZFS scrub_finish event for zfs_scrub_test' in _zfs_scrub_mail.stdout
+        and ' root' in _zfs_scrub_mail.stdout
+      retries: 20
+      delay: 1
+
+    - name: _verify | Scrub drill | Clear the repaired checksum errors
+      command: zpool clear zfs_scrub_test
       changed_when: true
 
-    - name: _verify | Health fault | Run the health script against the damaged pool
-      command: /usr/local/bin/zfs_health
-      register: _zfs_health_damaged
-      changed_when: false
-      failed_when: false
+    # The unit scrubs each pool in turn; cancel whichever scrub is running until
+    # the unit gives up.
+    - name: _verify | Scrub drill | Cancel scrubs while the unit runs
+      shell: |
+        set -euo pipefail
+        echo 1 >/sys/module/zfs/parameters/zfs_scan_suspend_progress
+        systemctl start --no-block zfs_scrub.service
+        for _ in $(seq 120); do
+          sleep 1
+          if [ "$(systemctl show -P ActiveState zfs_scrub.service)" != activating ]; then
+            break
+          fi
+          for pool in $(zpool list -H -o name); do
+            zpool scrub -s "$pool" 2>/dev/null || true
+          done
+        done
+        echo 0 >/sys/module/zfs/parameters/zfs_scan_suspend_progress
+        systemctl show -P ActiveState zfs_scrub.service
+        journalctl -o cat _SYSTEMD_INVOCATION_ID="$(systemctl show -P InvocationID zfs_scrub.service)"
+      args:
+        executable: /bin/bash
+      register: _zfs_scrub_canceled
+      changed_when: true
 
-    - name: _verify | Health fault | Script flags the drive errors and exits non-zero
+    - name: _verify | Scrub drill | The unit failed on the canceled scrub
       assert:
         that:
-          - _zfs_health_damaged.rc != 0
-          - "'Detected drive errors (READ/WRITE/CKSUM)' in _zfs_health_damaged.stderr"
-        fail_msg: >-
-          zfs_health did not flag the corrupted pool via the drive-error check.
-          rc={{ _zfs_health_damaged.rc }} stderr={{ _zfs_health_damaged.stderr }}
-
-    - name: _verify | Health fault | Clear repaired checksum errors
-      command: zpool clear zfs_health_test
-      changed_when: true
-
-    # SCRUB_EXPIRE=0 (the role's env seam) expires any scrub, even one that
-    # finished this second. Without the pool-creation suffix, the age came
-    # from the scrub's own end time.
-    - name: _verify | Health fault | Run the health script with a zero scrub-expiry threshold
-      command: /usr/local/bin/zfs_health
-      environment:
-        SCRUB_EXPIRE: "0"
-      register: _zfs_health_scrub_age
-      changed_when: false
-      failed_when: false
-
-    - name: _verify | Health fault | Script flags the expired scrub from its end time
-      assert:
-        that:
-          - _zfs_health_scrub_age.rc != 0
-          - "'ERROR :: Scrub expired on zfs_health_test' in _zfs_health_scrub_age.stderr_lines"
-        fail_msg: >-
-          zfs_health did not age the completed scrub on zfs_health_test.
-          rc={{ _zfs_health_scrub_age.rc }} stderr={{ _zfs_health_scrub_age.stderr }}
-
-    - name: _verify | Health fault | Offline one leg to degrade the pool
-      command: zpool offline zfs_health_test /var/tmp/zfs_health_test_0.img
-      changed_when: true
-
-    - name: _verify | Health fault | Run the health script against the degraded pool
-      command: /usr/local/bin/zfs_health
-      register: _zfs_health_degraded
-      changed_when: false
-      failed_when: false
-
-    - name: _verify | Health fault | Script flags the degraded pool and exits non-zero
-      assert:
-        that:
-          - _zfs_health_degraded.rc != 0
-          - "'zpool status -x reports a problem' in _zfs_health_degraded.stderr"
-        fail_msg: >-
-          zfs_health did not flag the DEGRADED pool via the pool-health check.
-          rc={{ _zfs_health_degraded.rc }} stderr={{ _zfs_health_degraded.stderr }}
+          - _zfs_scrub_canceled.stdout_lines[0] == 'failed'
+          - "'scrub on zfs_scrub_test did not complete' in _zfs_scrub_canceled.stdout"
+        fail_msg: "{{ _zfs_scrub_canceled.stdout }}"
 
   always:
-    # Teardown runs even if an assertion above fails, so a red test leaves no
-    # stray pool/files behind for a re-run on the same (kept) VM.
-    - name: _verify | Health fault | Destroy the throwaway pool
-      command: zpool destroy zfs_health_test
+    - name: _verify | Scrub drill | Resume scan progress
+      shell: echo 0 >/sys/module/zfs/parameters/zfs_scan_suspend_progress
+      changed_when: true
+
+    - name: _verify | Scrub drill | Destroy the throwaway pool
+      command: zpool destroy zfs_scrub_test
       changed_when: true
       failed_when: false
 
-    - name: _verify | Health fault | Remove backing files and mountpoint
+    - name: _verify | Scrub drill | Remove backing files, mountpoint, and mail stand-in
       file:
         path: "{{ item }}"
         state: absent
       loop:
-        - /var/tmp/zfs_health_test_0.img
-        - /var/tmp/zfs_health_test_1.img
-        - /zfs_health_test
+        - /var/tmp/zfs_scrub_test_0.img
+        - /var/tmp/zfs_scrub_test_1.img
+        - /var/tmp/zfs_scrub_test_mail.log
+        - /zfs_scrub_test
+        - /usr/bin/mail

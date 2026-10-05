@@ -185,4 +185,16 @@
     mode: "0755"
   loop:
     - /usr/local/bin/zfs_update_mount_cache
+    - /usr/local/bin/zfs_health
   become: true
+
+- name: _setup | Install the retired zfs_health timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: zfs_health
+      description: Daily ZFS health check
+      on_calendar: "*-*-* 00:06:00"
+      exec_start: /usr/local/bin/zfs_health

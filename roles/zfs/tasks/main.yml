@@ -95,13 +95,8 @@
   tags:
     - zfs
 
-- name: Install the ZFS status reader
-  import_tasks: status.yml
-  tags:
-    - zfs
-
-# zfs_cull is intentionally unscheduled operator tooling; zfs_health and
-# zfs_scrub are timer entry points configured below.
+# zfs_cull is intentionally unscheduled operator tooling; zfs_scrub is the
+# timer entry point configured below.
 - name: Copy ZFS scripts
   copy:
     src: "{{ item }}.sh"
@@ -114,25 +109,7 @@
   loop:
     - zfs_cull
     - zfs_scrub
-    - zfs_health
   become: true
-  tags:
-    - zfs
-
-- name: Schedule the zfs_health timer
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: zfs_health
-      description: Daily ZFS health check
-      # 00:06, early in the compact small-job cluster. zpool status is a
-      # local-only read with no fleet-shared resource, so no randomized spread is
-      # needed -- pinning it keeps the schedule deterministic.
-      on_calendar: "*-*-* 00:06:00"
-      persistent: true
-      exec_start: /usr/local/bin/zfs_health
   tags:
     - zfs
 
@@ -140,9 +117,10 @@
 # /etc/cron.d/zfsutils-linux (second Sunday, 00:24) -- a single scheduler is
 # easier to reason about. Second Sunday preserves the distro's monthly cadence;
 # a stable randomized delay spreads the fleet's scrubs over half an hour. The
-# script kicks the scrub off and returns (no -w), so the default 1h
-# TimeoutStartSec is ample; zfs_health + ZED's scrub_finish zedlet are the
-# outcome watchdogs.
+# script waits for each pool's scrub in turn and fails on an incomplete scrub or
+# an unhealthy pool, so netdata's failed-unit alarm reports the outcome and its
+# overdue alarm a timer that stopped firing. Two days covers the longest serial
+# run (pug ~17h) with room for growth.
 - name: Schedule the zfs_scrub timer
   import_role:
     name: systemd_timer
@@ -154,6 +132,7 @@
       on_calendar: "Sun *-*-08..14 01:00:00"
       persistent: true
       exec_start: /usr/local/bin/zfs_scrub
+      timeout_start_sec: 2d
       randomized_delay_sec: 1800
   tags:
     - zfs
@@ -206,10 +185,10 @@
 # ZED_EMAIL_ADDR unset (the package default) it mails nothing. Pointing it at
 # root lights up the stock statechange-notify / data-notify / scrub_finish
 # zedlets, which deliver event-driven fault + checksum + scrub-error mail within
-# seconds — the real-time complement to zfs_health's nightly poll backstop
-# (which still owns the capacity-free signals ZED structurally can't: a scrub
-# that *didn't* happen). ZED_NOTIFY_VERBOSE stays at its 0 default so clean
-# scrub completions don't mail; only faults and errored scrubs do.
+# seconds. Netdata's zfspool alarms cover pool and vdev state, and the zfs_scrub
+# unit a scrub that did not happen or did not complete. ZED_NOTIFY_VERBOSE stays
+# at its 0 default so clean scrub completions don't mail; only faults and
+# errored scrubs do.
 - name: Configure ZED email notifications
   when: not (ansible_check_mode and zfs_apt.changed)
   lineinfile:

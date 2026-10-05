@@ -114,6 +114,8 @@
   loop:
     - zfs_trim_rpool.timer
     - zfs_trim_rpool.service
+    - zfs_health.timer
+    - zfs_health.service
   register: retired_services_zfs_units
   failed_when: retired_services_zfs_units.status.LoadState != 'not-found'
   become: true
