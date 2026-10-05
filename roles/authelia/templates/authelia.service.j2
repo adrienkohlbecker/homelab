@@ -5,10 +5,12 @@ Description=authelia
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
-# Sessions live in Redis: start it first, and restart Authelia along with it,
-# which also picks up a rotated redis_password secret (owned by roles/redis).
+# Sessions live in Redis: start it first, and restart Authelia along with it so
+# a rotated password reaches both. Wants= rather than Requires=, so one failed
+# Redis start cannot cancel Authelia's start job and lock out every SSO service.
 After=redis.service
-Requires=redis.service
+Wants=redis.service
+PartOf=redis.service
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service

@@ -88,7 +88,7 @@
     status_code: 401
 
 # Sessions live in Redis, so a signed-in cookie must stay authenticated across
-# a Redis restart. Requires= restarts Authelia along with it, so this covers
+# a Redis restart. PartOf= restarts Authelia along with it, so this covers
 # both an in-memory session store and a Redis that does not persist to disk.
 - name: _verify | Sign in to obtain a session cookie
   uri:
