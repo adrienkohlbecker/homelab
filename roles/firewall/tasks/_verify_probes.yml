@@ -70,15 +70,6 @@
       runner: controller
       argv: [ nc, -u, -w, "1", "{{ wan_probe_host }}", "{{ wan_forward_ports.udp['51820'] }}" ]
       hit: [ wireguard_accept ]
-    - name: Transmission UDP from WAN
-      runner: controller
-      argv: [ nc, -u, -w, "1", "{{ wan_probe_host }}", "{{ wan_forward_ports.udp[service_ports.transmission_bt | string] }}" ]
-      hit: [ input_transmission_udp ]
-    - name: Transmission TCP from WAN
-      runner: controller
-      argv: [ nc, -z, -w, "3", "{{ wan_probe_host }}", "{{ wan_forward_ports.tcp[service_ports.transmission_bt | string] }}" ]
-      expect: pass
-      hit: [ input_transmission_tcp ]
     - name: Tailscale underlay from WAN
       enabled: "{{ tailscale_wan_direct | default(false) }}"
       runner: controller
@@ -109,10 +100,6 @@
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ service_ports.nut }}" ]
       expect: pass
       hit: [ input_admin_nut ]
-    - name: Authelia from a wireguard source
-      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ service_ports.authelia }}" ]
-      expect: pass
-      hit: [ input_authelia_wg ]
     # mDNS additionally requires WAN ingress and a home-LAN source.
     - name: mDNS from a wireguard source
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "5353" ]
@@ -159,10 +146,6 @@
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "51820" ]
       hit: [ input_catchall ]
       miss: [ wireguard_accept ]
-    - name: Transmission UDP from a non-scope source on wg0
-      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ service_ports.transmission_bt }}" ]
-      hit: [ input_catchall ]
-      miss: [ input_transmission_udp ]
     - name: Mosh from a non-scope source
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "60000" ]
       hit: [ input_catchall ]
@@ -178,11 +161,6 @@
       expect: fail
       hit: [ input_catchall_reset ]
       miss: [ input_admin_nut, input_nut_podman ]
-    - name: Transmission TCP from a non-scope source on wg0
-      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ service_ports.transmission_bt }}" ]
-      expect: fail
-      hit: [ input_catchall_reset ]
-      miss: [ input_transmission_tcp ]
     - name: Aardvark DNS TCP from a non-scope source
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "5333" ]
       expect: fail

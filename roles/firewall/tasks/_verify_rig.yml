@@ -111,7 +111,7 @@
         set -eu
         mkdir -p /www
         echo firewall-verify-ok > /www/index.html
-        for port in 80 443 445 {{ service_ports.nut }} {{ service_ports.authelia }} {{ service_ports.transmission_bt }} 192.0.2.1:5333; do
+        for port in 80 443 445 {{ service_ports.nut }} 192.0.2.1:5333; do
             httpd -f -p "$port" -h /www &
         done
         wait
@@ -132,7 +132,5 @@
     - 443
     - 445
     - "{{ service_ports.nut }}"
-    - "{{ service_ports.authelia }}"
-    - "{{ service_ports.transmission_bt }}"
     - 5333
   become: true

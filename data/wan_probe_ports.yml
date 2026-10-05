@@ -3,10 +3,8 @@
 # same guest ports directly through the CI cell security group.
 tcp:
   - 18080 # Published-container DNAT fixture
-  - 51413 # Transmission peer port
 udp:
   - 51820 # WireGuard
-  - 51413 # Transmission peer port
   - 5353  # mDNS negative WAN-source probe
   - 41641 # Tailscale direct underlay, lab
   - 41642 # Tailscale direct underlay, pug

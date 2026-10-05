@@ -51,14 +51,9 @@ table inet homelab {
     counter input_admin_samba {}
 {% endif %}
     counter input_admin_nut {}
-    counter input_transmission_tcp {}
-    counter input_transmission_udp {}
     counter input_nut_podman {}
     counter input_loopback {}
     counter input_icmp_accept {}
-{% if inventory_hostname == authelia_host %}
-    counter input_authelia_wg {}
-{% endif %}
 {% if tailscale_advertise_routes is defined %}
     counter tailscale_input_accept {}
     counter tailscale_forward_accept {}
@@ -179,11 +174,6 @@ table inet homelab {
         # an attacker on a future LAN bridge can't speculatively send
         # to udp/51820 from inside.
         iifname $WAN_IFACE udp dport {{ service_ports.wireguard }} counter name "wireguard_accept" accept comment "wireguard (WAN ingress only)"
-
-        # Transmission's WAN-forwarded peer listener needs TCP for the wire
-        # protocol and UDP for µTP/DHT.
-        iifname $WAN_IFACE tcp dport {{ service_ports.transmission_bt }} counter name "input_transmission_tcp" accept comment "transmission BT peers (WAN TCP ingress)"
-        iifname $WAN_IFACE udp dport {{ service_ports.transmission_bt }} counter name "input_transmission_udp" accept comment "transmission BT peers (WAN UDP ingress)"
 {% if tailscale_wan_direct | default(false) %}
 
         # A UniFi forward gives tailscaled a stable WAN underlay endpoint.
@@ -208,13 +198,6 @@ table inet homelab {
         iifname . ip saddr @lan_admin_pairs tcp dport 445 counter name "input_admin_samba" accept comment "Samba (admin)"
 {% endif %}
         iifname . ip saddr @lan_admin_pairs tcp dport {{ service_ports.nut }} counter name "input_admin_nut" accept comment "nut (admin)"
-
-{% if inventory_hostname == authelia_host %}
-        # Nginx uses loopback locally and this host's WG IP remotely. The
-        # container listens on every host interface, so this tight wg0 +
-        # WG_SUBNET rule is the access boundary.
-        iifname "wg0" ip saddr $WG_SUBNET tcp dport {{ service_ports.authelia }} counter name "input_authelia_wg" accept comment "Authelia forward-auth (wireguard peers)"
-{% endif %}
 
         # Home Assistant reaches NUT from a named podman bridge. Grant
         # container access only to NUT, not the broader admin services.
@@ -347,8 +330,10 @@ table inet homelab {
         iifname "tailscale0" counter name "tailscale_forward_accept" accept comment "tailscale subnet router + exit node"
 {% endif %}
 
-        # Reach containers via netavark's DNAT. Three ingress paths,
-        # all targeting any podman bridge:
+        # Reach containers via netavark's DNAT. PREROUTING rewrites every
+        # host-published port (transmission's BT peers, Authelia), so those
+        # flows meet these rules and never the INPUT chain. Three ingress
+        # paths, all targeting any podman bridge:
         #   - WAN: external clients hitting a published container
         #   - wg0: wireguard peers hitting a published container
         #   - any podman bridge: a container querying a VIP/host-IP
