@@ -89,7 +89,25 @@ def _real_qemu() -> str:
     return binary
 
 
-def _passt_usable(real_qemu: str) -> bool:
+def _machine_type(args: list[str]) -> str | None:
+    """The machine type from packer's `-machine type=<t>,accel=<a>` arg, or None.
+
+    qemu resolves a machine before answering `-netdev help`, and
+    qemu-system-aarch64 has no default one, so the passt probe must name it.
+    Only the type is kept: probing with packer's accel would also make the
+    probe depend on /dev/kvm.
+    """
+    for i, arg in enumerate(args[:-1]):
+        if arg in ("-machine", "-M"):
+            for part in args[i + 1].split(","):
+                if part.startswith("type="):
+                    return part[len("type=") :]
+                if "=" not in part:
+                    return part
+    return None
+
+
+def _passt_usable(real_qemu: str, machine_type: str | None) -> bool:
     """True when passt is on PATH and this qemu advertises `-netdev stream`."""
     host_os = platform.system()
     if host_os != "Linux":
@@ -98,15 +116,17 @@ def _passt_usable(real_qemu: str) -> bool:
     if shutil.which("passt") is None:
         _log("passt unusable: no `passt` on PATH")
         return False
+    machine_args = ["-machine", machine_type] if machine_type else []
+    probe_cmd = [real_qemu, *machine_args, "-netdev", "help"]
     try:
         probe = subprocess.run(
-            [real_qemu, "-netdev", "help"],
+            probe_cmd,
             capture_output=True,
             text=True,
             timeout=10,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        _log(f"passt unusable: `{real_qemu} -netdev help` probe failed: {exc}")
+        _log(f"passt unusable: `{' '.join(probe_cmd)}` probe failed: {exc}")
         return False
     has_stream = "stream" in (probe.stdout + probe.stderr)
     _log(f"passt probe: binary present, qemu `-netdev stream` {'supported' if has_stream else 'absent'}")
@@ -262,7 +282,7 @@ def main() -> None:
     if backend == "slirp":
         _log("backing build-VM NIC with slirp (passthrough): HOMELAB_NET_BACKEND=slirp")
         os.execv(real_qemu, [real_qemu, *args])
-    if not _passt_usable(real_qemu):
+    if not _passt_usable(real_qemu, _machine_type(args)):
         if backend == "passt":
             sys.exit("qemu-net-wrapper: HOMELAB_NET_BACKEND=passt but passt is unusable here")
         _log("backing build-VM NIC with slirp (passthrough): passt unusable here")

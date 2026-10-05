@@ -6,6 +6,8 @@ id + host-forwards out of packer's generated `-netdev user,...` and rebuilding
 them as passt port specs -- is pure string work and gets pinned here.
 """
 
+import subprocess
+
 import pytest
 
 import packer.qemu_net_wrapper as wrapper
@@ -51,6 +53,33 @@ def test_real_qemu_exits_when_the_emulator_is_missing(monkeypatch) -> None:
 
     with pytest.raises(SystemExit, match="not found on PATH"):
         wrapper._real_qemu()
+
+
+def test_machine_type_takes_the_type_from_packers_machine_arg() -> None:
+    assert wrapper._machine_type(["-machine", "type=virt,accel=kvm", *PACKER_ARGS]) == "virt"
+
+
+def test_machine_type_none_without_a_machine_arg() -> None:
+    assert wrapper._machine_type(PACKER_ARGS) is None
+
+
+def _fake_aarch64_qemu(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    """Mimic qemu-system-aarch64, which has no default machine: `-netdev help`
+    only lists the netdev types once a machine is named."""
+    if "-machine" not in argv:
+        return subprocess.CompletedProcess(
+            argv, 1, "", "qemu-system-aarch64: No machine specified, and there is no default\n"
+        )
+    return subprocess.CompletedProcess(argv, 0, "Available netdev backend types:\nsocket\nstream\n", "")
+
+
+def test_passt_usable_on_aarch64_probes_with_packers_machine(monkeypatch) -> None:
+    monkeypatch.setattr(wrapper.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(wrapper.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(wrapper.subprocess, "run", _fake_aarch64_qemu)
+    args = ["-machine", "type=virt,accel=kvm", *PACKER_ARGS]
+
+    assert wrapper._passt_usable("/usr/bin/qemu-system-aarch64", wrapper._machine_type(args)) is True
 
 
 def test_parse_netdev_user_extracts_id_and_forward() -> None:
@@ -130,7 +159,7 @@ def _run_main(monkeypatch, backend: str, *, usable: bool) -> tuple[list[str], li
     monkeypatch.setenv("HOMELAB_NET_BACKEND", backend)
     monkeypatch.delenv("QEMU_NET_WRAPPER_LOG", raising=False)
     monkeypatch.setattr(wrapper, "_real_qemu", lambda: "/usr/bin/qemu-system-x86_64")
-    monkeypatch.setattr(wrapper, "_passt_usable", lambda _q: usable)
+    monkeypatch.setattr(wrapper, "_passt_usable", lambda _q, _m: usable)
     monkeypatch.setattr(wrapper, "_start_passt", lambda _s, cmd: started.append(cmd))
     monkeypatch.setattr(wrapper.sys, "argv", ["qemu_net_wrapper.py", *PACKER_ARGS])
 
@@ -157,7 +186,7 @@ def test_main_auto_rewrites_the_netdev_when_passt_is_usable(monkeypatch) -> None
 def test_main_passt_override_fails_when_passt_is_unusable(monkeypatch) -> None:
     monkeypatch.setenv("HOMELAB_NET_BACKEND", "passt")
     monkeypatch.setattr(wrapper, "_real_qemu", lambda: "/usr/bin/qemu-system-x86_64")
-    monkeypatch.setattr(wrapper, "_passt_usable", lambda _q: False)
+    monkeypatch.setattr(wrapper, "_passt_usable", lambda _q, _m: False)
     monkeypatch.setattr(wrapper.sys, "argv", ["qemu_net_wrapper.py", *PACKER_ARGS])
     with pytest.raises(SystemExit, match="passt is unusable"):
         wrapper.main()
