@@ -7,6 +7,8 @@ disable-model-invocation: true
 allowed-tools: Bash(ssh lab:*), Bash(ssh pug:*), Bash(ssh fox:*), Bash(ansible-inventory:*), Bash(git log:*), Read, Grep, Glob
 ---
 
+# Triage
+
 Triage homelab service **$ARGUMENTS** on prod. Empty input means ask for a
 service; whitespace means reject the invocation. Diagnostics are pre-authorized,
 but prod mutations still need explicit operator ack.

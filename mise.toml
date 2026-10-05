@@ -194,8 +194,8 @@ description = "Validate data/network_topology.yml against its JSON Schema"
 run = "check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml"
 
 [tasks."lint:markdown"]
-description = "Lint Markdown files (CLAUDE.md + README.md)"
-run = "markdownlint-cli2 'CLAUDE.md' 'README.md'"
+description = "Lint tracked Markdown files"
+run = "lint/git_ls_existing.sh '*.md' | xargs -0 markdownlint-cli2"
 
 [tasks."lint:notes"]
 description = "Lint the notes/ clone if present (delegates to its own mise lint; skipped when absent, e.g. CI)"
@@ -251,8 +251,8 @@ description = "Format Lua filters (stylua)"
 run = "lint/git_ls_existing.sh '*.lua' | xargs -0 stylua --config-path lint/stylua.toml"
 
 [tasks."fmt:markdown"]
-description = "Fix Markdown formatting (CLAUDE.md + README.md)"
-run = "markdownlint-cli2 --fix 'CLAUDE.md' 'README.md'"
+description = "Fix Markdown formatting in tracked files"
+run = "lint/git_ls_existing.sh '*.md' | xargs -0 markdownlint-cli2 --fix"
 
 [tasks."fmt:notes"]
 description = "Fix Markdown formatting in the notes/ clone if present (skipped when absent)"
