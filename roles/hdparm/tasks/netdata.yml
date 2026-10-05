@@ -7,8 +7,8 @@
 # Debian, so opening the device as the netdata user fails with EACCES
 # regardless of capabilities. Add netdata to `disk` so `hdparm -C` can
 # open the block device. systemd reads supplementary groups at service
-# start, so the netdata restart below is load-bearing for a freshly
-# added group to take effect.
+# start, so the netdata restart requested below is load-bearing for a
+# freshly added group to take effect.
 - name: Add netdata user to disk group
   when: hdparm_netdata_condition | default(true)
   user:
@@ -20,12 +20,12 @@
   tags:
     - hdparm
 
-- name: Restart netdata to pick up disk-group membership
+# netdata_restart_needed is netdata's restart request flag (netdata
+# tasks/restart.yml), not an hdparm variable.
+- name: Request a netdata restart to pick up disk-group membership
   when: hdparm_netdata_disk_group.changed
-  systemd:
-    name: netdata
-    state: restarted
-  become: true
+  set_fact:
+    netdata_restart_needed: true  # noqa: var-naming[no-role-prefix]
   tags:
     - hdparm
 

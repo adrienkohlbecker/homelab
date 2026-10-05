@@ -118,3 +118,26 @@
       name: netdata
   tags:
     - netdata
+
+# Every config write above only requests a restart, so netdata restarts at most
+# once per converge. Tagged with every role whose netdata entry points
+# metrics.yml imports, so a run narrowed to one of those tags still applies
+# what it wrote.
+- name: Apply pending netdata configuration
+  import_tasks: restart.yml
+  tags:
+    - netdata
+    - certbot
+    - hdparm
+    - nginx
+    - systemd_timer
+
+- name: Enable netdata service
+  when: netdata_package_ready
+  systemd:
+    name: netdata.service
+    enabled: true
+    state: started
+  become: true
+  tags:
+    - netdata

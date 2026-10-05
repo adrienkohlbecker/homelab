@@ -1,0 +1,23 @@
+# Apply pending netdata configuration with a single restart. Every config
+# write in this role (config.yml, health.yml, charts_d.yml, charts_d_remove.yml
+# and the daemon config in configure.yml) only sets netdata_restart_needed;
+# main.yml imports this file once at the end of the run. Callers that write
+# through those entry points outside netdata's own run (retired_services,
+# sibling roles' _verify files) import it themselves afterwards.
+#
+# The flag is a host fact, so it survives across imported files and plays.
+# A restart also starts a stopped netdata, which is how a fresh install (held
+# stopped by policy_rc_d) first starts with its complete configuration.
+- name: restart | Restart netdata for pending configuration
+  when:
+    - netdata_restart_needed | default(false)
+    - netdata_package_ready | default(true)
+  systemd:
+    name: netdata.service
+    state: restarted
+  become: true
+
+- name: restart | Clear the pending netdata restart
+  when: netdata_restart_needed | default(false)
+  set_fact:
+    netdata_restart_needed: false

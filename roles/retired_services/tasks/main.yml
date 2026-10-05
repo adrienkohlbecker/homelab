@@ -14,6 +14,15 @@
     - netdata
     - zfs
 
+- name: Restart netdata without the retired zfs_scan collector
+  import_role:
+    name: netdata
+    tasks_from: restart
+  tags:
+    - retired_services
+    - netdata
+    - zfs
+
 # Drop once lab has converged.
 #
 # macos_vm adopts rpool/libvirt by moving it off /var/lib/libvirt/images.

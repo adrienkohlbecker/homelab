@@ -1,6 +1,6 @@
 # Install a netdata health-alert config under /etc/netdata/health.d/ and
-# hot-reload via `netdatacli reload-health`. Merges the former
-# health_copy/health_template helpers: the module is chosen by src's suffix.
+# request a netdata restart (restart.yml) to load it. The module is chosen by
+# src's suffix.
 #
 # Inputs: caller passes a single dict `netdata_args` with keys
 #   src   required; file under the caller's files/ (copy) or templates/
@@ -15,9 +15,8 @@
 # template, anything else -> copy. _module and validate stay inline so module
 # dispatch resolves before `when` and no-validate callers can use omit.
 #
-# Accepts `condition` to gate the whole call. Health changes hot-load through
-# `netdatacli reload-health`; unlike a go.d config, there is no stock
-# health.d/<dest> worth seeding before the overwrite.
+# Accepts `condition` to gate the whole call. Unlike a go.d config, there is
+# no stock health.d/<dest> worth seeding before the overwrite.
 - name: health | Ensure alert directory exists
   when: netdata_args.condition | default(true)
   file:
@@ -69,6 +68,7 @@
   register: netdata_alerts_conf
   become: true
 
-- name: health | Reload health configuration
-  when: (netdata_args.condition | default(true)) and netdata_alerts_conf.changed
-  import_tasks: reload_health.yml
+- name: health | Request a netdata restart
+  when: netdata_alerts_conf.changed
+  set_fact:
+    netdata_restart_needed: true

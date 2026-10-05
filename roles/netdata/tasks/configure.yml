@@ -1,8 +1,7 @@
 # Daemon-configuration phase, imported by main.yml right after the
 # package install: netdata.conf settings, cloud opt-out, the go.d
-# collectors, telegram alerting, the startup-readiness drop-in, and
-# the service enable. Split out of main.yml for navigability; runs in
-# main.yml's order so the registers it sets feed the service restart.
+# collectors, telegram alerting, and the startup-readiness drop-in. Split out
+# of main.yml for navigability.
 # Only the load-bearing overrides are templated; netdata overlays the file on
 # its compiled-in defaults, so this is deliberately not a wholesale netdata.conf
 # (which would freeze the hundreds of auto-tuned [plugin:*] sections). The
@@ -81,11 +80,8 @@
 # Drop-in override that blocks `systemctl start/restart netdata` on the HTTP
 # API answering: netdata's Type=notify signals READY=1 before the listener is
 # fully accepting connections, so a bare restart returns "early" and a
-# following `netdatacli reload-health` would race the listener coming up.
-# Installed here -- ahead of the first go.d config write below -- so the very
-# first start (the config-helper restart on a fresh install, where the package
-# was held by policy_rc_d) is already API-gated, not just the later "Enable
-# netdata service" step. Mirrors the podman --health-startup-cmd pattern.
+# following API consumer would race the listener coming up. Mirrors the podman
+# --health-startup-cmd pattern.
 - name: Install netdata service override
   import_role:
     name: systemd_unit
@@ -231,23 +227,14 @@
   tags:
     - netdata
 
-# Enable+start the service before the alert/metrics config writes so
-# `netdatacli reload-health` (in health_copy/health_template) lands on
-# a running daemon. On first install the service starts with stock
-# alerts; the role then writes custom alerts and reload-health hot-loads
-# them. Brief gap is acceptable on a fresh install.
-- name: Enable netdata service
-  when: netdata_package_ready
-  systemd:
-    name: netdata.service
-    enabled: true
-    state: >-
-      {{ 'restarted'
-         if netdata_conf.changed or netdata_charts_d_conf.changed or netdata_cloud_conf.changed
-            or netdata_cloud_unclaim.changed or netdata_health_alarm_notify.changed
-            or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed
-            or netdata_intelgpu_absent.changed
-         else 'started' }}
-  become: true
+- name: Request a netdata restart after daemon configuration changes
+  when: >-
+    [netdata_conf, netdata_charts_d_conf, netdata_cloud_conf,
+     netdata_cloud_unclaim, netdata_service_d_override_conf_result,
+     netdata_health_alarm_notify, netdata_debugfs_mount,
+     netdata_intelgpu_absent]
+    | selectattr('changed') | list | length > 0
+  set_fact:
+    netdata_restart_needed: true
   tags:
     - netdata

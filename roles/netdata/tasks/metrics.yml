@@ -1,4 +1,4 @@
-# Metric-wiring phase, imported by main.yml after the service is up: sibling
+# Metric-wiring phase, imported by main.yml: sibling
 # roles drop collector configuration and alerts through Netdata's helpers.
 # netdata_presence is Netdata's own collector rather than a sibling role.
 
@@ -85,13 +85,9 @@
   tags:
     - netdata
 
-- name: Restart netdata after stale keepalived VRRP collector removal
-  when:
-    - not ansible_check_mode
-    - netdata_keepalived_vrrp_absent.changed
-  systemd:
-    name: netdata
-    state: restarted
-  become: true
+- name: Request a netdata restart after stale keepalived VRRP collector removal
+  when: netdata_keepalived_vrrp_absent.changed
+  set_fact:
+    netdata_restart_needed: true
   tags:
     - netdata

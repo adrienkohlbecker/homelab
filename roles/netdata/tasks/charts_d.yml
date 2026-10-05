@@ -1,7 +1,8 @@
 # Install a charts.d.plugin shell collector. Drops the caller-provided
 # script under /usr/libexec/netdata/charts.d/ and the caller-provided conf
-# under /etc/netdata/charts.d/, then restarts charts.d.plugin when anything
-# changed. charts_d_remove.yml is the matching removal entry point.
+# under /etc/netdata/charts.d/, then requests a netdata restart (restart.yml)
+# when anything changed. charts_d_remove.yml is the matching removal entry
+# point.
 #
 # Inputs: caller passes a single dict `netdata_args` with keys
 #   name        required; collector module name (e.g. 'hdparm'). Used as
@@ -53,10 +54,8 @@
     mode: "0755"
   become: true
 
-# Inline rather than via netdata/template: charts.d collectors have no
-# meaningful upstream config stub to seed from, and the helper's restart
-# hook fires only on its own template-change, missing chart.sh / package
-# changes that also need a daemon respawn.
+# Inline rather than via config.yml: charts.d collectors have no meaningful
+# upstream config stub to seed from.
 - name: "charts_d | Install charts.d conf for {{ netdata_args.name }}"
   when: netdata_args.condition | default(true)
   vars:
@@ -78,56 +77,8 @@
   register: _netdata_charts_d_conf_result
   become: true
 
-# charts.d.plugin reads collector scripts and confs only at start, so killing
-# it is enough when it runs: netdata respawns it within seconds and the new
-# process reads the file on disk (_verify_reload.yml proves it). The plugin is
-# matched by command line because charts.d.plugin runs as a bash script. When
-# nothing matches after this run already killed it, a respawn is pending and
-# will read the latest file too. Otherwise it is disabled (charts.d.plugin
-# disables itself when netdata starts it with no collectors) or netdata is not
-# running, and only a netdata restart relaunches it.
-- name: "charts_d | Restart charts.d.plugin for collector {{ netdata_args.name }}"
-  when:
-    - netdata_args.condition | default(true)
-    - _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed
-  command:
-    argv:
-      - pkill
-      - --signal
-      - TERM
-      - --full
-      - plugins.d/charts.d.plugin
-  register: _netdata_charts_d_kill
-  changed_when: _netdata_charts_d_kill.rc == 0
-  failed_when: _netdata_charts_d_kill.rc > 1
-  become: true
-
-- name: charts_d | Record the charts.d.plugin kill
-  when:
-    - _netdata_charts_d_kill is not skipped
-    - _netdata_charts_d_kill.rc | default(1) == 0
+# charts.d.plugin reads collector scripts and confs only at start.
+- name: "charts_d | Request a netdata restart for collector {{ netdata_args.name }}"
+  when: _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed
   set_fact:
-    netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['charts.d.plugin']) }}"
-
-- name: charts_d | Restart netdata when charts.d.plugin is not running
-  when:
-    - _netdata_charts_d_kill.rc | default(0) == 1
-    - "'charts.d.plugin' not in netdata_killed_plugins | default([])"
-  systemd:
-    name: netdata
-    state: restarted
-  become: true
-  register: _netdata_charts_d_restart_result
-
-# Role _setup paths can call charts_d before netdata's ExecStartPost drop-in
-# (which holds a restart until /api/v1/info answers) is installed, so wait
-# for the API here before a following `netdatacli reload-health` uses it.
-- name: charts_d | Wait for netdata HTTP API
-  when: _netdata_charts_d_restart_result.changed | default(false)
-  uri:
-    url: http://127.0.0.1:{{ service_ports.netdata }}/api/v1/info
-    status_code: 200
-  register: _netdata_charts_d_api_probe
-  retries: 60
-  delay: 2
-  until: _netdata_charts_d_api_probe.status == 200
+    netdata_restart_needed: true
