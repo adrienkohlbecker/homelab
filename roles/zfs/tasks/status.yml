@@ -22,10 +22,11 @@
   tags:
     - zfs
 
-# Transitional: OpenZFS 2.2 has no `zpool status -j`. When noble leaves
-# data/ubuntu_releases.yml, delete this script and the text branch in
-# zfs_status.py, and replace this task with `state: absent`.
+# OpenZFS 2.2 has no `zpool status -j`, so only Noble runs the text parser.
+# When noble leaves data/ubuntu_releases.yml, delete this task, the script,
+# and the legacy launcher branch in zfs_status.py.
 - name: status | Install the Noble health parser
+  when: ansible_distribution_release == 'noble'
   copy:
     src: zfs_health_legacy.sh
     dest: /opt/zfs/zfs_health_legacy.sh
