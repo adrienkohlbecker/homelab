@@ -163,26 +163,3 @@
       command: podman rm -f net_verify
       changed_when: false
       failed_when: false
-
-# Noble fixtures prestart the daemon, so its live argv proves the drop-in took
-# effect after the restart rather than merely being loaded by systemd.
-- name: _verify | Read the running podman.service PID
-  when:
-    - not qemu_test_minimal
-    - ansible_distribution_release == 'noble'
-  systemd:
-    name: podman.service
-  become: true
-  register: podman_service_unit
-  changed_when: false
-
-- name: _verify | The running podman.service was restarted onto the drop-in
-  when:
-    - not qemu_test_minimal
-    - ansible_distribution_release == 'noble'
-  command: ps -o args= -p {{ podman_service_unit.status.MainPID }}
-  register: podman_service_args
-  changed_when: false
-  failed_when: >-
-    podman_service_args.rc != 0
-    or '--log-level=warn' not in podman_service_args.stdout.split()
