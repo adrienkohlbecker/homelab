@@ -155,11 +155,10 @@
     - retired_services
     - kdump
 
-# Requests the reboot that releases the reserved crash memory. GRUB hosts got
-# the reservation from the package's own grub.d conffile, which the purge
-# removes.
+# Requests the reboot that releases the reserved crash memory. The helper skips
+# hosts without a ZFS root, where the reservation came from the package's own
+# grub.d conffile, which the purge removes.
 - name: Remove the retired crashkernel reservation
-  when: not grub_bootloader
   import_role:
     name: boot
     tasks_from: cmdline

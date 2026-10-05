@@ -33,7 +33,6 @@ zfs_has_media_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_data_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_minio_mount: "{{ not (qemu_test | bool) }}"
 zfs_root: true
-grub_bootloader: false
 initramfs_use_dracut: "{{ ansible_distribution_release not in ['jammy', 'noble'] }}"
 # Pair ZFS support with the generator so root-on-ZFS hosts never build an image
 # without their root driver. Hosts whose root is not on ZFS import their pools

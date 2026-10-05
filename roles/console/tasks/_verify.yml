@@ -2,14 +2,13 @@
 # copy + image generation exit-coded cleanly; these checks verify that
 # the generated image carries the console policy (source configuration on
 # Noble, a compiled AZERTY keymap on Resolute), and the running kernel
-# actually applied consoleblank=0 from whichever cmdline mechanism (ZBM
-# property / GRUB grub.d) the host uses. Live tty glyph output isn't
-# observable in a headless QEMU run, so the noblank service is checked
-# via exit-code only.
+# actually applied consoleblank=0 from the ZBM command-line property. Live
+# tty glyph output isn't observable in a headless QEMU run, so the noblank
+# service is checked via exit-code only.
 #
 # We reboot at the top of the verify so the running kernel reflects
 # the cmdline we just wrote -- without that, /sys/module/kernel/
-# parameters/consoleblank shows the pre-role value (ZBM/GRUB apply at
+# parameters/consoleblank shows the pre-role value (ZBM applies it at
 # next boot), and `active` on the noblank oneshot would only prove it
 # ran at the *previous* boot. Costs one extra ~30s boot per test run;
 # in exchange every downstream check tests post-reboot reality rather
@@ -36,32 +35,26 @@
 
 # initramfs-tools copies the policy files; Dracut console-setup compiles them
 # into a keymap and a small setupcon script without the source configuration.
-#
-# Minimal boots a pre-baked initrd outside /boot. Deployment-shaped fixtures
-# provide the per-kernel initrd inspected here.
-- name: _verify | Inspect the current kernel's initrd
-  when: not qemu_test_minimal
-  block:
-    - name: _verify | Initrd bundles console-setup + keyboard configs
-      when: not initramfs_use_dracut
-      command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
-      register: _console_initrd
-      changed_when: false
-      failed_when: >-
-        not (['etc/default/console-setup', 'etc/default/keyboard']
-             is subset(_console_initrd.stdout_lines))
-      become: true
+- name: _verify | Initrd bundles console-setup + keyboard configs
+  when: not initramfs_use_dracut
+  command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
+  register: _console_initrd
+  changed_when: false
+  failed_when: >-
+    not (['etc/default/console-setup', 'etc/default/keyboard']
+         is subset(_console_initrd.stdout_lines))
+  become: true
 
-    - name: _verify | Dracut image contains a French AZERTY keymap
-      when: initramfs_use_dracut
-      command: >-
-        lsinitrd --file etc/console-setup/cached_UTF-8_del.kmap
-        /boot/initrd.img-{{ ansible_kernel }}
-      register: _console_dracut_keymap
-      changed_when: false
-      failed_when: >-
-        _console_dracut_keymap.stdout is not search('(?m)^keycode\\s+16\\s+=\\s+\\+?(a|U\\+0061)\\s')
-      become: true
+- name: _verify | Dracut image contains a French AZERTY keymap
+  when: initramfs_use_dracut
+  command: >-
+    lsinitrd --file etc/console-setup/cached_UTF-8_del.kmap
+    /boot/initrd.img-{{ ansible_kernel }}
+  register: _console_dracut_keymap
+  changed_when: false
+  failed_when: >-
+    _console_dracut_keymap.stdout is not search('(?m)^keycode\\s+16\\s+=\\s+\\+?(a|U\\+0061)\\s')
+  become: true
 
 # console_noblank.service is Type=oneshot RemainAfterExit=true, so
 # `active` after the start means setterm's ExecStart returned 0 — the
@@ -76,30 +69,6 @@
   changed_when: false
   failed_when: _console_noblank_active.stdout | trim != 'active'
   become: true
-
-- name: _verify | Read rendered /boot/grub/grub.cfg
-  when: grub_bootloader
-  slurp:
-    src: /boot/grub/grub.cfg
-  register: _console_grub_rendered
-  become: true
-
-- name: _verify | Every grub.cfg linux entry includes consoleblank=0
-  when: grub_bootloader
-  vars:
-    _grub: "{{ _console_grub_rendered.content | b64decode }}"
-    _all_linux: "{{ _grub | regex_findall('^\\s*linux\\s.*$', multiline=True) }}"
-    _with_blank: "{{ _grub | regex_findall('^\\s*linux\\s.*consoleblank=0.*$', multiline=True) }}"
-  assert:
-    that:
-      # Catches an update-grub no-op or a later grub.d snippet resetting
-      # the var. Recovery entry must also carry it (see GRUB_CMDLINE_LINUX
-      # choice in tasks/main.yml).
-      - _all_linux | length > 0
-      - _all_linux | length == _with_blank | length
-    fail_msg: >-
-      grub.cfg has {{ _all_linux | length }} linux entries but only
-      {{ _with_blank | length }} carry consoleblank=0
 
 # /sys/module/kernel/parameters/consoleblank exposes the value the
 # running kernel parsed from the cmdline at boot, proving the boot chain applied
