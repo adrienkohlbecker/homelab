@@ -19,6 +19,8 @@
     creates: /var/lib/macos_vm
     removes: /var/lib/libvirt/images/macos-vm
   become: true
+  tags:
+    - macos_vm
 
 - name: storage | Create and mount the workdir dataset
   import_role:
