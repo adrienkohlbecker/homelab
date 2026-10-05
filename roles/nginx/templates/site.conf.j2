@@ -27,8 +27,8 @@ server {
 {% set security_headers %}
   add_header X-Content-Type-Options    "nosniff" always;
   add_header Referrer-Policy           "same-origin" always;
-{% if not (nginx_site_args.csp_passthrough | default(false)) %}
-  add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %};" always;
+{% if _nginx_site_csp is not false %}
+  add_header Content-Security-Policy   "{{ _nginx_site_csp }}" always;
 {% endif %}
 {# Opt out of the Topics API. #}
   add_header Permissions-Policy        "browsing-topics=()" always;

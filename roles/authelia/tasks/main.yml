@@ -116,6 +116,6 @@
       subdomain: auth
       proxy_pass: http://127.0.0.1:{{ service_ports.authelia }}/
       # Avoid intersecting nginx's blanket CSP with Authelia's portal policy.
-      csp_passthrough: true
+      csp: false
   tags:
     - authelia

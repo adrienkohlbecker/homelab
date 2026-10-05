@@ -136,8 +136,9 @@
       # The WindFront UI pulls device images from zigbee2mqtt.io and device
       # docs (markdown) from raw.githubusercontent.com; widen img-src/connect-src
       # past default-src so the browser does not block them.
-      csp_additional: >-
+      csp: >-
         img-src https://www.zigbee2mqtt.io {{ nginx_csp_default }};
-        connect-src https://raw.githubusercontent.com {{ nginx_csp_default }}
+        connect-src https://raw.githubusercontent.com {{ nginx_csp_default }};
+        default-src {{ nginx_csp_default }}; frame-ancestors 'self';
   tags:
     - z2m

@@ -115,7 +115,9 @@
         }
       # Bookmark icons resolve via the selfh.st icon set served from jsdelivr,
       # so img-src has to allow that CDN — default-src 'self' wouldn't.
-      csp_additional: img-src cdn.jsdelivr.net {{ nginx_csp_default }}
+      csp: >-
+        img-src cdn.jsdelivr.net {{ nginx_csp_default }};
+        default-src {{ nginx_csp_default }}; frame-ancestors 'self';
   tags:
     - homepage
 

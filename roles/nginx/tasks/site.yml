@@ -6,15 +6,14 @@
 #                             Cleartext auth is unsafe, so do NOT combine with
 #                             `auth`: the forward-auth flow would travel
 #                             unencrypted. Asserted below.
-#   csp_default_src           optional CSP directive override
-#   csp_frame_ancestors       optional CSP directive override
-#   csp_additional            optional CSP directive prefix
-#   csp_passthrough           optional bool, default false; if true, skip the
-#                             site's `add_header Content-Security-Policy` entirely
-#                             and let the upstream's own CSP through. Use for apps
-#                             that ship a strict nonce-based CSP (Authelia) where
-#                             nginx's blanket CSP would intersect with the upstream's
-#                             and produce stricter-than-either rules in the browser
+#   csp                       optional Content-Security-Policy value, emitted
+#                             verbatim; default
+#                             "default-src <nginx_csp_default>; frame-ancestors 'self';".
+#                             false skips the header and lets the upstream's
+#                             own CSP through. Use that for apps that ship a
+#                             strict nonce-based CSP (Authelia), where nginx's
+#                             blanket CSP would intersect with the upstream's
+#                             and produce stricter-than-either rules.
 #   auth                      optional bool, default false. When true, every
 #                             request through / is auth_request'd via Authelia;
 #                             a 401 redirects to the portal with returnUrl.
@@ -42,8 +41,8 @@
 #                             site.conf.j2): nginx drops inherited add_header at
 #                             any level that declares its own, and we can't know
 #                             whether the snippet does, so we always re-emit.
-#                             csp_passthrough is honoured -- the re-emit reuses
-#                             the same capture, so a passthrough site stays CSP-free.
+#                             `csp: false` is honoured -- the re-emit reuses the
+#                             same capture, so such a site stays CSP-free.
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `nginx_site_args` value, so a
@@ -58,6 +57,8 @@
     _nginx_site_auth_enabled: "{{ (nginx_site_args.auth | default(false)) | bool }}"
     _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
     _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
+    _nginx_site_csp: >-
+      {{ nginx_site_args.csp | default("default-src " ~ nginx_csp_default ~ "; frame-ancestors 'self';") }}
   tags:
     - nginx_site
 
@@ -74,9 +75,7 @@
       # straight into `proxy_pass ...;`, so any of those changes the directive.
       - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[ ";]')
       - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[^ -~]')
-      - (nginx_site_args.csp_additional | default('') | string) is not search('"')
-      - (nginx_site_args.csp_default_src | default('') | string) is not search('"')
-      - (nginx_site_args.csp_frame_ancestors | default('') | string) is not search('"')
+      - _nginx_site_csp is false or (_nginx_site_csp is string and _nginx_site_csp is not search('"'))
       - not (_nginx_site_enable_http and _nginx_site_auth_enabled)
       - not _nginx_site_auth_enabled or nginx_authelia_internal_url is defined
       - not _nginx_site_auth_enabled or (nginx_authelia_internal_url | default('')) is string
@@ -84,8 +83,8 @@
       - not _nginx_site_auth_request_authorization or _nginx_site_auth_enabled
     fail_msg: >-
       Invalid nginx_site_args contract: subdomain must be one safe DNS label;
-      proxy_pass, when set, must be an injection-safe http(s) URL; CSP overrides
-      must not contain double quotes; enable_http cannot be combined with auth;
+      proxy_pass, when set, must be an injection-safe http(s) URL; csp must be
+      false or a string without double quotes; enable_http cannot be combined with auth;
       auth needs an http(s) nginx_authelia_internal_url; and
       auth_request_authorization requires auth.
   tags:

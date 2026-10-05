@@ -393,7 +393,9 @@
       # Chromecast support. Narrow the allow-list to script-src so
       # it doesn't fall through to connect-src/frame-src/img-src via
       # default-src.
-      csp_additional: "script-src www.gstatic.com {{ nginx_csp_default }}"
+      csp: >-
+        script-src www.gstatic.com {{ nginx_csp_default }};
+        default-src {{ nginx_csp_default }}; frame-ancestors 'self';
       location_conf: |
         # Jellyfin's reverse-proxy guide recommends 20M for plugin
         # uploads and custom poster art.
