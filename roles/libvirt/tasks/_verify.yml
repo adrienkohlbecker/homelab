@@ -155,6 +155,16 @@
       - _libvirt_verify_net.stdout is search('Autostart:\s+yes')
     fail_msg: "default network not active+autostart:\n{{ _libvirt_verify_net.stdout }}"
 
+# The firewall_backend setting lands before libvirtd first starts, so the
+# default network's rules go straight into libvirt's own nftables table.
+- name: _verify | Default network rules use the nftables backend
+  when: ansible_distribution_release != 'noble'
+  command: nft list table ip libvirt_network
+  register: _libvirt_verify_nft
+  changed_when: false
+  failed_when: "'virbr0' not in _libvirt_verify_nft.stdout"
+  become: true
+
 - name: _verify | Gather default storage pool state
   command: virsh pool-info default
   register: _libvirt_verify_pool

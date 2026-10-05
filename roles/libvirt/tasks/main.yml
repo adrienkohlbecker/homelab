@@ -93,12 +93,8 @@
     - libvirt
 
 # libvirt 10.4+ supports a native nftables firewall backend. Noble (10.0)
-# lacks the driver; resolute (12.0) and any future release have it. The
-# setting moves LIBVIRT_INP / LIBVIRT_FWX / LIBVIRT_PRT chains out of
-# `ip filter`/`ip nat` and into `inet libvirt_*` tables. The service call
-# below start-or-restarts on this register so libvirtd re-reads
-# network.conf; the network-reload block at the end re-creates rules under
-# the new backend.
+# lacks the driver; resolute (12.0) and any future release have it. Hosts are
+# built fresh, so this lands before libvirtd first starts the default network.
 - name: Configure libvirt to use native nftables firewall backend
   when: ansible_distribution_release != "noble"
   lineinfile:
@@ -110,7 +106,6 @@
     owner: root
     group: root
     mode: "0644"
-  register: libvirt_firewall_backend
   become: true
   tags:
     - libvirt
@@ -122,7 +117,6 @@
   systemd:
     name: libvirtd.service
     enabled: true
-    state: "{{ 'restarted' if libvirt_firewall_backend.changed | default(false) else omit }}"
   become: true
   tags:
     - libvirt
@@ -205,22 +199,6 @@
   community.libvirt.virt_net:
     name: default
     autostart: true
-  become: true
-  tags:
-    - libvirt
-
-# Existing networks keep their old firewall rules until destroyed and
-# started — restarting libvirtd doesn't re-install per-network rules.
-# Cycle the default network so it picks up the new firewall_backend.
-# ~1s connectivity blip for any guest attached; guests don't reboot.
-- name: Cycle default network for firewall backend change
-  when: libvirt_firewall_backend.changed | default(false) and not ansible_check_mode
-  community.libvirt.virt_net:
-    name: default
-    state: "{{ item }}"
-  loop:
-    - inactive
-    - active
   become: true
   tags:
     - libvirt
