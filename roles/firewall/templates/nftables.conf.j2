@@ -32,10 +32,8 @@ table inet homelab {
     # independent of rule comments and ordering.
     counter input_nonsyn {}
     counter input_silenced {}
-    counter input_silenced_netbios {}
     counter input_catchall {}
     counter input_catchall_reset {}
-    counter icmp_overflow {}
     counter vrrp_accept {}
     counter aardvark_accept {}
     counter aardvark_tcp_accept {}
@@ -211,11 +209,9 @@ table inet homelab {
         ip saddr $PODMAN_POOL tcp dport {{ service_ports.nut }} counter name "input_nut_podman" accept comment "nut (podman bridges, e.g. HA NUT integration)"
 
         # ICMP — only echo-request, rate-limited. Other ICMP types
-        # come back as RELATED. Overflow drops silently rather than
-        # falling through to the catch-all reject. `counter` so the
-        # overflow path can be functionally verified.
+        # come back as RELATED. Overflow falls through to the catch-all,
+        # which drops non-TCP silently.
         icmp type echo-request limit rate 10/second burst 20 packets counter name "input_icmp_accept" accept
-        icmp type echo-request counter name "icmp_overflow" drop comment "icmp echo overflow drop"
 
         # keepalived runs in unicast mode (not multicast 224.0.0.18)
         # with peers on the home LAN (see roles/adguard/templates/
@@ -241,12 +237,10 @@ table inet homelab {
         #           4-byte `01 00 00 00` every ~10s on every VLAN it
         #           has an interface in. ~6k/day. We don't run a UBNT
         #           agent on this host
+        #   137/138 — NetBIOS name/datagram broadcasts; nmbd is disabled
+        #           and SMB3 listens directly on 445
         #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
-        udp dport { 67, 1900, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
-
-        # nmbd is disabled and SMB3 listens directly on 445, so ambient
-        # NetBIOS broadcasts can be silently counted and dropped.
-        udp dport { 137, 138 } counter name "input_silenced_netbios" drop comment "NetBIOS broadcast noise (no local nmbd)"
+        udp dport { 67, 137, 138, 1900, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
 {% if dns_vrrp_enabled %}
 
         # DNS VIP traffic reaches INPUT only while netavark's AdGuard DNAT is

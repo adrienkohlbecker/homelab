@@ -5,7 +5,6 @@
 - name: _verify_rig | Install probe-only deps
   apt:
     name:
-      - python3
       - iproute2
       - curl
       - iputils-ping

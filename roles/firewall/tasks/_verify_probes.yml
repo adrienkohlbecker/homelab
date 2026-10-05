@@ -208,28 +208,13 @@
       expect: fail
       hit: [ forward_catchall ]
 
-    # Each echo uses a fresh ICMP id, so every packet is a NEW flow that
-    # reaches the rate limit (burst 20) instead of riding the first one.
-    - name: ICMP echo flood
-      argv: [ python3, "-" ]
-      stdin: |
-        import socket, struct
-        sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-        for icmp_id in range(1000, 1050):
-            hdr = struct.pack("!BBHHH", 8, 0, 0, icmp_id, 0)
-            chksum = sum((hdr[j] << 8) | hdr[j + 1] for j in range(0, len(hdr), 2))
-            while chksum >> 16:
-                chksum = (chksum & 0xFFFF) + (chksum >> 16)
-            sock.sendto(struct.pack("!BBHHH", 8, 0, ~chksum & 0xFFFF, icmp_id, 0), ("192.0.2.1", 0))
-      hit: [ icmp_overflow, input_icmp_accept ]
-
     # Silenced noise lands on its own drop, not the logging catch-all.
     - name: SSDP noise
       argv: [ nc, -u, -w, "1", 192.0.2.1, "1900" ]
       hit: [ input_silenced ]
     - name: NetBIOS noise
       argv: [ nc, -u, -w, "1", 192.0.2.1, "137" ]
-      hit: [ input_silenced_netbios ]
+      hit: [ input_silenced ]
     - name: Tailscale disco probe from an untrusted zone
       enabled: "{{ tailscale_wan_direct | default(false) }}"
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_untrusted_peer }}", "{{ _firewall_probe_untrusted_host }}", "{{ tailscale_port | default(0) }}" ]
