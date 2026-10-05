@@ -7,17 +7,6 @@
   tags:
     - user
 
-# Undo the sleep-hook diversion earlier converges installed.
-- name: Remove the sysstat sleep hook diversion
-  community.general.dpkg_divert:
-    path: /usr/lib/systemd/system-sleep/sysstat.sleep
-    divert: /usr/lib/systemd/sysstat.sleep.distrib
-    rename: true
-    state: absent
-  become: true
-  tags:
-    - user
-
 - name: Install packages
   apt:
     pkg:
@@ -72,28 +61,6 @@
     cache_valid_time: 3600
   become: true
   register: user_apt_packages
-  tags:
-    - user
-
-# Undo the cron log filter drop-in earlier converges installed.
-- name: Remove the cron log filters
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      for: cron.service
-  tags:
-    - user
-
-# journald reads a unit's filter patterns when the unit starts. Debian's
-# KillMode=process keeps running cron jobs alive across the restart.
-- name: Restart cron to drop its log filters
-  when: cron_service_d_override_conf_result.changed
-  systemd:
-    name: cron.service
-    state: restarted
-  become: true
   tags:
     - user
 
@@ -194,15 +161,6 @@
     user: "{{ ansible_user_id }}"
     key: "{{ (ssh_public_keys + '\n' + ssh_public_keys_additional) | trim }}"
     exclusive: true
-  tags:
-    - user
-
-# Git identity is owned by the stowed ~/.gitconfig. An included local override
-# would take precedence and let fleet hosts drift from that source of truth.
-- name: Remove local Git identity override
-  file:
-    path: "{{ ansible_user_dir }}/.gitconfig.local"
-    state: absent
   tags:
     - user
 

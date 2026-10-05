@@ -72,44 +72,6 @@
   register: _user_zoxide_path
   changed_when: false
 
-# Recreate the diversion earlier converges installed; the reconverges below
-# must hand the packaged hook back to systemd-sleep.
-- name: _verify | Divert the sysstat sleep hook as earlier converges did
-  community.general.dpkg_divert:
-    path: /usr/lib/systemd/system-sleep/sysstat.sleep
-    divert: /usr/lib/systemd/sysstat.sleep.distrib
-    rename: true
-  become: true
-
-- name: _verify | Check whether cron is installed
-  stat:
-    path: /usr/lib/systemd/system/cron.service
-  register: _user_cron_unit
-
-# Recreate the cron log filter earlier converges installed; the reconverges
-# below must take it out of the loaded unit.
-- name: _verify | Install the cron log filter as earlier converges did
-  when: _user_cron_unit.stat.exists
-  become: true
-  block:
-    - name: _verify | Create the cron drop-in directory
-      file:
-        path: /etc/systemd/system/cron.service.d
-        state: directory
-        mode: "0755"
-
-    - name: _verify | Write the cron log filter
-      copy:
-        dest: /etc/systemd/system/cron.service.d/override.conf
-        content: |
-          [Service]
-          LogFilterPatterns=~^pam_unix[(]cron:session[)]: session (opened|closed) for user
-        mode: "0644"
-
-    - name: _verify | Load the cron log filter
-      systemd:
-        daemon_reload: true
-
 # Stow must reject conflicts without installing tools ahead of the explicit installer.
 - name: _verify | Stow rejects conflicts and recovers incomplete deployment
   block:
@@ -163,35 +125,6 @@
     that:
       - user_dotfiles_stow.changed
       - user_mise_tools.changed
-
-- name: _verify | List dpkg diversions
-  command: dpkg-divert --list
-  register: _user_diversions
-  changed_when: false
-
-- name: _verify | Check the packaged sysstat sleep hook
-  stat:
-    path: /usr/lib/systemd/system-sleep/sysstat.sleep
-  register: _user_sysstat_sleep_hook
-
-- name: _verify | The sleep hook diversion is gone and the hook restored
-  assert:
-    that:
-      - "'sysstat.sleep' not in _user_diversions.stdout"
-      - _user_sysstat_sleep_hook.stat.exists
-    fail_msg: "{{ _user_diversions.stdout_lines }}"
-
-- name: _verify | Read the loaded cron log filters  # noqa: command-instead-of-module
-  when: _user_cron_unit.stat.exists
-  command: systemctl show --property=LogFilterPatterns --value cron.service
-  register: _user_cron_filters
-  changed_when: false
-
-- name: _verify | Cron no longer filters its log
-  when: _user_cron_unit.stat.exists
-  assert:
-    that: _user_cron_filters.stdout | trim | length == 0
-    fail_msg: "{{ _user_cron_filters.stdout }}"
 
 - name: _verify | Remove generated completions to exercise shell bootstrap
   file:
