@@ -45,7 +45,8 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="redis" \
-    --volume /mnt/services/redis:/data \
+    --volume /mnt/services/redis/config:/usr/local/etc/redis:ro \
+    --volume /mnt/services/redis/data:/data \
     --secret=redis_password,type=mount,target=redis_password \
     --user {{ redis_user.uid }}:{{ redis_user.gid }} \
     --network authelia \
@@ -56,7 +57,7 @@ ExecStart=/usr/bin/podman run \
     --health-start-period "30s" \
     --stop-timeout 30 \
     {{ redis_image }} \
-    sh -c 'exec redis-server /data/redis.conf --requirepass "$$(cat /run/secrets/redis_password)"'
+    sh -c 'exec redis-server /usr/local/etc/redis/redis.conf --requirepass "$$(cat /run/secrets/redis_password)"'
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
