@@ -1,6 +1,10 @@
 # Runner-host AMI for the nested-qemu GitLab instance executor: a stock Ubuntu
 # host that runs GitLab shell jobs and launches qemu/KVM guests from S3-hydrated
 # image bundles.
+#
+# Keep `inline` shell to one or two simple commands. Longer provisioner logic
+# goes in a checked-in .sh under packer/ (with `set -euo pipefail`), so
+# shellcheck and shfmt cover it and this stays declarative.
 
 packer {
   required_plugins {

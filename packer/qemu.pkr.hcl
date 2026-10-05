@@ -1,3 +1,8 @@
+# Keep `inline` shell to one or two simple commands. Longer provisioner or
+# post-processor logic goes in a checked-in .sh under packer/scripts/ (with
+# `set -euo pipefail`), so shellcheck and shfmt cover it and this stays
+# declarative.
+
 packer {
   required_plugins {
     qemu = {

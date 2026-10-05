@@ -35,8 +35,6 @@ Repository map and bootstrap: [README.md](README.md).
 
 **Ansible `shell:` blocks** start with `set -euo pipefail` and declare `executable: /bin/bash` (lint: `shell-strict-mode`; `_setup`/`_verify` exempt). Collapse `… | head` pipelines into `awk` (SIGPIPE under `pipefail`). No apostrophes inside `shell:`/`command:` block scalars, even in `#` comments — ansible's shlex pass reads `'` as an opening quote and fails task loading; YAML-level comments outside the scalar are fine.
 
-**Packer inline shell stays tiny.** Keep Packer `inline` shell blocks to one or two simple commands. Longer provisioner or post-processor scripts belong in checked-in `.sh` files under `packer/scripts/` or the relevant Packer subdirectory, with `set -euo pipefail`, so shellcheck/shfmt cover them and the HCL stays declarative.
-
 ## Repo Conventions
 
 ### Inventory layout
