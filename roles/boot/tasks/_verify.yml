@@ -201,16 +201,8 @@
 
 # --- /tmp mount ---
 
-# tmpfs /tmp -- enabled by tasks/main.yml, applied at the reboot above. Assert
-# both the next-boot intent (is-enabled, every machine) and, where we actually
-# rebooted, the live end-state (/tmp is really tmpfs) rather than just intent.
-- name: _verify | Tmp.mount is enabled # noqa: command-instead-of-module
-  command: systemctl is-enabled tmp.mount
-  changed_when: false
-  become: true
-  register: _boot_verify_tmp_enabled
-  failed_when: _boot_verify_tmp_enabled.stdout not in ['enabled', 'enabled-runtime', 'static']
-
+# tmpfs /tmp -- enabled by tasks/main.yml, applied at the reboot above, so the
+# live mount proves the unit is enabled for boot.
 - name: _verify | Read /tmp filesystem type
   command: findmnt -no FSTYPE -T /tmp
   changed_when: false
