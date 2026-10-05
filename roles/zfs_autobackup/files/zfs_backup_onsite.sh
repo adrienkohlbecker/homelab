@@ -20,6 +20,8 @@ fi
 # --keep-source 16384 is a high ceiling: with --no-snapshot the source
 # host's own local run owns source thinning, so this pull never prunes the
 # source; --keep-target does the real thinning of the received copies.
+# --set-properties takes one comma-separated list; a repeated flag replaces
+# the earlier value instead of adding to it.
 # No --progress flag: zfs-autobackup auto-enables progress when stderr is a
 # tty (operator run) and stays quiet under the timer -- passing --progress
 # would force it on and spam the journal.
@@ -32,8 +34,7 @@ zfs_autobackup_cmd=(zfs-autobackup
   --rollback
   --keep-source 16384
   --keep-target "10,1d1w,1w1m,1m10y"
-  --set-properties readonly=on
-  --set-properties mountpoint=none
+  --set-properties "readonly=on,mountpoint=none"
   --verbose
   --ssh-config /etc/zfs_autobackup_ssh_config
   --ssh-source "zfs_autobackup@$SSH_SOURCE"
