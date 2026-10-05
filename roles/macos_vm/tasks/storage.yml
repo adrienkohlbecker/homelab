@@ -2,26 +2,6 @@
 # ZFS volume, created or grown here, whose /dev/zvol path QEMU opens as a raw
 # block device.
 
-# rpool/libvirt held the workdir under macos-vm/ before the libvirt role
-# retired. Renaming it keeps the seeded OpenCore image and OVMF NVRAM, which
-# must not be re-seeded once a guest has used them; the moves flatten the
-# subdirectory onto the new mountpoint and drop libvirt's own config dumps.
-- name: storage | Adopt the retired libvirt dataset
-  shell: |
-    set -euo pipefail
-    zfs rename rpool/libvirt rpool/macos_vm
-    zfs set mountpoint=/var/lib/macos_vm rpool/macos_vm
-    mv /var/lib/macos_vm/macos-vm/* /var/lib/macos_vm/
-    rmdir /var/lib/macos_vm/macos-vm
-    rm -f /var/lib/macos_vm/net_default.xml /var/lib/macos_vm/pool_default.xml
-  args:
-    executable: /bin/bash
-    creates: /var/lib/macos_vm
-    removes: /var/lib/libvirt/images/macos-vm
-  become: true
-  tags:
-    - macos_vm
-
 - name: storage | Create and mount the workdir dataset
   import_role:
     name: zfs_dataset
