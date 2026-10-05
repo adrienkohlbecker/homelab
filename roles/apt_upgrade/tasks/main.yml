@@ -1,6 +1,10 @@
-- name: Run apt safe-upgrade
+# dist-upgrade, not upgrade: plain upgrade keeps back a package whose new
+# dependency carries an unsatisfiable Recommends. New kernel images recommend
+# grub, which the boot role holds, so upgrade would never move the kernel.
+# Holds still apply under dist-upgrade.
+- name: Run apt dist-upgrade
   apt:
-    upgrade: safe
+    upgrade: dist
     autoremove: true
     cache_valid_time: 3600
     lock_timeout: 300

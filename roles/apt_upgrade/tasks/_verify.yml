@@ -1,0 +1,79 @@
+# A new kernel image Recommends grub, which the boot role holds uninstalled, so
+# plain `apt-get upgrade` keeps the kernel metapackages back. Reproduce that
+# shape offline: probe 2 depends on a new image package whose only Recommends
+# is held and not installed.
+- name: _verify | Build the kept-back probe repository
+  shell:
+    cmd: |
+      set -euo pipefail
+      repo=/var/tmp/apt_upgrade_probe
+      rm -rf "$repo"
+      mkdir -p "$repo"
+      build() {
+        local dir
+        dir=$(mktemp -d)
+        mkdir "$dir/DEBIAN"
+        printf "%s\n" "Package: $1" "Version: $2" "Architecture: all" \
+          "Maintainer: probe <root@localhost>" "Description: apt_upgrade probe" \
+          ${3:+"$3"} >"$dir/DEBIAN/control"
+        dpkg-deb --root-owner-group --build "$dir" "$repo/$1_$2_all.deb" >/dev/null
+        rm -rf "$dir"
+      }
+      build apt-upgrade-probe 1
+      build apt-upgrade-probe 2 "Depends: apt-upgrade-probe-image-2"
+      build apt-upgrade-probe-image-2 1 "Recommends: apt-upgrade-probe-loader"
+      build apt-upgrade-probe-loader 1
+      cd "$repo"
+      for deb in *.deb; do
+        dpkg-deb --field "$deb"
+        printf "Filename: ./%s\nSize: %s\nSHA256: %s\n\n" \
+          "$deb" "$(stat -c %s "$deb")" "$(sha256sum "$deb" | cut -d " " -f 1)"
+      done >Packages
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _verify | Add the probe repository
+  copy:
+    content: "deb [trusted=yes] file:/var/tmp/apt_upgrade_probe ./\n"
+    dest: /etc/apt/sources.list.d/apt_upgrade_probe.list
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | Install probe 1
+  apt:
+    name: apt-upgrade-probe=1
+    update_cache: true
+  become: true
+
+- name: _verify | Hold the uninstalled loader the image recommends
+  command: apt-mark hold apt-upgrade-probe-loader
+  changed_when: true
+  become: true
+
+- name: _verify | Upgrade through the role
+  import_tasks: main.yml
+
+- name: _verify | Probe upgraded past the unsatisfiable recommendation
+  command:
+    argv:
+      - dpkg-query
+      - --show
+      - --showformat=${Version}
+      - apt-upgrade-probe
+  register: _apt_upgrade_verify_probe
+  failed_when: _apt_upgrade_verify_probe.stdout != '2'
+  changed_when: false
+
+- name: _verify | Held loader stays uninstalled
+  command:
+    argv:
+      - dpkg-query
+      - --show
+      - --showformat=${db:Status-Status}
+      - apt-upgrade-probe-loader
+  register: _apt_upgrade_verify_loader
+  failed_when: _apt_upgrade_verify_loader.stdout != 'not-installed'
+  changed_when: false
