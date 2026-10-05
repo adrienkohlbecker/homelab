@@ -247,7 +247,7 @@ SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-author
 
 ### Test environment design
 
-Details in [notes/test_environment_design.md](notes/test_environment_design.md). Lab and Pug start from stock Ubuntu; Fox starts from the Hetzner ZFS Packer image. There are two maintained and promoted **QEMU test-fixture** Packer variants: `lab`, the default integration fixture with Lab-style mirrored storage, and `pug`, for roles that need Pug's single-rpool partitioning or apoc layout. Both contain only the base OS and storage layout; role dependencies are installed by each test cell. The Hetzner image and AWS qemu-host AMI are separate Packer builds, not role-test fixtures. `minimal` remains a downloaded vanilla cloud-image fixture for non-ZFS, GRUB, cloud-init, and fresh-install branches; it is not built or promoted by this repository.
+Three fixtures: `lab` (default; Lab-style mirrored root plus data pools), `pug` (Pug's single-rpool partitioning and apoc layout), and `minimal` (the downloaded vanilla cloud image, for non-ZFS, GRUB, cloud-init, and fresh-install branches). The Packer-built `lab`/`pug` images carry only the base OS and storage layout; each cell's `_setup.yml` installs role dependencies. Details: [notes/test_environment_design.md](notes/test_environment_design.md).
 
 ## Continuous Integration
 
