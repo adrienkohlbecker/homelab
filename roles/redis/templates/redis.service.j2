@@ -18,7 +18,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+TimeoutSec=60
 RestartSec=5
 RestartSteps=6
 RestartMaxDelaySec=10min
@@ -53,8 +53,8 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd {{ ["sh", "-c", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli -e ping"] | json_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
-    --health-start-period "100s" \
-    --stop-timeout 120 \
+    --health-start-period "30s" \
+    --stop-timeout 30 \
     {{ redis_image }} \
     sh -c 'exec redis-server /data/redis.conf --requirepass "$$(cat /run/secrets/redis_password)"'
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
