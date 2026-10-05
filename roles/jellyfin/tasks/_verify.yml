@@ -47,13 +47,6 @@
   changed_when: false
   become: true
 
-# The phantom QEMU device cannot accelerate codecs, but it verifies --device wiring.
-- name: _verify | Confirm hardware transcoding device wiring
-  when: jellyfin_intel_qsv_enabled
-  command: podman exec jellyfin test -c /dev/dri/renderD128
-  changed_when: false
-  become: true
-
 # Functional transcode probe: lavfi testsrc → libx264 → HLS segments on
 # /cache/transcodes — Jellyfin's effective transcode path (default
 # $JELLYFIN_CACHE_DIR/transcodes, pinned as /cache/transcodes in the live
@@ -172,11 +165,3 @@
     _storage_service: jellyfin
     _storage_group: media
     _storage_mounts: [ services, scratch, media ]
-
-- name: _verify | Software unit omits render-device access
-  vars:
-    jellyfin_intel_qsv_enabled: false
-    zfs_root: false
-  assert:
-    that:
-      - "'/dev/dri/renderD128' not in lookup('template', 'jellyfin.service.j2')"

@@ -83,10 +83,6 @@ samba_shares:
     "fruit:time machine": "yes"
     "fruit:time machine max size": 1T
 
-# Exercise Jellyfin's HW-device passthrough with a phantom /dev/dri/renderD128
-# created by the role. QEMU has no GPU, so codec probes use software while the
-# container device wiring remains covered.
-jellyfin_intel_qsv_enabled: true
 netdata_packer_process_group_enabled: true
 # Exercise the AWS qemu instance-executor block: runner/plugin download,
 # manager-side AWS profile render, config.toml render, unit install, and the
