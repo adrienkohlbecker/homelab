@@ -35,7 +35,6 @@
   become: true
 
 - name: artifacts | Seed per-VM OpenCore image
-  when: not ansible_check_mode
   script:
     cmd: >-
       seed_opencore.py
@@ -62,9 +61,7 @@
   become: true
 
 - name: artifacts | Fetch BaseSystem recovery image
-  when:
-    - macos_vm_install_mode
-    - not (ansible_check_mode and (macos_vm_artifacts_dir_result.changed or macos_vm_workdir_result.changed))
+  when: macos_vm_install_mode
   ansible.builtin.command:
     # fetch-macOS-v2.py calls os.get_terminal_size() while verifying the
     # chunklist, so give it a pseudo-terminal even though Ansible is non-TTY.
@@ -85,7 +82,6 @@
         --outdir {{ macos_vm_workdir }}
         --basename BaseSystem.partial
       - /dev/null
-    chdir: "{{ macos_vm_workdir }}"
     creates: "{{ macos_vm_workdir }}/BaseSystem.dmg"
   become: true
   register: macos_vm_basesystem_result
@@ -114,9 +110,7 @@
 # download takes the name that skips the fetch on later runs; the image moves
 # last because it is that sentinel.
 - name: artifacts | Publish verified BaseSystem download
-  when:
-    - not ansible_check_mode
-    - macos_vm_basesystem_result.changed | default(false)
+  when: macos_vm_basesystem_result.changed | default(false)
   ansible.builtin.command:
     argv:
       - mv
@@ -137,7 +131,6 @@
     # qemu-img fails the read on chunk types it cannot decode, such as LZFSE
     # without its module, so a successful conversion is complete.
     - name: artifacts | Convert BaseSystem DMG to raw image
-      when: not (ansible_check_mode and (macos_vm_workdir_result.changed or macos_vm_basesystem_result.changed | default(false)))
       ansible.builtin.command:
         argv:
           - qemu-img
@@ -152,9 +145,7 @@
       register: macos_vm_basesystem_convert_result
 
     - name: artifacts | Publish converted BaseSystem image
-      when:
-        - not ansible_check_mode
-        - macos_vm_basesystem_convert_result.changed | default(false)
+      when: macos_vm_basesystem_convert_result.changed | default(false)
       ansible.builtin.command:
         argv:
           - mv
