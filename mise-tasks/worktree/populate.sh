@@ -10,8 +10,10 @@ set -euo pipefail
 wt="${1:-${usage_worktree:?Usage: $(basename "$0") <worktree-path>}}"
 wt=$(cd "$wt" && pwd)
 
-# Main repo = first entry in `worktree list` (always the real one).
-repo=$(git -C "$wt" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
+# shellcheck source=mise-tasks/worktree/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+repo=$(main_worktree "$wt")
 
 # Codex creates managed worktrees with a detached HEAD. Give each one a stable,
 # repository-visible branch named after its unique worktree directory, matching

@@ -3,8 +3,10 @@
 worktree_task="worktree:${0##*/}"
 worktree_task="${worktree_task%.sh}"
 
+# The first `worktree list` entry is always the main checkout. Optional $1 is
+# any directory inside the repository (default: the current directory).
 main_worktree() {
-  git worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}'
+  git -C "${1:-.}" worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}'
 }
 
 resolve_side_worktree() {

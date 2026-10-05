@@ -12,7 +12,10 @@
 # logic runs from Claude Code's WorktreeCreate hook (.claude/settings.json).
 set -euo pipefail
 
-repo=$(git worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}')
+# shellcheck source=mise-tasks/worktree/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+repo=$(main_worktree)
 
 # Worktree location: --path wins (relative paths resolve against the caller's
 # cwd, absolute taken verbatim); otherwise the conventional .worktrees/<name>.
