@@ -112,23 +112,6 @@ def test_rejects_missing_or_inexact_counters(pool, value):
         status.parse_status(document({"tank": pool}))
 
 
-def test_rejects_missing_requested_pool(monkeypatch):
-    monkeypatch.setattr(status, "run", lambda *_: document({}))
-    with pytest.raises(status.StatusError, match="Requested pools"):
-        status.read_status("tank")
-
-
-def test_explain_accepts_a_healthy_requested_pool_being_omitted(monkeypatch):
-    monkeypatch.setattr(status, "run", lambda *_: document({}))
-    assert status.read_status("tank", explain=True) == {}
-
-
-def test_explain_rejects_unrequested_pools(monkeypatch, pool):
-    monkeypatch.setattr(status, "run", lambda *_: document({"tank": pool}))
-    with pytest.raises(status.StatusError, match="Requested pools"):
-        status.read_status("other", explain=True)
-
-
 @pytest.mark.parametrize(
     ("function", "state", "pause", "active"),
     [

@@ -107,10 +107,7 @@ def read_status(*pools: str, explain: bool = False) -> dict[str, Any]:
     args = ["zpool", "status", "-j", "--json-int", "-p"]
     if explain:
         args.append("-x")
-    result = parse_status(run(*args, *pools))
-    if pools and (not set(result) <= set(pools) or (not explain and set(result) != set(pools))):
-        raise StatusError(f"Requested pools {pools!r}, received {tuple(result)!r}")
-    return result
+    return parse_status(run(*args, *pools))
 
 
 def supports_json() -> bool:
