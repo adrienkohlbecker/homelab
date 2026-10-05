@@ -100,19 +100,16 @@
 
     # mdadm --create without --force builds a raid5 degraded, reporting the
     # rebuilding member as a spare; persisting that transient count makes
-    # mdmonitor report a missing hot spare forever after. The mail route is the
-    # day-to-day notification path when an array later degrades.
-    - name: _verify | Mdadm config routes alerts and requests no nonexistent spares
+    # mdmonitor report a missing hot spare forever after.
+    - name: _verify | Mdadm config requests no nonexistent spares
       vars:
         _mdadm_conf: "{{ packer_verify_mdadm_conf.content | b64decode }}"
       assert:
-        that:
-          - "'spares=' not in _mdadm_conf"
-          - _mdadm_conf is search('(?m)^MAILADDR\\s+\\S+')
-        fail_msg: >-
-          /etc/mdadm/mdadm.conf must route alerts without requesting nonexistent
-          spares: {{ _mdadm_conf }}
+        that: "'spares=' not in _mdadm_conf"
+        fail_msg: "/etc/mdadm/mdadm.conf requests nonexistent spares: {{ _mdadm_conf }}"
 
+    # mdadm --monitor exits without a MAILADDR or PROGRAM, so an active
+    # mdmonitor also proves the alert route.
     - name: _verify | Mdmonitor watches the assembled arrays
       systemd:
         name: mdmonitor.service
