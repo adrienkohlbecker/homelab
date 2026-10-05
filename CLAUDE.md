@@ -26,7 +26,7 @@ Repository map: [README.md](README.md).
 
 - Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, `mise install`, then `uv sync` for Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - **op:// env refs only resolve under `op run --`.** Toml tasks wrap explicitly; file-based tasks under `mise-tasks/` do **not** — mise exports the literal `op://…` string. Fix: re-exec under `op run --` behind a guard env var.
-- Lint: `mise run lint` runs every linter in parallel; `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
+- Lint: `mise run lint` runs every linter in parallel; `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). A git `pre-push` hook (installed by `mise.toml` `[hooks]`) runs the full `mise run lint`.
 - Skills: `/triage <service>` investigates a service end-to-end (resolve hosts, gather state, summarize). Skill and hook wiring for both agents: [.agents/README.md](.agents/README.md).
 
 ## Coding Style & Naming Conventions

@@ -95,6 +95,18 @@ python.uv_venv_auto = "create|source"
 # The conda backend (selene) is still gated behind experimental.
 experimental = true
 
+[hooks]
+# Gate every push on the full lint, whoever runs it. The hook lives in the
+# common git dir so linked worktrees share it, and a core.hooksPath shim that
+# chains to repo hooks finds it there too. Idempotent: skips an existing hook.
+enter = '''
+hook=$(git rev-parse --path-format=absolute --git-common-dir)/hooks/pre-push
+test -x "$hook" || {
+  printf '#!/bin/sh\nexec mise run lint\n' >"$hook"
+  chmod +x "$hook"
+}
+'''
+
 [tasks."packer:init"]
 description = "packer init (forwards args)"
 dir = "{{config_root}}/packer"
