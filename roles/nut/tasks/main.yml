@@ -189,10 +189,6 @@
              if nut_mode_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed
              else 'started' }}
 
-    # state is omitted under qemu_test -- the fixture has no real UPS to reach, so
-    # the unit is only enabled (it still starts at the _site_test reboot and idles
-    # on NOCOMM retries, which upsmon tolerates indefinitely).
-    #
     # restart (not `upsmon -c reload`) is deliberate: reload cannot change
     # SHUTDOWNCMD or POWERDOWNFLAG -- the privileged (root) half keeps its
     # startup copy (upsmon split-process model). The cost is that a config converge
@@ -205,9 +201,7 @@
         # nut-client.service is a symlink to nut-monitor.service (the upsmon unit).
         name: nut-client.service
         enabled: true
-        state: >-
-          {{ ('restarted' if nut_upsmon_conf.changed or nut_upssched_conf.changed else 'started')
-             if not qemu_test else omit }}
+        state: "{{ 'restarted' if nut_upsmon_conf.changed or nut_upssched_conf.changed else 'started' }}"
 
     - name: Enable fcgiwrap socket
       systemd:

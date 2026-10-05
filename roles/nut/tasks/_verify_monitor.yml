@@ -38,10 +38,10 @@
     replace: 'SHUTDOWNCMD "/usr/bin/touch /tmp/nut_fsd_marker"'
   become: true
 
-# converge leaves the unit enabled but unstarted under qemu (no UPS);
-# start it here against the dummy upsd, on the still-benign OL
-# frame, so it is connected and polling before the on-battery flips below.
-- name: _verify | Start upsmon against the dummy upsd
+# upsmon's privileged half keeps the SHUTDOWNCMD it read at startup, so
+# restart it to pick up the marker. The dummy frame is still the benign OL,
+# so it is connected and polling before the on-battery flips below.
+- name: _verify | Restart upsmon onto the marker SHUTDOWNCMD
   systemd:
     name: nut-monitor.service
     state: restarted
