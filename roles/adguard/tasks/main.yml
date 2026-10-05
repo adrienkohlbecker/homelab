@@ -176,6 +176,7 @@
   tags:
     - adguard
 
+# Restart one DNS peer at a time so both resolvers are never down together.
 - name: Manage adguard service
   import_role:
     name: systemd_unit
@@ -187,7 +188,7 @@
         {{ (not ansible_check_mode or adguard_user.uid is defined)
            and adguard_network_info.networks | default([]) | length > 0 }}
       restart: "{{ adguard_network.changed or adguard_config.changed or adguard_tls_certs.changed }}"
-      throttle: 1
+  throttle: 1
   tags:
     - adguard
 

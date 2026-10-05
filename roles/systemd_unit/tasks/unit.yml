@@ -6,7 +6,6 @@
 #                     the host cannot satisfy (pair it with start: false)
 #   start             default true; false enables without touching state
 #   restart           default false; restart an already-active unit
-#   throttle          default 0; limits lifecycle changes across hosts
 - name: unit | Install unit file
   import_tasks: install.yml
 
@@ -76,7 +75,6 @@
     - _systemd_unit_condition
     - systemd_unit_args.start | default(true)
     - _systemd_unit_enable is not skipped
-  throttle: "{{ systemd_unit_args.throttle | default(0) }}"
   systemd:
     name: "{{ _systemd_unit_name }}"
     state: >-
