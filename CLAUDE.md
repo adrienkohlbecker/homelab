@@ -20,15 +20,13 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Production*.
 - **DO NOT add tautological checks to role `_verify.yml` files.** A check that only confirms a converge task wrote the requested file or value proves nothing beyond Ansible's own result. Exercise the consuming binary or service and assert observable behavior; if no meaningful functional assertion is possible, omit the check.
 
-## Build, Test, and Development Commands
+## Development Commands
 
 Repository map: [README.md](README.md).
 
 - Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install`. `python.uv_venv_auto` auto-sources `.venv`; `uv sync` populates Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - **op:// env refs only resolve under `op run --`.** Toml tasks wrap explicitly; file-based tasks under `mise-tasks/` do **not** — mise exports the literal `op://…` string. Fix: re-exec under `op run --` behind a guard env var.
-- Refresh a fixture image: `mise run packer:build [lab|pug]` (parallel; `--ubuntu resolute` for another release). See [notes/test_environment_design.md](notes/test_environment_design.md).
 - Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, ruff/pyright, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
-- Replay a kept fixture with the `ansible-playbook` command printed by `testrole.py --keep`; add `--start-at-task 'TASK NAME'` or `--step` to resume within the phase. The command uses the staged playbook and roles, so rerun `testrole.py` after editing repository code. `mise run ansible` targets production and must not be used for fixture recovery.
 
 ## Workflows — use the skill, don't reinvent
 
@@ -185,19 +183,13 @@ Default for new timers/services is **system-scope**. Reach for user-scope (linge
 
 Containers reach co-located podman services via **`<name>.dns.podman`** (aardvark-dns), never a host port or hard-coded IP. Both producer and consumer create the `containers.podman.podman_network` independently (idempotent). Requires the **netavark** backend with `disable_dns: false`. Canonical: [roles/mosquitto/](roles/mosquitto) (producer) + [roles/z2m/](roles/z2m) (consumer). Target network name or gateway IP, never an `ethN` index.
 
-## Testing Guidelines
+## Testing
 
-The harness lives in `test/` (Python, asyncio).
+The harness lives in `test/` (Python, asyncio). Fixtures: `lab` (default; Lab-style mirrored root plus data pools), `pug` (Pug's single-rpool partitioning and apoc layout), and `minimal` (the downloaded vanilla cloud image, for non-ZFS, GRUB, cloud-init, and fresh-install branches). The Packer-built `lab`/`pug` images carry only the base OS and storage layout — each cell's `_setup.yml` installs role dependencies — and refresh with `mise run packer:build [lab|pug]` (`--ubuntu resolute` for another release). Details: [notes/test_environment_design.md](notes/test_environment_design.md).
 
-### Harness CLI
-
-`test/testrole.py <role>` boots `lab` (default) and applies the role end-to-end. `test/testall.py` fans out role × machine in parallel. Flags: `--machine {minimal,lab,pug}`, `--keep`, `testall.py --retry-failed`. Exit codes: `0` success, `1` converge, `124` timeout, `125` idempotence, `130` cancelled. Failed-run artifacts → `test/out/<machine>.<ubuntu>.<role>.*.ansi`. Packer artifact trees live under `/mnt/scratch/homelab_ci/<codename>/` (Linux) or `packer/artifacts/<codename>/` (Mac); `minimal` downloads and caches the upstream Ubuntu cloud image instead. macOS needs `xorriso` for its cloud-init seed ISO.
-
-**Flake policy:** every wait in the harness is **bounded** — a stuck boot surfaces as a quick failure, never a silent hang. Don't paper over flakes with auto-retry; fix the unbounded wait.
-
-### Test environment design
-
-Three fixtures: `lab` (default; Lab-style mirrored root plus data pools), `pug` (Pug's single-rpool partitioning and apoc layout), and `minimal` (the downloaded vanilla cloud image, for non-ZFS, GRUB, cloud-init, and fresh-install branches). The Packer-built `lab`/`pug` images carry only the base OS and storage layout; each cell's `_setup.yml` installs role dependencies. Details: [notes/test_environment_design.md](notes/test_environment_design.md).
+- `test/testrole.py <role>` boots `lab` (default) and applies the role end-to-end; `test/testall.py` fans out role × machine in parallel. Flags: `--machine {minimal,lab,pug}`, `--keep`, `testall.py --retry-failed`. Exit codes: `0` success, `1` converge, `124` timeout, `125` idempotence, `130` cancelled. Failed-run artifacts → `test/out/<machine>.<ubuntu>.<role>.*.ansi`.
+- Replay a kept fixture with the `ansible-playbook` command printed by `testrole.py --keep`; add `--start-at-task 'TASK NAME'` or `--step` to resume within the phase. The command uses the staged playbook and roles, so rerun `testrole.py` after editing repository code. `mise run ansible` targets production and must not be used for fixture recovery.
+- **Flake policy:** every wait in the harness is **bounded** — a stuck boot surfaces as a quick failure, never a silent hang. Don't paper over flakes with auto-retry; fix the unbounded wait.
 
 ## Continuous Integration
 

@@ -6,7 +6,7 @@
 # lint had better be clean. Exit 2 surfaces stderr to the agent and blocks the
 # tool execution.
 #
-# AGENTS.md ("Build, Test, and Development Commands") says "Run full
+# AGENTS.md ("Development Commands") says "Run full
 # `mise run lint` before pushing"; this hook makes that machine-enforced.
 set -euo pipefail
 
