@@ -130,6 +130,7 @@
 # interface while all.accept_source_route keeps its default 0 (the
 # kernel ANDs it with the interface value). The others already equal
 # the kernel default.
+# Drop this task once lab and pug have converged.
 - name: Remove retired network-stack sysctl pins
   ansible.posix.sysctl:
     name: "{{ item }}"
