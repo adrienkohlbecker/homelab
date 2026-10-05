@@ -1,8 +1,10 @@
 // Managed by Ansible (roles/headscale). HuJSON (JSON + comments/trailing commas).
 //
 // This single-household tailnet intentionally lets every member reach every
-// other member. Subnet and exit-node routes are approved explicitly by the
-// tailscale role, so this policy needs no groups, tagOwners, or autoApprovers.
+// other member, so it needs no groups or tagOwners. Subnet and exit-node routes
+// are approved explicitly by the tailscale role rather than by autoApprovers.
+// That is a choice, not a tag requirement: headscale accepts user principals
+// such as servers@ as auto-approvers.
 {
   "acls": [
     {
