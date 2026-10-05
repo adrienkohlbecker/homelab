@@ -380,6 +380,10 @@ ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM/cmdline)
 
 # Configure rEFInd
 
+# Run refind-install once, explicitly, below. Left at its default, the
+# package postinst runs it on this install and again on every upgrade.
+echo "refind refind/install_to_esp boolean false" | debconf-set-selections
+
 # Noble's rEFInd 0.13.2 wedges the second boot under edk2-stable202408; the
 # packer template passes the pinned newer package only for releases that need it.
 if [ -n "${REFIND_DEB_URL:-}" ]; then

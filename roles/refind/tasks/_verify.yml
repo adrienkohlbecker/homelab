@@ -1,3 +1,21 @@
+# The package postinst decides from debconf whether to run refind-install, and
+# would rewrite the ESP before the boot-chain check below if it did.
+- name: _verify | Rerun the refind package configuration
+  command: dpkg-reconfigure --frontend noninteractive refind
+  environment:
+    LC_ALL: C.UTF-8
+  register: _refind_reconfigure
+  changed_when: false
+  become: true
+
+# debconf's confmodule moves maintainer-script output to stderr.
+- name: _verify | The postinst leaves the ESP to this role
+  vars:
+    _output: "{{ _refind_reconfigure.stdout }}{{ _refind_reconfigure.stderr }}"
+  assert:
+    that: "'Not installing rEFInd to the ESP' in _output"
+    fail_msg: "{{ _output }}"
+
 # One end-to-end check of the boot chain this role installs. rEFInd records
 # the entry it booted as PreviousBoot, and only writes when that changes.
 # refind.conf sets `use_nvram false`, so the record lands in

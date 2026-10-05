@@ -139,6 +139,20 @@
     - refind
     - zfsbootmenu
 
+# Left at its default (true), the package postinst runs refind-install on every
+# upgrade: it rewrites the ESP, may sign with local keys and may add an NVRAM
+# entry. This role installs the rEFInd binaries itself, and the boot role owns
+# the NVRAM entries.
+- name: Keep the refind package from running refind-install
+  debconf:
+    name: refind
+    question: refind/install_to_esp
+    vtype: boolean
+    value: false
+  become: true
+  tags:
+    - refind
+
 # Noble's own rEFInd is too old to survive a warm reboot under edk2-stable202408
 # (see refind_noble_release in versions.yml); later releases use the archive.
 - name: Download the pinned rEFInd package
