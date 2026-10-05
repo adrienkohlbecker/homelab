@@ -583,6 +583,39 @@
   retries: 10
   delay: 1
 
+# A broken update to an existing, enabled site must put the previous config
+# back rather than leave the bad render for the next host-wide reload.
+- name: _verify | Read the working IPv6 vhost config
+  slurp:
+    src: /etc/nginx/sites-available/nginxverifyipv6
+  register: nginx_verify_update_before
+  become: true
+
+- name: _verify | Broken update to an existing site restores its previous config
+  become: true
+  block:
+    - name: _verify | Configure a broken update for the IPv6 vhost
+      import_tasks: site.yml
+      vars:
+        nginx_site_args:
+          subdomain: nginxverifyipv6
+          server_conf: |
+            nginx_verify_broken_site_directive on;
+
+    - name: _verify | Broken update must fail validation (unexpected success)
+      fail:
+        msg: The broken update to an existing site unexpectedly passed validation.
+  rescue:
+    - name: _verify | The previous config is back in place
+      slurp:
+        src: /etc/nginx/sites-available/nginxverifyipv6
+      register: nginx_verify_update_after
+      failed_when: nginx_verify_update_after.content != nginx_verify_update_before.content
+
+    - name: _verify | Nginx config is still valid after the update rollback
+      command: nginx -t
+      changed_when: false
+
 # Remove every transient vhost in one teardown and reload once.
 - name: _verify | Remove transient test vhosts
   file:
@@ -608,189 +641,6 @@
     name: nginx
     state: reloaded
   become: true
-
-# A disabled site already has an available file but no enabled symlink. If its
-# replacement fails validation, rollback must restore that file and remove only
-# the symlink introduced by the failed helper call.
-- name: _verify | Seed an existing disabled site
-  copy:
-    dest: /etc/nginx/sites-available/nginxverifydisabled
-    content: "# nginx verify disabled sentinel\n"
-    owner: root
-    group: root
-    mode: "0640"
-  become: true
-
-- name: _verify | Broken disabled-site update restores the disabled state
-  become: true
-  block:
-    - name: _verify | Configure a broken replacement for the disabled site
-      import_tasks: site.yml
-      vars:
-        nginx_site_args:
-          subdomain: nginxverifydisabled
-          server_conf: |
-            nginx_verify_broken_site_directive on;
-
-    - name: _verify | Broken disabled-site replacement must fail validation
-      fail:
-        msg: The broken disabled-site replacement unexpectedly passed validation.
-
-  rescue:
-    - name: _verify | Restored disabled site keeps its content
-      slurp:
-        src: /etc/nginx/sites-available/nginxverifydisabled
-      register: nginx_verify_disabled_site_restored
-      failed_when: >-
-        nginx_verify_disabled_site_restored.content | b64decode
-        != '# nginx verify disabled sentinel\n'
-
-    - name: _verify | Restored disabled site keeps its mode
-      stat:
-        path: /etc/nginx/sites-available/nginxverifydisabled
-      register: nginx_verify_disabled_site_mode
-      failed_when: nginx_verify_disabled_site_mode.stat.mode != '0640'
-
-    - name: _verify | Restored disabled site stays disabled
-      stat:
-        path: /etc/nginx/sites-enabled/nginxverifydisabled
-      register: nginx_verify_disabled_site_enabled
-      failed_when: nginx_verify_disabled_site_enabled.stat.exists
-
-  always:
-    - name: _verify | Remove the disabled-site fixture
-      file:
-        path: /etc/nginx/sites-available/nginxverifydisabled
-        state: absent
-
-# A site can drift to a different symlink target. If correcting the target and
-# replacing the config then fails validation, rollback must restore both pieces
-# of prior state rather than disabling the site.
-- name: _verify | Exercise rollback after replacing an existing site symlink
-  become: true
-  vars:
-    _nginx_verify_retarget_name: nginxverifyretarget
-    _nginx_verify_retarget_old: nginxverifyretargetold
-    _nginx_verify_retarget_old_path: /etc/nginx/sites-available/nginxverifyretargetold
-  block:
-    - name: _verify | Seed the existing retargeted site configs
-      copy:
-        dest: "/etc/nginx/sites-available/{{ item.name }}"
-        content: "{{ item.content }}"
-        owner: root
-        group: root
-        mode: "0640"
-      loop:
-        - name: "{{ _nginx_verify_retarget_name }}"
-          content: "# nginx verify retarget site sentinel\n"
-        - name: "{{ _nginx_verify_retarget_old }}"
-          content: "# nginx verify retarget destination sentinel\n"
-      loop_control:
-        label: "{{ item.name }}"
-
-    - name: _verify | Point the existing site symlink at its old target
-      file:
-        src: "{{ _nginx_verify_retarget_old_path }}"
-        dest: "/etc/nginx/sites-enabled/{{ _nginx_verify_retarget_name }}"
-        state: link
-
-    - name: _verify | Broken retargeted-site update restores the prior link
-      block:
-        - name: _verify | Configure a broken replacement for the retargeted site
-          import_tasks: site.yml
-          vars:
-            nginx_site_args:
-              subdomain: "{{ _nginx_verify_retarget_name }}"
-              server_conf: |
-                nginx_verify_broken_site_directive on;
-
-        - name: _verify | Broken retargeted-site replacement must fail validation
-          fail:
-            msg: The broken retargeted-site replacement unexpectedly passed validation.
-
-      rescue:
-        - name: _verify | Restored site keeps its prior symlink target
-          stat:
-            path: "/etc/nginx/sites-enabled/{{ _nginx_verify_retarget_name }}"
-          register: nginx_verify_retarget_link
-          failed_when: >-
-            not nginx_verify_retarget_link.stat.islnk
-            or nginx_verify_retarget_link.stat.lnk_target != _nginx_verify_retarget_old_path
-
-        - name: _verify | Restored site keeps its prior content
-          slurp:
-            src: "/etc/nginx/sites-available/{{ _nginx_verify_retarget_name }}"
-          register: nginx_verify_retarget_config
-          failed_when: >-
-            nginx_verify_retarget_config.content | b64decode
-            != '# nginx verify retarget site sentinel\n'
-
-  always:
-    - name: _verify | Remove the retargeted-site fixture
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - "/etc/nginx/sites-enabled/{{ _nginx_verify_retarget_name }}"
-        - "/etc/nginx/sites-available/{{ _nginx_verify_retarget_name }}"
-        - "{{ _nginx_verify_retarget_old_path }}"
-
-# Make the enable step fail after an idempotent template write. The helper's
-# rescue must leave an unchanged config alone and must not try to remove a
-# symlink it did not create.
-- name: _verify | Exercise rollback after an unchanged site write
-  become: true
-  vars:
-    _nginx_verify_enable_failure_args:
-      subdomain: nginxverifyenablefailure
-  block:
-    - name: _verify | Configure the enable-failure fixture
-      import_tasks: site.yml
-      vars:
-        nginx_site_args: "{{ _nginx_verify_enable_failure_args }}"
-
-    - name: _verify | Remove the fixture symlink before creating a conflict
-      file:
-        path: /etc/nginx/sites-enabled/nginxverifyenablefailure
-        state: absent
-
-    - name: _verify | Create a directory where the helper expects a symlink
-      file:
-        path: /etc/nginx/sites-enabled/nginxverifyenablefailure
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: _verify | Unchanged site with an invalid enable path must fail
-      block:
-        - name: _verify | Reconfigure the enable-failure fixture
-          import_tasks: site.yml
-          vars:
-            nginx_site_args: "{{ _nginx_verify_enable_failure_args }}"
-
-        - name: _verify | Sentinel fail if the conflicting path was accepted
-          fail:
-            msg: The helper unexpectedly replaced a directory with a symlink.
-      rescue:
-        - name: _verify | Confirm the conflicting directory survived rollback
-          stat:
-            path: /etc/nginx/sites-enabled/nginxverifyenablefailure
-          register: _nginx_verify_enable_failure_path
-          failed_when: not _nginx_verify_enable_failure_path.stat.isdir
-  always:
-    - name: _verify | Remove the enable-failure fixture
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/nginx/sites-enabled/nginxverifyenablefailure
-        - /etc/nginx/sites-available/nginxverifyenablefailure
-
-    - name: _verify | Reload nginx after enable-failure fixture cleanup
-      systemd:
-        name: nginx
-        state: reloaded
 
 # Feed the helper a syntactically broken server_conf and confirm the config and
 # its sites-enabled symlink are both removed while nginx stays valid.

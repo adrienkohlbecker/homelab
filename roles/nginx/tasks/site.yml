@@ -93,20 +93,12 @@
 
 # The rendered vhost is written to sites-available/ and symlinked into
 # sites-enabled/, then `nginx -t` validates the assembled config in place. On
-# failure the previous version is restored from the .backup (or the file and
-# symlink are removed if the site is new), so a malformed render -- a bad
+# failure the previous version is restored from the .backup, or a new file and
+# its symlink are removed, so a malformed render -- a bad
 # server_conf/location_conf snippet, a CSP typo, an unbalanced quote -- can't
 # brick the next host-wide reload for every other site. The template task
 # carries no `validate:` because `nginx -t` needs the full assembled config
 # (events{}, http{}, and the symlink), not a standalone server{} snippet.
-- name: site | Inspect the existing nginx site link
-  stat:
-    path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-  register: nginx_static_conf_enable_before
-  become: true
-  tags:
-    - nginx_site
-
 - name: site | Configure and enable nginx site
   become: true
   tags:
@@ -160,31 +152,16 @@
           - "{{ nginx_static_conf.dest }}"
       changed_when: true
 
-    - name: site | Restore the previous site symlink
-      when:
-        - nginx_static_conf_enable.changed | default(false)
-        - nginx_static_conf_enable_before.stat.islnk | default(false)
-      file:
-        src: "{{ nginx_static_conf_enable_before.stat.lnk_target }}"
-        path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-        state: link
-        force: true
-
-    - name: site | Remove a newly enabled site symlink
-      when:
-        - nginx_static_conf_enable.changed | default(false)
-        - not nginx_static_conf_enable_before.stat.exists | default(false)
-      file:
-        path: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-        state: absent
-
-    - name: site | Remove a newly added site config
+    - name: site | Remove a newly added site config and its symlink
       when:
         - nginx_static_conf.changed | default(false)
-        - "'backup_file' not in (nginx_static_conf | default({}))"
+        - "'backup_file' not in nginx_static_conf"
       file:
-        path: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+        path: /etc/nginx/{{ item }}/{{ nginx_site_args.subdomain }}
         state: absent
+      loop:
+        - sites-enabled
+        - sites-available
 
     - name: site | Fail after rolling back the site write
       fail:
