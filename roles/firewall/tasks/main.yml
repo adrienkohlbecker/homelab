@@ -122,33 +122,6 @@
   tags:
     - firewall
 
-# Retired pins leave the persisted file without a live write, so each
-# reverts to its default at the next boot. The nftables non-SYN drop
-# rules cover what nf_conntrack_tcp_loose=0 did. Ubuntu's own
-# network-security sysctl file already sets loose rp_filter=2 on `all`
-# and `default`, and the kernel refuses source-routed packets on every
-# interface while all.accept_source_route keeps its default 0 (the
-# kernel ANDs it with the interface value). The others already equal
-# the kernel default.
-# Drop this task once lab and pug have converged.
-- name: Remove retired network-stack sysctl pins
-  ansible.posix.sysctl:
-    name: "{{ item }}"
-    state: absent
-    sysctl_file: /etc/sysctl.d/90-firewall-hardening.conf
-    reload: false
-  loop:
-    - net.netfilter.nf_conntrack_tcp_loose
-    - net.ipv4.tcp_syncookies
-    - net.ipv4.icmp_echo_ignore_broadcasts
-    - net.ipv4.icmp_ignore_bogus_error_responses
-    - net.ipv4.conf.default.rp_filter
-    - net.ipv4.conf.all.accept_source_route
-    - net.ipv4.conf.default.accept_source_route
-  become: true
-  tags:
-    - firewall
-
 # `nft -c` cannot detect a valid ruleset that drops the operator's SSH
 # path. Before replacing an active ruleset, arm a 60-second timer that
 # restores the last confirmed snapshot; cancel it only after Ansible
