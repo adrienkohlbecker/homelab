@@ -1,6 +1,7 @@
 # Implements the community unifios-utilities /data/on_boot.d/*.sh convention
 # locally; installing its package would collide with this unit and directory.
-# The framework survives UniFi firmware updates because /data persists.
+# The scripts live on /data; this unit lives in /etc/systemd/system, so the
+# framework relies on UniFi firmware updates keeping /etc (they wipe /usr).
 [Unit]
 Description=Run /data/on_boot.d scripts
 After=network-online.target
