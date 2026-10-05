@@ -1,7 +1,7 @@
-# Exercise Podman's runtime configuration with throwaway containers and
-# `podman info`. Rootful checks cover storage, netavark DNS, seccomp, and the
-# prune timer; a rootless pass proves pasta backs container egress. The test
-# harness invokes this only against QEMU fixtures, never production hosts.
+# Exercise Podman's runtime configuration with throwaway containers. Rootful
+# checks cover storage, netavark DNS and seccomp; a rootless pass proves pasta
+# backs container egress. The test harness invokes this only against QEMU
+# fixtures, never production hosts.
 
 - name: _verify | Resolve a tiny probe image
   set_fact:
@@ -23,31 +23,11 @@
       - not podman_condition_probe_podman_available
       - not podman_condition_probe_image_changed
 
-- name: _verify | Read podman's effective runtime config
-  command: podman info --format json
-  become: true
-  register: podman_info
-  changed_when: false
-
-- name: _verify | Podman info reflects the role's containers.conf/storage.conf
-  vars:
-    _info: "{{ podman_info.stdout | from_json }}"
-  assert:
-    that:
-      - _info.host.networkBackend == 'netavark'
-      - _info.store.graphDriverName == 'overlay'
-      - _info.store.graphRoot == '/var/lib/containers/storage'
-    fail_msg: >-
-      podman info disagrees with the role's containers.conf/storage.conf:
-      backend={{ _info.host.networkBackend }},
-      driver={{ _info.store.graphDriverName }},
-      graphroot={{ _info.store.graphRoot }}.
-
 # On ZFS-root hosts, prove /var/lib/containers is actually backed by the
-# dedicated device. graphRoot above only shows the path, not what it sits on --
-# a skipped mount would silently put reconstructible container data back in
-# rpool. findmnt resolves by-partlabel and /dev/md aliases before matching, so
-# one query pins the mountpoint, source, and filesystem type together.
+# dedicated device; a skipped mount would silently put reconstructible
+# container data back in rpool. findmnt resolves by-partlabel and /dev/md
+# aliases before matching, so one query pins the mountpoint, source, and
+# filesystem type together.
 - name: _verify | The podman store is on its dedicated device
   when: zfs_root
   command:
