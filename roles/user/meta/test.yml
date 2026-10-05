@@ -1,6 +1,6 @@
-# Minimal retains cloud-init sudoers residue and covers its cleanup path.
+# The role has no storage-dependent branch. Minimal retains cloud-init
+# sudoers residue and covers its cleanup path.
 machines:
-  lab:
   minimal:
 arm:
-  - lab
+  - minimal
