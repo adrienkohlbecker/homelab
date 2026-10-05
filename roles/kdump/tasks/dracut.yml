@@ -1,6 +1,6 @@
-# Backport the capture integration the installed package lacks. Inspect
-# package ownership so native support, even in a stable-release backport,
-# stops the converge instead of overwriting package-owned files.
+# Backport the capture integration the installed package lacks. Native
+# support, even in a stable-release backport, stops the converge so the
+# backport is retired rather than left overriding the package.
 - name: dracut | Install capture image integration
   when:
     - initramfs_use_dracut
@@ -9,8 +9,10 @@
   tags:
     - kdump
   block:
-    # Exit 1 means no package owns the native module path; 0 means a package
-    # ships native support, and anything else is a dpkg error.
+    # The package's own Dracut module marks native support. The files below
+    # cannot: the package already owns the hook, and never the local preset.
+    # Exit 1 means no package owns the module path, 0 means one does, and
+    # anything else is a dpkg error.
     - name: dracut | Package lacks native capture support (else retire the backport per notes/runbooks/kdump.md)
       command: dpkg-query --search /usr/lib/dracut/modules.d/50kdump-tools/module-setup.sh
       register: kdump_dracut_native
