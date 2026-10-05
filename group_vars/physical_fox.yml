@@ -31,8 +31,8 @@ netplan:
         use-dns: false
       optional: true
 
-# Cloud-init owns first-boot bootstrap and networking, so cleanup retains the
-# package and netplan retains its rendered 50-cloud-init.yaml.
+# Cloud-init owns first-boot bootstrap and networking (its rendered
+# 50-cloud-init.yaml), so cleanup retains the package.
 cloud_init_managed: true
 
 # Cloud-init selects Hetzner's in-network mirrors on first boot; keep the same

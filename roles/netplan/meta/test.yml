@@ -7,5 +7,5 @@ ubuntu:
   - resolute
 skip:
   "minimal:resolute": >-
-    Lab covers Resolute rollback and DNS recovery; Minimal covers origin removal
-    on Noble.
+    Lab covers Resolute rollback and DNS recovery; Minimal covers layering
+    over cloud-init's netplan origin on Noble.

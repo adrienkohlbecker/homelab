@@ -62,9 +62,8 @@ etc_hosts_entries:
   auth.fahm.fr: "{{ network.hosts.lab.physical }}"
 minio_root_user: minio
 ssh_public_keys_additional: ""
-# Whether cloud-init owns bootstrap and networking on this host. The cleanup
-# and netplan roles share this host capability, so it must remain globally
-# visible when either role is tested alone.
+# Whether cloud-init owns bootstrap and networking on this host. Cleanup keeps
+# the package when it does; the default stays global so the role tests alone.
 cloud_init_managed: false
 
 # Auto-discovered /dev/disk/by-id stems for every rotational drive on
