@@ -11,6 +11,8 @@
     - "{{ zfs_dozer_filesystem }}/vms"
     - "{{ zfs_dozer_filesystem }}/vms/macos"
   become: true
+  tags:
+    - macos_vm
 
 - name: storage | Read current macOS zvol size
   ansible.builtin.command:
@@ -20,6 +22,8 @@
   failed_when: false
   check_mode: false
   become: true
+  tags:
+    - macos_vm
 
 - name: storage | Assert macOS zvol size probe did not error unexpectedly
   when:
@@ -30,6 +34,8 @@
       `zfs get volsize {{ macos_vm_zvol_dataset }}` failed unexpectedly
       (rc={{ macos_vm_zvol_current.rc }}): {{ macos_vm_zvol_current.stderr | trim }}.
       Refusing to proceed because the zvol shrink guard cannot verify the current size.
+  tags:
+    - macos_vm
 
 - name: storage | Refuse to shrink macOS zvol
   when:
@@ -40,6 +46,8 @@
       Refusing to shrink {{ macos_vm_zvol_dataset }} from {{ macos_vm_zvol_current.stdout }}
       to {{ macos_vm_zvol_size | human_to_bytes }} bytes. Shrinking would corrupt APFS.
       Create a new smaller zvol and reinstall/restore instead.
+  tags:
+    - macos_vm
 
 - name: storage | Create or update macOS zvol
   community.general.zfs:
@@ -55,6 +63,8 @@
       logbias: throughput
       redundant_metadata: most
   become: true
+  tags:
+    - macos_vm
 
 # QEMU runs as root and needs no group grant on the zvol device.
 - name: storage | Remove the zvol permission udev rule
@@ -62,7 +72,11 @@
     path: "/etc/udev/rules.d/70-macos-vm-{{ macos_vm_name }}-zvol.rules"
     state: absent
   become: true
+  tags:
+    - macos_vm
 
 - name: storage | Set zvol disk source path
   set_fact:
     macos_vm_disk_source: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
+  tags:
+    - macos_vm

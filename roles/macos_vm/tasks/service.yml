@@ -10,6 +10,8 @@
     force: false
     backup: true
   become: true
+  tags:
+    - macos_vm
 
 - name: service | Install QEMU service
   import_role:

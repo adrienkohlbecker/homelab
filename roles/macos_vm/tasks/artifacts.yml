@@ -9,6 +9,8 @@
     mode: "0755"
   become: true
   register: macos_vm_artifacts_dir_result
+  tags:
+    - macos_vm
 
 - name: artifacts | Create per-VM workdir
   file:
@@ -19,6 +21,8 @@
     mode: "0755"
   become: true
   register: macos_vm_workdir_result
+  tags:
+    - macos_vm
 
 - name: artifacts | Fetch pinned OpenCore.qcow2
   # Skip in check mode if the dir was just (notionally) created; in check
@@ -33,6 +37,8 @@
     group: root
     mode: "0644"
   become: true
+  tags:
+    - macos_vm
 
 - name: artifacts | Seed per-VM OpenCore image
   script:
@@ -46,6 +52,8 @@
     executable: /usr/bin/python3
     creates: "{{ macos_vm_workdir }}/OpenCore.qcow2"
   become: true
+  tags:
+    - macos_vm
 
 - name: artifacts | Stage fetch-macOS script
   when:
@@ -59,6 +67,8 @@
     group: root
     mode: "0755"
   become: true
+  tags:
+    - macos_vm
 
 - name: artifacts | Fetch BaseSystem recovery image
   when: macos_vm_install_mode
@@ -96,6 +106,8 @@
         board_id: Mac-7BA5B2D9E42DDD94
         mlb: "00000000000000000"
         os_type: default
+  tags:
+    - macos_vm
 
 # fetch-macOS-v2.py exits non-zero on a chunklist mismatch but keeps the
 # file, and an interrupted download leaves a truncated one. Only a verified
@@ -113,6 +125,8 @@
     - chunklist
     - dmg
   become: true
+  tags:
+    - macos_vm
 
 # qemu-img fails the read on chunk types it cannot decode, such as LZFSE
 # without its module, so a successful conversion is complete.
@@ -131,6 +145,8 @@
     creates: "{{ macos_vm_workdir }}/BaseSystem.img"
   become: true
   register: macos_vm_basesystem_convert_result
+  tags:
+    - macos_vm
 
 - name: artifacts | Publish converted BaseSystem image
   when: macos_vm_basesystem_convert_result.changed
@@ -141,3 +157,5 @@
       - "{{ macos_vm_workdir }}/BaseSystem.img"
     creates: "{{ macos_vm_workdir }}/BaseSystem.img"
   become: true
+  tags:
+    - macos_vm
