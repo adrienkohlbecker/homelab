@@ -1,7 +1,7 @@
 # Physical Lab host configuration. QEMU Lab fixtures inherit storage and test
 # behavior through inventory groups instead of loading these hardware settings.
 ssh_x11_forwarding: true
-zfsbootmenu_artifact:
+refind_zbm_artifact:
   version: v3.0.1-linux6.1-upstream-x86_64
   url: "{{ zfsbootmenu_repository_url }}/v3.0.1-linux6.1-upstream-x86_64/zfsbootmenu-v3.0.1-linux6.1-upstream-x86_64.tar.gz"
 

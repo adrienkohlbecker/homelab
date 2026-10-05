@@ -720,7 +720,7 @@ menuentry "Ubuntu (ZBM)" {
     submenuentry "Show ZFSBootMenu" {
       options "{{ _zbm_launch_cmdline }} zbm.show"
     }
-    # VMLINUZ-BACKUP.EFI is seeded by the zfsbootmenu role as a copy of the
+    # VMLINUZ-BACKUP.EFI is seeded by the refind role as a copy of the
     # primary at install time, so this manual recovery entry resolves on a
     # freshly provisioned host. Boot-success-gated promotion (rotating a new
     # known-good into the backup slot) stays a SOMEDAY item.

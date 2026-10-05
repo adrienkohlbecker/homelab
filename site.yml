@@ -38,7 +38,6 @@
     - zfs
     - zfs_autobackup
     - boot
-    - zfsbootmenu
     - refind
     # Service platform -- container runtime and web/TLS front door.
     - podman

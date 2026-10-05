@@ -1,5 +1,0 @@
-# refind boots artifacts installed by the zfsbootmenu role. Import that role so
-# isolated refind tests have the same ESP prerequisites as the site.yml order.
-- name: _setup | Provide the ZFSBootMenu loader refind depends on
-  import_role:
-    name: zfsbootmenu

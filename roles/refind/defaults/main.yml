@@ -1,0 +1,2 @@
+---
+refind_zbm_artifact: "{{ zfsbootmenu_release[ansible_architecture] }}"

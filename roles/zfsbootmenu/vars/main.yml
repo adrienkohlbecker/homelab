@@ -1,3 +1,0 @@
----
-zfsbootmenu_cache_dir: "/var/cache/zfsbootmenu/{{ zfsbootmenu_artifact.version }}"
-zfsbootmenu_tarball_path: "{{ zfsbootmenu_cache_dir }}/{{ zfsbootmenu_artifact.url | basename }}"

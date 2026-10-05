@@ -1,4 +1,9 @@
 ---
+# One cache directory per ZFSBootMenu version: the tarball is get_url's
+# idempotence anchor and the extracted EFI image is the copy source.
+refind_zbm_cache_dir: "/var/cache/zfsbootmenu/{{ refind_zbm_artifact.version }}"
+refind_zbm_tarball_path: "{{ refind_zbm_cache_dir }}/{{ refind_zbm_artifact.url | basename }}"
+
 # rEFInd EFI binary + firmware-fallback names, keyed by arch. The refind package
 # ships the arch's binary under /usr/share/refind/refind/; x64 on Intel/AMD, aa64
 # on the arm64 test host.

@@ -38,7 +38,7 @@ done
 # Package version = the full version string embedded in the filename
 # (zfsbootmenu-<version>.tar.gz), arch suffix included — matching the
 # consumers' <base>/<version>/zfsbootmenu-<version>.tar.gz layout
-# (roles/zfsbootmenu/vars/main.yml, packer/scripts/chroot.sh).
+# (roles/refind/vars/main.yml, packer/scripts/chroot.sh).
 version="${tarball#zfsbootmenu-}"
 version="${version%.tar.gz}"
 
