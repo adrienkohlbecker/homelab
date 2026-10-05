@@ -5,8 +5,7 @@
 # only boot chain site.yml runs this role on.
 #
 # Reboot before the checks so /proc/cmdline reflects the role's writes. Same
-# pattern as console/_verify.yml. The aarch64 fixture bypasses ZBM, so the
-# command line staged outside this role cannot reflect its writes yet.
+# pattern as console/_verify.yml.
 
 # The fixture's Dracut image is built without host-only mode, and a converge
 # that changes no image input leaves it alone. Rebuild before the reboot so the
