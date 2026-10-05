@@ -29,7 +29,6 @@ case "${1:-}" in
 esac
 
 # create local snapshots
-local_failed_before=$failed
 run_step zfs_backup_local "${zfs_backup_local_args[@]}"
 
 # Gate offsite replication on the local snapshot succeeding. The offsite leg
@@ -41,7 +40,7 @@ run_step zfs_backup_local "${zfs_backup_local_args[@]}"
 # consistent copy with a mixed one. So if the local step failed at all, skip
 # offsite and let the next run retry from a clean snapshot. (`failed` is already
 # bumped, so the run still exits 1 below for monitoring.)
-zfs_backup_local_ok=$((failed == local_failed_before))
+zfs_backup_local_ok=$((failed == 0))
 
 # pull each configured source host's snapshots onto this host
 # Unaffected by the gate above: each onsite leg pulls a *peer* host's own
