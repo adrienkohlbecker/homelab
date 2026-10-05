@@ -233,25 +233,23 @@
 
 # ---- Wake leg -------------------------------------------------------------
 # Exercise the boot leg and its real three-round wakeonlan dispatch.
-- name: _verify | Exercise boot-time peer wake
-  block:
-    - name: _verify | Run the boot-time peer wake unit
-      systemd:
-        name: nut_wake_peers.service
-        state: started
-      become: true
+- name: _verify | Run the boot-time peer wake unit
+  systemd:
+    name: nut_wake_peers.service
+    state: started
+  become: true
 
-    - name: _verify | The wake run sent its magic packets
-      command:
-        argv:
-          - journalctl
-          - -u
-          - nut_wake_peers.service
-          - --no-pager
-      register: nut_wake_journal
-      changed_when: false
-      # Type=exec returns once the script starts; its first round follows.
-      until: "'Sending magic packet' in nut_wake_journal.stdout"
-      retries: 10
-      delay: 1
-      become: true
+- name: _verify | The wake run sent its magic packets
+  command:
+    argv:
+      - journalctl
+      - -u
+      - nut_wake_peers.service
+      - --no-pager
+  register: nut_wake_journal
+  changed_when: false
+  # Type=exec returns once the script starts; its first round follows.
+  until: "'Sending magic packet' in nut_wake_journal.stdout"
+  retries: 10
+  delay: 1
+  become: true
