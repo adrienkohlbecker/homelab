@@ -6,7 +6,6 @@
 #                     the host cannot satisfy (pair it with start: false)
 #   start             default true; false enables without touching state
 #   restart           default false; restart an already-active unit
-#   reload            default false; reload when restart is false
 #   throttle          default 0; limits lifecycle changes across hosts
 - name: unit | Install unit file
   import_tasks: install.yml
@@ -70,8 +69,8 @@
   become: true
 
 # Start inactive units before considering refresh requests. An active unit is
-# restarted for its own file change or a caller-owned hard change; reload is
-# the hitless fallback. Condition/Assert skips leave runtime state unchanged.
+# restarted for its own file change or a caller-owned hard change.
+# Condition/Assert skips leave runtime state unchanged.
 - name: unit | Apply lifecycle for {{ _systemd_unit_name }}
   when:
     - _systemd_unit_condition
@@ -81,12 +80,9 @@
   systemd:
     name: "{{ _systemd_unit_name }}"
     state: >-
-      {{ 'started'
-         if _systemd_unit_enable.status.ActiveState | default('inactive') != 'active'
-         else 'restarted'
-         if systemd_unit_file.changed or systemd_unit_args.restart | default(false)
-         else 'reloaded'
-         if systemd_unit_args.reload | default(false)
+      {{ 'restarted'
+         if _systemd_unit_enable.status.ActiveState | default('inactive') == 'active'
+            and (systemd_unit_file.changed or systemd_unit_args.restart | default(false))
          else 'started' }}
     scope: "{{ _systemd_unit_scope }}"
   register: systemd_unit_started

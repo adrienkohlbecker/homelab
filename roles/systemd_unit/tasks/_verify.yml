@@ -304,7 +304,7 @@
 
 # --- unit.yml coverage ---
 # Exercise the combined lifecycle: install + start, idempotent re-run,
-# caller-requested restart/reload, enable-only, and cleanup.
+# caller-requested restart, enable-only, and cleanup.
 - name: _verify | Install and start fixture via tasks_from=unit
   import_role:
     name: systemd_unit
@@ -333,15 +333,6 @@
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
       restart: true
-
-- name: _verify | Reload fires when ExecReload is present
-  import_role:
-    name: systemd_unit
-    tasks_from: unit
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
-      reload: true
 
 - name: _verify | Enable the copy-path fixture without starting it
   import_role:

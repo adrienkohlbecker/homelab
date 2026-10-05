@@ -5,7 +5,6 @@ Description=systemd_unit_verify_ok{{ systemd_unit_verify_suffix | default('') }}
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/true
-ExecReload=/bin/true
 
 [Install]
 WantedBy=multi-user.target
