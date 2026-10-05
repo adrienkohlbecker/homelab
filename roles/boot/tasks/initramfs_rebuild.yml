@@ -6,8 +6,6 @@
 #     boot_initramfs_args:
 #       changed: <bool>  # an image input changed; false skips the rebuild
 #       reboot: <bool>   # also request a reboot so the next boot loads the image
-#
-# Kdump detects these rebuilds from the image mtimes (roles/kdump/tasks/dracut.yml).
 
 - name: initramfs_rebuild | Validate inputs
   assert:

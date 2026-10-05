@@ -53,31 +53,11 @@
       check_mode: false
       register: kdump_dracut_kernels
 
-    # Capture and boot images share their inputs: Dracut, the host policy,
-    # module options and the console keymap. A boot image newer than its
-    # capture image means an input changed after the capture build, in this
-    # run, an earlier or tagged one, or a package trigger. Kernel installs run
-    # the dracut hook before kdump-tools, leaving the capture image newer.
-    # Without a boot image, only a missing capture image counts.
-    - name: dracut | Find capture images older than their boot image
-      shell:
-        cmd: |
-          set -euo pipefail
-          for version in {{ kdump_dracut_kernels.stdout_lines | join(" ") }}; do
-            capture=/var/lib/kdump/initrd.img-$version
-            if [ ! -e "$capture" ] || [ "/boot/initrd.img-$version" -nt "$capture" ]; then
-              echo "$version"
-            fi
-          done
-        executable: /bin/bash
-      changed_when: false
-      check_mode: false
-      register: kdump_dracut_stale
-
-# Rebuild every image when the capture integration changes, and otherwise the
-# stale ones, before the service reloads them. Kernel upgrades use the same
-# hook through run-parts. Check mode lists the kernels it would rebuild.
-- name: dracut | Rebuild changed or stale capture images
+# Rebuild every image when the capture integration changes, before the service
+# reloads them. Kernel upgrades use the same hook through run-parts. Boot image
+# rebuilds leave capture images on their last build; notes/runbooks/kdump.md
+# covers refreshing both.
+- name: dracut | Rebuild capture images after an integration change
   when:
     - initramfs_use_dracut
     - not ansible_check_mode
@@ -88,7 +68,7 @@
   loop: >-
     {{ (kdump_dracut_kernels.stdout_lines
         if kdump_apt_tools.changed or kdump_dracut_files.changed
-        else kdump_dracut_stale.stdout_lines) | default([]) }}
+        else []) | default([]) }}
   register: kdump_dracut_rebuild
   become: true
   tags:

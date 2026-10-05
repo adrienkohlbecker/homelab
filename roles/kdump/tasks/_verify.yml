@@ -1,10 +1,7 @@
-# Verify crash capture, capture-image refresh and loader reloads.
+# Verify crash capture and loader reloads.
 
 - name: _verify | Exercise the capture path through a deliberate panic
   import_tasks: _verify_capture.yml
-
-- name: _verify | Exercise a boot policy change consumed before kdump
-  import_tasks: _verify_policy.yml
 
 # Crash memory is reserved now, so a configuration change must reload the
 # loaded capture kernel rather than wait for the next boot.
