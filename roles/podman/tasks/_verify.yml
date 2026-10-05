@@ -1,7 +1,7 @@
 # Exercise Podman's runtime configuration with throwaway containers. Rootful
-# checks cover storage, netavark DNS and seccomp; a rootless pass proves pasta
-# backs container egress. The test harness invokes this only against QEMU
-# fixtures, never production hosts.
+# checks cover storage, netavark DNS, seccomp and the nightly prune; a
+# rootless pass proves pasta backs container egress. The test harness invokes
+# this only against QEMU fixtures, never production hosts.
 
 - name: _verify | Resolve a tiny probe image
   set_fact:
@@ -96,6 +96,66 @@
   loop:
     - podman rm -f podman_verify_server
     - podman network rm podman_verify_dns
+
+# The nightly prune must reclaim dangling images yet keep unused networks: a
+# single-consumer network is unused whenever its service is down. Backdate a
+# throwaway network past the 48h window (podman reads `created` from its
+# netavark config), leave an old image dangling, then run the real unit.
+- name: _verify | Exercise the nightly prune
+  become: true
+  block:
+    - name: _verify | Create an unused network for the prune check
+      containers.podman.podman_network:
+        name: podman_verify_prune
+
+    - name: _verify | Read the prune-check network config
+      slurp:
+        src: /etc/containers/networks/podman_verify_prune.json
+      register: _podman_prune_network
+
+    - name: _verify | Backdate the network past the prune window
+      copy:
+        dest: /etc/containers/networks/podman_verify_prune.json
+        content: >-
+          {{ _podman_prune_network.content | b64decode | from_json
+             | combine({'created': '2020-01-01T00:00:00Z'}) | to_nice_json }}
+        owner: root
+        group: root
+        mode: "0644"
+
+    # An end-of-life tag, so its image predates the prune window and differs
+    # from the probe image other checks still use.
+    - name: _verify | Pull an old image to leave dangling
+      command: podman pull --quiet docker.io/library/busybox:1.35.0
+      register: _podman_prune_image
+      until: _podman_prune_image.rc == 0
+      retries: 3
+      delay: 5
+      changed_when: true
+
+    - name: _verify | Untag the old image
+      command: podman untag {{ _podman_prune_image.stdout }}
+      changed_when: true
+
+    - name: _verify | Run the prune unit
+      systemd:
+        name: podman_prune.service
+        state: started
+
+    - name: _verify | The prune kept the unused network
+      command: podman network exists podman_verify_prune
+      changed_when: false
+
+    - name: _verify | The prune reclaimed the dangling image
+      command: podman image exists {{ _podman_prune_image.stdout }}
+      register: _podman_prune_image_exists
+      changed_when: false
+      failed_when: _podman_prune_image_exists.rc != 1
+  always:
+    - name: _verify | Remove the prune-check network
+      command: podman network rm --force podman_verify_prune
+      changed_when: true
+      failed_when: false
 
 # pasta is a rootless-only network connector (default_rootless_network_cmd,
 # set in install.yml), so this exercises it as the Lab fixture's
