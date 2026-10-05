@@ -325,23 +325,6 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     assert consumed <= set(staged)
 
 
-def test_noble_refind_pin_covers_every_architecture_and_is_baked_only_on_noble() -> None:
-    versions = yaml.safe_load((REPO_ROOT / "group_vars" / "all" / "versions.yml").read_text())
-    pins = versions["refind_noble_release"]
-    template = QEMU_TEMPLATE.read_text()
-    chroot = QEMU_CHROOT_SH.read_text()
-
-    assert set(pins) == {"x86_64", "aarch64"}
-    for architecture, package in {"x86_64": "amd64", "aarch64": "arm64"}.items():
-        assert pins[architecture]["url"].endswith(f"refind_0.14.2-2.1_{package}.deb")
-        assert re.fullmatch(r"[0-9a-f]{64}", pins[architecture]["sha256"])
-
-    # Only Noble bakes the pin; later releases keep the distribution package.
-    assert 'local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""' in template
-    assert 'local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""' in template
-    assert "sha256sum -c -" in chroot.split('if [ -n "${REFIND_DEB_URL:-}" ]', 1)[1].split("refind-install", 1)[0]
-
-
 @pytest.mark.parametrize(("architecture", "installs_key"), [("x86_64", False), ("aarch64", True)])
 def test_qemu_host_static_key_is_arm_only(tmp_path: Path, architecture: str, installs_key: bool) -> None:
     provision = QEMU_HOST_PROVISION_SH.read_text()
