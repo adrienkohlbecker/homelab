@@ -6,7 +6,7 @@
 #   condition         default true; gates the whole call.
 #
 # Stop and disable units, remove their files, reload after deletion, and publish
-# the same per-unit result shape as install. Never remove an operator mask.
+# the same per-unit result shape as install.
 - name: remove | Validate remove args
   assert:
     quiet: true
@@ -45,26 +45,6 @@
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
   register: _systemd_unit_linger
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
-
-# Deleting a /dev/null symlink would silently undo an operator mask.
-- name: remove | Stat unit path to detect a pre-existing mask
-  when: _systemd_unit_condition
-  stat:
-    path: "{{ _systemd_unit_remove_path }}"
-  register: _systemd_unit_mask
-  become: true
-
-- name: remove | Refuse to delete masked unit
-  when:
-    - _systemd_unit_condition
-    - _systemd_unit_mask.stat.islnk | default(false)
-    - _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
-  fail:
-    msg: >-
-      Refusing to remove {{ _systemd_unit_remove_path }}:
-      it is masked (symlink to /dev/null). Unmask with
-      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
-      before re-running, or --limit the play to skip this role.
 
 # Missing units are already in the desired state. Drop-ins have no lifecycle.
 - name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}

@@ -74,27 +74,6 @@
   register: _systemd_unit_linger
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
-# A mask is operator intent stored as a /dev/null symlink. Check the verify
-# target so a drop-in cannot bypass a masked parent unit.
-- name: install | Stat unit path to detect a pre-existing mask
-  when: _systemd_unit_condition
-  stat:
-    path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
-  register: _systemd_unit_mask
-  become: true
-
-- name: install | Refuse to overwrite masked unit
-  when:
-    - _systemd_unit_condition
-    - _systemd_unit_mask.stat.islnk | default(false)
-    - _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
-  fail:
-    msg: >-
-      Refusing to overwrite {{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}:
-      it is masked (symlink to /dev/null). Unmask with
-      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
-      before re-running, or --limit the play to skip this role.
-
 - name: install | Install systemd unit
   vars:
     _systemd_unit_path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
