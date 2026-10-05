@@ -236,3 +236,16 @@ class TestRequireRoleTag:
         caller = "- name: Use site\n  import_role:\n    name: web\n    tasks_from: site\n  tags: app\n"
         self._matches(tmp_path, "app", "main.yml", caller)
         assert self._matches(tmp_path, "web", "site.yml", "- name: Vhost\n  ping:\n") == []
+
+    def test_files_an_entrypoint_imports_are_exempt(self, tmp_path: Path) -> None:
+        files = {
+            "app/tasks/main.yml": "- name: Use site\n  import_role:\n    name: web\n    tasks_from: site\n  tags: app\n",
+            "web/tasks/site.yml": "- name: Reload\n  import_tasks: reload.yml\n",
+            "web/tasks/reload.yml": "- name: Reload\n  ping:\n",
+        }
+        for relative, body in files.items():
+            (tmp_path / "roles" / relative).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / "roles" / relative).write_text(body)
+
+        assert self._matches(tmp_path, "web", "reload.yml", files["web/tasks/reload.yml"]) == []
+        assert self._matches(tmp_path, "web", "other.yml", "- name: Other\n  ping:\n") == [1]

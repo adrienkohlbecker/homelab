@@ -252,10 +252,14 @@ def _caller_tagged(roles_dir: Path) -> tuple[frozenset[str], frozenset[tuple[str
 
     Helper roles keep an operationally empty tasks/main.yml; a task file another
     role calls through import_role/include_role `tasks_from` is a helper entry
-    point. In both cases the caller's import carries the tag scope.
+    point, and so is every same-role file it pulls in with import_tasks or
+    include_tasks. In all cases the caller's import carries the tag scope -- a
+    role tag of their own would let `--tags <role>` run them without the
+    entry-point tasks they depend on.
     """
     helpers: set[str] = set()
     entrypoints: set[tuple[str, str]] = set()
+    task_imports: dict[tuple[str, str], set[str]] = {}
     for tasks_file in roles_dir.glob("*/tasks/*.yml"):
         role = tasks_file.parent.parent.name
         tasks = yaml.load(tasks_file.read_text(), Loader=_IgnoreTagsLoader)
@@ -263,10 +267,19 @@ def _caller_tagged(roles_dir: Path) -> tuple[frozenset[str], frozenset[tuple[str
             helpers.add(role)
         for task in _walk_tasks(tasks):
             for key, args in task.items():
-                if _short_module(key) in {"import_role", "include_role"} and isinstance(args, dict):
+                module = _short_module(key)
+                if module in {"import_role", "include_role"} and isinstance(args, dict):
                     name, tasks_from = args.get("name"), args.get("tasks_from")
                     if isinstance(name, str) and tasks_from and name != role:
                         entrypoints.add((name, Path(str(tasks_from)).stem))
+                elif module in {"import_tasks", "include_tasks"} and isinstance(args, str) and "{{" not in args:
+                    task_imports.setdefault((role, tasks_file.stem), set()).add(Path(args).stem)
+    pending = list(entrypoints)
+    while pending:
+        role, stem = pending.pop()
+        for imported in task_imports.get((role, stem), set()) - {s for r, s in entrypoints if r == role}:
+            entrypoints.add((role, imported))
+            pending.append((role, imported))
     return frozenset(helpers), frozenset(entrypoints)
 
 
