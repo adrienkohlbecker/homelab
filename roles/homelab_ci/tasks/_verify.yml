@@ -14,3 +14,16 @@
     executable: /bin/bash
   become: true
   changed_when: true
+
+# Packer builds read these from the environment of whichever login shell
+# launched them: an operator session or the GitLab shell executor (bash -l).
+- name: _verify | Login shells hand packer the passt isolation settings
+  command: runuser -l {{ ansible_user_id }} -c 'printenv QEMU_NET_WRAPPER_ISOLATE_HOST QEMU_NET_WRAPPER_DNS'
+  become: true
+  register: homelab_ci_login_env
+  changed_when: false
+
+- name: _verify | Assert packer gets host isolation and the lab resolver
+  assert:
+    that:
+      - homelab_ci_login_env.stdout_lines == ['1', external_ips.dns]

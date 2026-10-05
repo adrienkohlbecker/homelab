@@ -1,0 +1,9 @@
+# Managed by ansible (roles/homelab_ci) -- do not edit on the host.
+#
+# Packer build VMs on passt stay off this host's loopback services, which
+# also cuts them off from its stub resolver, so they resolve through the DNS
+# VIP instead: it answers both nexus.lab.fahm.fr and upstream archive names.
+# Login shells read this, which covers operator sessions and the GitLab
+# shell executor alike (packer/qemu_net_wrapper.py).
+export QEMU_NET_WRAPPER_ISOLATE_HOST=1
+export QEMU_NET_WRAPPER_DNS={{ external_ips.dns }}

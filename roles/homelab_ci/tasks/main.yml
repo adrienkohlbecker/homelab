@@ -44,6 +44,19 @@
   tags:
     - homelab_ci
 
+- name: Point packer build VMs at the lab resolver
+  template:
+    src: homelab_ci.sh.j2
+    dest: /etc/profile.d/homelab_ci.sh
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: sh -n %s
+  become: true
+  tags:
+    - homelab_ci
+
 - name: Set default ACL on homelab_ci
   ansible.posix.acl:
     path: /mnt/scratch/homelab_ci
