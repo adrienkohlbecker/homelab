@@ -1,4 +1,0 @@
-# Default Noble coverage installs the qemu-kvm transitional metapackage;
-# Resolute exercises the qemu-system branch after qemu-kvm was removed.
-ubuntu:
-  - resolute

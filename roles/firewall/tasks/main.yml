@@ -32,7 +32,7 @@
     - firewall
 
 # Stock nftables.service ships `ExecStop=/usr/sbin/nft flush ruleset`,
-# which would tear down netavark and libvirt tables in the
+# which would tear down netavark's tables in the
 # same kernel ruleset on any `systemctl stop` or `restart`. Scope the
 # stop to our own table.
 - name: Install nftables.service ExecStop drop-in
@@ -211,7 +211,7 @@
 
 # The ExecReload drop-in installed above maps `state: reloaded` to atomic
 # `nft -f` (per-table flush+rebuild inside the file replaces only our
-# table; netavark and libvirt tables are untouched). On an inactive
+# table; netavark's tables are untouched). On an inactive
 # unit, Ansible starts it instead of reloading; otherwise a changed
 # ruleset fires ExecReload with no stop/start window. The condition
 # skips check-mode runs where the apt install reported changed but

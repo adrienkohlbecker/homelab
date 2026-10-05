@@ -97,7 +97,6 @@
   hosts: lab
   roles:
     - samba
-    - libvirt
     - minio
     - influxdb
     - jellyfin

@@ -13,3 +13,117 @@
     - retired_services
     - netdata
     - zfs
+
+# Drop once lab has converged.
+#
+# macos_vm adopts rpool/libvirt by moving it off /var/lib/libvirt/images.
+# Until it has, removing /var/lib/libvirt below would delete the VM workdir:
+# if this fails on a live mount, converge macos_vm first. Check mode never
+# runs the adoption, so the mount is still expected there.
+- name: Refuse to remove a mounted libvirt images dataset
+  command: findmnt --mountpoint /var/lib/libvirt/images
+  register: retired_services_libvirt_images_mount
+  changed_when: false
+  failed_when: >-
+    retired_services_libvirt_images_mount.rc > 1
+    or (retired_services_libvirt_images_mount.rc == 0 and not ansible_check_mode)
+  check_mode: false
+  tags:
+    - retired_services
+    - libvirt
+
+# Purging libvirt stops the daemon but leaves a running network's bridge,
+# dnsmasq, and firewall rules in place until the next reboot.
+- name: Stop the retired libvirt default network
+  command:
+    argv:
+      - virsh
+      - net-destroy
+      - default
+    removes: /usr/bin/virsh
+  register: retired_services_libvirt_net_destroy
+  # removes: reports rc 0 when it skips, so key off virsh's own success line.
+  changed_when: "'destroyed' in retired_services_libvirt_net_destroy.stdout"
+  failed_when:
+    - retired_services_libvirt_net_destroy.rc != 0
+    - "'is not active' not in retired_services_libvirt_net_destroy.stderr"
+  become: true
+  tags:
+    - retired_services
+    - libvirt
+
+# Purging libvirt0 also removes everything that depends on it: the clients,
+# the daemon packages, and python3-libvirt.
+- name: Remove retired libvirt packages
+  apt:
+    name:
+      - libvirt-l10n
+      - libvirt0
+      - python3-lxml
+    state: absent
+    purge: true
+  become: true
+  tags:
+    - retired_services
+    - libvirt
+
+- name: Remove the retired virsh_backup timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: virsh_backup
+  tags:
+    - retired_services
+    - libvirt
+
+- name: Remove the retired libvirt images mount check
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: "{{ '/var/lib/libvirt/images' | zfs_mount_unit }}"
+  tags:
+    - retired_services
+    - libvirt
+
+- name: Remove retired libvirt state
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/virsh_backup
+    - /etc/libvirt
+    - /var/lib/libvirt
+    - /var/log/libvirt
+  become: true
+  tags:
+    - retired_services
+    - libvirt
+
+# Package purges keep the system accounts they created.
+- name: Remove retired libvirt users
+  user:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - libvirt-qemu
+    - libvirt-dnsmasq
+  become: true
+  tags:
+    - retired_services
+    - libvirt
+
+- name: Remove retired libvirt groups
+  group:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - libvirt
+    - libvirt-qemu
+  become: true
+  tags:
+    - retired_services
+    - libvirt

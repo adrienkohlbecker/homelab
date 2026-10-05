@@ -24,7 +24,7 @@
 #   per-host /28 block = vlan_cidr | ansible.utils.ipsubnet(28, 8 + slot)
 #                      = cidrsubnet(vlan_cidr, 4, 8 + slot)
 #     → host's `mac_<vlan>` peer at block's first IP
-#     → libvirt macvtap VMs at block + .1 … .7
+#     → macvtap VMs at block + .1 … .7
 #     → podman containers at block + .8 … .15
 #
 #

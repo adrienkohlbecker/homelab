@@ -162,7 +162,7 @@
   become: true
 
 # FORWARD "podman → external" rule deliberately covers every non-podman
-# egress iface (WAN, home LAN, wg, libvirt, macvlan) — the default-bridge
+# egress iface (WAN, home LAN, wg, macvlan) — the default-bridge
 # egress probe above exercises the WAN case; this one hits a
 # non-WAN destination (extns over wg0) so a future tightening to WAN-
 # only fails loudly. ICMP rather than HTTP because extns has no

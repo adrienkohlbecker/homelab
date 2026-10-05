@@ -9,7 +9,7 @@
 # discovery of Sonos / HomeKit / Zigbee-bridge targets and talk
 # directly to IoT devices on the /24 (Philips airpurifier CoAP,
 # etc.). ip_range is the upper /29 of lab's IoT block (.136/29 — 8
-# container slots, lower /29 = mac_iot iface + libvirt VMs); HA gets
+# container slots, lower /29 = mac_iot iface + VMs); HA gets
 # whatever netavark allocates first.
 
 # Shared backend network for HA, mosquitto, z2m, and influxdb. Keeping HA's
