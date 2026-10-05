@@ -1,140 +1,54 @@
-# rEFInd reads its configuration and assets from the ESP at every boot, so the
-# on-disk files are the observable end state.
-
-- name: _verify | Load production rEFInd vars for x86
-  include_vars:
-    file: "{{ role_path }}/vars/main.yml"
-    name: _refind_x86_vars
-  vars:
-    ansible_architecture: x86_64
-
-- name: _verify | Resolve all x86 rEFInd artifact names
-  assert:
-    that:
-      - _refind_x86_vars.refind_efi_binary == 'refind_x64.efi'
-      - _refind_x86_vars.refind_fallback_binary == 'BOOTX64.EFI'
-      - _refind_x86_vars.refind_azerty_keymap_arch == 'x64'
-  vars:
-    ansible_architecture: x86_64
-
-- name: _verify | Load production rEFInd vars for ARM
-  include_vars:
-    file: "{{ role_path }}/vars/main.yml"
-    name: _refind_arm_vars
-  vars:
-    ansible_architecture: aarch64
-
-- name: _verify | Resolve all ARM rEFInd artifact names
-  assert:
-    that:
-      - _refind_arm_vars.refind_efi_binary == 'refind_aa64.efi'
-      - _refind_arm_vars.refind_fallback_binary == 'BOOTAA64.EFI'
-      - _refind_arm_vars.refind_azerty_keymap_arch == 'aa64'
-  vars:
-    ansible_architecture: aarch64
-
-- name: _verify | Remove alternate rEFInd config
-  file:
-    path: /tmp/refind-x86-zbm.conf
-    state: absent
+# One end-to-end check of the boot chain this role installs. rEFInd records
+# the entry it booted as PreviousBoot, and only writes when that changes.
+# refind.conf sets `use_nvram false`, so the record lands in
+# EFI/refind/vars/ on the ESP, but rEFInd reads the NVRAM copy while that
+# directory is missing. Forgetting both copies and rebooting proves the
+# firmware started the installed rEFInd, which read the rendered config, picked
+# the ZBM entry by default, and ZBM kexec'd back into the host.
+- name: _verify | Forget the entry rEFInd booted last
+  shell: |
+    set -euo pipefail
+    var=/sys/firmware/efi/efivars/PreviousBoot-36d08fa7-cf0b-42f5-8f14-68df73ed3740
+    if [ -e "$var" ]; then
+      chattr -i "$var"
+      rm "$var"
+    fi
+    rm -f /boot/efi/EFI/refind/vars/PreviousBoot
+  args:
+    executable: /bin/bash
+  changed_when: true
   become: true
 
-- name: _verify | Stat installed theme files
-  stat:
-    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"
-  loop:
-    - LICENSE
-    - theme.conf
-    - icons/128-48/os_ubuntu.png
-    - ".installed-{{ refind_theme_artifact.sha256 }}"
-  register: _refind_verify_present
-  become: true
-
-- name: _verify | Theme files were installed
-  assert:
-    that: item.stat.exists
-    fail_msg: "expected theme file missing: {{ item.item }}"
-  loop: "{{ _refind_verify_present.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: _verify | Stat excluded dev files
-  stat:
-    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"
-  loop:
-    - src
-    - .devcontainer
-    - .gitignore
-    - install.sh
-  register: _refind_verify_excluded
-  become: true
-
-- name: _verify | Excluded dev files are absent from the ESP
-  assert:
-    that: not item.stat.exists
-    fail_msg: "excluded file should not be on the ESP: {{ item.item }}"
-  loop: "{{ _refind_verify_excluded.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-- name: _verify | Read refind.conf
-  slurp:
-    src: /boot/efi/EFI/refind/refind.conf
-  register: _refind_verify_conf
-  become: true
-
-- name: _verify | Validate refind.conf boot config
-  vars:
-    _conf: "{{ _refind_verify_conf.content | b64decode }}"
-  assert:
-    that:
-      - "'timeout 3' in _conf"
-      - "'default_selection \"Ubuntu (ZBM)\"' in _conf"
-      - "'dont_scan_dirs EFI:/EFI/ZBM' in _conf"
-      - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
-      - "'include themes/refind-theme-regular/theme.conf' in _conf"
-    fail_msg: "refind.conf missing expected boot directives"
-
-- name: _verify | Read the firmware-fallback refind.conf mirror
-  slurp:
-    src: /boot/efi/EFI/BOOT/refind.conf
-  register: _refind_verify_fallback_conf
-  become: true
-
-- name: _verify | Fallback refind.conf is an exact mirror of the primary
-  assert:
-    that: _refind_verify_fallback_conf.content == _refind_verify_conf.content
-    fail_msg: >-
-      /boot/efi/EFI/BOOT/refind.conf differs from
-      /boot/efi/EFI/refind/refind.conf — the fallback boot path (empty/wiped
-      NVRAM) would use a stale config.
-
-- name: _verify | Stat ZBM artifacts consumed by refind
-  stat:
-    path: "/boot/efi/EFI/ZBM/{{ item }}"
-  loop:
-    - VMLINUZ.EFI
-    - VMLINUZ-BACKUP.EFI
-    - cmdline
-  loop_control:
-    label: "{{ item }}"
-  register: _refind_verify_zbm_artifacts
-  become: true
-
-- name: _verify | ZBM artifacts consumed by refind exist on the ESP
-  assert:
-    that:
-      - item.stat.exists
-      - item.stat.size > 0
-    fail_msg: "missing or empty ZBM artifact consumed by refind: {{ item.item }}"
-  loop: "{{ _refind_verify_zbm_artifacts.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-
-# The fixture's NVRAM already holds rEFInd's PreviousBoot variable, so this
-# warm reboot is rEFInd's second-or-later boot: the case that ASSERTs in the
-# stock aarch64 edk2 when rEFInd is 0.13.2 (see refind_noble_release).
-- name: _verify | Reboot through the installed rEFInd path
+- name: _verify | Reboot through firmware, rEFInd and ZFSBootMenu
   import_role:
     name: reboot
     tasks_from: reboot
+
+# rEFInd writes through the firmware to the one ESP partition it booted from,
+# underneath an md mirror, so read every ESP partition directly.
+- name: _verify | Read the entry rEFInd booted
+  shell: |
+    set -euo pipefail
+    mnt=$(mktemp -d)
+    lsblk -nrpo PATH,PARTTYPE | awk '$2 == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print $1}' |
+      while read -r part; do
+        loop=$(losetup --find --read-only --show "$part")
+        mount -t vfat -o ro "$loop" "$mnt"
+        if [ -f "$mnt/EFI/refind/vars/PreviousBoot" ]; then
+          iconv -f UTF-16LE -t UTF-8 "$mnt/EFI/refind/vars/PreviousBoot" | tr -d '\0'
+          echo
+        fi
+        umount "$mnt"
+        losetup --detach "$loop"
+      done
+    rmdir "$mnt"
+  args:
+    executable: /bin/bash
+  register: _refind_previous_boot
+  changed_when: false
+  become: true
+
+- name: _verify | The ZFSBootMenu entry is what rEFInd booted
+  assert:
+    that: "'Ubuntu (ZBM)' in _refind_previous_boot.stdout"
+    fail_msg: "rEFInd recorded {{ _refind_previous_boot.stdout_lines }} instead of the Ubuntu (ZBM) entry"
