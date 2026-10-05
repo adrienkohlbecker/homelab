@@ -33,7 +33,7 @@ rulesdir:
 
 skip_list:
   # Bare ansible.builtin.* names are the repo convention; FQCN is reserved for
-  # other collections (CLAUDE.md → Coding Style & Naming). Skip the whole rule,
+  # other collections. Skip the whole rule,
   # not just fqcn[action]/[action-core]: the rule's matchtask still RUNS when only
   # sub-tags are skipped, and it logs a spurious WARNING on the systemd_unit
   # helper's deliberate `action: "{{ _module }}"` dynamic dispatch (it can't

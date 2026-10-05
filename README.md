@@ -2,7 +2,7 @@
 
 Ansible-driven configuration for my home infrastructure: a handful of bare-metal Ubuntu hosts running ZFS-on-root, podman services behind nginx, WireGuard between sites, and Cloudflare DNS managed via OpenTofu. Everything in this repo is reproducible from a fresh disk: Packer bakes the OS image, Ansible converges per-host configuration, and a Python harness exercises any role end-to-end inside QEMU before it touches a real machine.
 
-`CLAUDE.md` is the canonical reference for conventions (role layout, helper roles, test variants, commit style). This README is the map.
+`CLAUDE.md` is the canonical reference for conventions (role layout, helper roles, test variants). This README is the map.
 
 ## Repository map
 
