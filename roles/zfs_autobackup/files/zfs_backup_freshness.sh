@@ -30,11 +30,7 @@ if [[ ! $MAX_AGE_SECONDS =~ ^[0-9]+$ ]]; then
   echo >&2 "Error: MAX_AGE_SECONDS must be a non-negative integer"
   exit 2
 fi
-NOW_SECONDS=${NOW_SECONDS:-$(date +%s)}
-if [[ ! $NOW_SECONDS =~ ^[0-9]+$ ]]; then
-  echo >&2 "Error: NOW_SECONDS must be a non-negative integer"
-  exit 2
-fi
+now=$(date +%s)
 
 failed=0
 checked=0
@@ -51,8 +47,8 @@ while IFS=$'\t' read -r ds value; do
   if [ -z "$newest" ]; then
     echo >&2 "STALE: $ds carries autobackup:bak=true but has no @bak- snapshot"
     failed=1
-  elif ((NOW_SECONDS - newest > MAX_AGE_SECONDS)); then
-    echo >&2 "STALE: $ds newest @bak- snapshot is $((NOW_SECONDS - newest))s old (limit ${MAX_AGE_SECONDS}s)"
+  elif ((now - newest > MAX_AGE_SECONDS)); then
+    echo >&2 "STALE: $ds newest @bak- snapshot is $((now - newest))s old (limit ${MAX_AGE_SECONDS}s)"
     failed=1
   fi
 done <<<"$dataset_rows"
