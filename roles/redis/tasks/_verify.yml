@@ -12,7 +12,7 @@
     - name: _verify | Authenticated ping as authelia
       command: "{{ redis_cli }} --user authelia -e ping"
       environment:
-        REDISCLI_AUTH: "{{ redis_password }}"
+        REDISCLI_AUTH: "{{ redis_authelia_password }}"
       register: redis_ping
       until: redis_ping.rc == 0 and redis_ping.stdout == 'PONG'
       retries: 15
@@ -30,7 +30,7 @@
     - name: _verify | CONFIG is denied to authelia
       command: "{{ redis_cli }} --user authelia config get maxmemory"
       environment:
-        REDISCLI_AUTH: "{{ redis_password }}"
+        REDISCLI_AUTH: "{{ redis_authelia_password }}"
       register: redis_config_disabled
       changed_when: false
       failed_when: "'NOPERM' not in (redis_config_disabled.stdout + redis_config_disabled.stderr)"

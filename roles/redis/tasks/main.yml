@@ -1,9 +1,9 @@
-- name: Assert redis password is provided
+- name: Assert the authelia redis password is provided
   assert:
     that:
-      - redis_password | default('') | length > 0
+      - redis_authelia_password | default('') | length > 0
     fail_msg: >-
-      redis_password must be set in group_vars/{prod,test}.yml (a required
+      redis_authelia_password must be set in group_vars/{prod,test}.yml (a required
       input; role vars sit above inventory vars and must not default it).
   tags:
     - redis

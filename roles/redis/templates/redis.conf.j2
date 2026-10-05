@@ -23,4 +23,4 @@ maxmemory-clients 10%
 # gets every command except admin (CONFIG, REPLICAOF, DEBUG, MODULE, ...) and
 # scripting, which it never issues. Only the password's SHA-256 lands on disk.
 user default on nopass -@all +ping
-user authelia on #{{ redis_password | hash('sha256') }} ~* +@all -@admin -@scripting
+user authelia on #{{ redis_authelia_password | hash('sha256') }} ~* +@all -@admin -@scripting

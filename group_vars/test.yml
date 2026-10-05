@@ -267,7 +267,7 @@ minio_users:
 authelia_cookie_domain: "{{ inventory_hostname }}.{{ domain }}"
 
 # Test-fixture password for Authelia's Redis session store.
-redis_password: StubQemuRedisPassword_do_not_use_in_prod
+redis_authelia_password: StubQemuRedisPassword_do_not_use_in_prod
 
 # Each test host runs its own Authelia (real role on `authelia` testrole,
 # the stub on every other testrole that needs the listener), so nginx's
