@@ -1,4 +1,4 @@
-# .ansible-lint — the conventions these rules back are documented in CLAUDE.md.
+# .ansible-lint — the conventions these rules back are documented in AGENTS.md.
 
 # No profile. The `shared`/`production` profiles pull in galaxy + meta rules
 # (meta-no-info, galaxy[*], meta-runtime) that don't apply here — roles carry
@@ -23,7 +23,7 @@ loop_var_prefix: "^(__|{role}_)"
 var_naming_pattern: "^[a-z_][a-z0-9_]*$"
 
 use_default_rules: true
-# Custom rules encode repo-specific conventions from AGENTS.md/CLAUDE.md:
+# Custom rules encode repo-specific conventions from AGENTS.md:
 # shell-strict-mode, require-backup, require-named-role-entrypoint, no-handlers,
 # no-no-log, and no inventory_hostname branching are enforced; prefer-import
 # and require-validate are warning-only so they surface drift without blocking
@@ -39,7 +39,7 @@ skip_list:
   # helper's deliberate `action: "{{ _module }}"` dynamic dispatch (it can't
   # resolve a templated module's FQCN). fqcn[canonical] has zero matches here.
   - fqcn
-  # Handlers are banned (CLAUDE.md Hard Rule) — restarts run off *_result.changed,
+  # Handlers are banned (AGENTS.md Hard Rule) — restarts run off *_result.changed,
   # so the "use a handler" rule is permanently wrong here.
   - no-handler
   # YAML formatting is owned by yamllint + .yamllint (brackets/commas house

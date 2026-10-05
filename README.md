@@ -2,7 +2,7 @@
 
 Ansible-driven configuration for my home infrastructure: a handful of bare-metal Ubuntu hosts running ZFS-on-root, podman services behind nginx, WireGuard between sites, and Cloudflare DNS managed via OpenTofu. Everything in this repo is reproducible from a fresh disk: Packer bakes the OS image, Ansible converges per-host configuration, and a Python harness exercises any role end-to-end inside QEMU before it touches a real machine.
 
-`CLAUDE.md` is the canonical reference for conventions (role layout, helper roles, test variants). This README is the map.
+[`AGENTS.md`](AGENTS.md) (also read as `CLAUDE.md`) is the canonical reference for conventions (role layout, helper roles, test variants). This README is the map.
 
 ## Repository map
 
@@ -36,7 +36,7 @@ Run `mise tasks` for the complete task catalog.
 
 ## Secrets
 
-Ansible uses two vault ids: `prod` is workstation-only, while `test` is also available to CI. `vault-client.sh` resolves their passwords; see [Vault ids](CLAUDE.md#vault-ids-prod-vs-test) for storage and lookup details. Other external credentials remain `op://` references in `mise.toml`, and WireGuard client configs are rendered on demand with `mise run wg:show`.
+Ansible uses two vault ids: `prod` is workstation-only, while `test` is also available to CI. `vault-client.sh` resolves their passwords; see [Vault ids](AGENTS.md#vault-ids-prod-vs-test) for storage and lookup details. Other external credentials remain `op://` references in `mise.toml`, and WireGuard client configs are rendered on demand with `mise run wg:show`.
 
 ## License
 
