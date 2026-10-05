@@ -4,12 +4,10 @@
       - zfs_root | bool
       - zfs_dozer_filesystem | length > 0
       - (macos_vm_zvol_size | human_to_bytes | int) > 0
-      - macos_vm_domain_type in ['kvm', 'qemu']
       - macos_vm_memory_mib | int >= 4096
     fail_msg: >-
       macos_vm requires a ZFS host with zfs_dozer_filesystem, a positive
-      macos_vm_zvol_size, macos_vm_domain_type kvm or qemu, and at least
-      4096 MiB of macos_vm_memory_mib.
+      macos_vm_zvol_size, and at least 4096 MiB of macos_vm_memory_mib.
   tags:
     - macos_vm
 

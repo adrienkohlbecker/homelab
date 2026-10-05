@@ -9,9 +9,6 @@ macos_vm_vcpus: 4
 macos_vm_cpu_pinset: ""  # comma-separated list, e.g. "0,2,4,6". Empty = no pinning.
 macos_vm_memory_mib: 12288  # 12 GiB
 
-# QEMU accelerator: kvm, or qemu (TCG) on a host without KVM.
-macos_vm_domain_type: kvm
-
 # Disk source. The role creates a sparse ZFS volume and passes its /dev/zvol
 # path as a raw block device.
 macos_vm_zvol_parent_datasets:

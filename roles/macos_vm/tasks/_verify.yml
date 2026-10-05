@@ -2,8 +2,10 @@
 # QEMU validates every option, device, and drive before the guest runs, so
 # this proves the release accepts the unit, including its pinned machine
 # model. Install mode attaches every drive, so it also covers the
-# post-install command line. TCG keeps the check independent of nested KVM,
-# and a small guest RAM fits the fixture: -S still allocates it up front.
+# post-install command line. The unit's -enable-kvm sets the machine's accel
+# property, so the appended accel=kvm:tcg (not -accel, which QEMU rejects
+# alongside it) falls back to TCG where the fixture has no /dev/kvm. A small
+# guest RAM fits the fixture: -S still allocates it up front.
 - name: _verify | Create a QEMU start fixture
   tempfile:
     state: directory
@@ -20,7 +22,6 @@
     macos_vm_disk_source: "{{ macos_vm_start_fixture.path }}/disk.raw"
     macos_vm_install_mode: true
     macos_vm_cpu_pinset: ""
-    macos_vm_domain_type: qemu
     macos_vm_memory_mib: 512
   block:
     - name: _verify | Create the QEMU start disks
@@ -80,7 +81,7 @@
             )
             os.makedirs("/run/macos-vm", exist_ok=True)
             proc = subprocess.run(
-                [*argv, "-S", "-qmp", "stdio"],
+                [*argv, "-machine", "accel=kvm:tcg", "-S", "-qmp", "stdio"],
                 input='{"execute": "qmp_capabilities"}\n{"execute": "quit"}\n',
                 capture_output=True,
                 text=True,
