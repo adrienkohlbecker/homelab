@@ -13,14 +13,15 @@ global_defs {
 }
 
 vrrp_script dnsmasq_healthcheck {
-  script    /usr/local/bin/dnsmasq_healthcheck
+  script    /etc/keepalived/dnsmasq_healthcheck
   interval  1
   timeout   5
   rise      1
   fall      2
-  # The UDM's keepalived 2.2.7 + enable_script_security rejects `user nobody`
-  # on the /data symlink chain (keepalived -t SIGTERMs with rc -15). root is
-  # fine — the healthcheck is a loopback dig that needs no privilege escalation.
+  # The UDM's keepalived 2.2.7 + enable_script_security SIGTERMed
+  # `keepalived -t` (rc -15) under `user nobody` with the script behind a
+  # symlink; unproven without one. root is fine — the healthcheck is a
+  # loopback dig that needs no privilege escalation.
   user      root
   # Start in FAILED state so keepalived enters FAULT on every restart and only
   # leaves once the healthcheck passes once -- a deterministic gate on the

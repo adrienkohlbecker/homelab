@@ -1,7 +1,6 @@
 # _setup is test-only (runs only under test/testrole.py, never against
 # prod). The real target is the UDM, whose always-on dnsmasq answers the
-# loopback healthcheck and whose firmware-persistent /data the role
-# symlinks from. On the Lab VM we stub just enough for the role to reach
+# loopback healthcheck. On the Lab VM we stub just enough for the role to reach
 # its functional state: dig (UniFi OS ships it; Lab may not) and a dnsmasq
 # on 127.0.0.1:53 so the init_fail healthcheck (dig @127.0.0.1) passes,
 # letting keepalived leave FAULT and claim the VIP. dnsmasq here is a stand
@@ -44,4 +43,33 @@
     name: dnsmasq
     state: restarted
     enabled: true
+  become: true
+
+# Seed the superseded /data master layout, symlinked into /etc and /usr, so
+# converge proves it replaces the links (including one whose content already
+# matches) and removes the masters. Drop with the role's cleanup task.
+- name: _setup | Seed the superseded persistent keepalived layout
+  shell: |
+    set -euo pipefail
+    mkdir -p /data/keepalived /etc/keepalived /usr/local/bin
+    printf 'global_defs {\n}\n' >/data/keepalived/keepalived.conf
+    printf '#!/bin/bash\nexit 0\n' >/data/keepalived/healthcheck.sh
+    chmod 0755 /data/keepalived/healthcheck.sh
+    printf '[Service]\nType=oneshot\nExecStart=/bin/true\n' >/data/keepalived/udm_keepalived_heartbeat.service
+    ln -sfn /data/keepalived/keepalived.conf /etc/keepalived/keepalived.conf
+    ln -sfn /data/keepalived/healthcheck.sh /usr/local/bin/dnsmasq_healthcheck
+    ln -sfn /data/keepalived/udm_keepalived_heartbeat.service /etc/systemd/system/udm_keepalived_heartbeat.service
+    ln -sfn /data/keepalived/udm_keepalived_heartbeat.timer /etc/systemd/system/udm_keepalived_heartbeat.timer
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _setup | Seed the superseded heartbeat timer master with current content
+  copy:
+    src: udm_keepalived_heartbeat.timer
+    dest: /data/keepalived/udm_keepalived_heartbeat.timer
+    owner: root
+    group: root
+    mode: "0644"
   become: true
