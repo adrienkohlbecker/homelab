@@ -235,14 +235,15 @@
       Raw apikey leaked into /var/log/nginx/access.log; expected only
       apikey=REDACTED.
 
-# An auth-enabled vhost must gate every cookieless request to Authelia,
-# including one carrying its own Authorization header. Stub is still in gate
-# mode (401), so the request must redirect instead of reaching the upstream.
-- name: _verify | A cookieless Authorization-bearing request is still gated (no bypass)
+# Without auth_request_authorization, the auth subrequest must not carry the
+# client's Authorization header. The gate-mode stub admits this exact Basic
+# credential, so a 302 proves nginx cleared it; forwarding it would yield 200.
+- name: _verify | An Authorization header does not reach the auth subrequest by default
   uri:
     url: "https://{{ nginx_verify_host }}/"
-    headers:
-      Authorization: Token should-not-bypass
+    url_username: nginxverify
+    url_password: secret
+    force_basic_auth: true
     validate_certs: false
     follow_redirects: none
     status_code: 302
