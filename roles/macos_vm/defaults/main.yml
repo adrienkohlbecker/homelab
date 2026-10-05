@@ -1,5 +1,5 @@
-# Per-VM identity. Overridden by the physical Lab inventory group.
-macos_vm_name: chi
+# Per-VM identity.
+macos_vm_name: base
 macos_vm_macos_version: "15"  # Sequoia. Keys the recovery product in tasks/artifacts.yml.
 
 # CPU & memory. macOS dislikes hybrid topology, so on Raptor Lake / Alder Lake

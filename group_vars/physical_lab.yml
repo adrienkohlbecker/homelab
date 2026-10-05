@@ -54,7 +54,6 @@ macvlan_blocks:
     # --network=mac_iot.
     podman_network: true
 
-macos_vm_name: base
 # First SMT sibling of four P-cores. CPUs 12-19 are E-cores on this i5-13500.
 macos_vm_cpu_pinset: "0,2,4,6"
 
