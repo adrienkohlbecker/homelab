@@ -364,10 +364,13 @@
     - homeassistant
     - homeassistant_icons
 
-# HA 2026.9 replaced the SMTP notify YAML platform with a config entry, and
-# ships no offline API for one -- so the role reconciles the entry inside
-# .storage/core.config_entries itself, keeping the relay, the sender identity,
-# and the vaulted password declared here rather than only in HA's UI.
+# HA 2026.9 moved SMTP notify to a config entry. The YAML platform still works
+# until 2027.1, but only as a deprecated one-shot import: it needs a live login
+# to the relay, and once any field changes (a rotated password) it no longer
+# matches the imported entry, so HA adds a duplicate instead of updating it.
+# HA ships no offline API for config entries, so the role reconciles the entry
+# inside .storage/core.config_entries itself, keeping the relay, the sender
+# identity, and the vaulted password declared here rather than only in HA's UI.
 #
 # Ordering is the subtle part. HA holds that registry in memory and flushes it
 # on shutdown, so a write to a *running* instance is undone by the very restart

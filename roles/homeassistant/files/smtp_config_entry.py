@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Reconcile Home Assistant's SMTP config entry with the repo's declared inputs.
 
-Home Assistant 2026.9 dropped YAML configuration for the SMTP notify platform.
-The live settings are now a config entry inside
-``.storage/core.config_entries``, and HA offers no offline API for them, so this
-script edits that registry directly.
+Home Assistant 2026.9 moved the SMTP notify platform to a config entry inside
+``.storage/core.config_entries``. YAML survives until 2027.1 only as a one-shot
+import that needs a live login and duplicates the entry when a field changes,
+and HA offers no offline API for config entries, so this script edits that
+registry directly.
 
 Two things make that safe enough to do from Ansible:
 
