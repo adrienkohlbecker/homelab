@@ -7,22 +7,6 @@
   set_fact:
     podman_probe_image: docker.io/library/busybox
 
-- name: _verify | Exercise a disabled image helper call
-  import_role:
-    name: podman
-    tasks_from: image
-  vars:
-    podman_image_args:
-      name: podman_condition_probe
-      image: "{{ podman_probe_image }}"
-      condition: false
-
-- name: _verify | Disabled image helper publishes no-change results
-  assert:
-    that:
-      - not podman_condition_probe_podman_available
-      - not podman_condition_probe_image_changed
-
 # On ZFS-root hosts, prove /var/lib/containers is actually backed by the
 # dedicated device; a skipped mount would silently put reconstructible
 # container data back in rpool. findmnt resolves by-partlabel and /dev/md

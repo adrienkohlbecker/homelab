@@ -2,7 +2,9 @@
 #   name       required caller name; publishes `<name>_podman_available` and
 #              `<name>_image_changed`
 #   image      required image reference
-#   condition  optional bool, default true
+#
+# Unlike the helper roles, this entry point takes no `condition`: every caller
+# pulls its image unconditionally.
 - name: image | Validate arguments
   assert:
     quiet: true
@@ -13,21 +15,14 @@
       - podman_image_args.name is match('^[a-z_][a-z0-9_-]*$')
       - podman_image_args.image is string
       - podman_image_args.image | length > 0
-      - podman_image_args.keys() | difference(['name', 'image', 'condition']) | length == 0
+      - podman_image_args.keys() | difference(['name', 'image']) | length == 0
     fail_msg: >-
       podman_image_args needs name (a valid identifier) and a non-empty image;
       got {{ podman_image_args | default('<unset>') }}
   tags:
     - podman
 
-- name: image | Resolve condition for {{ podman_image_args.name }}
-  set_fact:
-    _podman_image_condition: "{{ podman_image_args.condition | default(true) }}"
-  tags:
-    - podman
-
 - name: image | Check whether podman is installed for {{ podman_image_args.name }}
-  when: _podman_image_condition
   stat:
     path: /usr/bin/podman
   register: _podman_image_binary
@@ -35,9 +30,7 @@
     - podman
 
 - name: image | Pull image for {{ podman_image_args.name }}
-  when:
-    - _podman_image_condition
-    - not ansible_check_mode or _podman_image_binary.stat.exists
+  when: not ansible_check_mode or _podman_image_binary.stat.exists
   containers.podman.podman_image:
     name: "{{ podman_image_args.image }}"
   register: _podman_image_result
@@ -50,10 +43,7 @@
 
 - name: image | Publish results for {{ podman_image_args.name }}
   set_fact:
-    "{{ podman_image_args.name | ansible_var_key }}_podman_available": >-
-      {{ _podman_image_binary.stat.exists if _podman_image_condition else false }}
-    "{{ podman_image_args.name | ansible_var_key }}_image_changed": >-
-      {{ (_podman_image_result.changed | default(false))
-         if _podman_image_condition else false }}
+    "{{ podman_image_args.name | ansible_var_key }}_podman_available": "{{ _podman_image_binary.stat.exists }}"
+    "{{ podman_image_args.name | ansible_var_key }}_image_changed": "{{ _podman_image_result.changed | default(false) }}"
   tags:
     - podman
