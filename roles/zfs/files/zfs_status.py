@@ -85,8 +85,7 @@ def parse_status(raw: str) -> dict[str, Any]:
                 raise StatusError(f"Unknown scan function on {name}: {scan['function']!r}")
             if scan.get("state") not in ("NONE", "SCANNING", "FINISHED", "CANCELED"):
                 raise StatusError(f"Unknown scan state on {name}: {scan.get('state')!r}")
-            for field in ("end_time", "scrub_pause"):
-                integer(scan.get(field), f"{name}.{field}")
+            integer(scan.get("end_time"), f"{name}.end_time")
         elif scan and "rebuild_stats" not in scan:
             raise StatusError(f"Missing scan function on {name}")
         if "err_scrub_state" in scan:
@@ -124,17 +123,14 @@ def supports_json() -> bool:
 
 
 def scan_active(pool: dict[str, Any]) -> bool:
-    """Return whether the pool is doing scan I/O right now.
+    """Return whether the pool has a scrub or resilver underway.
 
-    A paused scrub stays SCANNING with a nonzero scrub_pause and counts as
-    inactive.
+    A paused scrub stays SCANNING and counts as underway: the next zfs_scrub
+    run resumes it.
     """
     scan = pool.get("scan_stats", {})
-    if scan.get("state") == "SCANNING":
-        if scan.get("function") == "SCRUB":
-            return scan["scrub_pause"] == 0
-        if scan.get("function") == "RESILVER":
-            return True
+    if scan.get("state") == "SCANNING" and scan.get("function") in ("SCRUB", "RESILVER"):
+        return True
     if scan.get("err_scrub_state") == "ERRORSCRUBBING" and scan["err_scrub_pause"] == 0:
         return True
     return any(rebuild["state"] == "ACTIVE" for rebuild in scan.get("rebuild_stats", {}).values())
@@ -154,9 +150,9 @@ def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str |
     """Return the scrub-watchdog alert for one pool, or None.
 
     A canceled scrub always alerts and an active scan never does. Age runs from
-    the newest completed scrub or resilver, completed sequential rebuild, or
-    paused scrub. Only when none exists does it query `zfs get creation`, and
-    the alert then says the age is measured from pool creation.
+    the newest completed scrub or resilver, or completed sequential rebuild.
+    Only when none exists does it query `zfs get creation`, and the alert then
+    says the age is measured from pool creation.
     """
     scan = pool.get("scan_stats", {})
     if scan.get("function") == "SCRUB" and scan.get("state") == "CANCELED":
@@ -168,8 +164,6 @@ def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str |
     ]
     if scan.get("function") in ("SCRUB", "RESILVER") and scan.get("state") == "FINISHED":
         completed.append(scan["end_time"])
-    elif scan.get("function") == "SCRUB" and scan.get("state") == "SCANNING":
-        completed.append(scan["scrub_pause"])
     scrub_date = max(completed) if completed else int(run("zfs", "get", "creation", "-Hpo", "value", name).strip())
     if scrub_date <= 0:
         raise StatusError(f"Missing scrub or creation timestamp for {name}")

@@ -318,7 +318,7 @@
 
 # Drive real scan transitions on a throwaway pool: the unprivileged reader the
 # netdata collector uses must track them, and the scheduler must skip an active
-# scrub and resume a paused one.
+# scrub.
 - name: _verify | Exercise real scan transitions and the scrub scheduler
   when: zfs_root
   script: _verify_scan.sh

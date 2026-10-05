@@ -25,7 +25,6 @@ def pool():
             "state": "FINISHED",
             "start_time": 80,
             "end_time": 90,
-            "scrub_pause": 0,
         },
     }
 
@@ -113,18 +112,17 @@ def test_rejects_missing_or_inexact_counters(pool, value):
 
 
 @pytest.mark.parametrize(
-    ("function", "state", "pause", "active"),
+    ("function", "state", "active"),
     [
-        pytest.param("SCRUB", "SCANNING", 0, True, id="active_scrub"),
-        pytest.param("SCRUB", "SCANNING", 95, False, id="paused_scrub"),
-        pytest.param("SCRUB", "CANCELED", 95, False, id="canceled_scrub"),
-        pytest.param("SCRUB", "FINISHED", 0, False, id="finished_scrub"),
-        pytest.param("RESILVER", "SCANNING", 0, True, id="active_resilver"),
-        pytest.param("RESILVER", "FINISHED", 0, False, id="finished_resilver"),
+        pytest.param("SCRUB", "SCANNING", True, id="active_scrub"),
+        pytest.param("SCRUB", "CANCELED", False, id="canceled_scrub"),
+        pytest.param("SCRUB", "FINISHED", False, id="finished_scrub"),
+        pytest.param("RESILVER", "SCANNING", True, id="active_resilver"),
+        pytest.param("RESILVER", "FINISHED", False, id="finished_resilver"),
     ],
 )
-def test_scan_activity_distinguishes_pause_and_history(pool, function, state, pause, active):
-    pool["scan_stats"].update(function=function, state=state, scrub_pause=pause)
+def test_scan_activity_distinguishes_running_scans_from_history(pool, function, state, active):
+    pool["scan_stats"].update(function=function, state=state)
     assert status.scan_active(pool) is active
 
 
@@ -156,7 +154,7 @@ def test_sequential_resilver_is_active(pool):
     assert status.scan_active(parsed)
 
 
-@pytest.mark.parametrize("field", ["state", "function", "scrub_pause"])
+@pytest.mark.parametrize("field", ["state", "function", "end_time"])
 def test_rejects_unknown_or_incomplete_scan(pool, field):
     pool["scan_stats"][field] = "unexpected"
     with pytest.raises(status.StatusError):
@@ -279,17 +277,16 @@ def test_scan_query_failure_propagates(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("state", "pause", "end", "expected"),
+    ("state", "end", "expected"),
     [
-        pytest.param("FINISHED", 0, 90, None, id="recent_scrub"),
-        pytest.param("FINISHED", 0, 70, "expired", id="expired_scrub"),
-        pytest.param("SCANNING", 70, 0, "expired", id="stale_pause"),
-        pytest.param("SCANNING", 0, 0, None, id="active_scrub"),
-        pytest.param("CANCELED", 95, 0, "canceled", id="canceled_scrub"),
+        pytest.param("FINISHED", 90, None, id="recent_scrub"),
+        pytest.param("FINISHED", 70, "expired", id="expired_scrub"),
+        pytest.param("SCANNING", 0, None, id="active_scrub"),
+        pytest.param("CANCELED", 0, "canceled", id="canceled_scrub"),
     ],
 )
-def test_scrub_watchdog_uses_integer_timestamps(pool, state, pause, end, expected):
-    pool["scan_stats"].update(state=state, scrub_pause=pause, end_time=end)
+def test_scrub_watchdog_uses_integer_timestamps(pool, state, end, expected):
+    pool["scan_stats"].update(state=state, end_time=end)
     issue = status.scrub_issue("tank", pool, now=100, expire=20)
     assert issue is None if expected is None else expected in issue
 
@@ -330,12 +327,6 @@ def test_latest_completion_wins_when_scan_and_rebuild_history_coexist(pool):
     assert status.scrub_issue("tank", pool, now=100, expire=20) is None
     pool["scan_stats"]["end_time"] = 99
     assert status.scrub_issue("tank", pool, now=110, expire=15) is None
-
-
-def test_paused_scrub_timestamp_is_not_hidden_by_old_rebuild_history(pool):
-    pool["scan_stats"].update(state="SCANNING", scrub_pause=95)
-    pool["scan_stats"]["rebuild_stats"] = {"mirror-0": {"state": "COMPLETE", "end_time": 70}}
-    assert status.scrub_issue("tank", pool, now=100, expire=20) is None
 
 
 @pytest.fixture

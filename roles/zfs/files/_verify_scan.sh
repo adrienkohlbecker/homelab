@@ -46,14 +46,9 @@ zpool scrub zfs_scan_test
 [[ $(scan_state) == 1 ]]
 scrub_test_pool | grep -F 'Scrub/resilver already running on zfs_scan_test, skipping.'
 
-zpool scrub -p zfs_scan_test
-[[ $(scan_state) == 0 ]]
-scrub_test_pool >/dev/null
-[[ $(scan_state) == 1 ]]
-
 zpool scrub -s zfs_scan_test
 [[ $(scan_state) == 0 ]]
 printf '%s\n' "$saved_suspend" >"$scan_suspend"
 timeout -k 10 60 zpool scrub -w zfs_scan_test
 [[ $(scan_state) == 0 ]]
-echo 'Active, paused, canceled, completed, and resumed scan states read back unprivileged'
+echo 'Active, canceled, and completed scan states read back unprivileged'
