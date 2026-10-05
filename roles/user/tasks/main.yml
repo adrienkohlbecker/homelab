@@ -92,27 +92,20 @@
 # doesn't ship that terminfo entry leaves zsh's zle without capability
 # lookups, which manifests as doubled keystrokes and runaway line redraw
 # over SSH. Install system-wide so sudo/root shells inherit it too.
-- name: Install Ghostty terminfo source
+#
+# files/xterm-ghostty is compiled from xterm-ghostty.terminfo with Ubuntu's
+# `tic -x -o <dir>`, which writes it to <dir>/x/xterm-ghostty. The trailing
+# slash on dest makes copy create the directory, also in check mode.
+# ncurses reads entries only by name from a terminfo tree, so a lone compiled
+# file has nothing to validate it.
+- name: Install Ghostty terminfo  # noqa: require-validate
   copy:
-    src: xterm-ghostty.terminfo
-    dest: /etc/terminfo/xterm-ghostty.terminfo
+    src: xterm-ghostty
+    dest: /etc/terminfo/x/
     owner: root
     group: root
     mode: "0644"
     backup: true
-    validate: tic -c %s
-  become: true
-  register: user_ghostty_terminfo
-  tags:
-    - user
-
-# Gate the compile on the source copy so an updated terminfo recompiles,
-# but skip the check-mode fresh-fixture case where the copy only reports the
-# change without writing the file tic would read.
-- name: Compile Ghostty terminfo
-  when: user_ghostty_terminfo.changed and not ansible_check_mode
-  command: tic -x -o /etc/terminfo /etc/terminfo/xterm-ghostty.terminfo
-  changed_when: true
   become: true
   tags:
     - user
