@@ -15,7 +15,7 @@ This is a home environment, not a corporate production site. Tie-breakers when t
 Load-bearing negatives, up-front so a fresh session sees them first.
 
 - **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See *Helper roles → systemd_unit*. (lint: `no-handlers`)
-- **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Healthchecks*.
+- **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Podman Service Conventions*.
 - **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* inventory vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in inventory vars (see *Inventory layout*) and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* inventory vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
 - **DO NOT run state-mutating commands on prod hosts (`hosts.ini` `[prod]`: `lab`, `pug`, `fox`, `bunk`, `udm`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Production*.
 - **DO NOT add tautological checks to role `_verify.yml` files.** A check that only confirms a converge task wrote the requested file or value proves nothing beyond Ansible's own result. Exercise the consuming binary or service and assert observable behavior; if no meaningful functional assertion is possible, omit the check.
@@ -27,12 +27,7 @@ Repository map: [README.md](README.md).
 - Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install`. `python.uv_venv_auto` auto-sources `.venv`; `uv sync` populates Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - **op:// env refs only resolve under `op run --`.** Toml tasks wrap explicitly; file-based tasks under `mise-tasks/` do **not** — mise exports the literal `op://…` string. Fix: re-exec under `op run --` behind a guard env var.
 - Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, ruff/pyright, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
-
-## Workflows — use the skill, don't reinvent
-
-- `/triage <service>` — investigate a service end-to-end (resolve host(s), gather state, summarize).
-
-Skill and hook wiring for both agents: [.agents/README.md](.agents/README.md).
+- Skills: `/triage <service>` investigates a service end-to-end (resolve hosts, gather state, summarize). Skill and hook wiring for both agents: [.agents/README.md](.agents/README.md).
 
 ## Coding Style & Naming Conventions
 
@@ -99,13 +94,10 @@ A new service role mirrors a recent sibling and wires these shared places:
 - **Vhost:** an `nginx_site` call (see *Helper roles*).
 - **Bookmark:** user-facing services get an entry in [roles/homepage/templates/bookmarks.yaml.j2](roles/homepage/templates/bookmarks.yaml.j2) shaped `abbr: XX` + `icon: sh-<name>.png` (selfh.st icons) + `href: https://<subdomain>.{{ inventory_hostname }}.{{ domain }}/`.
 
-### Home Assistant GUI YAML sync
+### Home Assistant
 
-Drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). The files live in `roles/homeassistant/files/ha_gui_config` — an **in-place gitignored clone** of the private `homelab_ha_config` repo (not a submodule); `ha:sync` owns it (commits + pushes there, deploys to the HA host). The HA role only creates dirs + include-target stubs.
-
-### Home Assistant `.storage` config
-
-For config HA has moved out of YAML, pick the highest tier that works — `configuration.yaml.j2`, then a `force: false` seed of a single-purpose `.storage/<key>`, then a reconcile into `.storage/core.config_entries` (smtp only; **HA must be stopped before that write**) — and record the choice in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md), which holds the tier rationale.
+- **GUI YAML:** drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). The files live in `roles/homeassistant/files/ha_gui_config` — an **in-place gitignored clone** of the private `homelab_ha_config` repo (not a submodule); `ha:sync` owns it (commits + pushes there, deploys to the HA host). The HA role only creates dirs + include-target stubs.
+- **`.storage` config:** for config HA has moved out of YAML, pick the highest tier that works — `configuration.yaml.j2`, then a `force: false` seed of a single-purpose `.storage/<key>`, then a reconcile into `.storage/core.config_entries` (smtp only; **HA must be stopped before that write**) — and record the choice in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md), which holds the tier rationale.
 
 ### `notes/` private clone
 
@@ -128,43 +120,26 @@ Prefer these over re-implementing boilerplate. Call them with `tasks_from` and a
 
 ## Podman Service Conventions
 
-Long-form rationale in [notes/podman_conventions.md](notes/podman_conventions.md). **Use canonical upstream image names** in service templates (`docker.io/sonatype/nexus3:3.91.1`, not `nexus.lab.fahm.fr/docker.io/…`); mirror redirection belongs in `registries.conf` + the `--upstream-mirrors` test flag.
+Rationale: [notes/podman_conventions.md](notes/podman_conventions.md).
 
-### Healthchecks
+- **Images:** use canonical upstream names in service templates (`docker.io/sonatype/nexus3:3.91.1`, not `nexus.lab.fahm.fr/docker.io/…`); mirror redirection belongs in `registries.conf` + the `--upstream-mirrors` test flag.
+- **Healthchecks:** every `*.service.j2` declares `--health-cmd` and `--health-startup-cmd`, preferring in order:
+  1. a service-native CLI — `mosquitto_sub -t ...`, `dig +short @127.0.0.1`;
+  2. `curl`/`wget` already in the image — grep the Dockerfile first;
+  3. Python `urllib.request` in JSON-array form, which survives the systemd→podman handoff: `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:PORT/"]'`.
 
-Every `*.service.j2` declares `--health-cmd` (and `--health-startup-cmd`). Preference order:
-
-1. Service-native CLI — `mosquitto_sub -t ...`, `dig +short @127.0.0.1`.
-2. `curl`/`wget` already in the image — grep the Dockerfile first.
-3. Python `urllib.request` (python images). **Must use JSON-array form** to survive systemd→podman handoff: `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:PORT/"]'`.
-
-No distroless image is in service today; if one arrives needing a healthcheck, bind-mount a statically-linked curl into the unit (JSON-array `--health-cmd` — the image has no `/bin/sh` for the string form).
-
-### Secrets
-
-Three paths, preferred order:
-
-1. **App-native `*_FILE`** — `--secret=<n>,type=mount,target=<basename>` + `--env XXX_FILE=/run/secrets/<basename>`. Never lands in env.
-2. **linuxserver `FILE__<VARNAME>`** prefix — s6-overlay reads the file at startup.
-3. **`type=env,target=VAR`** — last-resort, visible to `podman inspect`.
-
-### User namespacing
-
-1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.gid }}`** (default). No namespace mapping. Use whenever the app doesn't insist on `id -u == 0`.
-2. **linuxserver `PUID`/`PGID`** — s6-overlay aligns the baked-in `abc` user.
-3. **Fake-root uidmap** — last resort: `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1`. Canonical [roles/jellyfin/](roles/jellyfin/). When the entrypoint drops to a baked-in non-root uid, allocate a dedicated host user and add a `+N:<uid>:1` override (canonical: [roles/nexus/](roles/nexus/)).
-
-### PID 1 / `--init`
-
-Add `--init` (right after `--name`) **only when the image runs the application directly as PID 1** — a bare Go/Java/.NET/node binary as `ENTRYPOINT`; podman's `catatonit` then reaps children and forwards `SIGTERM`. Canonical: [roles/adguard/](roles/adguard/), [roles/jellyfin/](roles/jellyfin/). Skip it when the image ships its own init — s6-overlay `/init` (every `linuxserver/*`, home-assistant), `dumb-init`/`tini`, or an entrypoint that `exec`s a supervisor. Check, don't guess: `sudo podman image inspect <img> --format '{{json .Config.Entrypoint}}'`, and read the script if it's a shell wrapper. Rationale: [notes/podman_conventions.md](notes/podman_conventions.md).
-
-### Prefer system-scope systemd units
-
-Default for new timers/services is **system-scope**. Reach for user-scope (linger) only when fundamentally required. When hardening, `systemd-analyze security <unit>` lists cheap wins.
-
-### Inter-container DNS
-
-Containers reach co-located podman services via **`<name>.dns.podman`** (aardvark-dns), never a host port or hard-coded IP. Both producer and consumer create the `containers.podman.podman_network` independently (idempotent). Requires the **netavark** backend with `disable_dns: false`. Canonical: [roles/mosquitto/](roles/mosquitto) (producer) + [roles/z2m/](roles/z2m) (consumer). Target network name or gateway IP, never an `ethN` index.
+  A distroless image (none today) gets a bind-mounted static curl and a JSON-array `--health-cmd`, since it has no `/bin/sh`.
+- **Secrets**, in order:
+  1. app-native `*_FILE` — `--secret=<n>,type=mount,target=<basename>` + `--env XXX_FILE=/run/secrets/<basename>`; never lands in env;
+  2. linuxserver `FILE__<VARNAME>` — s6-overlay reads the file at startup;
+  3. `type=env,target=VAR` — last resort, visible to `podman inspect`.
+- **User namespacing**, in order:
+  1. `--user {{ <svc>_user.uid }}:{{ <svc>_user.gid }}` (default; no mapping) whenever the app doesn't insist on `id -u == 0`;
+  2. linuxserver `PUID`/`PGID` — s6-overlay aligns the baked-in `abc` user;
+  3. fake-root uidmap — `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (canonical [roles/jellyfin/](roles/jellyfin/)). When the entrypoint drops to a baked-in non-root uid, allocate a dedicated host user and add a `+N:<uid>:1` override (canonical [roles/nexus/](roles/nexus/)).
+- **PID 1 / `--init`:** add `--init` (right after `--name`) **only when the image runs the application directly as PID 1** — a bare Go/Java/.NET/node binary as `ENTRYPOINT`; podman's `catatonit` then reaps children and forwards `SIGTERM` (canonical [roles/adguard/](roles/adguard/), [roles/jellyfin/](roles/jellyfin/)). Skip it when the image ships its own init — s6-overlay `/init` (every `linuxserver/*`, home-assistant), `dumb-init`/`tini`, or an entrypoint that `exec`s a supervisor. Check, don't guess: `sudo podman image inspect <img> --format '{{json .Config.Entrypoint}}'`, and read the script if it's a shell wrapper.
+- **systemd scope:** new timers and services are system-scope; reach for user-scope (linger) only when fundamentally required. `systemd-analyze security <unit>` lists cheap hardening wins.
+- **Inter-container DNS:** containers reach co-located podman services via **`<name>.dns.podman`** (aardvark-dns), never a host port or hard-coded IP. Producer and consumer each create the `containers.podman.podman_network` (idempotent); it needs the **netavark** backend with `disable_dns: false`. Canonical: [roles/mosquitto/](roles/mosquitto) (producer) + [roles/z2m/](roles/z2m) (consumer). Target the network name or gateway IP, never an `ethN` index.
 
 ## Testing
 
