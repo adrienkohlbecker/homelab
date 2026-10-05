@@ -168,7 +168,6 @@
   apt:
     deb: /var/cache/refind.deb
     allow_downgrade: true
-  register: refind_deb
   become: true
   tags:
     - refind
@@ -245,14 +244,6 @@
     mode: "{{ boot_esp_mode }}"
   become: true
   register: refind_azerty_keymap_driver
-  tags:
-    - refind
-
-- name: Remove default config
-  file:
-    path: /boot/refind_linux.conf
-    state: absent
-  become: true
   tags:
     - refind
 
