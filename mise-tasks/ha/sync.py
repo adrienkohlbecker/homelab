@@ -25,6 +25,7 @@ lab. `--rebase` is the escape hatch for a clone that has diverged.
 import enum
 import getpass
 import glob
+import json
 import os
 import subprocess
 import sys
@@ -385,6 +386,30 @@ def _ha_post(service: str, token: str) -> None:
         raise RuntimeError(f"{service} failed; retry `mise run ha:sync push` after fixing HA: {e}") from e
 
 
+def check_host_config(token: str) -> None:
+    """Fail unless HA accepts the configuration now on lab's disk.
+
+    HA can only check its own files, so this runs after the upload and before
+    any reload or restart: a rejected config is never loaded, and the tag stays
+    put so the next push retries.
+    """
+    req = urllib.request.Request(
+        f"{HA_URL}/api/config/core/check_config",
+        method="POST",
+        data=b"{}",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        result = json.load(resp)
+    if result.get("result") != "valid":
+        fail(
+            "HA rejected the uploaded configuration; nothing was reloaded.\n"
+            f"{indent_block(str(result.get('errors') or result))}\n"
+            "fix the clone and run `mise run ha:sync push` again."
+        )
+    print("push: HA configuration check passed")
+
+
 def _print_diff_header(label: str) -> None:
     print(f"\n\033[1;34m=== {label} ===\033[0m", flush=True)
 
@@ -527,6 +552,8 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     if files:
         upload_to_host(files)
         print(f"push: uploaded {relpaths}")
+    if token is not None:
+        check_host_config(token)
     if services == ["homeassistant.restart"]:
         print("at least one changed file requires a restart -- restarting homeassistant")
     for service in services:

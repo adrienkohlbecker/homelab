@@ -1,5 +1,7 @@
 """Check GUI YAML sync deployment and credential handling."""
 
+import io
+import json
 import shutil
 import subprocess
 
@@ -111,6 +113,7 @@ def test_push_retries_reload_after_upload_failure(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
     monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
     monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
+    monkeypatch.setattr(sync, "check_host_config", lambda token: None)
     monkeypatch.setattr(sync, "upload_to_host", lambda files: uploads.append(files))
     monkeypatch.setattr(sync, "advance_synced_tag", lambda: tags.append("advanced"))
 
@@ -151,6 +154,7 @@ def test_push_reloads_custom_templates_before_their_consumers(monkeypatch: pytes
     monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
     monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
     monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
+    monkeypatch.setattr(sync, "check_host_config", lambda token: None)
     monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
     monkeypatch.setattr(sync, "advance_synced_tag", lambda: None)
     monkeypatch.setattr(sync, "_ha_post", lambda service, token: reloads.append(service))
@@ -158,6 +162,39 @@ def test_push_reloads_custom_templates_before_their_consumers(monkeypatch: pytes
     sync.do_push()
 
     assert reloads == ["homeassistant.reload_custom_templates", "automation.reload", "scene.reload"]
+
+
+def test_push_skips_reload_when_ha_rejects_the_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_check_config_test")
+    file = sync.SyncFile("automations.yaml", "automation.reload", sync.Direction.BOTH)
+    reloads: list[str] = []
+    tags: list[str] = []
+    monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
+    monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
+    monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
+    monkeypatch.setattr(sync, "resolve_ref", lambda ref: ref)
+    monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
+    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
+    monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
+    monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
+    monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
+    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
+    monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
+    monkeypatch.setattr(sync, "advance_synced_tag", lambda: tags.append("advanced"))
+    monkeypatch.setattr(sync, "_ha_post", lambda service, token: reloads.append(service))
+    verdict = {"result": "invalid", "errors": "Invalid config for 'automation'"}
+
+    monkeypatch.setattr(sync.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(json.dumps(verdict).encode()))
+    with pytest.raises(SystemExit, match="Invalid config for 'automation'"):
+        sync.do_push()
+    assert reloads == []
+    assert tags == []
+
+    verdict = {"result": "valid", "errors": None}
+    sync.do_push()
+    assert reloads == ["automation.reload"]
+    assert tags == ["advanced"]
 
 
 def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -268,6 +305,7 @@ def test_push_publishes_hand_made_commits_before_tagging(synced_clone, monkeypat
     (clone / "scripts.yaml").write_text("local: edit\n")
     _git(clone, "commit", "--quiet", "-am", "hand-made commit")
     monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
+    monkeypatch.setattr(sync, "check_host_config", lambda token: None)
     monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
     monkeypatch.setattr(sync, "_ha_post", lambda service, token: None)
 
