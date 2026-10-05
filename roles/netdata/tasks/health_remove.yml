@@ -1,0 +1,28 @@
+# Remove a health.d alert config installed by health.yml, then request a
+# netdata restart (restart.yml) so the running daemon unloads it.
+#
+# Inputs: caller passes a single dict `netdata_args` with keys
+#   dest        required; bare filename under /etc/netdata/health.d/, as
+#               passed to health.yml.
+#
+# Idempotent on hosts that never had the alert.
+- name: health_remove | Assert dest is a safe basename
+  assert:
+    that:
+      - netdata_args.dest is defined
+      - netdata_args.dest is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: >-
+      health_remove requires netdata_args.dest, a bare filename under
+      health.d/ (got {{ netdata_args.dest | default('nothing') }})
+
+- name: "health_remove | Remove alert config {{ netdata_args.dest }}"
+  file:
+    path: /etc/netdata/health.d/{{ netdata_args.dest }}
+    state: absent
+  register: _netdata_health_remove
+  become: true
+
+- name: "health_remove | Request a netdata restart without alert config {{ netdata_args.dest }}"
+  when: _netdata_health_remove.changed
+  set_fact:
+    netdata_restart_needed: true

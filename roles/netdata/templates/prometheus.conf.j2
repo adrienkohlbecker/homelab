@@ -6,10 +6,8 @@ jobs:
 #  - name: node_exporter_local
 #    url: 'http://127.0.0.1:9100/metrics'
 
-  # fluent-bit's HTTP_Server exposes a prometheus endpoint with
-  # output_dropped_records_total + output_retried_records_total. Dropped
-  # records mean fluent-bit gave up after exhausting retries against
-  # OpenObserve/HyperDX -- silent log loss otherwise.
+  # fluent-bit's HTTP server exposes its pipeline metrics. The job doubles as
+  # fluent-bit's liveness signal through the netdata_collectors presence alert.
   - name: fluentbit
     url: http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/metrics/prometheus
     autodetection_retry: 60

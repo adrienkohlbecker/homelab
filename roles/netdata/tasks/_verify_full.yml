@@ -208,7 +208,6 @@
 - name: _verify | List the managed alarms the fixture instantiates
   set_fact:
     _netdata_managed_alarms:
-      - fluentbit_output_records_dropped
       - gitlab_runner_actionable_failure
       - keepalived_lost_master
       - liveness_system_cpu

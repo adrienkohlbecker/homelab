@@ -45,8 +45,6 @@
       condition: "{{ netdata_keepalived_lost_master_alert }}"
     - src: disk_health_alerts.conf.j2
       dest: disk_health.conf
-    - src: fluentbit_alerts.conf.j2
-      dest: fluentbit.conf
     - src: reboot_alerts.conf.j2
       dest: reboot.conf
     - src: timex_alerts.conf.j2

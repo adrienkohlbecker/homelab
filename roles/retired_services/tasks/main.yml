@@ -14,7 +14,19 @@
     - netdata
     - zfs
 
-- name: Restart netdata without the retired zfs_scan collector
+# Drop once lab, pug, and fox have converged.
+- name: Remove the retired fluent-bit output-drop alert
+  import_role:
+    name: netdata
+    tasks_from: health_remove
+  vars:
+    netdata_args:
+      dest: fluentbit.conf
+  tags:
+    - retired_services
+    - netdata
+
+- name: Restart netdata without the retired collector and alert
   import_role:
     name: netdata
     tasks_from: restart
