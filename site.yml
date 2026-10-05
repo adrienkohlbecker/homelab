@@ -2,7 +2,12 @@
 # of the ones above it. "Base machine install" (host base -> persistent state ->
 # storage -> service platform -> observability) runs on every managed host; the
 # service plays below are host-scoped and assume the full platform is already in
-# place. See CLAUDE.md "Role layering" for the rule on where a new role belongs.
+# place. Roles within the host base are mutually independent.
+#
+# Placing a new role: stop at the first layer whose guarantees it needs --
+# booted OS -> host base; ZFS -> after storage; podman or nginx TLS -> after the
+# service platform (the base/service watershed); an app for a subset of hosts ->
+# a service play. Keep dataset producers ahead of their consumers.
 - name: Base machine install
   hosts: lab,pug,fox
   roles:

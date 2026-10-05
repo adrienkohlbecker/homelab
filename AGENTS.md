@@ -42,15 +42,6 @@ Repository map: [README.md](README.md).
 
 ## Repo Conventions
 
-### Role layering (`site.yml`)
-
-`site.yml` is ordered as a layer ladder — a role's converge position *is* its layer, and each layer builds on the guarantees of the ones above. Two bands:
-
-- **Base machine install** (`hosts: lab,pug,fox`) — sub-bands: *host base* (OS, networking, access), *persistent state* (`services` before its SSH identity consumers), *storage & boot* (`zfs`/`zfs_autobackup`/`zfsbootmenu`/`refind`), *service platform* (`podman`, `certbot`, `nginx`), *observability* (`netdata`/`fluentbit`). Roles within host-base are mutually independent.
-- **Services** — host-scoped plays that assume the full platform is already in place.
-
-**Where does a new role go?** Stop at the first layer whose guarantees you need: booted OS → host base; ZFS → after storage; podman/nginx-TLS → after platform (the base⇄service watershed); app for subset of hosts → service play. Keep dataset *producers* ahead of consumers.
-
 ### Inventory layout
 
 `hosts.ini` (prod) and `test/inventory.ini` (qemu fixtures) share host names — the `lab`/`pug` fixtures take their prod host's identity — so vars are split by which inventory may load them:
@@ -89,7 +80,7 @@ Repository map: [README.md](README.md).
 
 A new service role mirrors a recent sibling and wires these shared places:
 
-- **Play:** add it to the right `site.yml` play (see *Role layering*).
+- **Play:** `site.yml` is a layer ladder; add the role at the first layer whose guarantees it needs (placement rule in the file header), keeping dataset producers ahead of consumers.
 - **Pin:** the image tag (or artifact URL and sha256) goes in `group_vars/all/versions.yml`.
 - **Inventory:** required inputs are asserted by the role and set in both the prod inventory vars and the test ones (`group_vars/test.yml` or `test/host_vars/`), or the fixture's `assert:` fails. Gate per-host enablement with `<svc>_enabled` (see *Inventory layout*).
 - **Tests:** a functional `tasks/_verify.yml`, plus `meta/test.yml` when the role needs cells beyond the default Lab one (see *Continuous Integration*).
