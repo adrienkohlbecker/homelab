@@ -45,6 +45,7 @@ template: !include templates.yaml
 plant: !include plants.yaml
 input_number: !include input_numbers.yaml
 input_select: !include input_selects.yaml
+input_datetime: !include input_datetimes.yaml
 timer: !include timers.yaml
 # Daily Daikin write tally + safety cap for the HVAC Room Control loops
 # (reset at 00:00 by the HVAC Write Counter Reset automation).
@@ -52,6 +53,8 @@ counter: !include counters.yaml
 # climate_template platform from HACS (litinoveweedle/hass-template-climate):
 # per-room dashboard thermostats wrapping the Daikin units.
 climate: !include climate.yaml
+# Built-in hygrostats driving the switch-plug humidifiers (Master, Marie).
+generic_hygrostat: !include generic_hygrostats.yaml
 
 # Provides the wake_on_lan.send_magic_packet action, which has no config flow.
 # The LG TV's webostv.turn_on trigger uses it to power the TV on from standby.

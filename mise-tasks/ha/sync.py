@@ -85,6 +85,9 @@ SYNC_SPEC = [
     ("input_numbers.yaml", "input_number.reload", Direction.BOTH),
     ("input_selects.yaml", "input_select.reload", Direction.BOTH),
     ("timers.yaml", "timer.reload", Direction.BOTH),
+    ("input_datetimes.yaml", "input_datetime.reload", Direction.BOTH),
+    # generic_hygrostat registers no reload service.
+    ("generic_hygrostats.yaml", "homeassistant.restart", Direction.BOTH),
     # The `counter` integration registers no reload service (only increment/
     # decrement/reset/set_value), so a new or changed counter only loads on
     # restart — homeassistant.restart covers the whole file.

@@ -208,6 +208,8 @@
     - climate.yaml
     - counters.yaml
     - timers.yaml
+    - input_datetimes.yaml
+    - generic_hygrostats.yaml
   tags:
     - homeassistant
 
