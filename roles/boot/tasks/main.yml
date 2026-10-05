@@ -3,7 +3,7 @@
 # command-line fragment) plus the boot-chain config below that no feature role
 # owns. site.yml runs the role on the ZBM hosts; tasks specific to ZBM skip on
 # a host without a ZFS root.
-# Bootloader install + image staging stay role-owned (zfsbootmenu, refind);
+# Bootloader install + image staging stay owned by the refind role;
 # disk/ESP creation stays one-time bootstrap, while this role owns its mount
 # policy.
 
