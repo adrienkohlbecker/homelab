@@ -85,8 +85,8 @@ A new service role mirrors a recent sibling and wires these shared places:
 
 ### Home Assistant
 
-- **GUI YAML:** drive with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py)). Don't bypass the sync (no `scp`, no live-VM editing). The files live in `roles/homeassistant/files/ha_gui_config` — an in-place gitignored clone of the private `homelab_ha_config` repo (not a submodule); `ha:sync` owns it (commits + pushes there, deploys to the HA host). The HA role only creates dirs + include-target stubs.
-- **`.storage` config:** for config HA has moved out of YAML, pick the highest tier that works — `configuration.yaml.j2`, then a `force: false` seed of a single-purpose `.storage/<key>`, then a reconcile into `.storage/core.config_entries` (smtp only; HA must be stopped before that write) — and record the choice in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md), which holds the tier rationale.
+- **GUI YAML:** automations, scripts, and scenes live in `roles/homeassistant/files/ha_gui_config`, a gitignored clone of a private repo. Change them only through `mise run ha:sync` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py) documents the modes) — never `scp` or live edits on the host.
+- **`.storage` config:** follow the tier ladder in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md) and record the choice there.
 
 ### `notes/` private clone
 
