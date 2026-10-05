@@ -5,8 +5,11 @@
 #   * keepalived validates, leaves init_fail FAULT once the loopback
 #     healthcheck passes, and (alone on the closed bridge) becomes
 #     MASTER and claims the VIP — the catastrophic-failover path.
-#   * Restarting the on-boot framework leaves keepalived active without a
-#     restart and with the VIP still held — proving recovery is non-disruptive.
+#   * A simulated firmware wipe (keepalived package removed) is repaired by
+#     the on-boot framework, which reinstalls and restarts keepalived until
+#     it holds the VIP again.
+#   * The heartbeat pushes status=up while the peer can serve DNS and
+#     status=down once its dnsmasq stops answering.
 #
 # Lab is alone (its peers are not on the bridge), so it reaches
 # MASTER — unlike the real UDM, which sits BACKUP behind them. That's the
@@ -46,12 +49,20 @@
   delay: 2
   become: true
 
-# Firmware-recovery non-disruption probe: we can't wipe /usr under qemu, but
-# restarting the framework must leave healthy keepalived active without a
-# restart and with the VIP still held.
-- name: _verify | Capture keepalived's active-enter timestamp before recovery
-  set_fact:
-    _udm_dns_failover_ts_before: "{{ _udm_dns_failover_keepalived.status.ActiveEnterTimestampMonotonic }}"
+# Firmware wipes /usr but keeps /etc. Removing the package (not purging it)
+# leaves /etc intact, which is the state the on-boot script must repair.
+- name: _verify | Simulate a firmware wipe of keepalived
+  apt:
+    name: keepalived
+    state: absent
+  become: true
+
+- name: _verify | The wipe released the VIP
+  command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
+  register: _udm_dns_failover_vip_wiped
+  changed_when: false
+  failed_when: network.virtual_ips.dns in _udm_dns_failover_vip_wiped.stdout
+  become: true
 
 - name: _verify | Run recovery through the on-boot framework
   systemd:
@@ -59,18 +70,99 @@
     state: restarted
   become: true
 
-- name: _verify | Keepalived still active, never restarted, VIP still held
+- name: _verify | Keepalived is reinstalled, active and enabled
   systemd:
     name: keepalived.service
   register: _udm_dns_failover_keepalived_after
   failed_when: >-
     _udm_dns_failover_keepalived_after.status.ActiveState != 'active' or
-    _udm_dns_failover_keepalived_after.status.ActiveEnterTimestampMonotonic != _udm_dns_failover_ts_before
+    _udm_dns_failover_keepalived_after.status.UnitFileState != 'enabled'
   become: true
 
-- name: _verify | VIP still claimed after the recovery run
+- name: _verify | Keepalived reclaims the VIP after recovery
   command: ip -4 -oneline addr show dev {{ udm_dns_failover_interface }}
   register: _udm_dns_failover_vip_after
   changed_when: false
-  failed_when: network.virtual_ips.dns not in _udm_dns_failover_vip_after.stdout
+  until: network.virtual_ips.dns in _udm_dns_failover_vip_after.stdout
+  retries: 10
+  delay: 2
+  become: true
+
+# The test inventory points the heartbeat at a loopback URL; stand up a sink
+# there that records each request path. Starting the oneshot heartbeat blocks
+# until its push completes.
+- name: _verify | Start a heartbeat sink on the push URL
+  command:
+    argv:
+      - systemd-run
+      - --unit=udm_dns_failover_verify_sink
+      - python3
+      - -c
+      - |
+        import http.server, sys
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                with open("/run/udm_dns_failover_verify_sink.log", "a") as f:
+                    f.write(self.path + "\n")
+                self.send_response(200)
+                self.end_headers()
+
+        http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+      - "{{ udm_dns_failover_heartbeat_url | urlsplit('port') }}"
+  changed_when: true
+  become: true
+
+- name: _verify | Wait for the heartbeat sink to bind
+  wait_for:
+    host: 127.0.0.1
+    port: "{{ udm_dns_failover_heartbeat_url | urlsplit('port') }}"
+    timeout: 15
+
+- name: _verify | Fire the heartbeat while the peer is healthy
+  systemd:
+    name: udm_keepalived_heartbeat.service
+    state: started
+  become: true
+
+- name: _verify | Heartbeat pushed status=up
+  command: cat /run/udm_dns_failover_verify_sink.log
+  register: _udm_dns_failover_beats_up
+  changed_when: false
+  failed_when: >-
+    (_udm_dns_failover_beats_up.stdout_lines | last) !=
+    (udm_dns_failover_heartbeat_url | urlsplit('path')) ~ '?status=up'
+  become: true
+
+- name: _verify | Stop the resolver behind the healthcheck
+  systemd:
+    name: dnsmasq
+    state: stopped
+  become: true
+
+- name: _verify | Fire the heartbeat while dnsmasq is down
+  systemd:
+    name: udm_keepalived_heartbeat.service
+    state: started
+  become: true
+
+- name: _verify | Heartbeat pushed status=down
+  command: cat /run/udm_dns_failover_verify_sink.log
+  register: _udm_dns_failover_beats_down
+  changed_when: false
+  failed_when: >-
+    (_udm_dns_failover_beats_down.stdout_lines | last) !=
+    (udm_dns_failover_heartbeat_url | urlsplit('path')) ~ '?status=down'
+  become: true
+
+- name: _verify | Restart the resolver
+  systemd:
+    name: dnsmasq
+    state: started
+  become: true
+
+- name: _verify | Stop the heartbeat sink
+  systemd:
+    name: udm_dns_failover_verify_sink.service
+    state: stopped
   become: true
