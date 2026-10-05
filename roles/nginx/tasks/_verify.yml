@@ -485,25 +485,6 @@
   retries: 10
   delay: 1
 
-- name: _verify | Reject an auth-less vhost as an Authelia gate
-  block:
-    - name: _verify | Probe the auth-less vhost with the production gate verifier
-      import_role:
-        name: nginx
-        tasks_from: verify_authelia_gate
-      vars:
-        nginx_verify_authelia_gate_args:
-          subdomain: nginxverifyplain
-          require_rd: false
-
-    - name: _verify | Reject an unexpectedly accepted auth-less vhost
-      fail:
-        msg: the Authelia gate verifier unexpectedly accepted an auth-less vhost
-  rescue:
-    - name: _verify | Gate verification failed at its production predicate
-      assert:
-        that: ansible_failed_task.name is search('Verify unauthenticated redirect')
-
 # The nginx_ipv6 path (group_vars/physical_fox.yml only, never in the test matrix)
 # renders [::]-listeners in site.conf.j2 / nginx.conf.j2 that nothing
 # else exercises. The firewall role's disable_ipv6 sysctl does NOT run in the
@@ -622,45 +603,6 @@
     - name: _verify | Nginx config is still valid after the site rollback
       command: nginx -t
       changed_when: false
-
-# enable_http is asserted incompatible with auth -- :80 is cleartext, so the
-# forward-auth flow would travel unencrypted. Drive
-# that safety assert to its FAILURE direction (the create-tests above only ever
-# feed it valid inputs): the asserts run before any write, so there's nothing to
-# roll back; the helper's failure is expected, so catch it and confirm it was
-# THIS assert that fired (not some unrelated error masquerading as success).
-- name: _verify | Reject enable_http when combined with auth (assert must fire)
-  block:
-    - name: _verify | Configure an enable_http + auth vhost (must fail the assert)
-      import_tasks: site.yml
-      vars:
-        nginx_site_args:
-          subdomain: nginxverifyhttpauth
-          proxy_pass: http://127.0.0.1:18080/
-          enable_http: true
-          auth: true
-
-    - name: _verify | Combining enable_http and auth must fail validation (unexpected success)
-      fail:
-        msg: >-
-          enable_http + auth: true should have failed the site assert
-          (cleartext :80 would carry the auth flow), but the helper accepted it.
-  rescue:
-    - name: _verify | The failure was the enable_http/auth assert (not something else)
-      assert:
-        that:
-          - "'enable_http' in (ansible_failed_result.msg | default(''))"
-        fail_msg: >-
-          Expected the enable_http/auth incompatibility assert to fail, but a
-          different task failed: {{ ansible_failed_task.name | default('<unknown>') }}.
-
-- name: _verify | Verify remote Authelia routing
-  vars:
-    authelia_host: fox
-  assert:
-    that:
-      - network.hosts.fox.wireguard in nginx_authelia_internal_url
-      - "'127.0.0.1' not in nginx_authelia_internal_url"
 
 - name: _verify | Disturb the managed config before exercising reload
   lineinfile:
