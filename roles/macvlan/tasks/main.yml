@@ -10,7 +10,7 @@
 - name: Validate macvlan block inputs
   assert:
     that:
-      # The name must be safe in a unit filename, ip argument, and sysctl key.
+      # The name must be safe in a unit filename and an ip argument.
       - macvlan_args.name is string and macvlan_args.name is match('^[a-z][a-z0-9_]*$')
       - macvlan_args.name | length <= 15
       # parent allows a `.` for VLAN subifs (e.g. eth0.4 / iot).
@@ -41,33 +41,13 @@
   tags:
     - macvlan
 
-# Slash-form keys preserve dotted parent names such as eth0.4.
-- name: Configure ARP policy for macvlan parents and children
-  template:
-    src: macvlan_sysctl.conf.j2
-    dest: /etc/sysctl.d/30-macvlan.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: sysctl --dry-run --ignore --load %s
-  become: true
-  tags:
-    - macvlan
-
-# Existing links converge immediately; each unit applies the same file to its
-# child before bringing it up. Udev also applies it when a link appears.
-- name: Apply ARP policy to existing macvlan parents and children
-  ansible.posix.sysctl:
-    name: "net/ipv4/conf/{{ item.0 }}/{{ item.1.key }}"
-    value: "{{ item.1.value }}"
-    sysctl_set: true
-    sysctl_file: /etc/sysctl.d/30-macvlan.conf
-    reload: false
-    ignoreerrors: true # Child keys do not exist until their units create the links.
-  loop: "{{ macvlan_interfaces | product(macvlan_arp_settings | dict2items) | list }}"
-  loop_control:
-    label: "{{ item.0 }}/{{ item.1.key }}"
+# The firewall role's all.arp_ignore/arp_announce pins cover every parent and
+# child, since the kernel applies the stricter of `all` and the interface.
+# Drop this once lab and pug have converged.
+- name: Remove retired per-interface ARP policy
+  file:
+    path: /etc/sysctl.d/30-macvlan.conf
+    state: absent
   become: true
   tags:
     - macvlan

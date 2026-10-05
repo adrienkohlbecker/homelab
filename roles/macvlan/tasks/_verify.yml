@@ -5,7 +5,7 @@
 # same macvlan_blocks the role consumed and derives the expected addresses
 # independently so allocation drift is caught.
 
-- name: _verify | Reboot to exercise boot-time interface and ARP setup
+- name: _verify | Reboot to exercise boot-time interface setup
   import_role:
     name: reboot
     tasks_from: reboot
@@ -48,25 +48,6 @@
   become: true
   changed_when: false
   failed_when: macvlan_verify_route.stdout | length == 0
-
-- name: _verify | Check ARP policy after boot
-  import_tasks: _verify_arp.yml
-
-- name: _verify | Introduce ARP drift on parents and children
-  command: >-
-    sysctl -w net/ipv4/conf/{{ item }}/arp_ignore=0
-    net/ipv4/conf/{{ item }}/arp_announce=0
-  loop: "{{ macvlan_interfaces }}"
-  changed_when: true
-  become: true
-
-- name: _verify | Reconverge without changing persisted policy
-  import_role:
-    name: macvlan
-    tasks_from: main
-
-- name: _verify | Check that reconvergence repaired ARP drift
-  import_tasks: _verify_arp.yml
 
 # Self-heal regression guard for the child-device BindsTo: removing the iface
 # (a udev remove) must flip the unit to inactive, and starting it again must
@@ -112,9 +93,6 @@
   register: macvlan_verify_heal
   changed_when: false
   failed_when: "'UP' not in macvlan_verify_heal.stdout"
-
-- name: _verify | Check ARP policy after child recreation
-  import_tasks: _verify_arp.yml
 
 - name: _verify | Containers can reach the host over each macvlan network
   vars:

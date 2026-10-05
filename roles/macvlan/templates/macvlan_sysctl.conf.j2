@@ -1,5 +1,0 @@
-{% for interface in macvlan_interfaces %}
-{% for key, value in macvlan_arp_settings.items() %}
-net/ipv4/conf/{{ interface }}/{{ key }}={{ value }}
-{% endfor %}
-{% endfor %}
