@@ -18,21 +18,15 @@
   set_fact:
     nginx_verify_host: "nginxverify.{{ inventory_hostname }}.{{ domain }}"
 
-# TLS SNI follows the URL host, not the Host header. On noble/resolute (OpenSSL
-# 3.x), an SNI of `localhost` that matches no server_name triggers a fatal
-# TLSV1_UNRECOGNIZED_NAME. Map every test-vhost FQDN to loopback so probes can
-# use the real FQDN in the URL, making SNI match the vhost on every release.
 - name: _verify | Map test vhost FQDNs to loopback for SNI-correct probing
-  lineinfile:
-    path: /etc/hosts
-    regexp: '^127\.0\.0\.1\s+nginxverify'
-    line: >-
-      127.0.0.1
-      {{ nginx_verify_host }}
-      nginxverifybasic.{{ inventory_hostname }}.{{ domain }}
-      nginxverifyloc.{{ inventory_hostname }}.{{ domain }}
-      nginxverifyplain.{{ inventory_hostname }}.{{ domain }}
-  become: true
+  import_tasks: test_loopback_hosts.yml
+  vars:
+    nginx_test_loopback_hosts_args:
+      hostnames:
+        - "{{ nginx_verify_host }}"
+        - nginxverifybasic.{{ inventory_hostname }}.{{ domain }}
+        - nginxverifyloc.{{ inventory_hostname }}.{{ domain }}
+        - nginxverifyplain.{{ inventory_hostname }}.{{ domain }}
 
 - name: _verify | Map the IPv6 test vhost to ::1 so the probe reaches [::]:443
   lineinfile:

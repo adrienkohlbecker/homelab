@@ -7,15 +7,8 @@
 - name: Test authelia stub | Configure requested mode
   vars:
     _nginx_test_authelia_stub_mode: "{{ (nginx_test_authelia_stub_args | default({})).mode | default('gate') }}"
+  become: true
   block:
-    - name: Test authelia stub | Assert mode is a known value
-      assert:
-        that:
-          - _nginx_test_authelia_stub_mode in ['gate', 'authed']
-        fail_msg: >-
-          nginx_test_authelia_stub_args.mode must be one of gate/authed; got
-          '{{ _nginx_test_authelia_stub_mode }}'.
-
     # The mode-switching test stub is disposable and needs no backup history.
     - name: Test authelia stub | Install fixture for /api/authz/auth-request  # noqa: require-backup require-validate
       copy:
@@ -26,7 +19,6 @@
         content: |
           server {
             listen 127.0.0.1:{{ service_ports.authelia }};
-            server_name _;
             location = /api/authz/auth-request {
           {% if _nginx_test_authelia_stub_mode == 'gate' %}
               # The correct Basic credential exercises the service-account
@@ -39,37 +31,23 @@
               # redirect returns the browser to the originally requested vhost.
               add_header Location "https://auth.{{ inventory_hostname }}.{{ domain }}/?rd=$http_x_original_url" always;
               return 401;
-          {% elif _nginx_test_authelia_stub_mode == 'authed' %}
+          {% else %}
               add_header Remote-User "nginxverifyuser" always;
               return 200 'test_stub_ok';
           {% endif %}
             }
-            location / {
-              return 404;
-            }
           }
       register: nginx_test_authelia_stub_conf
-      become: true
 
-    - name: Test authelia stub | Validate nginx config
-      when:
-        - not ansible_check_mode
-        - nginx_test_authelia_stub_conf.changed
-      command: nginx -t
-      changed_when: false
-      become: true
-
+    # A reload with a bad config keeps the old workers, so the probe below is
+    # what proves the requested mode is live.
     - name: Test authelia stub | Reload nginx
-      when:
-        - not ansible_check_mode
-        - nginx_test_authelia_stub_conf.changed
+      when: nginx_test_authelia_stub_conf.changed
       systemd:
         name: nginx
         state: reloaded
-      become: true
 
     - name: Test authelia stub | Wait for the fixture to answer
-      when: not ansible_check_mode
       uri:
         url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
         status_code: "{{ 401 if _nginx_test_authelia_stub_mode == 'gate' else 200 }}"

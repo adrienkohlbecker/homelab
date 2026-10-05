@@ -1,5 +1,5 @@
 # Optional input: nginx_test_fixture_args.authelia_mode installs the auth stub
-# in gate, authed, or basic mode after nginx starts.
+# in gate or authed mode after nginx starts.
 #
 # Lay down snakeoil at the letsencrypt paths nginx.conf.j2 references so the
 # production nginx role can start in tests. The permission hardening used by
