@@ -2,8 +2,8 @@
 # vmcore to /var/crash. Panic sysctls apply immediately; crashkernel memory
 # reservation requires a reboot. Operator procedure: notes/runbooks/kdump.md.
 
-# nmi_watchdog is managed through the x86 kernel cmdline and re-arm timer;
-# writing its ineffective arm64 knob would report changed forever. The other
+# nmi_watchdog is managed through the x86 re-arm timer; writing its
+# ineffective arm64 knob would report changed forever. The other
 # two NMI-specific panic controls are absent on arm64.
 - name: Set panic sysctls
   ansible.posix.sysctl:
@@ -121,17 +121,16 @@
   tags:
     - kdump
 
-# Arm the perf-NMI detector before userspace on x86; the delayed timer below
-# restores it after boot-time tuners disable it.
-- name: Enable NMI hard-lockup detector on the kernel commandline
-  when: ansible_architecture == 'x86_64'
+# Ubuntu's x86 kernels enable the hard-lockup detector by default. Drop this
+# once lab and pug have converged without the fragment.
+- name: Remove the NMI hard-lockup detector commandline fragment
   import_role:
     name: boot
     tasks_from: cmdline
   vars:
     boot_cmdline_args:
       name: nmi_watchdog
-      contents: 'nmi_watchdog=1'
+      contents: ''
   tags:
     - kdump
 
@@ -160,9 +159,9 @@
   tags:
     - kdump
 
-# KVM and PowerTOP can disable the watchdog after the kernel command line arms
-# it. Re-assert once after boot; the fixed delay clears KVM's asynchronous
-# teardown and also covers x86 hosts without qemu-kvm.service.
+# KVM and PowerTOP can disable the kernel's default-on watchdog after boot.
+# Re-assert it once; the fixed delay clears KVM's asynchronous teardown and
+# also covers x86 hosts without qemu-kvm.service.
 
 # Install the timer-triggered service before validating its paired timer.
 - name: Install NMI watchdog re-arm service unit
