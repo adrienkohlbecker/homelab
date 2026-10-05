@@ -1,7 +1,12 @@
 """Homelab-specific ansible-lint rules."""
 
+import functools
 import re
+from collections.abc import Iterator
+from pathlib import Path
 
+import yaml
+from ansiblelint.errors import MatchError
 from ansiblelint.file_utils import Lintable
 from ansiblelint.rules import AnsibleLintRule
 from ansiblelint.utils import Task, get_cmd_args
@@ -210,3 +215,96 @@ class RequireValidate(_HomelabRule):
         if destination and _CONFIG_DEST_RE.search(destination):
             return f"{module} task writes config-like content without `validate:`"
         return False
+
+
+_BLOCK_KEYS = ("block", "rescue", "always")
+_IMPORT_MODULES = {"import_role", "include_role", "import_tasks", "include_tasks"}
+
+
+class _IgnoreTagsLoader(yaml.SafeLoader):
+    """SafeLoader that reads Ansible's custom tags (!vault, !unsafe) as null."""
+
+
+_IgnoreTagsLoader.add_multi_constructor("!", lambda loader, suffix, node: None)
+
+
+def _short_module(key: object) -> str:
+    return str(key).rsplit(".", 1)[-1]
+
+
+def _task_tags(task: dict) -> set[str]:
+    tags = task.get("tags") or []
+    return {tags} if isinstance(tags, str) else {str(tag) for tag in tags}
+
+
+def _walk_tasks(tasks: object) -> Iterator[dict]:
+    """Yield every task dict, descending into block/rescue/always."""
+    for task in tasks if isinstance(tasks, list) else []:
+        if isinstance(task, dict):
+            yield task
+            for key in _BLOCK_KEYS:
+                yield from _walk_tasks(task.get(key))
+
+
+@functools.cache
+def _caller_tagged(roles_dir: Path) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
+    """Helper roles, and (role, task file stem) entry points other roles call.
+
+    Helper roles keep an operationally empty tasks/main.yml; a task file another
+    role calls through import_role/include_role `tasks_from` is a helper entry
+    point. In both cases the caller's import carries the tag scope.
+    """
+    helpers: set[str] = set()
+    entrypoints: set[tuple[str, str]] = set()
+    for tasks_file in roles_dir.glob("*/tasks/*.yml"):
+        role = tasks_file.parent.parent.name
+        tasks = yaml.load(tasks_file.read_text(), Loader=_IgnoreTagsLoader)
+        if tasks_file.stem == "main" and not tasks:
+            helpers.add(role)
+        for task in _walk_tasks(tasks):
+            for key, args in task.items():
+                if _short_module(key) in {"import_role", "include_role"} and isinstance(args, dict):
+                    name, tasks_from = args.get("name"), args.get("tasks_from")
+                    if isinstance(name, str) and tasks_from and name != role:
+                        entrypoints.add((name, Path(str(tasks_from)).stem))
+    return frozenset(helpers), frozenset(entrypoints)
+
+
+class RequireRoleTag(_HomelabRule):
+    """Every task in a role carries the role name as a tag."""
+
+    id = "require-role-tag"
+
+    def matchyaml(self, file: Lintable) -> list[MatchError]:
+        path = file.path.resolve()
+        # `_`-prefixed task files (_setup, _verify, test stubs) are harness scaffolding.
+        if file.kind != "tasks" or path.name.startswith("_") or path.parent.name != "tasks":
+            return []
+        roles_dir = path.parent.parent.parent
+        role = path.parent.parent.name
+        if roles_dir.name != "roles":
+            return []
+        helpers, entrypoints = _caller_tagged(roles_dir)
+        if role in helpers or (role, path.stem) in entrypoints:
+            return []
+        return [
+            self.create_matcherror(message=f"task is missing the `{role}` role tag", filename=file, data=task)
+            for task in _untagged_tasks(file.data, role, inherited=False)
+        ]
+
+
+def _untagged_tasks(tasks: object, role: str, *, inherited: bool) -> Iterator[dict]:
+    """Yield leaf tasks lacking `role` in their own or an enclosing block's tags.
+
+    Import/include tasks are skipped: the files they pull in are checked
+    on their own.
+    """
+    for task in tasks if isinstance(tasks, list) else []:
+        if not isinstance(task, dict):
+            continue
+        tagged = inherited or role in _task_tags(task)
+        if any(key in task for key in _BLOCK_KEYS):
+            for key in _BLOCK_KEYS:
+                yield from _untagged_tasks(task.get(key), role, inherited=tagged)
+        elif not tagged and not any(_short_module(key) in _IMPORT_MODULES for key in task):
+            yield task

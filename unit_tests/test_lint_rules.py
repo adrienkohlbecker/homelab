@@ -13,6 +13,7 @@ from lint.ansible_rules.homelab import (
     PreferImport,
     RequireBackup,
     RequireNamedRoleEntrypoint,
+    RequireRoleTag,
     RequireValidate,
     ShellStrictMode,
 )
@@ -202,3 +203,36 @@ class TestRequireValidate:
 
     def test_non_config_destination_is_allowed(self) -> None:
         assert RequireValidate().matchtask(_task("copy", {"dest": "/mnt/services/foo/data.txt"})) is False
+
+
+class TestRequireRoleTag:
+    @staticmethod
+    def _matches(tmp_path: Path, role: str, name: str, body: str) -> list[int]:
+        tasks_file = tmp_path / "roles" / role / "tasks" / name
+        tasks_file.parent.mkdir(parents=True, exist_ok=True)
+        tasks_file.write_text(body)
+        return [match.lineno for match in RequireRoleTag().matchyaml(Lintable(tasks_file, kind="tasks"))]
+
+    def test_untagged_task_warns(self, tmp_path: Path) -> None:
+        body = "- name: Tagged\n  ping:\n  tags: [app]\n\n- name: Untagged\n  ping:\n"
+        assert self._matches(tmp_path, "app", "main.yml", body) == [5]
+
+    def test_block_tag_covers_its_tasks(self, tmp_path: Path) -> None:
+        body = "- name: Group\n  tags: app\n  block:\n    - name: Inner\n      ping:\n"
+        assert self._matches(tmp_path, "app", "main.yml", body) == []
+
+    def test_imports_are_skipped(self, tmp_path: Path) -> None:
+        assert self._matches(tmp_path, "app", "main.yml", "- name: Pull in\n  import_tasks: other.yml\n") == []
+
+    @pytest.mark.parametrize("name", ["_verify.yml", "_setup.yml", "_test_stub.yml"])
+    def test_test_scaffolding_is_exempt(self, tmp_path: Path, name: str) -> None:
+        assert self._matches(tmp_path, "app", name, "- name: Check\n  ping:\n") == []
+
+    def test_helper_role_with_empty_main_is_exempt(self, tmp_path: Path) -> None:
+        self._matches(tmp_path, "helper", "main.yml", "---\n# Entry points are named task files.\n")
+        assert self._matches(tmp_path, "helper", "install.yml", "- name: Install\n  ping:\n") == []
+
+    def test_cross_role_tasks_from_entrypoint_is_exempt(self, tmp_path: Path) -> None:
+        caller = "- name: Use site\n  import_role:\n    name: web\n    tasks_from: site\n  tags: app\n"
+        self._matches(tmp_path, "app", "main.yml", caller)
+        assert self._matches(tmp_path, "web", "site.yml", "- name: Vhost\n  ping:\n") == []

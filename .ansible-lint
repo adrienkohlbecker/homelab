@@ -25,9 +25,9 @@ var_naming_pattern: "^[a-z_][a-z0-9_]*$"
 use_default_rules: true
 # Custom rules encode repo-specific conventions from AGENTS.md:
 # shell-strict-mode, require-backup, require-named-role-entrypoint, no-handlers,
-# no-no-log, and no inventory_hostname branching are enforced; prefer-import
-# and require-validate are warning-only so they surface drift without blocking
-# unrelated changes.
+# no-no-log, and no inventory_hostname branching are enforced; prefer-import,
+# require-validate, and require-role-tag are warning-only so they surface drift
+# without blocking unrelated changes.
 rulesdir:
   - ./lint/ansible_rules/
 
@@ -67,6 +67,7 @@ warn_list:
   - experimental
   - prefer-import
   - require-validate
+  - require-role-tag
 
 # Don't fetch requirements.yml / refresh schemas at lint time.
 offline: true
