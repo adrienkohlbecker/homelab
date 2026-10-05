@@ -1,0 +1,4 @@
+# Relay the notify.email config entry logs in to. Defaults to the fleet relay;
+# the test inventory points it at the local stub from tasks/_setup.yml.
+homeassistant_smtp_host: "{{ smtp_host }}"
+homeassistant_smtp_port: "{{ smtp_port }}"

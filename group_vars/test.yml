@@ -236,6 +236,11 @@ homeassistant_elevation: 140
 homeassistant_smtp_from: changeme@example.com
 homeassistant_smtp_user: changeme@example.com
 homeassistant_smtp_password: changeme
+# The stub relay from roles/homeassistant/tasks/_setup.yml. Port 25 selects
+# plain SMTP: HA verifies STARTTLS against its bundled CA store, which no
+# fixture certificate can satisfy.
+homeassistant_smtp_host: smtpstub.dns.podman
+homeassistant_smtp_port: 25
 
 minio_users:
   - access_key: test
