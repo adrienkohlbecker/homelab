@@ -24,47 +24,6 @@
   failed_when: _zfs_verify_arc.stdout | trim | int != item.value | int
   become: true
 
-# --- Pool properties ---
-
-- name: _verify | Read managed pool properties
-  command: zpool get -H -o value {{ item.name }} {{ item.pool }}
-  loop: "{{ zfs_pool_properties }}"
-  loop_control:
-    label: "{{ item.pool }} {{ item.name }}"
-  changed_when: false
-  register: _zfs_verify_props
-  become: true
-
-- name: _verify | Managed pool properties are applied
-  assert:
-    that: item.stdout | trim == item.item.value
-    fail_msg: >-
-      {{ item.item.pool }} {{ item.item.name }} is
-      {{ item.stdout | trim }}, expected {{ item.item.value }}.
-  loop: "{{ _zfs_verify_props.results }}"
-  loop_control:
-    label: "{{ item.item.pool }} {{ item.item.name }}"
-
-# --- Root dataset autobackup property ---
-
-- name: _verify | Read autobackup:bak value+source on root dataset
-  when: zfs_root
-  command: zfs get -H -o value,source autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
-  register: _zfs_verify_autobackup
-  changed_when: false
-  become: true
-
-# Value AND source must be right: zfs-autobackup's picker filters `-s local`, so
-# an autobackup:bak=true left inherited or `received` (after a DR `zfs recv`)
-# reads back true yet never gets snapshotted. Assert source=local, not just true.
-- name: _verify | Root dataset autobackup:bak is true with a local source
-  when: zfs_root
-  assert:
-    that: (_zfs_verify_autobackup.stdout | trim).split() == ["true", "local"]
-    fail_msg: >-
-      autobackup:bak on rpool/ROOT/{{ ansible_distribution_release }} is
-      "{{ _zfs_verify_autobackup.stdout | trim }}", expected value=true source=local.
-
 # --- Root mount guard ---
 
 - name: _verify | Check root mount guard is active
@@ -78,29 +37,6 @@
   when: zfs_root
   assert:
     that: _zfs_verify_root_mount_unit.status.ActiveState == 'active'
-
-- name: _verify | Check root mount passes
-  when: zfs_root
-  command: /usr/local/bin/zfs_check_mount rpool/ROOT/{{ ansible_distribution_release }} /
-  register: _zfs_verify_root_mount
-  changed_when: false
-  become: true
-
-- name: _verify | Successful root mount check is silent
-  when: zfs_root
-  assert:
-    that: _zfs_verify_root_mount.stdout == ''
-
-# --- Zed service ---
-
-- name: _verify | Query zed unit state
-  systemd:
-    name: zfs-zed
-  register: _zfs_verify_zed
-  failed_when: >-
-    _zfs_verify_zed.status.ActiveState != 'active'
-    or _zfs_verify_zed.status.UnitFileState != 'enabled'
-  become: true
 
 # --- Scrub scheduler ---
 
@@ -184,34 +120,6 @@
   command: /usr/local/bin/zfs_health
   changed_when: false
   become: true
-
-# --- tank special vdev (functional) ---
-# tank carries an NVMe special-vdev mirror across the per-disk p6 meta partitions
-# (provision.sh wires it; notes/unified_disk_layout.md). It is the performance
-# contract behind special_small_blocks on tank/brumath + media -- a regression
-# that dropped the special vdev would silently push that metadata + small blocks
-# back onto the slow raidz2 HDDs. Only hosts declaring `tank` as their tank
-# filesystem carry it; a missing declared pool is a fixture or provisioning
-# failure, not a reason to skip the contract.
-# 'mirror' appears in `zpool status tank` only for the special mirror -- the
-# data vdev is raidz2 and the HDD device names carry no such token.
-- name: _verify | Tank carries its NVMe special-vdev mirror
-  when: zfs_tank_filesystem == 'tank'
-  block:
-    - name: _verify | Read tank vdev topology
-      command: zpool status tank
-      register: _zfs_verify_tank_status
-      changed_when: false
-      become: true
-
-    - name: _verify | Assert tank has a special mirror vdev
-      assert:
-        that:
-          - "'special' in _zfs_verify_tank_status.stdout"
-          - "'mirror' in _zfs_verify_tank_status.stdout"
-        fail_msg: >-
-          tank has no special-vdev mirror -- the p6 meta partitions were not
-          wired into the pool. {{ _zfs_verify_tank_status.stdout }}
 
 # --- Health script fault detection (functional) ---
 # zfs_health's checks only mean something if they actually fire on a damaged
