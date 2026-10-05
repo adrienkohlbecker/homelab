@@ -110,7 +110,7 @@
 # download takes the name that skips the fetch on later runs; the image moves
 # last because it is that sentinel.
 - name: artifacts | Publish verified BaseSystem download
-  when: macos_vm_basesystem_result.changed | default(false)
+  when: macos_vm_basesystem_result.changed
   ansible.builtin.command:
     argv:
       - mv
@@ -122,33 +122,30 @@
     - dmg
   become: true
 
-- name: artifacts | Prepare BaseSystem recovery image
+# qemu-img fails the read on chunk types it cannot decode, such as LZFSE
+# without its module, so a successful conversion is complete.
+- name: artifacts | Convert BaseSystem DMG to raw image
   when: macos_vm_install_mode
+  ansible.builtin.command:
+    argv:
+      - qemu-img
+      - convert
+      - -f
+      - dmg
+      - -O
+      - raw
+      - "{{ macos_vm_workdir }}/BaseSystem.dmg"
+      - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
+    creates: "{{ macos_vm_workdir }}/BaseSystem.img"
   become: true
-  tags:
-    - macos_vm
-  block:
-    # qemu-img fails the read on chunk types it cannot decode, such as LZFSE
-    # without its module, so a successful conversion is complete.
-    - name: artifacts | Convert BaseSystem DMG to raw image
-      ansible.builtin.command:
-        argv:
-          - qemu-img
-          - convert
-          - -f
-          - dmg
-          - -O
-          - raw
-          - "{{ macos_vm_workdir }}/BaseSystem.dmg"
-          - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
-        creates: "{{ macos_vm_workdir }}/BaseSystem.img"
-      register: macos_vm_basesystem_convert_result
+  register: macos_vm_basesystem_convert_result
 
-    - name: artifacts | Publish converted BaseSystem image
-      when: macos_vm_basesystem_convert_result.changed | default(false)
-      ansible.builtin.command:
-        argv:
-          - mv
-          - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
-          - "{{ macos_vm_workdir }}/BaseSystem.img"
-        creates: "{{ macos_vm_workdir }}/BaseSystem.img"
+- name: artifacts | Publish converted BaseSystem image
+  when: macos_vm_basesystem_convert_result.changed
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
+      - "{{ macos_vm_workdir }}/BaseSystem.img"
+    creates: "{{ macos_vm_workdir }}/BaseSystem.img"
+  become: true
