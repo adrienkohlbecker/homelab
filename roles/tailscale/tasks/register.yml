@@ -6,7 +6,6 @@
       - tailscale_login_server | default('') | length > 0
       - tailscale_headscale_host | default('') | length > 0
       - tailscale_headscale_user | default('') | length > 0
-      - tailscale_advertise_routes is defined
       - tailscale_advertise_routes | default([]) | length > 0
     fail_msg: >-
       tailscale registration needs tailscale_login_server, tailscale_headscale_host
