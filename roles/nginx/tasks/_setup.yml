@@ -1,8 +1,3 @@
-- name: _setup | Install netdata
-  import_role:
-    name: netdata
-    tasks_from: install
-
 # Seed stale proxy files so disabled hosts exercise cleanup and reload.
 - name: _setup | Seed the disabled static proxy fixture
   when: not (nginx_static_proxies_enabled | bool)
