@@ -25,13 +25,13 @@
   tags:
     - macos_vm
 
-- name: Fetch and stage upstream artifacts
-  import_tasks: artifacts.yml
+- name: Configure VM storage
+  import_tasks: storage.yml
   tags:
     - macos_vm
 
-- name: Configure VM storage
-  import_tasks: storage.yml
+- name: Fetch and stage upstream artifacts
+  import_tasks: artifacts.yml
   tags:
     - macos_vm
 

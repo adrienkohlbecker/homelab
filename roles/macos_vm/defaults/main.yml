@@ -54,6 +54,7 @@ macos_vm_autostart: false
 macos_vm_start_service: false
 
 # Where the role caches downloaded artifacts (shared across all macOS VMs)
-# and per-VM working files (one subdir per VM).
-macos_vm_artifacts_dir: /var/lib/libvirt/images/macos-vm/_artifacts
-macos_vm_workdir: "/var/lib/libvirt/images/macos-vm/{{ macos_vm_name }}"
+# and per-VM working files (one subdir per VM), on the rpool/macos_vm dataset
+# that tasks/storage.yml mounts at /var/lib/macos_vm.
+macos_vm_artifacts_dir: /var/lib/macos_vm/_artifacts
+macos_vm_workdir: "/var/lib/macos_vm/{{ macos_vm_name }}"

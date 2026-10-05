@@ -195,7 +195,7 @@ netdata_diskspace_blocklist:
   - /mnt/minio
   - /mnt/scratch
   - /mnt/services
-  - /var/lib/libvirt/images
+  - /var/lib/macos_vm
 
 # Netdata hosts the homepage_alerts sidecar polls through their public FQDNs.
 homepage_netdata_hosts:
