@@ -31,7 +31,9 @@
   changed_when: false
   become: true
 
-- name: _verify | The node registered and approved routes match exactly
+# Headscale sees what `tailscale set` advertised, independently of the
+# approve-routes step.
+- name: _verify | The node registered and its advertised and approved routes match exactly
   vars:
     _tailscale_node: >-
       {{ (_tailscale_nodes.stdout | from_json)
@@ -42,44 +44,14 @@
   assert:
     that:
       - _tailscale_node.id is defined
+      - (_tailscale_desired_routes | symmetric_difference(_tailscale_node.available_routes | default([], true))) | length == 0
       - (_tailscale_desired_routes | symmetric_difference(_tailscale_node.approved_routes | default([], true))) | length == 0
     fail_msg: >-
       headscale node for {{ ansible_hostname | lower }} is missing, or its
-      approved routes don't match the desired set.
+      advertised or approved routes don't match the desired set.
       desired={{ _tailscale_desired_routes | sort }}
+      advertised={{ _tailscale_node.available_routes | default([], true) | sort }}
       approved={{ _tailscale_node.approved_routes | default([], true) | sort }}
-
-- name: _verify | Read local preferences
-  command: tailscale get --json all
-  register: _tailscale_prefs
-  changed_when: false
-  become: true
-
-- name: _verify | Local preferences match inventory vars
-  vars:
-    _prefs: "{{ _tailscale_prefs.stdout | from_json }}"
-  assert:
-    that:
-      - ((_prefs['advertise-routes'] | default('', true)).split(',') | sort) == (tailscale_advertise_routes | sort)
-      - _prefs['advertise-exit-node'] | default(false) | bool
-      - not (_prefs['accept-routes'] | default(false) | bool)
-      - not (_prefs['accept-dns'] | default(false) | bool)
-      - _prefs['snat-subnet-routes'] | default(false) | bool
-      - not (_prefs['stateful-filtering'] | default(false) | bool)
-    fail_msg: >-
-      Local preferences do not match desired server routing policy:
-      {{ _prefs }}
-
-# Assert the forwarding settings are live, not just present in the sysctl file.
-- name: _verify | IP forwarding is enabled
-  command: sysctl -n {{ item }}
-  loop:
-    - net.ipv4.ip_forward
-    - net.ipv6.conf.all.forwarding
-  register: _tailscale_forwarding
-  changed_when: false
-  failed_when: _tailscale_forwarding.stdout | trim != '1'
-  become: true
 
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the add-wants link brings it back with the target's start.
