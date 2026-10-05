@@ -3,8 +3,9 @@
 # systemd-pstore archives under /var/lib/systemd/pstore. Operator procedure:
 # notes/runbooks/panic.md.
 
-# nmi_watchdog is managed through the x86 re-arm timer; writing its
-# ineffective arm64 knob would report changed forever. The other
+# nmi_watchdog stays at its default-on value; powertop.service re-arms it after
+# auto-tune turns it off. Writing its ineffective arm64 knob would report
+# changed forever. The other
 # two NMI-specific panic controls are absent on arm64.
 - name: Set panic sysctls
   ansible.posix.sysctl:
@@ -32,33 +33,5 @@
   loop_control:
     label: 'kernel.{{ item.name }}'
   become: true
-  tags:
-    - panic
-
-# KVM and PowerTOP can disable the kernel's default-on watchdog after boot,
-# leaving hardlockup_panic inert. Re-assert it once; the fixed delay clears
-# KVM's asynchronous teardown and also covers x86 hosts without
-# qemu-kvm.service.
-
-# Install the timer-triggered service before validating its paired timer.
-- name: Install NMI watchdog re-arm service unit
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: panic_nmi_watchdog.service
-      condition: "{{ ansible_architecture == 'x86_64' }}"
-  tags:
-    - panic
-
-- name: Manage NMI watchdog re-arm timer unit
-  import_role:
-    name: systemd_unit
-    tasks_from: unit
-  vars:
-    systemd_unit_args:
-      src: panic_nmi_watchdog.timer
-      condition: "{{ ansible_architecture == 'x86_64' }}"
   tags:
     - panic

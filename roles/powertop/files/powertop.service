@@ -9,6 +9,10 @@ Type=oneshot
 TimeoutStartSec=60
 RemainAfterExit=true
 ExecStart=/usr/sbin/powertop --auto-tune
+# Auto-tune turns the NMI hard-lockup watchdog off, which leaves the panic
+# role's hardlockup_panic inert. Re-arm it wherever a CPU perf PMU backs the
+# detector; VMs can expose the sysctl without one, and the write then fails.
+ExecStartPost=/bin/sh -c 'if ls /sys/bus/event_source/devices/cpu* >/dev/null 2>&1; then exec /sbin/sysctl -qw kernel.nmi_watchdog=1; fi'
 
 [Install]
 WantedBy=multi-user.target

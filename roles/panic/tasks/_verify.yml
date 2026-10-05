@@ -1,24 +1,3 @@
-# Disarm the detector as KVM or PowerTOP would, then run the re-arm unit the
-# boot timer starts. Without a perf PMU the unit's capability condition must
-# skip it cleanly, so the start still succeeds.
-- name: _verify | Re-arm unit restores the NMI watchdog
-  when: ansible_architecture == 'x86_64'
-  shell: |
-    set -euo pipefail
-    sysctl -qw kernel.nmi_watchdog=0 || true
-    systemctl start panic_nmi_watchdog.service
-    if compgen -G "/sys/bus/event_source/devices/cpu*" >/dev/null; then
-      cat /proc/sys/kernel/nmi_watchdog
-    else
-      echo skipped
-    fi
-  args:
-    executable: /bin/bash
-  register: panic_verify_nmi_watchdog
-  changed_when: false
-  failed_when: panic_verify_nmi_watchdog.rc != 0 or panic_verify_nmi_watchdog.stdout | trim not in ['1', 'skipped']
-  become: true
-
 # Dracut images snapshot the host sysctl files, but the panic policy must wait
 # for the real root so a slow root-pool import cannot trip the hung-task panic.
 # The fixture image predates this checkout's policy, so install and rebuild.

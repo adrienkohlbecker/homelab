@@ -10,3 +10,23 @@
     'Result=success' not in powertop_show.stdout or
     'ExecMainStatus=0' not in powertop_show.stdout
   become: true
+
+# Auto-tune disarms the NMI watchdog; the unit must re-arm it on hosts with a
+# CPU perf PMU. Start from a disarmed detector so a no-op cannot pass.
+- name: _verify | Auto-tune leaves the NMI watchdog armed
+  when: ansible_architecture == 'x86_64'
+  shell: |
+    set -euo pipefail
+    sysctl -qw kernel.nmi_watchdog=0 || true
+    systemctl restart powertop.service
+    if compgen -G "/sys/bus/event_source/devices/cpu*" >/dev/null; then
+      cat /proc/sys/kernel/nmi_watchdog
+    else
+      echo skipped
+    fi
+  args:
+    executable: /bin/bash
+  register: powertop_verify_nmi_watchdog
+  changed_when: false
+  failed_when: powertop_verify_nmi_watchdog.stdout | trim not in ['1', 'skipped']
+  become: true
