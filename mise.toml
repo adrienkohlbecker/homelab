@@ -97,10 +97,18 @@ python.uv_venv_auto = "create|source"
 experimental = true
 
 [hooks]
-# Gate every push on the full lint, whoever runs it. The hook lives in the
-# common git dir so linked worktrees share it, and a core.hooksPath shim that
-# chains to repo hooks finds it there too. Idempotent: skips an existing hook.
-enter = '''
+# Runs on every `mise install`, activated shell or not, so bootstrap is just
+# `mise trust && mise install`:
+# - Python deps from the lockfile as-is (--locked: a stale uv.lock fails here
+#   instead of being rewritten, so CI's lock check stays meaningful), and the
+#   mitogen strategy symlink ansible.cfg loads.
+# - A pre-push hook gating every push on the full lint, whoever runs it. It
+#   lives in the common git dir so linked worktrees share it, and a
+#   core.hooksPath shim that chains to repo hooks finds it there too.
+# Each step is idempotent.
+postinstall = '''
+uv sync --locked --quiet
+uv run --quiet python test/setup_mitogen.py
 hook=$(git rev-parse --path-format=absolute --git-common-dir)/hooks/pre-push
 test -x "$hook" || {
   printf '#!/bin/sh\nexec mise run lint\n' >"$hook"
