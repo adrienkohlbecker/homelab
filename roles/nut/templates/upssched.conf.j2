@@ -136,8 +136,7 @@ AT COMMOK * CANCEL-TIMER commbad commok
 AT SHUTDOWN * EXECUTE shutdown
 AT REPLBATT * EXECUTE replbatt
 AT NOPARENT * EXECUTE noparent
-# nut 2.8+ device-status events (the fleet is migrating to it). Inert on 2.7.4,
-# which never emits them; nut_notify's catch-all arm mails them by name.
+# nut 2.8+ device-status events; nut_notify's catch-all arm mails them by name.
 AT BYPASS * EXECUTE bypass
 AT NOTBYPASS * EXECUTE notbypass
 AT CAL * EXECUTE cal
