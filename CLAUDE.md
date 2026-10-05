@@ -17,7 +17,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See *Helper roles → systemd_unit*. (lint: `no-handlers`)
 - **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Healthchecks*.
 - **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* inventory vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in inventory vars (see *Inventory layout*) and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* inventory vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
-- **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Debugging prod hosts directly*.
+- **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Production*.
 - **DO NOT add tautological checks to role `_verify.yml` files.** A check that only confirms a converge task wrote the requested file or value proves nothing beyond Ansible's own result. Exercise the consuming binary or service and assert observable behavior; if no meaningful functional assertion is possible, omit the check.
 
 ## Build, Test, and Development Commands
@@ -26,8 +26,6 @@ Repository map: [README.md](README.md).
 
 - Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install`. `python.uv_venv_auto` auto-sources `.venv`; `uv sync` populates Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - **op:// env refs only resolve under `op run --`.** Toml tasks wrap explicitly; file-based tasks under `mise-tasks/` do **not** — mise exports the literal `op://…` string. Fix: re-exec under `op run --` behind a guard env var.
-- Configure everything: `mise run ansible --limit prod` (wrapper handles vault-id, ssh args, env; set `--tags` to narrow scope). `ansible.cfg` binds the repo to `hosts.ini` and `vault-client.sh`, so run from the root. One service/host: `mise run ansible --limit lab --tags wireguard`.
-- DNS/terraform: `mise run tf {init,plan,apply}` — `cd`s into `terraform/` and forwards to `tofu` (use `--` for flags mise intercepts). `apply` only after the operator has reviewed the plan. State in MinIO (`s3://terraform/homelab.tfstate`), AES-GCM-encrypted. Rotation: [notes/runbooks/terraform-state-encryption-rotation.md](notes/runbooks/terraform-state-encryption-rotation.md).
 - Refresh a fixture image: `mise run packer:build [lab|pug]` (parallel; `--ubuntu resolute` for another release). See [notes/test_environment_design.md](notes/test_environment_design.md).
 - Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, ruff/pyright, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
 - Replay a kept fixture with the `ansible-playbook` command printed by `testrole.py --keep`; add `--start-at-task 'TASK NAME'` or `--step` to resume within the phase. The command uses the staged playbook and roles, so rerun `testrole.py` after editing repository code. `mise run ansible` targets production and must not be used for fixture recovery.
@@ -197,12 +195,6 @@ The harness lives in `test/` (Python, asyncio).
 
 **Flake policy:** every wait in the harness is **bounded** — a stuck boot surfaces as a quick failure, never a silent hang. Don't paper over flakes with auto-retry; fix the unbounded wait.
 
-### Debugging prod hosts directly
-
-SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-authorized. **Needs explicit ack:** anything mutating (`systemctl restart`, `apt`, config edits, `/mnt/services/*/secrets/`) or anything exfiltrating secret material (`podman secret inspect`, vault files, secret files/env). **Bridge to ack:** run `mise run ansible --limit <host> --tags <role> --check` first so the operator sees the diff.
-
-**Triaging logs:** pipe journal output through `lognorm` (installed at `/usr/local/bin/lognorm` by [roles/user](roles/user/files/lognorm)) — it masks volatile tokens (hashes, IPs, pids, numbers) and aggregates identical lines by frequency, collapsing a day of logs into a handful of patterns so the dominant noise sources and the rare real errors both surface at a glance. Reach for it before reading raw `journalctl` whenever the volume is non-trivial: `journalctl --since "1 day ago" -p warning | lognorm`, `journalctl -u <svc> -b 0 | lognorm --top 20`.
-
 ### Test environment design
 
 Three fixtures: `lab` (default; Lab-style mirrored root plus data pools), `pug` (Pug's single-rpool partitioning and apoc layout), and `minimal` (the downloaded vanilla cloud image, for non-ZFS, GRUB, cloud-init, and fresh-install branches). The Packer-built `lab`/`pug` images carry only the base OS and storage layout; each cell's `_setup.yml` installs role dependencies. Details: [notes/test_environment_design.md](notes/test_environment_design.md).
@@ -213,7 +205,14 @@ GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) runs the role-test matrix as **qemu
 
 **Escalation:** A nonempty `machines:` map replaces the default Lab cell. List `lab:` alongside `minimal:` or `pug:` when Lab coverage should remain; the first machine is the local `testrole.py` default. `machines: {lab: {memory_mb: 5120}}` raises that cell's guest RAM above the `test/machine.py` default; `ubuntu:` lists add per-release cells. **Manual dispatch:** a `ROLES` pipeline variable bypasses change detection — `ROLES=ALL` runs the whole universe, a comma-separated list runs those cells, and the `SITE` token adds the full-fleet converge (`ROLES=SITE` runs it alone, `ROLES=SITE,nginx` pairs it with a cell). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect --child-path /tmp/cells.yml` previews the cell matrix (logged to stderr). CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
 
-## Vault ids: `prod` vs `test`
+## Production
+
+- **Access:** SSH to `lab`/`pug`/`bunk` for diagnostics, including service logs, is pre-authorized. Anything mutating (`systemctl restart`, `apt`, config edits, `/mnt/services/*/secrets/`) or exposing secret material (`podman secret inspect`, vault files, secret files/env) needs explicit ack — run `mise run ansible --limit <host> --tags <role> --check` first so the operator sees the diff.
+- **Apply:** `mise run ansible --limit <host> [--tags <role>]`, or `--limit prod` for the fleet (wrapper handles vault-id, ssh args, env; `ansible.cfg` binds the repo to `hosts.ini` and `vault-client.sh`, so run from the root).
+- **Terraform:** `mise run tf {init,plan,apply}` — `cd`s into `terraform/` and forwards to `tofu` (use `--` for flags mise intercepts). `apply` only after the operator has reviewed the plan. State in MinIO (`s3://terraform/homelab.tfstate`), AES-GCM-encrypted. Rotation: [notes/runbooks/terraform-state-encryption-rotation.md](notes/runbooks/terraform-state-encryption-rotation.md).
+- **Logs:** pipe `journalctl` through `lognorm` ([roles/user](roles/user/files/lognorm)), which masks volatile tokens and aggregates repeats so dominant noise and rare errors both surface: `journalctl --since "1 day ago" -p warning | lognorm`, `journalctl -u <svc> -b 0 | lognorm --top 20`.
+
+### Vault ids: `prod` vs `test`
 
 Two passwords, two scopes ([ansible.cfg](ansible.cfg): `vault_identity_list = prod@vault-client.sh, test@vault-client.sh`, `vault_id_match = True`).
 
