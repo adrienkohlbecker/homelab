@@ -3,20 +3,20 @@
 # files/netdata_restart_stale_plugins for the race. Move the installed netdata
 # packages to another in-series release, as a series bump through apt_upgrade
 # would.
-- name: _verify | Read the chartsd plugin apt policy
-  command: apt-cache policy netdata-plugin-chartsd
+- name: _verify | Read the netdata apt policy
+  command: apt-cache policy netdata
   changed_when: false
-  register: _netdata_chartsd_policy
+  register: _netdata_series_policy
 
-- name: _verify | List the in-series chartsd plugin versions, newest first
+- name: _verify | List the in-series netdata versions, newest first
   set_fact:
-    _netdata_chartsd_series: "{{ _netdata_chartsd_policy.stdout | regex_findall('(?m)^ [* ]{3} ([^ ]+) 999$') }}"
+    _netdata_series: "{{ _netdata_series_policy.stdout | regex_findall('(?m)^ [* ]{3} ([^ ]+) 999$') }}"
 
 - name: _verify | The index offers an older in-series release to move to
   assert:
     that:
-      - _netdata_chartsd_series | length > 1
-    fail_msg: "Expected several in-series chartsd plugin versions; got policy: {{ _netdata_chartsd_policy.stdout }}"
+      - _netdata_series | length > 1
+    fail_msg: "Expected several in-series netdata versions; got policy: {{ _netdata_series_policy.stdout }}"
 
 - name: _verify | List the installed netdata packages
   command:
@@ -36,7 +36,7 @@
     _netdata_downgrade: >-
       {{ _netdata_installed_packages.stdout
          | regex_findall('(?m)^ii ([^ ]+)$')
-         | map('regex_replace', '$', '=' ~ _netdata_chartsd_series[1])
+         | map('regex_replace', '$', '=' ~ _netdata_series[1])
          | join(' ') }}
   command: >-
     apt-get install --yes --allow-downgrades
