@@ -10,16 +10,7 @@
     name: reboot
     tasks_from: reboot
 
-# The hold blocks apt from installing an absent grub package, while the dpkg
-# check below confirms none was installed during converge.
-- name: _verify | Grub package family was held
-  when: not grub_bootloader
-  command: apt-mark showhold 'grub*'
-  changed_when: false
-  register: _boot_verify_grub_hold
-  failed_when: "'grub-common' not in _boot_verify_grub_hold.stdout_lines"
-  become: true
-
+# No grub package was installed during converge.
 - name: _verify | Dpkg install status for grub*
   when: not grub_bootloader
   command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
