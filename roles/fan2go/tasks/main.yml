@@ -101,13 +101,13 @@
     - fan2go
 
 - name: Manage fan2go systemd unit
-  when: fan2go_enabled
   import_role:
     name: systemd_unit
     tasks_from: unit
   vars:
     systemd_unit_args:
       src: fan2go.service
+      condition: "{{ fan2go_enabled }}"
       restart: >-
         {{ fan2go_config.changed | default(false)
            or fan2go_binary_download.changed | default(false) }}
