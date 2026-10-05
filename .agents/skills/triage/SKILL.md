@@ -35,7 +35,7 @@ report.
 For each host/unit, run the remote service commands with `sudo`:
 
 - `sudo systemctl show -p ActiveState,SubState,Result,UnitFileState,ActiveEnterTimestamp,NRestarts --value <unit>`
-- `sudo journalctl -u <unit> --since=-24h -p warning -o short-iso --no-pager | tail -40`
+- `sudo journalctl -u <unit> --since=-24h -p warning --no-pager | lognorm --top 20`
 - `sudo journalctl -u <unit> --since=-24h -o short-iso --no-pager | grep -E 'Main process exited|repeated too quickly|segfault|oom-kill|Failed with result|Killed process' | tail -10`
 - Podman: `sudo podman inspect <ct> --format '{{json .State}}'`; if unhealthy,
   run `sudo podman healthcheck run <ct>` and capture exit 0/1/125. If there is
