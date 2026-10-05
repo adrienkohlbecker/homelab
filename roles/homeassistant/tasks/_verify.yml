@@ -53,6 +53,21 @@
   changed_when: false
   become: true
 
+- name: _verify | Record the homeassistant container before the restart
+  command:
+    argv:
+      - podman
+      - inspect
+      - homeassistant
+      - --format
+      - "{{ '{{.Id}}' }}"
+  register: _homeassistant_container_before_restart
+  changed_when: false
+  become: true
+
+# The unit runs with --rm --replace, so this restart also recreates the
+# container: the dependency check below proves persistence, and the mac_iot
+# check proves the pinned MAC is reapplied to a fresh container.
 - name: _verify | Restart homeassistant after dependency installation
   systemd:
     name: homeassistant
@@ -87,6 +102,47 @@
 
         assert unidecode("électricité") == "electricite"
   changed_when: false
+  become: true
+
+- name: _verify | The restart recreated the homeassistant container
+  command:
+    argv:
+      - podman
+      - inspect
+      - homeassistant
+      - --format
+      - "{{ '{{.Id}}' }}"
+  register: _homeassistant_container_after_restart
+  changed_when: false
+  failed_when: >-
+    _homeassistant_container_after_restart.stdout
+    == _homeassistant_container_before_restart.stdout
+  become: true
+
+# Without the pin, podman mints a random MAC for every new container.
+- name: _verify | Homeassistant mac_iot adapter has its declared identity
+  command:
+    argv:
+      - podman
+      - exec
+      - homeassistant
+      - cat
+      - >-
+        /sys/class/net/{{
+          homeassistant_networks
+          | selectattr('name', 'equalto', 'mac_iot')
+          | map(attribute='interface_name')
+          | first
+        }}/address
+  register: _homeassistant_mac_iot_address
+  changed_when: false
+  failed_when: >-
+    _homeassistant_mac_iot_address.stdout | trim != (
+      homeassistant_networks
+      | selectattr('name', 'equalto', 'mac_iot')
+      | map(attribute='mac')
+      | first
+    )
   become: true
 
 # Exercise the complete nginx-proxied path.
@@ -246,31 +302,6 @@
         print(f"ok: {defaults}")
       - "{{ homeassistant_networks | selectattr('name', 'equalto', 'homeassistant') | map(attribute='interface_name') | first }}"
   changed_when: false
-  become: true
-
-- name: _verify | Homeassistant mac_iot adapter has its declared identity
-  command:
-    argv:
-      - podman
-      - exec
-      - homeassistant
-      - cat
-      - >-
-        /sys/class/net/{{
-          homeassistant_networks
-          | selectattr('name', 'equalto', 'mac_iot')
-          | map(attribute='interface_name')
-          | first
-        }}/address
-  register: _homeassistant_mac_iot_address
-  changed_when: false
-  failed_when: >-
-    _homeassistant_mac_iot_address.stdout | trim != (
-      homeassistant_networks
-      | selectattr('name', 'equalto', 'mac_iot')
-      | map(attribute='mac')
-      | first
-    )
   become: true
 
 # Functional HACS check: grep HA's journal for the loader's "We found
