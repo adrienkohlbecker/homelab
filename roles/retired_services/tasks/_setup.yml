@@ -175,3 +175,14 @@
       description: Weekly ZFS trim for rpool
       on_calendar: "Thu *-*-* 00:05:00"
       exec_start: /bin/true
+
+- name: _setup | Create the retired ZFS scripts
+  copy:
+    content: "#!/bin/sh\n"
+    dest: "{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /usr/local/bin/zfs_update_mount_cache
+  become: true

@@ -25,35 +25,31 @@
     - zfs
     - zfs_mount_generator
 
-- name: mount_generator | Configure symlink
-  when: not (ansible_check_mode and (zfs_apt.changed | default(false)))
-  file:
-    src: /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh
-    dest: /etc/zfs/zed.d/history_event-zfs-list-cacher.sh
-    state: link
-  become: true
-  tags:
-    - zfs
-    - zfs_mount_generator
-
-- name: mount_generator | Copy the mount cache script
-  copy:
-    src: zfs_update_mount_cache.sh
-    dest: /usr/local/bin/zfs_update_mount_cache
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - zfs
-    - zfs_mount_generator
-
-- name: mount_generator | Generate mount cache
-  command: /usr/local/bin/zfs_update_mount_cache {{ item }}
-  register: zfs_mount_cache_cmd
-  changed_when: "'file updated' in zfs_mount_cache_cmd.stdout"
+# The zfs-zed package enables the history_event-zfs-list-cacher zedlet, which
+# rewrites a pool's cache on every change to a tracked property. Only a fresh
+# empty cache needs a first fill: re-setting canmount to its current value is a
+# tracked-property event with no effect on the pool.
+- name: mount_generator | Fill an empty mount cache
+  shell: |
+    set -euo pipefail
+    cache=/etc/zfs/zfs-list.cache/{{ item }}
+    if [ -s "$cache" ]; then
+      exit 0
+    fi
+    zfs set canmount="$(zfs get -H -o value canmount {{ item }})" {{ item }}
+    for _ in $(seq 50); do
+      if [ -s "$cache" ]; then
+        echo filled
+        exit 0
+      fi
+      sleep 0.2
+    done
+    echo "zed did not fill $cache within 10s" >&2
+    exit 1
+  args:
+    executable: /bin/bash
+  register: zfs_mount_cache_fill
+  changed_when: zfs_mount_cache_fill.stdout == 'filled'
   loop: "{{ zfs_mount_cache_pools }}"
   become: true
   tags:
