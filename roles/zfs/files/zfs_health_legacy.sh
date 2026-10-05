@@ -1,9 +1,5 @@
 #!/bin/bash
 set -euo pipefail
-((EUID == 0)) || {
-  echo >&2 "Error: I require root"
-  exit 1
-}
 
 # The checks below match zpool prose and parse its dates; pin the locale as
 # zfs_status.py does for its own queries.
@@ -25,10 +21,10 @@ EMAIL_TO="root"
 EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 
 # Scrub expiration in seconds (40 days). Scrubs themselves are scheduled by the
-# zfs_scrub timer (monthly, second Sunday), not run here; this role also diverts
-# the distro's /etc/cron.d/zfsutils-linux aside so that timer is the sole
-# scheduler. The watchdog measures age since the latest completed scrub,
-# resilver/rebuild, or paused scrub, with pool creation as the fallback.
+# zfs_scrub timer (monthly, second Sunday), not run here; this role also deletes
+# the distro's /etc/cron.d/zfsutils-linux so that timer is the sole scheduler.
+# The watchdog measures age since the latest completed scrub, resilver/rebuild,
+# or paused scrub, with pool creation as the fallback.
 # Forty days allows one monthly cycle plus slack. Overridable via the
 # environment so the _verify harness can force the expiry branch
 # (SCRUB_EXPIRE=1) without faking a scrub date or waiting 40 days; prod always
