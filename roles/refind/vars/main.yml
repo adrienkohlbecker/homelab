@@ -4,15 +4,7 @@
 refind_zbm_cache_dir: "/var/cache/zfsbootmenu/{{ refind_zbm_artifact.version }}"
 refind_zbm_tarball_path: "{{ refind_zbm_cache_dir }}/{{ refind_zbm_artifact.url | basename }}"
 
-# rEFInd EFI binary + firmware-fallback names, keyed by arch. The refind package
-# ships the arch's binary under /usr/share/refind/refind/; x64 on Intel/AMD, aa64
-# on the arm64 test host.
-refind_efi_binary: "{{ 'refind_aa64.efi' if ansible_architecture == 'aarch64' else 'refind_x64.efi' }}"
-refind_fallback_binary: "{{ 'BOOTAA64.EFI' if ansible_architecture == 'aarch64' else 'BOOTX64.EFI' }}"
-
-# rEFInd loads architecture-specific driver directories automatically before
-# presenting its menu. This tiny HII driver switches the firmware text input
-# layout to French AZERTY so the kernel-args editor matches the physical
-# keyboard.
-refind_azerty_keymap_arch: "{{ 'aa64' if ansible_architecture == 'aarch64' else 'x64' }}"
-refind_azerty_keymap_file: "homelab_fr_azerty_{{ refind_azerty_keymap_arch }}.efi"
+# rEFInd's architecture suffix: the package ships refind_<arch>.efi under
+# /usr/share/refind/refind/, the firmware fallback path is BOOT<ARCH>.EFI, and
+# rEFInd loads drivers from drivers_<arch>/ before presenting its menu.
+refind_arch: "{{ 'aa64' if ansible_architecture == 'aarch64' else 'x64' }}"

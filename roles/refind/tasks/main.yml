@@ -193,7 +193,7 @@
     mode: "{{ boot_esp_mode }}"
   loop:
     - /boot/efi/EFI/refind
-    - /boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}
+    - /boot/efi/EFI/refind/drivers_{{ refind_arch }}
     - /boot/efi/EFI/BOOT
   become: true
   register: refind_esp_dirs
@@ -215,29 +215,31 @@
 - name: Install the rEFInd binaries on the ESP  # noqa: require-backup
   when: not (ansible_check_mode and (refind_apt.changed or refind_deb_download.changed))
   copy:
-    src: "/usr/share/refind/refind/{{ refind_efi_binary }}"
+    src: "/usr/share/refind/refind/refind_{{ refind_arch }}.efi"
     dest: "{{ item }}"
     remote_src: true
     owner: root
     group: root
     mode: "{{ boot_esp_mode }}"
   loop:
-    - "/boot/efi/EFI/refind/{{ refind_efi_binary }}"
-    - "/boot/efi/EFI/BOOT/{{ refind_fallback_binary }}"
+    - "/boot/efi/EFI/refind/refind_{{ refind_arch }}.efi"
+    - "/boot/efi/EFI/BOOT/BOOT{{ refind_arch | upper }}.EFI"
   loop_control:
     label: "{{ item }}"
   become: true
   tags:
     - refind
 
-# No backup: true — /boot/efi is vfat, and backup_local's ownership-preserving
+# This tiny HII driver switches the firmware text input layout to French
+# AZERTY so rEFInd's kernel-args editor matches the physical keyboard. No
+# backup: true — /boot/efi is vfat, and backup_local's ownership-preserving
 # chown fails on FAT. rEFInd automatically scans drivers_<arch> in its own
 # directory before presenting the menu.
 - name: Install rEFInd AZERTY keymap driver on the ESP  # noqa: require-backup
   when: not (ansible_check_mode and refind_esp_dirs.changed)
   copy:
-    src: "{{ refind_azerty_keymap_file }}"
-    dest: "/boot/efi/EFI/refind/drivers_{{ refind_azerty_keymap_arch }}/{{ refind_azerty_keymap_file }}"
+    src: "homelab_fr_azerty_{{ refind_arch }}.efi"
+    dest: "/boot/efi/EFI/refind/drivers_{{ refind_arch }}/homelab_fr_azerty_{{ refind_arch }}.efi"
     owner: root
     group: root
     mode: "{{ boot_esp_mode }}"
