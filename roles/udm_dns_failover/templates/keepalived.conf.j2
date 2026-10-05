@@ -62,12 +62,6 @@ vrrp_instance dns {
   priority          {{ dns_keepalived_priority }}
   advert_int        1
 
-  # Delay a recovered higher-priority peer (lab/pug adguard) from reclaiming
-  # the VIP for 60s so a flapping peer doesn't yank DNS back and forth. Plain
-  # preempt (no nopreempt) is kept so a recovered peer does eventually reclaim
-  # and the UDM falls back to BACKUP.
-  preempt_delay     60
-
   # No explicit track_interface: keepalived already tracks the instance's own
   # `interface` (above) for link state, so re-listing it is redundant --
   # keepalived ignores it ("since own interface") and that warning makes
