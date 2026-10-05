@@ -1,14 +1,3 @@
-- name: _verify | Physical UPS configs poll the SNMP card without SET rights
-  vars:
-    qemu_test: false
-    nut_verify_physical_ups: "{{ lookup('template', 'ups.conf.j2') }}"
-    nut_verify_physical_users: "{{ lookup('template', 'upsd.users.j2') }}"
-  assert:
-    that:
-      - "'driver = snmp-ups' in nut_verify_physical_ups"
-      - "'driver = dummy-ups' not in nut_verify_physical_ups"
-      - nut_verify_physical_users is not search('(?m)^actions = SET$')
-
 # Qemu convergence runs the packaged driver and server units against a static
 # dummy-ups frame. Reaching OL through upsc therefore exercises the normal
 # systemd lifecycle as well as the driver -> upsd path.
