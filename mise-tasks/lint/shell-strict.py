@@ -16,6 +16,9 @@ ALLOWLIST_PATTERNS = (
     "roles/hdparm/files/*.chart.sh",
     "roles/systemd_timer/files/*.chart.sh",
     "roles/zfs/files/*.chart.sh",
+    # Sourced by every login shell from /etc/profile.d; strict mode would leak
+    # into interactive sessions.
+    "roles/homelab_ci/templates/homelab_ci.sh.j2",
 )
 
 SHEBANG_RE = re.compile(r"^#!.*\b(?:ba|z|k)?sh\b")
