@@ -1,16 +1,16 @@
-# Release-divergent install paths: the default noble cell keeps the iptables
-# compatibility package; resolute uses netavark's native nftables driver.
+# Release-divergent install paths: Lab Noble keeps the iptables compatibility
+# package and the fchmodat2 seccomp profile; Pug Resolute uses netavark's
+# native nftables driver and the stock profile.
 #
-# Lab exercises mdadm RAID5 storage, Pug a labelled raw partition, and minimal
-# the root-filesystem fallback.
+# Lab exercises mdadm RAID5 storage and Pug a labelled raw partition. The
+# firewall role's Minimal cell installs podman on the root filesystem.
 machines:
   lab:
   pug:
-  minimal:
 ubuntu:
   - resolute
 skip:
-  "minimal:resolute": >-
-    Pug covers the Resolute install path; Minimal Noble covers root storage.
   "lab:resolute": >-
-    Pug covers the Resolute install path; Lab Noble covers mdadm storage and pruning.
+    Pug covers the Resolute install path; Lab Noble covers mdadm storage.
+  "pug": >-
+    Lab covers the Noble install path; Pug Resolute covers the raw partition.
