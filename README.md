@@ -9,7 +9,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 | Path | Contents |
 | --- | --- |
 | `hosts.ini`, `host_vars/`, `group_vars/` | Inventory and the current host, network, and service configuration |
-| `site.yml` | Top-level playbook — base install, services, lab-only roles, reboot check |
+| `site.yml` | Top-level playbook — base install, then host-scoped service plays |
 | `wireguard.yml` | Renders one client config on demand for `mise run wg:show <device>` (localhost; streamed to a QR or stdout, never written to disk) |
 | `bunk.yml` | One-shot config for the off-site `bunk` peer |
 | `roles/` | Role directories for services, system concerns, and shared helpers |
