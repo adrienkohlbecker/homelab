@@ -98,9 +98,8 @@
 # Pin the cross-role contracts that cannot follow Podman's defaults: netavark
 # provides service-name DNS; the network name and subnets match firewall,
 # AdGuard and Home Assistant policy; port 5333 avoids AdGuard's port 53; and
-# pasta backs rootless containers. Noble's old netavark needs iptables, while
-# newer releases use its native nftables driver. A host carrying legacy CNI
-# state needs a one-time `podman system reset --force` before switching.
+# pasta backs rootless containers. Releases after Noble select netavark's
+# native nftables firewall driver.
 - name: install | Configure podman containers.conf
   copy:
     dest: /etc/containers/containers.conf

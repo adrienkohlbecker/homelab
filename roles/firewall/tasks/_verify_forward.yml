@@ -1,6 +1,6 @@
-# FORWARD/DNAT (3 probes), POSTROUTING egress / MASQUERADE (3 probes),
-# and the ICMP accept path (1 probe). Crafted-packet drop probes live
-# in _verify_drops.yml.
+# FORWARD/DNAT reachability, podman bridge egress, isolation and TCP
+# DNS, the tailscale0 forward path, and the ICMP accept path.
+# Crafted-packet drop probes live in _verify_drops.yml.
 
 # FORWARD/DNAT — published container reachable via wg0 ingress.
 - name: _verify_forward | FORWARD/DNAT — published container reachable via wg0 ingress
@@ -179,8 +179,8 @@
   become: true
 
 # FORWARD "podman → external" rule deliberately covers every non-podman
-# egress iface (WAN, home LAN, wg, libvirt, macvlan) — the container →
-# example.com probe above exercises the WAN case; this one hits a
+# egress iface (WAN, home LAN, wg, libvirt, macvlan) — the default-bridge
+# egress probe above exercises the WAN case; this one hits a
 # non-WAN destination (extns over wg0) so a future tightening to WAN-
 # only fails loudly. ICMP rather than HTTP because extns has no
 # listener bound to its veth IP.
