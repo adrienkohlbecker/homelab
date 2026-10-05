@@ -18,6 +18,8 @@
     src: /usr/lib/netdata/conf.d/apps_groups.conf
   register: netdata_apps_groups_stock
   become: true
+  tags:
+    - netdata
 
 - name: Install apps_groups.conf with homelab process groups  # noqa: require-validate
   when:
@@ -41,6 +43,8 @@
     backup: true
   register: netdata_apps_groups
   become: true
+  tags:
+    - netdata
 
 - name: Remove custom apps_groups.conf when disabled
   when: not netdata_packer_process_group_enabled
@@ -49,6 +53,8 @@
     state: absent
   register: netdata_apps_groups_removed
   become: true
+  tags:
+    - netdata
 
 # apps.plugin reads apps_groups.conf only at start, so killing it is enough
 # when it runs: netdata respawns it within seconds and the new process reads
@@ -73,6 +79,8 @@
   changed_when: netdata_apps_plugin_kill.rc == 0
   failed_when: netdata_apps_plugin_kill.rc > 1
   become: true
+  tags:
+    - netdata
 
 - name: Record the apps.plugin kill
   when:
@@ -80,6 +88,8 @@
     - netdata_apps_plugin_kill.rc | default(1) == 0
   set_fact:
     netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['apps.plugin']) }}"
+  tags:
+    - netdata
 
 - name: Restart netdata when apps.plugin is not running
   when:
@@ -89,3 +99,5 @@
     name: netdata
     state: restarted
   become: true
+  tags:
+    - netdata
