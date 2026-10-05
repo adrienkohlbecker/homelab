@@ -88,15 +88,6 @@
   tags:
     - macos_vm
 
-# QEMU runs as root and needs no group grant on the zvol device.
-- name: storage | Remove the zvol permission udev rule
-  file:
-    path: "/etc/udev/rules.d/70-macos-vm-{{ macos_vm_name }}-zvol.rules"
-    state: absent
-  become: true
-  tags:
-    - macos_vm
-
 - name: storage | Set zvol disk source path
   set_fact:
     macos_vm_disk_source: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
