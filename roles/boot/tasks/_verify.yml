@@ -69,20 +69,15 @@
           contents: ""
           grub_scope: all
 
+# Minimal boots a pre-baked initrd outside /boot, as in console/_verify.yml.
+# Deployment-shaped fixtures boot the per-kernel image inspected here.
+#
 # Noble keeps its broad driver policy. Resolute's host-only image is exercised
 # by the normal-boot reboot check above and the NVMe driver check below.
-- name: _verify | Find the host initramfs (cloud images may boot initrd-less)
-  stat:
-    path: /boot/initrd.img-{{ ansible_kernel }}
-  register: _boot_verify_initrd
-  become: true
-
 - name: _verify | Boot image carries non-virtio drivers (ahci/e1000)
-  # Skipped where the host boots without an initramfs at all (the arm64 cloud
-  # fixture has no /boot/initrd.img to inspect).
   when:
+    - not qemu_test_minimal
     - not initramfs_use_dracut
-    - _boot_verify_initrd.stat.exists
   shell:
     cmd: >-
       set -euo pipefail;
@@ -97,8 +92,8 @@
 # its absence from the image would prove nothing.
 - name: _verify | Exercise the Dracut image exclusions
   when:
+    - not qemu_test_minimal
     - initramfs_use_dracut
-    - _boot_verify_initrd.stat.exists
   block:
     - name: _verify | ZFS-root fixture has a nonempty pool cache
       when: zfs_root
