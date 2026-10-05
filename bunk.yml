@@ -14,9 +14,42 @@
             state: directory
             mode: "0755"
 
+        - name: Create ak's cache directory
+          file:
+            path: "{{ ansible_user_dir }}/.cache"
+            state: directory
+            mode: "0755"
+          register: bunk_cache_dir
+
+        - name: Download the pinned rrsync
+          when: not (ansible_check_mode and bunk_cache_dir.changed)
+          get_url:
+            url: "{{ rrsync_artifact.url }}"
+            dest: "{{ ansible_user_dir }}/.cache/rrsync.upstream"
+            checksum: "sha256:{{ rrsync_artifact.sha256 }}"
+            mode: "0644"
+          register: bunk_rrsync_download
+
+        - name: Read the pinned rrsync
+          when: not (ansible_check_mode and (bunk_cache_dir.changed or bunk_rrsync_download is changed))
+          slurp:
+            src: "{{ ansible_user_dir }}/.cache/rrsync.upstream"
+          register: bunk_rrsync_upstream
+
+        # Two local edits, applied in one write so the install stays
+        # idempotent; mandatory_count fails a version bump whose upstream lines
+        # moved instead of silently shipping an unpatched wrapper.
+        #   - Shebang: bunk's /usr/bin/python3 (3.8.x). DSM ships no perl, so
+        #     the classic Perl rrsync from rsync <= 3.2.3 can't run.
+        #   - RSYNC: the SynoCli rsync 3.4.1, since DSM's stock /usr/bin/rsync
+        #     3.1.2 is too old to negotiate zstd.
         - name: Install the rrsync wrapper
+          when: bunk_rrsync_upstream is not skipped
           copy:
-            src: "{{ playbook_dir }}/roles/zfs_autobackup/files/rrsync"
+            content: >-
+              {{ bunk_rrsync_upstream.content | b64decode
+              | regex_replace('\A#!/usr/bin/env python3$', '#!/usr/bin/python3', multiline=true, mandatory_count=1)
+              | regex_replace("^RSYNC = '/usr/bin/rsync'$", "RSYNC = '/var/packages/synocli-net/target/bin/rsync'", multiline=true, mandatory_count=1) }}
             dest: "{{ ansible_user_dir }}/bin/rrsync"
             mode: "0755"
             backup: true
