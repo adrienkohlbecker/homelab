@@ -42,16 +42,6 @@
   tags:
     - redis
 
-- name: Create redis password secret
-  when: not ansible_check_mode or redis_podman_available
-  containers.podman.podman_secret:
-    name: redis_password
-    data: "{{ redis_password }}"
-  register: redis_secret
-  become: true
-  tags:
-    - redis
-
 # vm.overcommit_memory stays at the kernel default despite the startup warning:
 # the heuristic never refuses the RDB fork of a 64mb maxmemory store, and the
 # host-wide sysctl would drop the oversized-allocation check for every process.
@@ -77,8 +67,8 @@
 # catches.
 - name: Configure redis  # noqa: require-validate
   when: not ansible_check_mode or redis_user.uid is defined
-  copy:
-    src: redis.conf
+  template:
+    src: redis.conf.j2
     dest: /mnt/services/redis/config/redis.conf
     owner: redis
     group: redis
@@ -97,6 +87,6 @@
     systemd_unit_args:
       src: redis.service.j2
       condition: "{{ not ansible_check_mode or redis_user.uid is defined }}"
-      restart: "{{ redis_conf.changed or (redis_secret.changed | default(false)) }}"
+      restart: "{{ redis_conf.changed }}"
   tags:
     - redis

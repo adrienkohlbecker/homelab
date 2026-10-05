@@ -1,5 +1,3 @@
-# requirepass comes from the redis_password secret (see redis.service.j2).
-
 # Snapshot to /data/dump.rdb after 60s if >=1 key changed. RDB-only (no AOF):
 # a clean SIGTERM -- the nightly zfs_autosnapshot stop/start, and any
 # `systemctl restart` -- writes a final snapshot, so Authelia sessions survive.
@@ -24,14 +22,8 @@ maxmemory-policy volatile-lru
 # buffer without bound.
 maxmemory-clients 10%
 
-# Disable the admin, replication and scripting commands Authelia never issues.
-# DEBUG and MODULE are already refused by default (enable-*-command).
-rename-command CONFIG ""
-rename-command REPLICAOF ""
-rename-command SLAVEOF ""
-rename-command EVAL ""
-rename-command EVALSHA ""
-rename-command EVAL_RO ""
-rename-command EVALSHA_RO ""
-rename-command FUNCTION ""
-rename-command SCRIPT ""
+# Unauthenticated clients only get PING, which the healthcheck uses. Authelia
+# gets every command except admin (CONFIG, REPLICAOF, DEBUG, MODULE, ...) and
+# scripting, which it never issues. Only the password's SHA-256 lands on disk.
+user default on nopass -@all +ping
+user authelia on #{{ redis_password | hash('sha256') }} ~* +@all -@admin -@scripting

@@ -28,11 +28,9 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
-# The sh wrapper reads the password from the mounted secret so it never lands
-# on disk in redis.conf. It also bypasses the image entrypoint's redis-server
-# branch, which would otherwise --loadmodule every bundled Redis 8 module.
-# `exec` leaves redis-server as PID 1, which handles SIGTERM and reaps its own
-# RDB fork, so it needs no --init.
+# --entrypoint bypasses the image entrypoint's redis-server branch, which would
+# otherwise --loadmodule every bundled Redis 8 module. redis-server runs as PID
+# 1, handles SIGTERM and reaps its own RDB fork, so it needs no --init.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
@@ -47,17 +45,17 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="redis" \
     --volume /mnt/services/redis/config:/usr/local/etc/redis:ro \
     --volume /mnt/services/redis/data:/data \
-    --secret=redis_password,type=mount,target=redis_password \
     --user {{ redis_user.uid }}:{{ redis_user.gid }} \
     --network authelia \
-    --health-cmd {{ ["sh", "-c", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli -e ping"] | json_argv }} \
-    --health-startup-cmd {{ ["sh", "-c", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli -e ping"] | json_argv }} \
+    --health-cmd {{ ["redis-cli", "-e", "ping"] | json_argv }} \
+    --health-startup-cmd {{ ["redis-cli", "-e", "ping"] | json_argv }} \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "30s" \
     --stop-timeout 30 \
+    --entrypoint redis-server \
     {{ redis_image }} \
-    sh -c 'exec redis-server /usr/local/etc/redis/redis.conf --requirepass "$$(cat /run/secrets/redis_password)"'
+    /usr/local/etc/redis/redis.conf
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

@@ -9,8 +9,8 @@
       podman run --rm --network authelia --env REDISCLI_AUTH {{ redis_image }}
       redis-cli -h redis.dns.podman
   block:
-    - name: _verify | Authenticated ping
-      command: "{{ redis_cli }} -e ping"
+    - name: _verify | Authenticated ping as authelia
+      command: "{{ redis_cli }} --user authelia -e ping"
       environment:
         REDISCLI_AUTH: "{{ redis_password }}"
       register: redis_ping
@@ -19,21 +19,21 @@
       delay: 2
       changed_when: false
 
-    - name: _verify | Unauthenticated connection is refused
-      command: "{{ redis_cli }} ping"
+    - name: _verify | Unauthenticated clients cannot read keys
+      command: "{{ redis_cli }} get homelab:verify"
       register: redis_noauth
       changed_when: false
-      failed_when: "'NOAUTH' not in (redis_noauth.stdout + redis_noauth.stderr)"
+      failed_when: "'NOPERM' not in (redis_noauth.stdout + redis_noauth.stderr)"
 
-    # A dropped rename-command line would silently re-expose CONFIG SET, so
-    # prove the hardening is live: an authenticated CONFIG GET is unknown.
-    - name: _verify | CONFIG command is renamed out
-      command: "{{ redis_cli }} config get maxmemory"
+    # A widened ACL would silently re-expose CONFIG SET, so prove the
+    # restriction is live: an authenticated CONFIG GET must be refused.
+    - name: _verify | CONFIG is denied to authelia
+      command: "{{ redis_cli }} --user authelia config get maxmemory"
       environment:
         REDISCLI_AUTH: "{{ redis_password }}"
       register: redis_config_disabled
       changed_when: false
-      failed_when: "'unknown command' not in (redis_config_disabled.stdout + redis_config_disabled.stderr)"
+      failed_when: "'NOPERM' not in (redis_config_disabled.stdout + redis_config_disabled.stderr)"
 
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"

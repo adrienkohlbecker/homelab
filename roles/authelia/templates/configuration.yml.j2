@@ -80,6 +80,7 @@ session:
   # session data at rest; AUTHELIA_SESSION_REDIS_PASSWORD_FILE the password.
   redis:
     host: 'redis.dns.podman'
+    username: 'authelia'
 
 # Brute-force regulation: 5 failed attempts in 2 min → 5 min lockout.
 # Per-user (not per-IP) so a single misbehaving client doesn't

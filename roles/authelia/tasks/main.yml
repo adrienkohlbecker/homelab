@@ -66,6 +66,8 @@
       data: "{{ authelia_oidc_hmac_secret }}"
     - name: authelia_session_secret
       data: "{{ authelia_session_secret }}"
+    - name: authelia_session_redis_password
+      data: "{{ redis_password }}"
   loop_control:
     label: "{{ item.name }}"
   register: _authelia_secrets
