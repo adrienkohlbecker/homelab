@@ -10,6 +10,16 @@
   register: _firewall_flowtable_invocation_before_reload
   become: true
 
+# Drop-in ExecReload entries append to the stock one, so systemd's merged
+# view is what proves the reload loads the ruleset exactly once. The systemd
+# module keeps only the last of a repeated property.
+- name: _verify_lifecycle | Reload runs the ruleset load once  # noqa: command-instead-of-module
+  command: systemctl show nftables.service --property ExecReload
+  register: _firewall_exec_reload
+  changed_when: false
+  failed_when: _firewall_exec_reload.stdout.split('argv[]=/usr/sbin/nft ') | length != 2
+  become: true
+
 - name: _verify_lifecycle | Re-apply nftables ruleset via systemctl reload (must not disturb netavark)
   systemd:
     name: nftables.service
