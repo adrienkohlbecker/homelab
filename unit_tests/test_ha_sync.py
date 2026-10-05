@@ -1,5 +1,6 @@
 """Check GUI YAML sync deployment and credential handling."""
 
+import shutil
 import subprocess
 
 import pytest
@@ -150,17 +151,98 @@ def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> No
         sync.do_push()
 
 
-def test_pull_refuses_to_erase_pending_push(monkeypatch: pytest.MonkeyPatch) -> None:
-    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_pull_pending_test")
-    file = sync.SyncFile("scripts.yaml", "script.reload", sync.Direction.BOTH)
-    monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
-    monkeypatch.setattr(sync, "assert_clean_working_tree", lambda: None)
-    monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
-    monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old")
-    monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
-    with pytest.raises(SystemExit, match="clone changes await push"):
+def _git(cwd, *args: str) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+
+@pytest.fixture
+def synced_clone(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """A clone whose origin/main and last_synced_to_host match a fake lab host."""
+    sync = load_repo_module("mise-tasks/ha/sync.py", name=f"ha_sync_pull_{tmp_path.name}")
+    origin = tmp_path / "origin.git"
+    clone = tmp_path / "clone"
+    _git(tmp_path, "init", "--quiet", "--bare", "--initial-branch=main", str(origin))
+    _git(tmp_path, "clone", "--quiet", str(origin), str(clone))
+    for key, value in (("user.name", "Test"), ("user.email", "test@example.com"), ("commit.gpgsign", "false")):
+        _git(clone, "config", key, value)
+    host = {"automations.yaml": b"- id: a\n", "scripts.yaml": b"{}\n"}
+    for rel, content in host.items():
+        (clone / rel).write_bytes(content)
+    _git(clone, "add", "-A")
+    _git(clone, "commit", "--quiet", "-m", "baseline")
+    _git(clone, "push", "--quiet", "origin", "main")
+    _git(clone, "tag", sync.SYNCED_TAG)
+    _git(clone, "push", "--quiet", "origin", sync.SYNCED_TAG)
+    monkeypatch.setattr(sync, "CLONE", clone)
+    monkeypatch.setattr(
+        sync,
+        "SYNC_SPEC",
+        [
+            ("automations.yaml", "automation.reload", sync.Direction.BOTH),
+            ("scripts.yaml", "script.reload", sync.Direction.BOTH),
+        ],
+    )
+    monkeypatch.setattr(sync, "host_file", host.get)
+    return sync, clone, host
+
+
+def test_pull_rebases_local_commits_onto_captured_host_edits(synced_clone) -> None:
+    sync, clone, host = synced_clone
+    (clone / "automations.yaml").write_text("- id: local\n")
+    _git(clone, "commit", "--quiet", "-am", "local edit")
+    host["scripts.yaml"] = b"gui: edit\n"
+
+    sync.do_pull()
+
+    capture = _git(clone, "rev-parse", "origin/main")
+    assert _git(clone, "rev-parse", sync.SYNCED_TAG) == capture
+    assert _git(clone, "ls-remote", "origin", f"refs/tags/{sync.SYNCED_TAG}").split()[0] == capture
+    assert _git(clone, "show", f"{capture}:scripts.yaml") == "gui: edit"
+    assert _git(clone, "show", f"{capture}:automations.yaml") == "- id: a"
+    assert _git(clone, "rev-parse", "HEAD~1") == capture
+    assert _git(clone, "log", "-1", "--format=%s") == "local edit"
+    assert (clone / "scripts.yaml").read_text() == "gui: edit\n"
+    assert (clone / "automations.yaml").read_text() == "- id: local\n"
+
+
+@pytest.mark.skipif(shutil.which("ssh-keygen") is None, reason="ssh-keygen unavailable")
+def test_pull_signs_the_capture_when_commits_are_signed(synced_clone, tmp_path) -> None:
+    sync, clone, host = synced_clone
+    key = tmp_path / "signing_key"
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
+    for config_key, value in (("gpg.format", "ssh"), ("user.signingkey", str(key)), ("commit.gpgsign", "true")):
+        _git(clone, "config", config_key, value)
+    host["scripts.yaml"] = b"gui: edit\n"
+
+    sync.do_pull()
+
+    assert "gpgsig" in _git(clone, "cat-file", "commit", "origin/main")
+
+
+def test_pull_conflict_keeps_capture_and_local_branch(synced_clone) -> None:
+    sync, clone, host = synced_clone
+    (clone / "automations.yaml").write_text("- id: local\n")
+    _git(clone, "commit", "--quiet", "-am", "local edit")
+    local = _git(clone, "rev-parse", "HEAD")
+    host["automations.yaml"] = b"- id: gui\n"
+
+    with pytest.raises(SystemExit, match="git rebase origin/main"):
+        sync.do_pull()
+
+    assert _git(clone, "rev-parse", "HEAD") == local
+    assert _git(clone, "status", "--porcelain") == ""
+    assert _git(clone, "show", "origin/main:automations.yaml") == "- id: gui"
+    assert _git(clone, "rev-parse", sync.SYNCED_TAG) == _git(clone, "rev-parse", "origin/main")
+
+
+def test_pull_refuses_while_origin_awaits_push(synced_clone) -> None:
+    sync, clone, host = synced_clone
+    (clone / "scripts.yaml").write_text("pushed: but not deployed\n")
+    _git(clone, "commit", "--quiet", "-am", "undeployed")
+    _git(clone, "push", "--quiet", "origin", "main")
+    host["scripts.yaml"] = b"gui: edit\n"
+
+    with pytest.raises(SystemExit, match="origin changes await push or reload"):
         sync.do_pull()
 
 

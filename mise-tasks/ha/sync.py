@@ -10,7 +10,8 @@ The gitignored ha_gui_config clone is the source of truth for these files.
 `last_synced_to_host` records the clone commit applied on lab, so push can
 refuse host-side edits and retry a reload that failed after upload.
 
-pull: copy host files into the clean clone, commit changes, advance the tag.
+pull: commit host files on top of origin, advance the tag to that capture,
+then rebase unpushed local commits onto it.
 push: commit local clone edits, validate changed files, upload to lab, reload
 domains or restart HA for files without a hot reload, then advance the tag.
 push --dry-run: compare the host to the working tree, validate and print what
@@ -27,6 +28,7 @@ import glob
 import os
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -286,10 +288,33 @@ def resolve_ref(ref: str) -> str | None:
     return r.stdout.strip() or None
 
 
-def advance_synced_tag() -> None:
-    """Publish the applied HEAD before moving the local marker."""
-    sh(["git", "push", "origin", "--force", f"HEAD:refs/tags/{SYNCED_TAG}"], cwd=CLONE)
-    sh(["git", "tag", "-f", SYNCED_TAG], cwd=CLONE)
+def advance_synced_tag(commit: str = "HEAD") -> None:
+    """Publish the applied commit before moving the local marker."""
+    sh(["git", "push", "origin", "--force", f"{commit}:refs/tags/{SYNCED_TAG}"], cwd=CLONE)
+    sh(["git", "tag", "-f", SYNCED_TAG, commit], cwd=CLONE)
+
+
+def host_snapshot_tree(base: str) -> str:
+    """Tree of `base` with every pulled file replaced by its copy on lab.
+
+    Built in a throwaway index so neither the working tree nor local commits
+    are touched; a pulled file missing on lab aborts the pull.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "GIT_INDEX_FILE": f"{tmp}/index"}
+
+        def git(*args: str, content: bytes | None = None) -> str:
+            result = subprocess.run(["git", *args], cwd=CLONE, env=env, input=content, capture_output=True, check=True)
+            return result.stdout.decode().strip()
+
+        git("read-tree", base)
+        for file in enumerate_files(for_pull=True):
+            content = host_file(file.rel)
+            if content is None:
+                fail(f"cannot read {HOST_DIR}/{file.rel} on {HOST}")
+            blob = git("hash-object", "-w", "--stdin", content=content)
+            git("update-index", "--add", "--cacheinfo", f"100644,{blob},{file.rel}")
+        return git("write-tree")
 
 
 def upload_to_host(files: list[SyncFile]) -> None:
@@ -359,8 +384,6 @@ def _print_diff_header(label: str) -> None:
 
 def show_push_diff(changed: dict[SyncFile, bytes | None]) -> None:
     """For each file about to be pushed, print a colored diff host->HEAD."""
-    import tempfile
-
     for file, host_bytes in changed.items():
         with tempfile.NamedTemporaryFile(suffix=f"_{Path(file.rel).name}") as host_tmp:
             host_tmp.write(host_bytes or b"")
@@ -375,34 +398,51 @@ def show_push_diff(changed: dict[SyncFile, bytes | None]) -> None:
 
 
 def do_pull(rebase: bool = False) -> None:
+    """Capture lab's edits on top of origin, then rebase local commits onto them.
+
+    The capture commit sits directly on origin/main, so last_synced_to_host can
+    name a commit whose synced files match lab exactly even while unpushed local
+    commits exist. Those are replayed on top and stay local until the next push.
+    """
     assert_clone_present()
     assert_clean_working_tree()
     sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
     sync_clone_with_origin(rebase)
+    upstream = sh(["git", "rev-parse", "origin/main"], cwd=CLONE).stdout.strip()
     if resolve_ref(f"refs/tags/{SYNCED_TAG}") is not None:
-        pending = [file.rel for file in enumerate_files() if blob_at(SYNCED_TAG, file.rel) != blob_at("HEAD", file.rel)]
+        pending = [
+            file.rel for file in enumerate_files() if blob_at(SYNCED_TAG, file.rel) != blob_at(upstream, file.rel)
+        ]
         if pending:
             sys.exit(
-                f"refusing: clone changes await push or reload ({', '.join(pending)}); "
+                f"refusing: origin changes await push or reload ({', '.join(pending)}); "
                 "run `mise run ha:sync push` before pulling."
             )
-    for file in enumerate_files(for_pull=True):
-        target = CLONE / file.rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("wb") as out:
-            subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{file.rel}"], stdout=out, check=True)
-    if not sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
-        if resolve_ref(f"refs/tags/{SYNCED_TAG}") != resolve_ref("HEAD"):
-            advance_synced_tag()
-            print("pull: no host changes; advanced tag to HEAD")
-        else:
-            print("pull: in sync, no-op")
-        return
-    _print_diff_header("pull: host-side changes about to be committed")
-    subprocess.run(["git", "diff", "--color=always", "HEAD"], cwd=CLONE, check=False)
-    commit_and_push("pull: capture GUI edits from lab")
-    advance_synced_tag()
-    print("pull: committed GUI edits + pushed; tag advanced to HEAD")
+    tree = host_snapshot_tree(upstream)
+    capture = upstream
+    if tree != sh(["git", "rev-parse", f"{upstream}^{{tree}}"], cwd=CLONE).stdout.strip():
+        _print_diff_header("pull: host-side changes about to be committed")
+        subprocess.run(["git", "diff", "--color=always", upstream, tree], cwd=CLONE, check=False)
+        # Unlike commit and rebase, commit-tree ignores commit.gpgsign.
+        signing = sh(["git", "config", "--type=bool", "--default=false", "commit.gpgsign"], cwd=CLONE).stdout.strip()
+        sign = ["-S"] if signing == "true" else []
+        capture = sh(
+            ["git", "commit-tree", *sign, tree, "-p", upstream, "-m", "pull: capture GUI edits from lab"], cwd=CLONE
+        ).stdout.strip()
+        sh(["git", "push", "origin", f"{capture}:refs/heads/main"], cwd=CLONE)
+        print("pull: committed GUI edits + pushed")
+    if resolve_ref(f"refs/tags/{SYNCED_TAG}") != capture:
+        advance_synced_tag(capture)
+        print(f"pull: advanced {SYNCED_TAG}")
+    result = sh(["git", "rebase", "--quiet", capture], cwd=CLONE, check=False)
+    if result.returncode != 0:
+        # Leave no half-applied rebase for the next invocation to trip over.
+        sh(["git", "rebase", "--abort"], cwd=CLONE, check=False)
+        fail(
+            f"lab's edits are captured on origin, but replaying local commits onto them failed; "
+            f"the local branch is unchanged.\n{indent_block((result.stderr or result.stdout).strip())}\n"
+            f"run `git rebase origin/main` in {CLONE}, resolve, then `mise run ha:sync push`."
+        )
 
 
 def do_push(dry_run: bool = False, rebase: bool = False) -> None:
