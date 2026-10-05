@@ -34,7 +34,7 @@ Repository map: [README.md](README.md).
 
 - `/triage <service>` — investigate a service end-to-end (resolve host(s), gather state, summarize).
 
-Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks/`). Codex discovers `.agents/skills/` natively; Claude Code reads it through the `.claude/skills` symlink. Hooks are wired per-agent — `.claude/settings.json` (via `$CLAUDE_PROJECT_DIR`) and `.codex/hooks.json` (via `git rev-parse --show-toplevel`; codex trust-hashes each entry, so re-trust with `/hooks` after editing). Homelab-specific skills should reference `AGENTS.md` (a symlink to CLAUDE.md), not CLAUDE.md, so wording stays agent-neutral.
+Skill and hook wiring for both agents: [.agents/README.md](.agents/README.md).
 
 ## Coding Style & Naming Conventions
 
