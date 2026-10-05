@@ -33,42 +33,34 @@
   become_user: "{{ _systemd_unit_user }}"
 
 # Enable adds current [Install] links without pruning obsolete ones. Rebuild
-# the link set only after changing an already-enabled unit. This and the
-# reset-failed step below reach only the system manager, so user-scope units
-# (systemd_timer's lingered timers, whose [Install] never changes) skip both.
+# the link set only after changing an already-enabled unit.
 - name: unit | Reenable after an install change for {{ _systemd_unit_name }}
   when:
     - _systemd_unit_condition
-    - _systemd_unit_scope == 'system'
     - not ansible_check_mode
     - systemd_unit_file.changed
     - systemd_unit_args.enable | default(true)
     - _systemd_unit_enable.status.UnitFileState | default('') == 'enabled'
   command:
-    argv:
-      - systemctl
-      - reenable
-      - "{{ _systemd_unit_name }}"
+    argv: "{{ _systemd_unit_systemctl + ['reenable', _systemd_unit_name] }}"
   changed_when: false
   become: true
+  become_user: "{{ _systemd_unit_user }}"
 
 # Clear a crash-loop rate limit only when the next task will start or restart
 # the unit. A missing failure record is expected and benign.
 - name: unit | Reset failed state for {{ _systemd_unit_name }}
   when:
     - _systemd_unit_condition
-    - _systemd_unit_scope == 'system'
     - systemd_unit_args.start | default(true)
     - not ansible_check_mode
     - systemd_unit_file.changed or systemd_unit_args.restart | default(false) or _systemd_unit_enable.status.ActiveState | default('inactive') != 'active'
   command:
-    argv:
-      - systemctl
-      - reset-failed
-      - "{{ _systemd_unit_name }}"
+    argv: "{{ _systemd_unit_systemctl + ['reset-failed', _systemd_unit_name] }}"
   changed_when: false
   failed_when: false
   become: true
+  become_user: "{{ _systemd_unit_user }}"
 
 # Start inactive units before considering refresh requests. An active unit is
 # restarted for its own file change or a caller-owned hard change.

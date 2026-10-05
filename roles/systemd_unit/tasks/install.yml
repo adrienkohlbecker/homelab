@@ -49,6 +49,11 @@
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
+    # Raw systemctl calls reach a user manager only through its runtime dir,
+    # which become_user does not set; the systemd module derives it the same way.
+    _systemd_unit_systemctl: >-
+      {{ ['systemctl'] if _systemd_unit_user == 'root'
+         else ['sh', '-c', 'XDG_RUNTIME_DIR=/run/user/$(id -u) exec systemctl --user "$@"', 'systemctl'] }}
 
 - name: install | Create drop-in directory for {{ systemd_unit_args.src }}
   when:

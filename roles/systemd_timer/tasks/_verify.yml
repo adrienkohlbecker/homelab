@@ -252,6 +252,70 @@
       on_calendar: "*-*-* *:00:00"
       user: _verify_runas
 
+# A changed user-scope timer is reenabled in the user's own manager, which
+# prunes enablement links its [Install] section no longer names.
+- name: _verify | Create a stale user-scope wants directory
+  file:
+    path: "{{ _systemd_timer_runas_user.home }}/.config/systemd/user/default.target.wants"
+    state: directory
+    owner: _verify_runas
+    group: _verify_runas
+    mode: "0755"
+  become: true
+
+- name: _verify | Plant a stale user-scope enablement link
+  file:
+    src: /etc/systemd/user/_verify_timer.timer
+    dest: "{{ _systemd_timer_runas_user.home }}/.config/systemd/user/default.target.wants/_verify_timer.timer"
+    state: link
+    force: true
+    owner: _verify_runas
+    group: _verify_runas
+  become: true
+
+- name: _verify | Change the user-scope timer file behind the helper
+  lineinfile:
+    path: /etc/systemd/user/_verify_timer.timer
+    line: "# drift"
+  become: true
+
+- name: _verify | Reinstall the user-scope timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer
+      description: User-scope half of the scope-isolation fixture
+      exec_start: /bin/true
+      on_calendar: "*-*-* *:00:00"
+      user: _verify_runas
+
+- name: _verify | Stat user-scope enablement links after the reenable
+  stat:
+    path: "{{ _systemd_timer_runas_user.home }}/.config/systemd/user/{{ item }}/_verify_timer.timer"
+  loop:
+    - default.target.wants
+    - timers.target.wants
+  register: _systemd_timer_user_links
+  become: true
+
+- name: _verify | List user-scope enablement links
+  command: find {{ _systemd_timer_runas_user.home }}/.config/systemd -name _verify_timer.timer
+  register: _systemd_timer_user_link_list
+  changed_when: false
+  become: true
+
+- name: _verify | Reenable pruned the stale link and kept the timer enabled
+  assert:
+    that:
+      - not _systemd_timer_user_links.results[0].stat.exists
+      - _systemd_timer_user_links.results[1].stat.exists
+    fail_msg: >-
+      stale default.target.wants link exists={{ _systemd_timer_user_links.results[0].stat.exists }},
+      timers.target.wants link exists={{ _systemd_timer_user_links.results[1].stat.exists }};
+      user links: {{ _systemd_timer_user_link_list.stdout_lines | join(', ') }}
+
 # The user manager creates this tree on its first persistent trigger, which
 # an hourly fixture timer never reaches during the test.
 - name: _verify | Create the user-scope stamp directory
