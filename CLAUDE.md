@@ -211,15 +211,7 @@ Three paths, preferred order:
 
 ### PID 1 / `--init`
 
-Add `--init` (placed right after `--name`) **only when the image runs the application directly as PID 1** — a bare Go/Java/.NET/node binary as `ENTRYPOINT`, which neither reaps orphaned children nor forwards `SIGTERM`. Then podman's `catatonit` does both. Canonical: [roles/adguard/](roles/adguard/) (AdGuardHome binary), [roles/jellyfin/](roles/jellyfin/) (spawns `ffmpeg` children).
-
-**Do NOT add `--init` when the image already ships its own init** — it is pure redundant clutter there:
-
-- **s6-overlay** — `ENTRYPOINT ["/init"]`. Every `linuxserver/*` image (sonarr/radarr/lidarr/bazarr/sabnzbd/transmission, …) and `ghcr.io/home-assistant/home-assistant`.
-- **dumb-init / tini** — e.g. `louislam/uptime-kuma` (`ENTRYPOINT ["/usr/bin/dumb-init","--"]`).
-- **entrypoint that `exec`s a process supervisor or webserver master** — the supervisor reaps children and forwards signals itself.
-
-Verify before deciding, don't guess: `sudo podman image inspect <img> --format '{{json .Config.Entrypoint}}'` on the host (and read the entrypoint script if it's a shell wrapper). A `/init`, a `dumb-init`/`tini`, or a trailing `exec <supervisor>` means skip `--init`.
+Add `--init` (right after `--name`) **only when the image runs the application directly as PID 1** — a bare Go/Java/.NET/node binary as `ENTRYPOINT`; podman's `catatonit` then reaps children and forwards `SIGTERM`. Canonical: [roles/adguard/](roles/adguard/), [roles/jellyfin/](roles/jellyfin/). Skip it when the image ships its own init — s6-overlay `/init` (every `linuxserver/*`, home-assistant), `dumb-init`/`tini`, or an entrypoint that `exec`s a supervisor. Check, don't guess: `sudo podman image inspect <img> --format '{{json .Config.Entrypoint}}'`, and read the script if it's a shell wrapper. Rationale: [notes/podman_conventions.md](notes/podman_conventions.md).
 
 ### Prefer system-scope systemd units
 
