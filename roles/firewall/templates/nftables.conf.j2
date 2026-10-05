@@ -12,15 +12,15 @@ define PODMAN_POOL = {{ podman_bridge_pool }}
 # Atomically replace only this table; netavark's tables in
 # the same kernel ruleset remain untouched.
 #
-# Family is `inet` (dual-stack) even though IPv6 is currently
-# disabled at the stack layer (files/sysctl-hardening.conf). The
-# `ip saddr` / `ip protocol` / `icmp type` matches below are
-# IPv4-only by construction; an `inet` family hook means that if a
-# future operator re-enables IPv6 (ISP transition, dual-stack
-# service, etc.) the v6 packets enter THIS table and fall through to
-# the policy-drop catch-all rather than silently bypassing our
-# filter. v6 first-class rules would land here via `ip6 saddr` /
-# `icmpv6 type` once they're wanted.
+# Family is `inet` (dual-stack) even though the role disables IPv6
+# at the stack layer (the firewall_disable_ipv6 sysctls in
+# tasks/main.yml). The `ip saddr` / `ip protocol` / `icmp type`
+# matches below are IPv4-only by construction; an `inet` family hook
+# means that where IPv6 is enabled, v6 packets enter THIS table:
+# port- and interface-only rules still apply, and everything
+# address-scoped falls through to the policy-drop catch-all rather
+# than silently bypassing our filter. v6 first-class rules would land
+# here via `ip6 saddr` / `icmpv6 type` once they're wanted.
 #
 # Delete and recreate the whole table so constant set definitions do
 # not retain stale ifindexes. The batch remains atomic under `nft -f`.
@@ -97,7 +97,7 @@ table inet homelab {
     # speculatively probing these paths.
     #
     # vrrp.<vrid> is the keepalived use_vmac child of $WAN_IFACE that
-    # carries the DNS VIP (see roles/adguard/templates/keepalived.conf.j2).
+    # carries the DNS VIP (see roles/keepalived/templates/keepalived.conf.j2).
     # Inbound DNS to the VIP enters on this vmac before PREROUTING DNAT.
     # The vmac shares $WAN_IFACE's physical L2 and trust scope.
     set lan_admin_ifaces {
@@ -216,7 +216,7 @@ table inet homelab {
         icmp type echo-request limit rate 10/second burst 20 packets counter name "input_icmp_accept" accept
 
         # keepalived runs in unicast mode (not multicast 224.0.0.18)
-        # with peers on the home LAN (see roles/adguard/templates/
+        # with peers on the home LAN (see roles/keepalived/templates/
         # keepalived.conf.j2). Scope VRRP to WAN-iif + the literal
         # set of named peer IPs (not the whole HOME_LAN) — a
         # compromised LAN device could otherwise forge a high-priority
