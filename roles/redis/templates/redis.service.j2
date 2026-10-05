@@ -27,6 +27,13 @@ Type=notify
 # from conmon relaying the container healthcheck, not the unit's main PID.
 NotifyAccess=all
 SyslogIdentifier=%N
+# Routine snapshot progress; a failed background save still logs.
+LogFilterPatterns=~changes in [0-9]+ seconds[.] Saving
+LogFilterPatterns=~Background saving (started|terminated with success)
+LogFilterPatterns=~DB saved on disk
+LogFilterPatterns=~Fork CoW for RDB:
+# Accepted: overcommit stays at the kernel default (see tasks/main.yml).
+LogFilterPatterns=~WARNING Memory overcommit must be enabled
 
 # --entrypoint bypasses the image entrypoint's redis-server branch, which would
 # otherwise --loadmodule every bundled Redis 8 module. redis-server runs as PID

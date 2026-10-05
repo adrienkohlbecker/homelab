@@ -35,6 +35,36 @@
       changed_when: false
       failed_when: "'NOPERM' not in (redis_config_disabled.stdout + redis_config_disabled.stderr)"
 
+# Startup notices stay visible at the default loglevel while the unit filters
+# the accepted overcommit warning that redis prints on every start.
+- name: _verify | Redis startup reaches the journal
+  command: >-
+    journalctl --boot --no-pager --output=cat _SYSTEMD_UNIT=redis.service
+    --grep="Ready to accept connections"
+  become: true
+  register: redis_startup_log
+  changed_when: false
+  until: redis_startup_log.rc == 0
+  retries: 5
+  delay: 2
+
+# Redis prints the warning only when overcommit is off; otherwise there is
+# nothing to filter and the check below would pass vacuously.
+- name: _verify | Read the host overcommit mode
+  slurp:
+    src: /proc/sys/vm/overcommit_memory
+  register: redis_overcommit_mode
+
+- name: _verify | Overcommit warning is filtered from the journal
+  when: redis_overcommit_mode.content | b64decode | trim != '1'
+  command: >-
+    journalctl --boot --no-pager --output=cat _SYSTEMD_UNIT=redis.service
+    --grep="Memory overcommit"
+  become: true
+  register: redis_overcommit_log
+  changed_when: false
+  failed_when: redis_overcommit_log.rc == 0
+
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:

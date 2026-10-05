@@ -8,9 +8,6 @@ save 60 1
 # refuse every write and with it every Authelia login.
 stop-writes-on-bgsave-error no
 
-# Silences the per-snapshot notices; warnings and errors still reach journald.
-loglevel warning
-
 # Authelia's sessions are a few hundred bytes each, so this bound is generous.
 # volatile-lru (every Authelia session carries a TTL) evicts the least recently
 # used sessions if it is ever reached, instead of refusing new logins.
