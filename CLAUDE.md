@@ -20,27 +20,13 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Debugging prod hosts directly*.
 - **DO NOT add tautological checks to role `_verify.yml` files.** A check that only confirms a converge task wrote the requested file or value proves nothing beyond Ansible's own result. Exercise the consuming binary or service and assert observable behavior; if no meaningful functional assertion is possible, omit the check.
 
-## Project Structure & Module Organization
-
-`site.yml` orchestrates host groups → roles. `ansible.cfg` binds the repo to `hosts.ini` and `vault-client.sh` (dispatches on vault-id; see *Vault ids*), so running from the root picks up the correct inventory and vault passwords automatically.
-
-| Path             | Purpose                                                                                 |
-|------------------|-----------------------------------------------------------------------------------------|
-| `roles/<r>/`     | role logic — `tasks/`, `templates/`, `files/`, `vars/` (no `handlers/`, per Hard Rules) |
-| `group_vars/`    | shared, environment, physical-host, and storage-layout vars (see *Inventory layout*)    |
-| `host_vars/`     | only hosts absent from `test/inventory.ini` (e.g. `bunk`)                               |
-| `terraform/`     | DNS (Cloudflare), registrar (Gandi), Cloudflare Access, Mailgun, GitHub-repo, Nexus, GCP|
-| `packer/`        | QEMU image builds                                                                       |
-| `test/`          | ansible test harness, inventories, logs                                                 |
-| `unit_tests/`    | unit tests for non-ansible code                                                         |
-| `notes/`         | long-form design notes — landing zone for content that doesn't belong inline            |
-| `.agents/`       | agent-neutral skills + hook scripts shared by Claude Code and Codex (see *Workflows*)   |
-
 ## Build, Test, and Development Commands
+
+Repository map: [README.md](README.md).
 
 - Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install`. `python.uv_venv_auto` auto-sources `.venv`; `uv sync` populates Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - **op:// env refs only resolve under `op run --`.** Toml tasks wrap explicitly; file-based tasks under `mise-tasks/` do **not** — mise exports the literal `op://…` string. Fix: re-exec under `op run --` behind a guard env var.
-- Configure everything: `mise run ansible --limit prod` (wrapper handles vault-id, ssh args, env; set `--tags` to narrow scope). One service/host: `mise run ansible --limit lab --tags wireguard`.
+- Configure everything: `mise run ansible --limit prod` (wrapper handles vault-id, ssh args, env; set `--tags` to narrow scope). `ansible.cfg` binds the repo to `hosts.ini` and `vault-client.sh`, so run from the root. One service/host: `mise run ansible --limit lab --tags wireguard`.
 - DNS/terraform: `mise run tf {init,plan,apply}` — `cd`s into `terraform/` and forwards to `tofu` (use `--` for flags mise intercepts). `apply` only after the operator has reviewed the plan. State in MinIO (`s3://terraform/homelab.tfstate`), AES-GCM-encrypted. Rotation: [notes/runbooks/terraform-state-encryption-rotation.md](notes/runbooks/terraform-state-encryption-rotation.md).
 - Refresh a fixture image: `mise run packer:build [lab|pug]` (parallel; `--ubuntu resolute` for another release). See [notes/test_environment_design.md](notes/test_environment_design.md).
 - Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, ruff/pyright, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
