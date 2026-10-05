@@ -106,12 +106,45 @@
             state: restarted
           become: true
 
+    # The DSM package is installed out of band through Package Center. Configure
+    # it here, then reuse the role's shared headscale registration.
     - name: Configure Tailscale
-      import_role:
-        name: tailscale
-        tasks_from: dsm
       tags:
         - tailscale
+      block:
+        - name: Assert the Tailscale package is installed
+          stat:
+            path: "{{ tailscale_bin }}"
+          register: tailscale_dsm_bin
+          failed_when: not tailscale_dsm_bin.stat.exists
+
+        - name: Grant Synology routing permissions once
+          command: "{{ tailscale_bin }} configure synology"
+          args:
+            creates: /var/packages/Tailscale/conf/resource.own
+          register: tailscale_dsm_configure
+          become: true
+
+        # DSM hardcodes tailscaled's underlay port in its package launcher.
+        - name: Pin the underlay port in the package launcher
+          lineinfile:
+            path: /var/packages/Tailscale/scripts/start-stop-status
+            regexp: '^PORT='
+            line: 'PORT="{{ tailscale_port }}"'
+            backup: true
+          register: tailscale_dsm_port
+          become: true
+
+        - name: Restart the package after configuration changes
+          command: /usr/syno/bin/synosystemctl restart pkgctl-Tailscale.service
+          when: tailscale_dsm_configure.changed or tailscale_dsm_port.changed
+          changed_when: true
+          become: true
+
+        - name: Register against the headscale control plane
+          import_role:
+            name: tailscale
+            tasks_from: register
 
     - name: Configure Ghostty terminfo
       tags:
