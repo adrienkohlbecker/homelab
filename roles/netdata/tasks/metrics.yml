@@ -12,15 +12,6 @@
   tags:
     - netdata
 
-- name: Install zfs metrics
-  import_role:
-    name: zfs
-    tasks_from: netdata
-  vars:
-    zfs_netdata_condition: "{{ netdata_package_ready }}"
-  tags:
-    - netdata
-
 - name: Install systemd_timer metrics
   import_role:
     name: systemd_timer

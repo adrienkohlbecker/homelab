@@ -1,4 +1,4 @@
-"""Health and scan regressions for both supported ZFS status formats."""
+"""Health regressions for both supported ZFS status formats."""
 
 import copy
 import json
@@ -94,14 +94,6 @@ def test_unconsumed_pool_fields_are_left_to_zpool_x(pool, state):
     del pool["scan_stats"]["start_time"]
     pool["vdevs"]["disk0"]["slow_ios"] = "unconsumed"
     assert status.parse_status(document({"tank": pool}))["tank"]["state"] == state
-
-
-def test_one_unusual_pool_does_not_blank_the_host_scan(monkeypatch, pool):
-    removed = copy.deepcopy(pool) | {"name": "removed", "state": "REMOVED"}
-    pool["scan_stats"].update(state="SCANNING")
-    monkeypatch.setattr(status, "supports_json", lambda: True)
-    monkeypatch.setattr(status, "run", lambda *_: document({"removed": removed, "tank": pool}))
-    assert status.scan_in_progress(None)
 
 
 @pytest.mark.parametrize("value", [None, "1K", "0", True, -1])
@@ -223,57 +215,6 @@ def test_health_startup_failure_is_mailed(monkeypatch, capsys):
     assert len(mail) == 1
     assert mail[0][0][0][0] == "mail"
     assert status.diagnostic(error) in mail[0][1]["input"]
-
-
-def test_scan_version_failure_does_not_send_a_health_mail(monkeypatch, capsys):
-    monkeypatch.setattr(status.sys, "argv", ["zfs_status.py", "scan"])
-
-    def fail():
-        raise status.StatusError("Cannot identify the ZFS userspace version")
-
-    monkeypatch.setattr(status, "supports_json", fail)
-    monkeypatch.setattr(status.subprocess, "run", lambda *_, **__: pytest.fail("Scan queries must not mail"))
-    assert status.main() == 2
-    assert "Cannot identify" in capsys.readouterr().err
-
-
-def test_noble_scan_fallback_does_not_request_json(monkeypatch):
-    monkeypatch.setattr(status, "supports_json", lambda: False)
-    calls = []
-
-    def run(*argv):
-        calls.append(argv)
-        return "scan: scrub in progress"
-
-    monkeypatch.setattr(status, "run", run)
-    assert status.scan_in_progress("tank")
-    assert calls == [("zpool", "status", "tank")]
-
-
-@pytest.mark.parametrize(
-    ("output", "active"),
-    [
-        ("scan: resilver (mirror-0) in progress since Thu Oct 1 00:00:00 2026", True),
-        ("scan: resilver in progress since Thu Oct 1 00:00:00 2026", True),
-        ("scan: resilvered (mirror-0) 64M with 0 errors on Thu Oct 1 00:00:00 2026", False),
-        ("scan: scrub in progress since Thu Oct 1 00:00:00 2026", True),
-    ],
-)
-def test_noble_scan_fallback_distinguishes_active_rebuilds(monkeypatch, output, active):
-    monkeypatch.setattr(status, "supports_json", lambda: False)
-    monkeypatch.setattr(status.subprocess, "run", lambda argv, **_: subprocess.CompletedProcess(argv, 0, stdout=output))
-    assert status.scan_in_progress("tank") is active
-
-
-def test_scan_query_failure_propagates(monkeypatch):
-    monkeypatch.setattr(status, "supports_json", lambda: True)
-
-    def fail(*_, **__):
-        raise subprocess.CalledProcessError(124, ["zpool"], stderr="pool wedged")
-
-    monkeypatch.setattr(status, "run", fail)
-    with pytest.raises(subprocess.CalledProcessError):
-        status.scan_in_progress(None)
 
 
 @pytest.mark.parametrize(

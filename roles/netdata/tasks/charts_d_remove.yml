@@ -1,0 +1,46 @@
+# Remove a charts.d.plugin shell collector installed by charts_d.yml, then
+# restart charts.d.plugin when anything was removed so the running process
+# stops collecting it.
+#
+# Inputs: caller passes a single dict `netdata_args` with keys
+#   name        required; collector module name, as passed to charts_d.yml.
+#
+# Idempotent on hosts that never had the collector.
+- name: charts_d_remove | Assert required inputs are set
+  assert:
+    that:
+      - netdata_args.name is defined and netdata_args.name | length > 0
+    fail_msg: charts_d_remove requires netdata_args.name (collector module name)
+
+- name: "charts_d_remove | Remove collector files for {{ netdata_args.name }}"
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/libexec/netdata/charts.d/{{ netdata_args.name }}.chart.sh
+    - /etc/netdata/charts.d/{{ netdata_args.name }}.conf
+  register: _netdata_charts_d_remove_files
+  become: true
+
+# Same kill-and-respawn path as charts_d.yml. When charts.d.plugin is not
+# running, no live process holds the collector and nothing needs a restart.
+- name: "charts_d_remove | Restart charts.d.plugin without collector {{ netdata_args.name }}"
+  when: _netdata_charts_d_remove_files.changed
+  command:
+    argv:
+      - pkill
+      - --signal
+      - TERM
+      - --full
+      - plugins.d/charts.d.plugin
+  register: _netdata_charts_d_remove_kill
+  changed_when: _netdata_charts_d_remove_kill.rc == 0
+  failed_when: _netdata_charts_d_remove_kill.rc > 1
+  become: true
+
+- name: charts_d_remove | Record the charts.d.plugin kill
+  when:
+    - _netdata_charts_d_remove_kill is not skipped
+    - _netdata_charts_d_remove_kill.rc | default(1) == 0
+  set_fact:
+    netdata_killed_plugins: "{{ netdata_killed_plugins | default([]) | union(['charts.d.plugin']) }}"

@@ -1,2 +1,15 @@
 ---
 # Add temporary teardown tasks here when retiring services from the fleet.
+
+# Drop once lab, pug, and fox have converged.
+- name: Remove the retired zfs_scan charts.d collector
+  import_role:
+    name: netdata
+    tasks_from: charts_d_remove
+  vars:
+    netdata_args:
+      name: zfs_scan
+  tags:
+    - retired_services
+    - netdata
+    - zfs

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Read pool health and scan state without interpreting localized ZFS prose."""
+"""Check pool health without interpreting localized ZFS prose."""
 
 import argparse
 import json
@@ -136,16 +136,6 @@ def scan_active(pool: dict[str, Any]) -> bool:
     return any(rebuild["state"] == "ACTIVE" for rebuild in scan.get("rebuild_stats", {}).values())
 
 
-def scan_in_progress(pool: str | None) -> bool:
-    """Return actual I/O activity; a query failure must never become False."""
-    pools = [pool] if pool else []
-    if supports_json():
-        return any(scan_active(status) for status in read_status(*pools).values())
-    # OpenZFS 2.2 has no JSON status; run() pins its prose to the C locale.
-    output = run("zpool", "status", *pools)
-    return "scrub in progress" in output or re.search(r"resilver(?: \([^)]*\))? in progress", output) is not None
-
-
 def scrub_issue(name: str, pool: dict[str, Any], now: int, expire: int) -> str | None:
     """Return the scrub-watchdog alert for one pool, or None.
 
@@ -240,23 +230,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("health")
-    scan = commands.add_parser("scan")
-    scan.add_argument("pool", nargs="?")
-    args = parser.parse_args()
+    parser.parse_args()
     try:
-        if args.command == "health":
-            try:
-                expire = int(os.environ.get("SCRUB_EXPIRE", "3456000"))
-                if not supports_json():
-                    return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
-            except QUERY_ERRORS as error:
-                return finish_health([f"Cannot initialize health check: {diagnostic(error)}"], [])
-            return health(expire)
-        print(int(scan_in_progress(args.pool)))
-        return 0
+        expire = int(os.environ.get("SCRUB_EXPIRE", "3456000"))
+        if not supports_json():
+            return subprocess.run(["/opt/zfs/zfs_health_legacy.sh"], check=False).returncode
     except QUERY_ERRORS as error:
-        print(f"ERROR :: {diagnostic(error)}", file=sys.stderr)
-        return 2
+        return finish_health([f"Cannot initialize health check: {diagnostic(error)}"], [])
+    return health(expire)
 
 
 if __name__ == "__main__":

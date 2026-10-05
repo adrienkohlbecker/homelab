@@ -47,12 +47,6 @@
 - name: _verify | Install hdparm netdata collector
   import_tasks: netdata.yml
 
-# The active-drive alert references this chart so long ZFS scans suppress it.
-- name: _verify | Install zfs_scan collector
-  import_role:
-    name: zfs
-    tasks_from: netdata
-
 - name: _verify | Install canned hdparm shim
   copy:
     content: |
@@ -156,7 +150,7 @@
     state: restarted
   become: true
 
-- name: _verify | Wait for hdparm and zfs_scan charts
+- name: _verify | Wait for the hdparm chart
   uri:
     url: http://localhost:19999/api/v1/charts
     return_content: true
@@ -166,7 +160,6 @@
   until: >-
     _hdparm_charts.status == 200
     and 'hdparm.verify_active' in (_hdparm_charts.content | from_json).charts.keys()
-    and 'zfs_scan.any_in_progress' in (_hdparm_charts.content | from_json).charts.keys()
 
 - name: _verify | Live chart reports active state
   uri:

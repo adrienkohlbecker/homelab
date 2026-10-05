@@ -315,12 +315,3 @@
     fail_msg: >-
       zfs_health did not flag an expired scrub with SCRUB_EXPIRE=1.
       rc={{ _zfs_health_scrub_age.rc }} stderr={{ _zfs_health_scrub_age.stderr }}
-
-# Drive real scan transitions on a throwaway pool: the unprivileged reader the
-# netdata collector uses must track them, and the scheduler must skip an active
-# scrub.
-- name: _verify | Exercise real scan transitions and the scrub scheduler
-  when: zfs_root
-  script: _verify_scan.sh
-  changed_when: false
-  become: true

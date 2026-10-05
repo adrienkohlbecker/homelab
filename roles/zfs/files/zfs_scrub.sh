@@ -17,30 +17,22 @@ set -euo pipefail
 # canceled or stale scrubs (zfs_status.py scrub_issue); ZED's scrub_finish
 # zedlet mails on scrubs with errors.
 #
-# Stagger the per-pool kick-offs instead. lab hard-locked ~12s into this run on
+# zpool owns the per-pool scan state: it resumes a paused scrub and refuses to
+# start one while a scrub or resilver is running, so a long scan is never
+# restarted from zero. A refusal counts as a failure here; it takes a resilver
+# or a scrub outlasting a month, both worth a look.
+#
+# Stagger the per-pool kick-offs. lab hard-locked ~12s into this run on
 # 2026-06-14, during scrub initiation rather than steady state, so spacing the
 # starts keeps every pool from entering its metadata-read burst in the same
-# instant. Skipped (already-scrubbing) pools don't consume a slot, so the first
-# pool actually kicked off waits for nothing. The stagger is overridable
-# (ZFS_SCRUB_STAGGER_SEC) so the role's _verify can zero it -- the CI fixture's
-# img-backed pools can't thundering-herd a hard lock.
+# instant. The stagger is overridable (ZFS_SCRUB_STAGGER_SEC) so the role's
+# _verify can zero it -- the CI fixture's img-backed pools can't
+# thundering-herd a hard lock.
 stagger_sec="${ZFS_SCRUB_STAGGER_SEC:-120}"
 scrub_started=0
 failed=0
 pools=$(timeout -k 10 60 zpool list -H -o name)
 for pool in $pools; do
-  # Skip a pool already scrubbing or resilvering: a fresh `zpool scrub` would
-  # error out, and a long scrub spanning two monthly fires must not be
-  # restarted from zero.
-  active=$(/opt/zfs/zfs_status.py scan "$pool") || {
-    echo >&2 "Error: cannot read scan state on $pool, skipping."
-    ((failed += 1))
-    continue
-  }
-  if [[ "$active" == 1 ]]; then
-    echo "Scrub/resilver already running on $pool, skipping."
-    continue
-  fi
   if [ "$scrub_started" -ne 0 ]; then
     sleep "$stagger_sec"
   fi

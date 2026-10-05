@@ -1,7 +1,7 @@
 # Install a charts.d.plugin shell collector. Drops the caller-provided
 # script under /usr/libexec/netdata/charts.d/ and the caller-provided conf
 # under /etc/netdata/charts.d/, then restarts charts.d.plugin when anything
-# changed.
+# changed. charts_d_remove.yml is the matching removal entry point.
 #
 # Inputs: caller passes a single dict `netdata_args` with keys
 #   name        required; collector module name (e.g. 'hdparm'). Used as
