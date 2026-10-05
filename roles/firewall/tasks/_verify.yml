@@ -8,7 +8,7 @@
 # The rig uses reserved TEST-NET-1 so fixture routes cannot shadow it.
 #
 # extns carries one alias for each representative source range; probe
-# matrices select the source explicitly with curl/nc. Matching /32 host
+# rows select the source explicitly with curl/nc. Matching /32 host
 # routes return through wg0. Aliases derive from group_vars via
 # ipmath(250) — offset 250 keeps each
 # address outside netavark's bottom-up auto-allocation range while
@@ -81,13 +81,9 @@
 
 - name: _verify | Set up netns/veth test rig
   import_tasks: _verify_rig.yml
-- name: _verify | Run INPUT chain probes
-  import_tasks: _verify_input.yml
 - name: _verify | Run FORWARD chain probes
   import_tasks: _verify_forward.yml
-- name: _verify | Run drop-path probes
-  import_tasks: _verify_drops.yml
-- name: _verify | Assert nftables counters
-  import_tasks: _verify_counters.yml
+- name: _verify | Run the counter-judged probe matrix
+  import_tasks: _verify_probes.yml
 - name: _verify | Run lifecycle (stop/start) probes
   import_tasks: _verify_lifecycle.yml

@@ -34,6 +34,7 @@ table inet homelab {
     counter input_silenced {}
     counter input_silenced_netbios {}
     counter input_catchall {}
+    counter input_catchall_reset {}
     counter icmp_overflow {}
     counter vrrp_accept {}
     counter aardvark_accept {}
@@ -285,7 +286,7 @@ table inet homelab {
         # admin tools fail fast; from WAN we silently drop so closed
         # ports don't confirm host existence to internet scanners.
         limit rate 5/minute burst 10 packets log prefix "[nftables] INPUT:DROP: "
-        iifname @lan_admin_ifaces meta l4proto tcp reject with tcp reset
+        iifname @lan_admin_ifaces meta l4proto tcp counter name "input_catchall_reset" reject with tcp reset
         counter name "input_catchall" drop comment "input catch-all drop"
     }
 

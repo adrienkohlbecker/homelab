@@ -134,27 +134,6 @@ def nft_counters_by_name(value: str) -> dict[str, dict[str, Any]]:
     return counters
 
 
-def nft_rules_by_counter(value: str, counter_name: str) -> list[dict[str, Any]]:
-    """Return nft rules whose expression references a named counter."""
-    rules: list[dict[str, Any]] = []
-    for entry in _nftables(value):
-        rule = entry.get("rule")
-        if not isinstance(rule, Mapping):
-            continue
-        expr = rule.get("expr")
-        if isinstance(expr, list) and {"counter": counter_name} in expr:
-            rules.append(dict(rule))
-    return rules
-
-
-def nft_rule_by_counter(value: str, counter_name: str) -> dict[str, Any]:
-    """Return exactly one nft rule referencing a named counter."""
-    rules = nft_rules_by_counter(value, counter_name)
-    if len(rules) != 1:
-        raise AnsibleError(f"nft_rule_by_counter expected one rule for {counter_name}, got {len(rules)}")
-    return rules[0]
-
-
 class FilterModule:
     def filters(self):
         return {
@@ -162,8 +141,6 @@ class FilterModule:
             "host_vlan_block": host_vlan_block,
             "json_argv": json_argv,
             "nft_counters_by_name": nft_counters_by_name,
-            "nft_rule_by_counter": nft_rule_by_counter,
-            "nft_rules_by_counter": nft_rules_by_counter,
             "podman_health_curl": podman_health_curl,
             "podman_health_wget": podman_health_wget,
             "rstrip_newlines": rstrip_newlines,

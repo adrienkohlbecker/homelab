@@ -125,21 +125,17 @@ def test_any_successful_stdout_finds_successful_nonempty_result() -> None:
     assert not homelab_tests.any_successful_stdout([{"rc": 0, "stdout": ""}, {"rc": 1, "stdout": "ignored"}])
 
 
-def test_nft_helpers_extract_counters_and_rules_by_counter_reference() -> None:
+def test_nft_counters_by_name_keeps_only_counter_declarations() -> None:
     payload = {
         "nftables": [
+            {"metainfo": {"json_schema_version": 1}},
             {"counter": {"family": "inet", "table": "filter", "name": "input_http", "packets": 2}},
             {"rule": {"expr": [{"counter": "input_http"}, {"accept": None}]}},
-            {"rule": {"expr": [{"counter": "other"}, {"accept": None}]}},
         ]
     }
-    payload_json = json.dumps(payload)
-    assert homelab.nft_counters_by_name(payload_json)["input_http"]["packets"] == 2
-    assert homelab.nft_rule_by_counter(payload_json, "input_http")["expr"] == [
-        {"counter": "input_http"},
-        {"accept": None},
-    ]
-    assert homelab.nft_rules_by_counter(payload_json, "missing") == []
+    assert homelab.nft_counters_by_name(json.dumps(payload)) == {
+        "input_http": {"family": "inet", "table": "filter", "name": "input_http", "packets": 2}
+    }
 
 
 def test_exposes_filters() -> None:

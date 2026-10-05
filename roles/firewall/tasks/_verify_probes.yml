@@ -1,0 +1,285 @@
+# Probe matrix: one row per packet path, each judged by the counters of the
+# rules it must reach (`hit`) and bypass (`miss`). See _verify_probe.yml for
+# the row contract. Most rows run in extns and enter through the wg0-named
+# veth; `-s` picks the source alias from the rig topology in _verify.yml.
+#
+# FORWARD rows run after _verify_forward.yml, whose egress probes prove the
+# external destination is reachable before the transit row expects a drop.
+
+# Reproduce the stale-DNAT VIP handoff: the original destination is the DNS
+# VIP, but PREROUTING rewrites it to a peer behind wg0. The packet enters on
+# the vmac and reaches FORWARD without matching the podman DNAT accept.
+- name: _verify_probes | Install stale DNS VIP DNAT fixture
+  when: dns_vrrp_enabled
+  command:
+    argv: [ nft, -f, "-" ]
+    stdin: |
+      add chain inet homelab firewall_verify_vip_dnat {
+          type nat hook prerouting priority -101; policy accept;
+      }
+      add rule inet homelab firewall_verify_vip_dnat \
+          iifname "vrrp.{{ dns_keepalived_vrid }}" \
+          ip daddr {{ network.virtual_ips.dns }} udp dport 12345 \
+          dnat ip to {{ _firewall_probe_nonscope }}
+  changed_when: true
+  become: true
+
+- name: _verify_probes | Run probe matrix
+  include_tasks: _verify_probe.yml
+  when: firewall_probe.enabled | default(true) | bool
+  loop_control:
+    loop_var: firewall_probe
+    label: "{{ firewall_probe.name }}"
+  loop:
+    # Unscoped INPUT accepts.
+    - name: SSH from a non-scope source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "22" ]
+      expect: pass
+      hit: [ input_public_tcp ]
+    - name: HTTP from a non-scope source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "80" ]
+      expect: pass
+      hit: [ input_public_tcp ]
+    - name: HTTPS from a non-scope source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "443" ]
+      expect: pass
+      hit: [ input_public_tcp ]
+    - name: Loopback
+      runner: host
+      argv: [ curl, -sf, --max-time, "5", "http://127.0.0.1:80/" ]
+      expect: pass
+      hit: [ input_loopback ]
+      miss: [ input_public_tcp ]
+    - name: Tailscale0 ingress
+      enabled: "{{ tailscale_advertise_routes is defined }}"
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_tailscale }}", 100.64.99.1, "80" ]
+      expect: pass
+      hit: [ tailscale_input_accept ]
+      miss: [ input_public_tcp ]
+    - name: ICMP echo
+      argv: [ ping, -c, "1", -W, "2", 192.0.2.1 ]
+      expect: pass
+      hit: [ input_icmp_accept ]
+    # IGMP is link-local, so any ingress is accepted.
+    - name: IGMP
+      argv: [ hping3, --rawip, -H, "2", -c, "1", -d, "0", --quiet, 192.0.2.1 ]
+      hit: [ igmp_accept ]
+
+    # WAN ingress from the controller.
+    - name: WireGuard from WAN
+      runner: controller
+      argv: [ nc, -u, -w, "1", "{{ wan_probe_host }}", "{{ wan_forward_ports.udp['51820'] }}" ]
+      hit: [ wireguard_accept ]
+    - name: Transmission UDP from WAN
+      runner: controller
+      argv: [ nc, -u, -w, "1", "{{ wan_probe_host }}", "{{ wan_forward_ports.udp[service_ports.transmission_bt | string] }}" ]
+      hit: [ input_transmission_udp ]
+    - name: Transmission TCP from WAN
+      runner: controller
+      argv: [ nc, -z, -w, "3", "{{ wan_probe_host }}", "{{ wan_forward_ports.tcp[service_ports.transmission_bt | string] }}" ]
+      expect: pass
+      hit: [ input_transmission_tcp ]
+    - name: Tailscale underlay from WAN
+      enabled: "{{ tailscale_wan_direct | default(false) }}"
+      runner: controller
+      argv: [ nc, -u, -w, "1", "{{ wan_probe_host }}", "{{ wan_forward_ports.udp[tailscale_port | default(0) | string] | default(0) }}" ]
+      hit: [ tailscale_underlay_accept ]
+    # The forward does not preserve a home-LAN source.
+    - name: mDNS from WAN with a non-home source
+      runner: controller
+      argv: [ nc, -u, -w, "1", "{{ wan_probe_host }}", "{{ wan_forward_ports.udp['5353'] }}" ]
+      hit: [ input_catchall ]
+      miss: [ mdns_accept ]
+
+    # Admin services accept the wireguard subnet on wg0.
+    - name: Mosh from a wireguard source
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "60000" ]
+      hit: [ mosh_accept ]
+    - name: Tailscale direct endpoint from a wireguard source
+      enabled: "{{ tailscale_wan_direct | default(false) }}"
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ tailscale_port | default(0) }}" ]
+      hit: [ tailscale_lan_accept ]
+      miss: [ input_silenced_tailscale ]
+    - name: Samba from a wireguard source
+      enabled: "{{ _firewall_verify_samba_enabled }}"
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "445" ]
+      expect: pass
+      hit: [ input_admin_samba ]
+    - name: NUT from a wireguard source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ service_ports.nut }}" ]
+      expect: pass
+      hit: [ input_admin_nut ]
+    - name: Authelia from a wireguard source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ service_ports.authelia }}" ]
+      expect: pass
+      hit: [ input_authelia_wg ]
+    # mDNS additionally requires WAN ingress and a home-LAN source.
+    - name: mDNS from a wireguard source
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "5353" ]
+      hit: [ input_catchall ]
+      miss: [ mdns_accept ]
+
+    # Home-LAN sources must arrive on the WAN iface or mac_mgmt, not wg0.
+    - name: Mosh from a home source on wg0
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "60000" ]
+      hit: [ input_catchall ]
+      miss: [ mosh_accept ]
+    - name: mDNS from a home source on wg0
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "5353" ]
+      hit: [ input_catchall ]
+      miss: [ mdns_accept ]
+    - name: Samba from a home source on wg0
+      enabled: "{{ _firewall_verify_samba_enabled }}"
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "445" ]
+      expect: fail
+      hit: [ input_catchall_reset ]
+      miss: [ input_admin_samba ]
+    - name: NUT from a home source on wg0
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "{{ service_ports.nut }}" ]
+      expect: fail
+      hit: [ input_catchall_reset ]
+      miss: [ input_admin_nut ]
+    - name: Samba from a home source on mac_mgmt
+      enabled: "{{ _firewall_verify_mac_mgmt_enabled and _firewall_verify_samba_enabled }}"
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home_mac }}", "{{ _firewall_probe_home_mac_host }}", "445" ]
+      expect: pass
+      hit: [ input_admin_samba ]
+    - name: NUT from a home source on mac_mgmt
+      enabled: "{{ _firewall_verify_mac_mgmt_enabled }}"
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home_mac }}", "{{ _firewall_probe_home_mac_host }}", "{{ service_ports.nut }}" ]
+      expect: pass
+      hit: [ input_admin_nut ]
+    - name: Tailscale direct endpoint from a home source on mac_mgmt
+      enabled: "{{ _firewall_verify_mac_mgmt_enabled and tailscale_wan_direct | default(false) }}"
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_home_mac }}", "{{ _firewall_probe_home_mac_host }}", "{{ tailscale_port | default(0) }}" ]
+      hit: [ tailscale_lan_accept ]
+
+    # A source outside every trusted range misses each scoped accept.
+    - name: WireGuard from a non-scope source on wg0
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "51820" ]
+      hit: [ input_catchall ]
+      miss: [ wireguard_accept ]
+    - name: Transmission UDP from a non-scope source on wg0
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ service_ports.transmission_bt }}" ]
+      hit: [ input_catchall ]
+      miss: [ input_transmission_udp ]
+    - name: Mosh from a non-scope source
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "60000" ]
+      hit: [ input_catchall ]
+      miss: [ mosh_accept ]
+    - name: Samba from a non-scope source
+      enabled: "{{ _firewall_verify_samba_enabled }}"
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "445" ]
+      expect: fail
+      hit: [ input_catchall_reset ]
+      miss: [ input_admin_samba ]
+    - name: NUT from a non-scope source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ service_ports.nut }}" ]
+      expect: fail
+      hit: [ input_catchall_reset ]
+      miss: [ input_admin_nut, input_nut_podman ]
+    - name: Transmission TCP from a non-scope source on wg0
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ service_ports.transmission_bt }}" ]
+      expect: fail
+      hit: [ input_catchall_reset ]
+      miss: [ input_transmission_tcp ]
+    - name: Aardvark DNS TCP from a non-scope source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "5333" ]
+      expect: fail
+      hit: [ input_catchall_reset ]
+      miss: [ aardvark_tcp_accept ]
+
+    # Container sources: aardvark-dns serves both the default bridge and the
+    # named-bridge pool; NUT admits the pool used by Home Assistant.
+    - name: Aardvark DNS UDP from the default bridge
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_podman }}", 192.0.2.1, "5333" ]
+      hit: [ aardvark_accept ]
+    - name: Aardvark DNS UDP from the named-bridge pool
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_podman_pool }}", 192.0.2.1, "5333" ]
+      hit: [ aardvark_accept ]
+    - name: Aardvark DNS TCP from the default bridge
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_podman }}", 192.0.2.1, "5333" ]
+      expect: pass
+      hit: [ aardvark_tcp_accept ]
+    - name: Aardvark DNS TCP from the named-bridge pool
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_podman_pool }}", 192.0.2.1, "5333" ]
+      expect: pass
+      hit: [ aardvark_tcp_accept ]
+    - name: NUT from the named-bridge pool
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_podman_pool }}", 192.0.2.1, "{{ service_ports.nut }}" ]
+      expect: pass
+      hit: [ input_nut_podman ]
+      miss: [ input_admin_nut ]
+
+    # Crafted mid-stream packets. Loose conntrack classifies them as NEW.
+    - name: INPUT TCP ACK without SYN
+      argv: [ hping3, -A, -p, "80", -c, "1", --quiet, 192.0.2.1 ]
+      hit: [ input_nonsyn ]
+      miss: [ input_public_tcp ]
+    - name: FORWARD TCP ACK without SYN
+      argv: [ hping3, -A, -p, "{{ _firewall_probe_container_port }}", -c, "1", --quiet, "{{ _firewall_probe_container_dest }}" ]
+      hit: [ forward_nonsyn ]
+
+    # FORWARD catch-all: no DNAT, so no container or egress accept applies.
+    - name: Direct container IP from wg0
+      argv: [ nc, -z, -w, "2", "{{ _firewall_probe_container_dest }}", "80" ]
+      expect: fail
+      hit: [ forward_catchall ]
+    - name: WireGuard source transit to WAN
+      argv: [ nc, -z, -w, "2", -s, "{{ _firewall_probe_wg }}", 1.1.1.1, "80" ]
+      expect: fail
+      hit: [ forward_catchall ]
+
+    # Each echo uses a fresh ICMP id, so every packet is a NEW flow that
+    # reaches the rate limit (burst 20) instead of riding the first one.
+    - name: ICMP echo flood
+      argv: [ python3, "-" ]
+      stdin: |
+        import socket, struct
+        sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+        for icmp_id in range(1000, 1050):
+            hdr = struct.pack("!BBHHH", 8, 0, 0, icmp_id, 0)
+            chksum = sum((hdr[j] << 8) | hdr[j + 1] for j in range(0, len(hdr), 2))
+            while chksum >> 16:
+                chksum = (chksum & 0xFFFF) + (chksum >> 16)
+            sock.sendto(struct.pack("!BBHHH", 8, 0, ~chksum & 0xFFFF, icmp_id, 0), ("192.0.2.1", 0))
+      hit: [ icmp_overflow, input_icmp_accept ]
+
+    # Silenced noise lands on its own drop, not the logging catch-all.
+    - name: SSDP noise
+      argv: [ nc, -u, -w, "1", 192.0.2.1, "1900" ]
+      hit: [ input_silenced ]
+    - name: NetBIOS noise
+      argv: [ nc, -u, -w, "1", 192.0.2.1, "137" ]
+      hit: [ input_silenced_netbios ]
+    - name: Tailscale disco probe from an untrusted zone
+      enabled: "{{ tailscale_wan_direct | default(false) }}"
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_untrusted_peer }}", "{{ _firewall_probe_untrusted_host }}", "{{ tailscale_port | default(0) }}" ]
+      hit: [ input_silenced_tailscale ]
+      miss: [ tailscale_lan_accept ]
+    - name: Unscoped UDP port
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "18181" ]
+      hit: [ input_catchall ]
+
+    # DNS VIP leakage through the vmac. TCP keeps its fast-fail reset so DoT
+    # clients fail over; UDP and stale FORWARD DNAT drop silently.
+    - name: TCP to the DNS VIP through the vmac
+      enabled: "{{ dns_vrrp_enabled }}"
+      argv: [ hping3, -S, -p, "853", -c, "1", --quiet, --interface, vrrp_ext, "{{ network.virtual_ips.dns }}" ]
+      hit: [ input_silenced_vip_tcp ]
+    - name: UDP to the DNS VIP through the vmac
+      enabled: "{{ dns_vrrp_enabled }}"
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_vrrp_peer }}", "{{ network.virtual_ips.dns }}", "9999" ]
+      hit: [ input_silenced_vip ]
+    - name: Stale DNS VIP DNAT through the vmac
+      enabled: "{{ dns_vrrp_enabled }}"
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_vrrp_peer }}", "{{ network.virtual_ips.dns }}", "12345" ]
+      hit: [ forward_silenced_vip ]
+      miss: [ forward_catchall ]
+    # The rig cannot send protocol 112 through the WAN path; wg0 ingress
+    # must miss the WAN-scoped VRRP accept.
+    - name: VRRP on wg0
+      enabled: "{{ dns_vrrp_enabled }}"
+      argv: [ hping3, --rawip, -H, "112", -c, "1", -d, "0", --quiet, 192.0.2.1 ]
+      hit: [ input_catchall ]
+      miss: [ vrrp_accept ]

@@ -1,6 +1,6 @@
 # FORWARD/DNAT reachability, podman bridge egress, isolation and TCP
-# DNS, the tailscale0 forward path, and the ICMP accept path.
-# Crafted-packet drop probes live in _verify_drops.yml.
+# DNS, and the tailscale0 forward path. Paths that only need a counter
+# verdict live in the probe matrix (_verify_probes.yml).
 
 # FORWARD/DNAT — published container reachable via wg0 ingress.
 - name: _verify_forward | FORWARD/DNAT — published container reachable via wg0 ingress
@@ -87,19 +87,30 @@
       failed_when: _firewall_cross_bridge_dnat.rc != 0 or 'firewall-verify-ok' not in _firewall_cross_bridge_dnat.stdout
       become: true
 
-    - name: _verify_forward | Probe direct cross-network container-IP path
-      command: >
-        podman exec firewall_verify_named_peer
-        wget -q -O - -T 3 http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
-      register: _firewall_podman_isolation_probe
-      changed_when: false
-      failed_when: _firewall_podman_isolation_probe.rc == 0
-      become: true
+    - name: _verify_forward | Direct cross-network container-IP path is isolated
+      include_tasks: _verify_probe.yml
+      vars:
+        firewall_probe:
+          name: Direct cross-network container IP
+          runner: host
+          argv:
+            - podman
+            - exec
+            - firewall_verify_named_peer
+            - wget
+            - -q
+            - -O
+            - "-"
+            - -T
+            - "3"
+            - http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
+          expect: fail
+          hit: [ forward_podman_isolation ]
 
     # The INPUT probes reach tcp/5333 directly; this one follows the real
     # path, container -> gateway:53 -> netavark DNAT -> aardvark's tcp/5333.
     # The dig resolving through this ruleset's policy-drop INPUT is the proof;
-    # _verify_counters.yml pins the aardvark_tcp_accept counter itself.
+    # the probe matrix pins the aardvark_tcp_accept counter itself.
     # Aardvark-dns serves TCP from 1.12 (Noble ships 1.4). busybox nslookup
     # cannot force TCP, so the host dig runs inside the peer's netns.
     - name: _verify_forward | Named-bridge DNS over TCP passes the INPUT policy
@@ -183,23 +194,25 @@
       become: true
 
     - name: _verify_forward | Tailscale0 can forward to a podman destination
-      command: >
-        ip netns exec extns curl --interface {{ _firewall_probe_tailscale }}
-        --connect-timeout 3 --max-time 5 -sf
-        http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
-      register: _firewall_tailscale_forward
-      changed_when: false
-      failed_when: _firewall_tailscale_forward.rc != 0 or 'firewall-verify-ok' not in _firewall_tailscale_forward.stdout
-      become: true
+      include_tasks: _verify_probe.yml
+      vars:
+        firewall_probe:
+          name: Tailscale0 forward to a container
+          argv:
+            - curl
+            - --interface
+            - "{{ _firewall_probe_tailscale }}"
+            - --connect-timeout
+            - "3"
+            - --max-time
+            - "5"
+            - -sf
+            - http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
+          expect: pass
+          hit: [ tailscale_forward_accept ]
   always:
     - name: _verify_forward | Remove synthetic tailscale0 container route
       command: ip -n extns route del {{ _firewall_default_container_ip.stdout | trim }}/32
       changed_when: false
       failed_when: false
       become: true
-
-# ICMP rate-limit ACCEPT path. One ping is well below 10/sec.
-- name: _verify_forward | ICMP — ping from extns is accepted
-  command: ip netns exec extns ping -c 1 -W 2 192.0.2.1
-  changed_when: false
-  become: true

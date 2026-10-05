@@ -1,0 +1,55 @@
+# One firewall probe, judged by the homelab table's named counters. The
+# counters are cleared first, so the read after the probe holds only its own
+# packets. `firewall_probe` keys:
+#   name    label for failure messages
+#   argv    probe command
+#   runner  extns (default, inside the probe netns) | host | controller
+#           (the test runner, whose packets ingress on the WAN iface)
+#   stdin   probe input; defaults to one byte so `nc -u` sends a datagram
+#   expect  pass | fail | any (default): exit-status contract
+#   hit     counters that must count the probe. Every probe names at least
+#           one, which proves its packet reached the chain and keeps `miss`
+#           from passing vacuously.
+#   miss    counters that must stay at zero
+- name: _verify_probe | Clear counters
+  command: nft reset counters table inet homelab
+  changed_when: false
+  become: true
+
+- name: _verify_probe | Send probe
+  command:
+    argv: >-
+      {{ (['ip', 'netns', 'exec', 'extns'] if firewall_probe.runner | default('extns') == 'extns' else [])
+         + firewall_probe.argv }}
+    stdin: "{{ firewall_probe.stdin | default('.') }}"
+  delegate_to: "{{ 'localhost' if firewall_probe.runner | default('extns') == 'controller' else inventory_hostname }}"
+  register: _firewall_probe_result
+  changed_when: false
+  failed_when: >-
+    (firewall_probe.expect | default('any') == 'pass' and _firewall_probe_result.rc != 0)
+    or (firewall_probe.expect | default('any') == 'fail' and _firewall_probe_result.rc == 0)
+  become: "{{ firewall_probe.runner | default('extns') != 'controller' }}"
+
+- name: _verify_probe | Read counters
+  command: nft --json list counters table inet homelab
+  register: _firewall_probe_counters
+  changed_when: false
+  become: true
+
+- name: _verify_probe | Assert the probe matched exactly the expected rules
+  vars:
+    names: "{{ firewall_probe.hit + firewall_probe.miss | default([]) }}"
+    observed: >-
+      {{ _firewall_probe_counters.stdout | nft_counters_by_name | dict2items
+         | selectattr('key', 'in', names) | map(attribute='value')
+         | items2dict(key_name='name', value_name='packets') }}
+  assert:
+    that:
+      - firewall_probe.hit | length > 0
+      - observed | length == names | length
+      - firewall_probe.hit | map('extract', observed) | min > 0
+      - firewall_probe.miss | default([]) | map('extract', observed) | sum == 0
+    fail_msg: >-
+      {{ firewall_probe.name }}: expected packets on {{ firewall_probe.hit }}
+      and none on {{ firewall_probe.miss | default([]) }}; observed {{ observed }}.
+      A missing name means the rule did not render.

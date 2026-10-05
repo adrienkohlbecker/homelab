@@ -1,6 +1,6 @@
-# Re-apply coverage + ExecStop drop-in test. Runs last because the
-# ExecStop / restart cycle resets per-rule counters, so this must
-# come after _verify_counters.yml's assertion block.
+# Re-apply coverage + ExecStop drop-in test. Runs last because the reload
+# recreates the table, which also drops the probe matrix's stale VIP DNAT
+# fixture chain.
 
 # Reload through systemd to exercise the drop-in, preserve netavark's
 # tables, and reattach wg0 to the recreated flowtable.
@@ -47,7 +47,6 @@
 # netavark tables on any systemctl stop. Confirm the drop-in
 # scopes the stop to inet homelab only. Sentinel table simulates a
 # co-tenant; if ExecStop still flushed everything, it'd disappear.
-# Runs last because the stop/start cycle resets per-rule counters.
 - name: _verify_lifecycle | ExecStop drop-in — install sentinel table
   command: nft add table ip firewall_verify_sentinel
   changed_when: false
