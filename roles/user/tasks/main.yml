@@ -64,16 +64,6 @@
   tags:
     - user
 
-- name: Install amd64-only packages
-  when: ansible_architecture == "x86_64"
-  apt:
-    pkg:
-      - i7z
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - user
-
 # adm owns most of /var/log (syslog, auth.log, journal via systemd-journal),
 # so membership lets the operator tail logs over SSH without sudo -- the
 # diagnostic reads CLAUDE.md treats as pre-authorized. append is load-bearing:
