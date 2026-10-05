@@ -85,7 +85,7 @@ def test_passt_port_args_groups_tcp_and_udp() -> None:
 
 
 def test_passt_command_assigns_an_isolated_guest_address() -> None:
-    out = wrapper._passt_command("/tmp/passt.sock", [("tcp", "2222", "22")])
+    out = wrapper._passt_command("/tmp/passt.sock", [("tcp", "2222", "22")], None, False)
 
     # Only the addressing triple -- port rendering has its own test, and a
     # whole-argv equality would fail on any unrelated flag.
@@ -100,10 +100,63 @@ def test_passt_command_assigns_an_isolated_guest_address() -> None:
     ]
 
 
-def test_passt_command_isolates_the_guest_from_the_host() -> None:
-    out = wrapper._passt_command("/tmp/passt.sock", [])
+def test_passt_command_keeps_the_guest_off_host_v6() -> None:
+    # Without this the guest picks up a host-derived v6 address and route.
+    assert "--ipv4-only" in wrapper._passt_command("/tmp/passt.sock", [], None, False)
 
-    # Without these the guest picks up a host-derived v6 address and a gateway
-    # mapped onto the qemu host's loopback services.
-    assert "--ipv4-only" in out
-    assert "--no-map-gw" in out
+
+def test_passt_command_isolates_the_host_only_on_request() -> None:
+    # The gateway mapping is what lets passt relay DNS to a loopback stub
+    # resolver, so only hosts that opt in (lab) drop it.
+    assert "--no-map-gw" not in wrapper._passt_command("/tmp/passt.sock", [], None, False)
+    assert "--no-map-gw" in wrapper._passt_command("/tmp/passt.sock", [], None, True)
+
+
+def test_passt_command_advertises_only_a_configured_resolver() -> None:
+    assert "--dns" not in wrapper._passt_command("/tmp/passt.sock", [], None, False)
+
+    out = wrapper._passt_command("/tmp/passt.sock", [], "10.123.1.224", False)
+    assert out[out.index("--dns") + 1] == "10.123.1.224"
+
+
+class _Exec(Exception):
+    """Raised by the fake os.execv so main() stops where it would exec qemu."""
+
+
+def _run_main(monkeypatch, *, usable: bool) -> tuple[list[str], list[list[str]]]:
+    """Run main() on packer's argv; return the argv it would exec qemu with
+    and the passt commands it would launch."""
+    started: list[list[str]] = []
+    monkeypatch.delenv("QEMU_NET_WRAPPER_LOG", raising=False)
+    monkeypatch.setattr(wrapper, "_real_qemu", lambda: "/usr/bin/qemu-system-x86_64")
+    monkeypatch.setattr(wrapper, "_passt_usable", lambda _q: usable)
+    monkeypatch.setattr(wrapper, "_start_passt", lambda _s, cmd: started.append(cmd))
+    monkeypatch.setattr(wrapper.sys, "argv", ["qemu_net_wrapper.py", *PACKER_ARGS])
+
+    def fake_execv(_path: str, argv: list[str]) -> None:
+        raise _Exec(argv)
+
+    monkeypatch.setattr(wrapper.os, "execv", fake_execv)
+    with pytest.raises(_Exec) as exc:
+        wrapper.main()
+    return exc.value.args[0], started
+
+
+def test_main_rewrites_the_netdev_when_passt_is_usable(monkeypatch) -> None:
+    argv, _started = _run_main(monkeypatch, usable=True)
+    assert any(arg.startswith("stream,id=user.0,") for arg in argv)
+
+
+def test_main_wires_the_lab_environment_into_passt(monkeypatch) -> None:
+    monkeypatch.setenv("QEMU_NET_WRAPPER_DNS", "10.123.1.224")
+    monkeypatch.setenv("QEMU_NET_WRAPPER_ISOLATE_HOST", "1")
+    _argv, [cmd] = _run_main(monkeypatch, usable=True)
+
+    assert "--no-map-gw" in cmd
+    assert cmd[cmd.index("--dns") + 1] == "10.123.1.224"
+
+
+def test_main_rejects_a_malformed_isolate_flag(monkeypatch) -> None:
+    monkeypatch.setenv("QEMU_NET_WRAPPER_ISOLATE_HOST", "yes")
+    with pytest.raises(SystemExit, match="not in 0/1"):
+        _run_main(monkeypatch, usable=True)

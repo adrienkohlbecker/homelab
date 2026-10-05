@@ -63,6 +63,14 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
   shell = "bash"
   # Keep enough requests outstanding to avoid long-poll stalls.
   request_concurrency = 4
+  # Packer build VMs on passt stay off lab's loopback services, which also
+  # cuts them off from its stub resolver, so they resolve through the DNS
+  # VIP instead: it answers both nexus.lab.fahm.fr and upstream archive
+  # names (packer/qemu_net_wrapper.py).
+  environment = [
+    "QEMU_NET_WRAPPER_ISOLATE_HOST=1",
+    "QEMU_NET_WRAPPER_DNS={{ external_ips.dns }}",
+  ]
 {% endif %}
 {% if gitlab_runner_aws_qemu_enabled %}
 

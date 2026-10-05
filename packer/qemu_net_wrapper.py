@@ -7,6 +7,16 @@ shim starts a passt sidecar and rewrites the netdev to qemu's stream socket
 transport. Hosts without passt support and probe invocations such as
 `qemu_binary -version` exec qemu unchanged.
 
+Two knobs shape the passt guest:
+
+- QEMU_NET_WRAPPER_DNS: the resolver passt advertises over DHCP. Unset, passt
+  advertises the host's resolv.conf nameservers, relaying a loopback one
+  through the gateway address.
+- QEMU_NET_WRAPPER_ISOLATE_HOST=1: keep the guest off the host's loopback
+  services (passt --no-map-gw). passt then cannot relay DNS to a loopback
+  stub resolver either, so a host whose resolv.conf names only one (any
+  systemd-resolved host) must also set QEMU_NET_WRAPPER_DNS.
+
 Decision logs go to stderr and, when QEMU_NET_WRAPPER_LOG is set (build.sh
 points it at a per-build netlog), to that file. "off"/"0"/"none" disable
 file logging.
@@ -37,28 +47,6 @@ _LOG_PATH = None
 _PASST_GUEST_ADDRESS = "192.0.2.2"
 _PASST_GUEST_NETMASK = "255.255.255.0"
 _PASST_GUEST_GATEWAY = "192.0.2.1"
-
-# The nameserver passt advertises to the guest over DHCP (-D). This is the lab
-# DNS keepalived VIP (data/network_topology.yml -> virtual_ips.dns): a
-# real, reachable, split-horizon resolver that answers both nexus.lab.fahm.fr
-# (internal) and archive.ubuntu.com (upstream), which the early base-image apt
-# needs before the apt mirror is rewritten to nexus.
-#
-# Why a hard-coded real IP rather than passt's default: passt defaults to
-# advertising the host's /etc/resolv.conf nameservers, but in the ci-container
-# that's podman's loopback aardvark (127.0.0.11) -- unreachable from inside the
-# guest, so every lookup fails (libslirp's built-in 10.0.2.3 forwarder masked
-# this). --dns-forward can't rescue it either: passt forwards to the host's
-# resolv.conf resolver, and it has no working path to a loopback upstream. So
-# hand the guest a routable resolver instead and let passt NAT its queries out
-# the container bridge -- the guest's DNS to <VIP>:53 then rides the same
-# container -> VIP -> adguard DNAT path the firewall already permits (roles/
-# firewall: "container -> VIP -> container" accept). Every host that takes the
-# passt path is on lab's network -- the lab CI container and a bare-host
-# `packer:build` on lab itself, since _passt_usable only holds on Linux with
-# passt installed and qemu >= 7.2; a dev Mac execs slirp untouched. So coupling
-# to lab's resolver here is acceptable.
-_PASST_DNS = "10.123.1.224"
 
 
 def _log(msg: str) -> None:
@@ -167,8 +155,13 @@ def _passt_port_args(fwds: list[tuple[str, str, str]]) -> list[str]:
     return out
 
 
-def _passt_command(sock: str, fwds: list[tuple[str, str, str]]) -> list[str]:
-    """Build the passt sidecar command for one isolated build VM."""
+def _passt_command(sock: str, fwds: list[tuple[str, str, str]], dns: str | None, isolate_host: bool) -> list[str]:
+    """Build the passt sidecar command for one build VM.
+
+    *dns* is the resolver advertised to the guest; None leaves passt's
+    /etc/resolv.conf default. *isolate_host* drops passt's gateway-to-host
+    mapping; see the module docstring for how the two interact.
+    """
     return [
         "passt",
         # Foreground so it stays a plain child (no daemon fork).
@@ -180,8 +173,7 @@ def _passt_command(sock: str, fwds: list[tuple[str, str, str]]) -> list[str]:
         sock,
         # IPv4 only. passt would otherwise derive the guest's v6 address and
         # default route from the host interface -- reintroducing on v6 exactly
-        # the host-shadowing this pins away on v4 -- and _PASST_DNS is v4-only,
-        # so a guest preferring AAAA gets a route with no working egress.
+        # the host-shadowing this pins away on v4.
         "--ipv4-only",
         "--address",
         _PASST_GUEST_ADDRESS,
@@ -189,22 +181,26 @@ def _passt_command(sock: str, fwds: list[tuple[str, str, str]]) -> list[str]:
         _PASST_GUEST_NETMASK,
         "--gateway",
         _PASST_GUEST_GATEWAY,
-        # The gateway is an addressing anchor only. Without this passt maps it
-        # to the host, handing the build VM every loopback-bound service on the
-        # qemu host at a fixed, DHCP-advertised address. Inbound SSH rides
-        # --tcp-ports on 127.0.0.1 and needs no gateway mapping.
-        "--no-map-gw",
-        # Advertise a routable resolver to the guest over DHCP; passt then NATs
-        # the guest's DNS queries out through its current host environment.
-        "--dns",
-        _PASST_DNS,
+        # Without --no-map-gw passt maps the gateway to the host, handing the
+        # build VM every loopback-bound service on the qemu host at a fixed,
+        # DHCP-advertised address. Inbound SSH rides --tcp-ports on 127.0.0.1
+        # and needs no gateway mapping.
+        *(["--no-map-gw"] if isolate_host else []),
+        *(["--dns", dns] if dns else []),
         *_passt_port_args(fwds),
     ]
 
 
-def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> None:
-    """Launch the passt sidecar and block until its socket is listening."""
-    cmd = _passt_command(sock, fwds)
+def _isolate_host() -> bool:
+    """Parse QEMU_NET_WRAPPER_ISOLATE_HOST, failing closed on a typo."""
+    value = os.environ.get("QEMU_NET_WRAPPER_ISOLATE_HOST", "").strip()
+    if value not in ("", "0", "1"):
+        sys.exit(f"qemu-net-wrapper: QEMU_NET_WRAPPER_ISOLATE_HOST={value!r} not in 0/1")
+    return value == "1"
+
+
+def _start_passt(sock: str, cmd: list[str]) -> None:
+    """Launch the passt sidecar *cmd* and block until it listens on *sock*."""
     # Capture passt's startup banner (which echoes the DHCP-advertised DNS and
     # the bound socket -- the diagnostic for a DNS-path regression) into a log
     # beside ours. We must NOT pass passt `--log-file <path>`: passt's apparmor
@@ -256,6 +252,8 @@ def main() -> None:
         _log("backing build-VM NIC with slirp (passthrough): no user-netdev to rewrite")
         os.execv(real_qemu, [real_qemu, *args])
 
+    dns = os.environ.get("QEMU_NET_WRAPPER_DNS", "").strip() or None
+    isolate_host = _isolate_host()
     if not _passt_usable(real_qemu):
         _log("backing build-VM NIC with slirp (passthrough): passt unusable here")
         os.execv(real_qemu, [real_qemu, *args])
@@ -271,7 +269,7 @@ def main() -> None:
 
     _log(f"backing build-VM NIC with passt: netdev id={netid}, host-forwards={fwds}")
     sock = os.path.join(tempfile.mkdtemp(prefix="packer-passt-"), "passt.sock")
-    _start_passt(sock, fwds)
+    _start_passt(sock, _passt_command(sock, fwds, dns, isolate_host))
 
     args[netdev_idx + 1] = f"stream,id={netid},server=off,addr.type=unix,addr.path={sock}"
     _log(f"rewrote netdev to: {args[netdev_idx + 1]}; exec {real_qemu}")
