@@ -4,7 +4,7 @@ description: Triage a homelab service: resolve prod hosts and units, gather diag
 argument-hint: <service-name>
 model: sonnet
 disable-model-invocation: true
-allowed-tools: Bash(ssh lab:*), Bash(ssh pug:*), Bash(ssh fox:*), Bash(ansible-inventory:*), Bash(git log:*), Bash(curl -sS --max-time 5 http://netdata.*), Read, Grep, Glob
+allowed-tools: Bash(ssh lab:*), Bash(ssh pug:*), Bash(ssh fox:*), Bash(ansible-inventory:*), Bash(git log:*), Read, Grep, Glob
 ---
 
 Triage homelab service **$ARGUMENTS** on prod. Empty input means ask for a
@@ -40,8 +40,9 @@ For each host/unit, run the remote service commands with `sudo`:
 - Podman: `sudo podman inspect <ct> --format '{{json .State}}'`; if unhealthy,
   run `sudo podman healthcheck run <ct>` and capture exit 0/1/125. If there is
   no healthcheck, report `Healthcheck: n/a`.
-- Netdata: `curl -sS --max-time 5 'http://netdata.<h>.fahm.fr/api/v1/alarms?active=true'`;
-  filter to `systemd_service*` for the unit.
+- Netdata (loopback-only; the public vhost sits behind Authelia):
+  `curl -sS --max-time 5 'http://127.0.0.1:19999/api/v1/alarms?active=true'`
+  over the same ssh; filter to `systemd_service*` for the unit.
 
 Once locally:
 
