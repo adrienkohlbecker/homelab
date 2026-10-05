@@ -121,6 +121,22 @@
   changed_when: false
   become: true
 
+# --- Trim scheduler ---
+
+# Run the unit the weekly timer triggers. It is not a oneshot, so --wait holds
+# until the trim ends and fails if the unit failed; zpool then confirms the trim
+# completed rather than being skipped by a unit condition.
+- name: _verify | The stock trim unit trims each scheduled pool
+  shell: |
+    set -euo pipefail
+    timeout -k 10 300 systemctl start --wait zfs-trim@{{ item }}.service
+    LC_ALL=C zpool status -t {{ item }} | grep -q "trimmed, completed"
+  args:
+    executable: /bin/bash
+  loop: "{{ zfs_trim_pools }}"
+  changed_when: false
+  become: true
+
 # --- Mount generator ---
 
 # Check the initial refresh before child creation triggers another zed update.

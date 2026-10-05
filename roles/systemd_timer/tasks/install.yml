@@ -41,13 +41,6 @@
     # monitored and must not register metadata that would stay overdue forever.
     _systemd_timer_monitor: "{{ (systemd_timer_args.user | default('root')) == 'root' }}"
 
-# Nested import_role task names stay static. The role is called both
-# from import_role sites (where systemd_timer_args is in scope at
-# parse-time and a `{{ systemd_timer_args.name }}` interpolation would
-# resolve) AND from include_role + set_fact sites (the trim-timer
-# loop wrapper) where it isn't. Mixing the two would emit a parse-time
-# template warning on every trim-loop iteration. The outer caller's
-# task name already identifies which timer is being installed.
 - name: install | Install service unit
   import_role:
     name: systemd_unit
@@ -72,9 +65,8 @@
 # in check-mode — the file isn't actually on disk, so `systemctl enable`
 # would fail with "Could not find the requested service". Mirrors the
 # console role's guard for the same reason. The per-unit facts are set
-# by systemd_unit/install via set_fact `<name>_<type>_result`. Name
-# stays static for the same reason as the install tasks above.
-- name: install | Enable and start timer
+# by systemd_unit/install via set_fact `<name>_<type>_result`.
+- name: install | Enable and start timer for {{ systemd_timer_args.name }}
   when:
     - >-
       not (ansible_check_mode

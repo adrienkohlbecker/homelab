@@ -136,27 +136,6 @@
   tags:
     - zfs
 
-# include_tasks wrapper rather than include_role-with-loop: the latter
-# binds `vars:` once on the include task so every iteration ends up
-# with the same systemd_timer_args. include_tasks re-evaluates per
-# iteration, so the wrapper file's own include_role gets a fresh dict
-# each pool. `apply.tags` propagates the outer tag set into the
-# included tasks — unlike import_*, include_* does NOT inherit tags
-# automatically, so without this the wrapper loads but its
-# include_role gets tag-filtered to a no-op when --tags zfs runs.
-- name: Schedule a zfs_trim timer
-  include_tasks:
-    file: _trim_timer.yml
-    apply:
-      tags:
-        - zfs
-  loop: "{{ zfs_trim_pools }}"
-  loop_control:
-    loop_var: zfs_trim_pool
-    label: "{{ zfs_trim_pool }}"
-  tags:
-    - zfs
-
 # Own the scrub schedule rather than leaving it to the distro's
 # /etc/cron.d/zfsutils-linux (second Sunday, 00:24) -- a single scheduler is
 # easier to reason about. Second Sunday preserves the distro's monthly cadence;
@@ -179,9 +158,10 @@
   tags:
     - zfs
 
-# Keep the role-owned scrub and trim timers as the single source of truth.
-# Remove the package cron conffile; dpkg preserves local conffile removal across
-# upgrades. Mask the package timer templates defensively against preset changes.
+# Keep one scheduler per job: the role-owned scrub timer and the package's
+# weekly trim timer. Remove the package cron conffile; dpkg preserves local
+# conffile removal across upgrades. Mask the unused package timer templates
+# defensively against preset changes.
 - name: Remove distro ZFS scrub/trim cron
   file:
     path: /etc/cron.d/zfsutils-linux
@@ -190,7 +170,7 @@
   tags:
     - zfs
 
-- name: Mask distro ZFS scrub/trim systemd timers
+- name: Mask unused distro ZFS scrub/trim systemd timers
   systemd:
     name: "{{ item }}"
     masked: true
@@ -198,7 +178,26 @@
     - zfs-scrub-monthly@.timer
     - zfs-scrub-weekly@.timer
     - zfs-trim-monthly@.timer
-    - zfs-trim-weekly@.timer
+  become: true
+  tags:
+    - zfs
+
+- name: Unmask the distro weekly ZFS trim timer
+  systemd:
+    name: zfs-trim-weekly@.timer
+    masked: false
+  become: true
+  tags:
+    - zfs
+
+# zfs-trim@.service runs `zpool trim -w`, so a failed trim leaves a failed unit.
+- name: Enable the weekly ZFS trim timer for each pool
+  when: not (ansible_check_mode and zfs_apt.changed)
+  systemd:
+    name: zfs-trim-weekly@{{ item }}.timer
+    enabled: true
+    state: started
+  loop: "{{ zfs_trim_pools }}"
   become: true
   tags:
     - zfs

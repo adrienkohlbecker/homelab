@@ -107,3 +107,13 @@
   changed_when: false
   failed_when: retired_services_kdump_vmcore.stdout != 'vmcore'
   become: true
+
+- name: _verify | Query retired zfs units
+  systemd:
+    name: "{{ item }}"
+  loop:
+    - zfs_trim_rpool.timer
+    - zfs_trim_rpool.service
+  register: retired_services_zfs_units
+  failed_when: retired_services_zfs_units.status.LoadState != 'not-found'
+  become: true

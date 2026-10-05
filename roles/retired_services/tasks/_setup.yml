@@ -164,3 +164,14 @@
   loop_control:
     label: "{{ item.path }}"
   become: true
+
+- name: _setup | Install the retired zfs_trim timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: zfs_trim_rpool
+      description: Weekly ZFS trim for rpool
+      on_calendar: "Thu *-*-* 00:05:00"
+      exec_start: /bin/true

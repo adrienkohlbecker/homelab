@@ -35,6 +35,41 @@
     - netdata
     - zfs
 
+# Drop once lab, pug, and fox have converged. The package's weekly trim timer
+# replaces the per-pool zfs_trim timers; lab trimmed rpool, dozer, and tank.
+- name: Remove the retired zfs_trim timer for rpool
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: zfs_trim_rpool
+  tags:
+    - retired_services
+    - zfs
+
+- name: Remove the retired zfs_trim timer for dozer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: zfs_trim_dozer
+  tags:
+    - retired_services
+    - zfs
+
+- name: Remove the retired zfs_trim timer for tank
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: zfs_trim_tank
+  tags:
+    - retired_services
+    - zfs
+
 # Drop once lab has converged.
 #
 # macos_vm adopts rpool/libvirt by moving it off /var/lib/libvirt/images.
