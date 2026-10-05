@@ -300,9 +300,11 @@
 # every authenticated Authelia user may sign in); AdminRoles=[admins] maps
 # the groups claim to a Jellyfin admin. See
 # notes/archive/jellyfin_sso_rollout.md.
-- name: Compose desired SSO OID provider state
+- name: Provision SSO OID provider
   when: not qemu_test
-  set_fact:
+  tags:
+    - jellyfin
+  vars:
     jellyfin_oidc_state:
       OidEndpoint: "https://auth.{{ authelia_cookie_domain }}"
       OidClientId: jellyfin
@@ -321,65 +323,46 @@
       RoleClaim: groups
       OidScopes:
         - groups
-  tags:
-    - jellyfin
-
-- name: Read existing SSO OID provisioning fingerprint
-  when: not qemu_test
-  slurp:
-    src: /mnt/services/jellyfin/.oidc_authelia.fingerprint
-  register: jellyfin_oidc_fp_slurp
-  # Absent on first apply -- swallow so the comparison falls into the
-  # "needs provisioning" path.
-  failed_when: false
-  become: true
-  tags:
-    - jellyfin
-
-# Fingerprint covers the whole config (incl. the secret's bytes via the
-# json hash), so a secret rotation or any field change re-POSTs; the
-# sentinel stores only the hash, never the secret.
-- name: Compute desired vs current SSO OID fingerprints
-  when: not qemu_test
-  set_fact:
+    # The fingerprint covers the whole config, including the secret's bytes
+    # via the JSON hash, so a secret rotation or any field change re-POSTs;
+    # the sentinel stores only the hash, never the secret.
     jellyfin_oidc_desired_fp: "{{ jellyfin_oidc_state | to_json(sort_keys=true) | hash('sha256') }}"
     jellyfin_oidc_current_fp: "{{ jellyfin_oidc_fp_slurp.content | default('') | b64decode | trim }}"
-  tags:
-    - jellyfin
+  block:
+    - name: Read existing SSO OID provisioning fingerprint
+      slurp:
+        src: /mnt/services/jellyfin/.oidc_authelia.fingerprint
+      register: jellyfin_oidc_fp_slurp
+      # Absence is the expected first-apply state.
+      failed_when: false
+      become: true
 
-- name: Provision SSO OID provider via plugin API
-  when:
-    - not qemu_test
-    - jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
-  uri:
-    url: http://localhost:{{ service_ports.jellyfin }}/sso/OID/Add/authelia
-    method: POST
-    headers:
-      Authorization: 'MediaBrowser Token="{{ jellyfin_api_token }}"'
-    body_format: json
-    body: "{{ jellyfin_oidc_state }}"
-    status_code: [ 200, 204 ]
-  register: jellyfin_oidc_post
-  retries: 30
-  delay: 2
-  until: jellyfin_oidc_post.status | default(0) in [200, 204]
-  changed_when: true
-  tags:
-    - jellyfin
+    - name: Reconcile changed SSO OID provider state
+      when: jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
+      block:
+        - name: Provision SSO OID provider via plugin API
+          uri:
+            url: http://localhost:{{ service_ports.jellyfin }}/sso/OID/Add/authelia
+            method: POST
+            headers:
+              Authorization: 'MediaBrowser Token="{{ jellyfin_api_token }}"'
+            body_format: json
+            body: "{{ jellyfin_oidc_state }}"
+            status_code: [ 200, 204 ]
+          register: jellyfin_oidc_post
+          retries: 30
+          delay: 2
+          until: jellyfin_oidc_post.status | default(0) in [200, 204]
+          changed_when: true
 
-- name: Persist SSO OID provisioning fingerprint  # noqa: require-backup
-  when:
-    - not qemu_test
-    - jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
-  copy:
-    content: "{{ jellyfin_oidc_desired_fp }}\n"
-    dest: /mnt/services/jellyfin/.oidc_authelia.fingerprint
-    owner: jellyfin
-    group: media
-    mode: "0640"
-  become: true
-  tags:
-    - jellyfin
+        - name: Persist SSO OID provisioning fingerprint  # noqa: require-backup
+          copy:
+            content: "{{ jellyfin_oidc_desired_fp }}\n"
+            dest: /mnt/services/jellyfin/.oidc_authelia.fingerprint
+            owner: jellyfin
+            group: media
+            mode: "0640"
+          become: true
 
 - name: Configure nginx
   import_role:
