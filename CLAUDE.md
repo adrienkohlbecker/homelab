@@ -15,7 +15,7 @@ This is a home environment, not a corporate production site. Tie-breakers when t
 
 Load-bearing negatives, up-front so a fresh session sees them first.
 
-- **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See *Helper roles → systemd_unit*.
+- **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See *Helper roles → systemd_unit*. (lint: `no-handlers`)
 - **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Healthchecks*.
 - **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* inventory vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in inventory vars (see *Inventory layout*) and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* inventory vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Debugging prod hosts directly*.
@@ -58,7 +58,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 **Underscores, not hyphens** in identifiers we author: role names, files under `roles/`, systemd units, vars, dirs under `/mnt/services/<svc>/`. Exceptions: names dictated by upstream. Everything else enforced by `mise run lint`.
 
-**Never set `no_log: true`.** Applies run interactively on the operator's workstation, never captured to a file or CI log — hiding the diff only makes failures harder to debug.
+**Never set `no_log: true`.** Applies run interactively on the operator's workstation, never captured to a file or CI log — hiding the diff only makes failures harder to debug. (lint: `no-no-log`)
 
 **Shell strict mode is enforced for Ansible shell blocks.** Inline ansible `shell:` blocks must start with `set -euo pipefail` and declare `executable: /bin/bash`. Enforced by the custom **`shell-strict-mode`** rule ([lint/ansible_rules/homelab.py](lint/ansible_rules/homelab.py)); test scaffolding (`_verify*`/`_setup*`) exempt. Handle expected-failure commands with `|| true` and avoid `… | head` pipelines (SIGPIPE) — collapse into `awk`. **No apostrophes inside `shell:`/`command:` block scalars** — even in `#` comments within the block; ansible's pre-exec shlex pass treats `'` as an opening quote and fails task loading. YAML-level comments (outside the scalar) are fine.
 
@@ -97,9 +97,9 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 - Service lifecycle conditions that combine pending user, group, or unit changes keep the `not (ansible_check_mode and (...changed))` form. They suppress start/restart attempts while prerequisites exist only as predicted check-mode changes; `<svc>_user.changed` is part of the helper's published result contract for this purpose.
 - `ansible_check_mode` reflects only the CLI `--check` flag. A task- or block-level `check_mode: true` in `_verify` still runs every module in check mode but leaves the variable false, so these guards do not fire there. Assert on the published results instead of relying on a guard, import only the task file under test, and never put `check_mode: false` in a file imported that way unless something other than `ansible_check_mode` gates it.
 - Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope.
-- Static fixture playbooks under `test/playbooks/` must set `tasks_from` on every `import_role`. Their dependencies are named role entrypoints, never an implicit `tasks/main.yml`; the dynamic `site.yml` driver is the exception because it deliberately exercises the role under test through its normal entrypoint.
+- Static fixture playbooks under `test/playbooks/` must set `tasks_from` on every `import_role`. Their dependencies are named role entrypoints, never an implicit `tasks/main.yml`; the dynamic `site.yml` driver is the exception because it deliberately exercises the role under test through its normal entrypoint. (lint: `require-named-role-entrypoint`)
 - For state-mutating tasks that should run once, gate with `args: creates: <sentinel>` not `changed_when: false`.
-- **Never branch a task `when:` on `inventory_hostname`** (no `inventory_hostname in ['lab','pug']`). Introduce a host-level var instead — a `<svc>_enabled` flag set in the host's inventory vars (see *Inventory layout*) and read as `<svc>_enabled | default(false)` — so behaviour follows declared intent, not a hardcoded host list a new host silently misses. Play-level `hosts:` patterns in `site.yml` are the legitimate exception (that *is* ansible's host-targeting mechanism).
+- **Never branch a task `when:` on `inventory_hostname`** — a new host silently misses a hardcoded list. Set a `<svc>_enabled` flag in the host's inventory vars and read it as `<svc>_enabled | default(false)`. Play-level `hosts:` patterns in `site.yml` are the legitimate exception. (lint: `no-inventory-hostname-when`)
 
 **Style:**
 
