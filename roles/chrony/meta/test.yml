@@ -1,3 +1,5 @@
-# Noble converts a stock timesyncd host; Resolute images ship chrony already.
+# The default Noble cell covers a fresh chrony 4.5 install; Resolute covers
+# chrony 4.8, whose packaged NTS pools in sources.d the source-set check must
+# keep out.
 ubuntu:
   - resolute
