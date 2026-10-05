@@ -4,7 +4,7 @@ description: Triage a homelab service: resolve prod hosts and units, gather diag
 argument-hint: <service-name>
 model: sonnet
 disable-model-invocation: true
-allowed-tools: Bash(ssh lab:*), Bash(ssh pug:*), Bash(ssh fox:*), Bash(ansible-inventory:*), Bash(git log:*), Read, Grep, Glob
+allowed-tools: Bash(ssh lab:*), Bash(ssh pug:*), Bash(ssh fox:*), Bash(ssh udm:*), Bash(ansible-inventory:*), Bash(git log:*), Read, Grep, Glob
 ---
 
 # Triage
