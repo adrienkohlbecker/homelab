@@ -193,12 +193,12 @@
     or (authelia_verify_jwks.json['keys'] | length) < 1
     or authelia_verify_jwks.json['keys'][0].kty != 'RSA'
 
-# Cross-host network plumbing (pug/bunk -> authelia_host's WG IP) is
-# exercised in multi-host nightlies, not testrole.py: on a single VM
-# the wg0 IP routes via loopback anyway, so the request never hits
-# the wg0 ingress firewall rule that gates cross-host access. The
-# portal probe + auth-request probe above already cover the
-# Authelia-specific bits (listener up, gate semantics correct).
+# Cross-host forward-auth (pug/fox -> authelia_host's WG IP) cannot be
+# exercised here: on a single VM the wg0 IP routes via loopback. The
+# firewall role's probe matrix covers the FORWARD rules that admit the
+# published port only from the wireguard mesh. The portal probe +
+# auth-request probe above cover the Authelia-specific bits (listener
+# up, gate semantics correct).
 
 - name: _verify | Exercise authelia fluent-bit record contracts
   import_role:

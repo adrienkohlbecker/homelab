@@ -42,6 +42,8 @@ table inet homelab {
     counter wireguard_accept {}
     counter mosh_accept {}
     counter forward_podman_isolation {}
+    counter forward_authelia_wg {}
+    counter forward_authelia_drop {}
     counter forward_nonsyn {}
     counter forward_catchall {}
     counter input_public_tcp {}
@@ -307,6 +309,17 @@ table inet homelab {
         # DNAT-reach rule below; direct podman → podman is still
         # dropped.
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
+
+        # Authelia publishes its forward-auth backend on every host address.
+        # Nginx on the Authelia host connects over loopback, which never
+        # crosses FORWARD; nginx on every other host crosses the wireguard
+        # mesh. Admit only that path ahead of the broader DNAT accepts below,
+        # which would otherwise open it to the LAN, the tailnet and every
+        # container. Hosts without Authelia publish nothing on the port.
+        ct status dnat oifname "podman*" meta l4proto tcp ct original proto-dst {{ service_ports.authelia }} \
+            iifname "wg0" ip saddr $WG_SUBNET counter name "forward_authelia_wg" accept comment "Authelia forward-auth (wireguard peers)"
+        ct status dnat oifname "podman*" meta l4proto tcp ct original proto-dst {{ service_ports.authelia }} \
+            counter name "forward_authelia_drop" drop comment "Authelia forward-auth (outside the wireguard mesh)"
 {% if tailscale_advertise_routes is defined %}
 
         # Tailscale subnet router + exit node forwarding. As a subnet router this

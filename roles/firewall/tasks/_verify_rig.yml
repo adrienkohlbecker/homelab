@@ -15,7 +15,8 @@
 
 # The port is arbitrary; the FORWARD rule scopes by --ctstate DNAT, not by
 # dport. Run busybox httpd on the dedicated fixture port to serve a tiny
-# known-content page the probe can grep for.
+# known-content page the probe can grep for. The second publish stands in
+# for Authelia, whose host port carries its own FORWARD scope.
 # --cap-add=NET_RAW restores the capability podman 5.x dropped from
 # default_capabilities — the container-egress probe below uses busybox
 # ping (SOCK_RAW), which fails with "permission denied" without it.
@@ -23,6 +24,7 @@
   command: >
     podman run -d --replace --name firewall_verify_httpd
       --publish 0.0.0.0:{{ _firewall_probe_container_port }}:{{ _firewall_probe_container_port }}
+      --publish 0.0.0.0:{{ service_ports.authelia }}:{{ _firewall_probe_container_port }}
       --cap-add=NET_RAW
       docker.io/library/busybox
       sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p {{ _firewall_probe_container_port }} -h /www'

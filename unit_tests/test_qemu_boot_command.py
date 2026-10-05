@@ -14,7 +14,7 @@ import pytest
 
 def test_wan_probe_ports_manifest_loads_shared_surface() -> None:
     assert machine.DEFAULT_WAN_FORWARDS == {
-        "tcp": (18080,),
+        "tcp": (18080, 9092),
         "udp": (51820, 5353, 41641, 41642),
     }
 

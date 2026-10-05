@@ -208,6 +208,31 @@
       expect: fail
       hit: [ forward_catchall ]
 
+    # Authelia's published port admits only nginx: loopback on this host and
+    # the wireguard mesh from the others. The fixture container stands in.
+    - name: Authelia over loopback
+      runner: host
+      argv: [ curl, -sf, --max-time, "5", "http://127.0.0.1:{{ service_ports.authelia }}/" ]
+      expect: pass
+      hit: []
+      miss: [ forward_authelia_wg, forward_authelia_drop ]
+    - name: Authelia from a wireguard source
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ service_ports.authelia }}" ]
+      expect: pass
+      hit: [ forward_authelia_wg ]
+    - name: Authelia from a non-scope source on wg0
+      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ service_ports.authelia }}" ]
+      expect: fail
+      hit: [ forward_authelia_drop ]
+      miss: [ forward_authelia_wg ]
+    # The controller-side forward completes the handshake itself, so only an
+    # HTTP response proves the guest delivered.
+    - name: Authelia from WAN
+      runner: controller
+      argv: [ curl, -sf, --max-time, "5", "http://{{ wan_probe_host }}:{{ wan_forward_ports.tcp[service_ports.authelia | string] }}/" ]
+      expect: fail
+      hit: [ forward_authelia_drop ]
+
     # Silenced noise lands on its own drop, not the logging catch-all.
     - name: SSDP noise
       argv: [ nc, -u, -w, "1", 192.0.2.1, "1900" ]

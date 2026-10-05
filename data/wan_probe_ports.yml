@@ -3,6 +3,7 @@
 # same guest ports directly through the CI cell security group.
 tcp:
   - 18080 # Published-container DNAT fixture
+  - 9092  # Authelia forward-auth negative WAN-source probe
 udp:
   - 51820 # WireGuard
   - 5353  # mDNS negative WAN-source probe

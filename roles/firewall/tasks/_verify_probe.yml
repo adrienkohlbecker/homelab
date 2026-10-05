@@ -7,9 +7,9 @@
 #           (the test runner, whose packets ingress on the WAN iface)
 #   stdin   probe input; defaults to one byte so `nc -u` sends a datagram
 #   expect  pass | fail | any (default): exit-status contract
-#   hit     counters that must count the probe. Every probe names at least
-#           one, which proves its packet reached the chain and keeps `miss`
-#           from passing vacuously.
+#   hit     counters that must count the probe. A probe that names none
+#           must expect pass: either proves its packet arrived, which keeps
+#           `miss` from passing vacuously.
 #   miss    counters that must stay at zero
 - name: _verify_probe | Clear counters
   command: nft reset counters table inet homelab
@@ -45,9 +45,9 @@
          | items2dict(key_name='name', value_name='packets') }}
   assert:
     that:
-      - firewall_probe.hit | length > 0
+      - firewall_probe.hit | length > 0 or firewall_probe.expect | default('any') == 'pass'
       - observed | length == names | length
-      - firewall_probe.hit | map('extract', observed) | min > 0
+      - firewall_probe.hit | map('extract', observed) | select('eq', 0) | list | length == 0
       - firewall_probe.miss | default([]) | map('extract', observed) | sum == 0
     fail_msg: >-
       {{ firewall_probe.name }}: expected packets on {{ firewall_probe.hit }}
