@@ -5,8 +5,9 @@
 # it uses. A version bump is one edit here.
 #
 # Conventions:
-#   - Container image refs use canonical upstream names (docker.io/..., ghcr.io/...);
-#     mirror redirection to Nexus lives in registries.conf, not here.
+#   - Container image refs use canonical upstream names (docker.io/..., ghcr.io/...).
+#     Prod pulls them from upstream; only the test harness redirects fixture
+#     pulls to Nexus (registries.conf.d), so never hard-code a mirror prefix.
 #   - Downloadable artifacts keep the full URL ADJACENT to its sha256, keyed by
 #     ansible_architecture (x86_64 / aarch64) when upstream ships per-arch
 #     assets, so a human auditing a checksum sees exactly which URL it pins.
@@ -49,8 +50,7 @@ seerr_image:         ghcr.io/seerr-team/seerr:v3.2.0  # 2026-04-15
 
 # Tecnativa's docker-socket-proxy: a minimal HAProxy that filters the Docker
 # API by method/section. Pinned to a release tag; the image is multi-arch
-# (amd64 + arm64). Canonical upstream ref -- registries.conf rewrites it to
-# the Nexus mirror, so don't hard-code a mirror prefix here.
+# (amd64 + arm64).
 socket_proxy_image:  ghcr.io/tecnativa/docker-socket-proxy:v0.4.2  # 2025-12-16
 
 sonarr_image:        docker.io/linuxserver/sonarr:4.0.15  # 2025-06-20

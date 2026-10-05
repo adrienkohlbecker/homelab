@@ -19,6 +19,6 @@ zfs_tank_filesystem: tank
 
 swap_partition: /dev/md/swap
 
-# Three-member mdadm RAID5. The Podman role verifies the ext4 geometry against
-# the live array topology.
+# Three-member mdadm RAID5; mke2fs derives the ext4 stripe geometry from the
+# array when the Podman role formats it.
 podman_storage_device: /dev/md/podman
