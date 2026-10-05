@@ -1,8 +1,8 @@
 # Cross-cutting boot setup. This role owns the kernel-cmdline engine
 # (tasks/cmdline.yml, imported by zfs/console/kdump to contribute a fragment to
 # whichever bootloader the host uses) plus the boot-chain config below that no
-# feature role owns. It runs on the ZBM hosts; grub hosts drive their cmdline
-# through the same engine via the console role and need none of these tasks.
+# feature role owns. site.yml runs the role on the ZBM hosts; tasks specific to
+# ZBM skip on grub hosts.
 # Bootloader install + image staging stay role-owned (zfsbootmenu, refind);
 # disk/ESP creation stays one-time bootstrap, while this role owns its mount
 # policy.
