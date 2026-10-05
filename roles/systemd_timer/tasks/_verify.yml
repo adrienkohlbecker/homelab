@@ -223,6 +223,33 @@
       - _systemd_timer_failed_stamp.stat.mtime | int >= _systemd_timer_failed_started_at.stdout | int
     fail_msg: The combined fixture did not preserve its failure or refresh its trigger stamp.
 
+# A false condition installs nothing: no units and no monitoring metadata.
+- name: _verify | Skip a timer through its condition
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_skipped
+      exec_start: /bin/true
+      on_calendar: "*-*-* *:00:00"
+      condition: false
+
+- name: _verify | Stat the skipped timer artifacts
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/systemd/system/_verify_skipped.service
+    - /etc/systemd/system/_verify_skipped.timer
+    - /etc/netdata/charts.d/systemd_timers.d/_verify_skipped.conf
+  register: _systemd_timer_skipped
+  become: true
+
+- name: _verify | A false condition left nothing behind
+  assert:
+    that: _systemd_timer_skipped.results | selectattr('stat.exists') | list | length == 0
+    fail_msg: "left behind: {{ _systemd_timer_skipped.results | selectattr('stat.exists') | map(attribute='item') | join(', ') }}"
+
 # ============================================================
 # Contract 6: removal is scope-isolated. System- and user-scope managers keep
 # their units, trigger stamps and monitoring metadata in separate trees, so a

@@ -4,8 +4,8 @@
 # kill-switch, and journal-priority routing for free.
 #
 # Inputs: caller passes a single dict `podman_prune_args` with optional keys
-# `name` (default `podman_prune`) and `user` (default root). A named user
-# selects that user's rootless podman store.
+# `name` (default `podman_prune`), `user` (default root) and `condition`
+# (default true). A named user selects that user's rootless podman store.
 
 # Deliberately not `podman system prune`, which also deletes unused networks:
 # a single-consumer network (mac_iot, adguard, ...) is unused whenever its
@@ -24,5 +24,6 @@
         && /usr/bin/podman image prune --force --filter until=48h'
       on_calendar: "*-*-* 00:20:00"
       user: "{{ podman_prune_args.user | default('root') }}"
+      condition: "{{ podman_prune_args.condition | default(true) }}"
   tags:
     - podman

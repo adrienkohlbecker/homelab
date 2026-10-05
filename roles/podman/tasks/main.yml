@@ -51,11 +51,11 @@
     - podman
 
 - name: Install the Lab operator prune timer
-  when: podman_operator_prune_enabled
   import_tasks: prune.yml
   vars:
     podman_prune_args:
       user: "{{ ansible_user_id }}"
+      condition: "{{ podman_operator_prune_enabled }}"
   tags:
     - podman
 

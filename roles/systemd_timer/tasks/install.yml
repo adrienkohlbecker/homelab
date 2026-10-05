@@ -37,9 +37,12 @@
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
+    _systemd_timer_condition: "{{ systemd_timer_args.condition | default(true) }}"
     # The collector reads system-scope stamps, so user-scope timers cannot be
     # monitored and must not register metadata that would stay overdue forever.
-    _systemd_timer_monitor: "{{ (systemd_timer_args.user | default('root')) == 'root' }}"
+    _systemd_timer_monitor: >-
+      {{ (systemd_timer_args.user | default('root')) == 'root'
+         and (systemd_timer_args.condition | default(true)) | bool }}
 
 - name: install | Install service unit
   import_role:
@@ -50,6 +53,7 @@
       src: service.j2
       dest: "{{ systemd_timer_args.name }}.service"
       user: "{{ _systemd_timer_user }}"
+      condition: "{{ _systemd_timer_condition }}"
 
 # tasks_from=unit enables and starts the timer, restarting it after its own
 # file changes. The service is only ever started by the timer.
@@ -62,6 +66,7 @@
       src: timer.j2
       dest: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
+      condition: "{{ _systemd_timer_condition }}"
 
 # --- netdata overdue monitoring -------------------------------------------
 # Register the timer with the netdata systemd_timers collector. Placed after
