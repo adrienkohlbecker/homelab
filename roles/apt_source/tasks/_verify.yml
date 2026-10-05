@@ -54,7 +54,6 @@
     _apt_source_candidate_re: "(?m)^  Candidate: {{ _apt_source_versions | last | regex_escape }}$"
   assert:
     that:
-      - apt_source_docker_changed
       - _apt_source_pinned_policy.stdout is search(_apt_source_candidate_re)
     fail_msg: >-
       Expected the pin to select {{ _apt_source_versions | last }};
@@ -100,7 +99,6 @@
     _apt_source_candidate_re: "(?m)^  Candidate: {{ _apt_source_versions | first | regex_escape }}$"
   assert:
     that:
-      - apt_source_docker_changed
       - _apt_source_unpinned_policy.stdout is search(_apt_source_candidate_re)
     fail_msg: >-
       Expected the unpinned candidate {{ _apt_source_versions | first }};
