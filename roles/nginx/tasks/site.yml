@@ -15,8 +15,11 @@
 #                             blanket CSP would intersect with the upstream's
 #                             and produce stricter-than-either rules.
 #   auth                      optional bool, default false. When true, every
-#                             request through / is auth_request'd via Authelia;
-#                             a 401 redirects to the portal with returnUrl.
+#                             request through / is auth_request'd via Authelia.
+#                             On an Authelia 401, navigations (Sec-Fetch-Mode
+#                             navigate or absent) get a 302 to the portal URL
+#                             Authelia returned; fetch/XHR get a bare 401 so an
+#                             SPA can't loop on the cross-origin redirect.
 #                             The role's nginx_authelia_internal_url default chooses
 #                             the local or remote auth-request endpoint.
 #   auth_request_authorization optional bool, default false. Forward the
