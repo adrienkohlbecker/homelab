@@ -18,44 +18,6 @@
     name: fluentbit
     tasks_from: main
 
-# Seed retired optional files before Netdata is installed. The production role
-# must remove them and reload/restart the relevant subsystem on hosts where the
-# corresponding feature is disabled.
-- name: _setup | Create stale Netdata fixture directories
-  file:
-    path: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/netdata/health.d
-    - /etc/netdata/charts.d
-    - /usr/libexec/netdata/charts.d
-  become: true
-
-- name: _setup | Seed retired Netdata files
-  when: item.enabled | default(true) | bool
-  copy:
-    dest: "{{ item.path }}"
-    content: "{{ item.content }}"
-    owner: root
-    group: root
-    mode: "0644"
-  loop:
-    - path: /etc/netdata/health.d/keepalived_vrrp.conf
-      content: "# stale keepalived alert fixture\n"
-      enabled: "{{ not netdata_keepalived_lost_master_alert }}"
-    - path: /usr/libexec/netdata/charts.d/keepalived_vrrp.chart.sh
-      content: "# stale keepalived collector fixture\n"
-      enabled: "{{ not dns_vrrp_enabled }}"
-    - path: /etc/netdata/charts.d/keepalived_vrrp.conf
-      content: "# stale keepalived collector fixture\n"
-      enabled: "{{ not dns_vrrp_enabled }}"
-  loop_control:
-    label: "{{ item.path }}"
-  become: true
-
 - name: _setup | Install Postfix collector fixture
   apt:
     pkg: postfix

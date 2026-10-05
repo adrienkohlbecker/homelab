@@ -60,18 +60,8 @@
   tags:
     - netdata
 
-- name: Remove stale netdata keepalived lost-master alert
-  when: not netdata_keepalived_lost_master_alert
-  file:
-    path: /etc/netdata/health.d/keepalived_vrrp.conf
-    state: absent
-  register: netdata_keepalived_lost_master_alert_absent
-  become: true
-  tags:
-    - netdata
-
 - name: Request a netdata restart after alert changes
-  when: netdata_alerts.changed or netdata_keepalived_lost_master_alert_absent.changed
+  when: netdata_alerts.changed
   set_fact:
     netdata_restart_needed: true
   tags:

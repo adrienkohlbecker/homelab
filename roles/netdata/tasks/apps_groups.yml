@@ -46,19 +46,9 @@
   tags:
     - netdata
 
-- name: Remove custom apps_groups.conf when disabled
-  when: not netdata_packer_process_group_enabled
-  file:
-    path: /etc/netdata/apps_groups.conf
-    state: absent
-  register: netdata_apps_groups_removed
-  become: true
-  tags:
-    - netdata
-
 # apps.plugin reads apps_groups.conf only at start.
 - name: Request a netdata restart after an apps_groups change
-  when: netdata_apps_groups.changed or netdata_apps_groups_removed.changed
+  when: netdata_apps_groups.changed
   set_fact:
     netdata_restart_needed: true
   tags:

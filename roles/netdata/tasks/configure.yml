@@ -151,24 +151,6 @@
   tags:
     - netdata
 
-- name: Remove disabled Intel GPU collector
-  when: not (netdata_intelgpu_enabled and ansible_architecture == "x86_64")
-  become: true
-  tags:
-    - netdata
-  block:
-    - name: Remove stale intel gpu metrics config
-      file:
-        path: /etc/netdata/go.d/intelgpu.conf
-        state: absent
-      register: netdata_intelgpu_absent
-
-    # The collector is the only consumer of the package.
-    - name: Remove stale intel-gpu-tools
-      apt:
-        pkg: intel-gpu-tools
-        state: absent
-
 # alarm-notify.sh reads this on every notification, so it needs no restart.
 # Owner and mode keep the telegram bot token away from other users.
 - name: Configure alarm notifications
@@ -202,7 +184,7 @@
   when: >-
     [netdata_conf, netdata_charts_d_conf, netdata_cloud_conf,
      netdata_cloud_unclaim, netdata_service_d_override_conf_result,
-     netdata_go_d_conf, netdata_debugfs_mount, netdata_intelgpu_absent]
+     netdata_go_d_conf, netdata_debugfs_mount]
     | selectattr('changed') | list | length > 0
   set_fact:
     netdata_restart_needed: true

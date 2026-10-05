@@ -59,23 +59,3 @@
       condition: "{{ dns_vrrp_enabled and netdata_package_ready }}"
   tags:
     - netdata
-
-- name: Remove stale keepalived VRRP collector files
-  when: not dns_vrrp_enabled
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/libexec/netdata/charts.d/keepalived_vrrp.chart.sh
-    - /etc/netdata/charts.d/keepalived_vrrp.conf
-  register: netdata_keepalived_vrrp_absent
-  become: true
-  tags:
-    - netdata
-
-- name: Request a netdata restart after stale keepalived VRRP collector removal
-  when: netdata_keepalived_vrrp_absent.changed
-  set_fact:
-    netdata_restart_needed: true
-  tags:
-    - netdata
