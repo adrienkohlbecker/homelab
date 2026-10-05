@@ -5,7 +5,8 @@ Description=authelia
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
-# Sessions live in Redis: start it first, and restart Authelia along with it.
+# Sessions live in Redis: start it first, and restart Authelia along with it,
+# which also picks up a rotated redis_password secret (owned by roles/redis).
 After=redis.service
 Requires=redis.service
 {% if zfs_root %}
@@ -57,7 +58,7 @@ ExecStart=/usr/bin/podman run \
     --env AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE=/run/secrets/oidc_hmac_secret \
     --secret=authelia_session_secret,type=mount,target=session_secret \
     --env AUTHELIA_SESSION_SECRET_FILE=/run/secrets/session_secret \
-    --secret=authelia_session_redis_password,type=mount,target=session_redis_password \
+    --secret=redis_password,type=mount,target=session_redis_password \
     --env AUTHELIA_SESSION_REDIS_PASSWORD_FILE=/run/secrets/session_redis_password \
     --publish 0.0.0.0:{{ service_ports.authelia }}:9091/tcp \
     --health-cmd         {{ "http://localhost:9091/api/health" | podman_health_wget }} \
