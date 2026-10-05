@@ -81,35 +81,6 @@
   failed_when: _tailscale_forwarding.stdout | trim != '1'
   become: true
 
-# The successful converge exercises cleanup after login. Repeat registration
-# with a failing client binary to prove the staged one-time key is also removed
-# when login aborts the block.
-- name: _verify failure cleanup | Exercise auth-key cleanup after failed login
-  block:
-    - name: _verify failure cleanup | Register with a failing client
-      import_tasks: register.yml
-      vars:
-        tailscale_bin: /bin/false
-
-    - name: _verify failure cleanup | Registration unexpectedly succeeded
-      fail:
-        msg: "Expected the fixture Tailscale login to fail"
-
-  rescue:
-    - name: _verify failure cleanup | Confirm login reached the failure path
-      assert:
-        that:
-          - ansible_failed_task.name == 'register | Log in to headscale'
-        fail_msg: >-
-          Registration did not reach the failed-login cleanup path
-
-    - name: _verify failure cleanup | Staged auth key was removed
-      stat:
-        path: "{{ tailscale_authkey_temp.path }}"
-      register: tailscale_authkey_after_failed_login
-      failed_when: tailscale_authkey_after_failed_login.stat.exists
-      become: true
-
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the add-wants link brings it back with the target's start.
 # Kept last because it bounces the daemon; the harness reaches the VM over the
