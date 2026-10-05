@@ -3,8 +3,7 @@ Global:
   DracutFlags:
     - "--no-early-microcode"
 Components:
-  Versions: false
-  Enabled: true
+  Enabled: false
 EFI:
   Versions: false
   Enabled: true

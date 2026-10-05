@@ -355,9 +355,9 @@ mount /boot/efi
 # qemu.pkr.hcl reads the architecture-specific release from
 # group_vars/all/versions.yml and passes it here as $ZBM_VERSION.
 #
-# The tarball also carries a components-mode kernel + initrd alongside the
-# unified ZBM EFI image; only the unified image (/EFI/ZBM/VMLINUZ.EFI) is
-# installed. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on
+# Only the unified ZBM EFI image (/EFI/ZBM/VMLINUZ.EFI) and its cmdline are
+# installed; older tarballs also carry an unused components-mode kernel +
+# initrd. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on
 # aarch64 ($REFIND_NAME, derived from `uname -m` above).
 #
 # The registry path is project 83079143 = akohlbecker/homelab (numeric id
