@@ -57,3 +57,43 @@
   register: retired_services_zfs_units
   failed_when: retired_services_zfs_units.status.LoadState != 'not-found'
   become: true
+
+- name: _verify | Query the retired i7z package
+  command:
+    argv:
+      - dpkg-query
+      - --show
+      - --showformat=${db:Status-Status}
+      - i7z
+  register: retired_services_i7z
+  changed_when: false
+  failed_when: >-
+    retired_services_i7z.rc != 1
+    and retired_services_i7z.stdout != 'not-installed'
+
+- name: _verify | Stat retired leftovers
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/terminfo/xterm-ghostty.terminfo
+    - /etc/terminfo/g
+    - /mnt/services/tailscale/tailscaled.log.conf
+    - /mnt/services/tailscale/tailscaled.log1.txt
+    - /boot/efi/EFI/refind/BOOT.CSV
+    - /boot/efi/EFI/refind/keys
+    - /boot/efi/EFI/refind/refind.conf-sample
+  register: retired_services_leftovers
+  become: true
+
+- name: _verify | Retired leftovers are gone
+  assert:
+    that: retired_services_leftovers.results | selectattr('stat.exists') | list | length == 0
+    fail_msg: "left behind: {{ retired_services_leftovers.results | selectattr('stat.exists') | map(attribute='item') | join(', ') }}"
+
+# The teardown names exact files; tailscale's live state must survive.
+- name: _verify | Tailscale state survives the teardown
+  stat:
+    path: /mnt/services/tailscale/tailscaled.state
+  register: retired_services_tailscale_state
+  failed_when: not retired_services_tailscale_state.stat.exists
+  become: true

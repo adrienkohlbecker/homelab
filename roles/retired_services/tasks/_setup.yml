@@ -121,3 +121,54 @@
       description: Daily ZFS health check
       on_calendar: "*-*-* 00:06:00"
       exec_start: /usr/local/bin/zfs_health
+
+# i7z is an x86-only package.
+- name: _setup | Install the retired i7z package
+  when: ansible_architecture == 'x86_64'
+  apt:
+    name: i7z
+    state: present
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _setup | Create the retired terminfo alias directory
+  file:
+    path: /etc/terminfo/g
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Create the tailscale services directory
+  file:
+    path: /mnt/services/tailscale
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: _setup | Create the refind ESP directory
+  file:
+    path: /boot/efi/EFI/refind/keys
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _setup | Seed retired leftovers
+  copy:
+    content: "stale\n"
+    dest: "{{ item }}"
+    mode: "0644"
+  loop:
+    - /etc/terminfo/xterm-ghostty.terminfo
+    - /etc/terminfo/g/ghostty
+    - /mnt/services/tailscale/tailscaled.log.conf
+    - /mnt/services/tailscale/tailscaled.log1.txt
+    - /mnt/services/tailscale/tailscaled.state
+    - /boot/efi/EFI/refind/BOOT.CSV
+    - /boot/efi/EFI/refind/refind.conf-sample
+    - /boot/efi/EFI/refind/keys/refind.cer
+  become: true

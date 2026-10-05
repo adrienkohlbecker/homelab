@@ -177,3 +177,59 @@
   tags:
     - retired_services
     - fluentbit
+
+# Drop once lab, pug, and fox have converged. The user role stopped shipping
+# i7z and now copies the compiled Ghostty entry directly; the source copy and
+# its ghostty alias are inert.
+- name: Remove the retired i7z package
+  apt:
+    name: i7z
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - user
+
+- name: Remove the retired Ghostty terminfo source and alias
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/terminfo/xterm-ghostty.terminfo
+    - /etc/terminfo/g
+  become: true
+  tags:
+    - retired_services
+    - user
+
+# Drop once lab, pug, and fox have converged. tailscaled writes its logtail
+# files to /var/lib/tailscale; the copies on the services dataset stopped
+# changing on 2026-08-19.
+- name: Remove the stale tailscale logtail copies
+  file:
+    path: /mnt/services/tailscale/{{ item }}
+    state: absent
+  loop:
+    - tailscaled.log.conf
+    - tailscaled.log1.txt
+    - tailscaled.log2.txt
+  become: true
+  tags:
+    - retired_services
+    - tailscale
+
+# Drop once pug and fox have converged. Package upgrades used to run
+# refind-install, which left these unused files on the ESP.
+- name: Remove refind-install leftovers from the ESP
+  file:
+    path: /boot/efi/EFI/refind/{{ item }}
+    state: absent
+  loop:
+    - BOOT.CSV
+    - keys
+    - icons-backup
+    - refind.conf-sample
+  become: true
+  tags:
+    - retired_services
+    - refind
