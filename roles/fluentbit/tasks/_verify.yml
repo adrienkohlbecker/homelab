@@ -209,6 +209,67 @@
       - "row.service == 'fluentbit_verify_multiline'"
     fail_msg: "Multiline traceback not joined: {{ row }}"
 
+- name: _verify | Rotation | record the daemon PID
+  systemd:
+    name: fluent-bit.service
+  register: _fluentbit_rotate_pid_before
+  become: true
+
+- name: _verify | Rotation | force the production logrotate policy
+  command: logrotate --force /etc/logrotate.d/fluent-bit-lnav
+  changed_when: false
+  become: true
+
+- name: _verify | Rotation | emit a marked log after rotation
+  command:
+    argv:
+      - systemd-run
+      - --unit=fluentbit_verify_rotate
+      - --no-block
+      - --quiet
+      - /bin/sh
+      - -c
+      - '{ echo "ERROR rotated_{{ fluentbit_lnav_journald_marker }}"; sleep 2; } | logger -t fluentbit_verify_rotate'
+  changed_when: false
+  become: true
+
+# Writes must land at the start of the truncated file: a writer without
+# O_APPEND would keep its old offset and leave a NUL hole before them.
+- name: _verify | Rotation | live path keeps receiving records
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sys
+
+        live, rotated, marker = sys.argv[1:4]
+        with open(rotated, "rb") as handle:
+            if not handle.read(1):
+                sys.exit("rotated generation is empty")
+        with open(live, "rb") as handle:
+            data = handle.read()
+        if not data.startswith(b"{"):
+            sys.exit("live file does not start with a record")
+        if marker.encode() not in data:
+            sys.exit(1)
+      - /var/log/fluent-bit/lnav.jsonl
+      - /var/log/fluent-bit/lnav.jsonl.1
+      - rotated_{{ fluentbit_lnav_journald_marker }}
+  register: _fluentbit_rotate_check
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _fluentbit_rotate_check.rc == 0
+  become: true
+
+- name: _verify | Rotation | daemon was not restarted
+  systemd:
+    name: fluent-bit.service
+  register: _fluentbit_rotate_pid_after
+  failed_when: _fluentbit_rotate_pid_after.status.MainPID != _fluentbit_rotate_pid_before.status.MainPID
+  become: true
+
 - name: _verify | Remove the seeded service extension
   import_role:
     name: fluentbit

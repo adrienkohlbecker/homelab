@@ -10,10 +10,9 @@
 {% endif %}
     missingok
     notifempty
-    create 0640 root adm
-    sharedscripts
-    postrotate
-        systemctl try-restart fluent-bit.service >/dev/null 2>&1 || true
-    endscript
+    # systemd holds the file open with O_APPEND for the daemon lifetime, so
+    # truncating in place keeps fluent-bit writing to the live path without a
+    # restart, which would drop its in-memory backlog.
+    copytruncate
     su root adm
 }
