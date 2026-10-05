@@ -315,12 +315,11 @@ table inet homelab {
         # conntrack tcp_loose rationale. Counter for _verify.yml.
         tcp flags & (fin|syn|rst|ack) != syn counter name "forward_nonsyn" drop comment "forward non-syn drop"
 
-        # Egress paths from internal interfaces. SNAT for the reply
-        # path comes from POSTROUTING below for the default bridge,
-        # and from netavark's per-bridge NETAVARK-* chains in `ip nat`
-        # for every other named bridge — netavark masquerades any
-        # saddr-in-its-own-subnet packet whose daddr is outside that
-        # subnet, so we don't have to add SNAT rules per bridge here.
+        # Egress paths from internal interfaces. Netavark masquerades
+        # every bridge it manages, the default one included, under both
+        # its iptables and nftables drivers: any saddr-in-its-own-subnet
+        # packet whose daddr is outside that subnet is SNATed in its own
+        # rules, so this table carries no NAT chain.
         # The egress oifname set is "anything that isn't another
         # podman bridge" — deliberately covers WAN, the home LAN
         # (containers reaching the UDM / other LAN hosts), host VLAN
@@ -336,8 +335,7 @@ table inet homelab {
         # host relays tailnet clients to home LAN hosts (daddr in the advertised
         # 10.123.0.0/21, out $WAN_IFACE); as an exit node it relays them to the
         # internet (also out $WAN_IFACE). One ingress accept covers both roles:
-        # tailscaled SNATs subnet-route/exit traffic in its own ts-postrouting
-        # (this table's postrouting is policy-accept, so it doesn't interfere),
+        # tailscaled SNATs subnet-route/exit traffic in its own ts-postrouting,
         # and return flows match the established,related accept at the top of this
         # chain. Same policy-drop-wins rationale as the netavark DNAT accepts
         # below -- ts-forward's accept can't survive this chain's policy drop.
@@ -395,16 +393,5 @@ table inet homelab {
         # Catch-all log+drop. Counter for _verify.yml.
         limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "
         counter name "forward_catchall" drop comment "forward catch-all"
-    }
-
-    ##################################################
-    #                POSTROUTING / NAT               #
-    ##################################################
-    # Source-scoped so we never silently NAT traffic from a future
-    # interface (guest VLAN, mgmt net, an extra macvlan) we hadn't
-    # considered. The customer is containers on podman0.
-    chain postrouting {
-        type nat hook postrouting priority srcnat; policy accept;
-        ip saddr $PODMAN_DEFAULT oifname $WAN_IFACE masquerade comment "NAT container egress"
     }
 }
