@@ -54,7 +54,7 @@
       approved={{ _tailscale_node.approved_routes | default([], true) | sort }}
 
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
-# tailscaled, and the add-wants link brings it back with the target's start.
+# tailscaled, and the WantedBy link brings it back with the target's start.
 # Kept last because it bounces the daemon; the harness reaches the VM over the
 # qemu port-forward, not the tailnet.
 - name: _verify | Start the snapshot target fixture

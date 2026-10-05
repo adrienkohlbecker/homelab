@@ -18,3 +18,6 @@ LogFilterPatterns=~^magicsock: disco: node [[][^]]+[]] d:[^ ]+ now using [^ ]+ m
 # -prefix: drivers that reject the offload (e.g. qemu virtio) are ignored.
 ExecStartPost=-/usr/sbin/ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
 {% endif %}
+
+[Install]
+WantedBy=zfs_autosnapshot.target

@@ -82,22 +82,14 @@
   tags:
     - tailscale
 
-# PartOf propagates the snapshot stop but not its subsequent start. Wire the want
-# explicitly when the target exists; zfs_autobackup installs it, so a host
-# without that role skips the binding.
-- name: Check whether the snapshot target is installed
-  stat:
-    path: /etc/systemd/system/zfs_autosnapshot.target
-  register: tailscale_snapshot_target
-  become: true
-  tags:
-    - tailscale
-
-- name: Bind tailscaled to the snapshot target so it restarts after snapshots
-  command: systemctl add-wants zfs_autosnapshot.target tailscaled.service  # noqa: command-instead-of-module
-  args:
-    creates: /etc/systemd/system/zfs_autosnapshot.target.wants/tailscaled.service
-  when: tailscale_snapshot_target.stat.exists
+# PartOf propagates the snapshot stop but not its subsequent start, so the
+# drop-in also adds WantedBy=zfs_autosnapshot.target. `systemctl reenable`
+# re-processes [Install] including drop-ins; `enabled: true` below is a no-op
+# for an already-enabled unit and would never create the new link.
+- name: Re-enable tailscaled to pick up the drop-in WantedBy target  # noqa: command-instead-of-module
+  command: systemctl reenable tailscaled.service
+  when: tailscaled_service_d_override_conf_result.changed
+  changed_when: true
   become: true
   tags:
     - tailscale
