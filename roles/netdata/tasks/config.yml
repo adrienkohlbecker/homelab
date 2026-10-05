@@ -1,6 +1,6 @@
 # Install a netdata daemon/collector config under /etc/netdata/ (e.g.
-# go.d/<collector>.conf). Merges the former copy/template helpers: the
-# module is chosen by src's suffix.
+# go.d/<collector>.conf) for a sibling role and request a netdata restart
+# (restart.yml). The module is chosen by src's suffix.
 #
 # Inputs: caller passes a single dict `netdata_args` with keys
 #   src         required; file under the calling role's files/ (copy) or
@@ -51,30 +51,8 @@
   register: netdata_config_dir
   become: true
 
-- name: config | Check for an upstream stock config
-  when: netdata_args.condition | default(true)
-  stat:
-    path: /usr/lib/netdata/conf.d/{{ netdata_args.dest }}
-  register: netdata_config_stock
-  become: true
-
-# Seed the stock config so the role's copy/template overlays it. A dest with
-# no upstream stub (a collector netdata ships no default for) is fine: skip the
-# seed and let the role's own file be authoritative, rather than hard-failing
-# the `cp` on a missing source.
-- name: config | Seed the stock config
-  when:
-    - netdata_args.condition | default(true)
-    - netdata_config_stock.stat.exists | default(false)
-  command: cp /usr/lib/netdata/conf.d/{{ netdata_args.dest }} /etc/netdata/{{ netdata_args.dest }}
-  args:
-    creates: /etc/netdata/{{ netdata_args.dest }}
-  register: netdata_config_seed
-  become: true
-
-# Gate the file-write on the directory prerequisite (not the seed): in check
-# mode on a fresh host the dir only "would" exist, so writing into it would
-# fail. The seed is stat-gated above, so it's no longer the fresh-host proxy.
+# In check mode on a fresh host the directory only "would" exist, so writing
+# into it would fail.
 - name: config | Setup metrics ({{ _module }})
   when:
     - netdata_args.condition | default(true)
@@ -99,6 +77,6 @@
 # Collectors and the daemon read their config only at start; restart.yml
 # applies every pending change with one restart.
 - name: config | Request a netdata restart
-  when: netdata_config_seed.changed or netdata_config.changed
+  when: netdata_config.changed
   set_fact:
     netdata_restart_needed: true

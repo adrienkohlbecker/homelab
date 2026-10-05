@@ -1,0 +1,6 @@
+# alarm-notify.sh sources the stock /usr/lib/netdata/conf.d/health_alarm_notify.conf
+# first and then this file, so only the overrides live here.
+SEND_EMAIL="NO"
+SEND_TELEGRAM="YES"
+TELEGRAM_BOT_TOKEN="{{ telegram_netdata_bot_token }}"
+DEFAULT_RECIPIENT_TELEGRAM="{{ telegram_personal_chat_id }}"

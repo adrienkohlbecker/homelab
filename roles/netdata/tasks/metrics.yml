@@ -28,18 +28,6 @@
   tags:
     - netdata
 
-- name: Install lm_sensors metrics
-  import_tasks: config.yml
-  vars:
-    netdata_args:
-      src: sensors.conf
-      dest: go.d/sensors.conf
-      condition: "{{ netdata_package_ready }}"
-      validate: >-
-        python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' %s
-  tags:
-    - netdata
-
 - name: Install certbot metrics
   import_role:
     name: certbot

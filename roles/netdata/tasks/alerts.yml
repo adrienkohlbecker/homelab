@@ -1,61 +1,62 @@
-# Health-alert phase, imported by main.yml: the shipped alert configs plus the
-# timex.conf un-silence and its fail-closed assert. Split out of main.yml for
-# navigability.
-- name: Configure netdata alerts
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: systemdunits_alerts.conf.j2
+# Health-alert phase, imported by main.yml: the role's own health.d alert
+# configs. Sibling roles install theirs through health.yml. Split out of
+# main.yml for navigability.
+- name: Ensure the netdata alert directory exists
+  when: netdata_package_ready
+  file:
+    path: /etc/netdata/health.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - netdata
+
+# Health configs are a netdata-specific DSL with no offline parser.
+- name: Configure netdata alerts  # noqa: require-validate
+  when:
+    - netdata_package_ready
+    - item.condition | default(true)
+  template:
+    src: "{{ item.src }}"
+    dest: /etc/netdata/health.d/{{ item.dest }}
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  loop:
+    - src: systemdunits_alerts.conf.j2
       dest: systemdunits.conf
-  tags:
-    - netdata
-
-- name: Configure netdata GitLab Runner failure alert
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: gitlab_runner_alerts.conf.j2
+    - src: gitlab_runner_alerts.conf.j2
       dest: gitlab_runner.conf
-  tags:
-    - netdata
-
-- name: Configure netdata alerts
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: zfs_alerts_override.conf.j2
+    - src: zfs_alerts_override.conf.j2
       dest: zfs_alerts_override.conf
-  tags:
-    - netdata
-
-- name: Configure netdata postfix queue alert
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: postfix_alerts.conf
+    - src: postfix_alerts.conf.j2
       dest: postfix.conf
-  tags:
-    - netdata
-
-- name: Configure netdata wireguard bunk-peer alert policy
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: wireguard_alerts.conf.j2
+    - src: wireguard_alerts.conf.j2
       dest: wireguard.conf
-  tags:
-    - netdata
-
-# keepalived lost-master alarm, fed by the keepalived_vrrp collector above.
-# Deployed only on the designated primary peer: a backup normally has
-# holds_vip=0, so the alarm there would be a permanent false positive.
-- name: Configure netdata keepalived lost-master alert
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: keepalived_vrrp_alerts.conf
+    # keepalived lost-master alarm, fed by the keepalived_vrrp collector in
+    # metrics.yml. Deployed only on the designated primary peer: a backup
+    # normally has holds_vip=0, so the alarm there would be a permanent false
+    # positive.
+    - src: keepalived_vrrp_alerts.conf.j2
       dest: keepalived_vrrp.conf
       condition: "{{ netdata_keepalived_lost_master_alert }}"
+    - src: disk_health_alerts.conf.j2
+      dest: disk_health.conf
+    - src: fluentbit_alerts.conf.j2
+      dest: fluentbit.conf
+    - src: reboot_alerts.conf.j2
+      dest: reboot.conf
+    - src: timex_alerts.conf.j2
+      dest: timex.conf
+    - src: go_d_plugin_alerts.conf.j2
+      dest: go.d.plugin.conf
+  loop_control:
+    label: "{{ item.dest }}"
+  register: netdata_alerts
+  become: true
   tags:
     - netdata
 
@@ -69,116 +70,9 @@
   tags:
     - netdata
 
-- name: Request a netdata restart after stale keepalived alert removal
-  when: netdata_keepalived_lost_master_alert_absent.changed
+- name: Request a netdata restart after alert changes
+  when: netdata_alerts.changed or netdata_keepalived_lost_master_alert_absent.changed
   set_fact:
     netdata_restart_needed: true
-  tags:
-    - netdata
-
-- name: Configure netdata SMART + NVMe wear alerts
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: disk_health_alerts.conf
-      dest: disk_health.conf
-  tags:
-    - netdata
-
-- name: Configure netdata fluent-bit output-drop alert
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: fluentbit_alerts.conf
-      dest: fluentbit.conf
-  tags:
-    - netdata
-
-- name: Configure netdata reboot-required alert
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: reboot_alerts.conf
-      dest: reboot.conf
-  tags:
-    - netdata
-
-# Stage and patch timex.conf for its system_clock_sync_state alarm. The
-# kernel's ntp_adjtime() exposes a clock-synchronized bit; that bit going
-# to 0 means the local clock has
-# drifted out of sync with whatever ntp daemon is configured (chrony on
-# lab/pug). Upstream defaults `to: silent` because clock-sync is "boring"
-# on most cloud hosts -- but on lab/pug an out-of-sync clock breaks
-# TLS-cert validation, signed-package apt-get, and zfs replication
-# bookmarks. Cheap to alert on; not noisy in steady state.
-- name: Stage upstream timex.conf into /etc/netdata/health.d
-  command: cp /usr/lib/netdata/conf.d/health.d/timex.conf /etc/netdata/health.d/timex.conf
-  args:
-    creates: /etc/netdata/health.d/timex.conf
-  register: netdata_timex_staged
-  become: true
-  tags:
-    - netdata
-
-- name: Un-silence system_clock_sync_state
-  when: not (ansible_check_mode and netdata_timex_staged.changed)
-  replace:
-    path: /etc/netdata/health.d/timex.conf
-    # `alarm:` (not `template:`) since this binds to a single named chart
-    # rather than fanning out across a context. The lookahead confines the
-    # match to this stanza -- today timex.conf only ships one alarm so drift
-    # is impossible, but defensive in case upstream adds a second one in a
-    # future release.
-    regexp: '(?ms)(^\s*alarm:\s*system_clock_sync_state\b(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s*)silent'
-    replace: '\1sysadmin'
-    backup: true
-  register: netdata_timex_unsilenced
-  become: true
-  tags:
-    - netdata
-
-- name: Request a netdata restart after timex.conf edits
-  when: netdata_timex_staged.changed or netdata_timex_unsilenced.changed
-  set_fact:
-    netdata_restart_needed: true
-  tags:
-    - netdata
-
-# Fail-closed: the replace above reports changed=false both when it already ran
-# AND when it matched nothing (upstream renamed or restructured the alarm), so a
-# silent no-op would otherwise leave clock-sync at `to: silent` with no signal.
-# Assert the end state instead. Skipped in check mode, where the staging and
-# replace above are gated off on a fresh host.
-- name: Slurp the un-silenced timex.conf
-  when: not ansible_check_mode
-  slurp:
-    src: /etc/netdata/health.d/timex.conf
-  register: netdata_timex_unsilenced_check
-  become: true
-  tags:
-    - netdata
-
-- name: Assert the clock-sync alarm routes to sysadmin
-  when: not ansible_check_mode
-  vars:
-    _timex: "{{ netdata_timex_unsilenced_check.content | b64decode }}"
-  assert:
-    that:
-      # \s* around `alarm:`/`to:` matches the replace regex's classes; `\s`
-      # (not \b) after the name dodges ansible 2.20 re-escaping \b in `that:`.
-      - _timex | regex_findall('(?ms)^\s*alarm:\s*system_clock_sync_state\s(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s*sysadmin') | length >= 1
-    fail_msg: >-
-      timex.conf system_clock_sync_state no longer resolves to a
-      `to: sysadmin` stanza -- upstream likely renamed/restructured it,
-      leaving the clock-desync alert silenced. Re-check the un-silence regex.
-  tags:
-    - netdata
-
-- name: Configure sustained data-collection-failure alert
-  import_tasks: health.yml
-  vars:
-    netdata_args:
-      src: go_d_plugin_alerts.conf
-      dest: go.d.plugin.conf
   tags:
     - netdata

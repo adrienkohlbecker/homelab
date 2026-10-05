@@ -66,17 +66,6 @@
   tags:
     - netdata
 
-- name: Configure systemdunits metrics
-  import_tasks: config.yml
-  vars:
-    netdata_args:
-      src: systemdunits.conf
-      dest: go.d/systemdunits.conf
-      validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
-      condition: "{{ netdata_package_ready }}"
-  tags:
-    - netdata
-
 - name: Configure nginx
   import_role:
     name: nginx
