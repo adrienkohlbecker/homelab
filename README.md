@@ -27,8 +27,9 @@ mise trust && mise install
 mise run ansible --limit lab --tags nginx --check
 mise run tf plan
 mise run packer:build lab
-mise run test:role -- nginx
-mise run test
+mise run test:role -- nginx   # one role in a QEMU fixture
+mise run test:all             # role × machine matrix
+mise run test                 # unit tests (pytest)
 mise run lint
 ```
 
