@@ -27,7 +27,7 @@ EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 # or paused scrub, with pool creation as the fallback.
 # Forty days allows one monthly cycle plus slack. Overridable via the
 # environment so the _verify harness can force the expiry branch
-# (SCRUB_EXPIRE=1) without faking a scrub date or waiting 40 days; prod always
+# (SCRUB_EXPIRE=0) without faking a scrub date or waiting 40 days; prod always
 # takes the default.
 SCRUB_EXPIRE="${SCRUB_EXPIRE:-3456000}"
 

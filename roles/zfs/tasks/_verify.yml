@@ -104,8 +104,18 @@
 
 # --- Scrub scheduler ---
 
-- name: _verify | The scrub script kicks off without error
-  command: /usr/local/bin/zfs_scrub
+# Every imported pool must end up with a completed scrub, so the later health
+# runs see real scan history.
+- name: _verify | The scrub script scrubs every pool
+  shell: |
+    set -euo pipefail
+    /usr/local/bin/zfs_scrub
+    for pool in $(zpool list -H -o name); do
+      timeout -k 10 300 zpool wait -t scrub "$pool"
+      LC_ALL=C zpool status "$pool" | grep -q "scan: scrub repaired"
+    done
+  args:
+    executable: /bin/bash
   environment:
     ZFS_SCRUB_STAGGER_SEC: "0"  # skip the prod anti-thundering-herd stagger; img-backed CI pools can't hard-lock
   changed_when: false
@@ -194,9 +204,10 @@
 # executed yet the script still exited 0. Build a throwaway mirror over two
 # backing files, corrupt one leg's data region underneath ZFS, scrub to surface
 # the checksum errors, and assert the script flags them via the drive-error
-# branch. Clear those repaired errors, offline one leg, then use the same mirror
-# to assert the pool-state branch. qemu-only (gated on zfs_root); never prod,
-# and fully torn down at the end of the block.
+# branch. Clear those repaired errors and use the just-completed scrub to assert
+# the scrub-age branch, then offline one leg to assert the pool-state branch.
+# qemu-only (gated on zfs_root); never prod, and fully torn down at the end of
+# the block.
 - name: _verify | Health fault detection
   when: zfs_root
   become: true
@@ -252,6 +263,26 @@
       command: zpool clear zfs_health_test
       changed_when: true
 
+    # SCRUB_EXPIRE=0 (the role's env seam) expires any scrub, even one that
+    # finished this second. Without the pool-creation suffix, the age came
+    # from the scrub's own end time.
+    - name: _verify | Health fault | Run the health script with a zero scrub-expiry threshold
+      command: /usr/local/bin/zfs_health
+      environment:
+        SCRUB_EXPIRE: "0"
+      register: _zfs_health_scrub_age
+      changed_when: false
+      failed_when: false
+
+    - name: _verify | Health fault | Script flags the expired scrub from its end time
+      assert:
+        that:
+          - _zfs_health_scrub_age.rc != 0
+          - "'ERROR :: Scrub expired on zfs_health_test' in _zfs_health_scrub_age.stderr_lines"
+        fail_msg: >-
+          zfs_health did not age the completed scrub on zfs_health_test.
+          rc={{ _zfs_health_scrub_age.rc }} stderr={{ _zfs_health_scrub_age.stderr }}
+
     - name: _verify | Health fault | Offline one leg to degrade the pool
       command: zpool offline zfs_health_test /var/tmp/zfs_health_test_0.img
       changed_when: true
@@ -287,31 +318,3 @@
         - /var/tmp/zfs_health_test_0.img
         - /var/tmp/zfs_health_test_1.img
         - /zfs_health_test
-
-# --- Health script scrub-age detection (functional) ---
-# The scrub-age check is the one signal zfs_health owns that ZED structurally
-# cannot give -- a scrub that *didn't* happen emits no event. It can't be driven
-# by corrupting a pool, so exercise it directly: re-run the script with
-# SCRUB_EXPIRE forced to 1 second (the role's env seam) so every pool's last
-# scrub is "expired", and assert the script flags it. rpool here has a real,
-# recent scrub, so this confirms the date-parse + age-comparison path, not just
-# the creation-date fallback.
-- name: _verify | Health scrub-age | Run the script with a 1s scrub-expiry threshold
-  when: zfs_root
-  command: /usr/local/bin/zfs_health
-  environment:
-    SCRUB_EXPIRE: "1"
-  register: _zfs_health_scrub_age
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Health scrub-age | Script flags the expired scrub and exits non-zero
-  when: zfs_root
-  assert:
-    that:
-      - _zfs_health_scrub_age.rc != 0
-      - "'Scrub expired on' in _zfs_health_scrub_age.stderr"
-    fail_msg: >-
-      zfs_health did not flag an expired scrub with SCRUB_EXPIRE=1.
-      rc={{ _zfs_health_scrub_age.rc }} stderr={{ _zfs_health_scrub_age.stderr }}
