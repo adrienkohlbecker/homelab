@@ -88,49 +88,6 @@
           {{ netplan_verify_resolved_status.stdout }}
           {{ netplan_verify_resolved_status.stderr }}
 
-# The connectivity rejection above fails after staging. Exercise the separate
-# staging-failure path and verify it cancels the D-Bus transaction before
-# surfacing the error.
-- name: _verify staging failure | Exercise transaction cancellation
-  become: true
-  block:
-    - name: _verify staging failure | Try an unrenderable netplan config
-      import_tasks: apply.yml
-      vars:
-        netplan_apply_config: "{{ netplan_undefined_fixture }}"
-        netplan_remove_origins: []
-
-    - name: _verify staging failure | Unexpectedly completed the transaction
-      fail:
-        msg: "Expected netplan staging to fail"
-
-  rescue:
-    - name: _verify staging failure | Confirm the staging error was reported
-      assert:
-        that:
-          - ansible_failed_task.name == 'Report the netplan staging failure'
-        fail_msg: >-
-          The transaction did not exercise the staging rescue path
-
-    # The rescue ignores Cancel's result. Netplan unregisters the config object
-    # and removes its /run/netplan/config-<id> state only on a real cancel.
-    - name: _verify staging failure | Probe the cancelled D-Bus config object
-      command:
-        argv:
-          - busctl
-          - introspect
-          - io.netplan.Netplan
-          - "{{ netplan_dbus_path }}"
-      register: netplan_verify_cancelled_object
-      changed_when: false
-      failed_when: netplan_verify_cancelled_object.rc == 0
-
-    - name: _verify staging failure | Cancelled transaction state was removed
-      stat:
-        path: "/run/netplan/config-{{ netplan_dbus_path | basename }}"
-      register: netplan_verify_cancelled_state
-      failed_when: netplan_verify_cancelled_state.stat.exists
-
 # The role's wait-online drop-in must gate network-online.target on the uplink
 # even when the NIC appears after Netplan's generator ran, as it does under the
 # Resolute Dracut initrd and on cloud images. network-online.target is passive,

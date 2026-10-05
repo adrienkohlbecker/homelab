@@ -1,5 +1,7 @@
 # Shared by converge and the destructive rejection test. Netplan owns the
-# candidate snapshot and restores it unless the transaction is confirmed.
+# candidate snapshot and restores it unless the transaction is confirmed. Set
+# edits only the transaction's staging copy, so a failed Set leaves
+# /etc/netplan and the live network untouched.
 
 - name: Create a netplan D-Bus configuration transaction
   command:
@@ -32,70 +34,47 @@
   tags:
     - netplan
 
-- name: Stage the complete netplan transaction
-  block:
-    - name: Remove superseded origins from the netplan transaction
-      command:
-        argv:
-          - busctl
-          - call
-          - io.netplan.Netplan
-          - "{{ netplan_dbus_path }}"
-          - io.netplan.Netplan.Config
-          - Set
-          - ss
-          - network=null
-          - "{{ item }}"
-      loop: "{{ netplan_remove_origins }}"
-      register: netplan_remove_origin_result
-      changed_when: true
-      failed_when: >-
-        netplan_remove_origin_result.rc != 0
-        or netplan_remove_origin_result.stdout | trim != 'b true'
-      tags:
-        - netplan
+- name: Remove superseded origins from the netplan transaction
+  command:
+    argv:
+      - busctl
+      - call
+      - io.netplan.Netplan
+      - "{{ netplan_dbus_path }}"
+      - io.netplan.Netplan.Config
+      - Set
+      - ss
+      - network=null
+      - "{{ item }}"
+  loop: "{{ netplan_remove_origins }}"
+  register: netplan_remove_origin_result
+  changed_when: true
+  failed_when: >-
+    netplan_remove_origin_result.rc != 0
+    or netplan_remove_origin_result.stdout | trim != 'b true'
+  tags:
+    - netplan
 
-    - name: Stage the Ansible-managed netplan origin
-      command:
-        argv:
-          - busctl
-          - call
-          - io.netplan.Netplan
-          - "{{ netplan_dbus_path }}"
-          - io.netplan.Netplan.Config
-          - Set
-          - ss
-          - >-
-            network={{ {'version': 2} | combine(netplan_apply_config) | to_json }}
-          - 01-netcfg
-      register: netplan_stage_config_result
-      changed_when: true
-      failed_when: >-
-        netplan_stage_config_result.rc != 0
-        or netplan_stage_config_result.stdout | trim != 'b true'
-      tags:
-        - netplan
-
-  rescue:
-    - name: Cancel the incomplete netplan transaction
-      command:
-        argv:
-          - busctl
-          - call
-          - io.netplan.Netplan
-          - "{{ netplan_dbus_path }}"
-          - io.netplan.Netplan.Config
-          - Cancel
-      changed_when: false
-      failed_when: false
-      tags:
-        - netplan
-
-    - name: Report the netplan staging failure
-      fail:
-        msg: "Failed to stage the netplan D-Bus transaction"
-      tags:
-        - netplan
+- name: Stage the Ansible-managed netplan origin
+  command:
+    argv:
+      - busctl
+      - call
+      - io.netplan.Netplan
+      - "{{ netplan_dbus_path }}"
+      - io.netplan.Netplan.Config
+      - Set
+      - ss
+      - >-
+        network={{ {'version': 2} | combine(netplan_apply_config) | to_json }}
+      - 01-netcfg
+  register: netplan_stage_config_result
+  changed_when: true
+  failed_when: >-
+    netplan_stage_config_result.rc != 0
+    or netplan_stage_config_result.stdout | trim != 'b true'
+  tags:
+    - netplan
 
 - name: Start the 90-second netplan trial
   # Detach so a severed SSH connection cannot strand the controller inside
