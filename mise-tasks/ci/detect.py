@@ -22,12 +22,10 @@ import urllib.parse
 import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta
-from functools import cache
 from pathlib import Path
 from statistics import median
 from typing import NamedTuple
 
-import hcl2
 import jinja2
 import yaml
 
@@ -77,33 +75,6 @@ MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
 _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]
 
 
-PACKER_PATH_PREFIXES = ("packer/", "mise-tasks/packer/")
-
-
-@cache
-def packer_baked_repo_files() -> frozenset[str]:
-    """Repo-relative files outside packer/ that the fixture build uploads.
-
-    Read from the file provisioners in packer/qemu.pkr.hcl so detection follows
-    the template: editing one of these files changes the baked fixture image
-    just as an edit under packer/ does.
-    """
-    template = hcl2.loads(
-        (Path(__file__).resolve().parents[2] / "packer" / "qemu.pkr.hcl").read_text(),
-        serialization_options=hcl2.SerializationOptions(strip_string_quotes=True),
-    )
-    prefix = "${path.cwd}/"
-    baked: set[str] = set()
-    for build in template["build"]:
-        for provisioner in build.get("provisioner", []):
-            upload = provisioner.get("file")
-            if upload is None:
-                continue
-            sources = upload.get("sources") or [upload["source"]]
-            baked.update(source.removeprefix(prefix) for source in sources if source.startswith(prefix))
-    return frozenset(baked)
-
-
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 
@@ -111,7 +82,6 @@ ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
 class ChangeClassification(NamedTuple):
     direct_roles: list[str]
     full_universe_paths: list[str]
-    packer_changed: bool
     machine_universe: set[str]
 
 
@@ -119,7 +89,6 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
     """Classify changed file paths into CI-relevant categories."""
     roles: set[str] = set()
     full_universe: list[str] = []
-    packer_changed = False
     machine_universe: set[str] = set()
 
     for path in paths:
@@ -127,8 +96,6 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
             continue
         if FULL_UNIVERSE_RE.match(path):
             full_universe.append(path)
-        if path.startswith(PACKER_PATH_PREFIXES) or path in packer_baked_repo_files():
-            packer_changed = True
         for pat, machine in _MACHINE_UNIVERSE_COMPILED:
             if pat.match(path):
                 machine_universe.add(machine)
@@ -140,7 +107,6 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
     return ChangeClassification(
         direct_roles=sorted(roles),
         full_universe_paths=full_universe,
-        packer_changed=packer_changed,
         machine_universe=machine_universe,
     )
 
@@ -719,10 +685,6 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     log(f"comparing {base[:12]}..{head_short}: {len(changed)} file(s) changed")
 
     classification = classify_changed_files(changed)
-
-    # The qemu_image bake is a protected manual job; detection can only flag it.
-    if classification.packer_changed:
-        log("packer inputs changed -> run the qemu_image jobs to refresh the promoted fixtures")
 
     if classification.full_universe_paths:
         log("full-universe paths changed:")

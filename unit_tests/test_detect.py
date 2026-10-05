@@ -7,7 +7,6 @@ dependency map, and the ``gitlab`` child-pipeline command.
 
 import email.message
 import json
-import re
 import subprocess
 import urllib.error
 from collections import defaultdict
@@ -18,8 +17,6 @@ import pytest
 from conftest import load_repo_module
 
 detect = load_repo_module("mise-tasks/ci/detect.py")
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
@@ -92,31 +89,6 @@ class TestClassifyChangedFiles:
     @pytest.mark.parametrize(
         ("path", "expected"),
         [
-            ("packer/qemu.pkr.hcl", True),
-            ("packer/scripts/chroot.sh", True),
-            ("mise-tasks/packer/build", True),
-            ("roles/packer/tasks/main.yml", False),
-            ("test/machine.py", False),
-        ],
-    )
-    def test_packer_paths(self, path: str, expected: bool) -> None:
-        assert detect.classify_changed_files([path]).packer_changed is expected
-
-    def test_role_files_baked_by_packer_are_packer_inputs(self) -> None:
-        """Every role file the fixture build uploads must flag a fixture rebuild."""
-        template = (REPO_ROOT / "packer" / "qemu.pkr.hcl").read_text()
-        uploaded = re.findall(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)
-        assert uploaded, "qemu.pkr.hcl no longer uploads any role file"
-        for path in uploaded:
-            assert detect.classify_changed_files([path]).packer_changed, f"{path} is not a packer input"
-
-    @pytest.mark.parametrize("path", ["roles/console/tasks/main.yml", "roles/boot/files/efi_entries.py"])
-    def test_unbaked_role_files_are_not_packer_inputs(self, path: str) -> None:
-        assert not detect.classify_changed_files([path]).packer_changed
-
-    @pytest.mark.parametrize(
-        ("path", "expected"),
-        [
             ("test/host_vars/minimal.yml", {"minimal"}),
             ("test/minimal/user-data", {"minimal"}),
             ("test/host_vars/lab.yml", set()),
@@ -139,11 +111,10 @@ class TestClassifyChangedFiles:
         ]
         result = detect.classify_changed_files(paths)
         assert result.direct_roles == ["nginx"]
-        assert result.packer_changed
         assert result.full_universe_paths == ["group_vars/all/main.yml"]
 
     def test_empty_paths_and_blank_lines(self) -> None:
-        assert detect.classify_changed_files([]) == detect.ChangeClassification([], [], False, set())
+        assert detect.classify_changed_files([]) == detect.ChangeClassification([], [], set())
         assert detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""]).direct_roles == ["nginx"]
 
     def test_deduplicates_roles(self) -> None:
@@ -168,7 +139,6 @@ class TestClassifyChangedFiles:
         )
         assert result.direct_roles == ["zfs"]
         assert result.full_universe_paths == ["mise.toml", "pyproject.toml", "group_vars/storage_lab.yml"]
-        assert result.packer_changed
         assert result.machine_universe == {"pug"}
 
 
