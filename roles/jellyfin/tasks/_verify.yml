@@ -119,21 +119,19 @@
   until: _jellyfin_lnav_record.rc == 0
   become: true
 
-- name: _verify | Read seeded branding.xml
-  slurp:
-    src: /mnt/services/jellyfin/config/branding.xml
+# The sign-in page reads this anonymous endpoint before login, so it proves
+# Jellyfin parsed the seeded branding.xml and serves the SSO button and the
+# CSS that hides password login.
+- name: _verify | Jellyfin serves the SSO login button
+  uri:
+    url: http://localhost:{{ service_ports.jellyfin }}/Branding/Configuration
+    status_code: 200
   register: _jellyfin_branding
-  become: true
-
-- name: _verify | Assert SSO login button seeded with this host
-  assert:
-    that:
-      - >-
-        (_jellyfin_branding.content | b64decode)
-        is search('jellyfin\.' ~ inventory_hostname ~ '\.' ~ domain ~ '/sso/OID/start/authelia')
-    fail_msg: >-
-      branding.xml is missing the SSO login-button form for
-      jellyfin.{{ inventory_hostname }}.{{ domain }}.
+  failed_when: >-
+    _jellyfin_branding.status != 200
+    or not ((_jellyfin_branding.json.LoginDisclaimer | default(''))
+            is search('action="https://jellyfin\.' ~ inventory_hostname ~ '\.' ~ domain ~ '/sso/OID/start/authelia"'))
+    or not ((_jellyfin_branding.json.CustomCss | default('')) is search('\.manualLoginForm'))
 
 - name: _verify | Exercise jellyfin fluent-bit record contracts
   import_role:
