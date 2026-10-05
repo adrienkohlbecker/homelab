@@ -79,27 +79,6 @@
     # ip6tables ruleset.
     - { name: net.ipv6.conf.all.disable_ipv6, value: "{{ '1' if firewall_disable_ipv6 else '0' }}" }
     - { name: net.ipv6.conf.default.disable_ipv6, value: "{{ '1' if firewall_disable_ipv6 else '0' }}" }
-    # Loose reverse-path (rp_filter=2): drop packets whose source isn't
-    # routable via ANY interface (still catches RFC1918-on-WAN spoofs),
-    # but tolerate the asymmetric paths this host's macvlan topology
-    # creates. lab carries the keepalived DNS VIP on a `vrrp.N`
-    # macvlan that shares eth0's L2 segment, so VRRP-unicast and LAN
-    # broadcast/multicast legitimately ingress on an iface other than
-    # the one their source routes back through. Strict (=1) would drop
-    # that traffic and break keepalived failover.
-    #
-    # Only `default` is set, NOT `all`: on keepalived hosts the vrrp
-    # daemon forces net.ipv4.conf.all.rp_filter to 0 at startup (journal:
-    # "setting net.ipv4.conf.all.rp_filter from 2 to 0") to protect VRRP,
-    # so an `all=2` here loses a race on every converge and the sysctl
-    # flaps changed forever. Ceding `all` is safe: effective per-iface RPF
-    # is max(all, <iface>), and every real iface already carries =2 (from
-    # `default` below at creation + /usr/lib/sysctl.d/50-default.conf's
-    # `net.ipv4.conf.*.rp_filter=2` glob), so loose RPF holds regardless.
-    - { name: net.ipv4.conf.default.rp_filter, value: '2' }
-    # Refuse source-routed packets (no attacker-dictated path).
-    - { name: net.ipv4.conf.all.accept_source_route, value: '0' }
-    - { name: net.ipv4.conf.default.accept_source_route, value: '0' }
     # Ignore inbound ICMP redirects (no attacker-controlled reroute).
     - { name: net.ipv4.conf.all.accept_redirects, value: '0' }
     - { name: net.ipv4.conf.default.accept_redirects, value: '0' }
@@ -144,9 +123,13 @@
     - firewall
 
 # Retired pins leave the persisted file without a live write, so each
-# reverts to its kernel default at the next boot. The nftables non-SYN
-# drop rules cover what nf_conntrack_tcp_loose=0 did; the others already
-# equal the kernel default.
+# reverts to its default at the next boot. The nftables non-SYN drop
+# rules cover what nf_conntrack_tcp_loose=0 did. Ubuntu's own
+# network-security sysctl file already sets loose rp_filter=2 on `all`
+# and `default`, and the kernel refuses source-routed packets on every
+# interface while all.accept_source_route keeps its default 0 (the
+# kernel ANDs it with the interface value). The others already equal
+# the kernel default.
 - name: Remove retired network-stack sysctl pins
   ansible.posix.sysctl:
     name: "{{ item }}"
@@ -158,6 +141,9 @@
     - net.ipv4.tcp_syncookies
     - net.ipv4.icmp_echo_ignore_broadcasts
     - net.ipv4.icmp_ignore_bogus_error_responses
+    - net.ipv4.conf.default.rp_filter
+    - net.ipv4.conf.all.accept_source_route
+    - net.ipv4.conf.default.accept_source_route
   become: true
   tags:
     - firewall
