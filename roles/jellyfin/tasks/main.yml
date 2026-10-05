@@ -124,7 +124,6 @@
   loop:
     - /mnt/services/jellyfin/plugins
     - /mnt/services/jellyfin/plugins/sso
-    - /mnt/services/jellyfin/plugins/configurations
   tags:
     - jellyfin
 

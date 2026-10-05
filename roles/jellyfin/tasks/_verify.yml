@@ -48,7 +48,7 @@
   become: true
 
 # Functional transcode probe: lavfi testsrc → libx264 → HLS segments on
-# /cache/transcodes — Jellyfin's effective transcode path (default
+# /cache/transcodes — Jellyfin's effective transcode path (the image's
 # $JELLYFIN_CACHE_DIR/transcodes, pinned as /cache/transcodes in the live
 # encoding.xml), which the /cache volume backs with scratch storage.
 # Exercises jellyfin-ffmpeg presence, transcode-storage writability, and
