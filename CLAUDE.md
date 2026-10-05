@@ -87,14 +87,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 **Style:**
 
-- Every task within a role carries the role name as a tag, even when the role
-  invocation is already tagged. This keeps task files independently reusable
-  and makes their tag scope explicit. Test hooks (`tasks/_setup.yml` and
-  `tasks/_verify.yml`) are exempt because the harness invokes them directly.
-  Helper roles (see *Helper roles*) are exempt too: their caller supplies the
-  tag scope, either through `import_role`, whose tags the imported tasks
-  inherit, or through `include_role` with `apply: tags:` (canonical:
-  [roles/services/tasks/main.yml](roles/services/tasks/main.yml)).
+- Every task within a role carries the role name as a tag, even when the role invocation is already tagged, so task files stay independently reusable. Test hooks (`_setup`/`_verify`) and helper roles are exempt; helper callers supply the tag scope.
 - Centralize every pinned upstream version — container image tags, downloadable artifacts (debs/tarballs/binaries), and package-manager pins — in [group_vars/all/versions.yml](group_vars/all/versions.yml): full URL **adjacent to its sha256**, keyed by `ansible_architecture` (`x86_64`/`aarch64`) for multi-arch assets. Roles consume the pin by var name (ansible resolves vars globally); a role's `vars/main.yml` keeps only derived/computed values (e.g. arch-selected binary names, paths built from a version), never the raw pin.
 - Every config-writing `copy:`/`template:` carries a best-effort `validate:` that parses the rendered file. Omit rather than invent a fake one. Safe as `validate:` args but **don't** lift into `command:`/`shell:` — embedded quotes break task loading.
 - **Preserve upstream commentary and defaults in configuration derived from an upstream reference.** Keep comments, examples, and explicit default-valued settings intact so the file remains recognizable and comparable with upstream. This is a deliberate exception to sparse comments and the locally-authored rule below: the upstream reference *is* current state for the file.
@@ -143,16 +136,7 @@ Valid statuses: `runbook` (active operator procedures) · `current` (deployed st
 
 ### Helper roles
 
-Prefer these over re-implementing boilerplate. All take inputs through a single `*_args` dict (so each call replaces it wholesale and inter-call vars-leak can't happen). Full API: [notes/helper-roles-reference.md](notes/helper-roles-reference.md).
-
-Helper roles expose named task files and keep `tasks/main.yml` operationally empty (comments only), so the test harness can target the role without invoking an argument-requiring entry point. Call them with `tasks_from`; do not add a default dispatcher to `main.yml`.
-
-Every helper entry point that installs a reversible artifact must have a matching removal entry point. Keep removal entry points even when they have no current callers so future retirements can reuse them. Persistent-data removal must remain explicit and preserve data by default.
-
-Helpers that publish a caller-facing result must implement a `condition` input
-themselves and publish a no-change result when it is false. Pass the condition
-inside the helper's `*_args`; do not put `when:` on `import_role`, because a
-skipped import cannot uphold the result-variable contract for its callers.
+Prefer these over re-implementing boilerplate. Call them with `tasks_from` and a single `*_args` dict, passing any `condition` inside it rather than as `when:` on the import. Authoring contract (empty `main.yml`, `condition`, removal entry points, tag scope) and full API: [notes/helper-roles-reference.md](notes/helper-roles-reference.md).
 
 | Helper | Entry point | Exposes / creates |
 |--------|-------------|-------------------|
