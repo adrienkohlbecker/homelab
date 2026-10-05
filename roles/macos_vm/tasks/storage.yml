@@ -54,14 +54,6 @@
       redundant_metadata: most
   become: true
 
-- name: storage | Wait for macOS zvol device
-  when:
-    - not (ansible_check_mode and macos_vm_zvol_current.rc != 0)
-  wait_for:
-    path: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
-    timeout: 30
-  become: true
-
 # QEMU runs as root and needs no group grant on the zvol device.
 - name: storage | Remove the zvol permission udev rule
   file:
