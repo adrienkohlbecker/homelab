@@ -1,0 +1,39 @@
+# Reviewed hits in published history. Add a fingerprint only after
+# confirming the value is not a live secret.
+
+# CI placeholder runner tokens in the retired Box fixture.
+0ee980b07f0ade3dd547c6ece9c2bc2f11527e22:host_vars/box.yml:gitlab-runner-authentication-token:147
+191feee32d8374ec41ccf972d0b645cd4ecd951b:host_vars/box.yml:gitlab-runner-authentication-token:189
+2994fe3021dac3a887ec617514c77d551762e8f9:host_vars/box.yml:gitlab-runner-authentication-token:148
+360eb8c33f96de66f7cc6b9d93e9be65218fd83a:host_vars/box.yml:gitlab-runner-authentication-token:199
+836a7dc16eb145d77bdc380844b434be70ff3466:host_vars/box.yml:gitlab-runner-authentication-token:189
+a3277e1cd51a1bac68910177f365146d39bd589a:host_vars/box.yml:gitlab-runner-authentication-token:199
+aa362dba6f9834719fabad75a00fdd45aee33593:host_vars/box.yml:gitlab-runner-authentication-token:225
+b0d6a432116ade4616ed8623d45a57805499beea:host_vars/box.yml:gitlab-runner-authentication-token:142
+cc64cccdb97a07d96fa6096c632fd9064a6b8d31:host_vars/box.yml:gitlab-runner-authentication-token:147
+f3472b8e9f5259181e5ff4c9197f300608d16668:host_vars/box.yml:gitlab-runner-authentication-token:225
+
+# Retired services; values public in history since 2014 and 2018.
+e5cd8c3de13b00371549c2570cc238179f1985b3:ansible/roles/services/templates/couchpotato.ini.j2:generic-api-key:304
+3ed767b9bfec9fa62a4fd2e86ba66790e1a37b6f:roles/mailer/vars/main.yml:generic-api-key:6
+
+# Throwaway fixture values and CI placeholder tokens (test scope by design).
+029d1c0a2ed5619d61b447796f2c247a83448a2e:group_vars/test.yml:generic-api-key:188
+029d1c0a2ed5619d61b447796f2c247a83448a2e:group_vars/test.yml:generic-api-key:192
+070849e821c181bb8984ca3c722c4d948cd11a6c:group_vars/test.yml:gitlab-runner-authentication-token:16
+0aa880553ddc9dc4dd014d4268dde1b833179eb3:group_vars/test.yml:generic-api-key:208
+10fedd08abca6678a2dd9d78bc0e2c7dabb7ce8f:group_vars/test.yml:gitlab-runner-authentication-token:39
+1a780c5020302706be9b7192c1d039d3a1a0cc8c:group_vars/test.yml:private-key:161
+24a4d8539a01d2d5befc178e38ab53d566f2f1a8:group_vars/test.yml:private-key:161
+450213e973955f83dbf59238bff56a6d23546d43:group_vars/test.yml:gitlab-runner-authentication-token:16
+609df298e732740387c28de66e39d7edb7906c1f:group_vars/test.yml:generic-api-key:188
+609df298e732740387c28de66e39d7edb7906c1f:group_vars/test.yml:generic-api-key:192
+6d6c055278752f5e769d9793378b4674d11f66ca:group_vars/test.yml:gitlab-runner-authentication-token:37
+866e7e60288c81187837b797957a7dce06c36d46:group_vars/test.yml:generic-api-key:124
+aa362dba6f9834719fabad75a00fdd45aee33593:group_vars/test.yml:gitlab-runner-authentication-token:17
+cb27ae1412617fc8bec08f3ccc82a38924608895:group_vars/test.yml:generic-api-key:208
+d43f3379862f24187d585faf9218abffabbdd653:group_vars/test.yml:generic-api-key:124
+f3472b8e9f5259181e5ff4c9197f300608d16668:group_vars/test.yml:gitlab-runner-authentication-token:17
+
+# Vagrant's published insecure key.
+dfb80cb9d21bcc8492cc31813dce57c45fed63f4:packer/vagrant.key:private-key:1

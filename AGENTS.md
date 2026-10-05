@@ -172,7 +172,7 @@ Two passwords, two scopes:
 - `prod` — vault id for inline `!vault` values in `group_vars/prod.yml`, physical-host vars, and root `host_vars/` (including Bunk). Local workstations only; never in CI.
 - `test` — vault id for inline `!vault` values in `group_vars/test.yml` and test-host vars. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
 
-New values: `encrypt_string --encrypt-vault-id prod` (or `test`). Never commit decrypted values. Password lookup and bootstrap: [notes/runbooks/vault_setup.md](notes/runbooks/vault_setup.md).
+New values: `encrypt_string --encrypt-vault-id prod` (or `test`). Never commit decrypted values (lint: `lint:secrets` scans history with gitleaks; reviewed hits are fingerprinted in `.gitleaksignore`). Password lookup and bootstrap: [notes/runbooks/vault_setup.md](notes/runbooks/vault_setup.md).
 
 ## Someday
 

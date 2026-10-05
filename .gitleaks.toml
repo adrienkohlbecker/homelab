@@ -1,0 +1,10 @@
+# gitleaks config for `mise run lint:secrets`: the default rules, minus
+# patterns that only look like secrets. Reviewed historical hits are
+# fingerprinted in .gitleaksignore.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Download checksums and public resolver signing keys"
+regexTarget = "line"
+regexes = ['''key_sha256:''', '''minisign_key\s*=''']
