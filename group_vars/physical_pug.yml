@@ -128,7 +128,8 @@ nginx_static_proxies_enabled: true
 
 # NUT staged-shutdown ladder (roles/nut thresholds + roles/nut
 # upsmon), with the UPS card owning every power cut and restart natively --
-# load-shed Group 1 at 15% / Group 2 at 2%, forced reboot on AC return,
+# load-shed Group 1 at 300s on battery / Group 2 at 360s (15% / 2% as the
+# backstop), forced reboot on AC return,
 # staggered group restarts; see notes/ups_shutdown_ladder.md. The windows box
 # (unmanaged, WinNUT, Group 1) drops out first on a short on-battery delay,
 # lab (Group 1) after the 180s on-battery role default, pug (Group 2) last.
