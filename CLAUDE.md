@@ -111,22 +111,7 @@ For config HA has moved out of YAML, pick the highest tier that works — `confi
 
 ### `notes/` private clone
 
-`notes/` is an independent **private clone** of [adrienkohlbecker/homelab_notes](https://github.com/adrienkohlbecker/homelab_notes), living at `<repo>/notes` and **gitignored** — not a submodule, not tracked, not pinned per code commit. The public repo carries no notes footprint beyond the `.gitignore` entry; notes content must never land in it (no committing notes files, no `git subtree`).
-
-Notes keep their own linear history, soft-correlated to code: a `prepare-commit-msg` hook in the clone stamps each notes commit with a `Code: homelab@<sha>` trailer (the main checkout's HEAD at write time), self-installed via the notes repo's `[hooks] enter`. Sync is just `git commit` + `git push` inside `notes/` when ready — there is no parent pointer to bump.
-
-**In worktrees**, each `notes/` is a symlink to the main checkout's one clone (created by `worktree:add` / the `WorktreeCreate` hook via [mise-tasks/worktree/populate.sh](mise-tasks/worktree/populate.sh)), so notes written from any worktree land on the single notes history — no per-worktree clone, branch, or merge. `worktree:merge`/`worktree:update` therefore just rebase the code branch, with no submodule gitlink to reconcile.
-
-**Every note must open with YAML frontmatter** containing at least `status` and `created_at`:
-
-```yaml
----
-status: current # optional inline note after #
-created_at: 2026-05-20
----
-```
-
-Valid statuses: `runbook` (active operator procedures) · `current` (deployed state) · `planned` (near-term active work) · `deferred` (valid but not imminent) · `rejected` (decided against; kept for context) · `completed` (migration/investigation done; outcome in code/git) · `reference` (static lookup material). Archived notes live in `notes/archive/` and follow the same convention.
+`notes/` is a gitignored, independent clone of the private [adrienkohlbecker/homelab_notes](https://github.com/adrienkohlbecker/homelab_notes) — not a submodule. Notes content must never land in this public repo. Commit and push inside `notes/` (a hook stamps each commit with a `Code: homelab@<sha>` trailer); in worktrees `notes/` is a symlink to the main checkout's single clone. Every note opens with YAML frontmatter carrying `status` and `created_at` (enforced by the notes pre-commit hook). Statuses: `runbook` (active procedures) · `current` (deployed state) · `planned` (near-term) · `deferred` (valid, not imminent) · `rejected` (kept for context) · `completed` (outcome in code/git) · `reference` (static lookup). Archived notes live in `notes/archive/`.
 
 ### Helper roles
 
