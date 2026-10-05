@@ -259,10 +259,6 @@ GitLab CI ([.gitlab-ci.yml](.gitlab-ci.yml)) runs the role-test matrix as **qemu
 
 **Escalation:** A nonempty `machines:` map replaces the default Lab cell. List `lab:` alongside `minimal:` or `pug:` when Lab coverage should remain; the first machine is the local `testrole.py` default. `machines: {lab: {memory_mb: 5120}}` raises that cell's guest RAM above the `test/machine.py` default; `ubuntu:` lists add per-release cells. **Manual dispatch:** a `ROLES` pipeline variable bypasses change detection — `ROLES=ALL` runs the whole universe, a comma-separated list runs those cells, and the `SITE` token adds the full-fleet converge (`ROLES=SITE` runs it alone, `ROLES=SITE,nginx` pairs it with a cell). **Local-debug:** `CI_BASE_REF=HEAD~5 mise run ci:detect --child-path /tmp/cells.yml` previews the cell matrix (logged to stderr). CI secrets: [notes/runbooks/ci_secrets.md](notes/runbooks/ci_secrets.md).
 
-## Commit & Pull Request Guidelines
-
-Descriptive imperative subjects; prefix with role when it helps. Body: summary + motivation, max two paragraphs.
-
 ## Vault ids: `prod` vs `test`
 
 Two passwords, two scopes ([ansible.cfg](ansible.cfg): `vault_identity_list = prod@vault-client.sh, test@vault-client.sh`, `vault_id_match = True`).
