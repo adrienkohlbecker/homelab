@@ -76,8 +76,8 @@
   tags:
     - nut
 
-# start: gates on qemu_test -- the fixture has no real UPS to reach, so the
-# unit is only enabled (it still starts at the _site_test reboot and idles
+# state is omitted under qemu_test -- the fixture has no real UPS to reach, so
+# the unit is only enabled (it still starts at the _site_test reboot and idles
 # on NOCOMM retries, which upsmon tolerates indefinitely).
 #
 # restart (not `upsmon -c reload`) is deliberate: reload cannot change

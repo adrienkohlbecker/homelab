@@ -13,7 +13,7 @@
 # dummy-ups frame. Reaching OL through upsc therefore exercises the normal
 # systemd lifecycle as well as the driver -> upsd path.
 - name: _verify | Wait for the dummy UPS to publish OL over upsc
-  command: upsc eaton@localhost ups.status
+  command: upsc {{ nut_ups }} ups.status
   register: nut_upsc
   until: '"OL" in nut_upsc.stdout'
   retries: 15
@@ -61,7 +61,7 @@
 # transient 502 (fcgiwrap warming) retry; the `until` pins success on a real 200.
 - name: _verify | NUT CGI status page is served through nginx + fcgiwrap
   uri:
-    url: https://nut.{{ inventory_hostname }}.{{ domain }}/upsstats.cgi?host=eaton@localhost
+    url: https://nut.{{ inventory_hostname }}.{{ domain }}/upsstats.cgi?host={{ nut_ups }}
     validate_certs: false
     return_content: true
     status_code: [ 200, 301, 302, 401, 403, 502, 503 ]
@@ -84,7 +84,7 @@
 
 - name: _verify | NUT CGI status image is served
   uri:
-    url: https://nut.{{ inventory_hostname }}.{{ domain }}/upsimage.cgi?host=eaton@localhost&display=battery.charge
+    url: https://nut.{{ inventory_hostname }}.{{ domain }}/upsimage.cgi?host={{ nut_ups }}&display=battery.charge
     validate_certs: false
     status_code: 200
   become: true
