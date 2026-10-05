@@ -215,9 +215,9 @@
     - name: NetBIOS noise
       argv: [ nc, -u, -w, "1", 192.0.2.1, "137" ]
       hit: [ input_silenced ]
-    - name: Tailscale disco probe from an untrusted zone
+    - name: Tailscale disco probe from a non-scope source
       enabled: "{{ tailscale_wan_direct | default(false) }}"
-      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_untrusted_peer }}", "{{ _firewall_probe_untrusted_host }}", "{{ tailscale_port | default(0) }}" ]
+      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ tailscale_port | default(0) }}" ]
       hit: [ input_silenced_tailscale ]
       miss: [ tailscale_lan_accept ]
     - name: Unscoped UDP port

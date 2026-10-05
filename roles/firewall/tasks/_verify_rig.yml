@@ -47,10 +47,6 @@
       ip link add vrrp.{{ dns_keepalived_vrid }} type veth peer name vrrp_ext
       ip link set vrrp_ext netns extns
     fi
-    if ! ip link show untrusted0 >/dev/null 2>&1; then
-      ip link add untrusted0 type veth peer name untrusted_ext
-      ip link set untrusted_ext netns extns
-    fi
     ip addr replace 192.0.2.1/24 dev wg0
     ip link set wg0 up
     ip -n extns addr replace {{ _firewall_probe_nonscope }}/24 dev veth_ext
@@ -72,10 +68,6 @@
     ip link set vrrp.{{ dns_keepalived_vrid }} up
     ip -n extns addr replace {{ _firewall_probe_vrrp_peer }}/24 dev vrrp_ext
     ip -n extns link set vrrp_ext up
-    ip addr replace {{ _firewall_probe_untrusted_host }}/24 dev untrusted0
-    ip link set untrusted0 up
-    ip -n extns addr replace {{ _firewall_probe_untrusted_peer }}/24 dev untrusted_ext
-    ip -n extns link set untrusted_ext up
     ip -n extns link set lo up
     ip -n extns route replace default via 192.0.2.1
     ip -n extns route replace {{ network.virtual_ips.dns }}/32 via {{ _firewall_probe_vrrp_host }} dev vrrp_ext
