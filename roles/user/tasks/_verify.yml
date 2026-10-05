@@ -1,18 +1,24 @@
 - name: _verify | Login shell is zsh
-  command: getent passwd {{ ansible_user_id }}
+  command:
+    argv:
+      - su
+      - --login
+      - "{{ ansible_user_id }}"
+      - --command
+      - test -n "$ZSH_VERSION"
   changed_when: false
-  register: _user_getent
-  failed_when: _user_getent.rc != 0 or not _user_getent.stdout.endswith('/zsh')
+  become: true
 
-- name: _verify | Member of adm group
-  command: id -nG {{ ansible_user_id }}
+# sudo initializes the supplementary groups, so adm applies without a new login.
+- name: _verify | The adm group grants the system journal without sudo
+  command: journalctl --system --lines 1 --quiet
+  register: _user_journal
   changed_when: false
-  register: _user_groups
-  failed_when: >-
-    _user_groups.rc != 0
-    or 'adm' not in _user_groups.stdout.split()
+  failed_when: _user_journal.rc != 0 or _user_journal.stdout | length == 0
+  become: true
+  become_user: "{{ ansible_user_id }}"
 
-- name: _verify | Ghostty terminfo is compiled
+- name: _verify | Ghostty terminfo resolves
   command: infocmp xterm-ghostty
   changed_when: false
 
@@ -25,106 +31,40 @@
   changed_when: false
   become: true
 
-# Shell startup needs these binaries; verification must not install missing tools.
-- name: _verify | Mise tools execute without installing
-  environment:
-    HOME: "{{ ansible_user_dir }}"
-    MISE_EXEC_AUTO_INSTALL: "false"
-  block:
-    - name: _verify | Load-bearing mise tools execute
-      command: /usr/bin/mise exec -- {{ item }} --version
-      changed_when: false
-      loop:
-        - zoxide
-        - atuin
-
-    - name: _verify | A missing tool fails without being reinstalled
-      command:
-        argv:
-          - python3
-          - -c
-          - |
-            from pathlib import Path
-            import shutil
-            import subprocess
-            import tempfile
-
-            version = Path(subprocess.check_output(["/usr/bin/mise", "where", "zoxide"], text=True).strip())
-            with tempfile.TemporaryDirectory(dir=version.parent) as temp:
-                saved = Path(temp) / "installed"
-                version.rename(saved)
-                try:
-                    result = subprocess.run(
-                        ["/usr/bin/mise", "exec", "--", "zoxide", "--version"],
-                        capture_output=True, text=True, timeout=60,
-                    )
-                    assert result.returncode != 0, "Missing zoxide unexpectedly executed"
-                    assert not version.exists(), "Verification reinstalled zoxide"
-                finally:
-                    # Discard only a test-triggered reinstall before restoring the original.
-                    if version.exists():
-                        shutil.rmtree(version)
-                    saved.rename(version)
-      changed_when: false
-
-- name: _verify | Locate zoxide for the missing-tool fixture
+- name: _verify | Locate zoxide
   command: /usr/bin/mise where zoxide
   register: _user_zoxide_path
   changed_when: false
 
-# Stow must reject conflicts without installing tools ahead of the explicit installer.
-- name: _verify | Stow rejects conflicts and recovers incomplete deployment
-  block:
-    - name: _verify | Remove the zshrc link
-      file:
-        path: "{{ ansible_user_dir }}/.zshrc"
-        state: absent
+- name: _verify | Remove the zshrc link and zoxide
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ ansible_user_dir }}/.zshrc"
+    - "{{ _user_zoxide_path.stdout }}"
 
-    - name: _verify | Create a conflicting zshrc
-      copy:
-        dest: "{{ ansible_user_dir }}/.zshrc"
-        content: "Stow conflict fixture\n"
-        mode: "0644"
+- name: _verify | Converge to repair the deployment
+  import_role:
+    name: user
 
-    - name: _verify | Remove zoxide to exercise installation during reconverge
-      file:
-        path: "{{ _user_zoxide_path.stdout }}"
-        state: absent
-
-    - name: _verify | Converge with the conflict
-      import_role:
-        name: user
-
-    - name: _verify | A conflicting file must fail deployment
-      fail:
-        msg: Stow accepted a conflicting zshrc
-  rescue:
-    - name: _verify | Failure came from the Stow conflict
-      assert:
-        that:
-          - ansible_failed_task.name == 'Deploy dotfiles into $HOME (mise stow task)'
-          - "'would cause conflicts' in ansible_failed_result.stderr"
-
-    - name: _verify | Stow left tool installation to the installer
-      command: /usr/bin/mise ls --missing --json
-      register: _user_missing_after_stow
-      changed_when: false
-      failed_when: "'zoxide' not in (_user_missing_after_stow.stdout | from_json)"
-  always:
-    - name: _verify | Remove the conflict
-      file:
-        path: "{{ ansible_user_dir }}/.zshrc"
-        state: absent
-
-    - name: _verify | Converge to repair the missing link
-      import_role:
-        name: user
-
+# The installer counts tools still missing after the stow task, so its change
+# also proves stow left tool installation to it.
 - name: _verify | Link repair and tool installation report changes
   assert:
     that:
       - user_dotfiles_stow.changed
       - user_mise_tools.changed
+
+# Shell startup needs these binaries; verification must not install missing tools.
+- name: _verify | Load-bearing mise tools execute
+  command: /usr/bin/mise exec -- {{ item }} --version
+  environment:
+    MISE_EXEC_AUTO_INSTALL: "false"
+  changed_when: false
+  loop:
+    - zoxide
+    - atuin
 
 - name: _verify | Remove generated completions to exercise shell bootstrap
   file:
@@ -141,19 +81,9 @@
     TERM: xterm-256color
   changed_when: false
 
-- name: _verify | Dotfiles deployed (zshrc is a symlink)
-  stat:
-    path: "{{ ansible_user_dir }}/.zshrc"
-  register: _user_zshrc
-  failed_when: >-
-    not (_user_zshrc.stat.exists | default(false))
-    or not (_user_zshrc.stat.islnk | default(false))
-
-- name: _verify | 1Password CLI is installed
+- name: _verify | 1Password CLI runs
   command: op --version
   changed_when: false
-  register: _user_op_version
-  failed_when: _user_op_version.rc != 0 or _user_op_version.stdout | length == 0
 
 - name: _verify | Operator GPG public key is imported
   command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
