@@ -12,12 +12,16 @@
       - Config
   register: netplan_dbus_config
   changed_when: false
+  tags:
+    - netplan
 
 - name: Resolve the netplan D-Bus transaction path
   set_fact:
     netplan_dbus_path: >-
       {{ netplan_dbus_config.stdout
          | regex_search('/io/netplan/Netplan/config/[A-Za-z0-9]+') }}
+  tags:
+    - netplan
 
 - name: Assert the netplan D-Bus transaction was created
   assert:
@@ -25,6 +29,8 @@
       - netplan_dbus_path is string
       - netplan_dbus_path | length > 0
     fail_msg: "Netplan did not return a D-Bus configuration object"
+  tags:
+    - netplan
 
 - name: Stage the complete netplan transaction
   block:
@@ -46,6 +52,8 @@
       failed_when: >-
         netplan_remove_origin_result.rc != 0
         or netplan_remove_origin_result.stdout | trim != 'b true'
+      tags:
+        - netplan
 
     - name: Stage the Ansible-managed netplan origin
       command:
@@ -65,6 +73,8 @@
       failed_when: >-
         netplan_stage_config_result.rc != 0
         or netplan_stage_config_result.stdout | trim != 'b true'
+      tags:
+        - netplan
 
   rescue:
     - name: Cancel the incomplete netplan transaction
@@ -78,10 +88,14 @@
           - Cancel
       changed_when: false
       failed_when: false
+      tags:
+        - netplan
 
     - name: Report the netplan staging failure
       fail:
         msg: "Failed to stage the netplan D-Bus transaction"
+      tags:
+        - netplan
 
 - name: Start the 90-second netplan trial
   # Detach so a severed SSH connection cannot strand the controller inside
@@ -100,11 +114,15 @@
   poll: 0
   register: netplan_try_async
   changed_when: true
+  tags:
+    - netplan
 
 - name: Drop the multiplexed SSH master so the canary forces a fresh handshake
   # ControlPersist could make the canary pass over a stale connection while a
   # fresh TCP/SSH handshake still fails.
   meta: reset_connection
+  tags:
+    - netplan
 
 - name: Wait for SSH to re-establish during the netplan trial
   # Fail before the trial deadline so Ansible cannot mistake an automatically
@@ -112,6 +130,8 @@
   wait_for_connection:
     delay: 5
     timeout: 60
+  tags:
+    - netplan
 
 - name: Wait for the netplan trial to enter confirmation state
   # SSH may survive a rejected candidate, so reap the detached call before
@@ -126,6 +146,8 @@
     netplan_try_result.finished
     and (netplan_try_result.rc | default(1) != 0
          or netplan_try_result.stdout | default('') | trim != 'b true')
+  tags:
+    - netplan
 
 - name: Confirm the netplan transaction
   command:
@@ -141,3 +163,5 @@
   failed_when: >-
     netplan_apply_result.rc != 0
     or netplan_apply_result.stdout | trim != 'b true'
+  tags:
+    - netplan
