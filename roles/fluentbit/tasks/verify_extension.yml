@@ -6,6 +6,8 @@
       - fluentbit_verify_args.records | length > 0
       - fluentbit_verify_args.expected | length > 0
 
+# Service fragments declare filters only, and the fixture has its own dummy
+# inputs and storage path, so it runs beside the live daemon.
 - name: _verify | Write fluent-bit extension fixture  # noqa: require-backup require-validate
   copy:
     dest: "/tmp/fluent-bit-{{ fluentbit_verify_args.name }}-verify.yaml"
@@ -40,16 +42,6 @@
             json_date_format: iso8601
   become: true
 
-# Extensions may declare tail inputs on files the live daemon also tails,
-# which would race the fixture instance for the shared offset databases.
-# Stop unconditionally so every caller gets the same isolation; a single
-# restart cycle is harmless for filter-only extensions.
-- name: _verify | Stop fluent-bit around the isolated fixture
-  systemd:
-    name: fluent-bit
-    state: stopped
-  become: true
-
 # A graceful exit normally lands within a second or two of SIGTERM, but a
 # heavily loaded test VM can stall it far longer. The wide kill-after window
 # tolerates that while a forced kill stays fatal, so a real shutdown hang is
@@ -81,12 +73,6 @@
     fail_msg: |-
       fluent-bit reported errors while running the {{ fluentbit_verify_args.name }} fixture:
       {{ fluentbit_verify_result.stderr }}
-
-- name: _verify | Restart fluent-bit after the isolated fixture
-  systemd:
-    name: fluent-bit
-    state: started
-  become: true
 
 - name: _verify | Assert fluent-bit extension records
   command:

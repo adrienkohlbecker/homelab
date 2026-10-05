@@ -25,10 +25,13 @@ includes:
 pipeline:
   inputs:
     # The cursor makes read_from_tail a first-install choice; subsequent starts
-    # resume from journal.db regardless of retained journal location.
+    # resume from journal.db regardless of retained journal location. Unlike
+    # tail, the systemd input leaves SQLite at synchronous=FULL; match tail's
+    # normal so each cursor save is not a full fsync round.
     - name: systemd
       tag: svc.*
       db: /var/lib/fluent-bit/journal.db
+      db.sync: normal
       read_from_tail: true
       strip_underscores: true
       storage.type: filesystem
