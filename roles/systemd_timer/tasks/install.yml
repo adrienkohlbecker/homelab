@@ -51,33 +51,17 @@
       dest: "{{ systemd_timer_args.name }}.service"
       user: "{{ _systemd_timer_user }}"
 
-- name: install | Install timer unit
+# tasks_from=unit enables and starts the timer, restarting it after its own
+# file changes. The service is only ever started by the timer.
+- name: install | Manage timer unit
   import_role:
     name: systemd_unit
-    tasks_from: install
+    tasks_from: unit
   vars:
     systemd_unit_args:
       src: timer.j2
       dest: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
-
-# Skip enable+start when systemd_unit just (mock-)wrote either unit file
-# in check-mode — the file isn't actually on disk, so `systemctl enable`
-# would fail with "Could not find the requested service". systemd_unit
-# publishes `<name>_service_result` and `<name>_timer_result`.
-- name: install | Enable and start timer for {{ systemd_timer_args.name }}
-  when:
-    - >-
-      not (ansible_check_mode
-           and (lookup('vars', systemd_timer_args.name ~ '_service_result').changed
-                or lookup('vars', systemd_timer_args.name ~ '_timer_result').changed))
-  systemd:
-    name: "{{ systemd_timer_args.name }}.timer"
-    enabled: true
-    state: started
-    scope: "{{ 'system' if _systemd_timer_user == 'root' else 'user' }}"
-  become: true
-  become_user: "{{ _systemd_timer_user }}"
 
 # --- netdata overdue monitoring -------------------------------------------
 # Register the timer with the netdata systemd_timers collector. Placed after

@@ -14,7 +14,6 @@
     quiet: true
     that:
       - systemd_unit_args.for is not defined
-      - systemd_unit_args.user is not defined or systemd_unit_args.user == 'root'
       - _systemd_unit_name is match('^.+\.(service|socket|target|timer|mount|automount|path|slice|scope|device|swap)$')
     fail_msg: >-
       tasks_from=unit manages a complete unit file with a standard systemd
@@ -34,10 +33,13 @@
   become_user: "{{ _systemd_unit_user }}"
 
 # Enable adds current [Install] links without pruning obsolete ones. Rebuild
-# the link set only after changing an already-enabled unit.
+# the link set only after changing an already-enabled unit. This and the
+# reset-failed step below reach only the system manager, so user-scope units
+# (systemd_timer's lingered timers, whose [Install] never changes) skip both.
 - name: unit | Reenable after an install change for {{ _systemd_unit_name }}
   when:
     - _systemd_unit_condition
+    - _systemd_unit_scope == 'system'
     - not ansible_check_mode
     - systemd_unit_file.changed
     - systemd_unit_args.enable | default(true)
@@ -55,6 +57,7 @@
 - name: unit | Reset failed state for {{ _systemd_unit_name }}
   when:
     - _systemd_unit_condition
+    - _systemd_unit_scope == 'system'
     - systemd_unit_args.start | default(true)
     - not ansible_check_mode
     - systemd_unit_file.changed or systemd_unit_args.restart | default(false) or _systemd_unit_enable.status.ActiveState | default('inactive') != 'active'
