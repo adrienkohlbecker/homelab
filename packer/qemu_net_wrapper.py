@@ -7,7 +7,9 @@ shim starts a passt sidecar and rewrites the netdev to qemu's stream socket
 transport. Hosts without passt support and probe invocations such as
 `qemu_binary -version` exec qemu unchanged.
 
-Two knobs shape the passt guest:
+HOMELAB_NET_BACKEND overrides the probe as it does in the test harness:
+`slirp` execs qemu unchanged, `passt` fails the build when passt is unusable,
+and `auto` (default) probes. Two more knobs shape the passt guest:
 
 - QEMU_NET_WRAPPER_DNS: the resolver passt advertises over DHCP. Unset, passt
   advertises the host's resolv.conf nameservers, relaying a loopback one
@@ -252,9 +254,17 @@ def main() -> None:
         _log("backing build-VM NIC with slirp (passthrough): no user-netdev to rewrite")
         os.execv(real_qemu, [real_qemu, *args])
 
+    backend = os.environ.get("HOMELAB_NET_BACKEND", "auto").strip().lower()
+    if backend not in ("auto", "slirp", "passt"):
+        sys.exit(f"qemu-net-wrapper: HOMELAB_NET_BACKEND={backend!r} not in auto/slirp/passt")
     dns = os.environ.get("QEMU_NET_WRAPPER_DNS", "").strip() or None
     isolate_host = _isolate_host()
+    if backend == "slirp":
+        _log("backing build-VM NIC with slirp (passthrough): HOMELAB_NET_BACKEND=slirp")
+        os.execv(real_qemu, [real_qemu, *args])
     if not _passt_usable(real_qemu):
+        if backend == "passt":
+            sys.exit("qemu-net-wrapper: HOMELAB_NET_BACKEND=passt but passt is unusable here")
         _log("backing build-VM NIC with slirp (passthrough): passt unusable here")
         os.execv(real_qemu, [real_qemu, *args])
 

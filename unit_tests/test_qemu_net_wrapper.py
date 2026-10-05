@@ -123,10 +123,11 @@ class _Exec(Exception):
     """Raised by the fake os.execv so main() stops where it would exec qemu."""
 
 
-def _run_main(monkeypatch, *, usable: bool) -> tuple[list[str], list[list[str]]]:
+def _run_main(monkeypatch, backend: str, *, usable: bool) -> tuple[list[str], list[list[str]]]:
     """Run main() on packer's argv; return the argv it would exec qemu with
     and the passt commands it would launch."""
     started: list[list[str]] = []
+    monkeypatch.setenv("HOMELAB_NET_BACKEND", backend)
     monkeypatch.delenv("QEMU_NET_WRAPPER_LOG", raising=False)
     monkeypatch.setattr(wrapper, "_real_qemu", lambda: "/usr/bin/qemu-system-x86_64")
     monkeypatch.setattr(wrapper, "_passt_usable", lambda _q: usable)
@@ -142,15 +143,30 @@ def _run_main(monkeypatch, *, usable: bool) -> tuple[list[str], list[list[str]]]
     return exc.value.args[0], started
 
 
-def test_main_rewrites_the_netdev_when_passt_is_usable(monkeypatch) -> None:
-    argv, _started = _run_main(monkeypatch, usable=True)
+def test_main_slirp_override_skips_the_probe(monkeypatch) -> None:
+    argv, started = _run_main(monkeypatch, "slirp", usable=True)
+    assert "user,id=user.0,hostfwd=tcp::2222-:22" in argv
+    assert started == []
+
+
+def test_main_auto_rewrites_the_netdev_when_passt_is_usable(monkeypatch) -> None:
+    argv, _started = _run_main(monkeypatch, "auto", usable=True)
     assert any(arg.startswith("stream,id=user.0,") for arg in argv)
+
+
+def test_main_passt_override_fails_when_passt_is_unusable(monkeypatch) -> None:
+    monkeypatch.setenv("HOMELAB_NET_BACKEND", "passt")
+    monkeypatch.setattr(wrapper, "_real_qemu", lambda: "/usr/bin/qemu-system-x86_64")
+    monkeypatch.setattr(wrapper, "_passt_usable", lambda _q: False)
+    monkeypatch.setattr(wrapper.sys, "argv", ["qemu_net_wrapper.py", *PACKER_ARGS])
+    with pytest.raises(SystemExit, match="passt is unusable"):
+        wrapper.main()
 
 
 def test_main_wires_the_lab_environment_into_passt(monkeypatch) -> None:
     monkeypatch.setenv("QEMU_NET_WRAPPER_DNS", "10.123.1.224")
     monkeypatch.setenv("QEMU_NET_WRAPPER_ISOLATE_HOST", "1")
-    _argv, [cmd] = _run_main(monkeypatch, usable=True)
+    _argv, [cmd] = _run_main(monkeypatch, "auto", usable=True)
 
     assert "--no-map-gw" in cmd
     assert cmd[cmd.index("--dns") + 1] == "10.123.1.224"
@@ -159,4 +175,4 @@ def test_main_wires_the_lab_environment_into_passt(monkeypatch) -> None:
 def test_main_rejects_a_malformed_isolate_flag(monkeypatch) -> None:
     monkeypatch.setenv("QEMU_NET_WRAPPER_ISOLATE_HOST", "yes")
     with pytest.raises(SystemExit, match="not in 0/1"):
-        _run_main(monkeypatch, usable=True)
+        _run_main(monkeypatch, "auto", usable=True)
