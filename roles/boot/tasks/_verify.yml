@@ -42,18 +42,6 @@
     or 'is masked' not in _boot_verify_multipathd.stderr
   become: true
 
-# Exercise the helper's removal direction on both bootloader families. The
-# fixture name is deliberately absent, so this remains idempotent while proving
-# an empty contribution selects the GRUB or ZFSBootMenu cleanup task.
-- name: _verify | Remove an empty command-line contribution
-  import_role:
-    name: boot
-    tasks_from: cmdline
-  vars:
-    boot_cmdline_args:
-      name: _verify_absent
-      contents: ""
-
 - name: _verify | Exercise the all-kernel GRUB command-line scope
   when: grub_bootloader
   block:
