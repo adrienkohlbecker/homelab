@@ -1,41 +1,39 @@
 # Authelia reaches redis at redis.dns.podman over the `authelia` network. A
 # throwaway peer container (not `podman exec` into redis itself) exercises that
-# aardvark-dns path. The peer authenticates through REDISCLI_AUTH forwarded with
-# a bare `--env`, so the password never appears as an argv token.
-- name: _verify | Authenticated ping over the authelia network
-  command: >-
-    podman run --rm --network authelia --env REDISCLI_AUTH {{ redis_image }}
-    redis-cli -h redis.dns.podman -e ping
+# aardvark-dns path. A bare `--env REDISCLI_AUTH` forwards the password only
+# when the task sets it, so it never appears as an argv token.
+- name: _verify | Redis over the authelia network
   become: true
-  environment:
-    REDISCLI_AUTH: "{{ redis_password }}"
-  register: redis_ping
-  until: redis_ping.rc == 0 and redis_ping.stdout == 'PONG'
-  retries: 15
-  delay: 2
-  changed_when: false
+  vars:
+    redis_cli: >-
+      podman run --rm --network authelia --env REDISCLI_AUTH {{ redis_image }}
+      redis-cli -h redis.dns.podman
+  block:
+    - name: _verify | Authenticated ping
+      command: "{{ redis_cli }} -e ping"
+      environment:
+        REDISCLI_AUTH: "{{ redis_password }}"
+      register: redis_ping
+      until: redis_ping.rc == 0 and redis_ping.stdout == 'PONG'
+      retries: 15
+      delay: 2
+      changed_when: false
 
-- name: _verify | Unauthenticated connection is refused
-  command: >-
-    podman run --rm --network authelia {{ redis_image }}
-    redis-cli -h redis.dns.podman ping
-  become: true
-  register: redis_noauth
-  changed_when: false
-  failed_when: "'NOAUTH' not in (redis_noauth.stdout + redis_noauth.stderr)"
+    - name: _verify | Unauthenticated connection is refused
+      command: "{{ redis_cli }} ping"
+      register: redis_noauth
+      changed_when: false
+      failed_when: "'NOAUTH' not in (redis_noauth.stdout + redis_noauth.stderr)"
 
-# A dropped rename-command line would silently re-expose CONFIG SET, so prove
-# the hardening is live: an authenticated CONFIG GET must be an unknown command.
-- name: _verify | CONFIG command is renamed out
-  command: >-
-    podman run --rm --network authelia --env REDISCLI_AUTH {{ redis_image }}
-    redis-cli -h redis.dns.podman config get maxmemory
-  become: true
-  environment:
-    REDISCLI_AUTH: "{{ redis_password }}"
-  register: redis_config_disabled
-  changed_when: false
-  failed_when: "'unknown command' not in (redis_config_disabled.stdout + redis_config_disabled.stderr)"
+    # A dropped rename-command line would silently re-expose CONFIG SET, so
+    # prove the hardening is live: an authenticated CONFIG GET is unknown.
+    - name: _verify | CONFIG command is renamed out
+      command: "{{ redis_cli }} config get maxmemory"
+      environment:
+        REDISCLI_AUTH: "{{ redis_password }}"
+      register: redis_config_disabled
+      changed_when: false
+      failed_when: "'unknown command' not in (redis_config_disabled.stdout + redis_config_disabled.stderr)"
 
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
