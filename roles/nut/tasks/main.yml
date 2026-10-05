@@ -40,17 +40,17 @@
   tags:
     - nut
 
-# The fact's own broadcast key is empty on some NICs, including the QEMU fixture.
+# wakeonlan sends to the limited broadcast address, which leaves through the
+# default route's interface; that must be the LAN the peers sit on.
 - name: Validate the wake network
   assert:
     quiet: true
     that:
       - ansible_facts.default_ipv4.interface is defined
       - ansible_facts.default_ipv4.interface is not match('^(wg|podman|virbr|docker|br-|veth)')
-      - nut_broadcast is match('^([0-9]{1,3}[.]){3}[0-9]{1,3}$')
     fail_msg: >-
-      ansible_facts.default_ipv4 must identify a LAN interface and yield a
-      valid broadcast address for the wake_peers arm
+      ansible_facts.default_ipv4 must identify a LAN interface for the
+      wake_peers arm
   tags:
     - nut
 

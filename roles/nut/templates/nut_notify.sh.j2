@@ -54,7 +54,7 @@ onbatt_shutdown)
 wake_peers)
   for round in 1 2 3; do
     if [ "$round" -gt 1 ]; then sleep 30; fi
-    wakeonlan -i {{ nut_broadcast }} {{ nut_wake_peers | join(' ') }} || true
+    wakeonlan {{ nut_wake_peers | join(' ') }} || true
   done
   exit 0
   ;;
