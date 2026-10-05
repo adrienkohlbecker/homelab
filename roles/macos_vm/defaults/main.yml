@@ -29,15 +29,6 @@ macos_vm_mac_address: "{{ '52:54:00' | random_mac(seed=inventory_hostname ~ '/' 
 macos_vm_vnc_listen: "127.0.0.1"
 macos_vm_vnc_keymap: fr                 # QEMU VNC keymap; keeps AZERTY input aligned with macOS
 
-# Recovery defaults seeded through OpenCore NVRAM. `en-US:1` means English UI
-# with Apple's French keyboard layout; `en_FR` means English language with the
-# France region. These affect first boot/recovery defaults, not an installed
-# user's later System Settings choices. Keep verbose boot enabled while this
-# VM is still being installed/debugged so boot stalls show the real stop point.
-macos_vm_opencore_prev_lang_kbd: "en-US:1"
-macos_vm_opencore_apple_locale: "en_FR"
-macos_vm_opencore_boot_args: "keepsyms=1 -v"
-
 # First-install flow. Set to true while the recovery DMG should be attached;
 # flip to false (and re-run the role) after macOS is installed and booting.
 macos_vm_install_mode: true

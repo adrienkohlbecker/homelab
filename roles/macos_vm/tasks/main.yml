@@ -14,8 +14,6 @@
 - name: Install QEMU runtime dependencies
   apt:
     pkg:
-      - fdisk
-      - mtools
       - ovmf
       - qemu-block-extra
       - qemu-system-x86
