@@ -47,12 +47,6 @@
         label: '{{ item.dest }}'
       register: kdump_dracut_files
 
-    - name: dracut | Read installed kernel versions
-      command: linux-version list
-      changed_when: false
-      check_mode: false
-      register: kdump_dracut_kernels
-
 # Rebuild every image when the capture integration changes, before the service
 # reloads them. Kernel upgrades use the same hook through run-parts. Boot image
 # rebuilds leave capture images on their last build; notes/runbooks/kdump.md
@@ -61,14 +55,16 @@
   when:
     - initramfs_use_dracut
     - not ansible_check_mode
-  command:
-    cmd: /etc/kernel/postinst.d/kdump-tools {{ item }}
+    - kdump_dracut_files.changed
+  shell:
+    cmd: |
+      set -euo pipefail
+      for version in $(linux-version list); do
+        /etc/kernel/postinst.d/kdump-tools "$version"
+      done
     chdir: /
+    executable: /bin/bash
   changed_when: true
-  loop: >-
-    {{ (kdump_dracut_kernels.stdout_lines
-        if kdump_apt_tools.changed or kdump_dracut_files.changed
-        else []) | default([]) }}
   register: kdump_dracut_rebuild
   become: true
   tags:
