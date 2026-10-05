@@ -1,8 +1,18 @@
 # homelab
 
-Ansible-driven configuration for my home infrastructure: a handful of bare-metal Ubuntu hosts running ZFS-on-root, podman services behind nginx, WireGuard between sites, and Cloudflare DNS managed via OpenTofu. Everything in this repo is reproducible from a fresh disk: Packer bakes the OS image, Ansible converges per-host configuration, and a Python harness exercises any role end-to-end inside QEMU before it touches a real machine.
+Ansible-driven configuration for my home infrastructure: two bare-metal Ubuntu servers and a cloud VPS running ZFS-on-root, podman services behind nginx, WireGuard between sites, and Cloudflare DNS managed via OpenTofu. Everything in this repo is reproducible from a fresh disk: Packer bakes the OS image, Ansible converges per-host configuration, and a Python harness exercises any role end-to-end inside QEMU before it touches a real machine.
 
 [`AGENTS.md`](AGENTS.md) (also read as `CLAUDE.md`) is the canonical reference for conventions (role layout, helper roles, test variants). This README is the map.
+
+## Hosts
+
+| Host | Kind | Managed by |
+| --- | --- | --- |
+| `lab` | Primary home server (bare metal) | `site.yml` |
+| `pug` | Second home server (bare metal) | `site.yml` |
+| `fox` | Cloud VPS, the only internet-facing host (Headscale control plane) | `site.yml` |
+| `udm` | Home gateway (UniFi) | `site.yml` (appliance services only) |
+| `bunk` | Off-site NAS (Synology), backup target | `bunk.yml` |
 
 ## Repository map
 
