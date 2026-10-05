@@ -63,9 +63,8 @@
 
 # Skip enable+start when systemd_unit just (mock-)wrote either unit file
 # in check-mode — the file isn't actually on disk, so `systemctl enable`
-# would fail with "Could not find the requested service". Mirrors the
-# console role's guard for the same reason. The per-unit facts are set
-# by systemd_unit/install via set_fact `<name>_<type>_result`.
+# would fail with "Could not find the requested service". systemd_unit
+# publishes `<name>_service_result` and `<name>_timer_result`.
 - name: install | Enable and start timer for {{ systemd_timer_args.name }}
   when:
     - >-
