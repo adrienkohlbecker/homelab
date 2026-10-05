@@ -105,9 +105,11 @@
   copy:
     dest: /etc/containers/containers.conf
     content: |
+      {% if ansible_distribution_release == 'noble' %}
       [containers]
       seccomp_profile = "/etc/containers/seccomp-fchmodat2.json"
 
+      {% endif %}
       [network]
       network_backend = "netavark"
       default_rootless_network_cmd = "pasta"
@@ -144,11 +146,14 @@
     - podman
 
 # Noble's stock profile lacks fchmodat2 for tar-based entrypoints. Derive a
-# purely additive profile; see notes/archive/podman_seccomp_fchmodat2.md. A
-# fresh check-mode run only predicts installing the stock profile, so skip
-# until the package has placed it.
+# purely additive profile; see notes/archive/podman_seccomp_fchmodat2.md.
+# Later releases ship it in the stock profile. A fresh check-mode run only
+# predicts installing the stock profile, so skip until the package has placed
+# it.
 - name: install | Read stock seccomp profile
-  when: not (ansible_check_mode and podman_apt.changed)
+  when:
+    - ansible_distribution_release == 'noble'
+    - not (ansible_check_mode and podman_apt.changed)
   slurp:
     src: /usr/share/containers/seccomp.json
   register: podman_seccomp_stock
@@ -157,7 +162,9 @@
     - podman
 
 - name: install | Install augmented seccomp profile
-  when: not (ansible_check_mode and podman_apt.changed)
+  when:
+    - ansible_distribution_release == 'noble'
+    - not (ansible_check_mode and podman_apt.changed)
   template:
     src: seccomp.json.j2
     dest: /etc/containers/seccomp-fchmodat2.json

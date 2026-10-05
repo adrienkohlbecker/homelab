@@ -37,15 +37,11 @@
       - _info.host.networkBackend == 'netavark'
       - _info.store.graphDriverName == 'overlay'
       - _info.store.graphRoot == '/var/lib/containers/storage'
-      # A containers.conf regression dropping the seccomp_profile line would
-      # silently revert to the stock profile and revive the fchmodat2 EPERM.
-      - _info.host.security.seccompProfilePath == '/etc/containers/seccomp-fchmodat2.json'
     fail_msg: >-
       podman info disagrees with the role's containers.conf/storage.conf:
       backend={{ _info.host.networkBackend }},
       driver={{ _info.store.graphDriverName }},
-      graphroot={{ _info.store.graphRoot }},
-      seccomp={{ _info.host.security.seccompProfilePath }}.
+      graphroot={{ _info.store.graphRoot }}.
 
 # On ZFS-root hosts, prove /var/lib/containers is actually backed by the
 # dedicated device. graphRoot above only shows the path, not what it sits on --
@@ -77,8 +73,8 @@
   become: true
   changed_when: false
 
-# The seccomp augmentation is the role's reason for shipping a custom profile:
-# Noble's stock profile denies fchmodat2 to tar-based entrypoints. Call
+# Noble's stock profile denies fchmodat2 to tar-based entrypoints, so the role
+# augments it there; later releases must allow it with the stock profile. Call
 # fchmodat2(AT_FDCWD, "/tmp", 01777, 0) -- syscall 452 on x86_64 and aarch64
 # -- under the default profile and require success.
 - name: _verify | Default seccomp profile allows fchmodat2
