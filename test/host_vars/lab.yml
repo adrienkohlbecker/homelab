@@ -24,9 +24,10 @@ macvlan_blocks:
     vlan: iot
     podman_network: true
 
-# Prod-shaped self-reference exercises source validation, template rendering,
-# receive-root creation, and idempotence. _verify stubs zfs_backup_onsite around
-# the full autosnapshot orchestrator, so it never attempts the SSH pull.
+# Prod-shaped self-reference: external_ips maps lab to the fixture's own
+# address, so the onsite source is the fixture itself. The placeholder key only
+# satisfies converge; zfs_autobackup's _verify authorizes the generated backup
+# key and runs the nightly orchestrator for a real pull into dest_dataset.
 zfs_autobackup_sources:
   - host: lab
     dest_dataset: rpool/zfs_autobackup_receive_test
