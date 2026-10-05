@@ -30,3 +30,41 @@ prefix_rule(
     match = ["mise run ha:sync push"],
     not_match = ["mise run ha:sync pull"],
 )
+
+# Commands that print decrypted secrets into the session transcript.
+prefix_rule(
+    pattern = ["./vault-client.sh"],
+    decision = "forbidden",
+    justification = "Prints a vault password",
+    match = ["./vault-client.sh prod"],
+)
+
+prefix_rule(
+    pattern = ["security", "find-generic-password"],
+    decision = "forbidden",
+    justification = "Prints keychain passwords, including the vault passwords",
+    match = ["security find-generic-password -s homelab-vault-prod -w"],
+    not_match = ["security find-certificate -a"],
+)
+
+prefix_rule(
+    pattern = ["ansible-vault", ["view", "decrypt", "edit"]],
+    decision = "forbidden",
+    justification = "Prints decrypted vault content",
+    match = ["ansible-vault view group_vars/prod.yml"],
+    not_match = ["ansible-vault encrypt_string --encrypt-vault-id test"],
+)
+
+prefix_rule(
+    pattern = ["op", ["read", "item"]],
+    decision = "forbidden",
+    justification = "Prints 1Password secrets",
+    match = ["op read op://Lab/x/password"],
+)
+
+prefix_rule(
+    pattern = ["mise", "run", "wg:show"],
+    decision = "forbidden",
+    justification = "Prints a WireGuard private key",
+    match = ["mise run wg:show phone"],
+)

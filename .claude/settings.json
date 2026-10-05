@@ -9,6 +9,18 @@
       "Bash(mise run tf destroy:*)",
       "Bash(mise run ha:sync push:*)",
       "Bash(mise run ha:sync sync:*)"
+    ],
+    "deny": [
+      "Bash(./vault-client.sh:*)",
+      "Bash(ansible-vault view:*)",
+      "Bash(ansible-vault decrypt:*)",
+      "Bash(ansible-vault edit:*)",
+      "Bash(uv run ansible-vault view:*)",
+      "Bash(uv run ansible-vault decrypt:*)",
+      "Bash(security find-generic-password:*)",
+      "Bash(mise run wg:show:*)",
+      "Bash(op read:*)",
+      "Bash(op item:*)"
     ]
   },
   "hooks": {
