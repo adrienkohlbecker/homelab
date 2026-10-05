@@ -244,7 +244,7 @@
   tags:
     - fluentbit
 
-# Package and systemd changes require a restart; configuration and Lua changes
+# systemd drop-in changes require a restart; configuration and Lua changes
 # support a SIGHUP reload that preserves the in-memory backlog.
 - name: Enable fluent-bit service
   when: fluentbit_package_ready
@@ -253,7 +253,7 @@
     enabled: true
     state: >-
       {{ 'restarted'
-         if fluentbit_apt.changed or fluent_bit_service_d_override_conf_result.changed
+         if fluent_bit_service_d_override_conf_result.changed
          else 'reloaded'
          if fluentbit_conf.changed or fluentbit_assets.changed
             or fluentbit_extension_dir.changed or fluentbit_service_manifest.changed
