@@ -247,8 +247,11 @@
 # Always run install for postinstall hooks and shim repair, even with no missing tools.
 - name: Install mise-managed tools
   # Forward optional GitHub authentication without placing the token in argv.
+  # CI provides only MISE_GITHUB_TOKEN; prefer it, as mise does. The value goes
+  # out as GITHUB_TOKEN, the last name mise reads, because mise stops at the
+  # first variable that is set, even when it is empty.
   environment:
-    GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') | default('', true) }}"
+    GITHUB_TOKEN: "{{ lookup('env', 'MISE_GITHUB_TOKEN') or lookup('env', 'GITHUB_TOKEN') }}"
     MISE_YES: "1"
   tags:
     - user
