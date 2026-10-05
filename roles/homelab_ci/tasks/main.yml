@@ -8,22 +8,36 @@
   tags:
     - homelab_ci
 
-- name: Add operator to homelab_ci group
+# kvm lets the operator's own harness and Packer runs use /dev/kvm; the CI
+# runner account gets the same groups from gitlab_runner.
+- name: Add operator to CI groups
   when: not (ansible_check_mode and homelab_ci_group.changed)
   user:
     name: "{{ ansible_user_id }}"
-    groups: homelab_ci
+    groups:
+      - homelab_ci
+      - kvm
     append: true
   become: true
   tags:
     - homelab_ci
 
+# The harness and Packer boot native-architecture guests with the UEFI pair
+# that data/architectures.yml names. Packer's network wrapper prefers passt,
+# image bundles are zstd tarballs, and the Hetzner upload pipes through mbuffer.
 - name: Install CI host packages
   apt:
     name:
       - acl
+      - mbuffer
+      - passt
+      - qemu-utils
       - xorriso
+      - zstd
+      - "{{ 'qemu-system-x86' if ansible_architecture == 'x86_64' else 'qemu-system-arm' }}"
+      - "{{ 'ovmf' if ansible_architecture == 'x86_64' else 'qemu-efi-aarch64' }}"
     state: present
+    cache_valid_time: 3600
   register: homelab_ci_packages
   become: true
   tags:
