@@ -37,24 +37,20 @@
 
     # The role owns only this origin. Others, such as cloud-init's
     # 50-cloud-init.yaml on fox, stay in place and Netplan merges them in.
-    - name: Inspect the Ansible-managed netplan origin
-      stat:
-        path: /etc/netplan/01-netcfg.yaml
-      register: netplan_managed_config
-      become: true
-
     - name: Read the Ansible-managed netplan origin
-      when: netplan_managed_config.stat.exists
       slurp:
         src: /etc/netplan/01-netcfg.yaml
-      register: netplan_managed_config_content
+      register: netplan_managed_config
+      failed_when: >-
+        netplan_managed_config is failed
+        and not netplan_managed_config.msg.startswith('File not found')
       become: true
 
     - name: Detect changed netplan configuration
       set_fact:
         netplan_config_changed: >-
-          {{ ((netplan_managed_config_content.content | b64decode | from_yaml)
-              if netplan_managed_config.stat.exists else {})
+          {{ ((netplan_managed_config.content | b64decode | from_yaml)
+              if netplan_managed_config.content is defined else {})
              != {'network': {'version': 2} | combine(netplan)} }}
       changed_when: netplan_config_changed
 
@@ -70,4 +66,4 @@
       become: true
       vars:
         netplan_apply_config: "{{ netplan }}"
-        netplan_remove_origins: "{{ ['01-netcfg'] if netplan_managed_config.stat.exists else [] }}"
+        netplan_remove_origins: "{{ ['01-netcfg'] if netplan_managed_config.content is defined else [] }}"
