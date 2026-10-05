@@ -50,7 +50,6 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 ## Workflows — use the skill, don't reinvent
 
 - `/triage <service>` — investigate a service end-to-end (resolve host(s), gather state, summarize).
-- `/new_podman_role` — scaffold a new podman service role per *Podman Service Conventions*.
 
 Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks/`). Codex discovers `.agents/skills/` natively; Claude Code reads it through the `.claude/skills` symlink. Hooks are wired per-agent — `.claude/settings.json` (via `$CLAUDE_PROJECT_DIR`) and `.codex/hooks.json` (via `git rev-parse --show-toplevel`; codex trust-hashes each entry, so re-trust with `/hooks` after editing). Homelab-specific skills should reference `AGENTS.md` (a symlink to CLAUDE.md), not CLAUDE.md, so wording stays agent-neutral.
 
@@ -183,7 +182,7 @@ skipped import cannot uphold the result-variable contract for its callers.
 
 ## Podman Service Conventions
 
-Long-form rationale in [notes/podman_conventions.md](notes/podman_conventions.md). For new roles use `/new_podman_role`. **Use canonical upstream image names** in service templates (`docker.io/sonatype/nexus3:3.91.1`, not `nexus.lab.fahm.fr/docker.io/…`); mirror redirection belongs in `registries.conf` + the `--upstream-mirrors` test flag.
+Long-form rationale in [notes/podman_conventions.md](notes/podman_conventions.md). A new service role mirrors a recent sibling and wires `service_ports:`, its `site.yml` play, an `nginx_site` vhost, and a homepage bookmark. **Use canonical upstream image names** in service templates (`docker.io/sonatype/nexus3:3.91.1`, not `nexus.lab.fahm.fr/docker.io/…`); mirror redirection belongs in `registries.conf` + the `--upstream-mirrors` test flag.
 
 ### Healthchecks
 
