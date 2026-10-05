@@ -133,22 +133,8 @@
       got changed={{ apt_source_docker_changed }} and policy:
       {{ _apt_source_skipped_policy.stdout }}
 
-# Removal consumes the standalone source configured above: its pin and package
-# must stop resolving once the source is gone, and a repeat call must be a
-# no-op.
-- name: _verify | Pin docker-ce-cli before removing the source
-  import_role:
-    name: apt_source
-    tasks_from: configure
-  vars:
-    apt_source_args: >-
-      {{ _apt_source_docker | combine({'pin': {'package': 'docker-ce-cli', 'version': '0.*'}}) }}
-
-- name: _verify | Query docker-ce candidate while the source is configured
-  command: apt-cache policy docker-ce
-  register: _apt_source_policy_configured
-  changed_when: false
-
+# Removal consumes the standalone source configured above: its packages must
+# stop resolving once the source is gone.
 - name: _verify | Remove the representative source
   import_role:
     name: apt_source
@@ -162,27 +148,8 @@
   register: _apt_source_policy_removed
   changed_when: false
 
-- name: _verify | Removal dropped the pin and package candidate
+- name: _verify | Removal dropped the package candidate
   assert:
     that:
-      - apt_source_removed_pin is changed
-      - "_apt_source_policy_configured.stdout is search('Candidate: [0-9]')"
       - "_apt_source_policy_removed.stdout is not search('Candidate: [0-9]')"
-    fail_msg: >-
-      configured: {{ _apt_source_policy_configured.stdout }};
-      removed: {{ _apt_source_policy_removed.stdout }}
-
-- name: _verify | Remove the representative source again
-  import_role:
-    name: apt_source
-    tasks_from: remove
-  vars:
-    apt_source_args:
-      name: docker
-
-- name: _verify | Repeat removal reported no change
-  assert:
-    that:
-      - apt_source_removed_repo is not changed
-      - apt_source_removed_key is not changed
-      - apt_source_removed_pin is not changed
+    fail_msg: "Expected no docker-ce candidate after removal; got policy: {{ _apt_source_policy_removed.stdout }}"

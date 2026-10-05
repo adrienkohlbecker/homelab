@@ -28,7 +28,6 @@
     path: /etc/apt/preferences.d/{{ apt_source_args.name }}
     state: absent
   become: true
-  register: apt_source_removed_pin
 
 # state=absent resolves the same slugged .sources filename configure.yml wrote.
 # It also removes /etc/apt/keyrings/<slug>.{asc,gpg}, not the
@@ -39,11 +38,9 @@
     name: "{{ apt_source_args.name }}"
     state: absent
   become: true
-  register: apt_source_removed_repo
 
 - name: remove | Remove repository key for {{ apt_source_args.name }}
   file:
     path: /usr/share/keyrings/{{ apt_source_args.name }}.asc
     state: absent
   become: true
-  register: apt_source_removed_key
