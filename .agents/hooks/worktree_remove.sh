@@ -12,6 +12,9 @@
 # strand it.
 set -euo pipefail
 
+# shellcheck source=mise-tasks/worktree/lib.sh
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../../mise-tasks/worktree/lib.sh"
+
 input=$(cat)
 new=$(jq -r '.new_branch // empty' <<<"$input")
 base=$(jq -r '.base_branch // empty' <<<"$input")
@@ -24,9 +27,9 @@ wt=$(jq -r '.worktree_path // empty' <<<"$input")
 # already gone or not a git worktree.
 wt=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || exit 0
 
-# Resolve the main worktree from the worktree itself (first `worktree list`
-# entry is always the real repo), so an arbitrary worktree location is fine.
-main=$(git -C "$wt" worktree list --porcelain | awk '/^worktree / {print substr($0, 10); exit}')
+# Resolve the main worktree from the worktree itself, so an arbitrary worktree
+# location is fine.
+main=$(main_worktree "$wt")
 [ -n "$main" ] || exit 0
 [ "$wt" != "$main" ] || {
   echo "WorktreeRemove hook: $wt is the main worktree -- skipping" >&2
