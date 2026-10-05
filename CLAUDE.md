@@ -120,7 +120,7 @@ Repo-local skills and hook scripts live once under `.agents/` (`skills/`, `hooks
 
 ### Service ports
 
-Ports live in `group_vars/all/main.yml` under `service_ports:` — single source of truth. **Scope: only operator-reachable ports** (host-published `--publish` or loopback binds). Container-to-container traffic over podman networks stays as inline literals. **When allocating a new port, grep both `service_ports:` and `127.0.0.1:` literals in `roles/*/templates/*.j2`** — un-migrated roles still hard-code their port.
+Ports live in `group_vars/all/main.yml` under `service_ports:` — single source of truth. **Scope: only operator-reachable ports** (host-published `--publish` or loopback binds). Container-to-container traffic over podman networks stays as inline literals. When allocating a new port, check `service_ports:` for collisions.
 
 ### ZFS site mountpoints
 
