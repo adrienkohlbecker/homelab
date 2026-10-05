@@ -69,12 +69,20 @@ def _hook(tmp_path: Path, **bodies: str | None) -> Hook:
     return Hook(hook, bin_dir, target)
 
 
-def test_capture_image_installation(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "env",
+    [
+        pytest.param({}, id="direct"),
+        pytest.param({"DEB_MAINT_PARAMS": "'configure' ''"}, id="configure_action"),
+    ],
+)
+def test_capture_image_installation(tmp_path: Path, env: dict[str, str]) -> None:
     hook = _hook(tmp_path)
 
-    result = hook.run()
+    result = hook.run(**env)
 
     assert result.returncode == 0, result.stderr
+    assert hook.dracut_ran
     assert hook.target.read_text() == "new image"
     assert not Path(f"{hook.target}.new").exists()
 
@@ -107,13 +115,3 @@ def test_hook_skips_without_building(tmp_path: Path, bodies: dict[str, str | Non
     assert result.returncode == 0, result.stderr
     assert not hook.dracut_ran
     assert hook.target.read_text() == "old image"
-
-
-def test_configure_action_builds(tmp_path: Path) -> None:
-    hook = _hook(tmp_path)
-
-    result = hook.run(DEB_MAINT_PARAMS="'configure' ''")
-
-    assert result.returncode == 0, result.stderr
-    assert hook.dracut_ran
-    assert hook.target.read_text() == "new image"
