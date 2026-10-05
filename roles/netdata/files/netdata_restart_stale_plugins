@@ -7,8 +7,6 @@
 # apps.plugin then silently lose data).
 #
 # Runs from apt's DPkg::Post-Invoke, after every package is configured.
-# invoke-rc.d honours policy-rc.d, so an install that holds service starts
-# (the netdata role's own apt task) leaves the restart to its caller.
 set -euo pipefail
 
 systemctl is-active --quiet netdata.service || exit 0

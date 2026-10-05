@@ -20,9 +20,8 @@
   tags:
     - netdata
 
-# An upgrade restarts the daemon before the plugin packages reapply their file
-# capabilities, leaving the respawned plugins without them. The apt hook
-# restarts netdata once dpkg finishes; see the script for the race.
+# The apt hook below restarts netdata after package runs that strip plugin
+# file capabilities; see the script for the race.
 - name: install | Install the stale-plugin restart script
   copy:
     src: netdata_restart_stale_plugins
