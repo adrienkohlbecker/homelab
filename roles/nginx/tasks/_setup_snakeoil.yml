@@ -40,9 +40,6 @@
       dest: privkey.pem
       mode: "0640"
     - src: /etc/ssl/certs/ssl-cert-snakeoil.pem
-      dest: chain.pem
-      mode: "0644"
-    - src: /etc/ssl/certs/ssl-cert-snakeoil.pem
       dest: fullchain.pem
       mode: "0644"
   loop_control:
