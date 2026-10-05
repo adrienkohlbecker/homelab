@@ -2,6 +2,15 @@
 # upsd, and monitors the co-located server with upsmon. Keeping the complete NUT
 # chain in one role preserves the staged shutdown ladder without a cross-role
 # ordering contract.
+#
+# Upsmon completes the staged shutdown ladder: the windows box (unmanaged,
+# WinNUT) drops first on a short on-battery timer, then each host after its
+# own on-battery time (upssched's onbatt_shutdown timer: lab 180s, pug 300s),
+# with the per-host charge/runtime thresholds (lab 20%/300s, pug 5%/180s) as
+# the backstop. Power cuts and restarts are card-native
+# (per-group load shedding below each trigger, forced reboot on AC return;
+# notes/ups_shutdown_ladder.md); the wake_peers hooks cover the hosts an
+# outage strands shut-down-but-still-powered.
 
 - name: Assert required NUT secrets are set
   assert:
@@ -31,12 +40,204 @@
   tags:
     - nut
 
-- name: Configure the NUT server
-  import_tasks: server.yml
+# The fact's own broadcast key is empty on some NICs, including the QEMU fixture.
+- name: Validate the wake network
+  assert:
+    quiet: true
+    that:
+      - ansible_facts.default_ipv4.interface is defined
+      - ansible_facts.default_ipv4.interface is not match('^(wg|podman|virbr|docker|br-|veth)')
+      - nut_broadcast is match('^([0-9]{1,3}[.]){3}[0-9]{1,3}$')
+    fail_msg: >-
+      ansible_facts.default_ipv4 must identify a LAN interface and yield a
+      valid broadcast address for the wake_peers arm
   tags:
     - nut
 
-- name: Configure the NUT monitor
-  import_tasks: monitor.yml
+- name: Configure nut_notify
+  template:
+    src: nut_notify.sh.j2
+    dest: /usr/local/bin/nut_notify
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - nut
+
+- name: Manage the boot-time peer wake unit
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: nut_wake_peers.service
+      start: false
+  tags:
+    - nut
+
+# A fresh check-mode install only predicts /etc/nut, the nut group and the
+# units. NUT ships no offline checker for these whitespace-directive files: the
+# daemons only parse them at startup, so _verify starts the driver, upsd and
+# upsmon against them instead of a validate command.
+- name: Configure and start the NUT chain
+  when: not (ansible_check_mode and nut_apt.changed)
+  become: true
+  tags:
+    - nut
+  block:
+    - name: Configure nut nut.conf  # noqa: require-validate
+      copy:
+        src: nut.conf
+        dest: /etc/nut/nut.conf
+        backup: true
+        owner: root
+        group: nut
+        mode: "0640"
+      register: nut_mode_conf
+
+    - name: Configure nut ups.conf  # noqa: require-validate
+      template:
+        src: ups.conf.j2
+        dest: /etc/nut/ups.conf
+        owner: root
+        group: nut
+        mode: "0640"
+        backup: true
+      register: nut_ups_conf
+
+    - name: Configure the dummy UPS data for qemu  # noqa: require-validate
+      when: qemu_test | bool
+      copy:
+        dest: /etc/nut/eaton.dev
+        owner: root
+        group: nut
+        mode: "0640"
+        backup: true
+        content: |
+          ups.status: OL
+          battery.charge: 42.00
+          battery.runtime: 900.00
+          ups.mfr: dummy
+          ups.model: evolution500
+
+    - name: Configure nut upsd.conf  # noqa: require-validate
+      template:
+        src: upsd.conf.j2
+        dest: /etc/nut/upsd.conf
+        backup: true
+        owner: root
+        group: nut
+        mode: "0640"
+      register: nut_upsd_conf
+
+    - name: Configure nut upsd.users  # noqa: require-validate
+      template:
+        src: upsd.users.j2
+        dest: /etc/nut/upsd.users
+        owner: root
+        group: nut
+        mode: "0640"
+        backup: true
+      register: nut_upsd_users
+
+    - name: Configure nut hosts.conf  # noqa: require-validate
+      copy:
+        src: hosts.conf
+        dest: /etc/nut/hosts.conf
+        backup: true
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Configure nut upsmon.conf  # noqa: require-validate
+      template:
+        src: upsmon.conf.j2
+        dest: /etc/nut/upsmon.conf
+        backup: true
+        owner: root
+        group: nut
+        mode: "0640"
+      diff: false
+      register: nut_upsmon_conf
+
+    - name: Configure nut upssched.conf  # noqa: require-validate
+      template:
+        src: upssched.conf.j2
+        dest: /etc/nut/upssched.conf
+        backup: true
+        owner: root
+        group: nut
+        mode: "0640"
+      register: nut_upssched_conf
+
+    # Start order follows the data path: driver -> upsd -> upsmon.
+    - name: Enable nut-driver service
+      systemd:
+        name: nut-driver@eaton.service
+        enabled: true
+        state: "{{ 'restarted' if nut_mode_conf.changed or nut_ups_conf.changed else 'started' }}"
+
+    - name: Enable nut-server service
+      systemd:
+        name: nut-server.service
+        enabled: true
+        state: >-
+          {{ 'restarted'
+             if nut_mode_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed
+             else 'started' }}
+
+    # state is omitted under qemu_test -- the fixture has no real UPS to reach, so
+    # the unit is only enabled (it still starts at the _site_test reboot and idles
+    # on NOCOMM retries, which upsmon tolerates indefinitely).
+    #
+    # restart (not `upsmon -c reload`) is deliberate: reload cannot change
+    # SHUTDOWNCMD or POWERDOWNFLAG -- the privileged (root) half keeps its
+    # startup copy (upsmon split-process model). The cost is that a config converge
+    # mid-outage drops any in-flight upssched debounce timer; acceptable for a rare
+    # event.
+    # nut_notify is never a trigger -- upssched exec's it fresh per event, so a
+    # script-only change needs nothing.
+    - name: Enable NUT monitor service
+      systemd:
+        # nut-client.service is a symlink to nut-monitor.service (the upsmon unit).
+        name: nut-client.service
+        enabled: true
+        state: >-
+          {{ ('restarted' if nut_upsmon_conf.changed or nut_upssched_conf.changed else 'started')
+             if not qemu_test else omit }}
+
+    - name: Enable fcgiwrap socket
+      systemd:
+        name: fcgiwrap.socket
+        enabled: true
+        state: started
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nut
+      auth: true
+      server_conf: |
+        location = / {
+          return 301 /upsstats.cgi;
+        }
+      location_conf: |
+        gzip off;
+
+        # Admit only the read-only status and image programs. auth_request is
+        # inherited from the enclosing `location /`, so both stay
+        # Authelia-gated while the state-changing upsset.cgi remains absent.
+        location ~ ^/(upsstats|upsimage)\.cgi$ {
+          include /etc/nginx/fastcgi_params;
+
+          fastcgi_pass  unix:/var/run/fcgiwrap.socket;
+          fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
+        }
   tags:
     - nut
