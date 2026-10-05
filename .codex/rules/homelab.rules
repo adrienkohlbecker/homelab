@@ -1,0 +1,32 @@
+# Commands whose effect lands on prod or an external service need operator
+# approval every time (AGENTS.md hard rule). A --check run prompts too: prefix
+# rules cannot tell it apart.
+prefix_rule(
+    pattern = ["mise", "run", ["ansible", "ansible:bunk"]],
+    decision = "prompt",
+    justification = "Converges prod hosts",
+    match = ["mise run ansible --limit lab --tags nginx", "mise run ansible:bunk"],
+)
+
+prefix_rule(
+    pattern = ["ansible-playbook"],
+    decision = "prompt",
+    justification = "Converges hosts outside the mise wrapper",
+    match = ["ansible-playbook site.yml --limit lab"],
+)
+
+prefix_rule(
+    pattern = ["mise", "run", "tf", ["apply", "destroy"]],
+    decision = "prompt",
+    justification = "Changes DNS and cloud resources",
+    match = ["mise run tf apply"],
+    not_match = ["mise run tf plan"],
+)
+
+prefix_rule(
+    pattern = ["mise", "run", "ha:sync", ["push", "sync"]],
+    decision = "prompt",
+    justification = "Deploys Home Assistant config to lab",
+    match = ["mise run ha:sync push"],
+    not_match = ["mise run ha:sync pull"],
+)

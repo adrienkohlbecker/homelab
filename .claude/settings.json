@@ -1,4 +1,16 @@
 {
+  "permissions": {
+    "ask": [
+      "Bash(mise run ansible:*)",
+      "Bash(mise run ansible:bunk:*)",
+      "Bash(ansible-playbook:*)",
+      "Bash(uv run ansible-playbook:*)",
+      "Bash(mise run tf apply:*)",
+      "Bash(mise run tf destroy:*)",
+      "Bash(mise run ha:sync push:*)",
+      "Bash(mise run ha:sync sync:*)"
+    ]
+  },
   "hooks": {
     "WorktreeCreate": [
       {
