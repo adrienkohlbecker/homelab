@@ -8,12 +8,6 @@
     name: podman
     tasks_from: install
 
-# The real redis role, so Authelia's session store matches prod.
-- name: _setup | Install redis
-  import_role:
-    name: redis
-    tasks_from: main
-
 - name: _setup | Install nginx
   import_role:
     name: nginx
@@ -32,3 +26,9 @@
     executable: /bin/bash
     creates: /mnt/services
   become: true
+
+# The real redis role, so Authelia's session store matches prod.
+- name: _setup | Install redis
+  import_role:
+    name: redis
+    tasks_from: main
