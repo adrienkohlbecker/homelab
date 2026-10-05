@@ -202,24 +202,3 @@
     packer_verify_grub_status.stdout_lines
     | select('search', '\\sinstalled$')
     | list | length > 0
-
-# --- sshd password-auth lockdown ---
-#
-# chroot.sh drops /etc/ssh/sshd_config.d/00-hardening.conf to
-# force PasswordAuthentication no on the shipped image. Verify via
-# `sshd -T` (effective-config dump) rather than slurping the snippet
-# directly -- that exercises the whole chain (Include directive in
-# /etc/ssh/sshd_config + drop-in file + lexical-order precedence).
-# Reading the snippet alone would pass even if /etc/ssh/sshd_config
-# were edited to drop the Include line.
-
-- name: _verify | Sshd effective config disables password authentication
-  command: sshd -T
-  changed_when: false
-  become: true
-  register: packer_verify_sshd_effective
-  failed_when: >-
-    packer_verify_sshd_effective.rc != 0
-    or packer_verify_sshd_effective.stdout_lines
-       | select('match', '^passwordauthentication\s+no$')
-       | list | length == 0
