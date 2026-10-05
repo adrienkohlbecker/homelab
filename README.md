@@ -49,7 +49,7 @@ Run `mise tasks` for the complete task catalog.
 
 ## Secrets
 
-Ansible uses two vault ids: `prod` is workstation-only, while `test` is also available to CI. `vault-client.sh` resolves their passwords; see [Vault ids](AGENTS.md#vault-ids-prod-vs-test) for storage and lookup details. Other external credentials remain `op://` references in `mise.toml`, and WireGuard client configs are rendered on demand with `mise run wg:show`.
+Ansible uses two vault ids: `prod` is workstation-only, while `test` is also available to CI. [`vault-client.sh`](vault-client.sh) resolves their passwords from an environment variable (CI), the macOS keychain, or a Linux pass file; [Vault ids](AGENTS.md#vault-ids-prod-vs-test) covers what each id may encrypt. Other external credentials remain `op://` references in `mise.toml`, and WireGuard client configs are rendered on demand with `mise run wg:show`.
 
 ## License
 
