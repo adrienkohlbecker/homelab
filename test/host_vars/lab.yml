@@ -4,6 +4,9 @@
 
 fox_only_roles_enabled: true
 
+# Mirror lab and pug, which publish the LAN device admin UIs.
+nginx_static_proxies_enabled: true
+
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two
 # podman macvlan networks coexisting on one parent NIC. Prod-shape uses

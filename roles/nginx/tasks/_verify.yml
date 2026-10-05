@@ -135,6 +135,14 @@
   retries: 10
   delay: 1
 
+# The static LAN-device proxies converge on lab-shaped hosts; an enabled,
+# gated vhost redirects without ever reaching the unreachable device.
+- name: _verify | Static device proxies are enabled behind Authelia
+  import_tasks: verify_authelia_gate.yml
+  vars:
+    nginx_verify_authelia_gate_args:
+      subdomain: marantz
+
 # ssl_ecdh_curve only admits groups; with ssl_prefer_server_ciphers off, the
 # client's preference picks among them. The hybrid alone fills the server's
 # first group tuple, so a client that supports it but key-shares only X25519
