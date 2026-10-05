@@ -45,7 +45,6 @@ initramfs_packages: >-
 initramfs_rebuild_command: >-
   {{ 'dracut --force --regenerate-all' if initramfs_use_dracut
      else 'update-initramfs -u -k all' }}
-initramfs_list_command: "{{ 'lsinitrd' if initramfs_use_dracut else 'lsinitramfs' }}"
 zfs_dozer_filesystem: rpool
 zfs_tank_filesystem: rpool
 zfs_trim_pools:

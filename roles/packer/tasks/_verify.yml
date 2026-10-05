@@ -170,7 +170,7 @@
     # No grep -q: its early exit would SIGPIPE the lister under pipefail.
     cmd: >-
       set -euo pipefail;
-      {{ initramfs_list_command }} /boot/initrd.img-{{ ansible_kernel }}
+      {{ 'lsinitrd' if initramfs_use_dracut else 'lsinitramfs' }} /boot/initrd.img-{{ ansible_kernel }}
       | grep -E '/(megaraid_sas|mpt3sas)\.ko' >/dev/null
     executable: /bin/bash
   changed_when: false
