@@ -8,43 +8,27 @@
   until: _fluentbit_uptime.status == 200
   become: true
 
-# Exercise the reversible helper with installed artifacts. Removal validates
-# and reloads the rebuilt live configuration.
-- name: _verify | Seed retired service extensions
+# The daemon started without this fragment, so the journald record below only
+# carries its field if the reload that restores the managed config re-expands
+# the services/*.yaml include glob.
+- name: _verify | Seed a service extension behind the running daemon
   copy:
-    dest: "/etc/fluent-bit/services/{{ item }}.yaml"
+    dest: /etc/fluent-bit/services/fluentbit_verify_glob.yaml
     content: |
       pipeline:
         filters:
           - name: modify
-            match: "{{ item }}.*"
-            add:
-              - "{{ item }} true"
+            match: svc.fluentbit_verify_journald.service
+            add: verify_glob reloaded
     owner: root
     group: root
     mode: "0644"
-  loop:
-    - condition_coverage_fixture
-    - condition_coverage_remaining
   become: true
 
-- name: _verify | Remove the retired service extension
-  import_role:
-    name: fluentbit
-    tasks_from: extension_remove
-  vars:
-    fluentbit_extension_remove_args:
-      names:
-        - condition_coverage_fixture
-
-- name: _verify | Remove the remaining retired service extension
-  import_role:
-    name: fluentbit
-    tasks_from: extension_remove
-  vars:
-    fluentbit_extension_remove_args:
-      names:
-        - condition_coverage_remaining
+- name: _verify | Read the hot reload count before the reload
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v2/reload"
+  register: _fluentbit_reload_before
 
 - name: _verify | Disturb the managed config before exercising reload
   lineinfile:
@@ -56,104 +40,18 @@
 - name: _verify | Restore the managed config through the production tasks
   import_tasks: configure.yml
 
-# The shared core filters run against the deployed parsers/filters-pre/
-# filters-post files themselves, so this fixture cannot drift from what the
-# daemon actually executes.
-- name: _verify | Exercise shared core filters
-  import_role:
-    name: fluentbit
-    tasks_from: verify_extension
-  vars:
-    fluentbit_verify_args:
-      name: shared_filters
-      includes:
-        - /etc/fluent-bit/parsers.yaml
-        - /etc/fluent-bit/filters-pre.yaml
-        - /etc/fluent-bit/filters-post.yaml
-      records:
-        - _tag: svc.init.scope
-          MESSAGE: Starting homepage_alerts.service - Generate homepage alerts panel static files...
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          marker: homepage-start-drop
-        - _tag: svc.init.scope
-          MESSAGE: Finished homepage_alerts.service - Generate homepage alerts panel static files.
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          marker: homepage-finish-drop
-        - _tag: svc.init.scope
-          MESSAGE: "homepage_alerts.service: Deactivated successfully."
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          marker: homepage-deactivated-drop
-        - _tag: svc.init.scope
-          MESSAGE: "homepage_alerts.service: Failed with result exit-code."
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          PRIORITY: "3"
-          marker: homepage-failed-keep
-        - _tag: svc.podman.service
-          MESSAGE: verbose podman event
-          SYSLOG_IDENTIFIER: podman
-          SYSTEMD_UNIT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-startup.service
-          PODMAN_EVENT: health_status
-          PODMAN_TYPE: container
-          PODMAN_NAME: fixture
-          PODMAN_ID: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-          PODMAN_HEALTH_STATUS: starting
-          marker: podman-starting-drop
-        - _tag: svc.podman.service
-          MESSAGE: verbose podman event
-          SYSLOG_IDENTIFIER: podman
-          SYSTEMD_UNIT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.service
-          PODMAN_EVENT: health_status
-          PODMAN_TYPE: container
-          PODMAN_NAME: fixture
-          PODMAN_ID: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-          PODMAN_HEALTH_STATUS: unhealthy
-          marker: podman-unhealthy-keep
-        - _tag: svc.init.scope
-          MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Failed to open /run/systemd/transient/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: No such file or directory"
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
-          ERRNO: "2"
-          marker: healthcheck-enoent-keep
-        - _tag: svc.init.scope
-          MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Main process exited, code=exited, status=1/FAILURE"
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
-          PRIORITY: "3"
-          marker: healthcheck-failed-keep
-        - _tag: certbot.file
-          log: "2099-07-12 12:00:00,123:ERROR:certbot._internal.main:certbot-valid"
-        - _tag: certbot.file
-          log: certbot-unparsed
-      expected:
-        - level: error
-          fields.marker: homepage-failed-keep
-        - fields.marker: podman-unhealthy-keep
-          fields.health_status: unhealthy
-        - fields.marker: healthcheck-enoent-keep
-        - level: error
-          fields.marker: healthcheck-failed-keep
-        - service: certbot
-          unit: certbot.service
-          identifier: certbot
-          stream: certbot_file
-          level: error
-          message: certbot-valid
-          fields.source: certbot._internal.main
-          _absent:
-            - parse_error
-            - fields.parser_status
-        - service: certbot
-          level: warn
-          message: certbot-unparsed
-          parse_error: certbot_file
-
-- name: _verify | Shared core noise was omitted
-  assert:
-    that: "'-drop' not in fluentbit_verify_result.stdout"
+# SIGHUP returns before the reload finishes, and the HTTP server restarts
+# with the pipeline, so poll until the new context reports itself.
+- name: _verify | Wait for the hot reload to complete
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v2/reload"
+  register: _fluentbit_reload_after
+  failed_when: >-
+    (_fluentbit_reload_after.json.hot_reload_count | default(-1) | int)
+    <= (_fluentbit_reload_before.json.hot_reload_count | int)
+  retries: 15
+  delay: 2
+  until: _fluentbit_reload_after is not failed
 
 - name: _verify | Build per-run markers
   set_fact:
@@ -437,6 +335,7 @@
       - "row.identifier == 'fluentbit_verify_journald'"
       - "row.host == inventory_hostname"
       - "row.stream == 'journald'"
+      - "row.fields.verify_glob == 'reloaded'"
       - "'SYSTEMD_UNIT' not in row.fields"
       - "'SYSLOG_IDENTIFIER' not in row.fields"
       # The lua filters must use the classic 3-arg signature so Fluent Bit does
@@ -595,6 +494,114 @@
       - "row.fields.UNIT == fluentbit_lnav_healthcheck_unit"
       - "fluentbit_lnav_healthcheck_unit in row.message"
     fail_msg: "podman_healthcheck rewrite did not fire: {{ row }}"
+
+- name: _verify | Remove the seeded service extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension_remove
+  vars:
+    fluentbit_extension_remove_args:
+      names:
+        - fluentbit_verify_glob
+
+# The shared core filters run against the deployed parsers/filters-pre/
+# filters-post files themselves, so this fixture cannot drift from what the
+# daemon actually executes.
+- name: _verify | Exercise shared core filters
+  import_role:
+    name: fluentbit
+    tasks_from: verify_extension
+  vars:
+    fluentbit_verify_args:
+      name: shared_filters
+      includes:
+        - /etc/fluent-bit/parsers.yaml
+        - /etc/fluent-bit/filters-pre.yaml
+        - /etc/fluent-bit/filters-post.yaml
+      records:
+        - _tag: svc.init.scope
+          MESSAGE: Starting homepage_alerts.service - Generate homepage alerts panel static files...
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
+          marker: homepage-start-drop
+        - _tag: svc.init.scope
+          MESSAGE: Finished homepage_alerts.service - Generate homepage alerts panel static files.
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
+          marker: homepage-finish-drop
+        - _tag: svc.init.scope
+          MESSAGE: "homepage_alerts.service: Deactivated successfully."
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
+          marker: homepage-deactivated-drop
+        - _tag: svc.init.scope
+          MESSAGE: "homepage_alerts.service: Failed with result exit-code."
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: homepage_alerts.service
+          PRIORITY: "3"
+          marker: homepage-failed-keep
+        - _tag: svc.podman.service
+          MESSAGE: verbose podman event
+          SYSLOG_IDENTIFIER: podman
+          SYSTEMD_UNIT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-startup.service
+          PODMAN_EVENT: health_status
+          PODMAN_TYPE: container
+          PODMAN_NAME: fixture
+          PODMAN_ID: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          PODMAN_HEALTH_STATUS: starting
+          marker: podman-starting-drop
+        - _tag: svc.podman.service
+          MESSAGE: verbose podman event
+          SYSLOG_IDENTIFIER: podman
+          SYSTEMD_UNIT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.service
+          PODMAN_EVENT: health_status
+          PODMAN_TYPE: container
+          PODMAN_NAME: fixture
+          PODMAN_ID: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          PODMAN_HEALTH_STATUS: unhealthy
+          marker: podman-unhealthy-keep
+        - _tag: svc.init.scope
+          MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Failed to open /run/systemd/transient/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: No such file or directory"
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
+          ERRNO: "2"
+          marker: healthcheck-enoent-keep
+        - _tag: svc.init.scope
+          MESSAGE: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service: Main process exited, code=exited, status=1/FAILURE"
+          SYSLOG_IDENTIFIER: systemd
+          UNIT: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.service
+          PRIORITY: "3"
+          marker: healthcheck-failed-keep
+        - _tag: certbot.file
+          log: "2099-07-12 12:00:00,123:ERROR:certbot._internal.main:certbot-valid"
+        - _tag: certbot.file
+          log: certbot-unparsed
+      expected:
+        - level: error
+          fields.marker: homepage-failed-keep
+        - fields.marker: podman-unhealthy-keep
+          fields.health_status: unhealthy
+        - fields.marker: healthcheck-enoent-keep
+        - level: error
+          fields.marker: healthcheck-failed-keep
+        - service: certbot
+          unit: certbot.service
+          identifier: certbot
+          stream: certbot_file
+          level: error
+          message: certbot-valid
+          fields.source: certbot._internal.main
+          _absent:
+            - parse_error
+            - fields.parser_status
+        - service: certbot
+          level: warn
+          message: certbot-unparsed
+          parse_error: certbot_file
+
+- name: _verify | Shared core noise was omitted
+  assert:
+    that: "'-drop' not in fluentbit_verify_result.stdout"
 
 - name: _verify | Fluent Bit journal has no Lua warnings
   command:

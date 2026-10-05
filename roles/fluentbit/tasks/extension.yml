@@ -26,17 +26,12 @@
   register: fluentbit_extension_config
   become: true
 
-- name: Rebuild fluent-bit service extension manifest
-  import_tasks: extension_manifest.yml
-
 - name: Validate fluent-bit service extension
   command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.yaml --dry-run
   changed_when: false
   when:
     - not ansible_check_mode
-    - >-
-      fluentbit_extension_config.changed or
-      fluentbit_extension_manifest.changed
+    - fluentbit_extension_config.changed
   become: true
 
 - name: Reload fluent-bit for service extension
@@ -44,8 +39,5 @@
   systemd:
     name: fluent-bit.service
     enabled: true
-    state: >-
-      {{ 'reloaded'
-         if fluentbit_extension_config.changed or fluentbit_extension_manifest.changed
-         else 'started' }}
+    state: "{{ 'reloaded' if fluentbit_extension_config.changed else 'started' }}"
   become: true

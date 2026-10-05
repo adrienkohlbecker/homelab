@@ -1,4 +1,5 @@
-# Remove retired service extensions and rebuild the include manifest once.
+# Remove retired service extensions; the services/*.yaml include glob drops
+# them on the next reload.
 #
 # Inputs: caller passes `fluentbit_extension_remove_args.names`, a non-empty
 # list of extension identifiers previously installed by extension.yml.
@@ -6,16 +7,11 @@
   assert:
     quiet: true
     that:
-      - fluentbit_extension_remove_args is defined
-      - fluentbit_extension_remove_args is mapping
       - fluentbit_extension_remove_args.keys() | list | difference(['names']) | length == 0
       - fluentbit_extension_remove_args.names is sequence
       - fluentbit_extension_remove_args.names is not string
       - fluentbit_extension_remove_args.names | length > 0
-      - fluentbit_extension_remove_args.names | select('match', '^[a-z0-9_]+$') | list | length == fluentbit_extension_remove_args.names | length
-    fail_msg: >-
-      fluentbit_extension_remove_args.names must be a non-empty list of
-      extension identifiers matching [a-z0-9_]+.
+      - fluentbit_extension_remove_args.names | reject('match', '^[a-z0-9_]+$') | list | length == 0
   tags:
     - fluentbit
 
@@ -29,29 +25,10 @@
   tags:
     - fluentbit
 
-- name: extension_remove | Rebuild service extension manifest
-  import_tasks: extension_manifest.yml
-  tags:
-    - fluentbit
-
-- name: extension_remove | Validate rebuilt configuration
-  when:
-    - not ansible_check_mode
-    - >-
-      fluentbit_extension_remove_configs.changed | default(false)
-      or fluentbit_extension_manifest.changed | default(false)
-  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.yaml --dry-run
-  changed_when: false
-  become: true
-  tags:
-    - fluentbit
-
 - name: extension_remove | Reload Fluent Bit
   when:
     - not ansible_check_mode
-    - >-
-      fluentbit_extension_remove_configs.changed | default(false)
-      or fluentbit_extension_manifest.changed | default(false)
+    - fluentbit_extension_remove_configs.changed
   systemd:
     name: fluent-bit.service
     state: reloaded

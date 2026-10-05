@@ -93,18 +93,20 @@
   tags:
     - fluentbit
 
-- name: Initialize fluent-bit service manifest  # noqa: require-validate
+# Fluent Bit rejects an absolute include glob that matches no file, so this
+# comment-only fragment keeps services/*.yaml valid on hosts without service
+# extensions.
+- name: Install fluent-bit service extension anchor  # noqa: require-validate
   when: fluentbit_package_ready
   copy:
-    content: "includes: []\n"
-    dest: /etc/fluent-bit/services.yaml
+    content: "# Keeps the services/*.yaml include non-empty.\n"
+    dest: /etc/fluent-bit/services/fluentbit.yaml
     owner: root
     group: root
     mode: "0644"
     backup: true
-    force: false
   become: true
-  register: fluentbit_service_manifest
+  register: fluentbit_extension_anchor
   tags:
     - fluentbit
 
@@ -175,7 +177,7 @@
     fluentbit_package_ready
     and not (ansible_check_mode and
              (fluentbit_assets.changed or fluentbit_extension_dir.changed
-              or fluentbit_service_manifest.changed or fluentbit_filters_post.changed))
+              or fluentbit_extension_anchor.changed or fluentbit_filters_post.changed))
   tags:
     - fluentbit
 
@@ -256,8 +258,7 @@
          if fluent_bit_service_d_override_conf_result.changed
          else 'reloaded'
          if fluentbit_conf.changed or fluentbit_assets.changed
-            or fluentbit_extension_dir.changed or fluentbit_service_manifest.changed
-            or fluentbit_filters_post.changed
+            or fluentbit_extension_dir.changed or fluentbit_filters_post.changed
          else 'started' }}
   become: true
   tags:

@@ -196,3 +196,27 @@
   tags:
     - retired_services
     - kdump
+
+# Drop once lab, pug, and fox have converged.
+- name: Remove the retired fluent-bit service include manifest
+  file:
+    path: /etc/fluent-bit/services.yaml
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - fluentbit
+
+# The smart role no longer ships a fluent-bit extension; the include glob would
+# otherwise keep loading the stale fragment left on lab and pug.
+- name: Remove the retired smart fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension_remove
+  vars:
+    fluentbit_extension_remove_args:
+      names:
+        - smart
+  tags:
+    - retired_services
+    - fluentbit

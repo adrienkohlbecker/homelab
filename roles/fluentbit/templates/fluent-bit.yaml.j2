@@ -13,12 +13,13 @@ service:
   storage.metrics: true
   storage.backlog.flush_on_shutdown: true
 
-# Filters execute in include order. Service roles add literal includes to the
-# manifest so hot reload never depends on wildcard expansion.
+# Filters execute in include order. The services glob expands in place, in no
+# defined order, so each service fragment must match only its own tags. Hot
+# reload re-reads this file and picks up added or removed fragments.
 includes:
   - /etc/fluent-bit/parsers.yaml
   - /etc/fluent-bit/filters-pre.yaml
-  - /etc/fluent-bit/services.yaml
+  - /etc/fluent-bit/services/*.yaml
   - /etc/fluent-bit/filters-post.yaml
 
 pipeline:
