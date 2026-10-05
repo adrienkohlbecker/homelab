@@ -32,7 +32,7 @@ mise run test
 mise run lint
 ```
 
-Run `mise tasks` for the complete task catalog. See [CLAUDE.md](CLAUDE.md) for conventions, command variants, testing details, and operational safeguards.
+Run `mise tasks` for the complete task catalog.
 
 ## Secrets
 
