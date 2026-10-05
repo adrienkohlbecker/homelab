@@ -132,6 +132,34 @@ def test_push_retries_reload_after_upload_failure(monkeypatch: pytest.MonkeyPatc
     assert tags == ["advanced"]
 
 
+def test_push_reloads_custom_templates_before_their_consumers(monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_reload_order_test")
+    files = [
+        sync.SyncFile("automations.yaml", "automation.reload", sync.Direction.BOTH),
+        sync.SyncFile("custom_templates/macros.jinja", "homeassistant.reload_custom_templates", sync.Direction.BOTH),
+        sync.SyncFile("scenes.yaml", "scene.reload", sync.Direction.BOTH),
+    ]
+    reloads: list[str] = []
+    monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
+    monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
+    monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
+    monkeypatch.setattr(sync, "resolve_ref", lambda ref: ref)
+    monkeypatch.setattr(sync, "enumerate_files", lambda: files)
+    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
+    monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
+    monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
+    monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
+    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
+    monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
+    monkeypatch.setattr(sync, "advance_synced_tag", lambda: None)
+    monkeypatch.setattr(sync, "_ha_post", lambda service, token: reloads.append(service))
+
+    sync.do_push()
+
+    assert reloads == ["homeassistant.reload_custom_templates", "automation.reload", "scene.reload"]
+
+
 def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> None:
     sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_missing_token_test")
     file = sync.SyncFile("scripts.yaml", "script.reload", sync.Direction.BOTH)

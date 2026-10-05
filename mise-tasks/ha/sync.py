@@ -501,10 +501,15 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
         return
     files = list(changed)
     reloads = {file.reload_service for file in [*files, *pending]}
+    # Custom templates reload first: automations and template entities resolve
+    # their macro imports when they reload.
     services = (
         ["homeassistant.restart"]
         if "homeassistant.restart" in reloads
-        else sorted(reload for reload in reloads if reload)
+        else sorted(
+            (reload for reload in reloads if reload),
+            key=lambda service: (service != "homeassistant.reload_custom_templates", service),
+        )
     )
     relpaths = [file.rel for file in files]
     show_push_diff(changed)
