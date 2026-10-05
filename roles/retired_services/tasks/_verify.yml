@@ -97,3 +97,10 @@
   register: retired_services_tailscale_state
   failed_when: not retired_services_tailscale_state.stat.exists
   become: true
+
+- name: _verify | Retired Eaton IPP state is gone
+  stat:
+    path: /mnt/services/eaton_ipp
+  register: retired_services_eaton_ipp
+  failed_when: retired_services_eaton_ipp.stat.exists
+  become: true

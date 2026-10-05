@@ -172,3 +172,12 @@
     - /boot/efi/EFI/refind/refind.conf-sample
     - /boot/efi/EFI/refind/keys/refind.cer
   become: true
+
+- name: _setup | Seed the retired Eaton IPP state
+  file:
+    path: /mnt/services/eaton_ipp/configs
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true

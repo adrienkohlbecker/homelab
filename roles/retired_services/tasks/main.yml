@@ -233,3 +233,14 @@
   tags:
     - retired_services
     - refind
+
+# Drop once lab has converged. The Windows box no longer mirrors the retired
+# Eaton IPP config; uid 60711 stays reserved in group_vars/all/identities.yml.
+- name: Remove the retired Eaton IPP state
+  file:
+    path: /mnt/services/eaton_ipp
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - nut
