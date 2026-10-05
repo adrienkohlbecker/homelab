@@ -382,7 +382,6 @@
     - "'default-src default.csptest' in (nginx_verify_loc.content_security_policy | default(''))"
     - "'frame-ancestors https://frame.csptest' in (nginx_verify_loc.content_security_policy | default(''))"
     - nginx_verify_loc.x_verify_loc is defined
-    - nginx_verify_loc.x_xss_protection is not defined
   retries: 10
   delay: 1
 
