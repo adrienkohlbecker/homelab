@@ -4,12 +4,11 @@
 
 This is a home environment, not a corporate production site. Tie-breakers when the Hard Rules don't decide a question:
 
-- **Maintainability beats ambition.** The operator is also the on-call — an elegant rewrite they can't debug at 11pm is a regression. Default to simple-and-boring.
+- **Maintainability beats ambition.** The operator is also the on-call — an elegant rewrite they can't debug at 11pm is a regression. Simple problems get simple solutions; complex ones may warrant structure — a layered role system, a multi-stage pipeline — but it must stay coherent and followable, expressing rather than obscuring what it does.
 - **Security is pragmatic.** Reasonable hygiene (vault, firewall, file permissions) is in scope; defense against nation-state actors is not. New security machinery needs a concrete threat behind it.
 - **Wife-acceptance-factor is real.** Household-depended services (home-assistant, z2m, media, dns) have higher cost-of-failure than operator-only infra. Visible breakage outweighs elegance.
-- **Elegance applies at every scale.** Simple problems deserve simple solutions. Complex problems can warrant complex solutions — a layered role system, a multi-stage pipeline — but the design must stay coherent and followable. The failure mode is not complexity itself; it is complexity that grew without a clear shape or obscures rather than expresses what it does.
 - **Functional tests over stat checks.** Exercise code and configuration against a real running system; a stat-only check (file exists, service enabled, configuration set) proves the role ran, not that the service works.
-- **Not everything must be codified.** Codify the *platform* — the service, its reverse proxy, its secrets, its backups. But state that lives in a service's own UI/DB — Uptime-Kuma monitors, Healthchecks checks — is an accepted exception: configure it in the app and let it ride the ZFS snapshots, with the intent captured in a runbook. Don't contort Ansible (fragile sqlite seeds, unofficial APIs) to own monitor definitions. UI-managed monitoring is not a disqualifier when choosing a mechanism.
+- **Not everything must be codified.** Codify the *platform* — the service, its reverse proxy, its secrets, its backups. But state that lives in a service's own UI/DB — Uptime-Kuma monitors, Healthchecks checks — is an accepted exception: configure it in the app and let it ride the ZFS snapshots, with the intent captured in a runbook. Don't contort Ansible (fragile sqlite seeds, unofficial APIs) to own monitor definitions.
 
 ## Hard Rules — DO NOT
 
