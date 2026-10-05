@@ -8,5 +8,5 @@ ConditionPathExistsGlob=/sys/bus/event_source/devices/cpu*
 
 [Service]
 Type=oneshot
-SyslogIdentifier=kdump_nmi_watchdog
+SyslogIdentifier=panic_nmi_watchdog
 ExecStart=/sbin/sysctl -q -w kernel.nmi_watchdog=1

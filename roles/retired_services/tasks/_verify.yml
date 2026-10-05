@@ -60,3 +60,50 @@
   register: retired_services_libvirt_accounts
   changed_when: false
   failed_when: retired_services_libvirt_accounts.rc != 2
+
+- name: _verify | Query retired kdump packages
+  command:
+    argv:
+      - dpkg-query
+      - --show
+      - --showformat=${db:Status-Status}
+      - "{{ item }}"
+  loop:
+    - kdump-tools
+    - makedumpfile
+    - kexec-tools
+    - crash
+  register: retired_services_kdump_packages
+  changed_when: false
+  failed_when: >-
+    retired_services_kdump_packages.rc != 1
+    and retired_services_kdump_packages.stdout != 'not-installed'
+
+# ZFSBootMenu boots the next kernel with this property.
+- name: _verify | Next boot reserves no crash memory
+  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
+  register: retired_services_kdump_cmdline
+  changed_when: false
+  failed_when: >-
+    retired_services_kdump_cmdline.rc != 0
+    or 'crashkernel' in retired_services_kdump_cmdline.stdout
+  become: true
+
+- name: _verify | Query retired kdump units
+  systemd:
+    name: "{{ item }}"
+  loop:
+    - kdump_nmi_watchdog.timer
+    - kdump_nmi_watchdog.service
+    - kdump-tools.service
+  register: retired_services_kdump_units
+  failed_when: retired_services_kdump_units.status.LoadState != 'not-found'
+  become: true
+
+# Teardown must never delete saved dumps.
+- name: _verify | Saved vmcore survives the teardown
+  command: cat /var/crash/202601010000/dump.202601010000
+  register: retired_services_kdump_vmcore
+  changed_when: false
+  failed_when: retired_services_kdump_vmcore.stdout != 'vmcore'
+  become: true

@@ -1,0 +1,77 @@
+# Disarm the detector as KVM or PowerTOP would, then run the re-arm unit the
+# boot timer starts. Without a perf PMU the unit's capability condition must
+# skip it cleanly, so the start still succeeds.
+- name: _verify | Re-arm unit restores the NMI watchdog
+  when: ansible_architecture == 'x86_64'
+  shell: |
+    set -euo pipefail
+    sysctl -qw kernel.nmi_watchdog=0 || true
+    systemctl start panic_nmi_watchdog.service
+    if compgen -G "/sys/bus/event_source/devices/cpu*" >/dev/null; then
+      cat /proc/sys/kernel/nmi_watchdog
+    else
+      echo skipped
+    fi
+  args:
+    executable: /bin/bash
+  register: panic_verify_nmi_watchdog
+  changed_when: false
+  failed_when: panic_verify_nmi_watchdog.rc != 0 or panic_verify_nmi_watchdog.stdout | trim not in ['1', 'skipped']
+  become: true
+
+# Dracut images snapshot the host sysctl files, but the panic policy must wait
+# for the real root so a slow root-pool import cannot trip the hung-task panic.
+# The fixture image predates this checkout's policy, so install and rebuild.
+- name: _verify | Exercise the Dracut panic policy exclusion
+  when: initramfs_use_dracut
+  block:
+    - name: _verify | Install the shared Dracut policy
+      import_role:
+        name: boot
+        tasks_from: initramfs_provider
+
+    - name: _verify | Rebuild the boot images with the panic policy in place
+      import_role:
+        name: boot
+        tasks_from: initramfs_rebuild
+      vars:
+        boot_initramfs_args:
+          changed: true
+          reboot: false
+
+    - name: _verify | Boot image carries host sysctls but not the panic policy
+      command: lsinitrd /boot/initrd.img-{{ ansible_kernel }}
+      register: panic_verify_initrd
+      changed_when: false
+      failed_when: >-
+        panic_verify_initrd.stdout is not search('(?m)\s(etc|usr/lib)/sysctl.d/[^/]+\.conf$')
+        or panic_verify_initrd.stdout is search('(?m)\setc/sysctl.d/30-panic\.conf$')
+      become: true
+
+- name: _verify | List archived panic logs before the panic
+  command: grep -rlF 'sysrq triggered crash' /var/lib/systemd/pstore
+  register: panic_verify_pstore_before
+  changed_when: false
+  failed_when: panic_verify_pstore_before.rc > 1
+  become: true
+
+# Without kernel.panic the guest would sit in the panic forever and the wait
+# for a new boot would time out.
+- name: _verify | Deliberate panic reboots the host on its own
+  reboot:
+    reboot_command: '/usr/bin/sudo -n /bin/sh -c "echo c > /proc/sysrq-trigger"'
+    reboot_timeout: 240
+
+# The kernel writes the tail of its log to EFI variables; systemd-pstore moves
+# it into /var/lib/systemd/pstore early in the next boot. Requiring the panic
+# line itself also catches panic_print output crowding it out of the tail.
+- name: _verify | Panic log survives the reboot through pstore
+  command: grep -rlF 'sysrq triggered crash' /var/lib/systemd/pstore
+  register: panic_verify_pstore
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: >-
+    panic_verify_pstore.rc == 0
+    and panic_verify_pstore.stdout_lines | difference(panic_verify_pstore_before.stdout_lines) | length > 0
+  become: true

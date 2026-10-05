@@ -75,3 +75,92 @@
     group: root
     mode: "0600"
   become: true
+
+# Recreate what the retired kdump role left on a host: the capture packages,
+# the crashkernel reservation, the NMI re-arm timer, its sysctl file, and a
+# saved vmcore beside the kdump-config runtime files.
+- name: _setup | Install retired kdump packages
+  apt:
+    name:
+      - kdump-tools
+      - makedumpfile
+      - kexec-tools
+      - crash
+    install_recommends: false
+    policy_rc_d: 101
+    state: present
+    cache_valid_time: 3600
+  become: true
+
+- name: _setup | Reserve crashkernel memory
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: crashkernel
+      contents: crashkernel=512M,high crashkernel=128M,low
+
+- name: _setup | Create the retired kdump NMI watchdog re-arm units
+  copy:
+    content: "{{ item.content }}"
+    dest: /etc/systemd/system/{{ item.name }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - name: kdump_nmi_watchdog.service
+      content: |
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/true
+    - name: kdump_nmi_watchdog.timer
+      content: |
+        [Timer]
+        OnBootSec=3min
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+
+- name: _setup | Enable the retired kdump NMI watchdog re-arm timer
+  systemd:
+    name: kdump_nmi_watchdog.timer
+    daemon_reload: true
+    enabled: true
+  become: true
+
+- name: _setup | Create the retired kdump sysctl file
+  copy:
+    content: "kernel.panic=10\n"
+    dest: /etc/sysctl.d/30-kdump.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Create the crash directory
+  file:
+    path: /var/crash/202601010000
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: _setup | Seed a saved vmcore and kdump-config runtime files
+  copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - { path: /var/crash/202601010000/dump.202601010000, content: "vmcore\n" }
+    - { path: /var/crash/kdump_lock, content: "" }
+    - { path: /var/crash/kexec_cmd, content: "kexec -p\n" }
+  loop_control:
+    label: "{{ item.path }}"
+  become: true

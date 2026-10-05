@@ -108,7 +108,7 @@
   changed_when: false
   become: true
 
-# The shared Dracut policy keeps the pool cache out of every image (kdump's
+# The shared Dracut policy keeps the pool cache out of every image (panic's
 # verify covers its panic policy exclusion).
 - name: _verify | Exercise the Dracut image exclusions
   when:

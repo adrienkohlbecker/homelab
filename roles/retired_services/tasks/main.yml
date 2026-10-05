@@ -127,3 +127,64 @@
   tags:
     - retired_services
     - libvirt
+
+# Drop once lab and pug have converged.
+#
+# The purge keeps /var/crash: no package owns it, so saved vmcores stay until
+# the operator deletes them. crash and kexec-tools came in with kdump-tools.
+- name: Remove retired kdump packages
+  apt:
+    name:
+      - kdump-tools
+      - makedumpfile
+      - kexec-tools
+      - crash
+    state: absent
+    purge: true
+  become: true
+  tags:
+    - retired_services
+    - kdump
+
+# Requests the reboot that releases the reserved crash memory. GRUB hosts got
+# the reservation from the package's own grub.d conffile, which the purge
+# removes.
+- name: Remove the retired crashkernel reservation
+  when: not grub_bootloader
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: crashkernel
+      contents: ''
+  tags:
+    - retired_services
+    - kdump
+
+- name: Remove the retired kdump NMI watchdog re-arm timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: kdump_nmi_watchdog
+  tags:
+    - retired_services
+    - kdump
+
+# The panic role now owns these sysctls in 30-panic.conf. The lock and command
+# files are kdump-config runtime state, not dumps.
+- name: Remove retired kdump state
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/sysctl.d/30-kdump.conf
+    - /usr/lib/dracut/dracut.conf.d/kdump-tools
+    - /var/crash/kdump_lock
+    - /var/crash/kexec_cmd
+  become: true
+  tags:
+    - retired_services
+    - kdump

@@ -1,9 +1,0 @@
-# Cover ZFSBootMenu and GRUB crash capture on both architectures and releases.
-machines:
-  lab:
-  minimal:
-arm:
-  - lab
-  - minimal
-ubuntu:
-  - resolute

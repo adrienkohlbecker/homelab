@@ -13,8 +13,8 @@
 #   ZBM   -> /etc/zfsbootmenu/<name>, reassembled into org.zfsbootmenu:commandline
 # Both paths touch /var/run/reboot-required on change so the site.yml reboot
 # check applies the new cmdline. A caller gates the whole import with
-# `when: not grub_bootloader` for a ZBM-only fragment (e.g. crashkernel, where
-# grub hosts get the value from the kdump-tools package's own grub.d snippet).
+# `when: not grub_bootloader` for a ZBM-only fragment (e.g. the base console
+# fragment in tasks/main.yml).
 
 - name: cmdline | Validate inputs ({{ boot_cmdline_args.name }})
   assert:

@@ -1,0 +1,3 @@
+# Resolute covers the Dracut boot-image exclusion of the panic policy.
+ubuntu:
+  - resolute

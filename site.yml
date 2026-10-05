@@ -80,7 +80,7 @@
     - macvlan
     - resolved
     - avahi
-    - kdump
+    - panic
     - wolweb
     - keepalived
     - nut

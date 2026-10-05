@@ -1,0 +1,64 @@
+# Escalate kernel stalls to a panic and reboot, so a wedged host recovers on
+# its own. The panic log survives the reboot in EFI pstore, which
+# systemd-pstore archives under /var/lib/systemd/pstore. Operator procedure:
+# notes/runbooks/panic.md.
+
+# nmi_watchdog is managed through the x86 re-arm timer; writing its
+# ineffective arm64 knob would report changed forever. The other
+# two NMI-specific panic controls are absent on arm64.
+- name: Set panic sysctls
+  ansible.posix.sysctl:
+    name: kernel.{{ item.name }}
+    value: '{{ item.value }}'
+    # roles/boot/files/dracut_host.conf excludes this file from every Dracut
+    # image by name; rename both together.
+    sysctl_file: /etc/sysctl.d/30-panic.conf
+  loop:
+    - { name: hardlockup_panic, value: '1' }
+    - { name: softlockup_panic, value: '1' }
+    # Kernel warnings remain diagnostic instead of forcing a host outage.
+    - { name: panic_on_warn, value: '0' }
+    - { name: hung_task_panic, value: '1' }
+    - { name: panic_on_rcu_stall, value: '1' }
+    - { name: unknown_nmi_panic, value: '1', architectures: [ x86_64 ] }
+    - { name: panic_on_io_nmi, value: '1', architectures: [ x86_64 ] }
+    # EFI pstore keeps only the last ~10 KiB of compressed log, and anything
+    # printed after the panic line pushes the lockup report out of it. Even
+    # every CPU's backtrace alone would on a 20-thread host.
+    - { name: panic_print, value: '0' }
+    # Reboot ten seconds after a panic.
+    - { name: panic, value: '10' }
+  when: item.architectures is not defined or ansible_architecture in item.architectures
+  loop_control:
+    label: 'kernel.{{ item.name }}'
+  become: true
+  tags:
+    - panic
+
+# KVM and PowerTOP can disable the kernel's default-on watchdog after boot,
+# leaving hardlockup_panic inert. Re-assert it once; the fixed delay clears
+# KVM's asynchronous teardown and also covers x86 hosts without
+# qemu-kvm.service.
+
+# Install the timer-triggered service before validating its paired timer.
+- name: Install NMI watchdog re-arm service unit
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: panic_nmi_watchdog.service
+      condition: "{{ ansible_architecture == 'x86_64' }}"
+  tags:
+    - panic
+
+- name: Manage NMI watchdog re-arm timer unit
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: panic_nmi_watchdog.timer
+      condition: "{{ ansible_architecture == 'x86_64' }}"
+  tags:
+    - panic

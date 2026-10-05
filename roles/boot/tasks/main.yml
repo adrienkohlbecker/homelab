@@ -1,5 +1,5 @@
 # Cross-cutting boot setup. This role owns the kernel-cmdline engine
-# (tasks/cmdline.yml, imported by zfs/console/kdump to contribute a fragment to
+# (tasks/cmdline.yml, imported by zfs/console to contribute a fragment to
 # whichever bootloader the host uses) plus the boot-chain config below that no
 # feature role owns. site.yml runs the role on the ZBM hosts; tasks specific to
 # ZBM skip on grub hosts.
