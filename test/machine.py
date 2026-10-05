@@ -140,13 +140,15 @@ def qemu_user_net_args(machine: str) -> str:
 
 
 @functools.cache
-def _passt_available(qemu_binary: str) -> bool:
+def _passt_available(qemu_binary: str, machine_type: str) -> bool:
     """True iff passt can back qemu *here*: Linux + `passt` on PATH + a qemu
     that advertises the `stream` netdev (i.e. qemu >= 7.2).
 
     Deliberately a capability probe, not a uname check: Linux installations
     may expose different qemu and passt versions, while macOS cannot use passt
-    at all. Cached because the qemu probe forks a subprocess and the answer is
+    at all. The probe names *machine_type* because qemu resolves a machine
+    before answering `-netdev help`, and qemu-system-aarch64 has no default
+    one. Cached because the qemu probe forks a subprocess and the answer is
     constant per process.
     """
     if platform.system() != "Linux":
@@ -155,7 +157,7 @@ def _passt_available(qemu_binary: str) -> bool:
         return False
     try:
         probe = subprocess.run(
-            [qemu_binary, "-netdev", "help"],
+            [qemu_binary, "-machine", machine_type, "-netdev", "help"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -166,7 +168,7 @@ def _passt_available(qemu_binary: str) -> bool:
     return "stream" in (probe.stdout + probe.stderr)
 
 
-def resolve_net_backend(qemu_binary: str) -> str:
+def resolve_net_backend(arch: ArchProfile) -> str:
     """Pick the guest NIC backend: 'passt' or 'slirp'.
 
     passt is a userspace connector with a robust UDP datapath; it replaces
@@ -183,7 +185,7 @@ def resolve_net_backend(qemu_binary: str) -> str:
     override = os.environ.get("HOMELAB_NET_BACKEND", "auto").strip().lower()
     if override == "slirp":
         return "slirp"
-    available = _passt_available(qemu_binary)
+    available = _passt_available(arch.qemu_binary, arch.machine_type)
     if override == "passt":
         if not available:
             raise RuntimeError(
@@ -514,7 +516,7 @@ class Machine:
 
         # Resolve the NIC backend after _preflight has confirmed the qemu
         # binary exists, since the probe execs it.
-        self._net_backend = resolve_net_backend(self.arch.qemu_binary)
+        self._net_backend = resolve_net_backend(self.arch)
         self._passt_socket = None
         self._passt_socket_dir = None
         self._passt_proc = None
