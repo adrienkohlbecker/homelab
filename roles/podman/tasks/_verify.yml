@@ -63,16 +63,6 @@
   become: true
   changed_when: false
 
-# The Packer role owns array shape and monitoring; Podman only needs to prove
-# its supplied storage device is healthy at the point it is consumed.
-- name: _verify | The podman raid array is healthy
-  when:
-    - zfs_root
-    - podman_storage_raid
-  command: mdadm --detail --test {{ podman_storage_device }}
-  become: true
-  changed_when: false
-
 # Noble's stock profile denies fchmodat2 to tar-based entrypoints, so the role
 # augments it there; later releases must allow it with the stock profile. Call
 # fchmodat2(AT_FDCWD, "/tmp", 01777, 0) -- syscall 452 on x86_64 and aarch64
@@ -194,12 +184,11 @@
       changed_when: false
       failed_when: false
 
-# Pug Noble prestarts the daemon, so its live argv proves the drop-in took
+# Noble fixtures prestart the daemon, so its live argv proves the drop-in took
 # effect after the restart rather than merely being loaded by systemd.
 - name: _verify | Read the running podman.service PID
   when:
     - not qemu_test_minimal
-    - not podman_storage_raid
     - ansible_distribution_release == 'noble'
   systemd:
     name: podman.service
@@ -210,7 +199,6 @@
 - name: _verify | The running podman.service was restarted onto the drop-in
   when:
     - not qemu_test_minimal
-    - not podman_storage_raid
     - ansible_distribution_release == 'noble'
   command: ps -o args= -p {{ podman_service_unit.status.MainPID }}
   register: podman_service_args

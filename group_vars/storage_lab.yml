@@ -22,4 +22,3 @@ swap_partition: /dev/md/swap
 # Three-member mdadm RAID5. The Podman role verifies the ext4 geometry against
 # the live array topology.
 podman_storage_device: /dev/md/podman
-podman_storage_raid: true
