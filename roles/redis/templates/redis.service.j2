@@ -31,7 +31,8 @@ SyslogIdentifier=%N
 # The sh wrapper reads the password from the mounted secret so it never lands
 # on disk in redis.conf. It also bypasses the image entrypoint's redis-server
 # branch, which would otherwise --loadmodule every bundled Redis 8 module.
-# `exec` leaves redis-server as the container's main process, hence --init.
+# `exec` leaves redis-server as PID 1, which handles SIGTERM and reaps its own
+# RDB fork, so it needs no --init.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
@@ -41,7 +42,6 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name redis \
-    --init \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="redis" \
