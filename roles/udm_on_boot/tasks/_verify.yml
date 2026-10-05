@@ -1,0 +1,54 @@
+# One failing recovery script must not stop the ones after it, and the unit
+# must still end up failed so the failure is visible.
+- name: _verify | Seed a failing script and a later one
+  copy:
+    content: "{{ item.content }}"
+    dest: /data/on_boot.d/{{ item.name }}
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - name: 05-verify-fail.sh
+      content: "#!/bin/sh\nexit 1\n"
+    - name: 95-verify-after.sh
+      content: "#!/bin/sh\ntouch /run/udm_on_boot_verify_after\n"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+
+- name: _verify | Run the framework with a failing script  # noqa: command-instead-of-module
+  command: systemctl restart on-boot.service
+  register: udm_on_boot_verify_restart
+  changed_when: false
+  failed_when: udm_on_boot_verify_restart.rc == 0
+  become: true
+
+- name: _verify | Later script still ran
+  stat:
+    path: /run/udm_on_boot_verify_after
+  register: udm_on_boot_verify_marker
+  failed_when: not udm_on_boot_verify_marker.stat.exists
+  become: true
+
+- name: _verify | Unit reports the failure
+  systemd:
+    name: on-boot.service
+  register: udm_on_boot_verify_state
+  failed_when: udm_on_boot_verify_state.status.ActiveState != 'failed'
+  become: true
+
+- name: _verify | Remove the test scripts
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /data/on_boot.d/05-verify-fail.sh
+    - /data/on_boot.d/95-verify-after.sh
+    - /run/udm_on_boot_verify_after
+  become: true
+
+- name: _verify | Framework succeeds again without the failing script
+  systemd:
+    name: on-boot.service
+    state: restarted
+  become: true

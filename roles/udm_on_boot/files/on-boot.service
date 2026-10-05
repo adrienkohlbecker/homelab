@@ -11,11 +11,12 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=true
 TimeoutStartSec=120
-# --exit-on-error surfaces failed recovery scripts in the unit status.
-# run-parts rejects dotted names by default, so --regex selects *.sh while
-# still excluding Ansible backups; non-executables are skipped and an empty
-# directory succeeds.
-ExecStart=/bin/run-parts --exit-on-error --regex '[.]sh$' --report /data/on_boot.d
+# Every script runs even when an earlier one fails, so one broken recovery
+# (e.g. a keepalived reinstall) cannot strand the others; run-parts still
+# exits non-zero, which leaves the unit failed. run-parts rejects dotted
+# names by default, so --regex selects *.sh while still excluding Ansible
+# backups; non-executables are skipped and an empty directory succeeds.
+ExecStart=/bin/run-parts --regex '[.]sh$' --report /data/on_boot.d
 
 [Install]
 WantedBy=multi-user.target
