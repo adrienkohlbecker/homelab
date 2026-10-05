@@ -42,6 +42,8 @@ HOST = "lab"
 HOST_DIR = "/mnt/services/homeassistant"
 HA_URL = "https://homeassistant.lab.fahm.fr"
 SYNCED_TAG = "last_synced_to_host"
+# Expanded by lab's shell at upload time; see upload_to_host.
+BACKUP_SUFFIX = '-S ".$$.$(date +%Y-%m-%d@%H:%M:%S)~"'
 KEYCHAIN_SERVICE = "homelab-homeassistant-api-token"
 
 
@@ -326,7 +328,12 @@ def host_snapshot_tree(base: str) -> str:
 
 
 def upload_to_host(files: list[SyncFile]) -> None:
-    """Upload via /tmp, then sudo install with owner, mode, and backup."""
+    """Upload via /tmp, then sudo install with owner, mode, and backup.
+
+    The backup takes Ansible's `<name>.<pid>.<YYYY-MM-DD@HH:MM:SS>~` form, stamped
+    by lab's clock, so the cleanup role's prune_ansible_backups timer drops it
+    after a week and the offsite replica already excludes it.
+    """
     # Match the role's 0644 stubs so sync and converge do not fight over modes.
     # Synced GUI YAML contains no secrets; those stay in secrets.yaml.
     pid = os.getpid()
@@ -343,7 +350,8 @@ def upload_to_host(files: list[SyncFile]) -> None:
             [
                 "ssh",
                 HOST,
-                f"{ensure_parent}sudo install -o homeassistant -g homeassistant -m 0644 -b {tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
+                f"{ensure_parent}sudo install -o homeassistant -g homeassistant -m 0644 -b {BACKUP_SUFFIX} "
+                f"{tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
             ]
         )
 

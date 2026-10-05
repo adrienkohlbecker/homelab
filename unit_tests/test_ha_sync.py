@@ -2,6 +2,7 @@
 
 import io
 import json
+import re
 import shutil
 import subprocess
 
@@ -59,11 +60,25 @@ def test_upload_creates_only_nested_parent_directories(monkeypatch: pytest.Monke
     top_level = commands[1][2]
     nested = commands[3][2]
     assert "install -d" not in top_level
-    assert "-m 0644 -b" in top_level
+    assert f"-m 0644 -b {sync.BACKUP_SUFFIX} " in top_level
     assert nested.startswith(
         "sudo install -d -o homeassistant -g homeassistant -m 0755 /mnt/services/homeassistant/dashboards && "
     )
     assert "-m 0644 -b" in nested
+
+
+def test_upload_backups_match_the_ansible_backup_pruner() -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_backup_suffix_test")
+    pruner = (sync.REPO_ROOT / "roles/cleanup/files/prune_ansible_backups").read_text()
+    regex = re.search(r"-regex '([^']+)'", pruner)
+    assert regex is not None
+    expanded = subprocess.run(
+        ["bash", "-c", f"set -euo pipefail; printf %s {sync.BACKUP_SUFFIX.removeprefix('-S ')}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert re.fullmatch(regex.group(1), f"/mnt/services/homeassistant/automations.yaml{expanded}"), expanded
 
 
 def test_token_reads_keychain_only_when_needed(monkeypatch: pytest.MonkeyPatch) -> None:
