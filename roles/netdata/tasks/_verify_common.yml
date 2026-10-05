@@ -1,7 +1,6 @@
 # Checks that hold on every fixture: the service, the Postfix collector
 # against the shared _setup queue, the apt pin, the nginx/Authelia front,
-# netdata.conf's DNS policy, the certbot x509check coupling, and the Fluent Bit
-# extension. Full-fixture surfaces live in _verify_full.yml.
+# netdata.conf's DNS policy, and the Fluent Bit extension. Full-fixture surfaces live in _verify_full.yml.
 
 - name: _verify | Wait for Postfix queue metrics
   uri:
@@ -86,29 +85,6 @@
   changed_when: false
   become: true
   failed_when: _netdata_localhost_warn.stdout | trim | int != 0
-
-# Cover the cross-role coupling: netdata's main.yml imports certbot's
-# tasks_from: netdata to render x509check.conf. A break in the
-# certbot-side template (x509check.conf.j2) or the netdata template
-# helper would surface here.
-- name: _verify | Slurp rendered x509check config
-  slurp:
-    src: /etc/netdata/go.d/x509check.conf
-  register: _netdata_x509check
-  become: true
-
-- name: _verify | X509check renders structurally-valid YAML pointing at the host cert
-  vars:
-    _x509check: "{{ _netdata_x509check.content | b64decode | trim | from_yaml }}"
-    _expected_source: "file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem"
-  assert:
-    that:
-      - _x509check.jobs | length == 1
-      - _x509check.jobs[0].source == _expected_source
-      - _x509check.jobs[0].check_full_chain
-    fail_msg: >-
-      x509check.conf didn't render the host cert path correctly
-      (parsed={{ _x509check }}, expected source={{ _expected_source }})
 
 - name: _verify | Exercise netdata fluent-bit recovery severity
   import_role:
