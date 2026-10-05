@@ -7,7 +7,9 @@
     state: present
     extra_zfs_properties:
       mountpoint: none
-  loop: "{{ macos_vm_zvol_parent_datasets }}"
+  loop:
+    - "{{ zfs_dozer_filesystem }}/vms"
+    - "{{ zfs_dozer_filesystem }}/vms/macos"
   become: true
 
 - name: storage | Read current macOS zvol size

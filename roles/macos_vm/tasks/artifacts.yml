@@ -90,20 +90,12 @@
     # Keep these in sync with fetch-macOS-v2.py's product menu. `--shortname`
     # is ignored when `--action download` is passed, so provide the resolved
     # board/MLB/os_type tuple directly.
-    # 15 = Sequoia, 14 = Sonoma, 13 = Ventura. Add new entries here.
+    # 15 = Sequoia. Add other releases from the script's menu here.
     macos_vm_recovery_products:
       "15":
         board_id: Mac-7BA5B2D9E42DDD94
         mlb: "00000000000000000"
         os_type: default
-      "14":
-        board_id: Mac-827FAC58A8FDFA22
-        mlb: "00000000000000000"
-        os_type: default
-      "13":
-        board_id: Mac-4B682C642B45593E
-        mlb: "00000000000000000"
-        os_type: latest
 
 # fetch-macOS-v2.py exits non-zero on a chunklist mismatch but keeps the
 # file, and an interrupted download leaves a truncated one. Only a verified
