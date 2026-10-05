@@ -32,6 +32,8 @@ Ansible-driven configuration for my home infrastructure: two bare-metal Ubuntu s
 
 ## Common workflows
 
+Install [mise](https://mise.jdx.dev) and sign in to the 1Password CLI (tasks resolve `op://` references in `mise.toml`). `mise install` also syncs Python dependencies and installs the pre-push lint hook.
+
 ```sh
 mise trust && mise install
 mise run ansible --limit lab --tags nginx --check
