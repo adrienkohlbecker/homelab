@@ -151,7 +151,9 @@
     _tailscale_preference_args:
       - "--advertise-routes={{ tailscale_advertise_routes | join(',') }}"
       - "--advertise-exit-node=true"
-      - "--accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}"
+      # Accepting peer routes is all-or-nothing: lab and pug would send their
+      # own home LAN through each other's advertisement of the same route.
+      - "--accept-routes=false"
       # Server nodes keep their host DNS and use conventional SNAT forwarding.
       - "--accept-dns=false"
       - "--snat-subnet-routes=true"
