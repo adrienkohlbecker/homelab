@@ -24,9 +24,9 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 
 Repository map: [README.md](README.md).
 
-- Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install`. `python.uv_venv_auto` auto-sources `.venv`; `uv sync` populates Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
+- Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, `mise install`, then `uv sync` for Python deps. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - **op:// env refs only resolve under `op run --`.** Toml tasks wrap explicitly; file-based tasks under `mise-tasks/` do **not** — mise exports the literal `op://…` string. Fix: re-exec under `op run --` behind a guard env var.
-- Lint: `mise run lint` (ansible-lint, tofu/packer fmt+validate, tflint, ruff/pyright, yamllint, shellcheck+shfmt, stylua+selene, taplo, markdownlint — all parallel); `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
+- Lint: `mise run lint` runs every linter in parallel; `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). Run full `mise run lint` before pushing.
 - Skills: `/triage <service>` investigates a service end-to-end (resolve hosts, gather state, summarize). Skill and hook wiring for both agents: [.agents/README.md](.agents/README.md).
 
 ## Coding Style & Naming Conventions
