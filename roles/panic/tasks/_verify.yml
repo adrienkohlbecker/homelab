@@ -27,7 +27,14 @@
         or panic_verify_initrd.stdout is search('(?m)\setc/sysctl.d/30-panic\.conf$')
       become: true
 
+# EFI pstore needs UEFI runtime services; x86 Minimal boots SeaBIOS.
+- name: _verify | Probe for UEFI firmware
+  stat:
+    path: /sys/firmware/efi
+  register: panic_verify_efi
+
 - name: _verify | List archived panic logs before the panic
+  when: panic_verify_efi.stat.exists
   command: grep -rlF 'sysrq triggered crash' /var/lib/systemd/pstore
   register: panic_verify_pstore_before
   changed_when: false
@@ -45,6 +52,7 @@
 # it into /var/lib/systemd/pstore early in the next boot. Requiring the panic
 # line itself also catches panic_print output crowding it out of the tail.
 - name: _verify | Panic log survives the reboot through pstore
+  when: panic_verify_efi.stat.exists
   command: grep -rlF 'sysrq triggered crash' /var/lib/systemd/pstore
   register: panic_verify_pstore
   changed_when: false

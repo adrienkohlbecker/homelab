@@ -1,3 +1,16 @@
-# Resolute covers the Dracut boot-image exclusion of the panic policy.
+# Lab covers ZFSBootMenu hosts and Minimal GRUB hosts without a ZFS root; both
+# must come back from a deliberate panic unattended. x86 Minimal boots SeaBIOS,
+# so only the UEFI cells exercise EFI pstore. Resolute covers the Dracut
+# boot-image exclusion of the panic policy.
+machines:
+  lab:
+  minimal:
+arm:
+  - lab
+  - minimal
 ubuntu:
   - resolute
+skip:
+  "minimal:resolute": >-
+    Lab Resolute covers the Dracut boot-image exclusion; Minimal Noble covers
+    the GRUB reboot on a host without a ZFS root.

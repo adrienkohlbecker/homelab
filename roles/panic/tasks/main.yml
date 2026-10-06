@@ -1,7 +1,7 @@
 # Escalate kernel stalls to a panic and reboot, so a wedged host recovers on
-# its own. The panic log survives the reboot in EFI pstore, which
-# systemd-pstore archives under /var/lib/systemd/pstore. Operator procedure:
-# notes/runbooks/panic.md.
+# its own. On UEFI hosts the panic log survives the reboot in EFI pstore,
+# which systemd-pstore archives under /var/lib/systemd/pstore. Operator
+# procedure: notes/runbooks/panic.md.
 
 # nmi_watchdog stays at its default-on value; powertop.service re-arms it after
 # auto-tune turns it off. Writing its ineffective arm64 knob would report
