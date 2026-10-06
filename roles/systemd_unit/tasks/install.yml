@@ -55,120 +55,119 @@
       {{ ['systemctl'] if _systemd_unit_user == 'root'
          else ['sh', '-c', 'XDG_RUNTIME_DIR=/run/user/$(id -u) exec systemctl --user "$@"', 'systemctl'] }}
 
-- name: install | Create drop-in directory for {{ systemd_unit_args.src }}
-  when:
-    - _systemd_unit_condition
-    - systemd_unit_args.for is defined
-  file:
-    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-# A user manager must be lingered to survive logout. Task names use the caller
-# var because imports render them before set_fact runs. Check mode may predict
-# linger creation without creating its marker; real applies still fail closed.
-- name: install | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
-  when:
-    - _systemd_unit_condition
-    - _systemd_unit_scope == 'user'
-  stat:
-    path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
-  register: _systemd_unit_linger
-  failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
-
-- name: install | Install systemd unit
-  vars:
-    _systemd_unit_path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+- name: install | Install systemd unit for {{ systemd_unit_args.src }}
+  when: _systemd_unit_condition
   block:
-    # Keep dispatch task-local so a host fact cannot poison the next call. The
-    # action string form avoids the mapping form deprecated in ansible-core 2.23.
-    - name: install | Write the unit file ({{ _module }})
-      when: _systemd_unit_condition
+    - name: install | Create drop-in directory for {{ systemd_unit_args.src }}
+      when: systemd_unit_args.for is defined
+      file:
+        path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+    # A user manager must be lingered to survive logout. Task names use the caller
+    # var because imports render them before set_fact runs. Check mode may predict
+    # linger creation without creating its marker; real applies still fail closed.
+    - name: install | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
+      when: _systemd_unit_scope == 'user'
+      stat:
+        path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
+      register: _systemd_unit_linger
+      failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
+
+    - name: install | Write and validate the unit file
       vars:
-        _module: "{{ 'template' if systemd_unit_args.src.endswith('.j2') else 'copy' }}"
-      action: "{{ _module }}"
-      args:
-        src: "{{ systemd_unit_args.src }}"
-        dest: "{{ _systemd_unit_path }}"
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-      become: true
-      register: systemd_unit_file
+        _systemd_unit_path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+      block:
+        # Keep dispatch task-local so a host fact cannot poison the next call. The
+        # action string form avoids the mapping form deprecated in ansible-core 2.23.
+        - name: install | Write the unit file ({{ _module }})
+          vars:
+            _module: "{{ 'template' if systemd_unit_args.src.endswith('.j2') else 'copy' }}"
+          action: "{{ _module }}"
+          args:
+            src: "{{ systemd_unit_args.src }}"
+            dest: "{{ _systemd_unit_path }}"
+            owner: root
+            group: root
+            mode: "0644"
+            backup: true
+          become: true
+          register: systemd_unit_file
 
-    # Skip man-page completeness checks that fail on minimal images; --man=no
-    # works on systemd 249+. Verify user units by path in the system context to
-    # avoid user-manager resolution warnings becoming false rollbacks.
-    - name: install | Validate unit file
-      when: systemd_unit_file.changed
-      command:
-        argv:
-          - systemd-analyze
-          - verify
-          - --no-pager
-          - --man=no
-          - "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
-      register: systemd_unit_verify
-      changed_when: false
-      # Ignore removed-option notices from stock dependencies and blank lines.
-      failed_when: >-
-        systemd_unit_verify.rc != 0
-        or (systemd_unit_verify.stderr_lines
-            | reject('search', 'has been removed and it is ignored')
-            | select | list | length > 0)
-      become: true
+        # Skip man-page completeness checks that fail on minimal images; --man=no
+        # works on systemd 249+. Verify user units by path in the system context to
+        # avoid user-manager resolution warnings becoming false rollbacks.
+        - name: install | Validate unit file
+          when: systemd_unit_file.changed
+          command:
+            argv:
+              - systemd-analyze
+              - verify
+              - --no-pager
+              - --man=no
+              - "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
+          register: systemd_unit_verify
+          changed_when: false
+          # Ignore removed-option notices from stock dependencies and blank lines.
+          failed_when: >-
+            systemd_unit_verify.rc != 0
+            or (systemd_unit_verify.stderr_lines
+                | reject('search', 'has been removed and it is ignored')
+                | select | list | length > 0)
+          become: true
 
-    - name: install | Reload daemon
-      when: systemd_unit_file.changed
-      systemd:
-        daemon_reload: true
-        scope: "{{ _systemd_unit_scope }}"
-      become: true
-      become_user: "{{ _systemd_unit_user }}"
+        - name: install | Reload daemon
+          when: systemd_unit_file.changed
+          systemd:
+            daemon_reload: true
+            scope: "{{ _systemd_unit_scope }}"
+          become: true
+          become_user: "{{ _systemd_unit_user }}"
 
-    # Publish a per-unit result so later helper calls cannot clobber it. The
-    # task name uses the import-time caller var; the body can use resolved facts.
-    - name: install | Record install result for {{ systemd_unit_args.src }}
-      set_fact:
-        "{{ _systemd_unit_name | ansible_var_key }}_result":
-          changed: "{{ systemd_unit_file.changed }}"
+      # Validation needs the production path. Restore the backup or delete a new
+      # file on failure so one broken unit cannot poison daemon-reload host-wide.
+      rescue:
+        - name: install | Copy backup file to original  # noqa: require-backup
+          when: '"backup_file" in systemd_unit_file'
+          copy:
+            remote_src: true
+            dest: "{{ _systemd_unit_path }}"
+            src: "{{ systemd_unit_file.backup_file }}"
+            owner: root
+            group: root
+            mode: "0644"
+          become: true
 
-  # Validation needs the production path. Restore the backup or delete a new
-  # file on failure so one broken unit cannot poison daemon-reload host-wide.
-  rescue:
-    - name: install | Copy backup file to original  # noqa: require-backup
-      when: '"backup_file" in systemd_unit_file'
-      copy:
-        remote_src: true
-        dest: "{{ _systemd_unit_path }}"
-        src: "{{ systemd_unit_file.backup_file }}"
-        owner: root
-        group: root
-        mode: "0644"
-      become: true
+        - name: install | Delete backup file
+          when: '"backup_file" in systemd_unit_file'
+          file:
+            path: "{{ systemd_unit_file.backup_file }}"
+            state: absent
+          become: true
 
-    - name: install | Delete backup file
-      when: '"backup_file" in systemd_unit_file'
-      file:
-        path: "{{ systemd_unit_file.backup_file }}"
-        state: absent
-      become: true
+        - name: install | Delete newly added file
+          when: systemd_unit_file.changed and "backup_file" not in systemd_unit_file
+          file:
+            path: "{{ _systemd_unit_path }}"
+            state: absent
+          become: true
 
-    - name: install | Delete newly added file
-      when: systemd_unit_file.changed and "backup_file" not in systemd_unit_file
-      file:
-        path: "{{ _systemd_unit_path }}"
-        state: absent
-      become: true
+        - name: install | Record failure
+          fail:
+            msg: >-
+              Unable to install {{ _systemd_unit_path }}:
+              {{ ansible_failed_result.stderr
+                 | default(ansible_failed_result.msg
+                 | default('unknown error')) }}
 
-    - name: install | Record failure
-      fail:
-        msg: >-
-          Unable to install {{ _systemd_unit_path }}:
-          {{ ansible_failed_result.stderr
-             | default(ansible_failed_result.msg
-             | default('unknown error')) }}
+# Publish a per-unit result so later helper calls cannot clobber it. A false
+# condition skips the write, whose skipped result still reads changed: false.
+# The task name uses the import-time caller var; the body can use resolved facts.
+- name: install | Record install result for {{ systemd_unit_args.src }}
+  set_fact:
+    "{{ _systemd_unit_name | ansible_var_key }}_result":
+      changed: "{{ systemd_unit_file.changed }}"
