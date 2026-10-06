@@ -1,14 +1,3 @@
-- name: Install openssh-server
-  apt:
-    pkg:
-      - openssh-server
-    cache_valid_time: 3600
-    policy_rc_d: 101
-  register: ssh_apt
-  become: true
-  tags:
-    - ssh
-
 # --- host-key identity persistence -----------------------------------------
 # The configured Ed25519 host identity rides rpool/services so a wipe-and-
 # restore rebuild can bring the host identity back and every known_hosts pin
@@ -33,92 +22,70 @@
     - ssh
 
 # A host without a ZFS root has no services dataset and keeps ephemeral keys.
-- name: Record whether the host identity persists
-  set_fact:
-    ssh_host_identity_persistent: "{{ zfs_root and ssh_services_mount.rc == 0 }}"
-  tags:
-    - ssh
-
-- name: Stat the live host identity
-  when: ssh_host_identity_persistent
-  stat:
-    path: "/etc/ssh/{{ _ssh_host_private_key_file }}"
-  become: true
-  register: ssh_host_live_identity
-  tags:
-    - ssh
-
-- name: Stat the persisted host identity
-  when: ssh_host_identity_persistent
-  stat:
-    path: "/mnt/services/ssh_host_keys/{{ _ssh_host_private_key_file }}"
-  become: true
-  register: ssh_host_persisted_identity
-  tags:
-    - ssh
-
-# A divergent persisted identity means this host was rebuilt without
-# restoring its host key. Halt before the copy loop can destroy the old pin.
-- name: Refuse to overwrite a divergent persisted host identity
-  when:
-    - ssh_host_identity_persistent
-    - ssh_host_live_identity.stat.exists
-    - ssh_host_persisted_identity.stat.exists
-    - ssh_host_live_identity.stat.checksum != ssh_host_persisted_identity.stat.checksum
-  fail:
-    msg: >-
-      /mnt/services/ssh_host_keys holds a DIFFERENT {{ _ssh_host_private_key_file }}
-      identity than /etc/ssh. Either restore the persisted identity:
-      sudo cp -a /mnt/services/ssh_host_keys/ssh_host_ed25519_key{,.pub}
-      /etc/ssh/ && sudo systemctl restart ssh -- or adopt the new identity by
-      deleting /mnt/services/ssh_host_keys, then update every known_hosts pin
-      of this host.
-  tags:
-    - ssh
-
-- name: Create the host-key persistence directory
-  when: ssh_host_identity_persistent
-  file:
-    dest: /mnt/services/ssh_host_keys
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
-  become: true
-  register: ssh_host_persist_dir
-  tags:
-    - ssh
-
-- name: Persist the host keys
-  when:
-    - ssh_host_identity_persistent
-    - not (ansible_check_mode and ssh_host_persist_dir.changed)
-  copy:
-    src: "/etc/ssh/{{ item }}"
-    remote_src: true
-    dest: "/mnt/services/ssh_host_keys/{{ item }}"
-    owner: root
-    group: root
-    mode: preserve
-    backup: true
-  loop: "{{ _ssh_host_key_files }}"
-  loop_control:
-    label: "{{ item }}"
+- name: Persist the host identity
+  when: zfs_root and ssh_services_mount.rc == 0
   become: true
   tags:
     - ssh
+  block:
+    - name: Stat the live host identity
+      stat:
+        path: /etc/ssh/ssh_host_ed25519_key
+      register: ssh_host_live_identity
 
-# Package upgrades stop ssh.service and leave ssh.socket active. Because
-# /run/sshd is its RuntimeDirectory, it stays absent while Ansible reuses the
-# existing ControlMaster instead of opening a connection that triggers the socket.
-- name: Create the sshd runtime directory
-  file:
-    path: /run/sshd
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  register: ssh_runtime_dir
+    - name: Stat the persisted host identity
+      stat:
+        path: /mnt/services/ssh_host_keys/ssh_host_ed25519_key
+      register: ssh_host_persisted_identity
+
+    # A divergent persisted identity means this host was rebuilt without
+    # restoring its host key. Halt before the copy loop can destroy the old pin.
+    - name: Refuse to overwrite a divergent persisted host identity
+      when:
+        - ssh_host_live_identity.stat.exists
+        - ssh_host_persisted_identity.stat.exists
+        - ssh_host_live_identity.stat.checksum != ssh_host_persisted_identity.stat.checksum
+      fail:
+        msg: >-
+          /mnt/services/ssh_host_keys holds a DIFFERENT ssh_host_ed25519_key
+          identity than /etc/ssh. Either restore the persisted identity:
+          sudo cp -a /mnt/services/ssh_host_keys/ssh_host_ed25519_key{,.pub}
+          /etc/ssh/ && sudo systemctl restart ssh -- or adopt the new identity by
+          deleting /mnt/services/ssh_host_keys, then update every known_hosts pin
+          of this host.
+
+    - name: Create the host-key persistence directory
+      file:
+        dest: /mnt/services/ssh_host_keys
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      register: ssh_host_persist_dir
+
+    # Keep aligned with the sole HostKey directive in templates/00-hardening.conf.j2.
+    - name: Persist the host keys
+      when: not (ansible_check_mode and ssh_host_persist_dir.changed)
+      copy:
+        src: "/etc/ssh/{{ item }}"
+        remote_src: true
+        dest: "/mnt/services/ssh_host_keys/{{ item }}"
+        owner: root
+        group: root
+        mode: preserve
+        backup: true
+      loop:
+        - ssh_host_ed25519_key
+        - ssh_host_ed25519_key.pub
+
+# Starting ssh.service recreates /run/sshd, its RuntimeDirectory, which the
+# template's `sshd -t` needs. A package upgrade stops ssh.service behind its
+# still-active socket, and the reused ControlMaster never triggers the socket.
+- name: Enable and start sshd
+  systemd:
+    name: ssh.service
+    enabled: true
+    state: started
   become: true
   tags:
     - ssh
@@ -131,40 +98,21 @@
     group: root
     mode: "0644"
     backup: true
-    # Parse the staged file before it lands, catching a syntax error in the
-    # drop-in on write. This validates the drop-in in isolation; the merged
-    # Include-chain check is the separate `sshd -t` task below.
+    # Rejects a drop-in that fails to parse before it lands. The merged
+    # Include chain is checked by the unit's reload below.
     validate: sshd -t -f %s
-  when: >-
-    not (ansible_check_mode and (ssh_apt.changed or ssh_runtime_dir.changed))
   register: ssh_sshd_config
   become: true
   tags:
     - ssh
 
-# `sshd -t` (no -f) re-validates the merged live config, including every
-# package and role-owned file. The template's validate sees only the staged drop-in,
-# so keep this whole-chain gate before reload.
-- name: Validate sshd config before reload
-  when:
-    - >-
-      not (ansible_check_mode and (ssh_apt.changed or ssh_runtime_dir.changed))
-    - ssh_sshd_config.changed
-  command: sshd -t
-  changed_when: false
-  become: true
-  tags:
-    - ssh
-
-- name: Enable and reload sshd
-  when: not (ansible_check_mode and ssh_apt.changed)
+# Ubuntu's ExecReload runs `sshd -t` over the merged config before it sends
+# SIGHUP, so a config that fails as a whole never reaches the running daemon.
+- name: Reload sshd
+  when: ssh_sshd_config.changed
   systemd:
     name: ssh.service
-    enabled: true
-    state: >-
-      {{ 'reloaded'
-         if ssh_sshd_config.changed
-         else 'started' }}
+    state: reloaded
   become: true
   tags:
     - ssh
