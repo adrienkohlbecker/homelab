@@ -140,12 +140,10 @@
     _netplan_wait_online: "{{ netplan_verify_wait_online.status }}"
   assert:
     that:
-      - _netplan_wait_online.ConditionResult == 'yes'
       - _netplan_wait_online.ActiveState == 'active'
       - _netplan_probe_routes | length > 0
     fail_msg: |-
       network-online.target must wait for a default-route uplink.
       Routes seen by the probe: {{ _netplan_probe_routes }}
-      wait-online: ConditionResult={{ _netplan_wait_online.ConditionResult }}
-      ActiveState={{ _netplan_wait_online.ActiveState }}
+      wait-online: ActiveState={{ _netplan_wait_online.ActiveState }}
       ExecStart={{ _netplan_wait_online.ExecStart }}

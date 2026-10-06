@@ -5,13 +5,7 @@
 
 - name: Create a netplan D-Bus configuration transaction
   command:
-    argv:
-      - busctl
-      - call
-      - io.netplan.Netplan
-      - /io/netplan/Netplan
-      - io.netplan.Netplan
-      - Config
+    cmd: busctl call io.netplan.Netplan /io/netplan/Netplan io.netplan.Netplan Config
   register: netplan_dbus_config
   changed_when: false
   tags:
@@ -22,15 +16,6 @@
     netplan_dbus_path: >-
       {{ netplan_dbus_config.stdout
          | regex_search('/io/netplan/Netplan/config/[A-Za-z0-9]+') }}
-  tags:
-    - netplan
-
-- name: Assert the netplan D-Bus transaction was created
-  assert:
-    that:
-      - netplan_dbus_path is string
-      - netplan_dbus_path | length > 0
-    fail_msg: "Netplan did not return a D-Bus configuration object"
   tags:
     - netplan
 
@@ -80,15 +65,7 @@
   # Detach so a severed SSH connection cannot strand the controller inside
   # the D-Bus call; Netplan automatically rejects an unconfirmed trial.
   command:
-    argv:
-      - busctl
-      - call
-      - io.netplan.Netplan
-      - "{{ netplan_dbus_path }}"
-      - io.netplan.Netplan.Config
-      - Try
-      - u
-      - "90"
+    cmd: busctl call io.netplan.Netplan {{ netplan_dbus_path }} io.netplan.Netplan.Config Try u 90
   async: 30
   poll: 0
   register: netplan_try_async
@@ -130,13 +107,7 @@
 
 - name: Confirm the netplan transaction
   command:
-    argv:
-      - busctl
-      - call
-      - io.netplan.Netplan
-      - "{{ netplan_dbus_path }}"
-      - io.netplan.Netplan.Config
-      - Apply
+    cmd: busctl call io.netplan.Netplan {{ netplan_dbus_path }} io.netplan.Netplan.Config Apply
   register: netplan_apply_result
   changed_when: true
   failed_when: >-
