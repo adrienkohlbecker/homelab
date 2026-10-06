@@ -6,18 +6,13 @@
 # letting keepalived leave FAULT and claim the VIP. dnsmasq here is a stand
 # in for the UDM's own resolver — this role never configures dnsmasq, it
 # only rides the resolver the appliance already runs.
-# iptables is part of UniFi OS on the real UDM (it firewalls with it), so
-# the role assumes it's present. The Lab image ships neither iptables
-# nor a resolver, so the fixture provides them — mirroring how prod roles
-# (firewall, the appliance OS) would have on the target.
 - name: _setup | Install the site-level UDM on-boot prerequisite
   import_role:
     name: udm_on_boot
 
-- name: _setup | Install iptables, dig, and a stub resolver for the test
+- name: _setup | Install dig and a stub resolver for the test
   apt:
     pkg:
-      - iptables
       - dnsutils
       - dnsmasq
     install_recommends: false
