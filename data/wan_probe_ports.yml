@@ -7,5 +7,4 @@ tcp:
 udp:
   - 51820 # WireGuard
   - 5353  # mDNS negative WAN-source probe
-  - 41641 # Tailscale direct underlay, lab
-  - 41642 # Tailscale direct underlay, pug
+  - 41641 # Tailscale direct underlay
