@@ -24,6 +24,11 @@ ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
 ExecStart=/bin/ip link set {{ macvlan_args.name }} up
 # Use the child IP as the source for host-originated traffic into this block.
 ExecStart=/bin/ip route add {{ macvlan_block }} dev {{ macvlan_args.name }} proto static src {{ _host_ip }}
+# Hold activation until PID1 has seen the child device. Otherwise, while udev
+# lags (boot coldplug), the child BindsTo finds the device inactive with no
+# job and stops the unit, deleting the iface. A device start job only waits
+# for the device to appear, bounded by the default device job timeout.
+ExecStart=/bin/systemctl start sys-subsystem-net-devices-{{ macvlan_args.name }}.device
 ExecStop=-/bin/ip link delete {{ macvlan_args.name }}
 
 [Install]
