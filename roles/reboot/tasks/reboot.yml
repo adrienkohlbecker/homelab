@@ -2,8 +2,10 @@
 # severs SSH. Elevate only systemctl so Ansible polls through the base context.
 #
 # Production reboots through logind so the DNS reboot guard's block lock can
-# stop them. Fixtures run that guard on their only DNS server, so they start
-# reboot.target through PID1, which has no inhibitors and needs no polkit.
+# stop them on systemd 257+ (Resolute); Noble's logind ignores root's own
+# lock, leaving the site.yml DNS safety gate as the guard there. Fixtures run
+# that guard on their only DNS server, so they start reboot.target through
+# PID1, which has no inhibitors and needs no polkit.
 - name: Reboot and wait for the host to return
   reboot:
     reboot_command: >-

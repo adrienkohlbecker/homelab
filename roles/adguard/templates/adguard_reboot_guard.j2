@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+# Hold a logind shutdown block lock while no DNS peer answers, so a reboot
+# cannot take down the last DNS server. systemd 257+ (Resolute) logind
+# enforces the lock against root. Noble's logind ignores a lock held by the
+# caller's own uid, so root reboots pass there and only the site.yml DNS
+# safety gate protects the Ansible reboot path. NUT's SHUTDOWNCMD bypasses
+# logind on purpose (see roles/nut/templates/upsmon.conf.j2).
+
 {# udm is excluded: its last-resort dnsmasq failover has no adguard.home
    record, so it can never satisfy check_peers -- it serves degraded DNS,
    not a healthy peer worth releasing the reboot lock for, and probing it

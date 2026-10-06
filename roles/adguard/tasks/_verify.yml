@@ -168,6 +168,21 @@
   until: _adguard_verify_inhibitor.rc == 0
   become: true
 
+# The fixture's peers never answer, so the guard keeps its lock. Since systemd
+# 257, logind refuses even root's reboot while it is held. Noble's logind
+# ignores a lock held by the caller's own uid, so this control would reboot
+# there; on Noble only the site.yml DNS safety gate protects reboots. The
+# systemd module cannot request a logind reboot.
+- name: _verify | Reboot guard refuses a root reboot
+  when: ansible_distribution_release != 'noble'
+  command: /usr/bin/systemctl reboot # noqa: command-instead-of-module
+  register: adguard_verify_refused_reboot
+  changed_when: false
+  failed_when: >-
+    adguard_verify_refused_reboot.rc == 0
+    or 'inhibitor' not in adguard_verify_refused_reboot.stderr
+  become: true
+
 - name: _verify | Exercise adguard fluent-bit record contracts
   import_role:
     name: fluentbit
