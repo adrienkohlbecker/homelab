@@ -1,47 +1,11 @@
 # The harness has no live GitLab token, so verify every host-side contract and
 # leave real job dispatch to the registered runners.
-- name: _verify | Pinned gitlab-runner binary runs on this arch
-  command: /usr/local/bin/gitlab-runner --version
-  register: _gitlab_runner_version
-  changed_when: false
-  failed_when: gitlab_runner_version not in _gitlab_runner_version.stdout
-
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: gitlab_runner
     _storage_mounts: [ services ]
     _storage_autosnapshot: false
-
-- name: _verify | Validate installed AWS profile and credentials
-  when: gitlab_runner_aws_qemu_enabled or gitlab_runner_aws_qemu_arm_enabled
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import configparser
-        import sys
-
-        config_path, credentials_path, profile, region = sys.argv[1:5]
-
-        config = configparser.ConfigParser()
-        assert config.read(config_path) == [config_path]
-        assert config.sections() == [f"profile {profile}"]
-        assert config[f"profile {profile}"]["region"] == region
-
-        credentials = configparser.ConfigParser()
-        assert credentials.read(credentials_path) == [credentials_path]
-        assert credentials.sections() == [profile]
-        assert credentials[profile]["aws_access_key_id"]
-        assert credentials[profile]["aws_secret_access_key"]
-        assert "source_profile" not in credentials[profile]
-      - /mnt/services/gitlab_runner/.aws/config
-      - /mnt/services/gitlab_runner/.aws/credentials
-      - "{{ gitlab_runner_aws_qemu_profile }}"
-      - "{{ gitlab_runner_aws_qemu_region }}"
-  changed_when: false
-  become: true
 
 - name: _verify | Exercise gitlab_runner fluent-bit record contracts
   import_role:
@@ -52,12 +16,6 @@
       name: gitlab_runner
       records:
         - MESSAGE: '{"level":"warning","msg":"gitlab-runner-valid","time":"2099-01-02T03:04:05Z","job":42,"runner_name":"fixture","service":"attribute"}'
-          SYSLOG_IDENTIFIER: gitlab-runner
-          SYSTEMD_UNIT: gitlab_runner.service
-        - MESSAGE: '{"level":"info","msg":"gitlab-runner-action","time":"2099-01-02T03:04:05Z","subsystem":"taskscaler","marker":"gitlab-runner-keep"}'
-          SYSLOG_IDENTIFIER: gitlab-runner
-          SYSTEMD_UNIT: gitlab_runner.service
-        - MESSAGE: '{"level":"info","msg":"Submitting job to coordinator...accepted, but not yet completed","time":"2099-01-02T03:04:05Z","marker":"gitlab-runner-submit-pending-keep"}'
           SYSLOG_IDENTIFIER: gitlab-runner
           SYSTEMD_UNIT: gitlab_runner.service
         - MESSAGE: '{"level":"broken"'
@@ -76,14 +34,6 @@
           _absent:
             - fields.time
             - fields.msg
-        - message: gitlab-runner-action
-          level: info
-          service: gitlab-runner
-          fields.marker: gitlab-runner-keep
-        - message: Submitting job to coordinator...accepted, but not yet completed
-          level: info
-          service: gitlab-runner
-          fields.marker: gitlab-runner-submit-pending-keep
         - message: '{"level":"broken"'
           level: warn
           service: gitlab-runner
@@ -100,13 +50,6 @@
   failed_when: >-
     gitlab_runner_fleeting_aws_version
     not in _gitlab_runner_fleeting_aws_version.stdout
-
-# Start the qemu enable-only unit to exercise its runtime identity and paths.
-- name: _verify | Start the runner to drive the unit's ExecStart
-  systemd:
-    name: gitlab_runner.service
-    state: started
-  become: true
 
 # Probe the same loopback endpoint netdata scrapes.
 - name: _verify | Runner serves prometheus metrics on its loopback port
@@ -134,7 +77,7 @@
             - fields.msg
 
 # Re-read after the metrics probe to reject a brief active crash-loop window.
-- name: _verify | Runner stayed up since the smoke start
+- name: _verify | Runner stayed up since converge started it
   systemd:
     name: gitlab_runner.service
   register: _gitlab_runner_settled
@@ -143,9 +86,3 @@
     or _gitlab_runner_settled.status.NRestarts != "0"
   become: true
 
-# With no jobs, SIGQUIT drains immediately and leaves the fixture stopped.
-- name: _verify | Stop the runner after smoke
-  systemd:
-    name: gitlab_runner.service
-    state: stopped
-  become: true

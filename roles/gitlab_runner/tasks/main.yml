@@ -153,13 +153,6 @@
           become: true
           register: gitlab_runner_aws_qemu_arm_ssh_key
 
-    - name: Remove ARM Fleeting SSH key when disabled
-      when: not gitlab_runner_aws_qemu_arm_enabled
-      file:
-        path: "{{ gitlab_runner_aws_qemu_arm_ssh_private_key_path }}"
-        state: absent
-      become: true
-
     # Parse TOML locally; `gitlab-runner verify` is an online registration check,
     # not a configuration linter.
     - name: Render gitlab-runner config.toml
@@ -183,9 +176,9 @@
         fluentbit_extension_args:
           name: gitlab_runner
 
-    # QEMU fixtures enable without registering. Runner notices config changes,
-    # but an existing autoscaler's connector keeps the settings and private key
-    # loaded when its taskscaler started. Restart to apply either one.
+    # Runner notices config changes, but an existing autoscaler's connector
+    # keeps the settings and private key loaded when its taskscaler started.
+    # Restart to apply either one.
     - name: Manage gitlab_runner.service
       import_role:
         name: systemd_unit
@@ -194,7 +187,6 @@
         systemd_unit_args:
           src: gitlab_runner.service.j2
           condition: "{{ not ansible_check_mode or gitlab_runner_user.uid is defined }}"
-          start: "{{ not qemu_test }}"
           restart: >-
             {{ gitlab_runner_binary.changed
                or gitlab_runner_fleeting_aws_binary.changed

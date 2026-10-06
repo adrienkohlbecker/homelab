@@ -15,7 +15,6 @@
   [runners.autoscaler]
     plugin = "fleeting-plugin-aws"
     capacity_per_instance = {{ capacity }}
-    max_use_count = 0
     max_instances = {{ max_instances }}
     delete_instances_on_shutdown = true
     instance_ready_command = "/usr/local/bin/homelab_ci_ready"
@@ -38,7 +37,6 @@
 {% endif %}
 
     [[runners.autoscaler.policy]]
-      idle_count = 0
       idle_time = "{{ idle_time }}"
       preemptive_mode = false
 {% endmacro %}

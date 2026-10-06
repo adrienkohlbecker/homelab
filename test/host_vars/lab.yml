@@ -85,8 +85,8 @@ samba_shares:
 
 netdata_packer_process_group_enabled: true
 # Exercise the AWS qemu instance-executor block: runner/plugin download,
-# manager-side AWS profile render, config.toml render, unit install, and the
-# start/metrics/stop smoke. The qemu harness never boots an ASG, and these
+# manager-side AWS profile render, config.toml render, and the running unit's
+# metrics smoke. The qemu harness never boots an ASG, and these
 # placeholder credentials are never accepted by AWS.
 gitlab_runner_aws_qemu_enabled: true
 gitlab_runner_shell_enabled: true
