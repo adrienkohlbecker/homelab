@@ -148,18 +148,14 @@
                     ("2", ["--http2"]),
                 ]:
                     url = config["url"] + "/" + config["access_key"] + "/verify_" + uuid.uuid4().hex
-                    try:
-                        result = subprocess.run(
-                            curl + flags + ["--request", "PUT", "--data-binary", "@" + str(source),
-                                            "--header", "x-amz-content-sha256: " + digest,
-                                            "--write-out", "%{http_version}", url],
-                            input=credentials, text=True, stdout=subprocess.PIPE, check=True,
-                        )
-                        assert result.stdout == protocol, result.stdout
-                        print("48 MiB upload passed:", flags, flush=True)
-                    finally:
-                        subprocess.run(curl + ["--request", "DELETE", url],
-                                       input=credentials, text=True, check=True)
+                    result = subprocess.run(
+                        curl + flags + ["--request", "PUT", "--data-binary", "@" + str(source),
+                                        "--header", "x-amz-content-sha256: " + digest,
+                                        "--write-out", "%{http_version}", url],
+                        input=credentials, text=True, stdout=subprocess.PIPE, check=True,
+                    )
+                    assert result.stdout == protocol, result.stdout
+                    print("48 MiB upload passed:", flags, flush=True)
       args:
         stdin: "{{ minio_users[0] | combine({'url': 'https://minio-api.' ~ inventory_hostname ~ '.' ~ domain}) | to_json }}"
       changed_when: false
