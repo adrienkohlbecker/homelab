@@ -147,33 +147,15 @@
   tags:
     - user
 
-- name: Check for the operator GPG key
-  command: gpg --with-colons --list-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
-  register: user_gpg_check
-  failed_when: false
-  changed_when: false
-  check_mode: false
-  tags:
-    - user
-
-# Fetch over HTTPS rather than gpg --keyserver: bare HKP is port 11371
-# (widely firewalled), and dirmngr hard-fails when keyserver.ubuntu.com
-# resolves to an AAAA the host can't route (the qemu test net has no IPv6
-# route) instead of falling back. curl rides 443 and happy-eyeballs to IPv4.
+# Importing a key already in the keyring merges nothing; IMPORT_OK reports a
+# zero reason bitmask then, and nonzero for a new key or new subkeys, UIDs or
+# signatures, so an updated vendored key (extended expiry) lands on next run.
 - name: Import the operator GPG public key
-  when:
-    - user_gpg_check.rc != 0
-    - not (ansible_check_mode and user_apt_packages.changed)
-  shell: |
-    set -euo pipefail
-    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC248DE6357445D6302F9A62E74BFD03C20CC21AF" | gpg --batch --import
-  args:
-    executable: /bin/bash
-  changed_when: true
+  command:
+    argv: [ gpg, --batch, --status-fd, "1", --import ]
+    stdin: "{{ lookup('file', 'operator_gpg_public_key.asc') }}"
   register: user_gpg_import
-  until: user_gpg_import.rc == 0
-  retries: 3
-  delay: 5
+  changed_when: user_gpg_import.stdout is search('(?m)^\[GNUPG:\] IMPORT_OK [1-9]')
   tags:
     - user
 
