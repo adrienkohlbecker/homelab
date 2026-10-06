@@ -81,7 +81,7 @@ A new service role mirrors a recent sibling and wires these shared places:
 - **Ports:** operator-reachable ports (host `--publish` or loopback binds) live in `service_ports:` in `group_vars/all/main.yml` — check it for collisions. Container-to-container traffic over podman networks stays as inline literals.
 - **Datasets:** per-site gates are `zfs_has_<name>_mount:` (services/scratch/media/data/minio) in the same file. Consumers gate bind-mounts on the flag; producers create datasets unconditionally and never read it — test fixtures flip every flag `false`, so a gated producer would no-op there.
 - **Vhost:** an `nginx_site` call (see *Helper roles*).
-- **Bookmark:** user-facing services get an entry in [roles/homepage/templates/bookmarks.yaml.j2](roles/homepage/templates/bookmarks.yaml.j2) shaped `abbr: XX` + `icon: sh-<name>.png` (selfh.st icons) + `href: https://<subdomain>.{{ inventory_hostname }}.{{ domain }}/`.
+- **Bookmark:** user-facing services get a `homepage_bookmarks` entry under the right section in [roles/homepage/vars/main.yml](roles/homepage/vars/main.yml), shaped `{ name: …, abbr: XX, sub: <subdomain>, icon: <selfh.st name> }` (add `host:` for another host's service). [bookmarks.yaml.j2](roles/homepage/templates/bookmarks.yaml.j2) renders it to `icon: sh-<icon>.png` and `href: https://<sub>.<host>.{{ domain }}/`, and falls back to the abbr tile when `icon:` is omitted.
 
 ### Home Assistant
 
