@@ -5,6 +5,8 @@
 # A Python helper diffs current NVRAM state against boot_efi_entries
 # (from defaults) and applies the minimum changes: create missing
 # entries, remove stale/relabeled managed entries, reorder BootOrder.
+#
+# Gated on `zfs_root` by the import in main.yml.
 
 - name: efi_entries | Converge NVRAM entries
   script:
