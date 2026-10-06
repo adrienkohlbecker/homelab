@@ -80,6 +80,7 @@
 
 # Bind the DNS VIP the keepalived_vrrp collector watches, as a MASTER would.
 - name: _setup | Add keepalived VRRP loopback VIP fixture
+  when: dns_vrrp_enabled
   command: ip addr replace {{ network.virtual_ips.dns }}/32 dev lo
   changed_when: false
   become: true

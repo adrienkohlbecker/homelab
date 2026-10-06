@@ -1,3 +1,9 @@
+# Lab carries the full collector surface (keepalived VIP, MinIO scrape,
+# intelgpu, packer process group); Minimal exercises a GRUB-booted host
+# without a ZFS root, with those optional collectors and groups disabled.
+machines:
+  lab:
+  minimal:
 # Verification exercises the nginx and Authelia front on the full Lab fixture.
 arm:
   - lab

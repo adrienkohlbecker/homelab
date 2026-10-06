@@ -1,26 +1,29 @@
-# Exercises the running netdata on the Lab fixture: the Postfix collector
-# against the _setup queue, the apt pin, the nginx/Authelia front,
-# netdata.conf's DNS policy, the Fluent Bit extension, and the
-# netdata_presence.chart.sh collector plus the context_liveness templates that
-# consume netdata_contexts / netdata_collectors. test/host_vars/lab.yml seeds:
+# Exercises the running netdata: the Postfix collector against the _setup
+# queue, the apt pin, the nginx/Authelia front, netdata.conf's DNS policy, the
+# Fluent Bit extension, and the netdata_presence.chart.sh collector plus the
+# context_liveness templates that consume netdata_contexts /
+# netdata_collectors. test/host_vars/{lab,minimal}.yml seed:
 #   netdata_contexts:
 #     - system.cpu             (real chart, always live)
 #     - foo.does_not_exist     (never-existed chart)
 #   netdata_collectors:
 #     - go.d:collector:systemdunits:service-units  (real, always-live -- the role configures it)
 #     - go.d:collector:prometheus:gitlab_runner   (fixture metrics server)
-#     - go.d:collector:prometheus:minio           (MinIO scrape job)
-#     - go.d:collector:intelgpu:intelgpu          (no Intel GPU on the fixture)
+#     - go.d:collector:prometheus:minio           (Lab only: MinIO scrape job)
+#     - go.d:collector:intelgpu:intelgpu          (Lab only: no Intel GPU on the fixture)
 #     - go.d:collector:fake_plugin:fake_job        (never-existed collector)
 #   netdata_expected_charts:
 #     system_cpu_chart: system.cpu                 (real exact chart)
 #     missing_fixture_chart: fixture.does_not_exist (never-existed exact chart)
-# So the collector emits present=1 for system.cpu + systemdunits and
-# system_cpu_chart, present=0 for foo.does_not_exist + fake_plugin:fake_job +
-# missing_fixture_chart, and the health templates fan out across the resulting
-# charts. systemdunits is the present=1 witness for the collector prefix match
-# (instanced mode, plugin != job) -- not just the trivial present=0 path;
-# fake_plugin:fake_job is the present=0 witness.
+# So the collector emits present=1 for system.cpu + systemdunits +
+# gitlab_runner and system_cpu_chart, present=0 for foo.does_not_exist +
+# fake_plugin:fake_job + missing_fixture_chart, and the health templates fan
+# out across the resulting charts. systemdunits is the present=1 witness for
+# the collector prefix match (instanced mode, plugin != job) -- not just the
+# trivial present=0 path; fake_plugin:fake_job is the present=0 witness.
+#
+# Lab additionally binds the keepalived DNS VIP and enables the MinIO scrape;
+# Minimal (no ZFS root, GRUB-booted) leaves those optional collectors disabled.
 
 - name: _verify | Wait for Postfix queue metrics
   uri:
@@ -127,47 +130,51 @@
           service: netdata
           fields.marker: netdata-parser-error-keep
 
-- name: _verify | Read Prometheus collector configuration
-  slurp:
-    src: /etc/netdata/go.d/prometheus.conf
-  register: _netdata_prometheus_conf
-  become: true
+# The MinIO scrape job and the keepalived DNS VIP exist only on Lab.
+- name: _verify | Check the full-fixture collectors
+  when: not qemu_test_minimal
+  block:
+    - name: _verify | Read Prometheus collector configuration
+      slurp:
+        src: /etc/netdata/go.d/prometheus.conf
+      register: _netdata_prometheus_conf
+      become: true
 
-- name: _verify | MinIO inputs enable its Prometheus scrape job
-  assert:
-    that:
-      - >-
-        (_netdata_prometheus_conf.content | b64decode)
-        is search('(?m)^  - name: minio$')
-    fail_msg: >-
-      Expected the configured MinIO collector to enable its job in prometheus.conf.
+    - name: _verify | MinIO inputs enable its Prometheus scrape job
+      assert:
+        that:
+          - >-
+            (_netdata_prometheus_conf.content | b64decode)
+            is search('(?m)^  - name: minio$')
+        fail_msg: >-
+          Expected the configured MinIO collector to enable its job in prometheus.conf.
 
-# allmetrics reports the last collected sample directly, so no query-window
-# bucketing can leave the newest value invisible.
-- name: _verify | Keepalived_vrrp fixture reports holds_vip=1
-  uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=keepalived_vrrp.state
-  register: _netdata_keepalived_vrrp_data
-  retries: 30
-  delay: 2
-  until: >-
-    _netdata_keepalived_vrrp_data.status == 200
-    and ((_netdata_keepalived_vrrp_data.json | default({}))['keepalived_vrrp.state'] | default({}))
-        .dimensions.holds_vip.value | default(-1) | int == 1
+    # allmetrics reports the last collected sample directly, so no query-window
+    # bucketing can leave the newest value invisible.
+    - name: _verify | Keepalived_vrrp fixture reports holds_vip=1
+      uri:
+        url: http://localhost:{{ service_ports.netdata }}/api/v1/allmetrics?format=json&filter=keepalived_vrrp.state
+      register: _netdata_keepalived_vrrp_data
+      retries: 30
+      delay: 2
+      until: >-
+        _netdata_keepalived_vrrp_data.status == 200
+        and ((_netdata_keepalived_vrrp_data.json | default({}))['keepalived_vrrp.state'] | default({}))
+            .dimensions.holds_vip.value | default(-1) | int == 1
 
-- name: _verify | Keepalived_vrrp chart carries VIP label + shared context
-  uri:
-    url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=keepalived_vrrp.state
-  register: _netdata_keepalived_vrrp_chart
+    - name: _verify | Keepalived_vrrp chart carries VIP label + shared context
+      uri:
+        url: http://localhost:{{ service_ports.netdata }}/api/v1/chart?chart=keepalived_vrrp.state
+      register: _netdata_keepalived_vrrp_chart
 
-- name: _verify | Assert keepalived_vrrp labels + context
-  assert:
-    that:
-      - _netdata_keepalived_vrrp_chart.json.context == "keepalived_vrrp.state"
-      - _netdata_keepalived_vrrp_chart.json.chart_labels.vip | default('') == network.virtual_ips.dns
-    fail_msg: >-
-      chart {{ _netdata_keepalived_vrrp_chart.json.id }} context={{ _netdata_keepalived_vrrp_chart.json.context }}
-      labels={{ _netdata_keepalived_vrrp_chart.json.chart_labels | default({}) }}
+    - name: _verify | Assert keepalived_vrrp labels + context
+      assert:
+        that:
+          - _netdata_keepalived_vrrp_chart.json.context == "keepalived_vrrp.state"
+          - _netdata_keepalived_vrrp_chart.json.chart_labels.vip | default('') == network.virtual_ips.dns
+        fail_msg: >-
+          chart {{ _netdata_keepalived_vrrp_chart.json.id }} context={{ _netdata_keepalived_vrrp_chart.json.context }}
+          labels={{ _netdata_keepalived_vrrp_chart.json.chart_labels | default({}) }}
 
 # The slow-web alarm check below is only meaningful once the nginx web_log
 # chart has loaded.
@@ -192,6 +199,7 @@
   vars:
     _system_cpu: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_system_cpu'] | default({}) }}"
     _systemdunits: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_systemdunits_service_units'] | default({}) }}"
+    _gitlab_runner: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_prometheus_gitlab_runner'] | default({}) }}"
     _missing_context: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.context_foo_does_not_exist'] | default({}) }}"
     _fake_collector: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.collector_go_d_collector_fake_plugin_fake_job'] | default({}) }}"
     _system_cpu_chart: "{{ (_netdata_presence_metrics.json | default({}))['netdata_presence.chart_system_cpu_chart'] | default({}) }}"
@@ -202,6 +210,8 @@
     and _system_cpu.dimensions.ready.value | default(-1) | int == 1
     and _systemdunits.dimensions.present.value | default(-1) | int == 1
     and _systemdunits.dimensions.ready.value | default(-1) | int == 1
+    and _gitlab_runner.dimensions.present.value | default(-1) | int == 1
+    and _gitlab_runner.dimensions.ready.value | default(-1) | int == 1
     and _missing_context.dimensions.present.value | default(-1) | int == 0
     and _missing_context.dimensions.ready.value | default(-1) | int == 1
     and _fake_collector.dimensions.present.value | default(-1) | int == 0
@@ -211,11 +221,27 @@
     and _missing_chart.dimensions.present.value | default(-1) | int == 0
     and _missing_chart.dimensions.ready.value | default(-1) | int == 1
 
+# Minimal leaves the keepalived collector undeployed. The presence charts above
+# come from the same charts.d.plugin, so by now it has probed every installed
+# module: the enabled-but-absent keepalived_vrrp module must stay inert.
+- name: _verify | Check the disabled keepalived collector on Minimal
+  when: qemu_test_minimal
+  block:
+    - name: _verify | Read the registered charts
+      uri:
+        url: http://localhost:{{ service_ports.netdata }}/api/v1/charts
+      register: _netdata_minimal_charts
+
+    - name: _verify | No keepalived_vrrp chart without the DNS VIP collector
+      assert:
+        that: "'keepalived_vrrp.state' not in _netdata_minimal_charts.json.charts"
+        fail_msg: Expected no keepalived_vrrp chart on a host without dns_vrrp_enabled.
+
 # Unit-test the collector's pure derivations directly. The live
 # present=1 path above only exercises 'instanced' mode (systemdunits,
 # plugin != job); 'exact' mode (plugin == job -- nvme and zfspool,
 # the dominant prod shape) and the non-go.d skip have no always-live
-# witness on the Lab fixture, so assert the pure derivation here.
+# witness on the test fixtures, so assert the pure derivation here.
 # The agent-start derivation gets the same treatment: its grace-suppress
 # behavior only manifests on a prod-cadence plugin respawn, so assert
 # the derivation (pid 1 == boot epoch, unallocated pid == now fallback)
@@ -256,14 +282,16 @@
     executable: /bin/bash
   changed_when: false
 
-# Alarms the role's own health.d files define that instantiate on the Lab
-# fixture. Each must be loaded with its sysadmin routing: a parse error or a
+# Alarms the role's own health.d files define that instantiate on the test
+# fixtures. Each must be loaded with its sysadmin routing: a parse error or a
 # shadowing stock file leaves it missing or routed elsewhere.
+# The keepalived lost-master alarm loads only on Lab, the primary DNS peer, and
+# the swap-unit alarm only where a swap unit exists (not the Minimal cloud
+# image).
 - name: _verify | List the managed alarms the fixture instantiates
-  set_fact:
-    _netdata_managed_alarms:
+  vars:
+    _shared_alarms:
       - gitlab_runner_actionable_failure
-      - keepalived_lost_master
       - liveness_system_cpu
       - plugin_data_collection_status
       - postfix_queue_depth
@@ -276,9 +304,13 @@
       - systemd_service_unit_failed_state
       - systemd_slice_unit_failed_state
       - systemd_socket_unit_failed_state
-      - systemd_swap_unit_failed_state
       - systemd_target_unit_failed_state
       - systemd_timer_unit_failed_state
+  set_fact:
+    _netdata_managed_alarms: >-
+      {{ _shared_alarms
+         + ([] if qemu_test_minimal else ['keepalived_lost_master'])
+         + (['systemd_swap_unit_failed_state'] if ansible_swaptotal_mb > 0 else []) }}
 
 # Two alert template fan-outs to assert here:
 #   1) netdata_context_missing / netdata_collector_missing (presence alerts)

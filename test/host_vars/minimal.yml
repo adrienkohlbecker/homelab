@@ -19,3 +19,18 @@ grub_bootloader: true
 # The role installs the optional kernel-module package omitted by this trimmed
 # cloud image, making minimal the zram-only fixture.
 swap_zram_size: 2G
+
+# Netdata monitoring surface, mirroring Lab's always-live and never-existed
+# presence entries; _setup serves the GitLab Runner metrics fixture on its
+# production port. The MinIO and intelgpu collectors, the keepalived VIP, and
+# the packer process group stay disabled.
+netdata_contexts:
+  - system.cpu
+  - foo.does_not_exist
+netdata_collectors:
+  - go.d:collector:systemdunits:service-units
+  - go.d:collector:prometheus:gitlab_runner
+  - go.d:collector:fake_plugin:fake_job
+netdata_expected_charts:
+  system_cpu_chart: system.cpu
+  missing_fixture_chart: fixture.does_not_exist
