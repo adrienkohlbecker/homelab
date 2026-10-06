@@ -1,8 +1,8 @@
 # Exercises the docker_client role's contract:
 # 1) docker / docker-buildx-plugin / docker-compose-plugin are
 #    installed and runnable (binary exec, not just dpkg state).
-# 2) PAM exports DOCKER_HOST for Bash and zsh login shells. Whether the Podman
-#    socket answers belongs to the podman role.
+# 2) PAM exports DOCKER_HOST for Bash and zsh login shells.
+# 3) The operator's rootless Podman socket answers the Docker CLI there.
 
 - name: _verify | Docker CLI is installed and runnable
   command: docker --version
@@ -29,3 +29,18 @@
   loop:
     - bash
     - zsh
+
+- name: _verify | Docker CLI reaches the operator rootless Podman socket
+  command:
+    argv:
+      - sudo
+      - --user
+      - "{{ ansible_user_id }}"
+      - bash
+      - -lc
+      - docker version
+  register: _docker_client_version
+  changed_when: false
+  failed_when: >-
+    _docker_client_version.rc != 0
+    or 'Podman Engine' not in _docker_client_version.stdout

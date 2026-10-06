@@ -41,3 +41,37 @@
   become: true
   tags:
     - docker_client
+
+# The podman role drops the package-wide user-socket enablement, so enable the
+# socket DOCKER_HOST names for the operator alone. Linger keeps it answering
+# without a login session.
+- name: Enable linger for the operator Podman socket
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: "{{ ansible_user_id }}"
+      uid: "{{ ansible_user_uid }}"
+  tags:
+    - docker_client
+
+- name: Check whether podman ships its user socket
+  stat:
+    path: /usr/lib/systemd/user/podman.socket
+  register: docker_client_podman_socket
+  tags:
+    - docker_client
+
+# A fresh check-mode run only predicts the podman package.
+- name: Enable the operator rootless Podman socket
+  when: not ansible_check_mode or docker_client_podman_socket.stat.exists
+  systemd:
+    name: podman.socket
+    scope: user
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ ansible_user_id }}"
+  tags:
+    - docker_client
