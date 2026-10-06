@@ -1,28 +1,19 @@
 APP_NAME = Gitea
-RUN_USER = git
 WORK_PATH = /mnt/services/gitea
 
 [database]
 DB_TYPE = sqlite3
-PATH = /mnt/services/gitea/data/gitea.db
 SQLITE_JOURNAL_MODE = WAL
 # gitea default is 500ms; under concurrent web + cron + LFS load (the
 # cleanup_actions cron in particular) writers race on the WAL lock and
 # 500ms is short enough to surface as user-visible 500s.
 SQLITE_TIMEOUT = 10000
 
-[repository]
-ROOT = /mnt/services/gitea/data/gitea-repositories
-
 [server]
-SSH_DOMAIN = gitea.{{ inventory_hostname }}.{{ domain }}
 DOMAIN = gitea.{{ inventory_hostname }}.{{ domain }}
 HTTP_ADDR = 127.0.0.1
 HTTP_PORT = {{ service_ports.gitea }}
 ROOT_URL = https://gitea.{{ inventory_hostname }}.{{ domain }}/
-APP_DATA_PATH = /mnt/services/gitea/data
-DISABLE_SSH = false
-SSH_PORT = 22
 # Host sshd serves git@; gitea rewrites ~git/.ssh/authorized_keys with
 # command="..." prefixes. SSH clones break (and a bash shell may be
 # exposed) if sshd moves off :22 or any key loses the prefix. Pin
@@ -37,19 +28,13 @@ SSH_USER = git
 SSH_AUTHORIZED_KEYS_BACKUP = true
 LFS_START_SERVER = true
 LFS_JWT_SECRET = {{ gitea_lfs_jwt_secret }}
-# Disables external avatar and CDN fetches.
-OFFLINE_MODE = true
 # REQUIRE_SIGNIN_VIEW = true (below) gates every view behind a session, so
 # there is no anonymous landing page; this just points the pre-auth redirect
 # at /user/login to match the SSO-only, closed-registration posture.
 LANDING_PAGE = login
 
-[lfs]
-PATH = /mnt/services/gitea/data/lfs
-
 [mailer]
 ENABLED = true
-PROTOCOL = {{ 'smtps' if smtp_use_ssl | bool else ('smtp+starttls' if smtp_use_tls | bool else 'smtp') }}
 SMTP_ADDR = {{ smtp_host }}
 SMTP_PORT = {{ smtp_port }}
 FROM = {{ gitea_smtp_from }}
@@ -78,14 +63,8 @@ ENABLED = false
 
 [session]
 PROVIDER = file
-# ROOT_URL is https, so cookies must carry Secure. SameSite=lax defangs
-# CSRF on state-changing GETs without breaking inbound oauth callbacks.
-COOKIE_SECURE = true
-SAME_SITE = lax
 
 [log]
-MODE = console
-LEVEL = info
 # Router logs duplicate the nginx access log; an empty MODE disables them.
 logger.router.MODE =
 
@@ -93,10 +72,6 @@ logger.router.MODE =
 INSTALL_LOCK = true
 INTERNAL_TOKEN = {{ gitea_internal_token }}
 PASSWORD_HASH_ALGO = pbkdf2_hi
-# Independent of [session] COOKIE_SECURE -- gitea has separate cookies
-# for the user session and the CSRF/security token; both must be Secure
-# now that ROOT_URL is https.
-COOKIE_SECURE = true
 MIN_PASSWORD_LENGTH = 12
 # Same idempotence trap as [oauth2] JWT_SECRET below: gitea generates
 # SECRET_KEY on first start if unset and writes it back to app.ini.
@@ -108,11 +83,6 @@ SECRET_KEY = {{ gitea_secret_key }}
 # nginx access logs and browser history. Upstream notes this will
 # become the default in a future release.
 DISABLE_QUERY_AUTH_TOKEN = true
-# Server-side git hooks let any repo-admin run arbitrary code as the
-# git user, including reading app.ini secrets and modifying the DB.
-# We don't use them; closing the door reduces blast radius from a
-# compromised account or future role-grant mistake.
-DISABLE_GIT_HOOKS = true
 
 # gitea generates JWT_SECRET on first start if it's missing and writes
 # it back to app.ini, which then makes the role non-idempotent (template
@@ -129,13 +99,10 @@ JWT_SECRET = {{ gitea_jwt_secret }}
 [actions]
 ENABLED = false
 
-# Reject weak keys at registration time -- gitea-side enforcement is
-# independent of host sshd's KexAlgorithms/Ciphers. -1 = disallowed.
+# Reject ECDSA keys at registration time (-1 = disallowed); gitea's
+# defaults already reject DSA. Independent of host sshd's algorithms.
 [ssh.minimum_key_sizes]
-ED25519 = 256
-RSA = 3071
 ECDSA = -1
-DSA = -1
 
 # Suppress version disclosure in the page footer (visible on the anon
 # login page, which is the only page anon visitors see given closed

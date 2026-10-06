@@ -1,20 +1,19 @@
 - name: Validate required secrets
   assert:
-    that:
-      - gitea_jwt_secret is defined and gitea_jwt_secret | length > 0
-      - gitea_internal_token is defined and gitea_internal_token | length > 0
-      - gitea_lfs_jwt_secret is defined and gitea_lfs_jwt_secret | length > 0
-      - gitea_secret_key is defined and gitea_secret_key | length > 0
-      - gitea_smtp_user is defined and gitea_smtp_user | length > 0
-      - gitea_smtp_from is defined and gitea_smtp_from | length > 0
-      - gitea_smtp_password is defined and gitea_smtp_password | length > 0
-      - gitea_oidc_client_secret is defined and gitea_oidc_client_secret | length > 0
-    fail_msg: |
-      Missing required gitea_* secret(s). Set them in group_vars/<env>.yml
-      (vaulted via --encrypt-vault-id prod): gitea_jwt_secret,
-      gitea_internal_token, gitea_lfs_jwt_secret, gitea_secret_key,
-      gitea_smtp_user, gitea_smtp_from, gitea_smtp_password,
-      gitea_oidc_client_secret.
+    that: lookup('vars', item, default='') | length > 0
+    fail_msg: >-
+      Missing required {{ item }}. Set it in group_vars/<env>.yml
+      (vaulted via --encrypt-vault-id <env>).
+    quiet: true
+  loop:
+    - gitea_jwt_secret
+    - gitea_internal_token
+    - gitea_lfs_jwt_secret
+    - gitea_secret_key
+    - gitea_smtp_user
+    - gitea_smtp_from
+    - gitea_smtp_password
+    - gitea_oidc_client_secret
   tags:
     - gitea
 
@@ -50,19 +49,16 @@
   tags:
     - gitea
 
-- name: Create gitea data directories
+# Gitea creates its data/ tree under the work path on first start.
+- name: Create gitea work directory
   when: not ansible_check_mode or git_user.uid is defined
   file:
-    dest: "{{ item }}"
+    dest: /mnt/services/gitea
     state: directory
     owner: git
     group: git
     mode: "0750"
   become: true
-  loop:
-    - /mnt/services/gitea
-    - /mnt/services/gitea/custom
-    - /mnt/services/gitea/data
   tags:
     - gitea
 

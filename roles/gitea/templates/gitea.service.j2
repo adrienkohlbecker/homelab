@@ -1,5 +1,4 @@
 #jinja2: lstrip_blocks: True
-# gitea.service #######################################################################
 [Unit]
 Description=gitea
 After=network-online.target
@@ -16,10 +15,6 @@ PartOf=zfs_autosnapshot.target
 
 [Service]
 Restart=always
-# gitea cold start is <5s; the ExecStartPost curl probe below has a
-# ~30s budget. 60s leaves headroom without doubling the unavailable
-# window on a wedged binary.
-TimeoutStartSec=60
 TimeoutStopSec=30
 RestartSec=5
 RestartSteps=6
@@ -35,7 +30,7 @@ User=git
 Group=git
 WorkingDirectory=/mnt/services/gitea/
 ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
-Environment=USER=git HOME=/home/git GITEA_WORK_DIR=/mnt/services/gitea
+Environment=GITEA_WORK_DIR=/mnt/services/gitea
 
 [Install]
 WantedBy=multi-user.target
