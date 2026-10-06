@@ -6,7 +6,7 @@
 - name: Assert required inputs
   assert:
     that:
-      - zfs_root is defined
+      - zfs_root is boolean
       - zfs_trim_pools is defined
       - zfs_mount_cache_pools is defined
       - zfs_pool_properties is defined
