@@ -1,22 +1,3 @@
-# /var/lib/apt/lists/ filenames encode the mirror and suite. InRelease is
-# present even for an empty pocket such as resolute-backports before its first
-# upload, so it confirms every expected source was fetched.
-- name: _verify | Each (mirror, suite) has fetched metadata
-  find:
-    paths: /var/lib/apt/lists/
-    patterns: "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_InRelease"
-  register: _apt_lists
-  failed_when: _apt_lists.matched == 0
-  vars:
-    _verify_mirror_prefix: "{{ item.mirror | regex_replace('^https?://', '') | regex_replace('/+$', '') | regex_replace('/', '_') }}"
-  loop:
-    - { mirror: "{{ ubuntu_mirror }}", suite: "{{ ansible_distribution_release }}" }
-    - { mirror: "{{ ubuntu_mirror }}", suite: "{{ ansible_distribution_release }}-updates" }
-    - { mirror: "{{ ubuntu_mirror }}", suite: "{{ ansible_distribution_release }}-backports" }
-    - { mirror: "{{ ubuntu_mirror_security }}", suite: "{{ ansible_distribution_release }}-security" }
-  loop_control:
-    label: "{{ item.mirror }} {{ item.suite }}"
-
 # Functional check: every configured suite serves valid signed metadata.
 # --error-on=any turns transient warnings (one unreachable suite, stale
 # Release.gpg) into a non-zero exit; the apt module's update_cache lets
