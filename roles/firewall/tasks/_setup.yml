@@ -36,23 +36,5 @@
         create: false
       become: true
 
-# Create wg0 before converge so wg0_flowtable.service does not
-# condition-skip and appear inactive to Ansible. Match the veth shape
-# consumed by _verify_rig.
-- name: _setup | Create wg0 veth + extns netns (shape _verify_rig expects)
-  shell: |
-    set -euo pipefail
-    ip netns add extns 2>/dev/null || [ -e /var/run/netns/extns ]
-    if ip link show wg0 >/dev/null 2>&1; then
-      echo "exists"
-    else
-      ip link add wg0 type veth peer name veth_ext
-      ip link set veth_ext netns extns
-      ip link set wg0 up
-      echo "created"
-    fi
-  args:
-    executable: /bin/bash
-  register: _firewall_wg0_setup
-  changed_when: '"created" in _firewall_wg0_setup.stdout'
-  become: true
+- name: _setup | Build the probe topology
+  import_tasks: _rig_topology.yml

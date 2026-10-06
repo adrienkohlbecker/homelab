@@ -1,6 +1,8 @@
-# Fixture bringup: probe-only apt deps, busybox httpd test container,
-# extns netns + probe veths. Podman itself is installed by
-# _setup.yml (CLAUDE.md reserves _setup.yml for genuine fixture deps).
+# Probe rig: the shared veth topology, probe-only packages, a published
+# busybox httpd container and host TCP listeners. Podman itself comes from
+# _setup.yml.
+- name: _verify_rig | Build the probe topology
+  import_tasks: _rig_topology.yml
 
 - name: _verify_rig | Install probe-only deps
   apt:
@@ -13,64 +15,44 @@
     cache_valid_time: 3600
   become: true
 
+- name: _verify_rig | Pick the httpd container port
+  set_fact:
+    _firewall_container_port: 18080
+
 # The port is arbitrary; the FORWARD rule scopes by --ctstate DNAT, not by
-# dport. Run busybox httpd on the dedicated fixture port to serve a tiny
-# known-content page the probe can grep for. The second publish stands in
-# for Authelia, whose host port carries its own FORWARD scope.
-# --cap-add=NET_RAW restores the capability podman 5.x dropped from
-# default_capabilities — the container-egress probe below uses busybox
-# ping (SOCK_RAW), which fails with "permission denied" without it.
+# dport. The second publish stands in for Authelia, whose host port carries
+# its own FORWARD scope. --cap-add=NET_RAW restores the capability podman 5.x
+# dropped from default_capabilities for the container ping probe.
 - name: _verify_rig | Run busybox httpd test container with --publish
   command: >
     podman run -d --replace --name firewall_verify_httpd
-      --publish 0.0.0.0:{{ _firewall_probe_container_port }}:{{ _firewall_probe_container_port }}
-      --publish 0.0.0.0:{{ service_ports.authelia }}:{{ _firewall_probe_container_port }}
+      --publish 0.0.0.0:{{ _firewall_container_port }}:{{ _firewall_container_port }}
+      --publish 0.0.0.0:{{ service_ports.authelia }}:{{ _firewall_container_port }}
       --cap-add=NET_RAW
       docker.io/library/busybox
-      sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p {{ _firewall_probe_container_port }} -h /www'
+      sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p {{ _firewall_container_port }} -h /www'
   changed_when: true
   become: true
 
-# Configure the probe interfaces created by _setup.yml. Representative
-# source aliases and their host return routes live together here; probe
-# tasks select the source explicitly with curl/nc.
-- name: _verify_rig | Configure probe netns
-  shell: |
-    set -euo pipefail
-    if ! ip link show tailscale0 >/dev/null 2>&1; then
-      ip link add tailscale0 type veth peer name ts_ext
-      ip link set ts_ext netns extns
-    fi
-    if ! ip link show vrrp.{{ dns_keepalived_vrid }} >/dev/null 2>&1; then
-      ip link add vrrp.{{ dns_keepalived_vrid }} type veth peer name vrrp_ext
-      ip link set vrrp_ext netns extns
-    fi
-    ip addr replace 192.0.2.1/24 dev wg0
-    ip link set wg0 up
-    ip -n extns addr replace {{ _firewall_probe_nonscope }}/24 dev veth_ext
-    ip -n extns addr replace {{ _firewall_probe_home }}/32 dev veth_ext
-    ip -n extns addr replace {{ _firewall_probe_wg }}/32 dev veth_ext
-    ip -n extns addr replace {{ _firewall_probe_podman }}/32 dev veth_ext
-    ip -n extns addr replace {{ _firewall_probe_podman_pool }}/32 dev veth_ext
-    ip -n extns link set veth_ext up
-    ip addr replace 100.64.99.1/24 dev tailscale0
-    ip link set tailscale0 up
-    ip -n extns addr replace {{ _firewall_probe_tailscale }}/24 dev ts_ext
-    ip -n extns link set ts_ext up
-    ip addr replace {{ _firewall_probe_vrrp_host }}/24 dev vrrp.{{ dns_keepalived_vrid }}
-    ip addr replace {{ network.virtual_ips.dns }}/32 dev vrrp.{{ dns_keepalived_vrid }}
-    ip link set vrrp.{{ dns_keepalived_vrid }} up
-    ip -n extns addr replace {{ _firewall_probe_vrrp_peer }}/24 dev vrrp_ext
-    ip -n extns link set vrrp_ext up
-    ip -n extns link set lo up
-    ip -n extns route replace default via 192.0.2.1
-    ip -n extns route replace {{ network.virtual_ips.dns }}/32 via {{ _firewall_probe_vrrp_host }} dev vrrp_ext
-    ip route replace {{ _firewall_probe_home }}/32 dev wg0
-    ip route replace {{ _firewall_probe_wg }}/32 dev wg0
-    ip route replace {{ _firewall_probe_podman }}/32 dev wg0
-    ip route replace {{ _firewall_probe_podman_pool }}/32 dev wg0
-  args:
-    executable: /bin/bash
+- name: _verify_rig | Read the httpd container address
+  command: >
+    podman inspect firewall_verify_httpd
+    --format
+    {% raw %}'{{ .NetworkSettings.Networks.podman.IPAddress }}'{% endraw %}
+  register: _firewall_container_inspect
+  changed_when: false
+  become: true
+
+- name: _verify_rig | Name the httpd container address
+  set_fact:
+    _firewall_container_ip: "{{ _firewall_container_inspect.stdout | trim }}"
+
+# Stand-in for a subnet-router destination: the tailscale source reaches the
+# container directly, without DNAT.
+- name: _verify_rig | Route the container address through tailscale0
+  command: >-
+    ip -n extns route replace {{ _firewall_container_ip }}/32
+    via {{ _firewall_addr.tailscale_host }} dev ts_ext
   changed_when: true
   become: true
 
@@ -90,32 +72,28 @@
       - -c
       # aardvark-dns 1.12+ holds tcp/5333 on every DNS-enabled bridge gateway,
       # so a wildcard listener would steal the port from the named-bridge
-      # probes. Bind the probe address instead, which exists only after the
-      # netns step above.
+      # probes. Bind the rig address instead.
       - |
         set -eu
         mkdir -p /www
         echo firewall-verify-ok > /www/index.html
-        for port in 80 443 445 {{ service_ports.nut }} 192.0.2.1:5333; do
+        for port in 80 443 445 {{ service_ports.nut }} {{ _firewall_addr.host }}:5333; do
             httpd -f -p "$port" -h /www &
         done
         wait
   changed_when: true
   become: true
 
-- name: _verify_rig | Wait for httpd container
-  wait_for: { host: 127.0.0.1, port: "{{ _firewall_probe_container_port }}", timeout: 30 }
-  become: true
-
-- name: _verify_rig | Wait for TCP fixture listeners
+- name: _verify_rig | Wait for the published and host listeners
   wait_for:
-    host: 192.0.2.1
-    port: "{{ item }}"
+    host: "{{ item.host | default(_firewall_addr.host) }}"
+    port: "{{ item.port }}"
     timeout: 30
   loop:
-    - 80
-    - 443
-    - 445
-    - "{{ service_ports.nut }}"
-    - 5333
+    - { host: 127.0.0.1, port: "{{ _firewall_container_port }}" }
+    - { port: 80 }
+    - { port: 443 }
+    - { port: 445 }
+    - { port: "{{ service_ports.nut }}" }
+    - { port: 5333 }
   become: true

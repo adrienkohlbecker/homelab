@@ -1,0 +1,94 @@
+# Probe topology shared by _setup, which needs wg0 before converge so
+# wg0_flowtable.service does not condition-skip, and _verify. Probe sources
+# live in the extns netns behind veths whose host ends carry the interface
+# names the ruleset keys on, so their packets ingress as wireguard,
+# tailscale or keepalived vmac traffic. TEST-NET ranges keep fixture routes
+# from shadowing the rig.
+#
+# Scoped source aliases sit at offset 250 of their range, above netavark's
+# bottom-up allocations (assumes /24 or larger). The host routes each /32
+# peer alias back through its veth; peer_routes leave extns through it.
+- name: _rig_topology | Name the probe addresses
+  set_fact:
+    _firewall_addr:
+      host: 192.0.2.1
+      nonscope: 192.0.2.2
+      home: "{{ network.sites.home.cidr | ansible.utils.ipmath(250) }}"
+      wg: "{{ network.partitions.wireguard.cidr | ansible.utils.ipmath(250) }}"
+      podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
+      pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
+      tailscale_host: 100.64.99.1
+      tailscale: 100.64.99.2
+      vrrp_host: 198.51.100.1
+      vrrp_peer: 198.51.100.2
+      vip: "{{ network.virtual_ips.dns }}"
+      # Unused default-bridge address: FORWARD judges the packet before ARP
+      # fails.
+      container_dest: "{{ podman_default_network | ansible.utils.ipmath(249) }}"
+
+- name: _rig_topology | Describe the probe veths
+  set_fact:
+    _firewall_rig:
+      - host_if: wg0
+        peer_if: veth_ext
+        host_addrs: [ "{{ _firewall_addr.host }}/24" ]
+        peer_addrs:
+          - "{{ _firewall_addr.nonscope }}/24"
+          - "{{ _firewall_addr.home }}/32"
+          - "{{ _firewall_addr.wg }}/32"
+          - "{{ _firewall_addr.podman }}/32"
+          - "{{ _firewall_addr.pool }}/32"
+        peer_routes: [ default ]
+      - host_if: tailscale0
+        peer_if: ts_ext
+        host_addrs: [ "{{ _firewall_addr.tailscale_host }}/24" ]
+        peer_addrs: [ "{{ _firewall_addr.tailscale }}/24" ]
+        peer_routes: []
+      - host_if: vrrp.{{ dns_keepalived_vrid }}
+        peer_if: vrrp_ext
+        host_addrs: [ "{{ _firewall_addr.vrrp_host }}/24", "{{ _firewall_addr.vip }}/32" ]
+        peer_addrs: [ "{{ _firewall_addr.vrrp_peer }}/24" ]
+        peer_routes: [ "{{ _firewall_addr.vip }}/32" ]
+
+- name: _rig_topology | Create the probe netns
+  shell: |
+    set -euo pipefail
+    [ -e /var/run/netns/extns ] || ip netns add extns
+    ip -n extns link set lo up
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+# Jinja quotes stay in vars: a quote inside the shell scalar breaks task
+# loading.
+- name: _rig_topology | Build each probe veth
+  vars:
+    _host_addrs: "{{ item.host_addrs | join(' ') }}"
+    _peer_addrs: "{{ item.peer_addrs | join(' ') }}"
+    _peer_routes: "{{ item.peer_routes | join(' ') }}"
+    _gateway: "{{ item.host_addrs[0] | ansible.utils.ipaddr('address') }}"
+  shell: |
+    set -euo pipefail
+    if ! ip link show {{ item.host_if }} >/dev/null 2>&1; then
+      ip link add {{ item.host_if }} type veth peer name {{ item.peer_if }} netns extns
+    fi
+    ip link set {{ item.host_if }} up
+    ip -n extns link set {{ item.peer_if }} up
+    for addr in {{ _host_addrs }}; do
+      ip addr replace "$addr" dev {{ item.host_if }}
+    done
+    for addr in {{ _peer_addrs }}; do
+      ip -n extns addr replace "$addr" dev {{ item.peer_if }}
+      case "$addr" in */32) ip route replace "$addr" dev {{ item.host_if }} ;; esac
+    done
+    for dst in {{ _peer_routes }}; do
+      ip -n extns route replace "$dst" via {{ _gateway }} dev {{ item.peer_if }}
+    done
+  args:
+    executable: /bin/bash
+  loop: "{{ _firewall_rig }}"
+  loop_control:
+    label: "{{ item.host_if }}"
+  changed_when: true
+  become: true

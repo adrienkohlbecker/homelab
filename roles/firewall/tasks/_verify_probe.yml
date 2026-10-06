@@ -2,10 +2,14 @@
 # counters are cleared first, so the read after the probe holds only its own
 # packets. `firewall_probe` keys:
 #   name    label for failure messages
-#   argv    probe command
+#   proto   tcp | udp: an nc probe on `port` from the `from` address alias
+#           (default nonscope) to the `to` alias or literal (default host).
+#           tcp completes a handshake; udp sends one datagram.
+#   argv    explicit probe command instead of proto/port/from/to
 #   runner  extns (default, inside the probe netns) | host | controller
 #           (the test runner, whose packets ingress on the WAN iface)
 #   stdin   probe input; defaults to one byte so `nc -u` sends a datagram
+#   retries re-sends until the exit status meets `expect` (default none)
 #   expect  pass | fail | any (default): exit-status contract
 #   hit     counters that must count the probe. A probe that names none
 #           must expect pass: either proves its packet arrived, which keeps
@@ -17,18 +21,29 @@
   become: true
 
 - name: _verify_probe | Send probe
+  vars:
+    _runner: "{{ firewall_probe.runner | default('extns') }}"
+    _expect: "{{ firewall_probe.expect | default('any') }}"
+    _to: "{{ firewall_probe.to | default('host') }}"
+    _nc_argv: >-
+      {{ ['nc'] + (['-z', '-w', '3'] if firewall_probe.proto | default('') == 'tcp' else ['-u', '-w', '1'])
+         + ['-s', _firewall_addr[firewall_probe['from'] | default('nonscope')],
+            _firewall_addr.get(_to, _to), firewall_probe.port | default('') | string] }}
   command:
     argv: >-
-      {{ (['ip', 'netns', 'exec', 'extns'] if firewall_probe.runner | default('extns') == 'extns' else [])
-         + firewall_probe.argv }}
+      {{ (['ip', 'netns', 'exec', 'extns'] if _runner == 'extns' else [])
+         + (firewall_probe.argv if firewall_probe.argv is defined else _nc_argv) }}
     stdin: "{{ firewall_probe.stdin | default('.') }}"
-  delegate_to: "{{ 'localhost' if firewall_probe.runner | default('extns') == 'controller' else inventory_hostname }}"
+  delegate_to: "{{ 'localhost' if _runner == 'controller' else inventory_hostname }}"
   register: _firewall_probe_result
   changed_when: false
   failed_when: >-
-    (firewall_probe.expect | default('any') == 'pass' and _firewall_probe_result.rc != 0)
-    or (firewall_probe.expect | default('any') == 'fail' and _firewall_probe_result.rc == 0)
-  become: "{{ firewall_probe.runner | default('extns') != 'controller' }}"
+    (_expect == 'pass' and _firewall_probe_result.rc != 0)
+    or (_expect == 'fail' and _firewall_probe_result.rc == 0)
+  until: _firewall_probe_result is not failed
+  retries: "{{ firewall_probe.retries | default(0) }}"
+  delay: 2
+  become: "{{ _runner != 'controller' }}"
 
 - name: _verify_probe | Read counters
   command: nft --json list counters table inet homelab
@@ -38,18 +53,19 @@
 
 - name: _verify_probe | Assert the probe matched exactly the expected rules
   vars:
-    names: "{{ firewall_probe.hit + firewall_probe.miss | default([]) }}"
+    hit: "{{ firewall_probe.hit | default([]) }}"
+    miss: "{{ firewall_probe.miss | default([]) }}"
     observed: >-
       {{ _firewall_probe_counters.stdout | nft_counters_by_name | dict2items
-         | selectattr('key', 'in', names) | map(attribute='value')
+         | selectattr('key', 'in', hit + miss) | map(attribute='value')
          | items2dict(key_name='name', value_name='packets') }}
   assert:
     that:
-      - firewall_probe.hit | length > 0 or firewall_probe.expect | default('any') == 'pass'
-      - observed | length == names | length
-      - firewall_probe.hit | map('extract', observed) | select('eq', 0) | list | length == 0
-      - firewall_probe.miss | default([]) | map('extract', observed) | sum == 0
+      - hit | length > 0 or firewall_probe.expect | default('any') == 'pass'
+      - observed | length == (hit + miss) | length
+      - hit | map('extract', observed) | select('eq', 0) | list | length == 0
+      - miss | map('extract', observed) | sum == 0
     fail_msg: >-
-      {{ firewall_probe.name }}: expected packets on {{ firewall_probe.hit }}
-      and none on {{ firewall_probe.miss | default([]) }}; observed {{ observed }}.
+      {{ firewall_probe.name }}: expected packets on {{ hit }}
+      and none on {{ miss }}; observed {{ observed }}.
       A missing name means the rule did not render.

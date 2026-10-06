@@ -1,218 +1,86 @@
-# FORWARD/DNAT reachability, podman bridge egress, isolation and TCP
-# DNS, and the tailscale0 forward path. Paths that only need a counter
-# verdict live in the probe matrix (_verify_probes.yml).
-
-# FORWARD/DNAT — published container reachable via wg0 ingress.
-- name: _verify_forward | FORWARD/DNAT — published container reachable via wg0 ingress
-  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://192.0.2.1:{{ _firewall_probe_container_port }}/
-  register: firewall_verify_container
-  changed_when: false
-  failed_when: firewall_verify_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container.stdout
-  become: true
-
-# FORWARD/DNAT WAN-side counterpart — the packet ingresses on the
-# VM's WAN iface via the controller-side endpoint the harness provides
-# (qemu: loopback forward on enp0s2; EC2: the cell's public IP through
-# the security group's fixture-port allow). delegate_to:
-# localhost runs the curl on the test runner, so the packet reaches
-# the VM from "outside" exactly the way real WAN traffic does —
-# this rule is unreachable from the netns harness.
-- name: _verify_forward | FORWARD/DNAT — published container reachable from controller via WAN endpoint  # noqa: command-instead-of-module
-  delegate_to: localhost
-  command: curl --connect-timeout 5 --max-time 10 -s http://{{ wan_probe_host }}:{{ wan_forward_ports.tcp[_firewall_probe_container_port | string] }}/
-  register: firewall_verify_wan_container
-  changed_when: false
-  failed_when: firewall_verify_wan_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_wan_container.stdout
-
-# Query the bridge gateway from podman0 so netavark DNATs back to a
-# podman0 container, exercising the same-bridge ct-status-dnat allow.
-- name: _verify_forward | FORWARD/DNAT — container → host bridge IP → DNAT'd to container on same bridge
-  command: >
-    podman run --rm --network podman docker.io/library/busybox
-    wget -q -O - -T 5 http://10.88.0.1:{{ _firewall_probe_container_port }}/
-  register: firewall_verify_container_to_vip
-  changed_when: false
-  failed_when: firewall_verify_container_to_vip.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container_to_vip.stdout
-  become: true
-
 # Named-bridge coverage: most real services live on named podman bridges, not
 # podman0. Prove separate contracts from one long-lived peer on a throwaway
 # bridge: external egress is allowed, host-published DNAT to a different
-# bridge works, and raw container-IP lateral movement remains blocked.
-- name: _verify_forward | FORWARD — named podman bridge contracts
-  block:
-    - name: _verify_forward | Create named podman probe network
-      containers.podman.podman_network:
-        name: firewall_verify_named
-        disable_dns: false
-        state: present
-      become: true
-
-    - name: _verify_forward | Start a peer on the named probe network
-      command: >
-        podman run -d --replace --name firewall_verify_named_peer
-        --network firewall_verify_named docker.io/library/busybox sleep 300
-      changed_when: true
-      become: true
-
-    - name: _verify_forward | Named bridge egress through netavark MASQUERADE works
-      command: podman exec firewall_verify_named_peer nc -z -w 10 1.1.1.1 80
-      changed_when: false
-      become: true
-
-    - name: _verify_forward | Read named-network gateway IP
-      command: >
-        podman network inspect firewall_verify_named
-        --format
-        {% raw %}'{{ (index .Subnets 0).Gateway }}'{% endraw %}
-      register: _firewall_named_gateway_ip
-      changed_when: false
-      become: true
-
-    - name: _verify_forward | Read default-network probe container IP
-      command: >
-        podman inspect firewall_verify_httpd
-        --format
-        {% raw %}'{{ .NetworkSettings.Networks.podman.IPAddress }}'{% endraw %}
-      register: _firewall_default_container_ip
-      changed_when: false
-      become: true
-
-    - name: _verify_forward | Cross-bridge DNAT reaches the published container
-      command: >
-        podman exec firewall_verify_named_peer
-        wget -q -O - -T 5 http://{{ _firewall_named_gateway_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
-      register: _firewall_cross_bridge_dnat
-      changed_when: false
-      failed_when: _firewall_cross_bridge_dnat.rc != 0 or 'firewall-verify-ok' not in _firewall_cross_bridge_dnat.stdout
-      become: true
-
-    - name: _verify_forward | Direct cross-network container-IP path is isolated
-      include_tasks: _verify_probe.yml
-      vars:
-        firewall_probe:
-          name: Direct cross-network container IP
-          runner: host
-          argv:
-            - podman
-            - exec
-            - firewall_verify_named_peer
-            - wget
-            - -q
-            - -O
-            - "-"
-            - -T
-            - "3"
-            - http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
-          expect: fail
-          hit: [ forward_podman_isolation ]
-
-    # The INPUT probes reach tcp/5333 directly; this one follows the real
-    # path, container -> gateway:53 -> netavark DNAT -> aardvark's tcp/5333.
-    # The dig resolving through this ruleset's policy-drop INPUT is the proof;
-    # the probe matrix pins the aardvark_tcp_accept counter itself.
-    # Aardvark-dns serves TCP from 1.12 (Noble ships 1.4). busybox nslookup
-    # cannot force TCP, so the host dig runs inside the peer's netns.
-    - name: _verify_forward | Named-bridge DNS over TCP passes the INPUT policy
-      when: ansible_distribution_release != 'noble'
-      block:
-        - name: _verify_forward | Install dig for the TCP DNS probe
-          apt:
-            name: bind9-dnsutils
-            cache_valid_time: 3600
-          become: true
-
-        - name: _verify_forward | Inspect the named peer
-          command: podman inspect firewall_verify_named_peer
-          register: _firewall_named_peer
-          changed_when: false
-          become: true
-
-        - name: _verify_forward | A TCP dig from the peer netns resolves the peer
-          vars:
-            _container: "{{ _firewall_named_peer.stdout | from_json | first }}"
-          command: >-
-            nsenter --target {{ _container.State.Pid }} --net
-            dig +tcp +short +tries=1 +time=2 @{{ _firewall_named_gateway_ip.stdout | trim }}
-            firewall_verify_named_peer.dns.podman A
-          register: _firewall_tcp_dns_probe
-          until: >-
-            _firewall_tcp_dns_probe.stdout | trim
-            == _container.NetworkSettings.Networks.firewall_verify_named.IPAddress
-          retries: 5
-          delay: 2
-          changed_when: false
-          become: true
-  always:
-    - name: _verify_forward | Remove the named peer
-      command: podman rm -f firewall_verify_named_peer
-      register: _firewall_named_peer_rm
-      changed_when: _firewall_named_peer_rm.rc == 0
-      failed_when: false
-      become: true
-
-    - name: _verify_forward | Remove named podman probe network
-      command: podman network rm firewall_verify_named
-      register: _firewall_named_network_rm
-      changed_when: _firewall_named_network_rm.rc == 0
-      failed_when: false
-      become: true
-
-# Default-bridge egress — the FORWARD podman → external accept plus
-# netavark's own masquerade of the default network.
-# TCP-only probe: busybox wget follows 1.1.1.1's 301→HTTPS redirect,
-# which fails (no TLS, hostname DNS broken under SLIRP). nc -z just
-# proves the container can open a TCP socket to an external IP.
-- name: _verify_forward | FORWARD — default-bridge container egress works
-  command: podman exec firewall_verify_httpd nc -z -w 10 1.1.1.1 80
-  register: _firewall_container_egress
-  changed_when: false
-  until: _firewall_container_egress.rc == 0
-  retries: 5
-  delay: 2
+# bridge works, raw container-IP lateral movement remains blocked, and DNS
+# over TCP passes the INPUT policy.
+- name: _verify_forward | Create named podman probe network
+  containers.podman.podman_network:
+    name: firewall_verify_named
+    disable_dns: false
+    state: present
   become: true
 
-# FORWARD "podman → external" rule deliberately covers every non-podman
-# egress iface (WAN, home LAN, wg, macvlan) — the default-bridge
-# egress probe above exercises the WAN case; this one hits a
-# non-WAN destination (extns over wg0) so a future tightening to WAN-
-# only fails loudly. ICMP rather than HTTP because extns has no
-# listener bound to its veth IP.
-- name: _verify_forward | FORWARD — container egress to non-WAN iface (wg0) reachable
-  command: podman exec firewall_verify_httpd ping -c 1 -W 3 {{ _firewall_probe_nonscope }}
+- name: _verify_forward | Start a peer on the named probe network
+  command: >
+    podman run -d --replace --name firewall_verify_named_peer
+    --network firewall_verify_named docker.io/library/busybox sleep 300
+  changed_when: true
+  become: true
+
+- name: _verify_forward | Named bridge egress through netavark MASQUERADE works
+  command: podman exec firewall_verify_named_peer nc -z -w 10 1.1.1.1 80
   changed_when: false
   become: true
 
-- name: _verify_forward | FORWARD — tailscale0 subnet-router path is accepted
-  when: tailscale_advertise_routes is defined
+- name: _verify_forward | Read named-network gateway IP
+  command: >
+    podman network inspect firewall_verify_named
+    --format
+    {% raw %}'{{ (index .Subnets 0).Gateway }}'{% endraw %}
+  register: _firewall_named_gateway_ip
+  changed_when: false
+  become: true
+
+- name: _verify_forward | Cross-bridge DNAT reaches the published container
+  command: >
+    podman exec firewall_verify_named_peer
+    wget -q -O - -T 5 http://{{ _firewall_named_gateway_ip.stdout | trim }}:{{ _firewall_container_port }}/
+  register: _firewall_cross_bridge_dnat
+  changed_when: false
+  failed_when: _firewall_cross_bridge_dnat.rc != 0 or 'firewall-verify-ok' not in _firewall_cross_bridge_dnat.stdout
+  become: true
+
+- name: _verify_forward | Direct cross-network container-IP path is isolated
+  include_tasks: _verify_probe.yml
+  vars:
+    firewall_probe:
+      name: Direct cross-network container IP
+      runner: host
+      argv: [ podman, exec, firewall_verify_named_peer, wget, -q, -O, "-", -T, "3", "http://{{ _firewall_container_ip }}:{{ _firewall_container_port }}/" ]
+      expect: fail
+      hit: [ forward_podman_isolation ]
+
+# The INPUT probes reach tcp/5333 directly; this one follows the real
+# path, container -> gateway:53 -> netavark DNAT -> aardvark's tcp/5333.
+# Aardvark-dns serves TCP from 1.12 (Noble ships 1.4). busybox nslookup
+# cannot force TCP, so the host dig runs inside the peer's netns.
+- name: _verify_forward | Named-bridge DNS over TCP passes the INPUT policy
+  when: ansible_distribution_release != 'noble'
   block:
-    - name: _verify_forward | Route one container-IP probe through synthetic tailscale0
-      command: >
-        ip -n extns route replace {{ _firewall_default_container_ip.stdout | trim }}/32
-        via 100.64.99.1
-      changed_when: true
+    - name: _verify_forward | Install dig for the TCP DNS probe
+      apt:
+        name: bind9-dnsutils
+        cache_valid_time: 3600
       become: true
 
-    - name: _verify_forward | Tailscale0 can forward to a podman destination
-      include_tasks: _verify_probe.yml
-      vars:
-        firewall_probe:
-          name: Tailscale0 forward to a container
-          argv:
-            - curl
-            - --interface
-            - "{{ _firewall_probe_tailscale }}"
-            - --connect-timeout
-            - "3"
-            - --max-time
-            - "5"
-            - -sf
-            - http://{{ _firewall_default_container_ip.stdout | trim }}:{{ _firewall_probe_container_port }}/
-          expect: pass
-          hit: [ tailscale_forward_accept ]
-  always:
-    - name: _verify_forward | Remove synthetic tailscale0 container route
-      command: ip -n extns route del {{ _firewall_default_container_ip.stdout | trim }}/32
+    - name: _verify_forward | Inspect the named peer
+      command: podman inspect firewall_verify_named_peer
+      register: _firewall_named_peer
       changed_when: false
-      failed_when: false
+      become: true
+
+    - name: _verify_forward | A TCP dig from the peer netns resolves the peer
+      vars:
+        _container: "{{ _firewall_named_peer.stdout | from_json | first }}"
+      command: >-
+        nsenter --target {{ _container.State.Pid }} --net
+        dig +tcp +short +tries=1 +time=2 @{{ _firewall_named_gateway_ip.stdout | trim }}
+        firewall_verify_named_peer.dns.podman A
+      register: _firewall_tcp_dns_probe
+      until: >-
+        _firewall_tcp_dns_probe.stdout | trim
+        == _container.NetworkSettings.Networks.firewall_verify_named.IPAddress
+      retries: 5
+      delay: 2
+      changed_when: false
       become: true
