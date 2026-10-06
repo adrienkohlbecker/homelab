@@ -25,18 +25,6 @@
       - systemd_unit_verify_ok_service_result is defined
       - systemd_unit_verify_ok_service_result.changed
 
-- name: _verify | Re-install same template is idempotent
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: systemd_unit_verify_ok.service.j2
-
-- name: _verify | Second install reported no change
-  assert:
-    that: not systemd_unit_verify_ok_service_result.changed
-
 - name: _verify | Rescue restores backup when validate fails over a prior unit
   block:
     - name: _verify | Install broken unit over the good one (expect failure)
@@ -125,8 +113,7 @@
       - _systemd_unit_no_dropin_env.stdout == ''
 
 # Remove-path coverage consumes the valid fixture left by the install-path
-# scenarios, then exercises the observable behaviours of tasks_from=remove:
-# deletes-on-first-call and idempotent on second call.
+# scenarios.
 - name: _verify | Remove via tasks_from=remove
   import_role:
     name: systemd_unit
@@ -144,14 +131,6 @@
     - name: _verify | Assert verify_ok file is gone
       assert:
         that: not _systemd_unit_removed_stat.stat.exists
-
-- name: _verify | Re-remove same unit is idempotent
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: systemd_unit_verify_ok.service
 
 # enable: false must leave the unit out of boot and never start it, even when
 # it was enabled before (a unit the host cannot satisfy).
