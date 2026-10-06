@@ -21,6 +21,43 @@
   loop_control:
     label: "{{ item.name }}"
 
+# nginx overwrites X-Forwarded-For with its own peer, and the port publish
+# masquerades nginx to the media network gateway. A denied login for a unique
+# unknown user makes Jellyfin log the IP it attributes the request to: the
+# client nginx saw (127.0.0.1) proves Jellyfin trusts the gateway hop, where
+# the gateway itself would mean the header was ignored and the spoofed address
+# would mean it leaked through nginx.
+- name: _verify | Send a denied login through nginx with a spoofed X-Forwarded-For
+  uri:
+    url: https://jellyfin.{{ inventory_hostname }}.{{ domain }}/Users/AuthenticateByName
+    method: POST
+    validate_certs: false
+    headers:
+      Authorization: 'MediaBrowser Client="verify", Device="verify", DeviceId="verify", Version="1"'
+      X-Forwarded-For: 203.0.113.7
+    body_format: json
+    body:
+      Username: verify_forwarded_for_probe
+      Pw: not-a-password
+    status_code: 401
+
+- name: _verify | Jellyfin attributes the proxied login to the client nginx saw
+  command:
+    argv:
+      - journalctl
+      - -u
+      - jellyfin
+      - -b
+      - --no-pager
+      - --output=cat
+      - --grep=verify_forwarded_for_probe
+  register: _jellyfin_forwarded_for
+  changed_when: false
+  retries: 15
+  delay: 2
+  until: _jellyfin_forwarded_for.stdout is search('"IP":"127\.0\.0\.1"')
+  become: true
+
 # Jellyfin's operator-managed library options write beside media (trickplay
 # images, downloaded subtitles). Exercise a full create/remove round-trip
 # through the container bind so both mount flags and the shared media-group

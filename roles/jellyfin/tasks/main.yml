@@ -219,6 +219,16 @@
   tags:
     - jellyfin
 
+# network.xml trusts the media network gateway as the nginx proxy hop.
+- name: Read media podman network
+  containers.podman.podman_network_info:
+    name: media
+  register: jellyfin_media_network
+  failed_when: jellyfin_media_network.failed and not ansible_check_mode
+  become: true
+  tags:
+    - jellyfin
+
 # The SSO plugin's OID provider is NOT seeded as a file here: it lives in
 # a custom SerializableDictionary whose XML only round-trips when the
 # plugin's own WriteXml produces it -- a hand-written config deserializes
@@ -231,7 +241,9 @@
 # touched the file would re-diff and trigger a needless restart. Same
 # pattern as roles/sonarr (config.xml).
 - name: Configure Jellyfin network settings
-  when: not ansible_check_mode or jellyfin_user.uid is defined
+  when:
+    - not ansible_check_mode or jellyfin_user.uid is defined
+    - jellyfin_media_network.networks | default([]) | length > 0
   copy:
     content: "{{ lookup('template', 'network.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/jellyfin/config/network.xml
