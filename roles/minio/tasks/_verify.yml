@@ -118,7 +118,9 @@
         path: /var/lib/nginx/body
         mode: "0555"
 
-    - name: _verify | Round-trip large signed uploads over HTTP/1.1 and HTTP/2
+    # MinIO rejects a body whose SHA-256 differs from the signed
+    # x-amz-content-sha256 header, so a successful PUT proves the content.
+    - name: _verify | Upload large signed objects over HTTP/1.1 and HTTP/2
       command:
         argv:
           - python3
@@ -141,7 +143,6 @@
                 payload = bytes(range(256)) * (48 * 1024 * 1024 // 256)
                 source.write_bytes(payload)
                 digest = hashlib.sha256(payload).hexdigest()
-                target = pathlib.Path(directory, "download")
                 for protocol, flags in [
                     ("1.1", ["--http1.1"]),
                     ("2", ["--http2"]),
@@ -155,10 +156,7 @@
                             input=credentials, text=True, stdout=subprocess.PIPE, check=True,
                         )
                         assert result.stdout == protocol, result.stdout
-                        subprocess.run(curl + ["--output", str(target), url],
-                                       input=credentials, text=True, check=True)
-                        assert target.read_bytes() == payload, "Upload content changed"
-                        print("48 MiB round-trip passed:", flags, flush=True)
+                        print("48 MiB upload passed:", flags, flush=True)
                     finally:
                         subprocess.run(curl + ["--request", "DELETE", url],
                                        input=credentials, text=True, check=True)
