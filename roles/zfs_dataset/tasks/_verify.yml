@@ -97,13 +97,13 @@
   import_tasks: dataset.yml
 
 - name: _verify | Remove received probe mount unit
+  when: zfs_root
   import_role:
     name: systemd_unit
     tasks_from: remove
   vars:
     systemd_unit_args:
       dest: zfs_mount_mnt__verify_received.service
-      condition: "{{ zfs_root }}"
 
 - name: _verify | Destroy received probe dataset
   when: zfs_root
@@ -112,13 +112,13 @@
   become: true
 
 - name: _verify | Remove probe mount unit
+  when: zfs_root
   import_role:
     name: systemd_unit
     tasks_from: remove
   vars:
     systemd_unit_args:
       dest: zfs_mount_mnt__verify_probe.service
-      condition: "{{ zfs_root }}"
 
 - name: _verify | Destroy probe dataset
   when: zfs_root

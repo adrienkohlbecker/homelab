@@ -78,13 +78,13 @@
     - fan2go
 
 - name: Remove fan2go systemd unit (disabled)
+  when: not fan2go_enabled
   import_role:
     name: systemd_unit
     tasks_from: remove
   vars:
     systemd_unit_args:
       dest: fan2go.service
-      condition: "{{ not fan2go_enabled }}"
   tags:
     - fan2go
 

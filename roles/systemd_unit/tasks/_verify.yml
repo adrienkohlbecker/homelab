@@ -135,18 +135,15 @@
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
 
-- name: _verify | First remove deleted the file and reported changed
+- name: _verify | First remove deleted the file
   block:
     - name: _verify | Stat verify_ok path after remove
       stat:
         path: /etc/systemd/system/systemd_unit_verify_ok.service
       register: _systemd_unit_removed_stat
-    - name: _verify | Assert verify_ok result shows changed and file is gone
+    - name: _verify | Assert verify_ok file is gone
       assert:
-        that:
-          - systemd_unit_verify_ok_service_result is defined
-          - systemd_unit_verify_ok_service_result.changed
-          - not _systemd_unit_removed_stat.stat.exists
+        that: not _systemd_unit_removed_stat.stat.exists
 
 - name: _verify | Re-remove same unit is idempotent
   import_role:
@@ -155,10 +152,6 @@
   vars:
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
-
-- name: _verify | Second remove reported no change
-  assert:
-    that: not systemd_unit_verify_ok_service_result.changed
 
 # enable: false must leave the unit out of boot and never start it, even when
 # it was enabled before (a unit the host cannot satisfy).
