@@ -9,7 +9,6 @@
   vars:
     nginx_verify_authelia_gate_args:
       subdomain: kuma
-      require_rd: false
 
 # An unknown push token proves the bypass reached Kuma: v2 returns its 404 JSON
 # response instead of Authelia's redirect.

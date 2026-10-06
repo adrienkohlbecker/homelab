@@ -1,7 +1,38 @@
-# Lay snakeoil at the letsencrypt paths nginx.conf.j2 references before the
-# role validates and starts nginx.
-- name: _setup | Generate certificates
-  import_tasks: _setup_snakeoil.yml
-  vars:
-    nginx_snakeoil_args:
-      fqdn: "{{ inventory_hostname }}.{{ domain }}"
+# Lay the Debian snakeoil keypair at the letsencrypt paths nginx.conf.j2
+# references, so nginx can validate its config and start in tests without a
+# certbot-issued cert. The shared test_fixture imports this file too.
+- name: _setup | Install ssl-cert
+  apt:
+    pkg:
+      - ssl-cert
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _setup | Ensure the letsencrypt live dir exists
+  file:
+    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _setup | Lay down the snakeoil cert files
+  copy:
+    src: "{{ item.src }}"
+    dest: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/{{ item.dest }}
+    remote_src: true
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: /etc/ssl/private/ssl-cert-snakeoil.key
+      dest: privkey.pem
+      mode: "0640"
+    - src: /etc/ssl/certs/ssl-cert-snakeoil.pem
+      dest: fullchain.pem
+      mode: "0644"
+  loop_control:
+    label: "{{ item.dest }}"
+  become: true

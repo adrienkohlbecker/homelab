@@ -1,6 +1,6 @@
 # Functional verification of the nginx role. Stand up a throwaway upstream
 # stub + a transient nginx_site pointing at it, then probe the live vhost
-# through nginx for the contracts the ~46 nginx_site consumers depend on:
+# through nginx for the contracts every nginx_site consumer depends on:
 # TLS termination + Host routing, key exchange (on OpenSSL >= 3.5 the
 # post-quantum hybrid, including a HelloRetryRequest onto it for X25519-first
 # clients; X25519 for classical ones), HTTP/2 over TLS, the security headers,
@@ -105,7 +105,7 @@
   register: nginx_verify_unauth
   until:
     - nginx_verify_unauth.status == 302
-    - nginx_verify_unauth is authelia_redirects_to('nginxverify', inventory_hostname, domain, require_rd=false)
+    - nginx_verify_unauth is authelia_redirects_to('nginxverify', inventory_hostname, domain)
   retries: 10
   delay: 1
 

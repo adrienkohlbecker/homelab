@@ -70,11 +70,6 @@ def test_authelia_redirects_to_checks_status_auth_host_and_rd() -> None:
     assert not homelab_tests.authelia_redirects_to(result, "radarr", "lab", "example.test")
 
 
-def test_authelia_redirects_to_can_skip_rd_check() -> None:
-    result = {"status": 302, "location": "https://auth.lab.example.test/"}
-    assert homelab_tests.authelia_redirects_to(result, "kuma", "lab", "example.test", require_rd=False)
-
-
 def test_host_vlan_block_derives_slot_indexed_subnet() -> None:
     network = {
         "sites": {

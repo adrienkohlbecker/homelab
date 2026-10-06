@@ -1,6 +1,4 @@
-# `nginx_verify_authelia_gate_args` contract:
-#   subdomain  required vhost subdomain
-#   require_rd optional bool, default true
+# Input: nginx_verify_authelia_gate_args.subdomain, the gated vhost subdomain.
 - name: verify_authelia_gate | Map the vhost FQDN to loopback
   import_tasks: test_loopback_hosts.yml
   vars:
@@ -22,8 +20,7 @@
     _nginx_authelia_gate is not authelia_redirects_to(
       nginx_verify_authelia_gate_args.subdomain,
       inventory_hostname,
-      domain,
-      require_rd=(nginx_verify_authelia_gate_args.require_rd | default(true))
+      domain
     )
   tags:
     - nginx

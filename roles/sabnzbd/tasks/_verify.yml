@@ -72,7 +72,6 @@
   vars:
     nginx_verify_authelia_gate_args:
       subdomain: sabnzbd
-      require_rd: false
 
 - name: _verify | Wait for normalized sabnzbd startup record in lnav store
   import_role:

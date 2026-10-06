@@ -17,7 +17,6 @@ def authelia_redirects_to(
     subdomain: str,
     inventory_hostname: str,
     domain: str,
-    require_rd: bool = True,
 ) -> bool:
     """Return whether a URI result is an Authelia redirect for a service."""
     location = str(result.get("location", ""))
@@ -27,9 +26,6 @@ def authelia_redirects_to(
     auth_url = f"https://auth.{inventory_hostname}.{domain}"
     if not location.startswith(auth_url):
         return False
-
-    if not require_rd:
-        return True
 
     service_url = f"https://{subdomain}.{inventory_hostname}.{domain}"
     query = parse_qs(urlsplit(location).query, keep_blank_values=True)

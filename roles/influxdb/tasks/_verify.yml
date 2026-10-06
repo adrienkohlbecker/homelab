@@ -28,7 +28,6 @@
   vars:
     nginx_verify_authelia_gate_args:
       subdomain: influxdb
-      require_rd: false
 
 # The converge provisioned every influxdb_buckets tenant (the fixture declares
 # two). Check each one's bucket, authorization, and write path in InfluxDB.

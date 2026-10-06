@@ -52,47 +52,9 @@
 # previous caller's proxy_pass / csp / etc. can't bleed into the next
 # caller that doesn't explicitly override.
 #
-# Resolve caller defaults once into _nginx_site_* locals so they are not
-# re-spelled at every gate below and in site.conf.j2. Always set them so no
-# stale value leaks into the next nginx_site invocation.
-- name: site | Resolve caller defaults
-  set_fact:
-    _nginx_site_auth_enabled: "{{ (nginx_site_args.auth | default(false)) | bool }}"
-    _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
-    _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
-    _nginx_site_csp: >-
-      {{ nginx_site_args.csp | default("default-src " ~ nginx_csp_default ~ "; frame-ancestors 'self';") }}
-  tags:
-    - nginx_site
-
-- name: site | Assert site contract
-  assert:
-    that:
-      - nginx_site_args.subdomain is defined
-      - nginx_site_args.subdomain is string
-      - nginx_site_args.subdomain | default('') | length > 0
-      - nginx_site_args.subdomain | default('') is match('^[A-Za-z0-9-]+$')
-      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass is string
-      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is match('^https?://')
-      # No space/quote/semicolon and no control/non-ASCII char: it is rendered
-      # straight into `proxy_pass ...;`, so any of those changes the directive.
-      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[ ";]')
-      - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[^ -~]')
-      - _nginx_site_csp is false or (_nginx_site_csp is string and _nginx_site_csp is not search('"'))
-      - not (_nginx_site_enable_http and _nginx_site_auth_enabled)
-      - not _nginx_site_auth_enabled or nginx_authelia_internal_url is defined
-      - not _nginx_site_auth_enabled or (nginx_authelia_internal_url | default('')) is string
-      - not _nginx_site_auth_enabled or nginx_authelia_internal_url | default('') | string is match('^https?://')
-      - not _nginx_site_auth_request_authorization or _nginx_site_auth_enabled
-    fail_msg: >-
-      Invalid nginx_site_args contract: subdomain must be one safe DNS label;
-      proxy_pass, when set, must be an injection-safe http(s) URL; csp must be
-      false or a string without double quotes; enable_http cannot be combined with auth;
-      auth needs an http(s) nginx_authelia_internal_url; and
-      auth_request_authorization requires auth.
-  tags:
-    - nginx_site
-
+# The block vars resolve caller defaults once for the gates below and for
+# site.conf.j2, scoped to this invocation so no value leaks into the next.
+#
 # The rendered vhost is written to sites-available/ and symlinked into
 # sites-enabled/, then `nginx -t` validates the assembled config in place. On
 # failure the previous version is restored from the .backup, or a new file and
@@ -102,72 +64,108 @@
 # carries no `validate:` because `nginx -t` needs the full assembled config
 # (events{}, http{}, and the symlink), not a standalone server{} snippet.
 - name: site | Configure and enable nginx site
-  become: true
   tags:
     - nginx_site
+  vars:
+    _nginx_site_auth_enabled: "{{ (nginx_site_args.auth | default(false)) | bool }}"
+    _nginx_site_auth_request_authorization: "{{ (nginx_site_args.auth_request_authorization | default(false)) | bool }}"
+    _nginx_site_enable_http: "{{ (nginx_site_args.enable_http | default(false)) | bool }}"
+    _nginx_site_csp: >-
+      {{ nginx_site_args.csp | default("default-src " ~ nginx_csp_default ~ "; frame-ancestors 'self';") }}
   block:
-    - name: site | Configure nginx site  # noqa: require-validate
-      template:
-        src: site.conf.j2
-        dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-        owner: root
-        group: root
-        # 0640 root:root: vhost configs are read by nginx as root and carry no
-        # public value, so keep them off world-read as a conservative default.
-        mode: "0640"
-        backup: true
-      register: nginx_static_conf
+    - name: site | Assert site contract
+      assert:
+        that:
+          - nginx_site_args.subdomain is defined
+          - nginx_site_args.subdomain is string
+          - nginx_site_args.subdomain | default('') | length > 0
+          - nginx_site_args.subdomain | default('') is match('^[A-Za-z0-9-]+$')
+          - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass is string
+          - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is match('^https?://')
+          # No space/quote/semicolon and no control/non-ASCII char: it is rendered
+          # straight into `proxy_pass ...;`, so any of those changes the directive.
+          - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[ ";]')
+          - nginx_site_args.proxy_pass is not defined or nginx_site_args.proxy_pass | string is not search('[^ -~]')
+          - _nginx_site_csp is false or (_nginx_site_csp is string and _nginx_site_csp is not search('"'))
+          - not (_nginx_site_enable_http and _nginx_site_auth_enabled)
+          - not _nginx_site_auth_enabled or nginx_authelia_internal_url is defined
+          - not _nginx_site_auth_enabled or (nginx_authelia_internal_url | default('')) is string
+          - not _nginx_site_auth_enabled or nginx_authelia_internal_url | default('') | string is match('^https?://')
+          - not _nginx_site_auth_request_authorization or _nginx_site_auth_enabled
+        fail_msg: >-
+          Invalid nginx_site_args contract: subdomain must be one safe DNS label;
+          proxy_pass, when set, must be an injection-safe http(s) URL; csp must be
+          false or a string without double quotes; enable_http cannot be combined with auth;
+          auth needs an http(s) nginx_authelia_internal_url; and
+          auth_request_authorization requires auth.
 
-    - name: site | Enable nginx site
-      when: not (ansible_check_mode and nginx_static_conf.changed)
-      file:
-        src: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-        dest: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-        state: link
-      register: nginx_static_conf_enable
+    # Kept apart from the assert so a contract failure never reaches the
+    # rescue, which would act on a previous invocation's registered result.
+    - name: site | Write, validate, and reload the site
+      become: true
+      block:
+        - name: site | Configure nginx site  # noqa: require-validate
+          template:
+            src: site.conf.j2
+            dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+            owner: root
+            group: root
+            # 0640 root:root: vhost configs are read by nginx as root and carry no
+            # public value, so keep them off world-read as a conservative default.
+            mode: "0640"
+            backup: true
+          register: nginx_static_conf
 
-    - name: site | Validate nginx config in place
-      when:
-        - not ansible_check_mode
-        - nginx_static_conf.changed or nginx_static_conf_enable.changed
-      command: nginx -t
-      changed_when: false
+        - name: site | Enable nginx site
+          when: not (ansible_check_mode and nginx_static_conf.changed)
+          file:
+            src: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+            dest: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+            state: link
+          register: nginx_static_conf_enable
 
-    - name: site | Reload nginx config
-      when:
-        - not ansible_check_mode
-        - nginx_static_conf.changed or nginx_static_conf_enable.changed
-      systemd:
-        name: nginx
-        state: reloaded
+        - name: site | Validate nginx config in place
+          when:
+            - not ansible_check_mode
+            - nginx_static_conf.changed or nginx_static_conf_enable.changed
+          command: nginx -t
+          changed_when: false
 
-  rescue:
-    # Template backups live beside the vhost and retain its ownership/mode;
-    # rename the original back atomically before nginx can reload it.
-    - name: site | Restore previous site config  # noqa: command-instead-of-module
-      when: "'backup_file' in (nginx_static_conf | default({}))"
-      command:
-        argv:
-          - mv
-          - --
-          - "{{ nginx_static_conf.backup_file }}"
-          - "{{ nginx_static_conf.dest }}"
-      changed_when: true
+        - name: site | Reload nginx config
+          when:
+            - not ansible_check_mode
+            - nginx_static_conf.changed or nginx_static_conf_enable.changed
+          systemd:
+            name: nginx
+            state: reloaded
 
-    - name: site | Remove a newly added site config and its symlink
-      when:
-        - nginx_static_conf.changed | default(false)
-        - "'backup_file' not in nginx_static_conf"
-      file:
-        path: /etc/nginx/{{ item }}/{{ nginx_site_args.subdomain }}
-        state: absent
-      loop:
-        - sites-enabled
-        - sites-available
+      rescue:
+        # Template backups live beside the vhost and retain its ownership/mode;
+        # rename the original back atomically before nginx can reload it.
+        - name: site | Restore previous site config  # noqa: command-instead-of-module
+          when: "'backup_file' in (nginx_static_conf | default({}))"
+          command:
+            argv:
+              - mv
+              - --
+              - "{{ nginx_static_conf.backup_file }}"
+              - "{{ nginx_static_conf.dest }}"
+          changed_when: true
 
-    - name: site | Fail after rolling back the site write
-      fail:
-        msg: >-
-          nginx -t failed after writing
-          /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}; previous
-          state restored. Inspect the validate output above and the managed content.
+        - name: site | Remove a newly added site config and its symlink
+          when:
+            - nginx_static_conf.changed | default(false)
+            - "'backup_file' not in nginx_static_conf"
+          file:
+            path: /etc/nginx/{{ item }}/{{ nginx_site_args.subdomain }}
+            state: absent
+          loop:
+            - sites-enabled
+            - sites-available
+
+        - name: site | Fail after rolling back the site write
+          fail:
+            msg: >-
+              nginx -t failed after writing
+              /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}; previous
+              state restored. Inspect the validate output above and the managed content.
