@@ -17,7 +17,6 @@
 #
 #   192.0.2.2                          non-scope source (primary)
 #   home site CIDR + .250 offset       physical home LAN source
-#   home site CIDR + .249 offset       mac_mgmt LAN source
 #   WG partition   + .250 offset       wireguard client source
 #   podman_default_network + .250      container source (DNS rule probes)
 #   podman_bridge_pool     + .250      non-default-bridge container source
@@ -29,8 +28,6 @@
 - name: _verify | Derive probe source IPs from subnet vars
   set_fact:
     _firewall_probe_home: "{{ network.sites.home.cidr | ansible.utils.ipmath(250) }}"
-    _firewall_probe_home_mac: "{{ network.sites.home.cidr | ansible.utils.ipmath(249) }}"
-    _firewall_probe_home_mac_host: "{{ network.sites.home.cidr | ansible.utils.ipmath(1) }}"
     _firewall_probe_wg: "{{ network.partitions.wireguard.cidr | ansible.utils.ipmath(250) }}"
     _firewall_probe_podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
     _firewall_probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
@@ -39,8 +36,6 @@
     _firewall_probe_vrrp_peer: 198.51.100.2
     _firewall_probe_container_port: 18080
     _firewall_verify_samba_enabled: "{{ (samba_shares | default([]) | length) > 0 }}"
-    _firewall_verify_mac_mgmt_enabled: >-
-      {{ (macvlan_blocks | selectattr('name', 'equalto', 'mac_mgmt') | list | length) > 0 }}
     # Non-scope source: in-subnet on the netns veth (192.0.2.0/24, see
     # the topology header above) but outside any allowlisted saddr —
     # used by the OOS negative probes (samba, nut, mosh).

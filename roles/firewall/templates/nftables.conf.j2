@@ -64,20 +64,12 @@ table inet homelab {
     # Admin services require an (iif, saddr) pair, not a union of the two:
     # home-LAN sources must arrive on the WAN iface (also the LAN iface
     # behind the UDM) and wireguard sources on wg0.
-    #
-    # mac_mgmt (macvlan child of $WAN_IFACE in mode bridge) is included
-    # on hosts that run the macvlan role: L2 broadcasts to $WAN_IFACE --
-    # keepalived gratuitous ARPs and LAN broadcasts also reach mac_mgmt.
-    # It shares the physical L2 and trust scope of $WAN_IFACE.
     set lan_admin_pairs {
         typeof iifname . ip saddr
         flags interval, constant
         elements = {
             $WAN_IFACE . $HOME_LAN comment "home LAN via WAN iface",
             "wg0" . $WG_SUBNET comment "wireguard peer via wg0",
-{% if macvlan_blocks | selectattr('name', 'equalto', 'mac_mgmt') | list %}
-            "mac_mgmt" . $HOME_LAN comment "home LAN via macvlan child",
-{% endif %}
         }
     }
 
@@ -159,8 +151,8 @@ table inet homelab {
 
         # Tailscale direct LAN endpoint: LAN/wireguard peers reaching this
         # host's tailscaled underlay directly. lan_admin_pairs admits the
-        # mac_mgmt/home-LAN and wg0/wireguard paths while excluding future
-        # untrusted interfaces.
+        # home-LAN and wireguard paths while excluding future untrusted
+        # interfaces.
         iifname . ip saddr @lan_admin_pairs udp dport {{ tailscale_port }} counter name "tailscale_lan_accept" accept comment "tailscale direct endpoint (LAN/wireguard peers)"
 {% endif %}
 

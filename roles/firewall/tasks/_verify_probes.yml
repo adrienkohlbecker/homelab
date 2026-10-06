@@ -106,7 +106,7 @@
       hit: [ input_catchall ]
       miss: [ mdns_accept ]
 
-    # Home-LAN sources must arrive on the WAN iface or mac_mgmt, not wg0.
+    # Home-LAN sources must arrive on the WAN iface, not wg0.
     - name: Mosh from a home source on wg0
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "60000" ]
       hit: [ input_catchall ]
@@ -126,20 +126,6 @@
       expect: fail
       hit: [ input_catchall_reset ]
       miss: [ input_admin_nut ]
-    - name: Samba from a home source on mac_mgmt
-      enabled: "{{ _firewall_verify_mac_mgmt_enabled and _firewall_verify_samba_enabled }}"
-      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home_mac }}", "{{ _firewall_probe_home_mac_host }}", "445" ]
-      expect: pass
-      hit: [ input_admin_samba ]
-    - name: NUT from a home source on mac_mgmt
-      enabled: "{{ _firewall_verify_mac_mgmt_enabled }}"
-      argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home_mac }}", "{{ _firewall_probe_home_mac_host }}", "{{ service_ports.nut }}" ]
-      expect: pass
-      hit: [ input_admin_nut ]
-    - name: Tailscale direct endpoint from a home source on mac_mgmt
-      enabled: "{{ _firewall_verify_mac_mgmt_enabled and tailscale_wan_direct | default(false) }}"
-      argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_home_mac }}", "{{ _firewall_probe_home_mac_host }}", "{{ tailscale_port | default(0) }}" ]
-      hit: [ tailscale_lan_accept ]
 
     # A source outside every trusted range misses each scoped accept.
     - name: WireGuard from a non-scope source on wg0

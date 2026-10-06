@@ -41,10 +41,6 @@
       ip link add tailscale0 type veth peer name ts_ext
       ip link set ts_ext netns extns
     fi
-    if ! ip link show mac_mgmt >/dev/null 2>&1; then
-      ip link add mac_mgmt type veth peer name mgmt_ext
-      ip link set mgmt_ext netns extns
-    fi
     if ! ip link show vrrp.{{ dns_keepalived_vrid }} >/dev/null 2>&1; then
       ip link add vrrp.{{ dns_keepalived_vrid }} type veth peer name vrrp_ext
       ip link set vrrp_ext netns extns
@@ -61,10 +57,6 @@
     ip link set tailscale0 up
     ip -n extns addr replace {{ _firewall_probe_tailscale }}/24 dev ts_ext
     ip -n extns link set ts_ext up
-    ip addr replace {{ _firewall_probe_home_mac_host }}/24 dev mac_mgmt
-    ip link set mac_mgmt up
-    ip -n extns addr replace {{ _firewall_probe_home_mac }}/24 dev mgmt_ext
-    ip -n extns link set mgmt_ext up
     ip addr replace {{ _firewall_probe_vrrp_host }}/24 dev vrrp.{{ dns_keepalived_vrid }}
     ip addr replace {{ network.virtual_ips.dns }}/32 dev vrrp.{{ dns_keepalived_vrid }}
     ip link set vrrp.{{ dns_keepalived_vrid }} up
