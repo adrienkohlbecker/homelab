@@ -492,6 +492,10 @@ def sort_specs_by_runtime(specs: list[str], runtimes: dict[str, float]) -> list[
 # Stands for "any task file": a templated or subdirectory reference the import
 # graph cannot resolve statically, so it conservatively reaches everything.
 ANY_TASK_FILE = "*"
+# The harness's environment playbook imports role entry points into every cell
+# whose role keeps base_prerequisites on; this importer stands for those cells.
+ENVIRONMENT_PLAYBOOK = Path("test/playbooks/_environment.yml")
+BASE_PREREQUISITES = "<base prerequisites>"
 TASK_FILE_RE = re.compile(r"^tasks/([^/]+)\.ya?ml$")
 
 
@@ -544,6 +548,10 @@ def build_role_imports() -> RoleImports:
             tasks = yaml.safe_load(fh)
         imports.includes[role].setdefault(task_file.stem, set())
         _walk_tasks(tasks, role, task_file.stem, imports)
+    if ENVIRONMENT_PLAYBOOK.exists():
+        with ENVIRONMENT_PLAYBOOK.open() as fh:
+            for play in yaml.safe_load(fh) or []:
+                _walk_tasks(play.get("tasks"), BASE_PREREQUISITES, ENVIRONMENT_PLAYBOOK.stem, imports)
     return imports
 
 
@@ -780,7 +788,11 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     for role in classification.direct_roles:
         if role in universe:
             roles.add(role)
-        consumers = sorted(change_consumers(role, classification.role_paths[role], imports))
+        consumers = change_consumers(role, classification.role_paths[role], imports)
+        if BASE_PREREQUISITES in consumers:
+            consumers.discard(BASE_PREREQUISITES)
+            consumers |= {r for r in universe if load_role_test_config(r).base_prerequisites}
+        consumers = sorted(consumers)
         consumers_by_role[role] = consumers
         if consumers:
             log(f"role '{role}' changed -> consumers: {' '.join(consumers)}")

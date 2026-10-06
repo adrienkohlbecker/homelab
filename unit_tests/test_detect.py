@@ -940,7 +940,18 @@ _IMPORT_TREE = {
     "nginx/tasks/_verify.yml": "- debug:\n",
     "homepage/tasks/main.yml": "- debug:\n",
     "homepage/tasks/_setup.yml": "- import_role:\n    name: nginx\n    tasks_from: test_fixture\n",
+    "hostname/tasks/main.yml": "- import_tasks: configure.yml\n",
+    "hostname/tasks/configure.yml": "- debug:\n",
+    "hostname/tasks/_verify.yml": "- debug:\n",
+    "hostname/meta/test.yml": "base_prerequisites: false\n",
 }
+
+# The harness environment playbook imports hostname's configure entry point
+# into every cell that keeps base_prerequisites on.
+_ENVIRONMENT_PLAYBOOK = (
+    "- hosts: all\n  tasks:\n    - when: test_base_prerequisites\n      block:\n"
+    "        - import_role:\n            name: hostname\n            tasks_from: configure\n"
+)
 
 
 class TestWalkTasks:
@@ -1067,6 +1078,8 @@ class TestChangeMatrixFanOut:
     def _tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         _write_role_tree(tmp_path, _IMPORT_TREE)
+        (tmp_path / "test" / "playbooks").mkdir(parents=True)
+        (tmp_path / "test" / "playbooks" / "_environment.yml").write_text(_ENVIRONMENT_PLAYBOOK)
         monkeypatch.setenv("CI_BASE_REF", "explicit")
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
         monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: ref)
@@ -1095,6 +1108,14 @@ class TestChangeMatrixFanOut:
         cells = self._cells(monkeypatch, ["roles/podman/templates/podman.conf.j2"])
         assert {role for role, _ in cells} == {"podman", "redis", "kuma"}
         assert {("redis", "resolute"), ("kuma", "resolute")} <= cells
+
+    def test_base_prerequisite_change_runs_every_prerequisite_cell(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cells = self._cells(monkeypatch, ["roles/hostname/tasks/configure.yml"])
+        assert {role for role, _ in cells} == {"hostname", "podman", "redis", "kuma", "nginx", "homepage"}
+
+    def test_base_prerequisite_verify_change_stays_in_its_role(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cells = self._cells(monkeypatch, ["roles/hostname/tasks/_verify.yml"])
+        assert {role for role, _ in cells} == {"hostname"}
 
 
 class TestListTestableRoles:
