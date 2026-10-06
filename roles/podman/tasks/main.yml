@@ -50,18 +50,41 @@
   tags:
     - podman
 
+# Daily prune of stopped containers and dangling images older than 48h; named
+# images stay cached so the next pull is a no-op. Deliberately not `podman
+# system prune`, which also deletes unused networks: a single-consumer network
+# (mac_iot, adguard, ...) is unused whenever its service is down, and only a
+# converge recreates it. Named volumes are never pruned either, since they may
+# hold a stopped service's state. The operator timer prunes the Lab operator's
+# rootless store.
 - name: Install the Lab operator prune timer
-  import_tasks: prune.yml
+  import_role:
+    name: systemd_timer
+    tasks_from: install
   vars:
-    podman_prune_args:
+    systemd_timer_args:
+      name: podman_prune
+      description: Prune stopped podman containers and dangling images
+      exec_start: >-
+        /bin/sh -c '/usr/bin/podman container prune --force --filter until=48h
+        && /usr/bin/podman image prune --force --filter until=48h'
+      on_calendar: "*-*-* 00:20:00"
       user: "{{ ansible_user_id }}"
       condition: "{{ podman_operator_prune_enabled }}"
   tags:
     - podman
 
 - name: Install rootful podman prune timer
-  import_tasks: prune.yml
+  import_role:
+    name: systemd_timer
+    tasks_from: install
   vars:
-    podman_prune_args: {}
+    systemd_timer_args:
+      name: podman_prune
+      description: Prune stopped podman containers and dangling images
+      exec_start: >-
+        /bin/sh -c '/usr/bin/podman container prune --force --filter until=48h
+        && /usr/bin/podman image prune --force --filter until=48h'
+      on_calendar: "*-*-* 00:20:00"
   tags:
     - podman
