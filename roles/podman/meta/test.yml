@@ -2,15 +2,18 @@
 # package and the fchmodat2 seccomp profile; Pug Resolute uses netavark's
 # native nftables driver and the stock profile.
 #
-# Lab exercises mdadm RAID5 storage and Pug a labelled raw partition. The
-# firewall role's Minimal cell installs podman on the root filesystem.
+# Lab exercises mdadm RAID5 storage, Pug a labelled raw partition, and Minimal
+# the root-filesystem fallback on a host without a ZFS root.
 machines:
   lab:
   pug:
+  minimal:
 ubuntu:
   - resolute
 skip:
   "lab:resolute": >-
     Pug covers the Resolute install path; Lab Noble covers mdadm storage.
+  "minimal:resolute": >-
+    Pug covers the Resolute install path; Minimal Noble covers root storage.
   "pug": >-
     Lab covers the Noble install path; Pug Resolute covers the raw partition.
