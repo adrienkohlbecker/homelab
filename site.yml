@@ -139,6 +139,11 @@
     - udm_dns_failover
     - udm_wol_relay
 
+# bunk is a Synology NAS (DSM, no apt), so it takes none of the roles above;
+# its own playbook configures the offsite backup target and Tailscale.
+- name: Offsite backup NAS
+  import_playbook: bunk.yml
+
 - name: Decomission services
   hosts: lab,pug,fox
   roles:

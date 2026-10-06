@@ -35,8 +35,8 @@ bunk_offsite_backup_sources:
     public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDyYBrn9Im8oTbstBQZseVT+KhO4hLU6QbcJhcPiQ2ug root@fox
 
 # Tailscale mesh: bunk is the Bonniers subnet router + exit node, enrolled into
-# headscale by the standalone bunk.yml playbook (`mise run ansible:bunk --tags
-# tailscale`), NOT site.yml -- bunk is DSM (no apt). The Tailscale package is
+# headscale by bunk.yml (`mise run ansible --limit bunk --tags tailscale`),
+# not the tailscale role -- bunk is DSM (no apt). The Tailscale package is
 # installed via Package Center (operator runbook); bunk.yml configures it and
 # reuses the role's shared registration. The control-plane constants
 # (tailscale_login_server / _headscale_host / _headscale_user) live in

@@ -2,10 +2,10 @@
 # approval every time (AGENTS.md hard rule). A --check run prompts too: prefix
 # rules cannot tell it apart.
 prefix_rule(
-    pattern = ["mise", "run", ["ansible", "ansible:bunk"]],
+    pattern = ["mise", "run", "ansible"],
     decision = "prompt",
     justification = "Converges prod hosts",
-    match = ["mise run ansible --limit lab --tags nginx", "mise run ansible:bunk"],
+    match = ["mise run ansible --limit lab --tags nginx", "mise run ansible --limit bunk"],
 )
 
 prefix_rule(

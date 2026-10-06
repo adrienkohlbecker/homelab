@@ -203,6 +203,9 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
 
         staged = m.workdir_path / "site.yml"
         shutil.copy(Path("site.yml"), staged)
+        # site.yml imports bunk.yml at parse time; the fixture has no bunk
+        # host, so the play only needs to resolve.
+        shutil.copy(Path("bunk.yml"), m.workdir_path / "bunk.yml")
 
         label = "check" if check_mode else "converge"
         print_line(f"Running site.yml {label}")

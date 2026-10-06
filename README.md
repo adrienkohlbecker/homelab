@@ -12,7 +12,7 @@ Ansible-driven configuration for my home infrastructure: two bare-metal Ubuntu s
 | `pug` | Second home server (bare metal) | `site.yml` |
 | `fox` | Cloud VPS, the only internet-facing host (Headscale control plane) | `site.yml` |
 | `udm` | Home gateway (UniFi) | `site.yml` (appliance services only) |
-| `bunk` | Off-site NAS (Synology), backup target | `bunk.yml` |
+| `bunk` | Off-site NAS (Synology), backup target | `site.yml` (via `bunk.yml`) |
 
 ## Repository map
 
@@ -21,7 +21,7 @@ Ansible-driven configuration for my home infrastructure: two bare-metal Ubuntu s
 | `hosts.ini`, `host_vars/`, `group_vars/` | Inventory and the current host, network, and service configuration |
 | `site.yml` | Top-level playbook — base install, then host-scoped service plays |
 | `wireguard.yml` | Renders one client config on demand for `mise run wg:show <device>` (localhost; streamed to a QR or stdout, never written to disk) |
-| `bunk.yml` | One-shot config for the off-site `bunk` peer |
+| `bunk.yml` | Config for the off-site `bunk` peer, imported by `site.yml` |
 | `roles/` | Role directories for services, system concerns, and shared helpers |
 | `packer/` | QEMU fixture and server-image builds |
 | `terraform/` | DNS, cloud resources, and supporting infrastructure |
