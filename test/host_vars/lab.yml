@@ -48,8 +48,6 @@ netdata_contexts:
 # The fixture priority (5) is below the production map's maximum, so the role
 # default would disable the primary-only alert. Force it on for this test.
 netdata_keepalived_lost_master_alert: true
-netdata_keepalived_vrrp_ip: 198.51.100.10
-netdata_keepalived_vrrp_update_every: 5
 netdata_collectors:
   # Real, always-live collector (the role configures go.d/systemdunits.conf); mirrors prod and exercises the present=1 instanced-prefix path
   - go.d:collector:systemdunits:service-units

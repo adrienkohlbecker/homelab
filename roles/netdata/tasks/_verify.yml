@@ -174,7 +174,7 @@
   assert:
     that:
       - _netdata_keepalived_vrrp_chart.json.context == "keepalived_vrrp.state"
-      - _netdata_keepalived_vrrp_chart.json.chart_labels.vip | default('') == "198.51.100.10"
+      - _netdata_keepalived_vrrp_chart.json.chart_labels.vip | default('') == network.virtual_ips.dns
     fail_msg: >-
       chart {{ _netdata_keepalived_vrrp_chart.json.id }} context={{ _netdata_keepalived_vrrp_chart.json.context }}
       labels={{ _netdata_keepalived_vrrp_chart.json.chart_labels | default({}) }}

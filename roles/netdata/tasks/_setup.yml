@@ -76,7 +76,8 @@
     state: reloaded
   become: true
 
+# Bind the DNS VIP the keepalived_vrrp collector watches, as a MASTER would.
 - name: _setup | Add keepalived VRRP loopback VIP fixture
-  command: ip addr replace 198.51.100.10/32 dev lo
+  command: ip addr replace {{ network.virtual_ips.dns }}/32 dev lo
   changed_when: false
   become: true
