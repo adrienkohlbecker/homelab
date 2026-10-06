@@ -1,10 +1,3 @@
-- name: Validate architecture is supported
-  assert:
-    that: ansible_architecture in lnav_artifacts
-    fail_msg: "lnav only supports {{ lnav_artifacts.keys() | join(', ') }}, got {{ ansible_architecture }}"
-  tags:
-    - lnav
-
 - name: Install unzip (required to extract lnav release)
   apt:
     pkg: unzip
@@ -30,49 +23,6 @@
   tags:
     - lnav
 
-- name: Check installed lnav version
-  command: /usr/local/bin/lnav -V
-  register: lnav_installed_version
-  failed_when: false
-  changed_when: false
-  tags:
-    - lnav
-
-# unarchive extra_opts inserts args before the zipfile path, making unzip
-# treat the file filter as the archive name. Use command: with explicit argv
-# to control argument order. Skipped in check mode (zip not yet present).
-- name: Extract lnav binary
-  command:
-    argv:
-      - unzip
-      - -o
-      - -j
-      - "/var/cache/lnav-{{ lnav_version }}-{{ ansible_architecture }}.zip"
-      - "lnav-{{ lnav_version }}/lnav"
-      - -d
-      - /usr/local/bin
-  become: true
-  when: >-
-    not ansible_check_mode and (
-      lnav_zip_download is changed or
-      lnav_installed_version.rc != 0 or
-      lnav_version not in (lnav_installed_version.stdout | default(''))
-    )
-  changed_when: true
-  tags:
-    - lnav
-
-- name: Set lnav binary permissions
-  file:
-    path: /usr/local/bin/lnav
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  when: not ansible_check_mode
-  tags:
-    - lnav
-
 - name: Create lnav directories
   file:
     path: "{{ item }}"
@@ -81,8 +31,37 @@
     group: root
     mode: "0755"
   loop:
+    - /opt/lnav
     - /etc/lnav/formats/homelab
     - /etc/lnav/configs/homelab
+  register: lnav_dirs
+  become: true
+  tags:
+    - lnav
+
+- name: Extract lnav binary
+  when: >-
+    not (ansible_check_mode and
+         (lnav_zip_download.changed or lnav_dirs.changed))
+  unarchive:
+    src: "/var/cache/lnav-{{ lnav_version }}-{{ ansible_architecture }}.zip"
+    dest: /opt/lnav
+    remote_src: true
+    include:
+      - "lnav-{{ lnav_version }}/lnav"
+    creates: "/opt/lnav/lnav-{{ lnav_version }}/lnav"
+  become: true
+  tags:
+    - lnav
+
+# force replaces a regular file at the path and lets check mode link to a
+# binary the guarded extract above has not unpacked yet.
+- name: Link lnav into PATH
+  file:
+    src: "/opt/lnav/lnav-{{ lnav_version }}/lnav"
+    dest: /usr/local/bin/lnav
+    state: link
+    force: true
   become: true
   tags:
     - lnav
