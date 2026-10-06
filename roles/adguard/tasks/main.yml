@@ -9,20 +9,11 @@
       # The service unit publishes :53 on this address; a malformed value
       # must fail here, not render a unit that silently skips the VIP.
       - (network.virtual_ips.dns | default('') | ansible.utils.ipaddr('address')) is string
-      - dns_keepalived_vrid is defined
-      - dns_keepalived_priority is defined
-      - (dns_keepalived_priority | default(0) | int) > 0
-      - (dns_keepalived_priority | default(0) | int) <= 255
-      - dns_keepalived_peers is defined
-      - dns_keepalived_peers | length > 0
-      - inventory_hostname in external_ips
       - adguard_adlists is defined
       - adguard_adlists | default([]) | length > 0
       - (adguard_adlists | default([]) | select('search', '\s') | list | length) == 0
     fail_msg: >-
-      adguard requires the DNS VIP from network.virtual_ips.dns plus
-      dns_keepalived_{vrid,priority,peers} (priority 1-255, set per-host
-      in host_vars), an external_ips entry for this host, and the
+      adguard requires the DNS VIP from network.virtual_ips.dns and the
       non-empty adguard_adlists list with no whitespace in any URL.
   tags:
     - adguard
@@ -81,9 +72,9 @@
   tags:
     - adguard
 
-# The deploy/ hook dir normally comes with the certbot package, which the
-# adguard test fixture deliberately omits (snakeoil certs instead); create
-# it so the hook task below works on both.
+# certbot creates the renewal-hooks dirs at runtime (the package ships
+# none), and the adguard test fixture never runs it (snakeoil certs
+# instead); create the deploy dir so the hook task below works on both.
 - name: Create certbot deploy hook directory
   file:
     dest: /etc/letsencrypt/renewal-hooks/deploy
