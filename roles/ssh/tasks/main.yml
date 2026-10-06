@@ -11,14 +11,16 @@
 
 # --- host-key identity persistence -----------------------------------------
 # The configured Ed25519 host identity rides rpool/services so a wipe-and-
-# restore rebuild can bring the host identity back and every
-# known_hosts pin of this host -- operator workstations, lab root's pin the
-# nightly pull authenticates against -- stays valid. Unlike zfs_autobackup's
-# client keypair, converge only BACKS UP, never restores: swapping host keys
-# mid-converge would invalidate the pin the play's own ssh connection was
-# verified against. The rebuild runbooks restore by hand right after the
-# dataset restore (Phase 5), before ansible first connects. The services role
-# runs earlier and installs the shared mount validator used here.
+# restore rebuild can bring the host identity back and every known_hosts pin
+# of this host -- operator workstations, lab root's pin the nightly pull
+# authenticates against -- stays valid. Those pins are trust-on-first-use, so
+# a new identity breaks them. Ansible itself pins nothing (ansible.cfg
+# disables host key checking), which leaves the divergence guard below as the
+# only check in the converge path that notices a rebuilt host whose old key
+# was not restored. Converge only BACKS UP, never restores; the rebuild
+# runbooks restore by hand right after the dataset restore (Phase 5). The
+# services role runs earlier and installs the shared mount validator used
+# here.
 - name: Check the services dataset mount
   when: zfs_root
   command: /usr/local/bin/zfs_check_mount rpool/services /mnt/services
