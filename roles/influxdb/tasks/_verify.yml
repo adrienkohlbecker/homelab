@@ -30,18 +30,9 @@
       subdomain: influxdb
       require_rd: false
 
-# Exercise bucket.yml end-to-end with a throwaway tenant, then verify its
-# authorization metadata and the bucket's write path.
-- name: _verify | Provision throwaway influxdb tenant via bucket.yml
-  import_role:
-    name: influxdb
-    tasks_from: bucket
-  vars:
-    influxdb_bucket_args:
-      user: verify_user
-      bucket: verify_bucket
-
-- name: _verify | Resolve verify_bucket id
+# The converge provisioned every influxdb_buckets tenant (the fixture declares
+# two). Check each one's bucket, authorization, and write path in InfluxDB.
+- name: _verify | List the managed org's buckets
   command:
     argv:
       - podman
@@ -52,21 +43,23 @@
       - list
       - --org
       - "{{ influxdb_root_org }}"
-      - --name
-      - verify_bucket
       - --json
-  register: _influxdb_verify_bucket
+  register: _influxdb_verify_buckets
   changed_when: false
   become: true
 
-# The token is redacted after creation, but its exact permission list remains.
-- name: _verify | Bucket.yml minted a write-auth for verify_bucket
+# The token is redacted after creation, but its owner, status, and exact
+# permission list remain. Matching each tenant's own bucket ID also proves the
+# second entry did not reuse the first entry's derived IDs. `auth list --user`
+# returns every authorization in the org, hence the explicit owner filter.
+- name: _verify | Each tenant holds an active write-auth for its own bucket
   vars:
     _verify_bucket: >-
-      {{ _influxdb_verify_bucket.stdout
+      {{ _influxdb_verify_buckets.stdout
          | from_json
-         | selectattr('name', 'eq', 'verify_bucket')
-         | first }}
+         | selectattr('name', 'eq', item.bucket)
+         | first
+         | default({}) }}
     _verify_write_permission: >-
       write:orgs/{{ _verify_bucket.orgID }}/buckets/{{ _verify_bucket.id }}
   command:
@@ -78,17 +71,23 @@
       - auth
       - list
       - --user
-      - verify_user
+      - "{{ item.user }}"
       - --json
+  loop: "{{ influxdb_buckets }}"
+  loop_control:
+    label: "{{ item.user }} / {{ item.bucket }}"
   register: _influxdb_verify_auth_list
   changed_when: false
   failed_when: >-
-    ((_influxdb_verify_auth_list.stdout | from_json)
-     | selectattr('permissions', 'eq', [_verify_write_permission])
-     | list | length) == 0
+    _verify_bucket == {}
+    or ((_influxdb_verify_auth_list.stdout | from_json)
+        | selectattr('userName', 'eq', item.user)
+        | selectattr('status', 'eq', 'active')
+        | selectattr('permissions', 'eq', [_verify_write_permission])
+        | list | length) == 0
   become: true
 
-- name: _verify | Write a sentinel point through the managed operator config
+- name: _verify | Write a sentinel point into each tenant bucket
   command:
     argv:
       - podman
@@ -97,12 +96,16 @@
       - influx
       - write
       - --bucket
-      - verify_bucket
+      - "{{ item.bucket }}"
       - --org
       - "{{ influxdb_root_org }}"
       - sentinel,source=ansible_verify value=1
+  loop: "{{ influxdb_buckets }}"
+  loop_control:
+    label: "{{ item.bucket }}"
   changed_when: false
   become: true
+
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:

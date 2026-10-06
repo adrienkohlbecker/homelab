@@ -149,7 +149,7 @@
   tags:
     - influxdb
 
-# Authenticated readiness barrier for later `tasks_from: bucket` callers.
+# Authenticated readiness barrier for the tenant provisioning below.
 # The separate assertion turns a persistent 401 into actionable guidance.
 - name: Wait for the influx default config to authenticate
   command:
@@ -191,6 +191,17 @@
       fresh token offline with `influxd recovery auth create-operator` (stop the
       container first), set influxdb_root_token in the vault, and re-apply.
   when: not ansible_check_mode
+  tags:
+    - influxdb
+
+# One tenant per in-network client, declared in inventory as `influxdb_buckets`.
+# bucket.yml documents how each write token reaches its client.
+- name: Provision influxdb tenants
+  include_tasks: bucket.yml
+  loop: "{{ influxdb_buckets | default([]) }}"
+  loop_control:
+    loop_var: influxdb_bucket_args
+    label: "{{ influxdb_bucket_args.user | default('') }} / {{ influxdb_bucket_args.bucket | default('') }}"
   tags:
     - influxdb
 

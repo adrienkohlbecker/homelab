@@ -1,11 +1,13 @@
-# Provision a user, bucket, and bucket-scoped write authorization in
-# `influxdb_root_org`. Required `influxdb_bucket_args` keys: `user`, `bucket`.
+# Provision one `influxdb_buckets` entry: a user, bucket, and bucket-scoped
+# write authorization in `influxdb_root_org`. main.yml includes this file once
+# per entry with the entry bound to `influxdb_bucket_args` (keys: `user`,
+# `bucket`), after its authenticated readiness barrier.
 #
 # The token is printed only by the first `auth create`; InfluxDB redacts it from
-# later listings, so this task neither publishes nor persists it. Delete the
-# authorization and re-run to recover a lost token. The main role must have
-# authenticated its managed CLI config and verified the managed org before this
-# entry point runs.
+# later listings, so this task neither publishes nor persists it. On the
+# converge that first mints the auth, the operator copies it from the converge
+# output into the consumer (e.g. the one-time Home Assistant UI integration
+# setup). Delete the authorization and re-run to recover a lost token.
 #
 # JSON output avoids table-shape drift; argv slots keep tenant names inert.
 # There is no useful check-mode simulation: the helper queries live application
@@ -18,9 +20,11 @@
       - influxdb_bucket_args.user   is defined
       - influxdb_bucket_args.bucket is defined
     fail_msg: >-
-      influxdb_bucket requires influxdb_bucket_args.{user,bucket}.
+      Every influxdb_buckets entry needs `user` and `bucket` keys.
+  tags:
+    - influxdb
 
-# Keep derived IDs block-scoped so repeated imports cannot leak tenant state.
+# Keep derived IDs block-scoped so one entry cannot leak tenant state into the next.
 - name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_root_org }}
   when: not ansible_check_mode
   vars:
@@ -31,6 +35,8 @@
           | selectattr('name', 'eq', influxdb_bucket_args.bucket)
           | first }}
     _influxdb_bucket_id: "{{ _influxdb_bucket_record.id }}"
+  tags:
+    - influxdb
   block:
     - name: bucket | Query user {{ influxdb_bucket_args.user }}
       command:

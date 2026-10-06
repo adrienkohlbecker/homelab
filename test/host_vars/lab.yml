@@ -122,3 +122,12 @@ nut_wake_peers:
 # the headscale bridge its address, so the container never starts. Production
 # never pairs the two: the firewall role runs on lab and pug, headscale on fox.
 firewall_disable_ipv6: false
+
+# roles/influxdb tenants: Lab's homeassistant tenant plus a second one, so the
+# per-entry include runs more than once and _verify proves one tenant's derived
+# IDs never leak into the next.
+influxdb_buckets:
+  - user: homeassistant
+    bucket: homeassistant
+  - user: verify_user
+    bucket: verify_bucket

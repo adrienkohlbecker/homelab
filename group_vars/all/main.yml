@@ -132,10 +132,9 @@ bootstrap_dns_resolver:
 journald_storage: persistent
 
 # Org name the influxdb image's DOCKER_INFLUXDB_INIT_* entrypoint creates
-# on first boot. Consumer roles (`homeassistant`, etc.) also provision
-# tenants in this org via `import_role: name: influxdb, tasks_from: bucket`
-# -- bucket.yml refuses any org that doesn't already exist, and this is
-# the only one this role bootstraps.
+# on first boot. The role also provisions every `influxdb_buckets` tenant in
+# this org -- bucket.yml refuses any org that doesn't already exist, and this
+# is the only one the role bootstraps.
 influxdb_root_org: home
 
 # Ports each host-level service publishes. Single source of truth for unit

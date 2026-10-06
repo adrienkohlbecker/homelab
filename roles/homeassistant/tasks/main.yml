@@ -116,25 +116,6 @@
   tags:
     - homeassistant
 
-# The influxdb integration is configured through HA's UI (not via
-# configuration.yaml); the helper below lands the org / user / bucket /
-# write-auth. It does NOT surface the token (influxd 2.8+ redacts it from
-# `auth list`, returning it only at `auth create`). On the converge that
-# first mints the auth, bucket.yml's `auth create --json` prints the token
-# to the interactive converge output -- the operator copies it from there
-# into the one-time HA UI integration setup, and vaults it for their own
-# records if desired. To recover a lost token, delete the auth and re-run.
-- name: Bootstrap influxdb tenant for homeassistant
-  import_role:
-    name: influxdb
-    tasks_from: bucket
-  vars:
-    influxdb_bucket_args:
-      user: homeassistant
-      bucket: homeassistant
-  tags:
-    - homeassistant
-
 # The house location renders into configuration.yaml's `homeassistant:` block.
 # Vaulted, so a missing vault-id would otherwise render an empty latitude and
 # put HA on the null island rather than failing.

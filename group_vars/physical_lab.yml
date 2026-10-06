@@ -250,3 +250,10 @@ nginx_static_proxies_enabled: true
 # leg is what brings pug back.
 nut_wake_peers:
   - "{{ mac_addresses.pug }}"
+
+# InfluxDB tenants: a user, bucket, and bucket-scoped write token each. The
+# token prints once, on the converge that mints it; Home Assistant's influxdb
+# integration (configured in HA's UI) holds it.
+influxdb_buckets:
+  - user: homeassistant
+    bucket: homeassistant
