@@ -25,17 +25,288 @@
   tags:
     - macos_vm
 
-- name: Configure VM storage
-  import_tasks: storage.yml
+# Working files live on an rpool dataset. The block-device source is a sparse
+# ZFS volume, created or grown here, whose /dev/zvol path QEMU opens as a raw
+# block device.
+- name: Create and mount the workdir dataset
+  import_role:
+    name: zfs_dataset
+    tasks_from: dataset
+  vars:
+    zfs_dataset_args:
+      dataset: rpool/macos_vm
+      mountpoint: /var/lib/macos_vm
+      owner: root
+      group: root
+      mode: "0711"
+      extra_properties:
+        # Match qemu's default qcow2 cluster size.
+        recordsize: '65536'
+        # The guest caches its own pages; keep them out of the host ARC.
+        primarycache: metadata
+        # Limit atime writes without disabling access-time accounting.
+        relatime: 'on'
+        # Downloaded artifacts and VM working files are not replicated.
+        'autobackup:bak': 'false'
   tags:
     - macos_vm
 
-- name: Fetch and stage upstream artifacts
-  import_tasks: artifacts.yml
+- name: Create macOS zvol parent datasets
+  community.general.zfs:
+    name: "{{ item }}"
+    state: present
+    extra_zfs_properties:
+      mountpoint: none
+  loop:
+    - "{{ zfs_dozer_filesystem }}/vms"
+    - "{{ zfs_dozer_filesystem }}/vms/macos"
+  become: true
   tags:
     - macos_vm
 
-- name: Install QEMU systemd service
-  import_tasks: service.yml
+- name: Read current macOS zvol size
+  ansible.builtin.command:
+    cmd: "zfs get -Hp -o value volsize {{ macos_vm_zvol_dataset }}"
+  register: macos_vm_zvol_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - macos_vm
+
+- name: Assert macOS zvol size probe did not error unexpectedly
+  when:
+    - macos_vm_zvol_current.rc != 0
+  assert:
+    that: "'does not exist' in macos_vm_zvol_current.stderr"
+    fail_msg: >-
+      `zfs get volsize {{ macos_vm_zvol_dataset }}` failed unexpectedly
+      (rc={{ macos_vm_zvol_current.rc }}): {{ macos_vm_zvol_current.stderr | trim }}.
+      Refusing to proceed because the zvol shrink guard cannot verify the current size.
+  tags:
+    - macos_vm
+
+- name: Refuse to shrink macOS zvol
+  when:
+    - macos_vm_zvol_current.rc == 0
+  assert:
+    that: (macos_vm_zvol_size | human_to_bytes) >= (macos_vm_zvol_current.stdout | int)
+    fail_msg: >-
+      Refusing to shrink {{ macos_vm_zvol_dataset }} from {{ macos_vm_zvol_current.stdout }}
+      to {{ macos_vm_zvol_size | human_to_bytes }} bytes. Shrinking would corrupt APFS.
+      Create a new smaller zvol and reinstall/restore instead.
+  tags:
+    - macos_vm
+
+- name: Create or update macOS zvol
+  community.general.zfs:
+    name: "{{ macos_vm_zvol_dataset }}"
+    state: present
+    extra_zfs_properties:
+      volsize: "{{ macos_vm_zvol_size | human_to_bytes | string }}"
+      # Creation-only: the module tries to rewrite properties whose source is default.
+      volblocksize: "{{ macos_vm_zvol_volblocksize if macos_vm_zvol_current.rc != 0 else omit }}"
+      compression: "{{ macos_vm_zvol_compression }}"
+      volmode: dev
+      refreservation: "0"
+      logbias: throughput
+      redundant_metadata: most
+  become: true
+  tags:
+    - macos_vm
+
+- name: Set zvol disk source path
+  set_fact:
+    macos_vm_disk_source: "/dev/zvol/{{ macos_vm_zvol_dataset }}"
+  tags:
+    - macos_vm
+
+- name: Create artifacts cache dir
+  file:
+    path: "{{ macos_vm_artifacts_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: macos_vm_artifacts_dir_result
+  tags:
+    - macos_vm
+
+- name: Create per-VM workdir
+  file:
+    path: "{{ macos_vm_workdir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: macos_vm_workdir_result
+  tags:
+    - macos_vm
+
+- name: Fetch pinned OpenCore.qcow2
+  # Skip in check mode if the dir was just (notionally) created; in check
+  # mode the dir doesn't actually exist on disk so get_url's destination
+  # check fails. On a real run the dir is real and the task proceeds.
+  when: not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
+  get_url:
+    url: "{{ macos_vm_opencore_artifact.url }}"
+    dest: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
+    checksum: "sha256:{{ macos_vm_opencore_artifact.sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - macos_vm
+
+# Seed OpenCore once; existing per-VM images retain guest identity state.
+- name: Seed per-VM OpenCore image
+  script:
+    cmd: >-
+      seed_opencore.py
+      {{ (macos_vm_artifacts_dir ~ '/OpenCore.qcow2') | quote }}
+      {{ (macos_vm_workdir ~ '/OpenCore.qcow2') | quote }}
+      --prev-lang-kbd={{ macos_vm_opencore_prev_lang_kbd | quote }}
+      --apple-locale={{ macos_vm_opencore_apple_locale | quote }}
+      --boot-args={{ macos_vm_opencore_boot_args | quote }}
+    executable: /usr/bin/python3
+    creates: "{{ macos_vm_workdir }}/OpenCore.qcow2"
+  become: true
+  tags:
+    - macos_vm
+
+- name: Stage fetch-macOS script
+  when:
+    - macos_vm_install_mode
+    - not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
+  get_url:
+    url: "{{ macos_vm_fetch_macos_artifact.url }}"
+    dest: "{{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py"
+    checksum: "sha256:{{ macos_vm_fetch_macos_artifact.sha256 }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - macos_vm
+
+- name: Fetch BaseSystem recovery image
+  when: macos_vm_install_mode
+  ansible.builtin.command:
+    # fetch-macOS-v2.py calls os.get_terminal_size() while verifying the
+    # chunklist, so give it a pseudo-terminal even though Ansible is non-TTY.
+    # timeout runs inside that terminal, so the bound kills the download on
+    # the host and script -e reports the 124 exit status.
+    argv:
+      - script
+      - -q
+      - -e
+      - -c
+      - >-
+        timeout --kill-after=30 {{ macos_vm_recovery_fetch_timeout }}
+        python3 {{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py
+        --action download
+        --board-id {{ macos_vm_recovery_product.board_id }}
+        --mlb {{ macos_vm_recovery_product.mlb }}
+        --os-type {{ macos_vm_recovery_product.os_type }}
+        --outdir {{ macos_vm_workdir }}
+        --basename BaseSystem.partial
+      - /dev/null
+    creates: "{{ macos_vm_workdir }}/BaseSystem.dmg"
+  become: true
+  register: macos_vm_basesystem_result
+  vars:
+    macos_vm_recovery_product: "{{ macos_vm_recovery_products[macos_vm_macos_version] }}"
+    # Keep these in sync with fetch-macOS-v2.py's product menu. `--shortname`
+    # is ignored when `--action download` is passed, so provide the resolved
+    # board/MLB/os_type tuple directly.
+    # 15 = Sequoia. Add other releases from the script's menu here.
+    macos_vm_recovery_products:
+      "15":
+        board_id: Mac-7BA5B2D9E42DDD94
+        mlb: "00000000000000000"
+        os_type: default
+  tags:
+    - macos_vm
+
+# fetch-macOS-v2.py exits non-zero on a chunklist mismatch but keeps the
+# file, and an interrupted download leaves a truncated one. Only a verified
+# download takes the name that skips the fetch on later runs; the image moves
+# last because it is that sentinel.
+- name: Publish verified BaseSystem download
+  when: macos_vm_basesystem_result.changed
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ macos_vm_workdir }}/BaseSystem.partial.{{ item }}"
+      - "{{ macos_vm_workdir }}/BaseSystem.{{ item }}"
+    creates: "{{ macos_vm_workdir }}/BaseSystem.{{ item }}"
+  loop:
+    - chunklist
+    - dmg
+  become: true
+  tags:
+    - macos_vm
+
+# qemu-img fails the read on chunk types it cannot decode, such as LZFSE
+# without its module, so a successful conversion is complete.
+- name: Convert BaseSystem DMG to raw image
+  when: macos_vm_install_mode
+  ansible.builtin.command:
+    argv:
+      - qemu-img
+      - convert
+      - -f
+      - dmg
+      - -O
+      - raw
+      - "{{ macos_vm_workdir }}/BaseSystem.dmg"
+      - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
+    creates: "{{ macos_vm_workdir }}/BaseSystem.img"
+  become: true
+  register: macos_vm_basesystem_convert_result
+  tags:
+    - macos_vm
+
+- name: Publish converted BaseSystem image
+  when: macos_vm_basesystem_convert_result.changed
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ macos_vm_workdir }}/BaseSystem.img.partial"
+      - "{{ macos_vm_workdir }}/BaseSystem.img"
+    creates: "{{ macos_vm_workdir }}/BaseSystem.img"
+  become: true
+  tags:
+    - macos_vm
+
+- name: Seed missing OVMF vars
+  when: not (ansible_check_mode and macos_vm_workdir_result.changed)
+  copy:
+    src: /usr/share/OVMF/OVMF_VARS_4M.fd
+    dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
+    backup: true
+  become: true
+  tags:
+    - macos_vm
+
+- name: Install QEMU service
+  import_role:
+    name: systemd_unit
+    tasks_from: unit
+  vars:
+    systemd_unit_args:
+      src: macos_vm.service.j2
+      dest: "macos-vm-{{ macos_vm_name }}.service"
+      enable: "{{ macos_vm_autostart }}"
+      start: "{{ macos_vm_start_service }}"
   tags:
     - macos_vm

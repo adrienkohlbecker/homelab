@@ -1,6 +1,6 @@
 # Per-VM identity.
 macos_vm_name: base
-macos_vm_macos_version: "15"  # Sequoia. Keys the recovery product in tasks/artifacts.yml.
+macos_vm_macos_version: "15"  # Sequoia. Keys the recovery product in tasks/main.yml.
 
 # CPU & memory. macOS dislikes hybrid topology, so on Raptor Lake / Alder Lake
 # pin to P-core threads only via macos_vm_cpu_pinset. Confirm thread numbering
@@ -55,6 +55,6 @@ macos_vm_start_service: false
 
 # Where the role caches downloaded artifacts (shared across all macOS VMs)
 # and per-VM working files (one subdir per VM), on the rpool/macos_vm dataset
-# that tasks/storage.yml mounts at /var/lib/macos_vm.
+# that tasks/main.yml mounts at /var/lib/macos_vm.
 macos_vm_artifacts_dir: /var/lib/macos_vm/_artifacts
 macos_vm_workdir: "/var/lib/macos_vm/{{ macos_vm_name }}"
