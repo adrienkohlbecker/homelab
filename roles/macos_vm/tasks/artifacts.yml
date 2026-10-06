@@ -1,3 +1,5 @@
+# Seed OpenCore once; existing per-VM images retain guest identity state.
+
 - name: artifacts | Create artifacts cache dir
   file:
     path: "{{ macos_vm_artifacts_dir }}"
@@ -38,22 +40,17 @@
   tags:
     - macos_vm
 
-# The per-VM copy carries the guest's NVRAM and iCloud identity, so an
-# existing one is never replaced.
-- name: artifacts | Stage per-VM OpenCore image
-  when: >-
-    not (ansible_check_mode
-    and (macos_vm_artifacts_dir_result.changed or macos_vm_workdir_result.changed))
-  copy:
-    src: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
-    dest: "{{ macos_vm_workdir }}/OpenCore.qcow2"
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0644"
-    force: false
-    backup: true
-    validate: qemu-img check -q -f qcow2 %s
+- name: artifacts | Seed per-VM OpenCore image
+  script:
+    cmd: >-
+      seed_opencore.py
+      {{ (macos_vm_artifacts_dir ~ '/OpenCore.qcow2') | quote }}
+      {{ (macos_vm_workdir ~ '/OpenCore.qcow2') | quote }}
+      --prev-lang-kbd={{ macos_vm_opencore_prev_lang_kbd | quote }}
+      --apple-locale={{ macos_vm_opencore_apple_locale | quote }}
+      --boot-args={{ macos_vm_opencore_boot_args | quote }}
+    executable: /usr/bin/python3
+    creates: "{{ macos_vm_workdir }}/OpenCore.qcow2"
   become: true
   tags:
     - macos_vm
