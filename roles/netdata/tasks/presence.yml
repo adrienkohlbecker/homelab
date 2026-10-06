@@ -27,19 +27,19 @@
       condition: "{{ netdata_presence_condition | default(true) }}"
 
 - name: presence | Configure netdata_presence alerts
-  import_tasks: health.yml
+  import_tasks: config.yml
   vars:
     netdata_args:
       src: netdata_presence_alerts.conf
-      dest: netdata_presence.conf
+      dest: health.d/netdata_presence.conf
       mode: "0600"
 
 # Per-context $last_collected_t staleness alerts + the shared
 # go.d-collector staleness/failure templates.
 - name: presence | Configure netdata context-liveness alerts
-  import_tasks: health.yml
+  import_tasks: config.yml
   vars:
     netdata_args:
       src: context_liveness.conf.j2
-      dest: context_liveness.conf
+      dest: health.d/context_liveness.conf
       mode: "0600"

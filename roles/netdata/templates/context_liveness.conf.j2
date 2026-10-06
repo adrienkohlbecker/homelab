@@ -33,7 +33,7 @@ template: liveness_{{ name }}
 {# The running-but-failing collector case (a go.d job that instantiated
    charts but whose polls now fail) is covered by un-silencing netdata's
    stock `plugin_data_collection_status` template (to: silent -> sysadmin, in
-   alerts.yml) rather than re-declaring it here -- it ships with the right
-   lookup/warn/delay already. The netdata_presence machinery covers the
+   go_d_plugin_alerts.conf.j2) rather than re-declaring it here -- it ships
+   with the right lookup/warn/delay already. The netdata_presence machinery covers the
    complementary configured-but-never-instantiated case (uniquely, since the
    status chart only appears once a job has run). #}

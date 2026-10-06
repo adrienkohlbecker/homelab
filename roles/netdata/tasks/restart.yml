@@ -1,6 +1,6 @@
 # Apply pending netdata configuration with a single restart. Every config
-# write in this role (config.yml, health.yml, charts_d.yml, charts_d_remove.yml
-# and the daemon config in configure.yml) only sets netdata_restart_needed;
+# write in this role (config.yml, charts_d.yml, remove.yml and the daemon
+# config in configure.yml) only sets netdata_restart_needed;
 # main.yml imports this file once at the end of the run. Callers that write
 # through those entry points outside netdata's own run (retired_services,
 # sibling roles' _verify files) import it themselves afterwards.

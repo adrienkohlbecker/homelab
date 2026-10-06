@@ -61,11 +61,6 @@
   tags:
     - netdata
 
-- name: Configure netdata alerts
-  import_tasks: alerts.yml
-  tags:
-    - netdata
-
 - name: Configure nginx
   import_role:
     name: nginx

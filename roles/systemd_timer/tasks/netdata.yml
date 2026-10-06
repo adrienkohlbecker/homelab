@@ -16,10 +16,10 @@
 - name: Configure systemd_timers netdata alerts
   import_role:
     name: netdata
-    tasks_from: health
+    tasks_from: config
   vars:
     netdata_args:
       src: systemd_timers_alerts.conf
-      dest: systemd_timers.conf
+      dest: health.d/systemd_timers.conf
   tags:
     - systemd_timer

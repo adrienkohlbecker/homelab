@@ -1,7 +1,7 @@
 # Daemon-configuration phase, imported by main.yml right after the
 # package install: netdata.conf settings, cloud opt-out, the role's own go.d
-# collectors, telegram alerting, and the startup-readiness drop-in. Split out
-# of main.yml for navigability.
+# collectors and health alerts, telegram alerting, and the startup-readiness
+# drop-in. Split out of main.yml for navigability.
 # Only the load-bearing overrides are templated; netdata overlays the file on
 # its compiled-in defaults, so this is deliberately not a wholesale netdata.conf
 # (which would freeze the hundreds of auto-tuned [plugin:*] sections). The
@@ -104,49 +104,81 @@
   tags:
     - netdata
 
-- name: Ensure the netdata go.d directory exists
+- name: Ensure the netdata config directories exist
   when: netdata_package_ready
   file:
-    path: /etc/netdata/go.d
+    path: /etc/netdata/{{ item }}
     state: directory
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - go.d
+    - health.d
   become: true
   tags:
     - netdata
 
-# Sibling roles install their go.d jobs through config.yml (metrics.yml).
-- name: Configure go.d collectors
+# The role's own go.d collector jobs and health.d alerts. Sibling roles install
+# theirs through config.yml (metrics.yml). go.d jobs are YAML; health configs
+# are a netdata-specific DSL with no offline parser, so only go.d/ validates.
+- name: Configure go.d collectors and health alerts
   when:
     - netdata_package_ready
     - item.condition | default(true)
+  vars:
+    _netdata_yaml_validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   template:
     src: "{{ item.src }}"
-    dest: /etc/netdata/go.d/{{ item.dest }}
+    dest: /etc/netdata/{{ item.dest }}
     owner: netdata
     group: netdata
     mode: "{{ item.mode | default('0644') }}"
     backup: true
-    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+    validate: "{{ _netdata_yaml_validate if item.dest.startswith('go.d/') else omit }}"
   loop:
     - src: prometheus.conf.j2
-      dest: prometheus.conf
+      dest: go.d/prometheus.conf
       mode: "0600"
     - src: postfix.conf.j2
-      dest: postfix.conf
+      dest: go.d/postfix.conf
     - src: docker.conf.j2
-      dest: docker.conf
+      dest: go.d/docker.conf
     - src: systemdunits.conf.j2
-      dest: systemdunits.conf
+      dest: go.d/systemdunits.conf
     - src: sensors.conf.j2
-      dest: sensors.conf
+      dest: go.d/sensors.conf
     - src: intelgpu.conf.j2
-      dest: intelgpu.conf
+      dest: go.d/intelgpu.conf
       condition: "{{ netdata_intelgpu_enabled and ansible_architecture == 'x86_64' }}"
+    - src: systemdunits_alerts.conf.j2
+      dest: health.d/systemdunits.conf
+    - src: gitlab_runner_alerts.conf.j2
+      dest: health.d/gitlab_runner.conf
+    - src: zfs_alerts_override.conf.j2
+      dest: health.d/zfs_alerts_override.conf
+    - src: postfix_alerts.conf.j2
+      dest: health.d/postfix.conf
+    - src: wireguard_alerts.conf.j2
+      dest: health.d/wireguard.conf
+    # keepalived lost-master alarm, fed by the keepalived_vrrp collector in
+    # metrics.yml. Deployed only on the designated primary peer: a backup
+    # normally has holds_vip=0, so the alarm there would be a permanent false
+    # positive.
+    - src: keepalived_vrrp_alerts.conf.j2
+      dest: health.d/keepalived_vrrp.conf
+      condition: "{{ netdata_keepalived_lost_master_alert }}"
+    - src: disk_health_alerts.conf.j2
+      dest: health.d/disk_health.conf
+    - src: reboot_alerts.conf.j2
+      dest: health.d/reboot.conf
+    - src: timex_alerts.conf.j2
+      dest: health.d/timex.conf
+    - src: go_d_plugin_alerts.conf.j2
+      dest: health.d/go.d.plugin.conf
   loop_control:
     label: "{{ item.dest }}"
-  register: netdata_go_d_conf
+  register: netdata_templates
   become: true
   tags:
     - netdata
@@ -184,7 +216,7 @@
   when: >-
     [netdata_conf, netdata_charts_d_conf, netdata_cloud_conf,
      netdata_cloud_unclaim, netdata_service_d_override_conf_result,
-     netdata_go_d_conf, netdata_debugfs_mount]
+     netdata_templates, netdata_debugfs_mount]
     | selectattr('changed') | list | length > 0
   set_fact:
     netdata_restart_needed: true

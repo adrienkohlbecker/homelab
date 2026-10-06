@@ -1,8 +1,7 @@
 # Install a charts.d.plugin shell collector. Drops the caller-provided
 # script under /usr/libexec/netdata/charts.d/ and the caller-provided conf
 # under /etc/netdata/charts.d/, then requests a netdata restart (restart.yml)
-# when anything changed. charts_d_remove.yml is the matching removal entry
-# point.
+# when anything changed. remove.yml is the matching removal entry point.
 #
 # Inputs: caller passes a single dict `netdata_args` with keys
 #   name        required; collector module name (e.g. 'hdparm'). Used as
@@ -20,17 +19,6 @@
 #
 # The whole dict is replaced at each call, so optional values cannot leak from
 # a previous collector import.
-- name: charts_d | Assert required inputs are set
-  assert:
-    that:
-      - netdata_args.name is defined and netdata_args.name | length > 0
-      - netdata_args.script is defined and netdata_args.script | length > 0
-      - netdata_args.conf is defined and netdata_args.conf | length > 0
-    fail_msg: >-
-      charts_d helper requires netdata_args.name (collector module name),
-      netdata_args.script (chart.sh under the caller's files/), and
-      netdata_args.conf (charts.d conf under the caller's files/ or templates/)
-
 - name: "charts_d | Install chart.sh for {{ netdata_args.name }}"
   when: netdata_args.condition | default(true)
   copy:
@@ -54,8 +42,8 @@
     mode: "0755"
   become: true
 
-# Inline rather than via config.yml: charts.d collectors have no meaningful
-# upstream config stub to seed from.
+# Inline rather than via config.yml so every charts.d conf, which the plugin
+# sources as shell, gets the bash parse check.
 - name: "charts_d | Install charts.d conf for {{ netdata_args.name }}"
   when: netdata_args.condition | default(true)
   vars:

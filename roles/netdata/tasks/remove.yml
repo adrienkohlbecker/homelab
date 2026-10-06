@@ -1,0 +1,26 @@
+# Remove what config.yml or charts_d.yml installed, then request a netdata
+# restart (restart.yml) so the running daemon and charts.d.plugin drop it.
+#
+# Inputs: caller passes a single dict `netdata_args` with either or both of
+#   dest   path under /etc/netdata/, as passed to config.yml
+#          (e.g. health.d/fluentbit.conf)
+#   name   charts.d collector module name, as passed to charts_d.yml; removes
+#          its chart.sh and conf
+#
+# Idempotent on hosts that never had the files.
+- name: remove | Remove netdata files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ (['/etc/netdata/' ~ netdata_args.dest] if netdata_args.dest is defined else [])
+       + (['/usr/libexec/netdata/charts.d/' ~ netdata_args.name ~ '.chart.sh',
+           '/etc/netdata/charts.d/' ~ netdata_args.name ~ '.conf']
+          if netdata_args.name is defined else []) }}
+  register: _netdata_remove
+  become: true
+
+- name: remove | Request a netdata restart after removing files
+  when: _netdata_remove.changed
+  set_fact:
+    netdata_restart_needed: true

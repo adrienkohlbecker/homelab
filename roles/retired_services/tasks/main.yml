@@ -5,7 +5,7 @@
 - name: Remove the retired zfs_scan charts.d collector
   import_role:
     name: netdata
-    tasks_from: charts_d_remove
+    tasks_from: remove
   vars:
     netdata_args:
       name: zfs_scan
@@ -18,10 +18,10 @@
 - name: Remove the retired fluent-bit output-drop alert
   import_role:
     name: netdata
-    tasks_from: health_remove
+    tasks_from: remove
   vars:
     netdata_args:
-      dest: fluentbit.conf
+      dest: health.d/fluentbit.conf
   tags:
     - retired_services
     - netdata
