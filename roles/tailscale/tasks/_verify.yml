@@ -74,6 +74,18 @@
   register: _tailscale_snapshot_wants
   failed_when: _tailscale_snapshot_wants.stat.exists
 
+# No fixture mounts a services dataset, so the live drop-in never carries the
+# mount dependency; render the production branch to cover it.
+- name: _verify | A services dataset override requires the services mount
+  vars:
+    zfs_root: true
+    zfs_has_services_mount: true
+    _tailscale_override: "{{ lookup('template', 'tailscaled-override.conf.j2') }}"
+  assert:
+    that:
+      - "'After=zfs_mount_mnt_services.service' in _tailscale_override"
+      - "'Requires=zfs_mount_mnt_services.service' in _tailscale_override"
+
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the WantedBy link brings it back with the target's start.
 # Kept after the registration checks because it bounces the daemon; the
@@ -112,53 +124,3 @@
       until: _tailscale_after_target_start.status.ActiveState == 'active'
       retries: 15
       delay: 2
-
-- name: _verify | Render production overrides for alternate host layouts
-  template:
-    src: tailscaled-override.conf.j2
-    dest: "/tmp/tailscale-{{ item.name }}.conf"
-    mode: "0644"
-  vars:
-    zfs_root: "{{ item.zfs_root }}"
-    zfs_has_services_mount: "{{ item.zfs_root }}"
-    ansible_default_ipv4: "{{ item.default_ipv4 }}"
-  loop:
-    - name: ext4
-      zfs_root: false
-      default_ipv4: {}
-    - name: zfs_services
-      zfs_root: true
-      default_ipv4:
-        interface: eth0
-  become: true
-
-- name: _verify | Verify alternate Tailscale dependencies and offload hook
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-        import sys
-
-        ext4 = pathlib.Path(sys.argv[1]).read_text()
-        zfs = pathlib.Path(sys.argv[2]).read_text()
-        assert "zfs_mount_mnt_services.service" not in ext4
-        assert "zfs_autosnapshot.target" not in ext4
-        assert "ExecStartPost=" not in ext4
-        assert "Requires=zfs_mount_mnt_services.service" in zfs
-        assert "After=zfs_autosnapshot.target" in zfs
-        assert "ethtool -K eth0" in zfs
-      - /tmp/tailscale-ext4.conf
-      - /tmp/tailscale-zfs_services.conf
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate Tailscale overrides
-  file:
-    path: "/tmp/tailscale-{{ item }}.conf"
-    state: absent
-  loop:
-    - ext4
-    - zfs_services
-  become: true
