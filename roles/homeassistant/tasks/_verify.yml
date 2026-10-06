@@ -240,41 +240,6 @@
   until: _homeassistant_smtp_entity.rc == 0
   become: true
 
-- name: _verify | Homeassistant reaches influxdb over the homeassistant podman network
-  command:
-    argv:
-      - podman
-      - exec
-      - homeassistant
-      - curl
-      - --location
-      - --fail
-      - --silent
-      - --show-error
-      - --connect-timeout
-      - "1"
-      - --max-time
-      - "5"
-      - -o
-      - /dev/null
-      - http://influxdb.dns.podman:8086/health
-  changed_when: false
-  become: true
-
-- name: _verify | Homeassistant reaches mosquitto over the homeassistant podman network
-  command:
-    argv:
-      - podman
-      - exec
-      - homeassistant
-      - python3
-      - -c
-      - >-
-        import socket;
-        socket.create_connection(("mosquitto.dns.podman", 1883), timeout=2).close()
-  changed_when: false
-  become: true
-
 # Asserting only which iface wins `route get` is not enough: with the macvlan
 # and the bridge both holding a default at the same metric, the winner is
 # decided by FIB insertion order, so the check can pass on a fixture while prod

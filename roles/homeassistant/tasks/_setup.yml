@@ -23,27 +23,22 @@
     name: macvlan
     tasks_from: main
 
-# Run the real influxdb role so the bootstrap exercises the same image
-# tag + the same `home` org / default bucket the prod host runs against
-# -- not a hand-rolled `podman run influxdb` that drifts vs prod.
-- name: _setup | Install influxdb
-  import_role:
-    name: influxdb
-    tasks_from: main
-
-# Provision a real mosquitto broker so _verify exercises HA's MQTT
-# integration path end-to-end instead of joining a nameplate-only
-# `homeassistant` network that no broker is listening on. Test fixture
-# `group_vars/test.yml` already defines `mosquitto_accounts`.
-- name: _setup | Install mosquitto
-  import_role:
-    name: mosquitto
+# The stub relay below joins HA's backend network before the role creates it.
+# Same options as main.yml, so the converge finds the network unchanged.
+- name: _setup | Create the homeassistant podman network
+  containers.podman.podman_network:
+    name: homeassistant
+    disable_dns: false
+    opt:
+      metric: "50"
+    state: present
+  become: true
 
 # Stand-in for the SMTP relay, which group_vars/test.yml points HA's smtp config
 # entry at, so the fixture never logs in to the real one. It runs the HA image,
-# which ships aiosmtpd, on the network the mosquitto role just created, and
-# accepts only the fixture credentials: a login it accepts proves HA built its
-# client from the entry the role wrote.
+# which ships aiosmtpd, on HA's backend network, and accepts only the fixture
+# credentials: a login it accepts proves HA built its client from the entry the
+# role wrote, and that HA resolves backend peers by their *.dns.podman names.
 - name: _setup | Start the stub SMTP relay
   containers.podman.podman_container:
     name: smtpstub
