@@ -109,7 +109,6 @@
     - user
 
 - name: Sudo without password
-  when: ansible_user_id != "root"
   copy:
     dest: /etc/sudoers.d/{{ ansible_user_id }}
     content: "{{ ansible_user_id }} ALL=(ALL) NOPASSWD:ALL\n"
@@ -219,6 +218,9 @@
 # Dotfiles own tool versions; leave MISE_ENV unset to exclude mac-only runtimes.
 # Always run install for postinstall hooks and shim repair, even with no missing tools.
 - name: Install mise-managed tools
+  command: /usr/bin/mise install
+  args:
+    chdir: "{{ ansible_user_dir }}"
   # Forward optional GitHub authentication without placing the token in argv.
   # CI provides only MISE_GITHUB_TOKEN; prefer it, as mise does. The value goes
   # out as GITHUB_TOKEN, the last name mise reads, because mise stops at the
@@ -226,25 +228,14 @@
   environment:
     GITHUB_TOKEN: "{{ lookup('env', 'MISE_GITHUB_TOKEN') or lookup('env', 'GITHUB_TOKEN') }}"
     MISE_YES: "1"
+  register: user_mise_tools
+  # mise logs this line only when no configured tool was missing.
+  changed_when: "'all tools are installed' not in user_mise_tools.stderr"
+  until: user_mise_tools is not failed
+  retries: 3
+  delay: 5
   tags:
     - user
-  block:
-    - name: Find missing mise tools
-      command: /usr/bin/mise ls --missing --json
-      args:
-        chdir: "{{ ansible_user_dir }}"
-      register: user_mise_missing
-      changed_when: false
-
-    - name: Install configured mise tools
-      command: /usr/bin/mise install
-      args:
-        chdir: "{{ ansible_user_dir }}"
-      register: user_mise_tools
-      changed_when: user_mise_missing.stdout | from_json | length > 0
-      until: user_mise_tools is not failed
-      retries: 3
-      delay: 5
 
 - name: Configure 1Password apt repository
   import_role:

@@ -26,11 +26,6 @@
   command: sudo -n true
   changed_when: false
 
-- name: _verify | EDAC monitoring service is active  # noqa: command-instead-of-module
-  command: systemctl is-active edac.service
-  changed_when: false
-  become: true
-
 - name: _verify | Locate zoxide
   command: /usr/bin/mise where zoxide
   register: _user_zoxide_path
