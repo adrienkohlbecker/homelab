@@ -1,0 +1,61 @@
+# Auto-revert: apply a valid ruleset that also drops new SSH through the
+# role's own tasks. Established flows, Ansible's connection among them,
+# survive it; the new-connection check must fail and the timer must restore
+# the previous ruleset, live and on disk. Runs last: the revert recreates the
+# table, dropping the probe matrix's fixture chain.
+- name: _verify_revert | Create the lockout template on the controller
+  tempfile:
+    suffix: .nftables.conf.j2
+  register: _firewall_lockout_template
+  delegate_to: localhost
+  become: false
+
+- name: _verify_revert | Write a template that also drops new SSH
+  copy:
+    dest: "{{ _firewall_lockout_template.path }}"
+    # `+%}` keeps the newline that trim_blocks would eat after the include.
+    content: |
+      {% raw %}{% include 'nftables.conf.j2' +%}{% endraw %}
+
+      add chain inet homelab firewall_verify_lockout { type filter hook input priority filter; policy accept; }
+      add rule inet homelab firewall_verify_lockout tcp dport 22 ct state new drop
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+
+- name: _verify_revert | Apply the lockout through the role
+  block:
+    - name: _verify_revert | Run the role with the lockout template
+      import_tasks: main.yml
+      vars:
+        _firewall_ruleset_template: "{{ _firewall_lockout_template.path }}"
+
+    - name: _verify_revert | The new-connection check let the lockout through
+      fail:
+        msg: The role kept a ruleset that drops new SSH.
+  rescue:
+    - name: _verify_revert | The new-connection check caught the lockout
+      assert:
+        that: ansible_failed_task.name == 'Confirm a new SSH connection reaches the host'
+        fail_msg: "Expected the new-connection check to fail, not: {{ ansible_failed_task.name }}"
+
+- name: _verify_revert | New SSH connections get in again after the revert
+  wait_for:
+    host: "{{ ansible_ssh_host }}"
+    port: "{{ ansible_ssh_port }}"
+    search_regex: SSH-2\.0-
+    timeout: 120
+  delegate_to: localhost
+  become: false
+
+- name: _verify_revert | The revert restored the ruleset live and on disk
+  shell: |
+    set -euo pipefail
+    nft list table inet homelab
+    cat /etc/nftables.conf
+  args:
+    executable: /bin/bash
+  register: _firewall_after_revert
+  changed_when: false
+  failed_when: _firewall_after_revert.rc != 0 or 'firewall_verify_lockout' in _firewall_after_revert.stdout
+  become: true

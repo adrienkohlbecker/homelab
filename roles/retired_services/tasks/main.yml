@@ -269,3 +269,14 @@
   tags:
     - retired_services
     - nut
+
+# Drop once lab and pug have converged. The firewall auto-revert now targets
+# the template backup instead of this snapshot.
+- name: Remove the retired nftables pre-reload snapshot
+  file:
+    path: /etc/nftables.conf.pre-reload
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - firewall

@@ -112,9 +112,10 @@
     - firewall
 
 # `nft -c` cannot detect a valid ruleset that drops the operator's SSH
-# path. Before replacing an active ruleset, arm a 60-second timer that
-# restores the last confirmed snapshot; cancel it only after Ansible
-# remains connected. First install has no rollback target.
+# path. Before reloading a changed ruleset, arm a 60-second timer that
+# restores the template's backup; cancel it only once a new SSH connection
+# gets in. Only an active unit has a revert target: on first install the
+# backup is the stock file, whose `flush ruleset` would wipe netavark.
 #
 # check_mode: false forces a real probe even in --check; otherwise
 # command{} reports "would have run" with rc=0 in the register and
@@ -129,20 +130,13 @@
   tags:
     - firewall
 
-- name: Stat prior pre-reload snapshot (gates auto-revert scheduling)
-  stat:
-    path: /etc/nftables.conf.pre-reload
-  register: firewall_pre_reload_snapshot
-  become: true
-  tags:
-    - firewall
-
 # Validate the assembled ruleset before it touches the kernel. Skip
 # the same-run install check-mode branch because nft is not on disk.
 - name: Configure nftables ruleset
   when: not (ansible_check_mode and firewall_apt_nftables.changed)
   template:
-    src: nftables.conf.j2
+    # _verify swaps in a lockout ruleset to exercise the auto-revert.
+    src: "{{ _firewall_ruleset_template | default('nftables.conf.j2') }}"
     dest: /etc/nftables.conf
     owner: root
     group: root
@@ -154,18 +148,21 @@
   tags:
     - firewall
 
-# Clear any interrupted transient unit before reusing its name.
+# Clear any interrupted transient unit before reusing its name. The revert
+# loads the backup, then restores it as /etc/nftables.conf so a reboot does
+# not bring the lockout back.
 - name: Schedule auto-revert timer (60s — cancelled on successful reload)
   when:
     - firewall_nftables_pre_active.rc == 0
-    - firewall_ruleset.changed
-    - firewall_pre_reload_snapshot.stat.exists
+    - firewall_ruleset.backup_file is defined
   shell: |
     set -euo pipefail
     systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
     systemctl reset-failed firewall_emergency_revert.timer firewall_emergency_revert.service 2>/dev/null || true
-    systemd-run --unit firewall_emergency_revert --on-active=60 /usr/sbin/nft -f /etc/nftables.conf.pre-reload
+    systemd-run --unit firewall_emergency_revert --on-active=60 /bin/sh -c \
+      "/usr/sbin/nft -f {{ firewall_ruleset.backup_file }} && cp {{ firewall_ruleset.backup_file }} /etc/nftables.conf"
   args: { executable: /bin/bash }
+  register: firewall_revert_timer
   changed_when: true
   become: true
   tags:
@@ -186,56 +183,31 @@
   tags:
     - firewall
 
-# Cancel the auto-revert. The reload completed and ansible can still
-# reach the host. If we never get here (reload broke SSH, role
-# errored, network blip), the systemd-run timer fires in 60s and
-# restores /etc/nftables.conf.pre-reload via `nft -f`.
-- name: Cancel auto-revert timer (post-reload alive)
-  when:
-    - firewall_nftables_pre_active.rc == 0
-    - firewall_ruleset.changed
-    - firewall_pre_reload_snapshot.stat.exists
+# Mitogen keeps one persistent connection, and the established accept keeps
+# it alive under any ruleset, so only a new connection from the controller
+# proves SSH still gets in. Wait for the server banner: a port forward in
+# front of the host, like the test harness's, completes the TCP handshake
+# itself. A failure here leaves the timer to revert.
+- name: Confirm a new SSH connection reaches the host
+  when: firewall_revert_timer is not skipped
+  wait_for:
+    host: "{{ ansible_host | default(ansible_ssh_host) | default(inventory_hostname) }}"
+    port: "{{ ansible_port | default(ansible_ssh_port) | default(22) }}"
+    search_regex: SSH-2\.0-
+    timeout: 15
+  delegate_to: localhost
+  become: false
+  tags:
+    - firewall
+
+- name: Cancel auto-revert timer (new SSH confirmed)
+  when: firewall_revert_timer is not skipped
   shell: |
     set -euo pipefail
     systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
     systemctl reset-failed firewall_emergency_revert.timer firewall_emergency_revert.service 2>/dev/null || true
   args: { executable: /bin/bash }
   changed_when: true
-  become: true
-  tags:
-    - firewall
-
-# Promote the confirmed live ruleset as the next apply's rollback
-# target. Compare checksums explicitly because remote_src copy reports
-# byte-identical files changed under Mitogen.
-- name: Stat live + pre-reload for post-reload snapshot
-  stat:
-    path: "{{ item }}"
-    checksum_algorithm: sha256
-  loop:
-    - /etc/nftables.conf
-    - /etc/nftables.conf.pre-reload
-  register: firewall_post_reload_stats
-  become: true
-  tags:
-    - firewall
-
-# Source-exists gate covers the same-run-as-install check-mode branch
-# (apt reported changed but didn't install, so /etc/nftables.conf
-# isn't on disk yet to snapshot).
-- name: Snapshot post-reload ruleset for next run's auto-revert  # noqa: require-backup
-  when:
-    - firewall_post_reload_stats.results[0].stat.exists
-    - >-
-      not firewall_post_reload_stats.results[1].stat.exists
-      or firewall_post_reload_stats.results[0].stat.checksum
-         != firewall_post_reload_stats.results[1].stat.checksum
-  copy:
-    src: /etc/nftables.conf
-    dest: /etc/nftables.conf.pre-reload
-    remote_src: true
-    mode: "0644"
-    validate: nft -c -f %s
   become: true
   tags:
     - firewall

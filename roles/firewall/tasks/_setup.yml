@@ -5,16 +5,18 @@
     name: podman
     tasks_from: install
 
-# Force a valid ruleset drift on full fixtures so converge exercises live
-# reload and rollback. Minimal remains inactive to cover first installation.
+# Stand in for a previous apply on full fixtures, so converge reloads a live
+# ruleset under the auto-revert guard with a safe revert target. Minimal
+# stays inactive to cover first installation.
 - name: _setup | Prepare the live reload exercise
   when: not (qemu_test_minimal | default(false))
   block:
-    - name: _setup | Seed the confirmed pre-reload snapshot
+    - name: _setup | Persist an empty homelab ruleset
       copy:
-        src: /etc/nftables.conf
-        dest: /etc/nftables.conf.pre-reload
-        remote_src: true
+        content: |
+          table inet homelab {
+          }
+        dest: /etc/nftables.conf
         owner: root
         group: root
         mode: "0644"
@@ -24,16 +26,6 @@
       systemd:
         name: nftables.service
         state: started
-      become: true
-
-    # A comment keeps the currently loaded firewall semantics unchanged until
-    # converge applies the drift.
-    - name: _setup | Drift the persisted nftables ruleset
-      lineinfile:
-        path: /etc/nftables.conf
-        line: '# condition coverage drift fixture'
-        insertafter: EOF
-        create: false
       become: true
 
 - name: _setup | Build the probe topology
