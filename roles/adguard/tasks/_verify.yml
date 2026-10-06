@@ -197,7 +197,7 @@
       records:
         - MESSAGE: >-
             2099/01/02 03:04:05.678901 [error] dnsproxy: adguard-valid
-            retry=true count=3 parser_status=forged source=attribute service=attribute
+            retry=true count=3 source=attribute service=attribute
           CONTAINER_TAG: adguard
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: adguard.service

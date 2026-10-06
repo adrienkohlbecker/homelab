@@ -123,7 +123,6 @@
           CONTAINER_TAG: homepage
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: homepage.service
-          parser_status: forged
         - MESSAGE: "[2099-01-02T03:04:05.679Z] http: <homepage.verify> homepage-access"
           CONTAINER_TAG: homepage
           SYSLOG_IDENTIFIER: conmon

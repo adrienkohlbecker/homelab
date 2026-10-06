@@ -81,7 +81,6 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
-          parser_status: forged
         - MESSAGE: "[WARNING]  (8) : Current worker (9) exited with code 0 (Exit)"
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon

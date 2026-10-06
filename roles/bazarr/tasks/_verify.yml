@@ -63,7 +63,6 @@
           CONTAINER_TAG: bazarr
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: bazarr.service
-          parser_status: forged
         - MESSAGE: bazarr-raw
           CONTAINER_TAG: bazarr
           SYSLOG_IDENTIFIER: conmon

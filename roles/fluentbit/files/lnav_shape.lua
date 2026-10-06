@@ -114,7 +114,6 @@ local EXCLUDE_FROM_FIELDS = {
     UID = true,
     host = true,
     log = true,
-    parser_status = true,
     _level = true,
     parse_error = true,
 }

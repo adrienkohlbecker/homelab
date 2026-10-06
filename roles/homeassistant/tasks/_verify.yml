@@ -349,7 +349,6 @@
           CONTAINER_TAG: homeassistant
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: homeassistant.service
-          parser_status: forged
         - MESSAGE: homeassistant-raw
           CONTAINER_TAG: homeassistant
           SYSLOG_IDENTIFIER: conmon

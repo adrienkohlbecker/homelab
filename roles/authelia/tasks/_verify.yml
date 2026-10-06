@@ -208,7 +208,7 @@
     fluentbit_verify_args:
       name: authelia
       records:
-        - MESSAGE: '{"level":"WARNING","msg":"authelia-valid","time":"2099-01-02T03:04:05Z","parser_status":"forged","service":"attribute"}'
+        - MESSAGE: '{"level":"WARNING","msg":"authelia-valid","time":"2099-01-02T03:04:05Z","service":"attribute"}'
           CONTAINER_TAG: authelia
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: authelia.service

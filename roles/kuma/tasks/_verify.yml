@@ -150,7 +150,7 @@
     fluentbit_verify_args:
       name: kuma
       records:
-        - MESSAGE: '{"time":"2099-01-02T03:04:05Z","module":"SERVER","level":"WARN","msg":"kuma-valid","parser_status":"forged","service":"attribute"}'
+        - MESSAGE: '{"time":"2099-01-02T03:04:05Z","module":"SERVER","level":"WARN","msg":"kuma-valid","service":"attribute"}'
           CONTAINER_TAG: kuma
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: kuma.service

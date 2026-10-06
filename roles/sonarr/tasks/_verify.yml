@@ -156,7 +156,6 @@
           CONTAINER_TAG: sonarr
           SYSLOG_IDENTIFIER: sonarr
           SYSTEMD_UNIT: sonarr.service
-          parser_status: forged
         - MESSAGE: "[migrations] no migrations found\n"
           CONTAINER_TAG: sonarr
           SYSLOG_IDENTIFIER: sonarr

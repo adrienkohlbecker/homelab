@@ -167,11 +167,9 @@ do
     local rec = shape("host_packages", {
         host = "lab",
         log = "  updated\n\npackage \t\n",
-        parser_status = "forged",
     }, nil)
     check("fallback.level", rec.level, "info")
     check("message.trim_trailing_whitespace", rec.message, "  updated\n\npackage")
-    check("fields.no_parser_status", rec.fields.parser_status, nil)
 end
 
 do

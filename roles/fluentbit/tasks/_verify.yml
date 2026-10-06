@@ -194,7 +194,6 @@
       - "'Traceback' in row.message"
       - "'ValueError' in row.message"
       - "row.fields.source == 'certbot._internal.main'"
-      - "'parser_status' not in row.fields"
       - "'parse_error' not in row"
     fail_msg: "certbot file record did not parse into one shaped record: {{ row }}"
 
@@ -420,7 +419,6 @@
           PODMAN_HEALTH_STATUS: ""
           PODMAN_TIME: "2026-07-13T02:01:25.445274426Z"
           PODMAN_LABELS: '{"org.opencontainers.image.description":"verbose metadata"}'
-          parser_status: forged
           marker: podman-start-keep
         - _tag: svc.init.scope
           MESSAGE: "{{ _fluentbit_healthcheck_unit }}: Main process exited, code=exited, status=1/FAILURE"
@@ -463,7 +461,6 @@
           fields.source: certbot._internal.main
           _absent:
             - parse_error
-            - fields.parser_status
         - service: certbot
           level: warn
           message: certbot-unparsed
@@ -492,7 +489,6 @@
             - fields.PODMAN_EVENT
             - fields.PODMAN_TIME
             - fields.PODMAN_LABELS
-            - fields.parser_status
         - fields.marker: healthcheck-rewrite-keep
           service: podman_healthcheck
           message: "{{ _fluentbit_healthcheck_unit }}: Main process exited, code=exited, status=1/FAILURE"
