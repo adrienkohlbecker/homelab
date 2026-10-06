@@ -26,38 +26,24 @@ mounted where the source had it.
 from __future__ import annotations
 
 import argparse
-import re
 import shlex
 import subprocess
 import sys
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import NoReturn
 
 EXAMPLE = """example:
   zfs_backup_restore ak@lab apoc/lab/rpool/services \\
     bak-20260801020000 bak-20260813020000 rpool/services /mnt/services"""
-SSH_DESTINATION = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*@[A-Za-z0-9_.:-]+", re.ASCII)
-ZFS_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", re.ASCII)
-SNAPSHOT_SUFFIX = re.compile(r"bak-[0-9]{14}", re.ASCII)
-MOUNTPOINT = re.compile(r"/[A-Za-z0-9_.:-]+(?:/[A-Za-z0-9_.:-]+)*", re.ASCII)
-SSH_BULK_OPTIONS = (
-    "-o",
-    "ControlPath=none",
-    "-o",
-    "Compression=no",
-    "-o",
-    "Ciphers=^aes128-gcm@openssh.com",
-    # A restore runs for hours over WireGuard to a freshly rebuilt host. Without
-    # keepalives a silently dropped path leaves ssh blocked in read() and the
-    # pipeline waiting forever; 30s x 6 declares the peer dead in three minutes
-    # and surfaces a real exit code instead.
-    "-o",
-    "ServerAliveInterval=30",
-    "-o",
-    "ServerAliveCountMax=6",
-)
+# Bulk streams bypass multiplexing and SSH compression so mbuffer reflects the
+# actual bottleneck. A restore runs for hours over WireGuard to a freshly
+# rebuilt host: without keepalives a silently dropped path leaves ssh blocked in
+# read() and the pipeline waiting forever; 30s x 6 declares the peer dead in
+# three minutes and surfaces a real exit code instead.
+SSH_BULK_OPTIONS = [
+    *("-o", "ControlPath=none", "-o", "Compression=no", "-o", "Ciphers=^aes128-gcm@openssh.com"),
+    *("-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=6"),
+]
 # Values ZFS reports for datasets that have no mountpoint of their own.
 UNMOUNTABLE = frozenset({"none", "legacy", "-"})
 
@@ -78,37 +64,39 @@ class Config:
     mountpoint: str
 
 
-def fail(message: str, exit_code: int = 1) -> NoReturn:
-    """Print an operator-facing error and terminate with ``exit_code``."""
+def run(command: list[str], *, check: bool = True, capture: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run a command, capturing its text output unless ``capture`` is false.
 
-    print(f"ERROR: {message}", file=sys.stderr)
-    raise SystemExit(exit_code)
-
-
-def capture(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run a text command and capture stdout, raising on failure by default."""
+    Raises RestoreError when the command cannot start or, with ``check``,
+    exits nonzero; captured stderr is echoed first so the cause is visible.
+    """
 
     try:
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        result = subprocess.run(command, check=False, capture_output=capture, text=True)
     except OSError as error:
         raise RestoreError(f"could not run command {shlex.join(command)}: {error}") from error
     if check and result.returncode:
-        detail = result.stderr.strip()
-        if detail:
-            print(detail, file=sys.stderr)
+        if capture and result.stderr.strip():
+            print(result.stderr.strip(), file=sys.stderr)
         raise RestoreError(f"command failed with exit {result.returncode}: {shlex.join(command)}")
     return result
 
 
-def run(command: list[str]) -> None:
-    """Run a command with inherited stdio and raise if it fails."""
+def remote(config: Config, *argv: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run ``argv`` on the target and capture its output.
 
-    try:
-        result = subprocess.run(command, check=False)
-    except OSError as error:
-        raise RestoreError(f"could not run command {shlex.join(command)}: {error}") from error
-    if result.returncode:
-        raise RestoreError(f"command failed with exit {result.returncode}: {shlex.join(command)}")
+    OpenSSH sends its command as one string that the remote shell re-parses,
+    so the argv is quoted here instead of letting ssh join raw words. -n keeps
+    ssh from stealing the confirmation prompt or a caller's input.
+    """
+
+    return run(["ssh", "-n", config.target_ssh, shlex.join(argv)], check=check)
+
+
+def remote_zfs(config: Config, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run an elevated ZFS command on the target."""
+
+    return remote(config, "sudo", "-n", "zfs", *args, check=check)
 
 
 def lines(result: subprocess.CompletedProcess[str]) -> list[str]:
@@ -117,106 +105,32 @@ def lines(result: subprocess.CompletedProcess[str]) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
-def ssh_command(config: Config, *command: str) -> list[str]:
-    """Build a non-interactive SSH command for a short remote operation."""
-
-    # Short probes never consume stdin. -n prevents SSH from stealing the
-    # confirmation prompt or a caller's input; streaming receives omit it.
-    return ["ssh", "-n", config.target_ssh, *command]
-
-
-def zfs_command(*args: str, sudo: bool = False) -> list[str]:
-    """Build a local ZFS command, optionally elevated through sudo."""
-
-    return ["sudo", "zfs", *args] if sudo else ["zfs", *args]
-
-
-def zfs_capture(*args: str) -> subprocess.CompletedProcess[str]:
-    """Run a local ZFS command and capture its text output."""
-
-    return capture(zfs_command(*args))
-
-
-def remote_zfs_capture(config: Config, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run an elevated ZFS command remotely and capture its text output."""
-
-    return capture(ssh_command(config, "sudo", "-n", "zfs", *args), check=check)
-
-
-def remote_zfs_run(config: Config, *args: str) -> None:
-    """Run an elevated remote ZFS command with inherited stdio."""
-
-    run(ssh_command(config, "sudo", "-n", "zfs", *args))
-
-
-def pattern_argument(pattern: re.Pattern[str], label: str) -> Callable[[str], str]:
-    """Build an argparse type that admits only ``pattern`` in full."""
-
-    def check(value: str) -> str:
-        if not pattern.fullmatch(value):
-            raise argparse.ArgumentTypeError(f"unsupported {label}: {value}")
-        return value
-
-    return check
-
-
-def mountpoint_argument(value: str) -> str:
-    """Validate a target mountpoint as an absolute, normalized, safe path."""
-
-    path = PurePosixPath(value)
-    if ".." in path.parts or str(path) != value or not MOUNTPOINT.fullmatch(value):
-        raise argparse.ArgumentTypeError(f"unsupported target mountpoint: {value}")
-    return value
-
-
 def parse_config(argv: list[str]) -> Config:
-    """Parse and validate the six positional command-line arguments."""
+    """Parse the six positional command-line arguments."""
 
-    # OpenSSH joins remote argv into a shell command instead of transmitting an
-    # argv vector. Restrict every interpolated value to a shell-safe alphabet.
     parser = argparse.ArgumentParser(
         prog="zfs_backup_restore",
         description=__doc__,
         epilog=EXAMPLE,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "target_ssh",
-        type=pattern_argument(SSH_DESTINATION, "SSH destination"),
-        help="user@host of the rebuilt target",
-    )
-    parser.add_argument(
-        "replica_dataset",
-        type=pattern_argument(ZFS_NAME, "replica dataset name"),
-        help="root of the replica tree to send",
-    )
-    parser.add_argument(
-        "start_suffix",
-        type=pattern_argument(SNAPSHOT_SUFFIX, "snapshot suffix"),
-        help="oldest snapshot to retain (bak-YYYYMMDDhhmmss)",
-    )
-    parser.add_argument(
-        "end_suffix",
-        type=pattern_argument(SNAPSHOT_SUFFIX, "snapshot suffix"),
-        help="newest snapshot to restore (bak-YYYYMMDDhhmmss)",
-    )
-    parser.add_argument(
-        "target_dataset",
-        type=pattern_argument(ZFS_NAME, "target dataset name"),
-        help="root of the destination tree, which must not exist",
-    )
-    parser.add_argument("mountpoint", type=mountpoint_argument, help="mountpoint for the restored tree")
+    parser.add_argument("target_ssh", help="user@host of the rebuilt target")
+    parser.add_argument("replica_dataset", help="root of the replica tree to send")
+    parser.add_argument("start_suffix", help="oldest snapshot to retain (bak-YYYYMMDDhhmmss)")
+    parser.add_argument("end_suffix", help="newest snapshot to restore (bak-YYYYMMDDhhmmss)")
+    parser.add_argument("target_dataset", help="root of the destination tree, which must not exist")
+    parser.add_argument("mountpoint", help="mountpoint for the restored tree")
 
     config = Config(**vars(parser.parse_args(argv)))
+    # bak-YYYYMMDDhhmmss names sort chronologically.
     if config.start_suffix > config.end_suffix:
         parser.error("starting snapshot is newer than ending snapshot")
+    # desired_mountpoint decides containment lexically, so the root must be a
+    # normalized absolute path below /.
+    path = PurePosixPath(config.mountpoint)
+    if not path.is_absolute() or str(path) != config.mountpoint or ".." in path.parts or path.parent == path:
+        parser.error(f"target mountpoint must be a normalized absolute path below /: {config.mountpoint}")
     return config
-
-
-def target_dataset_for(config: Config, source: str) -> str:
-    """Map a replica dataset onto its destination under the target tree."""
-
-    return config.target_dataset + source.removeprefix(config.replica_dataset)
 
 
 def resolve_sources(config: Config) -> list[str]:
@@ -224,26 +138,15 @@ def resolve_sources(config: Config) -> list[str]:
 
     try:
         sources = lines(
-            zfs_capture("list", "-r", "-H", "-t", "filesystem,volume", "-o", "name", config.replica_dataset)
+            run(["zfs", "list", "-r", "-H", "-t", "filesystem,volume", "-o", "name", config.replica_dataset])
         )
     except RestoreError as error:
         raise RestoreError(f"replica dataset does not exist: {config.replica_dataset}") from error
 
-    for source in sources:
-        if not ZFS_NAME.fullmatch(source):
-            raise RestoreError(f"unsupported dataset name: {source}")
-
-    suffixes = (
-        (config.start_suffix,)
-        if config.start_suffix == config.end_suffix
-        else (
-            config.start_suffix,
-            config.end_suffix,
-        )
-    )
+    suffixes = dict.fromkeys((config.start_suffix, config.end_suffix))
     endpoints = [f"{source}@{suffix}" for source in sources for suffix in suffixes]
     try:
-        zfs_capture("list", "-H", "-t", "snapshot", "-o", "name", *endpoints)
+        run(["zfs", "list", "-H", "-t", "snapshot", "-o", "name", *endpoints])
     except RestoreError as error:
         raise RestoreError("snapshot range is incomplete on the replica tree") from error
     return sources
@@ -258,7 +161,7 @@ def check_target_preflight(config: Config) -> None:
     remote pipe, sudo by reading the binary send stream as password attempts.
     """
 
-    mbuffer = capture(ssh_command(config, "command", "-v", "mbuffer"), check=False)
+    mbuffer = remote(config, "command", "-v", "mbuffer", check=False)
     if mbuffer.returncode == 255:
         raise RestoreError(f"cannot reach {config.target_ssh}: {mbuffer.stderr.strip()}")
     if mbuffer.returncode:
@@ -267,7 +170,7 @@ def check_target_preflight(config: Config) -> None:
             "Install it first: sudo apt-get install -y mbuffer"
         )
 
-    if capture(ssh_command(config, "sudo", "-n", "zfs", "--version"), check=False).returncode:
+    if remote_zfs(config, "--version", check=False).returncode:
         raise RestoreError(
             f"passwordless sudo zfs is unavailable on {config.target_ssh}; "
             "the receive leg cannot answer a password prompt mid-stream"
@@ -277,7 +180,7 @@ def check_target_preflight(config: Config) -> None:
 def inspect_targets(config: Config) -> None:
     """Require the destination tree to be absent before any stream starts."""
 
-    result = remote_zfs_capture(
+    result = remote_zfs(
         config, "list", "-r", "-H", "-t", "filesystem,volume", "-o", "name", config.target_dataset, check=False
     )
     if result.returncode:
@@ -289,15 +192,13 @@ def inspect_targets(config: Config) -> None:
             )
         return
 
-    existing = lines(result)
-    if existing:
-        recovery = "\n".join(f"  sudo zfs receive -A {dataset}" for dataset in existing)
-        raise RestoreError(
-            f"{config.target_dataset} already exists on {config.target_ssh}; "
-            f"remove the incomplete target tree before restoring. On {config.target_ssh}:\n"
-            f"{recovery}\n"
-            f"  sudo zfs destroy -r {config.target_dataset}"
-        )
+    recovery = "\n".join(f"  sudo zfs receive -A {shlex.quote(dataset)}" for dataset in lines(result))
+    raise RestoreError(
+        f"{config.target_dataset} already exists on {config.target_ssh}; "
+        f"remove the incomplete target tree before restoring. On {config.target_ssh}:\n"
+        f"{recovery}\n"
+        f"  sudo zfs destroy -r {shlex.quote(config.target_dataset)}"
+    )
 
 
 def receive(config: Config, send_command: list[str], target: str) -> None:
@@ -311,51 +212,23 @@ def receive(config: Config, send_command: list[str], target: str) -> None:
     # recv -s leaves a resume token on an interrupted stream, so an aborted
     # multi-hour transfer can be continued by hand rather than restarted; the
     # -o pins keep a half-received tree inert until finalize releases it.
-    remote_receive = " | ".join(
-        (
-            shlex.join(["mbuffer", "-q", "-m", "256M"]),
-            shlex.join(
-                [
-                    "sudo",
-                    "-n",
-                    "zfs",
-                    "recv",
-                    "-s",
-                    "-u",
-                    "-o",
-                    "readonly=on",
-                    "-o",
-                    "canmount=noauto",
-                    "-o",
-                    "mountpoint=none",
-                    target,
-                ]
-            ),
-        )
-    )
-    pipeline = " | ".join(
-        shlex.join(command)
-        for command in (
-            send_command,
-            ["mbuffer", "-m", "256M"],
-            # Bulk streams must consume stdin, so no -n here. They also bypass
-            # multiplexing and SSH compression so mbuffer reflects the actual
-            # bottleneck.
-            ["ssh", *SSH_BULK_OPTIONS, config.target_ssh, remote_receive],
-        )
-    )
+    pins = ["-o", "readonly=on", "-o", "canmount=noauto", "-o", "mountpoint=none"]
+    remote_receive = "mbuffer -q -m 256M | " + shlex.join(["sudo", "-n", "zfs", "recv", "-s", "-u", *pins, target])
+    # Bulk streams must consume stdin, so ssh runs without -n here.
+    ssh = ["ssh", *SSH_BULK_OPTIONS, config.target_ssh, remote_receive]
+    pipeline = " | ".join(shlex.join(command) for command in (send_command, ["mbuffer", "-m", "256M"], ssh))
     # Echo the real invocation, matching the sibling shell scripts:
     # rerunning one dataset by hand is the documented fallback mid-restore.
     print(f"$ {pipeline}")
-    run(["bash", "-o", "pipefail", "-c", pipeline])
+    run(["bash", "-o", "pipefail", "-c", pipeline], capture=False)
 
 
 def sync_dataset(config: Config, source: str) -> None:
     """Send the selected history to a new destination dataset."""
 
-    target = target_dataset_for(config, source)
+    target = config.target_dataset + source.removeprefix(config.replica_dataset)
     print(f"Sending {source}@{config.start_suffix} -> {target}")
-    receive(config, zfs_command("send", "-bpcveL", f"{source}@{config.start_suffix}", sudo=True), target)
+    receive(config, ["sudo", "zfs", "send", "-bpcveL", f"{source}@{config.start_suffix}"], target)
 
     if config.start_suffix == config.end_suffix:
         return
@@ -363,14 +236,7 @@ def sync_dataset(config: Config, source: str) -> None:
     print(f"Sending {source}@{config.start_suffix}..{config.end_suffix} -> {target}")
     receive(
         config,
-        zfs_command(
-            "send",
-            "-bpcveL",
-            "-I",
-            f"@{config.start_suffix}",
-            f"{source}@{config.end_suffix}",
-            sudo=True,
-        ),
+        ["sudo", "zfs", "send", "-bpcveL", "-I", f"@{config.start_suffix}", f"{source}@{config.end_suffix}"],
         target,
     )
 
@@ -384,17 +250,10 @@ def remote_properties(config: Config) -> dict[str, dict[str, str]]:
 
     # -t filesystem,volume: zfs get recurses into snapshots by default, which
     # would swamp the result with rows carrying none of these properties.
-    result = remote_zfs_capture(
+    result = remote_zfs(
         config,
-        "get",
-        "-r",
-        "-H",
-        "-t",
-        "filesystem,volume",
-        "-o",
-        "name,property,value,received",
-        "type,mountpoint,canmount,mounted,autobackup:bak",
-        config.target_dataset,
+        *("get", "-r", "-H", "-t", "filesystem,volume", "-o", "name,property,value,received"),
+        *("type,mountpoint,canmount,mounted,autobackup:bak", config.target_dataset),
     )
     properties: dict[str, dict[str, str]] = {}
     for line in lines(result):
@@ -437,28 +296,28 @@ def finalize(config: Config) -> None:
     for dataset, values in planned.items():
         if values["type"] == "volume":
             continue
-        remote_zfs_run(config, "set", f"mountpoint={desired_mountpoint(config, dataset, values)}", dataset)
+        remote_zfs(config, "set", f"mountpoint={desired_mountpoint(config, dataset, values)}", dataset)
 
     # Release the remaining pins. -S reverts each dataset to the value its
     # source carried rather than to this pool's inherited default; changing
     # either property never mounts anything on its own.
     for property_name in ("readonly", "canmount"):
-        remote_zfs_run(config, "inherit", "-S", "-r", property_name, config.target_dataset)
-    remote_zfs_run(config, "set", "readonly=off", "canmount=on", config.target_dataset)
+        remote_zfs(config, "inherit", "-S", "-r", property_name, config.target_dataset)
+    remote_zfs(config, "set", "readonly=off", "canmount=on", config.target_dataset)
 
     tagged = []
     for dataset, values in remote_properties(config).items():
         # A property-based mount check avoids invalid explicit mounts for
         # datasets whose received configuration uses none, legacy, or off.
         if values["mountpoint"] not in UNMOUNTABLE and values["canmount"] != "off" and values["mounted"] == "no":
-            remote_zfs_run(config, "mount", dataset)
+            remote_zfs(config, "mount", dataset)
 
         # Received-source tags are invisible to the local snapshot picker.
         if values["autobackup:bak"] == "true":
             tagged.append(dataset)
 
     if tagged:
-        remote_zfs_run(config, "set", "autobackup:bak=true", *tagged)
+        remote_zfs(config, "set", "autobackup:bak=true", *tagged)
 
 
 def main(argv: list[str]) -> None:
@@ -494,10 +353,11 @@ if __name__ == "__main__":
     try:
         main(sys.argv[1:])
     except RestoreError as error:
-        fail(str(error))
+        sys.exit(f"ERROR: {error}")
     except KeyboardInterrupt:
-        fail(
-            "interrupted. A partial target tree may remain; abort any pending receive "
+        print(
+            "ERROR: interrupted. A partial target tree may remain; abort any pending receive "
             "and destroy it before re-running (the next run prints the exact commands).",
-            130,
+            file=sys.stderr,
         )
+        sys.exit(130)

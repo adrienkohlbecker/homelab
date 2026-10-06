@@ -387,8 +387,9 @@
 # produced: the selected history range, a dataset the restore must leave
 # unmounted, a replica clone restored as an independent filesystem, and the
 # refusal to restore over an existing target.
-# Partial-target recovery, incomplete ranges, and single-snapshot restores are
-# covered by unit_tests/test_zfs_backup_restore.py.
+# Unreachable targets, partial-target recovery, incomplete ranges,
+# single-snapshot restores, volume and legacy finalize branches, and remote
+# quoting are covered by unit_tests/test_zfs_backup_restore.py.
 - name: _verify | Generate a loopback ssh key for the restore test
   command:
     argv:
