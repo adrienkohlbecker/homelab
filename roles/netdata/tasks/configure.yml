@@ -95,7 +95,7 @@
 
 - name: Install intel-gpu-tools
   when:
-    - netdata_intelgpu_enabled
+    - "'go.d:collector:intelgpu:intelgpu' in netdata_collectors"
     - ansible_architecture == "x86_64"
   apt:
     pkg: intel-gpu-tools
@@ -150,7 +150,7 @@
       dest: go.d/sensors.conf
     - src: intelgpu.conf.j2
       dest: go.d/intelgpu.conf
-      condition: "{{ netdata_intelgpu_enabled and ansible_architecture == 'x86_64' }}"
+      condition: "{{ 'go.d:collector:intelgpu:intelgpu' in netdata_collectors and ansible_architecture == 'x86_64' }}"
     - src: systemdunits_alerts.conf.j2
       dest: health.d/systemdunits.conf
     - src: gitlab_runner_alerts.conf.j2

@@ -42,7 +42,6 @@ dns_keepalived_priority: 5
 # site.yml reboot gate would refuse every post-upgrade reboot.
 dns_reboot_guard_enabled: false
 
-netdata_intelgpu_enabled: true
 netdata_contexts:
   - system.cpu              # always-live chart, baseline
   - foo.does_not_exist      # never-existed chart, probes the "missing-chart" gap
@@ -57,6 +56,9 @@ netdata_collectors:
   # _setup serves the GitLab Runner counter fixture on its production port.
   - go.d:collector:prometheus:gitlab_runner
   - go.d:collector:prometheus:minio
+  # Installs intel-gpu-tools and the intelgpu job; the fixture has no Intel GPU,
+  # so it reports present=0.
+  - go.d:collector:intelgpu:intelgpu
   - go.d:collector:fake_plugin:fake_job  # never-existed collector; exercises the netdata_collector_missing alert path
 netdata_expected_charts:
   system_cpu_chart: system.cpu
