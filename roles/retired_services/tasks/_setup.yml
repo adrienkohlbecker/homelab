@@ -132,6 +132,22 @@
     cache_valid_time: 3600
   become: true
 
+# One purge task covers the whole list, so the small packages exercise it
+# without downloading the GTK, Python, and Haskell stacks of the large ones.
+- name: _setup | Install retired user role packages
+  apt:
+    name:
+      - ccze
+      - fatrace
+      - nmon
+      - nnn
+      - stress
+      - telnet
+    state: present
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
 - name: _setup | Create the retired terminfo alias directory
   file:
     path: /etc/terminfo/g

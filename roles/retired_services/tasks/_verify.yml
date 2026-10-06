@@ -71,6 +71,27 @@
     retired_services_i7z.rc != 1
     and retired_services_i7z.stdout != 'not-installed'
 
+# A removed but unpurged package reports config-files.
+- name: _verify | Retired user role packages are purged
+  command:
+    argv:
+      - dpkg-query
+      - --show
+      - --showformat=${db:Status-Status}
+      - "{{ item }}"
+  loop:
+    - ccze
+    - fatrace
+    - nmon
+    - nnn
+    - stress
+    - telnet
+  register: retired_services_user_packages
+  changed_when: false
+  failed_when: >-
+    retired_services_user_packages.rc != 1
+    and retired_services_user_packages.stdout != 'not-installed'
+
 - name: _verify | Stat retired leftovers
   stat:
     path: "{{ item }}"

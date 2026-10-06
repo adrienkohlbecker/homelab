@@ -191,6 +191,27 @@
     - retired_services
     - user
 
+# Drop once lab, pug, and fox have converged. The user role stopped shipping
+# these desktop and ad hoc tools that no headless host uses.
+- name: Purge the retired user role packages
+  apt:
+    name:
+      - ccze
+      - fatrace
+      - gparted
+      - mitmproxy
+      - nmon
+      - nnn
+      - pandoc
+      - stress
+      - telnet
+    state: absent
+    purge: true
+  become: true
+  tags:
+    - retired_services
+    - user
+
 - name: Remove the retired Ghostty terminfo source and alias
   file:
     path: "{{ item }}"
