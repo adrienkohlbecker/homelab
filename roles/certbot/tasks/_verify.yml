@@ -45,8 +45,6 @@
     - name: _verify | Reconcile a drifted certificate without the test flag
       import_tasks: certificate.yml
       vars:
-        certbot_apt:
-          changed: false
         certbot_domains:
           - "{{ _certbot_fixture_domain }}"
           - "*.{{ _certbot_fixture_domain }}"

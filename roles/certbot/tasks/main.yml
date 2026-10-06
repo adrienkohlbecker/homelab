@@ -13,80 +13,83 @@
         cache_valid_time: 3600
       register: certbot_apt
 
-    - name: Configure certbot log compression
-      import_role:
-        name: logrotate
-        tasks_from: compression
-      vars:
-        logrotate_args:
-          configs:
-            - path: /etc/logrotate.d/certbot
-          condition: "{{ not (ansible_check_mode and certbot_apt.changed) }}"
-
-    # Let explicit ssl-cert members such as netdata traverse Certbot storage
-    # without exposing the wildcard lineage to every local UID.
-    - name: Set permissions on storage directories
-      file:
-        dest: /etc/letsencrypt/{{ item }}
-        state: directory
-        owner: root
-        group: ssl-cert
-        mode: "0750"
-      loop:
-        - live
-        - archive
+    # A fresh install in check mode has no ssl-cert group, /etc/letsencrypt,
+    # or certbot.timer to configure.
+    - name: Configure certbot after install
       when: not (ansible_check_mode and certbot_apt.changed)
+      block:
+        - name: Configure certbot log compression
+          import_role:
+            name: logrotate
+            tasks_from: compression
+          vars:
+            logrotate_args:
+              configs:
+                - path: /etc/logrotate.d/certbot
 
-    # Keep hand-run Certbot commands aligned with Ansible. Per-lineage renewal
-    # configuration and explicit arguments still override these defaults.
-    - name: Write certbot cli.ini  # noqa: require-validate
-      copy:
-        dest: /etc/letsencrypt/cli.ini
-        content: |
-          agree-tos = true
-          email = {{ root_email }}
-          key-type = ecdsa
-          elliptic-curve = secp384r1
-          dns-cloudflare-credentials = /etc/letsencrypt/cloudflare.ini
-          {# Fixtures shorten the wait, but not below what Cloudflare actually
-             needs: 10s issued fine most runs and then failed a site converge
-             with "No TXT record found", which costs far more than it saved. #}
-          dns-cloudflare-propagation-seconds = {{ 30 if qemu_test else 60 }}
-        mode: "0644"
-        owner: root
-        group: root
-        backup: true
-      when: not (ansible_check_mode and certbot_apt.changed)
+        # Let explicit ssl-cert members such as netdata traverse Certbot storage
+        # without exposing the wildcard lineage to every local UID.
+        - name: Set permissions on storage directories
+          file:
+            dest: /etc/letsencrypt/{{ item }}
+            state: directory
+            owner: root
+            group: ssl-cert
+            mode: "0750"
+          loop:
+            - live
+            - archive
 
-    - name: Write cloudflare credentials  # noqa: require-validate
-      copy:
-        dest: /etc/letsencrypt/cloudflare.ini
-        content: "dns_cloudflare_api_token = {{ cloudflare_api_token }}\n"
-        mode: "0600"
-        owner: root
-        group: root
-        backup: true
-      register: certbot_cf_creds
-      when: not (ansible_check_mode and certbot_apt.changed)
+        # Keep hand-run Certbot commands aligned with Ansible. Per-lineage
+        # renewal configuration and explicit arguments still override these
+        # defaults.
+        - name: Write certbot cli.ini  # noqa: require-validate
+          copy:
+            dest: /etc/letsencrypt/cli.ini
+            content: |
+              agree-tos = true
+              email = {{ root_email }}
+              key-type = ecdsa
+              elliptic-curve = secp384r1
+              dns-cloudflare-credentials = /etc/letsencrypt/cloudflare.ini
+              {# Fixtures shorten the wait, but not below what Cloudflare
+                 actually needs: 10s issued fine most runs and then failed a
+                 site converge with "No TXT record found", which costs far
+                 more than it saved. #}
+              dns-cloudflare-propagation-seconds = {{ 30 if qemu_test else 60 }}
+            mode: "0644"
+            owner: root
+            group: root
+            backup: true
 
-    - name: Reconcile certificate lineage
-      import_tasks: certificate.yml
-      tags:
-        - certbot
+        - name: Write cloudflare credentials  # noqa: require-validate
+          copy:
+            dest: /etc/letsencrypt/cloudflare.ini
+            content: "dns_cloudflare_api_token = {{ cloudflare_api_token }}\n"
+            mode: "0600"
+            owner: root
+            group: root
+            backup: true
+          register: certbot_cf_creds
 
-    # Surface a bad rotated token at apply time rather than at the next timer
-    # renewal. Any issuance this run already proved the credentials, and
-    # re-validating the same names right after it trips the CA's DNS caching.
-    - name: Exercise renewal after cloudflare token rotation
-      command: certbot renew --dry-run --no-random-sleep-on-renew
-      changed_when: false
-      when:
-        - certbot_cf_creds.changed
-        - certbot_issue is skipped
+        - name: Reconcile certificate lineage
+          import_tasks: certificate.yml
+          tags:
+            - certbot
 
-    - name: Enable certbot renewal timer
-      when: not (ansible_check_mode and certbot_apt.changed)
-      systemd:
-        name: certbot.timer
-        enabled: true
-        state: started
+        # Surface a bad rotated token at apply time rather than at the next
+        # timer renewal. Any issuance this run already proved the credentials,
+        # and re-validating the same names right after it trips the CA's DNS
+        # caching.
+        - name: Exercise renewal after cloudflare token rotation
+          command: certbot renew --dry-run --no-random-sleep-on-renew
+          changed_when: false
+          when:
+            - certbot_cf_creds.changed
+            - certbot_issue is skipped
+
+        - name: Enable certbot renewal timer
+          systemd:
+            name: certbot.timer
+            enabled: true
+            state: started
