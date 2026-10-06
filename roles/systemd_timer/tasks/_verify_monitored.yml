@@ -123,30 +123,3 @@
       Expected systemd_timer_overdue to suppress alert state during the first
       35 minutes of host uptime without an up-notification delay. Got:
       {{ _alarm }}
-
-# Cleanup: remove the fixture so a follow-on test run starts clean.
-- name: _verify | Remove monitored fixture
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: _verify_timer_monitored
-
-# Asserts both the metadata cleanup and remove.yml's persistent-stamp drop.
-- name: _verify | Stat metadata + stamp files after removal (should NOT exist)
-  stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer_monitored.conf
-    - /var/lib/systemd/timers/stamp-_verify_timer_monitored.timer
-  register: _systemd_timer_meta_after
-  become: true
-- name: _verify | Assert metadata + stamps cleaned up
-  assert:
-    that:
-      - not item.stat.exists
-    fail_msg: "{{ item.item }} still present after remove"
-  loop: "{{ _systemd_timer_meta_after.results }}"
-  loop_control:
-    label: "{{ item.item }}"

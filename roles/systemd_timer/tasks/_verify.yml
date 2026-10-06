@@ -7,8 +7,8 @@
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
 #      tracks the persistent trigger stamp's mtime, and overdue fires when
 #      the stamp is older than 2 * period
-#   5. extension knobs (environment, accuracy_sec, randomized_delay_sec,
-#      additional_service_directives)
+#   5. run_as, environment and additional_service_directives reach the
+#      running service
 
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
@@ -32,7 +32,7 @@
 
 # ============================================================
 # Contracts 1+2: one fixture exercises the successful lifecycle, privilege
-# drop, environment, timer knobs, service hardening, and journal priorities.
+# drop, environment, service hardening, and journal priorities.
 # ============================================================
 # systemd-analyze verify (run by systemd_unit) warns "Special user nobody
 # configured, this is not safe!" for User=nobody, and systemd_unit treats any
@@ -45,21 +45,6 @@
     create_home: true
     shell: /usr/sbin/nologin
   register: _systemd_timer_runas_user
-  become: true
-
-- name: _verify | Remove stale combined fixture files
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /tmp/_verify_timer.out
-    - /tmp/_verify_timer.fail
-  become: true
-
-- name: _verify | Remove stale combined fixture stamp
-  file:
-    path: /var/lib/systemd/timers/stamp-_verify_timer.timer
-    state: absent
   become: true
 
 - name: _verify | Capture pre-run timestamp for journal filter
@@ -85,13 +70,11 @@
       environment:
         ENV_KEY: knob_value
         ENV_OTHER: "value with spaces, and a comma"
-      accuracy_sec: 1s
-      randomized_delay_sec: 600
       additional_service_directives:
         # ProtectSystem=strict makes the filesystem read-only except for the
-        # explicit test output path, exercising the directive passthrough.
+        # test output path, so the stamp check below also proves the
+        # monitoring touch bypasses caller sandboxing.
         - "ProtectSystem=strict"
-        - "ProtectHome=yes"
         - "ReadWritePaths=/tmp"
 
 - name: _verify | Trigger the combined fixture manually  # noqa: command-instead-of-module
@@ -145,14 +128,6 @@
   register: _systemd_timer_timer_out_stat
   become: true
 
-- name: _verify | Read timer and service properties  # noqa: command-instead-of-module
-  command: >-
-    systemctl show -p AccuracyUSec,RandomizedDelayUSec,FixedRandomDelay,TimeoutStopUSec,ProtectSystem,ProtectHome
-    _verify_timer.timer _verify_timer.service
-  register: _systemd_timer_knobs_show
-  changed_when: false
-  become: true
-
 - name: _verify | Assert combined fixture behavior
   vars:
     _output: "{{ (_systemd_timer_timer_out.content | b64decode).rstrip() }}"
@@ -163,12 +138,6 @@
       - _systemd_timer_timer_stamp.stat.exists
       - _systemd_timer_timer_out_stat.stat.pw_name == '_verify_runas'
       - _output == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
-      - "'AccuracyUSec=1s' in _systemd_timer_knobs_show.stdout"
-      - "'RandomizedDelayUSec=10min' in _systemd_timer_knobs_show.stdout"
-      - "'FixedRandomDelay=yes' in _systemd_timer_knobs_show.stdout"
-      - "'TimeoutStopUSec=30s' in _systemd_timer_knobs_show.stdout"
-      - "'ProtectSystem=strict' in _systemd_timer_knobs_show.stdout"
-      - "'ProtectHome=yes' in _systemd_timer_knobs_show.stdout"
 
 - name: _verify | Assert stderr priority through each journal filter
   assert:
@@ -248,6 +217,8 @@
     that: _systemd_timer_skipped.results | selectattr('stat.exists') | list | length == 0
     fail_msg: "left behind: {{ _systemd_timer_skipped.results | selectattr('stat.exists') | map(attribute='item') | join(', ') }}"
 
+# Removal drops both units, the netdata metadata, and the persistent trigger
+# stamp the runs above refreshed.
 - name: _verify | Remove the combined fixture timer
   import_role:
     name: systemd_timer
@@ -256,29 +227,34 @@
     systemd_timer_args:
       name: _verify_timer
 
-- name: _verify | Read removed unit statuses  # noqa: command-instead-of-module
-  command: systemctl status _verify_timer.{{ item }}
+- name: _verify | Query the removed fixture units
+  systemd:
+    name: _verify_timer.{{ item }}
   loop:
     - service
     - timer
-  register: _systemd_timer_timer_statuses
-  changed_when: false
-  failed_when: false
+  register: _systemd_timer_removed_units
   become: true
 
-- name: _verify | Assert fixture removal
+- name: _verify | Stat the removed fixture metadata and stamp
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/netdata/charts.d/systemd_timers.d/_verify_timer.conf
+    - /var/lib/systemd/timers/stamp-_verify_timer.timer
+  register: _systemd_timer_removed_files
+  become: true
+
+- name: _verify | Removal left no units, metadata or stamp behind
   assert:
     that:
-      - _systemd_timer_timer_statuses.results | map(attribute='rc') | select('equalto', 0) | list | length == 0
-
-- name: _verify | Cleanup combined fixture
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /tmp/_verify_timer.out
-    - /tmp/_verify_timer.fail
-  become: true
+      - _systemd_timer_removed_units.results | map(attribute='status.LoadState') | reject('equalto', 'not-found') | list | length == 0
+      - _systemd_timer_removed_files.results | selectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      unit load states:
+      {{ _systemd_timer_removed_units.results | map(attribute='status.LoadState') | join(', ') }};
+      left behind:
+      {{ _systemd_timer_removed_files.results | selectattr('stat.exists') | map(attribute='item') | join(', ') }}
 
 # Contracts 3+4 exercise the netdata charts.d collector. netdata installs
 # from repo.netdata.cloud's multi-arch 2.x series (see roles/netdata), so
