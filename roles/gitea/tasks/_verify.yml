@@ -15,6 +15,35 @@
     validate_certs: false
     status_code: 200
 
+# Router logs stay off: a probe URI must not reach the journal. Each probe
+# carries ?token=, which DISABLE_QUERY_AUTH_TOKEN rejects with a default-
+# logger warning on the same console writer the router logger would use.
+# Waiting for the second warning proves the first probe would have been
+# logged by now, so the absence check below cannot pass on a slow flush.
+- name: _verify | Send router log probes
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version?token=router_log_probe_{{ ansible_date_time.epoch }}
+    status_code: 403
+  loop: [ 1, 2 ]
+
+- name: _verify | Read the gitea journal after the probes
+  command: journalctl --unit gitea --since @{{ ansible_date_time.epoch }} --output cat
+  become: true
+  register: _gitea_probe_journal
+  until: >-
+    _gitea_probe_journal.stdout_lines
+    | select('search', 'API token sent in query string')
+    | length >= 2
+  retries: 10
+  delay: 1
+  changed_when: false
+
+- name: _verify | Gitea did not log the probe requests
+  assert:
+    that:
+      - "'router_log_probe_' not in _gitea_probe_journal.stdout"
+    fail_msg: "{{ _gitea_probe_journal.stdout_lines | select('search', 'router_log_probe_') | list }}"
+
 # Functional git roundtrip: confirms the HTTP basic-auth path, git over
 # HTTP, sqlite write path, and on-disk repo creation all work end-to-
 # end. Endpoint checks above can pass on a build that is "running but not

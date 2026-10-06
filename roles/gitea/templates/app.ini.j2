@@ -43,8 +43,6 @@ OFFLINE_MODE = true
 # there is no anonymous landing page; this just points the pre-auth redirect
 # at /user/login to match the SSO-only, closed-registration posture.
 LANDING_PAGE = login
-# Router logs are debug-only signal; nginx access logs are upstream.
-DISABLE_ROUTER_LOG = true
 
 [lfs]
 PATH = /mnt/services/gitea/data/lfs
@@ -88,6 +86,8 @@ SAME_SITE = lax
 [log]
 MODE = console
 LEVEL = info
+# Router logs duplicate the nginx access log; an empty MODE disables them.
+logger.router.MODE =
 
 [security]
 INSTALL_LOCK = true
