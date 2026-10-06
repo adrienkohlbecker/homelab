@@ -49,74 +49,52 @@
   tags:
     - refind
 
-- name: Extract zfsbootmenu bundle
-  when:
-    - >-
-      not (ansible_check_mode and
-           (refind_zbm_cache_directory.changed
-            or refind_zbm_bundle.changed | default(false)))
-  unarchive:
-    src: "{{ refind_zbm_tarball_path }}"
-    dest: "{{ refind_zbm_cache_dir }}"
-    remote_src: true
-    creates: "{{ refind_zbm_cache_dir }}/zfsbootmenu.EFI"
-    owner: root
-    group: root
+# A fresh cache directory or ZBM directory, or a pending download, is only
+# predicted in check mode, so there is nothing to extract or copy yet.
+- name: Install the ZBM artifacts on the ESP
+  when: >-
+    not (ansible_check_mode and
+         (refind_zbm_cache_directory.changed or refind_zbm_directory.changed
+          or refind_zbm_bundle.changed))
   become: true
-  register: refind_zbm_extract
   tags:
     - refind
+  block:
+    - name: Extract zfsbootmenu bundle
+      unarchive:
+        src: "{{ refind_zbm_tarball_path }}"
+        dest: "{{ refind_zbm_cache_dir }}"
+        remote_src: true
+        creates: "{{ refind_zbm_cache_dir }}/zfsbootmenu.EFI"
+        owner: root
+        group: root
 
-# rEFInd LoadOptions replace the cmdline embedded in the unified EFI image, so
-# keep the bundle cmdline beside it for rEFInd to pass explicitly on every arch.
-# No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
-- name: Install common ZBM artifacts  # noqa: require-backup
-  when:
-    - >-
-      not (ansible_check_mode and
-           (refind_zbm_cache_directory.changed or refind_zbm_directory.changed
-            or refind_zbm_bundle.changed | default(false) or refind_zbm_extract.changed))
-  copy:
-    src: "{{ refind_zbm_cache_dir }}/{{ item.src }}"
-    dest: "/boot/efi/EFI/ZBM/{{ item.dest }}"
-    remote_src: true
-    owner: root
-    group: root
-    mode: "{{ boot_esp_mode }}"
-  loop:
-    - src: zfsbootmenu.EFI
-      dest: VMLINUZ.EFI
-    - src: cmdline
-      dest: cmdline
-  loop_control:
-    label: "{{ item.dest }}"
-  become: true
-  register: refind_zbm_artifact_install
-  tags:
-    - refind
-
-# Seed the backup loader the refind fallback menuentry (VMLINUZ-BACKUP.EFI)
-# boots. Copy-if-absent (force: false) so a later primary update never clobbers
-# the known-good backup.
-# No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
-- name: Seed ZBM backup loader  # noqa: require-backup
-  when:
-    - >-
-      not (ansible_check_mode and
-           (refind_zbm_cache_directory.changed or refind_zbm_directory.changed
-            or refind_zbm_bundle.changed | default(false) or refind_zbm_extract.changed
-            or refind_zbm_artifact_install.changed))
-  copy:
-    src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
-    dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
-    remote_src: true
-    force: false
-    owner: root
-    group: root
-    mode: "{{ boot_esp_mode }}"
-  become: true
-  tags:
-    - refind
+    # rEFInd LoadOptions replace the cmdline embedded in the unified EFI image,
+    # so keep the bundle cmdline beside it for rEFInd to pass explicitly on
+    # every arch. The backup loader the refind fallback menuentry boots is
+    # copy-if-absent (force: false), so a later primary update never clobbers
+    # the known-good backup.
+    # No backup: true — /boot/efi is vfat; backup_local's chown fails on FAT.
+    - name: Install common ZBM artifacts  # noqa: require-backup
+      copy:
+        src: "{{ refind_zbm_cache_dir }}/{{ item.src }}"
+        dest: "/boot/efi/EFI/ZBM/{{ item.dest }}"
+        remote_src: true
+        force: "{{ item.force | default(true) }}"
+        owner: root
+        group: root
+        mode: "{{ boot_esp_mode }}"
+      loop:
+        - src: zfsbootmenu.EFI
+          dest: VMLINUZ.EFI
+        - src: cmdline
+          dest: cmdline
+        - src: zfsbootmenu.EFI
+          dest: VMLINUZ-BACKUP.EFI
+          force: false
+      loop_control:
+        label: "{{ item.dest }}"
+      register: refind_zbm_artifact_install
 
 # Every ZBM version gets its own cache directory, so superseded ones pile up.
 # Only the current one is read again; the ESP holds independent copies of the
@@ -220,7 +198,6 @@
     group: root
     mode: "{{ boot_esp_mode }}"
   loop:
-    - /boot/efi/EFI/refind
     - /boot/efi/EFI/refind/drivers_{{ refind_arch }}
     - /boot/efi/EFI/BOOT
   become: true
@@ -284,7 +261,6 @@
     group: root
     mode: "{{ boot_esp_mode }}"
   loop:
-    - /boot/efi/EFI/refind/themes
     - /boot/efi/EFI/refind/themes/refind-theme-regular
   become: true
   register: refind_theme_dir
@@ -359,39 +335,28 @@
   tags:
     - refind
 
-# No backup: true on these two — /boot/efi is vfat, and backup_local's chown
-# to preserve ownership fails on FAT, so a backup can't be written on the ESP.
+# rEFInd only reads refind.conf from its own directory, so the firmware-
+# fallback copy at \EFI\BOOT gets the same config. Without it an NVRAM-wipe
+# recovery boot (and every boot on EC2 test cells, whose NVRAM starts empty)
+# runs config-less — 20s default countdown, then the first auto-scanned loader
+# (the ZBM image) with empty load options: no zbm.skip and no serial console
+# args. The fallback copy boots without theme and keymap driver (both resolve
+# relative to rEFInd's own directory; rEFInd skips a missing include and falls
+# back to text mode).
+# No backup: true — /boot/efi is vfat, and backup_local's chown to preserve
+# ownership fails on FAT, so a backup can't be written on the ESP.
 - name: Configure refind  # noqa: require-backup require-validate
   template:
     src: refind.conf.j2
-    dest: /boot/efi/EFI/refind/refind.conf
+    dest: "{{ item }}"
     owner: root
     group: root
     mode: "{{ boot_esp_mode }}"
+  loop:
+    - /boot/efi/EFI/refind/refind.conf
+    - /boot/efi/EFI/BOOT/refind.conf
   become: true
   register: refind_conf
-  tags:
-    - refind
-
-# Mirror the config next to the firmware-fallback binary. rEFInd only reads
-# refind.conf from its own directory, so the fallback copy at \EFI\BOOT
-# otherwise boots config-less — 20s default countdown, then the first
-# auto-scanned loader (the ZBM image) with empty load options: no zbm.skip
-# and no serial console args. With the mirror, an NVRAM-wipe recovery boot
-# (and every boot on EC2 test cells, whose NVRAM starts empty) behaves
-# exactly like the normal NVRAM-entry path, minus theme and keymap driver
-# (both resolve relative to rEFInd's own directory; rEFInd skips a missing
-# include and falls back to text mode).
-- name: Mirror refind.conf to the firmware-fallback directory  # noqa: require-backup require-validate
-  when: not (ansible_check_mode and refind_conf.changed)
-  copy:
-    src: /boot/efi/EFI/refind/refind.conf
-    dest: /boot/efi/EFI/BOOT/refind.conf
-    remote_src: true
-    owner: root
-    group: root
-    mode: "{{ boot_esp_mode }}"
-  become: true
   tags:
     - refind
 
