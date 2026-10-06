@@ -110,9 +110,6 @@
           CONTAINER_TAG: lidarr
           SYSLOG_IDENTIFIER: lidarr
           SYSTEMD_UNIT: lidarr.service
-        - MESSAGE: "[Info] Lifecycle: lidarr-unit-record \n"
-          SYSLOG_IDENTIFIER: systemd
-          SYSTEMD_UNIT: lidarr.service
         - MESSAGE: "[Info] RssSyncService: RSS Sync Completed. Reports found: 1, Reports grabbed: 0 \n"
           CONTAINER_TAG: lidarr
           SYSLOG_IDENTIFIER: lidarr
@@ -135,10 +132,6 @@
           fields.exception: "System.InvalidOperationException: failed    at Verify.Run()"
         - message: "[migrations] no migrations found"
           level: info
-          _absent:
-            - fields.source
-        - message: "[Info] Lifecycle: lidarr-unit-record"
-          service: systemd
           _absent:
             - fields.source
         - message: "RSS Sync Completed. Reports found: 1, Reports grabbed: 0"

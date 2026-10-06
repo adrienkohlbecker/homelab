@@ -248,7 +248,6 @@
           fields.source: utils.cc
           fields.source_line: 144
           _absent:
-            - fields.transmission_level
             - fields.CONTAINER_TAG
         - message: Rejected request from 127.0.0.1 (failed authentication)
           level: warn

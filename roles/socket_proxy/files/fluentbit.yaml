@@ -1,28 +1,13 @@
 parsers:
   - name: socket_proxy_haproxy
     format: regex
-    regex: '/\A\[(?<socket_proxy_level>ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\((?<socket_proxy_process_id>[0-9]+)\)[[:space:]]+:[[:space:]]+(?<socket_proxy_message>[\s\S]*?)[[:space:]]*\z/'
-    types: socket_proxy_process_id:integer
+    regex: '/\A\[(?<_level>ALERT|WARNING|NOTICE|INFO|DEBUG)\][[:space:]]+\((?<process_id>[0-9]+)\)[[:space:]]+:[[:space:]]+(?<log>[\s\S]*?)[[:space:]]*\z/'
+    types: process_id:integer
+
 pipeline:
   filters:
-    - name: modify
-      match: svc.socket_proxy.service
-      condition: key_exists CONTAINER_TAG
-      rename: MESSAGE log
     - name: parser
       match: svc.socket_proxy.service
-      key_name: log
+      key_name: MESSAGE
       parser: socket_proxy_haproxy
       reserve_data: true
-      preserve_key: true
-    - name: modify
-      match: svc.socket_proxy.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists socket_proxy_message
-        - key_exists socket_proxy_level
-        - key_exists socket_proxy_process_id
-      hard_rename:
-        - socket_proxy_message log
-        - socket_proxy_level _level
-        - socket_proxy_process_id process_id

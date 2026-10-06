@@ -1,38 +1,24 @@
 parsers:
   - name: profilarr_python
     format: regex
-    regex: '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - (?<source>.+?) - (?<_level>DEBUG|INFO|WARNING|ERROR|CRITICAL) - (?<message>[\s\S]*?)[[:space:]]*\z/'
+    regex: '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - (?<source>.+?) - (?<_level>DEBUG|INFO|WARNING|ERROR|CRITICAL) - (?<log>[\s\S]*?)[[:space:]]*\z/'
   - name: profilarr_gunicorn
     format: regex
-    regex: '/\A\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}\] \[(?<profilarr_gunicorn_pid>\d+)\] \[(?<_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\] (?<message>[\s\S]*?)[[:space:]]*\z/'
+    regex: '/\A\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4}\] \[(?<profilarr_gunicorn_pid>\d+)\] \[(?<_level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\] (?<log>[\s\S]*?)[[:space:]]*\z/'
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.profilarr.service
-      condition: key_exists CONTAINER_TAG
-      rename: MESSAGE log
+    # The parser filter stops at the first parser that matches.
     - name: parser
       match: svc.profilarr.service
-      key_name: log
-      parser: profilarr_python
+      key_name: MESSAGE
+      parser:
+        - profilarr_python
+        - profilarr_gunicorn
       reserve_data: true
-      preserve_key: true
-    - name: parser
-      match: svc.profilarr.service
-      key_name: log
-      parser: profilarr_gunicorn
-      reserve_data: true
-      preserve_key: true
+    # Gunicorn lines name no logger, so label them by their emitter.
     - name: modify
       match: svc.profilarr.service
       condition: key_exists profilarr_gunicorn_pid
       add: source gunicorn
-    - name: modify
-      match: svc.profilarr.service
-      condition:
-        - key_exists message
-        - key_exists _level
-        - key_exists source
-      hard_rename: message log
       remove: profilarr_gunicorn_pid

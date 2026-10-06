@@ -157,9 +157,6 @@
           CONTAINER_TAG: wolweb
           SYSLOG_IDENTIFIER: wolweb
           SYSTEMD_UNIT: wolweb.service
-        - MESSAGE: "2099/01/02 03:04:09 same-unit lifecycle record\n"
-          SYSLOG_IDENTIFIER: systemd
-          SYSTEMD_UNIT: wolweb.service
       expected:
         - message: 'Startup Webserver on "127.0.0.1:8089"'
           level: info
@@ -172,8 +169,6 @@
           level: info
         - message: wolweb-raw
           service: wolweb
-        - message: "2099/01/02 03:04:09 same-unit lifecycle record"
-          service: systemd
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:

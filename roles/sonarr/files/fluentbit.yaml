@@ -1,29 +1,12 @@
 parsers:
   - name: sonarr_console
     format: regex
-    regex: '/\A\[(?<sonarr_level>Trace|Debug|Info|Warn|Error|Fatal)\] (?<sonarr_source>[^:]+): (?<sonarr_message>[^\r\n]*?)[ \t]*(?:\r?\n(?:[[:space:]]*\r?\n)*\[v(?<sonarr_version>[^]]+)\] (?<sonarr_exception>[\s\S]*?))?[[:space:]]*\z/'
+    regex: '/\A\[(?<_level>Trace|Debug|Info|Warn|Error|Fatal)\] (?<source>[^:]+): (?<log>[^\r\n]*?)[ \t]*(?:\r?\n(?:[[:space:]]*\r?\n)*\[v(?<app_version>[^]]+)\] (?<exception>[\s\S]*?))?[[:space:]]*\z/'
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.sonarr.service
-      condition: key_exists CONTAINER_TAG
-      rename: MESSAGE log
     - name: parser
       match: svc.sonarr.service
-      key_name: log
+      key_name: MESSAGE
       parser: sonarr_console
       reserve_data: true
-      preserve_key: true
-    - name: modify
-      match: svc.sonarr.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists sonarr_message
-        - key_exists sonarr_level
-      hard_rename:
-        - sonarr_message log
-        - sonarr_level _level
-        - sonarr_source source
-        - sonarr_version app_version
-        - sonarr_exception exception

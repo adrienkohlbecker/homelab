@@ -1,7 +1,7 @@
 parsers:
   - name: homepage_winston
     format: regex
-    regex: '/^\[(?<homepage_timestamp>[^]]+)\] (?:\x1b\[[0-9;]*m)?(?<homepage_level>error|warn|info|http|verbose|debug|silly)(?:\x1b\[[0-9;]*m)?: (?:<(?<homepage_source>[^>]+)> )?(?<homepage_message>.*)$/m'
+    regex: '/^\[[^]]+\] (?:\x1b\[[0-9;]*m)?(?<_level>error|warn|info|http|verbose|debug|silly)(?:\x1b\[[0-9;]*m)?: (?:<(?<source>[^>]+)> )?(?<log>.*)$/m'
 
 pipeline:
   filters:
@@ -10,14 +10,3 @@ pipeline:
       key_name: MESSAGE
       parser: homepage_winston
       reserve_data: true
-    - name: modify
-      match: svc.homepage.service
-      condition:
-        - key_exists CONTAINER_TAG
-        - key_exists homepage_message
-        - key_exists homepage_level
-      hard_rename:
-        - homepage_message log
-        - homepage_level _level
-        - homepage_source source
-      remove: homepage_timestamp

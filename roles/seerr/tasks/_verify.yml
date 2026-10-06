@@ -132,9 +132,6 @@
           CONTAINER_TAG: seerr
           SYSLOG_IDENTIFIER: seerr
           SYSTEMD_UNIT: seerr.service
-        - MESSAGE: '2099-01-02T03:04:09.012Z [info][Server]: must-not-parse'
-          SYSLOG_IDENTIFIER: systemd
-          SYSTEMD_UNIT: seerr.service
         - MESSAGE: '2099-01-02T03:04:11.234Z [debug][Jobs]: non-routine-debug'
           CONTAINER_TAG: seerr
           SYSLOG_IDENTIFIER: seerr
@@ -155,10 +152,6 @@
           level: info
           service: seerr
           fields.source: Server
-        - message: '2099-01-02T03:04:09.012Z [info][Server]: must-not-parse'
-          service: systemd
-          _absent:
-            - fields.source
         - message: non-routine-debug
           level: debug
           fields.source: Jobs

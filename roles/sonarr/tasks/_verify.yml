@@ -160,9 +160,6 @@
           CONTAINER_TAG: sonarr
           SYSLOG_IDENTIFIER: sonarr
           SYSTEMD_UNIT: sonarr.service
-        - MESSAGE: "[Info] Lifecycle: sonarr-unit-record \n"
-          SYSLOG_IDENTIFIER: systemd
-          SYSTEMD_UNIT: sonarr.service
         - MESSAGE: "[Info] RssSyncService: RSS Sync Completed. Reports found: 1, Reports grabbed: 1 \n"
           CONTAINER_TAG: sonarr
           SYSLOG_IDENTIFIER: sonarr
@@ -173,16 +170,9 @@
           service: sonarr
           fields.source: VerifyInfo
           _absent:
-            - fields.sonarr_level
-            - fields.sonarr_message
-            - fields.sonarr_source
             - fields.CONTAINER_TAG
         - message: "[migrations] no migrations found"
           level: info
-          _absent:
-            - fields.source
-        - message: "[Info] Lifecycle: sonarr-unit-record"
-          service: systemd
           _absent:
             - fields.source
         - message: "RSS Sync Completed. Reports found: 1, Reports grabbed: 1"

@@ -1,23 +1,12 @@
 parsers:
   - name: seerr_console
     format: regex
-    regex: '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[(?:\x1b\[[0-9;]*m)?(?<_level>debug|info|warn|error)(?:\x1b\[[0-9;]*m)?\](?:\[(?<source>[^]]+)\])?: (?<message>[\s\S]*?)[[:space:]]*\z/'
+    regex: '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[(?:\x1b\[[0-9;]*m)?(?<_level>debug|info|warn|error)(?:\x1b\[[0-9;]*m)?\](?:\[(?<source>[^]]+)\])?: (?<log>[\s\S]*?)[[:space:]]*\z/'
 
 pipeline:
   filters:
-    - name: modify
-      match: svc.seerr.service
-      condition: key_exists CONTAINER_TAG
-      rename: MESSAGE log
     - name: parser
       match: svc.seerr.service
-      key_name: log
+      key_name: MESSAGE
       parser: seerr_console
       reserve_data: true
-      preserve_key: true
-    - name: modify
-      match: svc.seerr.service
-      condition:
-        - key_exists message
-        - key_exists _level
-      hard_rename: message log

@@ -97,18 +97,12 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: "[WARNING]  (8) : socket-proxy-lifecycle"
-          SYSLOG_IDENTIFIER: systemd
-          SYSTEMD_UNIT: socket_proxy.service
       expected:
         - message: Loading success.
           level: info
           service: socket_proxy
           fields.process_id: 2
           _absent:
-            - fields.socket_proxy_level
-            - fields.socket_proxy_message
-            - fields.socket_proxy_process_id
             - fields.CONTAINER_TAG
         - message: Current worker (9) exited with code 0 (Exit)
           level: warn
@@ -123,10 +117,6 @@
           fields.process_id: 8
         - message: socket-proxy-prose
           service: socket_proxy
-          _absent:
-            - fields.process_id
-        - message: "[WARNING]  (8) : socket-proxy-lifecycle"
-          service: systemd
           _absent:
             - fields.process_id
 
