@@ -90,7 +90,7 @@
       enabled: "{{ tailscale_wan_direct | default(false) }}"
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ tailscale_port | default(0) }}" ]
       hit: [ tailscale_lan_accept ]
-      miss: [ input_silenced_tailscale ]
+      miss: [ input_silenced ]
     - name: Samba from a wireguard source
       enabled: "{{ _firewall_verify_samba_enabled }}"
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "445" ]
@@ -229,7 +229,7 @@
     - name: Tailscale disco probe from a non-scope source
       enabled: "{{ tailscale_wan_direct | default(false) }}"
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ tailscale_port | default(0) }}" ]
-      hit: [ input_silenced_tailscale ]
+      hit: [ input_silenced ]
       miss: [ tailscale_lan_accept ]
     - name: Unscoped UDP port
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "18181" ]
