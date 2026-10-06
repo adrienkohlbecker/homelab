@@ -97,7 +97,7 @@
 # so the cmdline engine doesn't silently drop them on every converge. tty0 keeps
 # VGA output. The earlycon + serial args come from _console_cmdline (group_vars),
 # which selects the arch-specific QEMU UART on test VMs and boot_serial_console
-# on real hardware (empty on lab/pug which have no UART).
+# on real hardware (unset on lab/pug, which have no UART).
 - name: Set the base console command line
   import_role:
     name: boot
