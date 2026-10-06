@@ -36,13 +36,3 @@
   become: true
   tags:
     - minio
-
-# The mcli config lives under root's home; drop any stray ~/.mcli left by
-# manual mcli use as the connecting user so a credential can't linger in an
-# interactive account.
-- name: client | Drop per-user mcli alias config
-  file:
-    path: ~/.mcli
-    state: absent
-  tags:
-    - minio
