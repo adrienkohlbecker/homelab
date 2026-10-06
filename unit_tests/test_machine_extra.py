@@ -374,9 +374,9 @@ class TestCellLoopbackHost:
         m = machine_factory(ssh_port=2222, ssh_user="vagrant", loopback_host="127.5.6.7")
         assert m.format_ssh_cmd()[-1] == "vagrant@127.5.6.7"
         assert m.ssh_control_path == "/tmp/homelab-cm-127.5.6.7-2222"
-        cmd = m.format_ansible_cmd("site.yml")
-        assert "ansible_ssh_host=127.5.6.7" in cmd
-        assert "wan_probe_host=127.5.6.7" in cmd
+        m._write_connection_inventory()
+        assert "ansible_ssh_host=127.5.6.7 " in m.connection_inventory_path.read_text()
+        assert "wan_probe_host=127.5.6.7" in m.format_ansible_cmd("site.yml")
 
     def test_explicit_loopback_binds_hostfwds(self, machine_factory: Callable[..., machine.Machine]) -> None:
         m = machine_factory(machine="lab", loopback_host="127.5.6.7")

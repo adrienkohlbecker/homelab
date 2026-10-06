@@ -718,14 +718,6 @@ class Machine:
         """
         parts = [
             "ansible-playbook",
-            "-e",
-            f"ansible_ssh_port={self.ssh_port}",
-            "-e",
-            f"ansible_ssh_host={self.ssh_host}",
-            "-e",
-            f"ansible_ssh_user={self.ssh_user}",
-            "-e",
-            f"ansible_ssh_private_key_file={SSH_KEY}",
             # Static playbooks declare `hosts: all`; --limit pins the play to
             # the inventory host we actually provisioned.
             "--limit",
@@ -764,6 +756,8 @@ class Machine:
             ),
             "--inventory",
             "test/inventory.ini",
+            "--inventory",
+            str(self.connection_inventory_path),
         ]
         if cmd:
             parts += cmd
@@ -773,6 +767,27 @@ class Machine:
         """Execute an SSH command and stream output into the role log."""
 
         return await run_command(self.format_ssh_cmd(*cmd), check=check)
+
+    @property
+    def connection_inventory_path(self) -> Path:
+        """Per-cell inventory carrying this fixture's SSH connection vars."""
+        # Its own subdirectory, so Ansible finds no group_vars/ or host_vars/
+        # beside it and loads the staged copies only at playbook precedence.
+        return self.workdir_path / "inventory" / "connection.ini"
+
+    def _write_connection_inventory(self) -> None:
+        """Set the fixture's SSH endpoint as inventory host vars, as hosts.ini does.
+
+        Extra vars would outrank every other source, including the connection
+        vars Ansible swaps in under delegate_to, and so hide lookups that only
+        work for the -e form.
+        """
+        path = self.connection_inventory_path
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(
+            f"{self.inventory_host} ansible_ssh_host={self.ssh_host} ansible_ssh_port={self.ssh_port}"
+            f" ansible_ssh_user={self.ssh_user} ansible_ssh_private_key_file={SSH_KEY}\n"
+        )
 
     async def ansible_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute ansible-playbook with machine-specific SSH overrides."""
@@ -788,6 +803,7 @@ class Machine:
             return
 
         ensure_mitogen_symlink()
+        self._write_connection_inventory()
 
         for required_tree in ("group_vars", "host_vars", "roles", "data"):
             Path(required_tree).copy_into(self.workdir_path)

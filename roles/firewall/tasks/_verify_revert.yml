@@ -41,8 +41,8 @@
 
 - name: _verify_revert | New SSH connections get in again after the revert
   wait_for:
-    host: "{{ ansible_ssh_host }}"
-    port: "{{ ansible_ssh_port }}"
+    host: "{{ hostvars[inventory_hostname].ansible_ssh_host }}"
+    port: "{{ hostvars[inventory_hostname].ansible_ssh_port }}"
     search_regex: SSH-2\.0-
     timeout: 120
   delegate_to: localhost

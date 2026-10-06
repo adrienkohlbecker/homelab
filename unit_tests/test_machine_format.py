@@ -77,15 +77,16 @@ def test_format_ansible_cmd_default_envelope(
 
     assert cmd[0] == "ansible-playbook"
 
-    # ansible_ssh_* overrides
-    assert "ansible_ssh_port=2222" in cmd
-    assert "ansible_ssh_host=127.0.0.1" in cmd
-    assert "ansible_ssh_user=vagrant" in cmd
-    assert "ansible_ssh_private_key_file=packer/vagrant.key" in cmd
-
-    # The test inventory supplies group vars at inventory precedence.
-    assert "--inventory" in cmd
-    assert cmd[cmd.index("--inventory") + 1] == "test/inventory.ini"
+    # Connection vars ride a per-cell inventory, as in hosts.ini, never -e:
+    # extra vars would mask what delegated tasks see in production.
+    assert not any("ansible_ssh_" in part and "common_args" not in part for part in cmd)
+    inventories = [cmd[i + 1] for i, part in enumerate(cmd) if part == "--inventory"]
+    assert inventories == ["test/inventory.ini", str(m.connection_inventory_path)]
+    m._write_connection_inventory()
+    assert m.connection_inventory_path.read_text() == (
+        f"{m.inventory_host} ansible_ssh_host=127.0.0.1 ansible_ssh_port=2222"
+        " ansible_ssh_user=vagrant ansible_ssh_private_key_file=packer/vagrant.key\n"
+    )
 
     # --limit pins the static `hosts: all` playbook to the inventory host
     assert "--limit" in cmd
@@ -145,7 +146,7 @@ def test_kept_vm_resume_command_targets_fixture(
     assert expected_arg in parts
     if "--tags" in phase_args:
         assert parts[parts.index("--tags") + 1] == "homepage"
-    assert "ansible_ssh_port=2222" in parts
+    assert str(m.connection_inventory_path) in parts
     assert any("uses staged code" in line for line in lines)
     assert any("--step" in line for line in lines)
 
