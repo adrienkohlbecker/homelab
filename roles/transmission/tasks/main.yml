@@ -31,22 +31,13 @@
   tags:
     - transmission
 
-- name: Create scratch directory
+- name: Create download directories
   when: not ansible_check_mode or transmission_user.uid is defined
+  loop:
+    - /mnt/scratch/transmission
+    - /mnt/media/Torrents
   file:
-    dest: /mnt/scratch/transmission
-    state: directory
-    owner: transmission
-    group: media
-    mode: "0775"
-  become: true
-  tags:
-    - transmission
-
-- name: Create storage directory
-  when: not ansible_check_mode or transmission_user.uid is defined
-  file:
-    dest: /mnt/media/Torrents
+    dest: "{{ item }}"
     state: directory
     owner: transmission
     group: media
