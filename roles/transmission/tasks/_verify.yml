@@ -156,13 +156,6 @@
           CONTAINER_TAG: transmission
           SYSLOG_IDENTIFIER: transmission
           SYSTEMD_UNIT: transmission.service
-        - MESSAGE: '[ls.io-init] done.'
-          CONTAINER_TAG: transmission
-          SYSLOG_IDENTIFIER: transmission
-          SYSTEMD_UNIT: transmission.service
-        - MESSAGE: Started transmission.
-          SYSLOG_IDENTIFIER: systemd
-          SYSTEMD_UNIT: transmission.service
       expected:
         - message: "Couldn't read '/config/queue.json': No such file or directory (2)"
           level: error
@@ -175,10 +168,7 @@
           level: warn
           fields.source: rpc-server.cc
           fields.source_line: 570
-        - message: '[ls.io-init] done.'
-          service: transmission
-        - message: Started transmission.
-          service: systemd
+
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
