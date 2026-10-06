@@ -71,20 +71,3 @@
     tasks_from: main
   vars:
     headscale_server_url: "http://localhost:{{ service_ports.headscale }}"
-
-- name: _setup | Wait for headscale to answer /health
-  uri:
-    url: http://localhost:{{ service_ports.headscale }}/health
-    status_code: 200
-  register: _tailscale_health
-  retries: 10
-  delay: 2
-  until: _tailscale_health.status == 200
-  become: true
-
-# The role's remaining test wiring is plain inventory vars (login_server,
-# headscale_host, headscale_user, advertised routes/exit); main.yml mints the
-# pre-auth key from this headscale at registration, delegated to
-# tailscale_headscale_host (== lab here). _setup only stands up the control
-# plane -- the per-phase process boundary means a set_fact here wouldn't reach
-# the role's apply/--check runs, which is why the mint lives in main.yml.
