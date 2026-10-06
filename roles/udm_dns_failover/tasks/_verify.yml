@@ -141,15 +141,3 @@
     (_udm_dns_failover_beats_down.stdout_lines | last) !=
     (udm_dns_failover_heartbeat_url | urlsplit('path')) ~ '?status=down'
   become: true
-
-- name: _verify | Restart the resolver
-  systemd:
-    name: dnsmasq
-    state: started
-  become: true
-
-- name: _verify | Stop the heartbeat sink
-  systemd:
-    name: udm_dns_failover_verify_sink.service
-    state: stopped
-  become: true
