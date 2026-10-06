@@ -5,10 +5,9 @@ Description=headscale
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
-{% if not qemu_test %}
-# Fox reaches its Authelia issuer over wg0; the fixture has no such unit.
+# Fox reaches its Authelia issuer over wg0. Ordering after an absent unit is a
+# no-op, so hosts without wg0 need no gate.
 After=wg-quick@wg0.service
-{% endif %}
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
