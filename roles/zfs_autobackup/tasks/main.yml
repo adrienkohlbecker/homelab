@@ -155,6 +155,20 @@
   tags:
     - zfs_autobackup
 
+# Snapshots, pulls, and the freshness check all need a pool. A host without
+# one (a non-ZFS root with no data pools) has nothing to back up or receive,
+# so it keeps the identity and tooling but schedules no timer that would fail
+# every night. Lists every imported pool, not just rpool: a data pool alone
+# makes the host a snapshot and pull source.
+- name: List the imported pools
+  command: zpool list -H -o name
+  register: zfs_autobackup_pools
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - zfs_autobackup
+
 - name: Schedule the zfs_autosnapshot timer
   import_role:
     name: systemd_timer
@@ -162,6 +176,7 @@
   vars:
     systemd_timer_args:
       name: zfs_autosnapshot
+      condition: "{{ zfs_autobackup_pools.stdout_lines | length > 0 }}"
       description: Daily ZFS autosnapshot
       on_calendar: "*-*-* 02:00:00"
       # Keep all hosts' starts inside one hd-idle spindown window (-i 1200,
@@ -198,6 +213,7 @@
   vars:
     systemd_timer_args:
       name: zfs_backup_freshness
+      condition: "{{ zfs_autobackup_pools.stdout_lines | length > 0 }}"
       description: Daily ZFS backup freshness check
       on_calendar: "*-*-* 10:00:00"
       exec_start: /usr/local/bin/zfs_backup_freshness

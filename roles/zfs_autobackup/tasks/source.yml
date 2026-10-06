@@ -27,12 +27,12 @@
     - zfs_autobackup
 
 - name: source | Configure backup dataset permissions
-  when: zfs_root
+  when: zfs_autobackup_pools.stdout_lines | length > 0
   become: true
   tags:
     - zfs_autobackup
   block:
-    # The permission machinery runs everywhere the root pool exists.
+    # Any imported pool, root or data, can carry tagged datasets to pull.
     - name: source | Get backed-up datasets
       shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
       args:

@@ -1,4 +1,14 @@
-# Resolute: pipx installs zfs-autobackup on the newer Python, and the backup,
-# pull, and restore paths drive OpenZFS 2.4 send/receive.
+# Lab drives the snapshot, pull, restore, and freshness paths on its pools.
+# Minimal has neither a ZFS root nor a pool: the identity and tooling converge
+# without a backup timer. Resolute: pipx installs zfs-autobackup on the newer
+# Python, and the backup, pull, and restore paths drive OpenZFS 2.4
+# send/receive.
+machines:
+  lab:
+  minimal:
 ubuntu:
   - resolute
+skip:
+  "minimal:resolute": >-
+    Lab Resolute covers the newer pipx and OpenZFS paths; Minimal Noble covers
+    the host without a pool.

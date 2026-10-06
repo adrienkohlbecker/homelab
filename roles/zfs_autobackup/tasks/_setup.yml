@@ -1,55 +1,66 @@
+# Production runs the zfs role first on every host; its userspace backs the
+# converge's pool listing even where no pool exists.
+- name: _setup | Install the ZFS userspace
+  apt:
+    package: zfsutils-linux
+    cache_valid_time: 3600
+  become: true
+
 # Mirror the production producer so the backup identity gets the real services
-# dataset, mount unit, and zfs_check_mount dependency.
+# dataset, mount unit, and zfs_check_mount dependency, or the plain directory
+# on a host without a ZFS root.
 - name: _setup | Configure the services datasets
   import_role:
     name: services
 
-# A tagged tree for the onsite pull and restore round-trip. Created before
-# converge so source.yml delegates send/hold/release on each dataset; _verify
-# snapshots it, pulls it, and restores the pulled replica. The child carries a
-# non-default property and the canmount=off dataset must never be mounted.
-- name: _setup | Create the restore origin datasets
-  community.general.zfs:
-    name: "{{ item.name }}"
-    state: present
-    extra_zfs_properties: "{{ {'autobackup:bak': 'true'} | combine(item.properties) }}"
-  loop:
-    - name: rpool/zfs_autobackup_restore_source_test
-      properties:
-        compression: lz4
-        mountpoint: /mnt/zfs_autobackup_restore_source_test
-    - name: rpool/zfs_autobackup_restore_source_test/child
-      properties:
-        recordsize: 64K
-    - name: rpool/zfs_autobackup_restore_source_test/nomount
-      properties:
-        canmount: "off"
+# The pull, offsite-gate, and restore fixtures live on rpool.
+- name: _setup | Create the rpool fixture datasets
+  when: zfs_root
   become: true
+  block:
+    # A tagged tree for the onsite pull and restore round-trip. Created before
+    # converge so source.yml delegates send/hold/release on each dataset; _verify
+    # snapshots it, pulls it, and restores the pulled replica. The child carries a
+    # non-default property and the canmount=off dataset must never be mounted.
+    - name: _setup | Create the restore origin datasets
+      community.general.zfs:
+        name: "{{ item.name }}"
+        state: present
+        extra_zfs_properties: "{{ {'autobackup:bak': 'true'} | combine(item.properties) }}"
+      loop:
+        - name: rpool/zfs_autobackup_restore_source_test
+          properties:
+            compression: lz4
+            mountpoint: /mnt/zfs_autobackup_restore_source_test
+        - name: rpool/zfs_autobackup_restore_source_test/child
+          properties:
+            recordsize: 64K
+        - name: rpool/zfs_autobackup_restore_source_test/nomount
+          properties:
+            canmount: "off"
 
-# A mounted, tagged dataset for exercising zfs_backup_offsite's change-gate,
-# whose no-skip path reaches zfs_check_mount. atime=off so a stray read can't
-# bump `written` and perturb the gate.
-- name: _setup | Create a mounted scratch dataset for offsite-gate testing
-  community.general.zfs:
-    name: rpool/zfs_autobackup_offsite_test
-    state: present
-    extra_zfs_properties:
-      autobackup:bak: "true"
-      canmount: "on"
-      mountpoint: /mnt/zfs_autobackup_offsite_test
-      atime: "off"
-  become: true
+    # A mounted, tagged dataset for exercising zfs_backup_offsite's change-gate,
+    # whose no-skip path reaches zfs_check_mount. atime=off so a stray read can't
+    # bump `written` and perturb the gate.
+    - name: _setup | Create a mounted scratch dataset for offsite-gate testing
+      community.general.zfs:
+        name: rpool/zfs_autobackup_offsite_test
+        state: present
+        extra_zfs_properties:
+          autobackup:bak: "true"
+          canmount: "on"
+          mountpoint: /mnt/zfs_autobackup_offsite_test
+          atime: "off"
 
-# A snapshot-free dataset for the no-@bak- mount-ordering regression in _verify.
-# Deliberately NOT tagged autobackup:bak, so zfs_backup_local never snapshots it
-# and the script's no-snapshot branch is reachable -- _verify then unmounts it to
-# prove that branch still runs the mount check first.
-- name: _setup | Create an untagged, snapshot-free dataset for the no-snapshot mount test
-  community.general.zfs:
-    name: rpool/zfs_autobackup_offsite_nosnap_test
-    state: present
-    extra_zfs_properties:
-      canmount: "on"
-      mountpoint: /mnt/zfs_autobackup_offsite_nosnap_test
-      atime: "off"
-  become: true
+    # A snapshot-free dataset for the no-@bak- mount-ordering regression in _verify.
+    # Deliberately NOT tagged autobackup:bak, so zfs_backup_local never snapshots it
+    # and the script's no-snapshot branch is reachable -- _verify then unmounts it to
+    # prove that branch still runs the mount check first.
+    - name: _setup | Create an untagged, snapshot-free dataset for the no-snapshot mount test
+      community.general.zfs:
+        name: rpool/zfs_autobackup_offsite_nosnap_test
+        state: present
+        extra_zfs_properties:
+          canmount: "on"
+          mountpoint: /mnt/zfs_autobackup_offsite_nosnap_test
+          atime: "off"

@@ -1,592 +1,621 @@
-- name: _verify | Read the receive-target container properties
-  command: zfs get -H -o value canmount,mountpoint rpool/zfs_autobackup_receive_test
-  register: zfs_autobackup_verify_receive_root
-  changed_when: false
-  become: true
-
-- name: _verify | Receive target was created as a pure container
-  assert:
-    that:
-      - zfs_autobackup_verify_receive_root.stdout_lines == ['off', 'none']
-    fail_msg: >-
-      Expected canmount=off and mountpoint=none on the receive root, got
-      {{ zfs_autobackup_verify_receive_root.stdout_lines }}
-
-- name: _verify | Drift the receive root canmount policy
-  command: zfs set canmount=on rpool/zfs_autobackup_receive_test
-  changed_when: true
-  become: true
-
-- name: _verify | Reconcile the receive root
-  import_tasks: dest.yml
-
-- name: _verify | Read the repaired receive root policy
-  command: zfs get -H -o value canmount rpool/zfs_autobackup_receive_test
-  register: zfs_autobackup_verify_repaired_receive_root
-  changed_when: false
-  failed_when: zfs_autobackup_verify_repaired_receive_root.stdout != 'off'
-  become: true
-
-# Functional onsite pull. The fixture's onsite source is the fixture itself
-# (external_ips maps it to its own address), so authorizing the generated
-# backup key for the source-side user lets the installed nightly orchestrator
-# run a real pull end to end: the backup SSH client config and its persistent
-# identity, the first-connection host-key pin, the delegated
-# send/hold/release, and the replica scrub.
+# Every host can authenticate with the backup identity: authorize its key for
+# the source-side user and log in over loopback through the backup SSH client
+# config, as the onsite pulls and offsite rsync do.
 - name: _verify | Read the backup public key
   slurp:
     src: /mnt/services/zfs_autobackup/id_ed25519.pub
   register: zfs_autobackup_verify_root_pubkey
   become: true
 
-- name: _verify | Authorize the backup key on the onsite source
+- name: _verify | Authorize the backup key for the source user
   ansible.posix.authorized_key:
     user: zfs_autobackup
     key: "{{ zfs_autobackup_verify_root_pubkey.content | b64decode }}"
     key_options: restrict
   become: true
 
-# BatchMode cannot answer a host-key prompt, so the pull only connects if
-# accept-new pins the unknown peer on first contact.
-- name: _verify | Forget the onsite source host key
-  known_hosts:
-    path: /root/.ssh/known_hosts
-    name: "{{ external_ips[zfs_autobackup_sources[0].host] }}"
-    state: absent
-  become: true
-
-- name: _verify | Define production-shaped restore snapshot suffixes
-  set_fact:
-    zfs_autobackup_verify_restore_before_suffix: bak-20000101000000
-    zfs_autobackup_verify_restore_start_suffix: bak-20000102000000
-    zfs_autobackup_verify_restore_middle_suffix: bak-20000103000000
-    zfs_autobackup_verify_restore_end_suffix: bak-20000104000000
-
-# The replica clone forks from the child, so its restored copy must carry this
-# payload as independent data.
-- name: _verify | Write a payload into the restore origin child
-  command:
-    argv:
-      - dd
-      - if=/dev/urandom
-      - of=/mnt/zfs_autobackup_restore_source_test/child/restore_payload.bin
-      - bs=1M
-      - count=1
-      - status=none
-    creates: /mnt/zfs_autobackup_restore_source_test/child/restore_payload.bin
-  become: true
-
-# The marker changes between every snapshot, so the restored file content
-# identifies exactly which snapshot the target tree ended on.
-- name: _verify | Write markers and snapshot the restore origin at each restore point
-  shell: |
-    set -euo pipefail
-    marker=/mnt/zfs_autobackup_restore_source_test/restore_marker.txt
-    root=rpool/zfs_autobackup_restore_source_test
-    echo before-cutoff > "$marker"
-    zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_before_suffix }}"
-    echo cutoff > "$marker"
-    zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_start_suffix }}"
-    echo intermediate > "$marker"
-    zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_middle_suffix }}"
-    echo round-trip > "$marker"
-    zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_end_suffix }}"
-  args:
-    executable: /bin/bash
-  changed_when: true
-  become: true
-
-- name: _verify | Wait out the snapshot-name second before the nightly run
-  pause:
-    seconds: 2
-
-# The first run pulls full streams, the second incrementals. The replicas then
-# carry autobackup:bak as a received property, so the second run must skip
-# them (--exclude-received) instead of pulling the replica tree into itself --
-# the same guard that keeps two peers from re-pulling each other's replicas.
-# The offsite leg is paused, so the run exits 0 only if the local and onsite
-# legs both succeed.
-- name: _verify | Run the nightly backup with its onsite pull
-  command: /usr/local/bin/zfs_autosnapshot
-  changed_when: true
-  loop:
-    - full
-    - incremental
-  loop_control:
-    pause: 2
-  become: true
-
-- name: _verify | Read the newest bak snapshot of every pull source
-  shell: |
-    set -euo pipefail
-    newest() {
-      zfs list -H -t snapshot -o name -d 1 "$1" | awk -F @ '$2 ~ /^bak-/ && $2 > s {s = $2} END {print s}'
-    }
-    zfs get -H -s local -t filesystem -o name,value autobackup:bak |
-      awk -F '\t' '$2 == "true" {print $1}' |
-      while read -r ds; do echo "$ds $(newest "$ds")"; done
-  args:
-    executable: /bin/bash
+- name: _verify | Log in with the backup identity and client config
+  command: ssh -F /etc/zfs_autobackup_ssh_config zfs_autobackup@127.0.0.1 id -un
+  register: zfs_autobackup_verify_login
   changed_when: false
-  register: zfs_autobackup_verify_pull_sources
+  failed_when: zfs_autobackup_verify_login.stdout != 'zfs_autobackup'
   become: true
 
-- name: _verify | Read the pulled replica tree
-  shell: |
-    set -euo pipefail
-    root={{ zfs_autobackup_sources[0].dest_dataset }}
-    newest() {
-      zfs list -H -t snapshot -o name -d 1 "$1" | awk -F @ '$2 ~ /^bak-/ && $2 > s {s = $2} END {print s}'
-    }
-    zfs list -r -H -t filesystem -o name,autobackup:bak,readonly,mountpoint "$root" |
-      awk -F '\t' '$2 == "true" {print $1, $3, $4}' |
-      while read -r ds readonly mountpoint; do
-        echo "${ds#"$root"/} $(newest "$ds") readonly=$readonly mountpoint=$mountpoint"
-      done
-  args:
-    executable: /bin/bash
-  changed_when: false
-  register: zfs_autobackup_verify_pull_replicas
-  become: true
-
-# Every tagged source lands exactly once, holds the newest source snapshot (so
-# the incremental run delivered), and is scrubbed read-only and unmounted.
-- name: _verify | Onsite pull replicated every source once, scrubbed
-  assert:
-    that:
-      - "'rpool/zfs_autobackup_restore_source_test/nomount bak-' in zfs_autobackup_verify_pull_sources.stdout"
-      - zfs_autobackup_verify_pull_sources.stdout_lines | select('search', ' bak-[0-9]{14}$') | list | length == zfs_autobackup_verify_pull_sources.stdout_lines | length
-      - >-
-        zfs_autobackup_verify_pull_replicas.stdout_lines | sort
-        == zfs_autobackup_verify_pull_sources.stdout_lines | map('regex_replace', '$', ' readonly=on mountpoint=none') | sort
-    fail_msg: >-
-      onsite pull mismatch
-      (sources={{ zfs_autobackup_verify_pull_sources.stdout_lines }},
-      replicas={{ zfs_autobackup_verify_pull_replicas.stdout_lines }})
-
-# Functional check for the quiesce path: --no-resume must snapshot but leave
-# zfs_autosnapshot.target stopped (the rebuild runbooks depend on state
-# writers NOT restarting after the final pre-wipe snapshot).
-- name: _verify | Wait out the snapshot-name second (bak-%Y%m%d%H%M%S)
-  pause:
-    seconds: 2
-
-- name: _verify | Run a local backup with --no-resume
-  command: /usr/local/bin/zfs_backup_local --no-resume
+- name: _verify | List the imported pools
+  command: zpool list -H -o name
+  register: zfs_autobackup_verify_pools
   changed_when: false
   become: true
 
-- name: _verify | Read zfs_autosnapshot.target state after --no-resume  # noqa: command-instead-of-module
-  command: systemctl is-active zfs_autosnapshot.target
+# Without a pool the nightly and freshness runs could only fail, so none may
+# be scheduled.
+- name: _verify | A host without a pool schedules no backup timer  # noqa: command-instead-of-module
+  when: zfs_autobackup_verify_pools.stdout_lines | length == 0
+  command: systemctl list-timers --all --no-legend zfs_autosnapshot.timer zfs_backup_freshness.timer
+  register: zfs_autobackup_verify_timers
   changed_when: false
-  failed_when: false
-  register: zfs_autobackup_verify_target_state
-  become: true
+  failed_when: zfs_autobackup_verify_timers.stdout | trim | length > 0
 
-- name: _verify | Target stayed stopped after --no-resume
-  assert:
-    that:
-      - zfs_autobackup_verify_target_state.stdout | trim == 'inactive'
-    fail_msg: >-
-      zfs_backup_local --no-resume left zfs_autosnapshot.target
-      {{ zfs_autobackup_verify_target_state.stdout }} (expected inactive)
+# The receive, pull, offsite-gate, restore, and freshness fixtures live on
+# rpool.
+- name: _verify | Exercise the backup paths on rpool
+  when: zfs_root
+  block:
+    - name: _verify | Read the receive-target container properties
+      command: zfs get -H -o value canmount,mountpoint rpool/zfs_autobackup_receive_test
+      register: zfs_autobackup_verify_receive_root
+      changed_when: false
+      become: true
 
-- name: _verify | Restart the target the --no-resume run left down
-  systemd:
-    name: zfs_autosnapshot.target
-    state: started
-  become: true
+    - name: _verify | Receive target was created as a pure container
+      assert:
+        that:
+          - zfs_autobackup_verify_receive_root.stdout_lines == ['off', 'none']
+        fail_msg: >-
+          Expected canmount=off and mountpoint=none on the receive root, got
+          {{ zfs_autobackup_verify_receive_root.stdout_lines }}
 
-# Functional check for zfs_backup_offsite's change-gate. With a marker recording
-# the latest snapshot and nothing written since, the script must skip before any
-# rsync; once a write bumps written@, it must proceed to the transfer. bunk is
-# unreachable from the fixture, so the no-skip path targets an unresolvable host
-# and we assert it reached the rsync stage (the printed invocation), not its outcome.
-- name: _verify | Latest bak snapshot on the offsite-gate dataset
-  shell: set -euo pipefail; zfs list -t snapshot -o name -s creation -r rpool/zfs_autobackup_offsite_test | awk -F@ '/@bak-/ {s=$2} END {print s}'
-  args:
-    executable: /bin/bash
-  changed_when: false
-  register: zfs_autobackup_verify_gate_snap
-  become: true
+    - name: _verify | Drift the receive root canmount policy
+      command: zfs set canmount=on rpool/zfs_autobackup_receive_test
+      changed_when: true
+      become: true
 
-- name: _verify | A bak snapshot exists to gate against
-  assert:
-    that:
-      - zfs_autobackup_verify_gate_snap.stdout | length > 0
-    fail_msg: "no @bak- snapshot on rpool/zfs_autobackup_offsite_test to seed the gate marker"
+    - name: _verify | Reconcile the receive root
+      import_tasks: dest.yml
 
-- name: _verify | Seed the offsite marker (simulate a prior successful sync)
-  copy:
-    dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
-    content: "{{ zfs_autobackup_verify_gate_snap.stdout }}\n"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+    - name: _verify | Read the repaired receive root policy
+      command: zfs get -H -o value canmount rpool/zfs_autobackup_receive_test
+      register: zfs_autobackup_verify_repaired_receive_root
+      changed_when: false
+      failed_when: zfs_autobackup_verify_repaired_receive_root.stdout != 'off'
+      become: true
 
-- name: _verify | Offsite gate skips an unchanged dataset (written=0)
-  command: /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
-  changed_when: false
-  register: zfs_autobackup_verify_gate_skip
-  become: true
+    # Functional onsite pull. The fixture's onsite source is the fixture itself
+    # (external_ips maps it to its own address), so the backup key authorized
+    # above lets the installed nightly orchestrator run a real pull end to end:
+    # the first-connection host-key pin, the delegated send/hold/release, and the
+    # replica scrub.
+    # BatchMode cannot answer a host-key prompt, so the pull only connects if
+    # accept-new pins the unknown peer on first contact.
+    - name: _verify | Forget the onsite source host key
+      known_hosts:
+        path: /root/.ssh/known_hosts
+        name: "{{ external_ips[zfs_autobackup_sources[0].host] }}"
+        state: absent
+      become: true
 
-- name: _verify | Skip path exited cleanly without attempting rsync
-  assert:
-    that:
-      - "'skipping offsite sync' in zfs_autobackup_verify_gate_skip.stdout"
-      - "'rsync' not in zfs_autobackup_verify_gate_skip.stdout"
-    fail_msg: >-
-      offsite gate did not skip an unchanged dataset
-      (stdout={{ zfs_autobackup_verify_gate_skip.stdout }})
+    - name: _verify | Define production-shaped restore snapshot suffixes
+      set_fact:
+        zfs_autobackup_verify_restore_before_suffix: bak-20000101000000
+        zfs_autobackup_verify_restore_start_suffix: bak-20000102000000
+        zfs_autobackup_verify_restore_middle_suffix: bak-20000103000000
+        zfs_autobackup_verify_restore_end_suffix: bak-20000104000000
 
-# Monthly reconciliation: even with nothing written since the marker snapshot,
-# a marker older than 30 days must fall through to a full rsync (re-verifying the
-# tree against bunk). Age the marker's mtime past the threshold and confirm the
-# gate no longer short-circuits. The dataset is still unchanged here, so reaching
-# rsync can only be the mtime branch, not a real write.
-- name: _verify | Age the marker past the 30-day reconciliation threshold
-  command: touch -d "40 days ago" /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
-  changed_when: false
-  become: true
+    # The replica clone forks from the child, so its restored copy must carry this
+    # payload as independent data.
+    - name: _verify | Write a payload into the restore origin child
+      command:
+        argv:
+          - dd
+          - if=/dev/urandom
+          - of=/mnt/zfs_autobackup_restore_source_test/child/restore_payload.bin
+          - bs=1M
+          - count=1
+          - status=none
+        creates: /mnt/zfs_autobackup_restore_source_test/child/restore_payload.bin
+      become: true
 
-- name: _verify | Offsite gate reconciles an unchanged dataset with a stale marker
-  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
-  changed_when: false
-  failed_when: false
-  register: zfs_autobackup_verify_gate_reconcile
-  become: true
+    # The marker changes between every snapshot, so the restored file content
+    # identifies exactly which snapshot the target tree ended on.
+    - name: _verify | Write markers and snapshot the restore origin at each restore point
+      shell: |
+        set -euo pipefail
+        marker=/mnt/zfs_autobackup_restore_source_test/restore_marker.txt
+        root=rpool/zfs_autobackup_restore_source_test
+        echo before-cutoff > "$marker"
+        zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_before_suffix }}"
+        echo cutoff > "$marker"
+        zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_start_suffix }}"
+        echo intermediate > "$marker"
+        zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_middle_suffix }}"
+        echo round-trip > "$marker"
+        zfs snapshot -r "$root@{{ zfs_autobackup_verify_restore_end_suffix }}"
+      args:
+        executable: /bin/bash
+      changed_when: true
+      become: true
 
-- name: _verify | Stale-marker dataset reconciles to a full rsync
-  assert:
-    that:
-      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_reconcile.stdout"
-      - "'rsync' in zfs_autobackup_verify_gate_reconcile.stdout"
-      - "'/etc/zfs_autobackup_ssh_config' in zfs_autobackup_verify_gate_reconcile.stdout"
-      - "'--out-format=dataset=rpool/zfs_autobackup_offsite_test' in zfs_autobackup_verify_gate_reconcile.stdout"
-      - "'change=%i' in zfs_autobackup_verify_gate_reconcile.stdout"
-      - "'path=%n%L' in zfs_autobackup_verify_gate_reconcile.stdout"
-      - "'--log-file' not in zfs_autobackup_verify_gate_reconcile.stdout"
-    fail_msg: >-
-      offsite gate failed to reconcile an unchanged dataset with a >30d marker
-      (rc={{ zfs_autobackup_verify_gate_reconcile.rc }},
-      stdout={{ zfs_autobackup_verify_gate_reconcile.stdout }})
+    - name: _verify | Wait out the snapshot-name second before the nightly run
+      pause:
+        seconds: 2
 
-# Restore a fresh-mtime marker so the change test below exercises the written@
-# branch, not the stale-mtime fallthrough just aged above.
-- name: _verify | Re-seed the offsite marker with a current mtime
-  copy:
-    dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
-    content: "{{ zfs_autobackup_verify_gate_snap.stdout }}\n"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+    # The first run pulls full streams, the second incrementals. The replicas then
+    # carry autobackup:bak as a received property, so the second run must skip
+    # them (--exclude-received) instead of pulling the replica tree into itself --
+    # the same guard that keeps two peers from re-pulling each other's replicas.
+    # The offsite leg is paused, so the run exits 0 only if the local and onsite
+    # legs both succeed.
+    - name: _verify | Run the nightly backup with its onsite pull
+      command: /usr/local/bin/zfs_autosnapshot
+      changed_when: true
+      loop:
+        - full
+        - incremental
+      loop_control:
+        pause: 2
+      become: true
 
-- name: _verify | Change the dataset so written@ is no longer zero
-  copy:
-    dest: /mnt/zfs_autobackup_offsite_test/changed.txt
-    content: "changed\n"
-    mode: "0644"
-  become: true
+    - name: _verify | Read the newest bak snapshot of every pull source
+      shell: |
+        set -euo pipefail
+        newest() {
+          zfs list -H -t snapshot -o name -d 1 "$1" | awk -F @ '$2 ~ /^bak-/ && $2 > s {s = $2} END {print s}'
+        }
+        zfs get -H -s local -t filesystem -o name,value autobackup:bak |
+          awk -F '\t' '$2 == "true" {print $1}' |
+          while read -r ds; do echo "$ds $(newest "$ds")"; done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: zfs_autobackup_verify_pull_sources
+      become: true
 
-# written@ only reflects data once its txg commits (~5s cadence); the copy
-# above lands in an open txg, so force a sync before checking. Test-only race:
-# in prod the gate compares against a prior day's long-committed snapshot.
-- name: _verify | Commit the write to a txg so written@ reflects it
-  command: zpool sync rpool
-  changed_when: false
-  become: true
+    - name: _verify | Read the pulled replica tree
+      shell: |
+        set -euo pipefail
+        root={{ zfs_autobackup_sources[0].dest_dataset }}
+        newest() {
+          zfs list -H -t snapshot -o name -d 1 "$1" | awk -F @ '$2 ~ /^bak-/ && $2 > s {s = $2} END {print s}'
+        }
+        zfs list -r -H -t filesystem -o name,autobackup:bak,readonly,mountpoint "$root" |
+          awk -F '\t' '$2 == "true" {print $1, $3, $4}' |
+          while read -r ds readonly mountpoint; do
+            echo "${ds#"$root"/} $(newest "$ds") readonly=$readonly mountpoint=$mountpoint"
+          done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: zfs_autobackup_verify_pull_replicas
+      become: true
 
-- name: _verify | Offsite gate does NOT skip after a change
-  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
-  changed_when: false
-  failed_when: false
-  register: zfs_autobackup_verify_gate_nochange
-  become: true
+    # Every tagged source lands exactly once, holds the newest source snapshot (so
+    # the incremental run delivered), and is scrubbed read-only and unmounted.
+    - name: _verify | Onsite pull replicated every source once, scrubbed
+      assert:
+        that:
+          - "'rpool/zfs_autobackup_restore_source_test/nomount bak-' in zfs_autobackup_verify_pull_sources.stdout"
+          - zfs_autobackup_verify_pull_sources.stdout_lines | select('search', ' bak-[0-9]{14}$') | list | length == zfs_autobackup_verify_pull_sources.stdout_lines | length
+          - >-
+            zfs_autobackup_verify_pull_replicas.stdout_lines | sort
+            == zfs_autobackup_verify_pull_sources.stdout_lines | map('regex_replace', '$', ' readonly=on mountpoint=none') | sort
+        fail_msg: >-
+          onsite pull mismatch
+          (sources={{ zfs_autobackup_verify_pull_sources.stdout_lines }},
+          replicas={{ zfs_autobackup_verify_pull_replicas.stdout_lines }})
 
-- name: _verify | Changed dataset passes the gate and reaches the rsync stage
-  assert:
-    that:
-      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nochange.stdout"
-      - "'rsync' in zfs_autobackup_verify_gate_nochange.stdout"
-    fail_msg: >-
-      offsite gate failed to proceed to rsync after a change
-      (rc={{ zfs_autobackup_verify_gate_nochange.rc }},
-      stdout={{ zfs_autobackup_verify_gate_nochange.stdout }})
+    # Functional check for the quiesce path: --no-resume must snapshot but leave
+    # zfs_autosnapshot.target stopped (the rebuild runbooks depend on state
+    # writers NOT restarting after the final pre-wipe snapshot).
+    - name: _verify | Wait out the snapshot-name second (bak-%Y%m%d%H%M%S)
+      pause:
+        seconds: 2
 
-# Regression guard for the gate/mount ordering: the change-gate must never
-# short-circuit the mount check. Seed a marker that WOULD skip (a fresh snapshot
-# with nothing written since, recent mtime), then unmount the dataset. A correct
-# script validates the mount first and fails loudly; a gate-before-mount order
-# would skip an unmounted dataset and report a phantom up-to-date backup.
-- name: _verify | Snapshot the offsite-gate dataset for the unmount test
-  command: zfs snapshot rpool/zfs_autobackup_offsite_test@bak-verify-unmount
-  changed_when: true
-  become: true
+    - name: _verify | Run a local backup with --no-resume
+      command: /usr/local/bin/zfs_backup_local --no-resume
+      changed_when: false
+      become: true
 
-- name: _verify | Seed a would-skip marker (fresh snapshot, written=0, current mtime)
-  copy:
-    dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
-    content: "bak-verify-unmount\n"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+    - name: _verify | Read zfs_autosnapshot.target state after --no-resume  # noqa: command-instead-of-module
+      command: systemctl is-active zfs_autosnapshot.target
+      changed_when: false
+      failed_when: false
+      register: zfs_autobackup_verify_target_state
+      become: true
 
-- name: _verify | Unmount the offsite-gate dataset
-  command: zfs unmount rpool/zfs_autobackup_offsite_test
-  changed_when: true
-  become: true
+    - name: _verify | Target stayed stopped after --no-resume
+      assert:
+        that:
+          - zfs_autobackup_verify_target_state.stdout | trim == 'inactive'
+        fail_msg: >-
+          zfs_backup_local --no-resume left zfs_autosnapshot.target
+          {{ zfs_autobackup_verify_target_state.stdout }} (expected inactive)
 
-- name: _verify | Run the offsite script against the unmounted dataset
-  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
-  changed_when: false
-  failed_when: false
-  register: zfs_autobackup_verify_gate_unmounted
-  become: true
+    - name: _verify | Restart the target the --no-resume run left down
+      systemd:
+        name: zfs_autosnapshot.target
+        state: started
+      become: true
 
-- name: _verify | Unmounted dataset fails the mount check instead of skipping
-  assert:
-    that:
-      - zfs_autobackup_verify_gate_unmounted.rc != 0
-      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_unmounted.stdout"
-    fail_msg: >-
-      offsite gate did not fail on an unmounted dataset
-      (rc={{ zfs_autobackup_verify_gate_unmounted.rc }},
-      stdout={{ zfs_autobackup_verify_gate_unmounted.stdout }},
-      stderr={{ zfs_autobackup_verify_gate_unmounted.stderr }})
+    # Functional check for zfs_backup_offsite's change-gate. With a marker recording
+    # the latest snapshot and nothing written since, the script must skip before any
+    # rsync; once a write bumps written@, it must proceed to the transfer. bunk is
+    # unreachable from the fixture, so the no-skip path targets an unresolvable host
+    # and we assert it reached the rsync stage (the printed invocation), not its outcome.
+    - name: _verify | Latest bak snapshot on the offsite-gate dataset
+      shell: set -euo pipefail; zfs list -t snapshot -o name -s creation -r rpool/zfs_autobackup_offsite_test | awk -F@ '/@bak-/ {s=$2} END {print s}'
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: zfs_autobackup_verify_gate_snap
+      become: true
 
-# Second ordering guard, for the no-@bak- skip path: it too must not short-
-# circuit the mount check. This dataset has no snapshot; unmounted, a correct
-# script fails the mount check rather than exiting cleanly on "No @bak- snapshot".
-- name: _verify | Unmount the snapshot-free dataset
-  command: zfs unmount rpool/zfs_autobackup_offsite_nosnap_test
-  changed_when: true
-  become: true
+    - name: _verify | A bak snapshot exists to gate against
+      assert:
+        that:
+          - zfs_autobackup_verify_gate_snap.stdout | length > 0
+        fail_msg: "no @bak- snapshot on rpool/zfs_autobackup_offsite_test to seed the gate marker"
 
-- name: _verify | Run the offsite script against the unmounted snapshot-free dataset
-  command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_nosnap_test
-  changed_when: false
-  failed_when: false
-  register: zfs_autobackup_verify_gate_nosnap
-  become: true
+    - name: _verify | Seed the offsite marker (simulate a prior successful sync)
+      copy:
+        dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+        content: "{{ zfs_autobackup_verify_gate_snap.stdout }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
 
-- name: _verify | Snapshot-free unmounted dataset fails the mount check, not the no-snapshot skip
-  assert:
-    that:
-      - zfs_autobackup_verify_gate_nosnap.rc != 0
-      - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nosnap.stdout"
-    fail_msg: >-
-      offsite gate skipped a no-snapshot dataset ahead of the mount check
-      (rc={{ zfs_autobackup_verify_gate_nosnap.rc }},
-      stdout={{ zfs_autobackup_verify_gate_nosnap.stdout }},
-      stderr={{ zfs_autobackup_verify_gate_nosnap.stderr }})
+    - name: _verify | Offsite gate skips an unchanged dataset (written=0)
+      command: /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+      changed_when: false
+      register: zfs_autobackup_verify_gate_skip
+      become: true
 
-# Functional round-trip for zfs_backup_restore from the replica the onsite pull
-# produced: the selected history range, a dataset the restore must leave
-# unmounted, a replica clone restored as an independent filesystem, and the
-# refusal to restore over an existing target.
-# Unreachable targets, partial-target recovery, incomplete ranges,
-# single-snapshot restores, volume and legacy finalize branches, and remote
-# quoting are covered by unit_tests/test_zfs_backup_restore.py.
-- name: _verify | Generate a loopback ssh key for the restore test
-  command:
-    argv:
-      - ssh-keygen
-      - -t
-      - ed25519
-      - -N
-      - ''
-      - -f
-      - "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key"
-    creates: "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key"
+    - name: _verify | Skip path exited cleanly without attempting rsync
+      assert:
+        that:
+          - "'skipping offsite sync' in zfs_autobackup_verify_gate_skip.stdout"
+          - "'rsync' not in zfs_autobackup_verify_gate_skip.stdout"
+        fail_msg: >-
+          offsite gate did not skip an unchanged dataset
+          (stdout={{ zfs_autobackup_verify_gate_skip.stdout }})
 
-- name: _verify | Read the loopback pubkey
-  slurp:
-    src: "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key.pub"
-  register: zfs_autobackup_verify_restore_pubkey
+    # Monthly reconciliation: even with nothing written since the marker snapshot,
+    # a marker older than 30 days must fall through to a full rsync (re-verifying the
+    # tree against bunk). Age the marker's mtime past the threshold and confirm the
+    # gate no longer short-circuits. The dataset is still unchanged here, so reaching
+    # rsync can only be the mtime branch, not a real write.
+    - name: _verify | Age the marker past the 30-day reconciliation threshold
+      command: touch -d "40 days ago" /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+      changed_when: false
+      become: true
 
-- name: _verify | Authorize the loopback key
-  ansible.posix.authorized_key:
-    user: "{{ ansible_user_id }}"
-    key: "{{ zfs_autobackup_verify_restore_pubkey.content | b64decode }}"
+    - name: _verify | Offsite gate reconciles an unchanged dataset with a stale marker
+      command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+      changed_when: false
+      failed_when: false
+      register: zfs_autobackup_verify_gate_reconcile
+      become: true
 
-- name: _verify | Point loopback ssh at the test key
-  blockinfile:
-    path: "{{ ansible_user_dir }}/.ssh/config"
-    create: true
-    mode: "0600"
-    block: |
-      Host 127.0.0.1
-        IdentityFile ~/.ssh/zfs_restore_test_key
-        StrictHostKeyChecking accept-new
-        Compression yes
-        ControlMaster auto
-        ControlPersist 60s
-        ControlPath ~/.ssh/zfs_restore_test_control
+    - name: _verify | Stale-marker dataset reconciles to a full rsync
+      assert:
+        that:
+          - "'skipping offsite sync' not in zfs_autobackup_verify_gate_reconcile.stdout"
+          - "'rsync' in zfs_autobackup_verify_gate_reconcile.stdout"
+          - "'/etc/zfs_autobackup_ssh_config' in zfs_autobackup_verify_gate_reconcile.stdout"
+          - "'--out-format=dataset=rpool/zfs_autobackup_offsite_test' in zfs_autobackup_verify_gate_reconcile.stdout"
+          - "'change=%i' in zfs_autobackup_verify_gate_reconcile.stdout"
+          - "'path=%n%L' in zfs_autobackup_verify_gate_reconcile.stdout"
+          - "'--log-file' not in zfs_autobackup_verify_gate_reconcile.stdout"
+        fail_msg: >-
+          offsite gate failed to reconcile an unchanged dataset with a >30d marker
+          (rc={{ zfs_autobackup_verify_gate_reconcile.rc }},
+          stdout={{ zfs_autobackup_verify_gate_reconcile.stdout }})
 
-- name: _verify | Create a clone inside the pull replica
-  command:
-    argv:
-      - zfs
-      - clone
-      - -o
-      - autobackup:bak=true
-      - -o
-      - readonly=on
-      - -o
-      - canmount=noauto
-      - -o
-      - mountpoint=none
-      - >-
-        rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test/child@{{ zfs_autobackup_verify_restore_start_suffix }}
-      - rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test/clone
-  changed_when: true
-  become: true
+    # Restore a fresh-mtime marker so the change test below exercises the written@
+    # branch, not the stale-mtime fallthrough just aged above.
+    - name: _verify | Re-seed the offsite marker with a current mtime
+      copy:
+        dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+        content: "{{ zfs_autobackup_verify_gate_snap.stdout }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
 
-- name: _verify | Give the replica clone the selected snapshot history
-  command: >-
-    zfs snapshot
-    rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test/clone@{{ item }}
-  changed_when: true
-  loop:
-    - "{{ zfs_autobackup_verify_restore_start_suffix }}"
-    - "{{ zfs_autobackup_verify_restore_middle_suffix }}"
-    - "{{ zfs_autobackup_verify_restore_end_suffix }}"
-  become: true
+    - name: _verify | Change the dataset so written@ is no longer zero
+      copy:
+        dest: /mnt/zfs_autobackup_offsite_test/changed.txt
+        content: "changed\n"
+        mode: "0644"
+      become: true
 
-# Runs as the fixture user, exactly like the operator would on the replica
-# holder: the SSH hop authenticates with the user key, sudo happens inside.
-- name: _verify | Restore the explicit snapshot range over loopback ssh
-  command:
-    argv:
-      - /usr/local/bin/zfs_backup_restore
-      - "{{ ansible_user_id }}@127.0.0.1"
-      - rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test
-      - "{{ zfs_autobackup_verify_restore_start_suffix }}"
-      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
-      - rpool/zfs_autobackup_restore_target_test
-      - /mnt/zfs_autobackup_restore_target_test
-  args:
-    stdin: "y\n"
-  changed_when: true
-  register: zfs_autobackup_verify_restore_run
+    # written@ only reflects data once its txg commits (~5s cadence); the copy
+    # above lands in an open txg, so force a sync before checking. Test-only race:
+    # in prod the gate compares against a prior day's long-committed snapshot.
+    - name: _verify | Commit the write to a txg so written@ reflects it
+      command: zpool sync rpool
+      changed_when: false
+      become: true
 
-- name: _verify | Read restored state and snapshot history
-  shell: |
-    set -euo pipefail
-    cat /mnt/zfs_autobackup_restore_target_test/restore_marker.txt
-    zfs get -H -o value readonly rpool/zfs_autobackup_restore_target_test
-    zfs get -H -o value mounted rpool/zfs_autobackup_restore_target_test
-    zfs get -H -o value mountpoint rpool/zfs_autobackup_restore_target_test
-    zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_target_test
-    zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_target_test
-    zfs get -H -o value readonly rpool/zfs_autobackup_restore_target_test/child
-    zfs get -H -o value mounted rpool/zfs_autobackup_restore_target_test/child
-    zfs get -H -o value mountpoint rpool/zfs_autobackup_restore_target_test/child
-    zfs get -H -p -o value recordsize rpool/zfs_autobackup_restore_target_test/child
-    zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_target_test/child
-    zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_target_test/child
-    zfs get -H -o value canmount rpool/zfs_autobackup_restore_target_test/nomount
-    zfs get -H -o value mounted rpool/zfs_autobackup_restore_target_test/nomount
-    zfs get -H -o value origin rpool/zfs_autobackup_restore_target_test/clone
-    test -s /mnt/zfs_autobackup_restore_target_test/clone/restore_payload.bin && echo clone-data
-    zfs list -r -t snapshot -H -o name rpool/zfs_autobackup_restore_target_test
-  args:
-    executable: /bin/bash
-  changed_when: false
-  register: zfs_autobackup_verify_restore_state
-  become: true
+    - name: _verify | Offsite gate does NOT skip after a change
+      command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+      changed_when: false
+      failed_when: false
+      register: zfs_autobackup_verify_gate_nochange
+      become: true
 
-- name: _verify | Restore kept exactly the selected range
-  assert:
-    that:
-      - zfs_autobackup_verify_restore_state.stdout_lines[0:12] == [
-          'round-trip', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test',
-          'true', 'local', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test/child',
-          '65536', 'true', 'local']
-      # A canmount=off dataset rides the stream but must never be mounted:
-      # zfs mount would fail on it and leave the tree half-finalized.
-      - zfs_autobackup_verify_restore_state.stdout_lines[12:14] == ['off', 'no']
-      - zfs_autobackup_verify_restore_state.stdout_lines[14] == '-'
-      - zfs_autobackup_verify_restore_state.stdout_lines[15] == 'clone-data'
-      - zfs_autobackup_verify_restore_state.stdout_lines[16:] | length == 12
-      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_start_suffix ~ '$') | list | length == 4
-      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_middle_suffix ~ '$') | list | length == 4
-      - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 4
-      - zfs_autobackup_verify_restore_before_suffix not in zfs_autobackup_verify_restore_state.stdout
-    fail_msg: >-
-      restore round-trip state mismatch
-      (state={{ zfs_autobackup_verify_restore_state.stdout_lines }},
-      restore stdout={{ zfs_autobackup_verify_restore_run.stdout }})
+    - name: _verify | Changed dataset passes the gate and reaches the rsync stage
+      assert:
+        that:
+          - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nochange.stdout"
+          - "'rsync' in zfs_autobackup_verify_gate_nochange.stdout"
+        fail_msg: >-
+          offsite gate failed to proceed to rsync after a change
+          (rc={{ zfs_autobackup_verify_gate_nochange.rc }},
+          stdout={{ zfs_autobackup_verify_gate_nochange.stdout }})
 
-- name: _verify | Refuse to restore over the completed target
-  command:
-    argv:
-      - /usr/local/bin/zfs_backup_restore
-      - "{{ ansible_user_id }}@127.0.0.1"
-      - rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test
-      - "{{ zfs_autobackup_verify_restore_start_suffix }}"
-      - "{{ zfs_autobackup_verify_restore_end_suffix }}"
-      - rpool/zfs_autobackup_restore_target_test
-      - /mnt/zfs_autobackup_restore_target_test
-  args:
-    stdin: "y\n"
-  changed_when: false
-  failed_when: false
-  register: zfs_autobackup_verify_restore_refusal
+    # Regression guard for the gate/mount ordering: the change-gate must never
+    # short-circuit the mount check. Seed a marker that WOULD skip (a fresh snapshot
+    # with nothing written since, recent mtime), then unmount the dataset. A correct
+    # script validates the mount first and fails loudly; a gate-before-mount order
+    # would skip an unmounted dataset and report a phantom up-to-date backup.
+    - name: _verify | Snapshot the offsite-gate dataset for the unmount test
+      command: zfs snapshot rpool/zfs_autobackup_offsite_test@bak-verify-unmount
+      changed_when: true
+      become: true
 
-- name: _verify | Existing target refusal is non-destructive
-  assert:
-    that:
-      - zfs_autobackup_verify_restore_refusal.rc != 0
-      - "'already exists' in zfs_autobackup_verify_restore_refusal.stderr"
+    - name: _verify | Seed a would-skip marker (fresh snapshot, written=0, current mtime)
+      copy:
+        dest: /var/lib/zfs_backup_offsite/rpool_zfs_autobackup_offsite_test
+        content: "bak-verify-unmount\n"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
 
-# Functional check for the freshness dead-man switch: a fresh fleet passes, a
-# never-snapshotted dataset fails, and a deliberately retired one is skipped.
-- name: _verify | Freshness check passes while everything is fresh
-  command: /usr/local/bin/zfs_backup_freshness
-  changed_when: false
-  become: true
+    - name: _verify | Unmount the offsite-gate dataset
+      command: zfs unmount rpool/zfs_autobackup_offsite_test
+      changed_when: true
+      become: true
 
-- name: _verify | Create a tagged dataset with no snapshot (silent-exclusion shape)
-  community.general.zfs:
-    name: rpool/zfs_autobackup_freshness_test
-    state: present
-    extra_zfs_properties:
-      autobackup:bak: "true"
-      mountpoint: none
-  become: true
+    - name: _verify | Run the offsite script against the unmounted dataset
+      command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
+      changed_when: false
+      failed_when: false
+      register: zfs_autobackup_verify_gate_unmounted
+      become: true
 
-- name: _verify | Freshness check flags the never-snapshotted dataset
-  command: /usr/local/bin/zfs_backup_freshness
-  changed_when: false
-  failed_when: false
-  register: zfs_autobackup_verify_freshness_stale
-  become: true
+    - name: _verify | Unmounted dataset fails the mount check instead of skipping
+      assert:
+        that:
+          - zfs_autobackup_verify_gate_unmounted.rc != 0
+          - "'skipping offsite sync' not in zfs_autobackup_verify_gate_unmounted.stdout"
+        fail_msg: >-
+          offsite gate did not fail on an unmounted dataset
+          (rc={{ zfs_autobackup_verify_gate_unmounted.rc }},
+          stdout={{ zfs_autobackup_verify_gate_unmounted.stdout }},
+          stderr={{ zfs_autobackup_verify_gate_unmounted.stderr }})
 
-- name: _verify | Stale dataset produced a nonzero exit and a STALE line
-  assert:
-    that:
-      - zfs_autobackup_verify_freshness_stale.rc != 0
-      - "'STALE: rpool/zfs_autobackup_freshness_test' in zfs_autobackup_verify_freshness_stale.stderr"
-    fail_msg: >-
-      freshness check did not flag the never-snapshotted dataset
-      (rc={{ zfs_autobackup_verify_freshness_stale.rc }},
-      stderr={{ zfs_autobackup_verify_freshness_stale.stderr }})
+    # Second ordering guard, for the no-@bak- skip path: it too must not short-
+    # circuit the mount check. This dataset has no snapshot; unmounted, a correct
+    # script fails the mount check rather than exiting cleanly on "No @bak- snapshot".
+    - name: _verify | Unmount the snapshot-free dataset
+      command: zfs unmount rpool/zfs_autobackup_offsite_nosnap_test
+      changed_when: true
+      become: true
 
-- name: _verify | Retire the snapshot-free dataset from freshness monitoring
-  command:
-    argv:
-      - zfs
-      - set
-      - autobackup:bak=false
-      - rpool/zfs_autobackup_freshness_test
-  changed_when: true
-  become: true
+    - name: _verify | Run the offsite script against the unmounted snapshot-free dataset
+      command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_nosnap_test
+      changed_when: false
+      failed_when: false
+      register: zfs_autobackup_verify_gate_nosnap
+      become: true
 
-- name: _verify | Freshness check skips a deliberately retired dataset
-  command: /usr/local/bin/zfs_backup_freshness
-  changed_when: false
-  become: true
+    - name: _verify | Snapshot-free unmounted dataset fails the mount check, not the no-snapshot skip
+      assert:
+        that:
+          - zfs_autobackup_verify_gate_nosnap.rc != 0
+          - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nosnap.stdout"
+        fail_msg: >-
+          offsite gate skipped a no-snapshot dataset ahead of the mount check
+          (rc={{ zfs_autobackup_verify_gate_nosnap.rc }},
+          stdout={{ zfs_autobackup_verify_gate_nosnap.stdout }},
+          stderr={{ zfs_autobackup_verify_gate_nosnap.stderr }})
+
+    # Functional round-trip for zfs_backup_restore from the replica the onsite pull
+    # produced: the selected history range, a dataset the restore must leave
+    # unmounted, a replica clone restored as an independent filesystem, and the
+    # refusal to restore over an existing target.
+    # Unreachable targets, partial-target recovery, incomplete ranges,
+    # single-snapshot restores, volume and legacy finalize branches, and remote
+    # quoting are covered by unit_tests/test_zfs_backup_restore.py.
+    - name: _verify | Generate a loopback ssh key for the restore test
+      command:
+        argv:
+          - ssh-keygen
+          - -t
+          - ed25519
+          - -N
+          - ''
+          - -f
+          - "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key"
+        creates: "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key"
+
+    - name: _verify | Read the loopback pubkey
+      slurp:
+        src: "{{ ansible_user_dir }}/.ssh/zfs_restore_test_key.pub"
+      register: zfs_autobackup_verify_restore_pubkey
+
+    - name: _verify | Authorize the loopback key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user_id }}"
+        key: "{{ zfs_autobackup_verify_restore_pubkey.content | b64decode }}"
+
+    - name: _verify | Point loopback ssh at the test key
+      blockinfile:
+        path: "{{ ansible_user_dir }}/.ssh/config"
+        create: true
+        mode: "0600"
+        block: |
+          Host 127.0.0.1
+            IdentityFile ~/.ssh/zfs_restore_test_key
+            StrictHostKeyChecking accept-new
+            Compression yes
+            ControlMaster auto
+            ControlPersist 60s
+            ControlPath ~/.ssh/zfs_restore_test_control
+
+    - name: _verify | Create a clone inside the pull replica
+      command:
+        argv:
+          - zfs
+          - clone
+          - -o
+          - autobackup:bak=true
+          - -o
+          - readonly=on
+          - -o
+          - canmount=noauto
+          - -o
+          - mountpoint=none
+          - >-
+            rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test/child@{{ zfs_autobackup_verify_restore_start_suffix }}
+          - rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test/clone
+      changed_when: true
+      become: true
+
+    - name: _verify | Give the replica clone the selected snapshot history
+      command: >-
+        zfs snapshot
+        rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test/clone@{{ item }}
+      changed_when: true
+      loop:
+        - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+        - "{{ zfs_autobackup_verify_restore_middle_suffix }}"
+        - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+      become: true
+
+    # Runs as the fixture user, exactly like the operator would on the replica
+    # holder: the SSH hop authenticates with the user key, sudo happens inside.
+    - name: _verify | Restore the explicit snapshot range over loopback ssh
+      command:
+        argv:
+          - /usr/local/bin/zfs_backup_restore
+          - "{{ ansible_user_id }}@127.0.0.1"
+          - rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test
+          - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+          - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+          - rpool/zfs_autobackup_restore_target_test
+          - /mnt/zfs_autobackup_restore_target_test
+      args:
+        stdin: "y\n"
+      changed_when: true
+      register: zfs_autobackup_verify_restore_run
+
+    - name: _verify | Read restored state and snapshot history
+      shell: |
+        set -euo pipefail
+        cat /mnt/zfs_autobackup_restore_target_test/restore_marker.txt
+        zfs get -H -o value readonly rpool/zfs_autobackup_restore_target_test
+        zfs get -H -o value mounted rpool/zfs_autobackup_restore_target_test
+        zfs get -H -o value mountpoint rpool/zfs_autobackup_restore_target_test
+        zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_target_test
+        zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_target_test
+        zfs get -H -o value readonly rpool/zfs_autobackup_restore_target_test/child
+        zfs get -H -o value mounted rpool/zfs_autobackup_restore_target_test/child
+        zfs get -H -o value mountpoint rpool/zfs_autobackup_restore_target_test/child
+        zfs get -H -p -o value recordsize rpool/zfs_autobackup_restore_target_test/child
+        zfs get -H -o value autobackup:bak rpool/zfs_autobackup_restore_target_test/child
+        zfs get -H -o source autobackup:bak rpool/zfs_autobackup_restore_target_test/child
+        zfs get -H -o value canmount rpool/zfs_autobackup_restore_target_test/nomount
+        zfs get -H -o value mounted rpool/zfs_autobackup_restore_target_test/nomount
+        zfs get -H -o value origin rpool/zfs_autobackup_restore_target_test/clone
+        test -s /mnt/zfs_autobackup_restore_target_test/clone/restore_payload.bin && echo clone-data
+        zfs list -r -t snapshot -H -o name rpool/zfs_autobackup_restore_target_test
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: zfs_autobackup_verify_restore_state
+      become: true
+
+    - name: _verify | Restore kept exactly the selected range
+      assert:
+        that:
+          - zfs_autobackup_verify_restore_state.stdout_lines[0:12] == [
+              'round-trip', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test',
+              'true', 'local', 'off', 'yes', '/mnt/zfs_autobackup_restore_target_test/child',
+              '65536', 'true', 'local']
+          # A canmount=off dataset rides the stream but must never be mounted:
+          # zfs mount would fail on it and leave the tree half-finalized.
+          - zfs_autobackup_verify_restore_state.stdout_lines[12:14] == ['off', 'no']
+          - zfs_autobackup_verify_restore_state.stdout_lines[14] == '-'
+          - zfs_autobackup_verify_restore_state.stdout_lines[15] == 'clone-data'
+          - zfs_autobackup_verify_restore_state.stdout_lines[16:] | length == 12
+          - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_start_suffix ~ '$') | list | length == 4
+          - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_middle_suffix ~ '$') | list | length == 4
+          - zfs_autobackup_verify_restore_state.stdout_lines | select('search', '@' ~ zfs_autobackup_verify_restore_end_suffix ~ '$') | list | length == 4
+          - zfs_autobackup_verify_restore_before_suffix not in zfs_autobackup_verify_restore_state.stdout
+        fail_msg: >-
+          restore round-trip state mismatch
+          (state={{ zfs_autobackup_verify_restore_state.stdout_lines }},
+          restore stdout={{ zfs_autobackup_verify_restore_run.stdout }})
+
+    - name: _verify | Refuse to restore over the completed target
+      command:
+        argv:
+          - /usr/local/bin/zfs_backup_restore
+          - "{{ ansible_user_id }}@127.0.0.1"
+          - rpool/zfs_autobackup_receive_test/rpool/zfs_autobackup_restore_source_test
+          - "{{ zfs_autobackup_verify_restore_start_suffix }}"
+          - "{{ zfs_autobackup_verify_restore_end_suffix }}"
+          - rpool/zfs_autobackup_restore_target_test
+          - /mnt/zfs_autobackup_restore_target_test
+      args:
+        stdin: "y\n"
+      changed_when: false
+      failed_when: false
+      register: zfs_autobackup_verify_restore_refusal
+
+    - name: _verify | Existing target refusal is non-destructive
+      assert:
+        that:
+          - zfs_autobackup_verify_restore_refusal.rc != 0
+          - "'already exists' in zfs_autobackup_verify_restore_refusal.stderr"
+
+    # Functional check for the freshness dead-man switch: a fresh fleet passes, a
+    # never-snapshotted dataset fails, and a deliberately retired one is skipped.
+    - name: _verify | Freshness check passes while everything is fresh
+      command: /usr/local/bin/zfs_backup_freshness
+      changed_when: false
+      become: true
+
+    - name: _verify | Create a tagged dataset with no snapshot (silent-exclusion shape)
+      community.general.zfs:
+        name: rpool/zfs_autobackup_freshness_test
+        state: present
+        extra_zfs_properties:
+          autobackup:bak: "true"
+          mountpoint: none
+      become: true
+
+    - name: _verify | Freshness check flags the never-snapshotted dataset
+      command: /usr/local/bin/zfs_backup_freshness
+      changed_when: false
+      failed_when: false
+      register: zfs_autobackup_verify_freshness_stale
+      become: true
+
+    - name: _verify | Stale dataset produced a nonzero exit and a STALE line
+      assert:
+        that:
+          - zfs_autobackup_verify_freshness_stale.rc != 0
+          - "'STALE: rpool/zfs_autobackup_freshness_test' in zfs_autobackup_verify_freshness_stale.stderr"
+        fail_msg: >-
+          freshness check did not flag the never-snapshotted dataset
+          (rc={{ zfs_autobackup_verify_freshness_stale.rc }},
+          stderr={{ zfs_autobackup_verify_freshness_stale.stderr }})
+
+    - name: _verify | Retire the snapshot-free dataset from freshness monitoring
+      command:
+        argv:
+          - zfs
+          - set
+          - autobackup:bak=false
+          - rpool/zfs_autobackup_freshness_test
+      changed_when: true
+      become: true
+
+    - name: _verify | Freshness check skips a deliberately retired dataset
+      command: /usr/local/bin/zfs_backup_freshness
+      changed_when: false
+      become: true

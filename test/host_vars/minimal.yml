@@ -34,3 +34,8 @@ netdata_collectors:
 netdata_expected_charts:
   system_cpu_chart: system.cpu
   missing_fixture_chart: fixture.does_not_exist
+
+# No pool means nothing to pull or receive; the placeholder key only satisfies
+# zfs_autobackup's input assert.
+zfs_autobackup_sources: []
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKEQFR3KzOd/MuPj+EoQkXAuuzTdRkpRp4mNBzwlofTP root@minimal

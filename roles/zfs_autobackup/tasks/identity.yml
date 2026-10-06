@@ -1,7 +1,9 @@
 # Root's outbound SSH identity authenticates the automated onsite pulls and
 # offsite rsync, which both read /etc/zfs_autobackup_ssh_config. The key lives
-# on rpool/services so it survives a rebuild. /root/.ssh keeps the backup
-# transports' known_hosts and ControlMaster sockets.
+# under /mnt/services: on a ZFS-root host that is rpool/services, so the key
+# survives a rebuild; elsewhere it is the services role's plain directory and
+# the key is regenerated with the host. /root/.ssh keeps the backup transports'
+# known_hosts and ControlMaster sockets.
 - name: identity | Create the root SSH directory
   file:
     dest: /root/.ssh
@@ -14,6 +16,7 @@
     - zfs_autobackup
 
 - name: identity | Check the services dataset mount
+  when: zfs_root
   command: /usr/local/bin/zfs_check_mount rpool/services /mnt/services
   register: zfs_autobackup_identity_services_mount
   changed_when: false
@@ -24,6 +27,7 @@
     - zfs_autobackup
 
 - name: identity | Require the persistent services dataset
+  when: zfs_root
   assert:
     that:
       - zfs_autobackup_identity_services_mount.rc == 0
