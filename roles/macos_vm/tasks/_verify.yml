@@ -1,63 +1,15 @@
-# Start the rendered unit's QEMU command, paused, under this release's QEMU.
-# QEMU validates every option, device, and drive before the guest runs, so
-# this proves the release accepts the unit, including its pinned machine
-# model. Install mode attaches every drive, so it also covers the
-# post-install command line. The unit's -enable-kvm sets the machine's accel
-# property, so the appended accel=kvm:tcg (not -accel, which QEMU rejects
-# alongside it) falls back to TCG where the fixture has no /dev/kvm. A small
-# guest RAM fits the fixture: -S still allocates it up front.
-- name: _verify | Create a QEMU start fixture
-  tempfile:
-    state: directory
-    # Not tmpfs: the unit's cache=none disk needs O_DIRECT.
-    path: /var/tmp
-    suffix: macos_vm_start
-  register: macos_vm_start_fixture
-  become: true
-
-- name: _verify | Start the rendered QEMU command
-  vars:
-    macos_vm_name: verify
-    macos_vm_workdir: "{{ macos_vm_start_fixture.path }}"
-    macos_vm_disk_source: "{{ macos_vm_start_fixture.path }}/disk.raw"
-    macos_vm_install_mode: true
-    macos_vm_cpu_pinset: ""
-    macos_vm_memory_mib: 512
+# Start the installed unit's QEMU command, paused, under this release's QEMU.
+# QEMU opens every drive and validates every option and device before the
+# guest runs, so this proves the release accepts the converged unit, including
+# its pinned machine model, against the seeded OpenCore image, OVMF vars,
+# recovery image, and zvol. Install mode attaches every drive, so it also
+# covers the post-install command line. The unit's -enable-kvm sets the
+# machine's accel property, so the appended accel=kvm:tcg (not -accel, which
+# QEMU rejects alongside it) falls back to TCG where the fixture has no
+# /dev/kvm. QEMU keeps the last -m, so the appended small guest RAM fits the
+# fixture: -S still allocates it up front.
+- name: _verify | Start the installed QEMU command
   block:
-    - name: _verify | Create the QEMU start disks
-      command:
-        argv:
-          - qemu-img
-          - create
-          - -f
-          - "{{ item.format }}"
-          - "{{ item.path }}"
-          - 64M
-      loop:
-        - format: qcow2
-          path: "{{ macos_vm_workdir }}/OpenCore.qcow2"
-        - format: raw
-          path: "{{ macos_vm_disk_source }}"
-        - format: raw
-          path: "{{ macos_vm_workdir }}/BaseSystem.img"
-      changed_when: true
-      become: true
-
-    - name: _verify | Seed the QEMU start firmware vars
-      copy:
-        src: /usr/share/OVMF/OVMF_VARS_4M.fd
-        dest: "{{ macos_vm_workdir }}/OVMF_VARS.fd"
-        remote_src: true
-        mode: "0600"
-      become: true
-
-    - name: _verify | Render the QEMU start unit
-      template:
-        src: macos_vm.service.j2
-        dest: "{{ macos_vm_workdir }}/macos_vm.service"
-        mode: "0644"
-      become: true
-
     # -S holds the guest before its first instruction; QMP then quits.
     - name: _verify | Start QEMU paused and quit
       command:
@@ -81,7 +33,7 @@
             )
             os.makedirs("/run/macos-vm", exist_ok=True)
             proc = subprocess.run(
-                [*argv, "-machine", "accel=kvm:tcg", "-S", "-qmp", "stdio"],
+                [*argv, "-m", "512", "-machine", "accel=kvm:tcg", "-S", "-qmp", "stdio"],
                 input='{"execute": "qmp_capabilities"}\n{"execute": "quit"}\n',
                 capture_output=True,
                 text=True,
@@ -90,18 +42,15 @@
             )
             sys.stderr.write(proc.stderr)
             sys.exit(proc.returncode)
-          - "{{ macos_vm_workdir }}/macos_vm.service"
+          - /etc/systemd/system/macos-vm-{{ macos_vm_name }}.service
       register: macos_vm_start
       changed_when: false
       failed_when: macos_vm_start.rc != 0 or 'deprecated' in (macos_vm_start.stderr | lower)
       become: true
 
   always:
-    - name: _verify | Remove the QEMU start fixture
+    - name: _verify | Remove the QEMU monitor socket
       file:
-        path: "{{ item }}"
+        path: /run/macos-vm/{{ macos_vm_name }}.monitor
         state: absent
-      loop:
-        - "{{ macos_vm_start_fixture.path }}"
-        - /run/macos-vm/verify.monitor
       become: true
