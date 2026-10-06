@@ -1,7 +1,6 @@
 # This role owns the boot chain on the ESP: firmware -> rEFInd -> ZFSBootMenu.
 # The ZFSBootMenu tasks come first because the rEFInd menuentry reads the ZBM
-# cmdline; they also carry the zfsbootmenu tag so `--tags zfsbootmenu` still
-# refreshes only the ZBM image.
+# cmdline.
 #
 # The boot role mounts the vfat ESP with umask=0077. FAT has no per-path Unix
 # permissions, so every on-ESP task uses the effective mode exposed by that
@@ -18,7 +17,6 @@
   register: refind_zbm_directory
   tags:
     - refind
-    - zfsbootmenu
 
 - name: Create ZBM artifact cache directory
   file:
@@ -31,7 +29,6 @@
   register: refind_zbm_cache_directory
   tags:
     - refind
-    - zfsbootmenu
 
 - name: Download zfsbootmenu bundle
   when:
@@ -51,7 +48,6 @@
   until: refind_zbm_bundle is succeeded
   tags:
     - refind
-    - zfsbootmenu
 
 - name: Extract zfsbootmenu bundle
   when:
@@ -70,7 +66,6 @@
   register: refind_zbm_extract
   tags:
     - refind
-    - zfsbootmenu
 
 # rEFInd LoadOptions replace the cmdline embedded in the unified EFI image, so
 # keep the bundle cmdline beside it for rEFInd to pass explicitly on every arch.
@@ -99,7 +94,6 @@
   register: refind_zbm_artifact_install
   tags:
     - refind
-    - zfsbootmenu
 
 # Seed the backup loader the refind fallback menuentry (VMLINUZ-BACKUP.EFI)
 # boots. Copy-if-absent (force: false) so a later primary update never clobbers
@@ -123,7 +117,6 @@
   become: true
   tags:
     - refind
-    - zfsbootmenu
 
 # Every ZBM version gets its own cache directory, so superseded ones pile up.
 # Only the current one is read again; the ESP holds independent copies of the
@@ -136,7 +129,6 @@
   register: refind_zbm_stale_caches
   tags:
     - refind
-    - zfsbootmenu
 
 - name: Remove superseded ZBM cache directories
   file:
@@ -148,7 +140,6 @@
   become: true
   tags:
     - refind
-    - zfsbootmenu
 
 - name: Ask to reboot for the new ZFSBootMenu image
   when:
@@ -162,7 +153,6 @@
   become: true
   tags:
     - refind
-    - zfsbootmenu
 
 # Left at its default (true), the package postinst runs refind-install on every
 # upgrade: it rewrites the ESP, may sign with local keys and may add an NVRAM
