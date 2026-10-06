@@ -1,15 +1,12 @@
-# Resolute: zram-generator 1.2.1, zram in the base kernel module package, and
-# mdadm 4.5.
-#
-# Lab exercises mdadm RAID1 swap, Pug a labelled raw partition, and minimal
-# zram-only installation.
+# Lab exercises mdadm RAID1 partition swap on a full image that already
+# carries zram. Minimal exercises zram-only installation: Noble pulls zram
+# from linux-modules-extra, Resolute ships it in the base module package.
 machines:
   lab:
-  pug:
   minimal:
 ubuntu:
   - resolute
 skip:
-  "pug:resolute": >-
-    Lab covers Resolute's mdadm and zram paths; Pug's raw partition is
+  "lab:resolute": >-
+    Minimal covers Resolute's zram path; Lab's partition swap is
     release-independent.

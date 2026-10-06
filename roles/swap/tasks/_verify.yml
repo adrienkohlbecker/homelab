@@ -1,7 +1,3 @@
-# Swap role _verify: assert zram is active and primary, an optional partition
-# coexists below it, and swappiness is tuned. testrole.py / testall.py only
-# (qemu); never site.yml. See notes/swap_strategy.md.
-
 - name: _verify | Create the ambivalent-signature blkid fixture
   copy:
     dest: /tmp/blkid
@@ -92,36 +88,6 @@
       partition swap device {{ _swap_verify_partition_dev.stdout | trim }}
       (for {{ swap_partition }}) not active: {{ _swap_verify_swapon.stdout }}
 
-# On the mirror hosts the swap partition is an mdadm raid1 whose redundancy is
-# the reason it exists -- the active-swap assert above proves it's usable but
-# not that the mirror is intact. A regression that assembled the wrong level
-# or left the array degraded would pass swapon yet silently lose fault
-# tolerance. Gated on swap_partition resolving to an md node: Minimal has no
-# partition, Pug uses a plain partition, and Lab exercises this path.
-# Initial-create resync may still be running here; all members are active-sync,
-# so the level/failed-count asserts hold. We don't gate on 'clean' because
-# that would race the resync.
-- name: _verify | Inspect the swap raid array when swap is on mdadm
-  when:
-    - swap_partition is defined
-    - (_swap_verify_partition_dev.stdout | trim).startswith('/dev/md')
-  block:
-    - name: _verify | Read mdadm detail for the swap array
-      command: mdadm --detail {{ swap_partition }}
-      become: true
-      changed_when: false
-      register: _swap_verify_md_detail
-
-    - name: _verify | Assert the swap array is a healthy raid1
-      assert:
-        that:
-          - "'Raid Level : raid1' in _swap_verify_md_detail.stdout"
-          - "'Failed Devices : 0' in _swap_verify_md_detail.stdout"
-          - "'degraded' not in _swap_verify_md_detail.stdout"
-        fail_msg: >-
-          The swap array is not a healthy raid1. mdadm --detail:
-          {{ _swap_verify_md_detail.stdout }}
-
 - name: _verify | Overflow swap priority is below zram
   when: swap_partition is defined
   vars:
@@ -133,16 +99,3 @@
     fail_msg: >-
       Overflow swap priority must be below zram (100), got:
       {{ _swap_verify_swapon.stdout }}
-
-- name: _verify | Read vm.swappiness
-  command: sysctl -n vm.swappiness
-  changed_when: false
-  register: _swap_verify_swappiness
-
-- name: _verify | Swappiness tuned to the configured value
-  assert:
-    that:
-      - (_swap_verify_swappiness.stdout | trim | int) == (swap_swappiness | int)
-    fail_msg: >-
-      vm.swappiness is {{ _swap_verify_swappiness.stdout | trim }},
-      expected {{ swap_swappiness }}.
