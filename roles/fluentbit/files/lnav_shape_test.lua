@@ -164,7 +164,7 @@ do
 end
 
 do
-    local rec = shape("host_packages", {
+    local rec = shape("fixture", {
         host = "lab",
         log = "  updated\n\npackage \t\n",
     }, nil)
