@@ -85,21 +85,21 @@
     # Admin services accept the wireguard subnet on wg0.
     - name: Mosh from a wireguard source
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "60000" ]
-      hit: [ mosh_accept ]
+      hit: [ input_admin ]
     - name: Tailscale direct endpoint from a wireguard source
       enabled: "{{ tailscale_wan_direct | default(false) }}"
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ tailscale_port | default(0) }}" ]
-      hit: [ tailscale_lan_accept ]
+      hit: [ input_admin ]
       miss: [ input_silenced ]
     - name: Samba from a wireguard source
       enabled: "{{ _firewall_verify_samba_enabled }}"
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "445" ]
       expect: pass
-      hit: [ input_admin_samba ]
+      hit: [ input_admin ]
     - name: NUT from a wireguard source
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "{{ service_ports.nut }}" ]
       expect: pass
-      hit: [ input_admin_nut ]
+      hit: [ input_admin ]
     # mDNS additionally requires WAN ingress and a home-LAN source.
     - name: mDNS from a wireguard source
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_wg }}", 192.0.2.1, "5353" ]
@@ -110,7 +110,7 @@
     - name: Mosh from a home source on wg0
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "60000" ]
       hit: [ input_catchall ]
-      miss: [ mosh_accept ]
+      miss: [ input_admin ]
     - name: mDNS from a home source on wg0
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "5353" ]
       hit: [ input_catchall ]
@@ -120,12 +120,12 @@
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "445" ]
       expect: fail
       hit: [ input_catchall_reset ]
-      miss: [ input_admin_samba ]
+      miss: [ input_admin ]
     - name: NUT from a home source on wg0
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_home }}", 192.0.2.1, "{{ service_ports.nut }}" ]
       expect: fail
       hit: [ input_catchall_reset ]
-      miss: [ input_admin_nut ]
+      miss: [ input_admin ]
 
     # A source outside every trusted range misses each scoped accept.
     - name: WireGuard from a non-scope source on wg0
@@ -135,18 +135,18 @@
     - name: Mosh from a non-scope source
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "60000" ]
       hit: [ input_catchall ]
-      miss: [ mosh_accept ]
+      miss: [ input_admin ]
     - name: Samba from a non-scope source
       enabled: "{{ _firewall_verify_samba_enabled }}"
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "445" ]
       expect: fail
       hit: [ input_catchall_reset ]
-      miss: [ input_admin_samba ]
+      miss: [ input_admin ]
     - name: NUT from a non-scope source
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ service_ports.nut }}" ]
       expect: fail
       hit: [ input_catchall_reset ]
-      miss: [ input_admin_nut, input_nut_podman ]
+      miss: [ input_admin, input_nut_podman ]
     - name: Aardvark DNS TCP from a non-scope source
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "5333" ]
       expect: fail
@@ -173,7 +173,7 @@
       argv: [ nc, -z, -w, "3", -s, "{{ _firewall_probe_podman_pool }}", 192.0.2.1, "{{ service_ports.nut }}" ]
       expect: pass
       hit: [ input_nut_podman ]
-      miss: [ input_admin_nut ]
+      miss: [ input_admin ]
 
     # Crafted mid-stream packets. Loose conntrack classifies them as NEW.
     - name: INPUT TCP ACK without SYN
@@ -230,7 +230,7 @@
       enabled: "{{ tailscale_wan_direct | default(false) }}"
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "{{ tailscale_port | default(0) }}" ]
       hit: [ input_silenced ]
-      miss: [ tailscale_lan_accept ]
+      miss: [ input_admin ]
     - name: Unscoped UDP port
       argv: [ nc, -u, -w, "1", -s, "{{ _firewall_probe_nonscope }}", 192.0.2.1, "18181" ]
       hit: [ input_catchall ]
