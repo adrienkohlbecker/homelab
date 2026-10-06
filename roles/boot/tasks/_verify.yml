@@ -88,31 +88,19 @@
             ansible_architecture != 'x86_64'
             or _boot_verify_dracut_files.stdout is search('(?m)/vmd\.ko(\.(zst|xz|gz))?$')
 
-# The 'default' fragment carries the base console args. On test VMs (qemu) this
-# includes earlycon + serial for harness output capture; on prod (no legacy UART)
-# it's just console=tty0.
-- name: _verify | Read the assembled ZBM commandline
-  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
-  register: _boot_verify_cmdline
-  changed_when: false
-  failed_when: >-
-    _boot_verify_cmdline.rc != 0
-    or 'console=tty0' not in _boot_verify_cmdline.stdout
-    or (_console_serial | trim | length > 0
-        and _console_serial | trim not in _boot_verify_cmdline.stdout)
-  become: true
-
-# /proc/cmdline exposes the args the running kernel actually booted with.
-# Post-reboot this proves the ZBM property propagated through the boot chain,
-# not just that the ZFS property was set.
-- name: _verify | Read the running kernel's cmdline
+# The 'default' fragment carries the base console args: console=tty0 plus, on
+# test VMs, the earlycon + serial args for harness output capture. Post-reboot,
+# /proc/cmdline proves the ZBM property propagated through the boot chain into
+# the running kernel, not just that the ZFS property was set.
+- name: _verify | Running kernel booted with the base console args
   slurp:
     src: /proc/cmdline
   register: _boot_verify_proc_cmdline
   failed_when: >-
     _boot_verify_proc_cmdline is failed
-    or 'console=tty0' not in (_boot_verify_proc_cmdline.content | b64decode)
-    or 'earlycon=' not in (_boot_verify_proc_cmdline.content | b64decode)
+    or (['console=tty0'] + _console_serial.split())
+       | difference((_boot_verify_proc_cmdline.content | b64decode).split())
+       | length > 0
   become: true
 
 # --- EFI NVRAM boot entries ---
