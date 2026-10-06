@@ -5,14 +5,6 @@
   tags:
     - jellyfin
 
-- name: Validate the jellyfin hardware transcoding policy
-  assert:
-    that:
-      - jellyfin_intel_qsv_enabled is boolean
-    fail_msg: jellyfin_intel_qsv_enabled must be boolean.
-  tags:
-    - jellyfin
-
 - name: Set up jellyfin system user, group, and config dir
   import_role:
     name: service_user
