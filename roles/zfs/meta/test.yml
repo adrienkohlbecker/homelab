@@ -1,7 +1,4 @@
 # Lab exercises the multi-pool and tank special-vdev contracts, a superset of
-# Pug's single-rpool layout. Minimal covers non-root ZFS.
-machines:
-  lab:
-  minimal:
+# Pug's single-rpool layout.
 ubuntu:
   - resolute
