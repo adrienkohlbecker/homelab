@@ -60,8 +60,9 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/scratch/transmission:/downloads/incomplete \
     --network media \
     --publish 127.0.0.1:{{ service_ports.transmission }}:9091/tcp \
-    --publish 0.0.0.0:{{ service_ports.transmission_bt }}:51413/tcp \
-    --publish 0.0.0.0:{{ service_ports.transmission_bt }}:51413/udp \
+{# The container side must equal settings.json's peer-port. #}
+    --publish 0.0.0.0:{{ service_ports.transmission_bt }}:{{ service_ports.transmission_bt }}/tcp \
+    --publish 0.0.0.0:{{ service_ports.transmission_bt }}:{{ service_ports.transmission_bt }}/udp \
 {# Liveness only. An unauthenticated RPC request is noisy and eventually trips
    transmission's brute-force protection. The image uses this same TCP probe
    to gate s6 readiness, and _verify exercises authenticated RPC separately. #}
