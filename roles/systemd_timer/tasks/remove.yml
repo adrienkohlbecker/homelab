@@ -1,8 +1,6 @@
 # Inputs: caller passes a single dict `systemd_timer_args` with keys
 #   name              required; bare name (no extension). Removes both
 #                     <name>.service and <name>.timer.
-#   user              default 'root'; non-root targets the named user's
-#                     user manager.
 #
 # Idempotent on fresh hosts. Order matters: stop and remove the timer first so
 # scheduling halts before the service it triggered disappears.
@@ -19,10 +17,6 @@
       {{ systemd_timer_args.name | default('<unset>') }}) must be defined and
       contain only [a-zA-Z0-9_].
 
-- name: remove | Resolve caller defaults for {{ systemd_timer_args.name }}
-  set_fact:
-    _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
-
 - name: remove | Remove timer unit for {{ systemd_timer_args.name }}
   import_role:
     name: systemd_unit
@@ -30,7 +24,6 @@
   vars:
     systemd_unit_args:
       dest: "{{ systemd_timer_args.name }}.timer"
-      user: "{{ _systemd_timer_user }}"
 
 - name: remove | Remove service unit for {{ systemd_timer_args.name }}
   import_role:
@@ -39,41 +32,20 @@
   vars:
     systemd_unit_args:
       dest: "{{ systemd_timer_args.name }}.service"
-      user: "{{ _systemd_timer_user }}"
 
-# Mirror install.yml's system-scope-only metadata write so removing a user
-# timer with the same name cannot erase a system timer's monitoring state.
 - name: remove | Drop systemd_timers metadata for {{ systemd_timer_args.name }}
-  when: _systemd_timer_user == 'root'
   file:
     path: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
     state: absent
   become: true
 
-- name: remove | Resolve user home for {{ systemd_timer_args.name }}
-  when: _systemd_timer_user != 'root'
-  getent:
-    database: passwd
-    key: "{{ _systemd_timer_user }}"
-  register: _systemd_timer_user_passwd
-
 # systemd records a persistent trigger timestamp at
 # /var/lib/systemd/timers/stamp-<name>.timer; its mtime is the last-fire
 # time. Removing the units orphans that stamp, and a later timer reusing
 # the name inherits it so Persistent=true fires an unwanted catch-up on
-# first enable. System- and user-scope managers store it separately.
-- name: remove | Drop system persistent trigger stamp for {{ systemd_timer_args.name }}
-  when: _systemd_timer_user == 'root'
+# first enable.
+- name: remove | Drop persistent trigger stamp for {{ systemd_timer_args.name }}
   file:
     path: /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
-    state: absent
-  become: true
-
-- name: remove | Drop user persistent trigger stamp for {{ systemd_timer_args.name }}
-  when: _systemd_timer_user != 'root'
-  file:
-    path: >-
-      {{ _systemd_timer_user_passwd.ansible_facts.getent_passwd[_systemd_timer_user][4]
-         }}/.local/share/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
     state: absent
   become: true

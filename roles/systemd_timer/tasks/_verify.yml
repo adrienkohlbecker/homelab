@@ -1,16 +1,14 @@
-# Verify covers six contracts:
-#   1. install + manual-trigger + remove for a system-scope timer
+# Verify covers five contracts:
+#   1. install + manual-trigger + remove
 #   2. systemd-cat routes stderr to journal priority err and preserves the
 #      command's exit code
-#   3. system-scope timers write netdata metadata with period_secs
+#   3. timers write netdata metadata with period_secs
 #      derived from on_calendar via systemd-analyze
 #   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
 #      tracks the persistent trigger stamp's mtime, and overdue fires when
 #      the stamp is older than 2 * period
 #   5. extension knobs (environment, accuracy_sec, randomized_delay_sec,
 #      additional_service_directives)
-#   6. removal is scope-isolated: dropping a user-scope timer leaves a
-#      same-named system-scope timer's units, stamp and netdata metadata intact
 
 - name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
@@ -250,164 +248,7 @@
     that: _systemd_timer_skipped.results | selectattr('stat.exists') | list | length == 0
     fail_msg: "left behind: {{ _systemd_timer_skipped.results | selectattr('stat.exists') | map(attribute='item') | join(', ') }}"
 
-# ============================================================
-# Contract 6: removal is scope-isolated. System- and user-scope managers keep
-# their units, trigger stamps and monitoring metadata in separate trees, so a
-# user-scope removal must not reach into the system-scope ones. Both halves
-# deliberately share a name -- that is the only case where the scopes can be
-# confused.
-# ============================================================
-# A user manager must be lingered before user-scope units can be enabled.
-- name: _verify | Enable linger for the scope-isolation fixture
-  import_role:
-    name: linger
-    tasks_from: linger
-  vars:
-    linger_args:
-      name: _verify_runas
-      uid: "{{ _systemd_timer_runas_user.uid }}"
-
-- name: _verify | Install the user-scope half of the scope-isolation fixture
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: _verify_timer
-      description: User-scope half of the scope-isolation fixture
-      exec_start: /bin/true
-      on_calendar: "*-*-* *:00:00"
-      user: _verify_runas
-
-# A changed user-scope timer is reenabled in the user's own manager, which
-# prunes enablement links its [Install] section no longer names.
-- name: _verify | Create a stale user-scope wants directory
-  file:
-    path: "{{ _systemd_timer_runas_user.home }}/.config/systemd/user/default.target.wants"
-    state: directory
-    owner: _verify_runas
-    group: _verify_runas
-    mode: "0755"
-  become: true
-
-- name: _verify | Plant a stale user-scope enablement link
-  file:
-    src: /etc/systemd/user/_verify_timer.timer
-    dest: "{{ _systemd_timer_runas_user.home }}/.config/systemd/user/default.target.wants/_verify_timer.timer"
-    state: link
-    force: true
-    owner: _verify_runas
-    group: _verify_runas
-  become: true
-
-- name: _verify | Change the user-scope timer file behind the helper
-  lineinfile:
-    path: /etc/systemd/user/_verify_timer.timer
-    line: "# drift"
-  become: true
-
-- name: _verify | Reinstall the user-scope timer
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: _verify_timer
-      description: User-scope half of the scope-isolation fixture
-      exec_start: /bin/true
-      on_calendar: "*-*-* *:00:00"
-      user: _verify_runas
-
-- name: _verify | Stat user-scope enablement links after the reenable
-  stat:
-    path: "{{ _systemd_timer_runas_user.home }}/.config/systemd/user/{{ item }}/_verify_timer.timer"
-  loop:
-    - default.target.wants
-    - timers.target.wants
-  register: _systemd_timer_user_links
-  become: true
-
-- name: _verify | List user-scope enablement links
-  command: find {{ _systemd_timer_runas_user.home }}/.config/systemd -name _verify_timer.timer
-  register: _systemd_timer_user_link_list
-  changed_when: false
-  become: true
-
-- name: _verify | Reenable pruned the stale link and kept the timer enabled
-  assert:
-    that:
-      - not _systemd_timer_user_links.results[0].stat.exists
-      - _systemd_timer_user_links.results[1].stat.exists
-    fail_msg: >-
-      stale default.target.wants link exists={{ _systemd_timer_user_links.results[0].stat.exists }},
-      timers.target.wants link exists={{ _systemd_timer_user_links.results[1].stat.exists }};
-      user links: {{ _systemd_timer_user_link_list.stdout_lines | join(', ') }}
-
-# The user manager creates this tree on its first persistent trigger, which
-# an hourly fixture timer never reaches during the test.
-- name: _verify | Create the user-scope stamp directory
-  file:
-    path: "{{ _systemd_timer_runas_user.home }}/.local/share/systemd/timers"
-    state: directory
-    owner: _verify_runas
-    group: _verify_runas
-    mode: "0755"
-  become: true
-
-- name: _verify | Seed the user-scope trigger stamp
-  file:
-    path: "{{ _systemd_timer_runas_user.home }}/.local/share/systemd/timers/stamp-_verify_timer.timer"
-    state: touch
-    owner: _verify_runas
-    group: _verify_runas
-    mode: "0644"
-  become: true
-
-- name: _verify | Remove the user-scope half of the scope-isolation fixture
-  import_role:
-    name: systemd_timer
-    tasks_from: remove
-  vars:
-    systemd_timer_args:
-      name: _verify_timer
-      user: _verify_runas
-
-- name: _verify | Stat scope-isolation artifacts after the user-scope removal
-  stat:
-    path: "{{ item.path }}"
-  loop:
-    - path: /etc/systemd/user/_verify_timer.timer
-      exists: false
-    - path: /etc/systemd/user/_verify_timer.service
-      exists: false
-    - path: "{{ _systemd_timer_runas_user.home }}/.local/share/systemd/timers/stamp-_verify_timer.timer"
-      exists: false
-    - path: /etc/systemd/system/_verify_timer.timer
-      exists: true
-    - path: /etc/systemd/system/_verify_timer.service
-      exists: true
-    - path: /var/lib/systemd/timers/stamp-_verify_timer.timer
-      exists: true
-    - path: /etc/netdata/charts.d/systemd_timers.d/_verify_timer.conf
-      exists: true
-  loop_control:
-    label: "{{ item.path }}"
-  register: _systemd_timer_scope_after
-  become: true
-
-- name: _verify | User-scope removal touches only user-scope artifacts
-  assert:
-    that: item.stat.exists == item.item.exists
-    fail_msg: >-
-      {{ item.item.path }} exists={{ item.stat.exists }} after removing the
-      user-scope timer, expected {{ item.item.exists }}.
-  loop: "{{ _systemd_timer_scope_after.results }}"
-  loop_control:
-    label: "{{ item.item.path }}"
-
-# The system-scope half survived the assertions above; drop it through the
-# same entry point so its own removal path stays covered.
-- name: _verify | Remove the system-scope half of the scope-isolation fixture
+- name: _verify | Remove the combined fixture timer
   import_role:
     name: systemd_timer
     tasks_from: remove
@@ -429,30 +270,6 @@
   assert:
     that:
       - _systemd_timer_timer_statuses.results | map(attribute='rc') | select('equalto', 0) | list | length == 0
-
-- name: _verify | Disable linger for the scope-isolation fixture
-  import_role:
-    name: linger
-    tasks_from: disable
-  vars:
-    linger_args:
-      name: _verify_runas
-      uid: "{{ _systemd_timer_runas_user.uid }}"
-
-# systemd is finished with the account by now -- user@<uid>.service is
-# inactive and loginctl reports no session -- but ansible's own become_user
-# context is not: mitogen keeps a persistent `sudo -u _verify_runas
-# python3` child alive per become_user, and userdel refuses while any process
-# belongs to the account. Drop the host connection so those children exit.
-- name: _verify | Drop the become_user context holding the fixture account
-  meta: reset_connection
-
-- name: _verify | Remove the scope-isolation fixture user
-  user:
-    name: _verify_runas
-    state: absent
-    remove: true
-  become: true
 
 - name: _verify | Cleanup combined fixture
   file:

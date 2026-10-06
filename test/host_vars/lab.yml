@@ -7,6 +7,9 @@ fox_only_roles_enabled: true
 # Mirror lab and pug, which publish the LAN device admin UIs.
 nginx_static_proxies_enabled: true
 
+# Mirror Lab, which prunes the operator's rootless podman store nightly.
+podman_operator_prune_enabled: true
+
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and an
 # iface-only block beside a podman macvlan network on one parent NIC. Prod

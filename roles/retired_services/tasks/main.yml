@@ -305,3 +305,44 @@
   tags:
     - retired_services
     - zfs_autobackup
+
+# Drop once lab has converged. The Lab operator prune runs as the system-scope
+# podman_prune_operator timer; the user-scope units it replaces sit in
+# /etc/systemd/user and are enabled in the operator's own manager.
+- name: Inspect the retired operator prune user units
+  stat:
+    path: /etc/systemd/user/podman_prune.{{ item }}
+  loop:
+    - timer
+    - service
+  register: retired_services_operator_prune_units
+  become: true
+  tags:
+    - retired_services
+    - podman
+
+- name: Remove the retired operator prune user timer
+  when: retired_services_operator_prune_units.results[0].stat.exists
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: podman_prune.timer
+      user: "{{ ansible_user_id }}"
+  tags:
+    - retired_services
+    - podman
+
+- name: Remove the retired operator prune user service
+  when: retired_services_operator_prune_units.results[1].stat.exists
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: podman_prune.service
+      user: "{{ ansible_user_id }}"
+  tags:
+    - retired_services
+    - podman

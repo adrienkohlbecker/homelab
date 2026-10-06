@@ -38,6 +38,8 @@
   tags:
     - podman
 
+# The operator prune runs as the operator from a system unit; linger keeps
+# the runtime directory its rootless podman state lives in.
 - name: Enable linger for the Lab operator prune timer
   when: podman_operator_prune_enabled
   import_role:
@@ -56,21 +58,24 @@
 # single-consumer network (mac_iot, adguard, ...) is unused whenever its service
 # is down, and only a converge recreates it. The volume prune also removes
 # unused named volumes, which is safe only because services keep their state in
-# bind mounts. The operator timer prunes the Lab operator's rootless store.
+# bind mounts. The operator timer prunes the Lab operator's rootless store and
+# shares the operator's run root, as interactive podman does.
 - name: Install the Lab operator prune timer
   import_role:
     name: systemd_timer
     tasks_from: install
   vars:
     systemd_timer_args:
-      name: podman_prune
-      description: Prune stopped podman containers, dangling images and unused volumes
+      name: podman_prune_operator
+      description: Prune the operator's stopped rootless podman containers, dangling images and unused volumes
       exec_start: >-
         /bin/sh -c '/usr/bin/podman container prune --force --filter until=48h
         && /usr/bin/podman image prune --force --filter until=48h
         && /usr/bin/podman volume prune --force --filter until=48h'
       on_calendar: "*-*-* 00:20:00"
-      user: "{{ ansible_user_id }}"
+      run_as: "{{ ansible_user_id }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ ansible_user_uid }}
       condition: "{{ podman_operator_prune_enabled }}"
   tags:
     - podman

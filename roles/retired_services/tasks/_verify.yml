@@ -140,3 +140,24 @@
     that:
       - not retired_services_backup_keys.results[0].stat.exists
       - retired_services_backup_keys.results[1].stat.isreg
+
+- name: _verify | Query the retired operator prune user units
+  systemd:
+    name: "{{ item }}"
+    scope: user
+  loop:
+    - podman_prune.timer
+    - podman_prune.service
+  register: retired_services_operator_prune_units
+  failed_when: retired_services_operator_prune_units.status.LoadState != 'not-found'
+  become: true
+  become_user: "{{ ansible_user_id }}"
+
+- name: _verify | Find leftover operator prune user enablement links
+  find:
+    paths: "{{ ansible_user_dir }}/.config/systemd/user"
+    patterns: podman_prune.*
+    file_type: any
+    recurse: true
+  register: retired_services_operator_prune_links
+  failed_when: retired_services_operator_prune_links.matched != 0

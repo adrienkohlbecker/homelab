@@ -223,3 +223,48 @@
     dest: /root/.ssh/id_ed25519.pub
     mode: "0644"
   become: true
+
+# The retired Lab operator prune: user-scope units in /etc/systemd/user,
+# enabled and started in the lingered operator's own manager.
+- name: _setup | Linger the operator for the retired user-scope prune timer
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: "{{ ansible_user_id }}"
+      uid: "{{ ansible_user_uid }}"
+
+- name: _setup | Create the retired operator prune user units
+  copy:
+    content: "{{ item.content }}"
+    dest: /etc/systemd/user/{{ item.name }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - name: podman_prune.service
+      content: |
+        [Service]
+        Type=oneshot
+        ExecStart=/bin/true
+    - name: podman_prune.timer
+      content: |
+        [Timer]
+        OnCalendar=*-*-* 00:20:00
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+
+- name: _setup | Enable the retired operator prune user timer
+  systemd:
+    name: podman_prune.timer
+    scope: user
+    daemon_reload: true
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ ansible_user_id }}"

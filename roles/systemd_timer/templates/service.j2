@@ -16,7 +16,6 @@ User={{ systemd_timer_args.run_as }}
 Environment="{{ k }}={{ v | string | replace('\\', '\\\\') | replace('"', '\\"') }}"
 {% endfor %}
 {% endif %}
-{% if _systemd_timer_monitor %}
 {# Update the netdata overdue-monitoring stamp when each run starts. systemd only
    maintains this stamp itself for Persistent=true timers (touched at trigger
    time); for persistent: false ones this line is the sole writer. ExecStartPre
@@ -29,7 +28,6 @@ Environment="{{ k }}={{ v | string | replace('\\', '\\\\') | replace('"', '\\"')
    non-root user and bypasses per-command filesystem restrictions such as a
    caller's ProtectSystem=strict. #}
 ExecStartPre=+/usr/bin/touch /var/lib/systemd/timers/stamp-{{ systemd_timer_args.name }}.timer
-{% endif %}
 {% if systemd_timer_args.additional_service_directives is defined %}
 {% for line in systemd_timer_args.additional_service_directives %}
 {{ line }}

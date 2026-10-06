@@ -1,7 +1,8 @@
 # Exercise Podman's runtime configuration with throwaway containers. Rootful
-# checks cover storage, netavark DNS, seccomp and the nightly prune; a
-# rootless pass proves pasta backs container egress. The test harness invokes
-# this only against QEMU fixtures, never production hosts.
+# checks cover storage, netavark DNS, seccomp and the nightly prune; rootless
+# passes cover the Lab operator prune and prove pasta backs container egress.
+# The test harness invokes this only against QEMU fixtures, never production
+# hosts.
 
 - name: _verify | Resolve a tiny probe image
   set_fact:
@@ -156,6 +157,59 @@
       command: podman network rm --force podman_verify_prune
       changed_when: true
       failed_when: false
+
+# The Lab operator prune runs rootless podman as the operator from a system
+# unit, sharing the operator's run root. Leave an old image dangling in the
+# operator's store and require the real unit to reclaim it.
+- name: _verify | Exercise the operator prune
+  when: podman_operator_prune_enabled
+  environment:
+    XDG_RUNTIME_DIR: /run/user/{{ ansible_user_uid }}
+  block:
+    - name: _verify | Pull an old image into the operator store
+      command: podman pull --quiet docker.io/library/busybox:1.35.0
+      register: _podman_operator_prune_image
+      until: _podman_operator_prune_image.rc == 0
+      retries: 3
+      delay: 5
+      changed_when: true
+
+    - name: _verify | Untag the old operator image
+      command: podman untag {{ _podman_operator_prune_image.stdout }}
+      changed_when: true
+
+    - name: _verify | Record time before the operator prune
+      command: date +%s
+      register: _podman_operator_prune_t0
+      changed_when: false
+
+    - name: _verify | Run the operator prune unit
+      systemd:
+        name: podman_prune_operator.service
+        state: started
+      become: true
+
+    - name: _verify | The operator prune reclaimed the dangling image
+      command: podman image exists {{ _podman_operator_prune_image.stdout }}
+      register: _podman_operator_prune_image_exists
+      changed_when: false
+      failed_when: _podman_operator_prune_image_exists.rc != 1
+
+    # Rootless podman moves itself into the operator's user manager, so its
+    # output carries the timer's identifier rather than the service unit.
+    - name: _verify | Sync the journal before reading the operator prune
+      command: journalctl --sync
+      changed_when: false
+      become: true
+
+    - name: _verify | The operator prune logged nothing at priority err
+      command: >-
+        journalctl --identifier podman_prune_operator -p err
+        --since=@{{ _podman_operator_prune_t0.stdout }} --no-pager --output=cat
+      register: _podman_operator_prune_errors
+      changed_when: false
+      failed_when: _podman_operator_prune_errors.rc != 0 or _podman_operator_prune_errors.stdout != ''
+      become: true
 
 # pasta is a rootless-only network connector (default_rootless_network_cmd,
 # set in install.yml), so this exercises it as the Lab fixture's
