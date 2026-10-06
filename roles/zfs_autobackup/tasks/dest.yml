@@ -6,6 +6,7 @@
 # the received children carry their own readonly=on/mountpoint=none from the
 # onsite pull's --set-properties.
 - name: dest | Read backup receive-root properties
+  when: zfs_root
   command: zfs get -H -o value canmount,mountpoint {{ item.dest_dataset }}
   check_mode: false
   changed_when: false
@@ -19,14 +20,16 @@
     - zfs_autobackup
 
 - name: dest | Create missing backup receive roots
-  when: item.rc != 0
+  when:
+    - zfs_root
+    - item.rc != 0
   community.general.zfs:
     name: "{{ item.item.dest_dataset }}"
     state: present
     extra_zfs_properties:
       canmount: "off"
       mountpoint: none
-  loop: "{{ zfs_autobackup_receive_roots.results }}"
+  loop: "{{ zfs_autobackup_receive_roots.results | default([]) }}"
   loop_control:
     label: "{{ item.item.dest_dataset }}"
   become: true
@@ -37,13 +40,14 @@
 # report a change every run, so compare the live values before issuing zfs set.
 - name: dest | Preview backup receive-root repairs
   when:
+    - zfs_root
     - item.rc == 0
     - item.stdout_lines != ['off', 'none']
     - ansible_check_mode
   debug:
     msg: "{{ item.item.dest_dataset }}: {{ item.stdout_lines }} -> ['off', 'none']"
   changed_when: true
-  loop: "{{ zfs_autobackup_receive_roots.results }}"
+  loop: "{{ zfs_autobackup_receive_roots.results | default([]) }}"
   loop_control:
     label: "{{ item.item.dest_dataset }}"
   tags:
@@ -51,12 +55,13 @@
 
 - name: dest | Reconcile existing backup receive roots
   when:
+    - zfs_root
     - item.rc == 0
     - item.stdout_lines != ['off', 'none']
     - not ansible_check_mode
   command: zfs set canmount=off mountpoint=none {{ item.item.dest_dataset }}
   changed_when: true
-  loop: "{{ zfs_autobackup_receive_roots.results }}"
+  loop: "{{ zfs_autobackup_receive_roots.results | default([]) }}"
   loop_control:
     label: "{{ item.item.dest_dataset }}"
   become: true
