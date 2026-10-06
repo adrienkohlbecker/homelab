@@ -1,5 +1,6 @@
 #jinja2: lstrip_blocks: True
-# Managed by Ansible (roles/headscale). Schema: headscale v0.26.x.
+# Managed by Ansible (roles/headscale). Schema: headscale v0.26.x. Keys equal
+# to headscale's built-in defaults are omitted; recheck them on upgrade.
 # Fox overrides the public name so unenrolled clients do not depend on its
 # Tailscale address. Tests use either the host vhost or a plain loopback URL.
 # nginx terminates TLS in both production and the vhost test.
@@ -7,7 +8,6 @@ server_url: {{ headscale_server_url | default('https://headscale.' ~ inventory_h
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
 grpc_listen_addr: 127.0.0.1:50443
-grpc_allow_insecure: false
 
 # The non-root process creates its admin socket in writable state. Only the same
 # uid invokes it through `podman exec`, so no group access is needed.
@@ -20,10 +20,9 @@ noise:
 prefixes:
   v4: 100.64.0.0/10
   v6: fd7a:115c:a1e0::/48
-  allocation: sequential
 
-# Embedded DERP uses public STUN and relays over server_url. Empty maps keep
-# third-party relays out; traffic remains end-to-end encrypted.
+# Embedded DERP uses public STUN and relays over server_url. No third-party DERP
+# maps are configured; traffic remains end-to-end encrypted.
 derp:
   server:
     enabled: true
@@ -33,57 +32,37 @@ derp:
     # The dual-stack socket accepts IPv4-mapped and IPv6 clients.
     stun_listen_addr: "[::]:3478"
     private_key_path: /var/lib/headscale/derp_server_private.key
-    automatically_add_embedded_derp_region: true
     # Auto-detection sees Podman's private addresses; fox pins its reserved
     # public addresses while the IPv4-only fixture omits both keys.
 {% if headscale_derp_ipv4 is defined %}
     ipv4: "{{ headscale_derp_ipv4 }}"
     ipv6: "{{ headscale_derp_ipv6 }}"
 {% endif %}
-  urls: []
-  paths: []
-  auto_update_enabled: false
 
 disable_check_updates: true
-ephemeral_node_inactivity_timeout: 30m
-
-# Randomizing the WireGuard source port helps some NATs and hurts others. Change
-# only after a roaming-client `tailscale netcheck` comparison.
-randomize_client_port: false
 
 database:
   type: sqlite
   sqlite:
     path: /var/lib/headscale/db.sqlite
 
-# TLS is terminated by nginx (roles/nginx site). Leave headscale's own TLS off.
-tls_letsencrypt_hostname: ""
-tls_cert_path: ""
-tls_key_path: ""
-
 log:
   # JSON preserves typed fields and avoids text-mode's misleading stderr level.
   format: json
-  level: info
 
 policy:
-  mode: file
   path: /etc/headscale/acl.hujson
 
 # MagicDNS owns base_domain; AdGuard handles everything else over the mesh. Its
 # /18 mesh route remains less specific than the Trusted VLAN's local /21 route.
 dns:
-  magic_dns: true
-  # Roaming devices use AdGuard for adblocking and split-horizon names. Clients
-  # that reject its route must opt out with `tailscale set --accept-dns=false`;
-  # headless hosts already do.
-  override_local_dns: true
   base_domain: ts.{{ domain }}
+  # The default override_local_dns sends roaming devices to AdGuard for adblocking
+  # and split-horizon names. Clients that reject its route must opt out with
+  # `tailscale set --accept-dns=false`; headless hosts already do.
   nameservers:
     global:
       - {{ external_ips.dns }}
-    split: {}
-  search_domains: []
 {% if headscale_derp_ipv4 is defined %}
   # Keep the control plane resolvable when the DNS VIP is down. Fox reuses its
   # public DERP addresses; the loopback fixture omits these records.
@@ -94,8 +73,6 @@ dns:
     - name: "headscale.{{ domain }}"
       type: "AAAA"
       value: "{{ headscale_derp_ipv6 }}"
-{% else %}
-  extra_records: []
 {% endif %}
 
 # User devices enroll through Authelia; headless hosts use pre-auth keys.
@@ -103,7 +80,6 @@ oidc:
   issuer: "{{ headscale_oidc_issuer }}"
   client_id: headscale
   client_secret_path: "/run/secrets/oidc_client_secret"
-  scope: ["openid", "profile", "email"]
   # An Authelia outage should degrade only interactive enrollment.
   only_start_if_oidc_is_available: false
   # PKCE uses Headscale's S256 default; Authelia accepts the client challenge.
