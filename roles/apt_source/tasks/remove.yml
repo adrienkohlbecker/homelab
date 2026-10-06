@@ -4,8 +4,6 @@
 # Inputs: caller passes a single dict `apt_source_args` with keys
 #   name:          required; the identifier passed to configure.yml
 #
-# Like configure.yml, requires the apt role to have run first:
-# deb822_repository needs python3-debian even for state=absent.
 # Packages installed from the source are the caller's to remove, before this
 # call.
 #
@@ -29,13 +27,9 @@
     state: absent
   become: true
 
-# state=absent resolves the same slugged .sources filename configure.yml wrote.
-# It also removes /etc/apt/keyrings/<slug>.{asc,gpg}, not the
-# /usr/share/keyrings key configure.yml fetched, so that one is deleted below.
 - name: remove | Remove repository for {{ apt_source_args.name }}
-  when: apt_deb822_available | default(true)
-  deb822_repository:
-    name: "{{ apt_source_args.name }}"
+  file:
+    path: /etc/apt/sources.list.d/{{ apt_source_args.name }}.sources
     state: absent
   become: true
 

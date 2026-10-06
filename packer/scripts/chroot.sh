@@ -101,13 +101,13 @@ apt_update() {
 # .sources files, matching both the stock Noble layout and what roles/apt
 # converges to.
 write_sources_list() {
-  # Shape matches what roles/apt's deb822_repository tasks render (the
-  # module emits fields sorted by parameter name), so a diff between the
-  # packer-baked files and the post-apply state highlights real drift
-  # (mirror substitution) rather than format noise. Stock noble ships a
-  # single ubuntu.sources; the archive/security split mirrors roles/apt,
-  # which overwrites ubuntu.sources and adds ubuntu-security.sources on
-  # first apply.
+  # Shape matches the stanza roles/apt writes (field order and
+  # X-Repolib-Name follow Ansible's deb822_repository module output), so a
+  # diff between the packer-baked files and the post-apply state highlights
+  # real drift (mirror substitution) rather than format noise. Stock noble
+  # ships a single ubuntu.sources; the archive/security split mirrors
+  # roles/apt, which overwrites ubuntu.sources and adds
+  # ubuntu-security.sources on first apply.
   local deb_arch
   if [ "$ZBM_ARCH" = "aarch64" ]; then
     deb_arch=arm64

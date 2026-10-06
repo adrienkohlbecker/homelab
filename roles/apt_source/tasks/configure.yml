@@ -24,11 +24,8 @@
 #   condition:     default true; false skips the call and publishes
 #                  apt_source_<name>_changed as false
 #
-# Exposes apt_source_<name>_changed, true when the source file changed or its
-# write was skipped, so check-mode callers can skip installs from a source apt
-# cannot read yet.
-# The apt role publishes apt_deb822_available=false when a fresh check-mode run
-# can only predict installation of deb822_repository's Python dependency.
+# Exposes apt_source_<name>_changed, true when the source file changed, so
+# check-mode callers can skip installs from a source apt cannot read yet.
 
 - name: configure | Assert apt_source args for {{ apt_source_args.name }}
   assert:
@@ -77,23 +74,34 @@
     mode: "0644"
   become: true
 
-- name: configure | Configure repository for {{ apt_source_args.name }}
-  when:
-    - _apt_source_condition
-    - apt_deb822_available | default(true)
-  deb822_repository:
-    name: "{{ apt_source_args.name }}"
-    uris: "{{ apt_source_args.uris }}"
-    suites: "{{ apt_source_args.suites }}"
-    components: "{{ apt_source_args.components | default(omit) }}"
-    architectures: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
-    signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.asc
+# Field order and X-Repolib-Name match the files Ansible's deb822_repository
+# module writes, so hosts it converged see no diff. A flat repo has no
+# Components field.
+# No validate: apt cannot parse one .sources file in isolation, so the strict
+# refresh below is the functional check.
+- name: configure | Configure repository for {{ apt_source_args.name }}  # noqa: require-validate
+  when: _apt_source_condition
+  copy:
+    content: |
+      Architectures: {{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}
+      {% if apt_source_args.components is defined -%}
+      Components: {{ apt_source_args.components }}
+      {% endif -%}
+      X-Repolib-Name: {{ apt_source_args.name }}
+      Signed-By: /usr/share/keyrings/{{ apt_source_args.name }}.asc
+      Suites: {{ apt_source_args.suites }}
+      Types: deb
+      URIs: {{ apt_source_args.uris }}
+    dest: /etc/apt/sources.list.d/{{ apt_source_args.name }}.sources
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
   become: true
   register: apt_source_repo
 
-# deb822_repository writes the .sources file but does not refresh apt. Use a
-# strict refresh after changing the repo so a broken source fails here rather
-# than as a missing package in the caller.
+# Refresh strictly after changing the source so a broken source fails here
+# rather than as a missing package in the caller.
 - name: configure | Refresh apt cache after repository change for {{ apt_source_args.name }}  # noqa: command-instead-of-module
   when:
     - apt_source_repo is changed
@@ -149,5 +157,4 @@
 - name: configure | Export change signal for {{ apt_source_args.name }}
   set_fact:
     "apt_source_{{ apt_source_args.name }}_changed": >-
-      {{ _apt_source_condition
-         and (apt_source_repo is changed or apt_source_repo is skipped) }}
+      {{ _apt_source_condition and apt_source_repo is changed }}

@@ -12,7 +12,7 @@
   hosts: lab,pug,fox
   roles:
     # Host base -- OS, networking, remote access, system services. Apt first
-    # establishes package and deb822 tooling for every role below it.
+    # establishes the package sources every role below it installs from.
     - apt
     - lnav
     - user
