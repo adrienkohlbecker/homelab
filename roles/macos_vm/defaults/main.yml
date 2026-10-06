@@ -1,6 +1,5 @@
 # Per-VM identity.
 macos_vm_name: base
-macos_vm_macos_version: "15"  # Sequoia. Keys the recovery product in tasks/main.yml.
 
 # CPU & memory. macOS dislikes hybrid topology, so on Raptor Lake / Alder Lake
 # pin to P-core threads only via macos_vm_cpu_pinset. Confirm thread numbering
@@ -14,20 +13,12 @@ macos_vm_memory_mib: 12288  # 12 GiB
 macos_vm_zvol_dataset: "{{ zfs_dozer_filesystem }}/vms/macos/{{ macos_vm_name }}"
 # 128 GB, expressed in bytes so it stays decimal rather than GiB.
 macos_vm_zvol_size: "128000000000"
-macos_vm_zvol_volblocksize: 16K
-macos_vm_zvol_compression: zstd
 
 # Networking. Direct QEMU uses user-mode NAT during install. It is slower than
 # macvtap, but gives Recovery boring DHCP/DNS/egress and avoids libvirt.
-macos_vm_ssh_host_listen: "127.0.0.1"
 macos_vm_ssh_host_port: 2222
 # Seeded, so it stays stable across converges for a given host and VM name.
 macos_vm_mac_address: "{{ '52:54:00' | random_mac(seed=inventory_hostname ~ '/' ~ macos_vm_name) }}"
-
-# Display & input.
-# Tunnel via SSH; change only when remote VNC is intentional.
-macos_vm_vnc_listen: "127.0.0.1"
-macos_vm_vnc_keymap: fr                 # QEMU VNC keymap; keeps AZERTY input aligned with macOS
 
 # Recovery defaults seeded through OpenCore NVRAM. `en-US:1` means English UI
 # with Apple's French keyboard layout; `en_FR` means English language with the
@@ -42,10 +33,6 @@ macos_vm_opencore_boot_args: "keepsyms=1 -v"
 # flip to false (and re-run the role) after macOS is installed and booting.
 macos_vm_install_mode: true
 
-# Upper bound on the ~700 MB recovery download, in seconds. fetch-macOS-v2.py
-# sets no socket timeouts, so a stalled transfer would otherwise hang.
-macos_vm_recovery_fetch_timeout: 900
-
 # Autostart on host boot. Leave false until first install completes; flip
 # afterwards. Independent of install_mode so they don't interfere.
 macos_vm_autostart: false
@@ -53,8 +40,6 @@ macos_vm_autostart: false
 # its run state to the operator.
 macos_vm_start_service: false
 
-# Where the role caches downloaded artifacts (shared across all macOS VMs)
-# and per-VM working files (one subdir per VM), on the rpool/macos_vm dataset
+# Per-VM working files (one subdir per VM), on the rpool/macos_vm dataset
 # that tasks/main.yml mounts at /var/lib/macos_vm.
-macos_vm_artifacts_dir: /var/lib/macos_vm/_artifacts
 macos_vm_workdir: "/var/lib/macos_vm/{{ macos_vm_name }}"

@@ -106,8 +106,8 @@
     extra_zfs_properties:
       volsize: "{{ macos_vm_zvol_size | human_to_bytes | string }}"
       # Creation-only: the module tries to rewrite properties whose source is default.
-      volblocksize: "{{ macos_vm_zvol_volblocksize if macos_vm_zvol_current.rc != 0 else omit }}"
-      compression: "{{ macos_vm_zvol_compression }}"
+      volblocksize: "{{ '16K' if macos_vm_zvol_current.rc != 0 else omit }}"
+      compression: zstd
       volmode: dev
       refreservation: "0"
       logbias: throughput
@@ -122,9 +122,10 @@
   tags:
     - macos_vm
 
+# Downloaded artifacts are shared across all macOS VMs.
 - name: Create artifacts cache dir
   file:
-    path: "{{ macos_vm_artifacts_dir }}"
+    path: "/var/lib/macos_vm/_artifacts"
     state: directory
     owner: root
     group: root
@@ -153,7 +154,7 @@
   when: not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
   get_url:
     url: "{{ macos_vm_opencore_artifact.url }}"
-    dest: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
+    dest: "/var/lib/macos_vm/_artifacts/OpenCore.qcow2"
     checksum: "sha256:{{ macos_vm_opencore_artifact.sha256 }}"
     owner: root
     group: root
@@ -167,7 +168,7 @@
   script:
     cmd: >-
       seed_opencore.py
-      {{ (macos_vm_artifacts_dir ~ '/OpenCore.qcow2') | quote }}
+      /var/lib/macos_vm/_artifacts/OpenCore.qcow2
       {{ (macos_vm_workdir ~ '/OpenCore.qcow2') | quote }}
       --prev-lang-kbd={{ macos_vm_opencore_prev_lang_kbd | quote }}
       --apple-locale={{ macos_vm_opencore_apple_locale | quote }}
@@ -184,7 +185,7 @@
     - not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
   get_url:
     url: "{{ macos_vm_fetch_macos_artifact.url }}"
-    dest: "{{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py"
+    dest: "/var/lib/macos_vm/_artifacts/fetch-macOS-v2.py"
     checksum: "sha256:{{ macos_vm_fetch_macos_artifact.sha256 }}"
     owner: root
     group: root
@@ -199,36 +200,29 @@
     # fetch-macOS-v2.py calls os.get_terminal_size() while verifying the
     # chunklist, so give it a pseudo-terminal even though Ansible is non-TTY.
     # timeout runs inside that terminal, so the bound kills the download on
-    # the host and script -e reports the 124 exit status.
+    # the host and script -e reports the 124 exit status. The script sets no
+    # socket timeouts, so a stalled transfer would otherwise hang.
+    # The board/MLB/os_type tuple is the script's Sequoia (15) menu entry:
+    # `--shortname` is ignored with `--action download`, so pass the
+    # resolved values directly.
     argv:
       - script
       - -q
       - -e
       - -c
       - >-
-        timeout --kill-after=30 {{ macos_vm_recovery_fetch_timeout }}
-        python3 {{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py
+        timeout --kill-after=30 900
+        python3 /var/lib/macos_vm/_artifacts/fetch-macOS-v2.py
         --action download
-        --board-id {{ macos_vm_recovery_product.board_id }}
-        --mlb {{ macos_vm_recovery_product.mlb }}
-        --os-type {{ macos_vm_recovery_product.os_type }}
+        --board-id Mac-7BA5B2D9E42DDD94
+        --mlb 00000000000000000
+        --os-type default
         --outdir {{ macos_vm_workdir }}
         --basename BaseSystem.partial
       - /dev/null
     creates: "{{ macos_vm_workdir }}/BaseSystem.dmg"
   become: true
   register: macos_vm_basesystem_result
-  vars:
-    macos_vm_recovery_product: "{{ macos_vm_recovery_products[macos_vm_macos_version] }}"
-    # Keep these in sync with fetch-macOS-v2.py's product menu. `--shortname`
-    # is ignored when `--action download` is passed, so provide the resolved
-    # board/MLB/os_type tuple directly.
-    # 15 = Sequoia. Add other releases from the script's menu here.
-    macos_vm_recovery_products:
-      "15":
-        board_id: Mac-7BA5B2D9E42DDD94
-        mlb: "00000000000000000"
-        os_type: default
   tags:
     - macos_vm
 

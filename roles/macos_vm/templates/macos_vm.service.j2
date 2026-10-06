@@ -53,10 +53,12 @@ ExecStart={% if macos_vm_cpu_pinset | length > 0 %}/usr/bin/taskset -c {{ macos_
 {% endif %}
   -drive id=MacZvol,if=none,file={{ macos_vm_disk_source }},format=raw,cache=none,aio=native \
   -device ide-hd,bus=sata.4,drive=MacZvol,bootindex=2 \
-  -netdev user,id=net0,hostfwd=tcp:{{ macos_vm_ssh_host_listen }}:{{ macos_vm_ssh_host_port }}-:22 \
+  -netdev user,id=net0,hostfwd=tcp:127.0.0.1:{{ macos_vm_ssh_host_port }}-:22 \
   -device virtio-net-pci,netdev=net0,id=net0,mac={{ macos_vm_mac_address }} \
-  -k {{ macos_vm_vnc_keymap }} \
-  -vnc {{ macos_vm_vnc_listen }}:0 \
+{# The keymap keeps AZERTY input aligned with macOS's French layout. VNC
+   stays on loopback: reach it through an SSH tunnel. #}
+  -k fr \
+  -vnc 127.0.0.1:0 \
   -monitor unix:/run/macos-vm/{{ macos_vm_name }}.monitor,server=on,wait=off \
   -device vmware-svga
 

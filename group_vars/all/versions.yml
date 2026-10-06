@@ -167,7 +167,7 @@ lnav_artifacts:
 # Both OSX-KVM artifacts pin the same commit. Replace OpenCore only during a
 # planned reinstall: the per-VM copy carries NVRAM and iCloud state. Detailed
 # lifecycle guidance lives in notes/macos-vm-design.md; the macOS release itself
-# remains host-overridable through roles/macos_vm/defaults/main.yml.
+# is the recovery board id in roles/macos_vm/tasks/main.yml.
 macos_vm_osx_kvm_commit: 4c378a4b5e0b219783683012bec680325eb40719  # 2026-01-26
 macos_vm_opencore_artifact:
   url: "{{ mirror_raw_githubusercontent }}/kholia/OSX-KVM/{{ macos_vm_osx_kvm_commit }}/OpenCore/OpenCore.qcow2"
