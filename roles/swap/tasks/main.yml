@@ -114,7 +114,9 @@
   tags:
     - swap
 
-# daemon-reload reruns the generator; restarting applies configuration changes.
+# daemon-reload reruns the generator. Size and algorithm are applied by the
+# oneshot systemd-zram-setup@zram0.service, which the generator binds to the
+# swap unit, so restarting the swap also resets and re-creates the device.
 # Skip a predicted package/config change in check mode because the generated
 # unit does not exist yet.
 - name: Activate zram swap device

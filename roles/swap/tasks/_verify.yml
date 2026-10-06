@@ -99,3 +99,35 @@
     fail_msg: >-
       Overflow swap priority must be below zram (100), got:
       {{ _swap_verify_swapon.stdout }}
+
+# A size or algorithm change must apply without a reboot, through the swap
+# unit restart. The values sit below every fixture's RAM and differ from the
+# inventory defaults.
+- name: _verify | Reconfigure the zram device
+  import_role:
+    name: swap
+    tasks_from: main
+  vars:
+    swap_zram_size: 1G
+    swap_zram_algorithm: lz4
+
+- name: _verify | Read the live zram device geometry
+  command: zramctl --bytes --noheadings --raw --output DISKSIZE,ALGORITHM /dev/zram0
+  changed_when: false
+  become: true
+  register: _swap_verify_zramctl
+
+- name: _verify | Read active swap devices after the reconfiguration
+  command: swapon --show=NAME,PRIO --noheadings --raw
+  changed_when: false
+  become: true
+  register: _swap_verify_swapon_resized
+
+- name: _verify | Zram device carries the new size and algorithm and swaps
+  assert:
+    that:
+      - _swap_verify_zramctl.stdout.split() == ['1073741824', 'lz4']
+      - "'/dev/zram0 100' in _swap_verify_swapon_resized.stdout_lines"
+    fail_msg: >-
+      zram0 not reconfigured live: zramctl={{ _swap_verify_zramctl.stdout }},
+      swapon={{ _swap_verify_swapon_resized.stdout }}
