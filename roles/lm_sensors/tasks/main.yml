@@ -1,21 +1,10 @@
-- name: Assert lm_sensors_modules is a list of valid module names
-  assert:
-    that:
-      - lm_sensors_effective_modules is not string
-      - lm_sensors_effective_modules | reject('match', '^[a-z0-9_-]+\Z') | list | length == 0
-    fail_msg: >-
-      lm_sensors_modules must be a list of kernel module names (lowercase letters,
-      digits, underscore, hyphen). Got: {{ lm_sensors_effective_modules }}
-  tags:
-    - lm_sensors
-
 - name: Install lm-sensors
   apt:
     pkg:
       - i2c-tools
       - lm-sensors
-    policy_rc_d: 101
     cache_valid_time: 3600
+  register: lm_sensors_package
   become: true
   tags:
     - lm_sensors
@@ -25,16 +14,15 @@
   modprobe:
     name: "{{ item }}"
     state: present
-  loop: "{{ lm_sensors_effective_modules }}"
+  loop: "{{ lm_sensors_modules }}"
   become: true
   tags:
     - lm_sensors
 
 - name: Persist the sensor module list for boot  # noqa: require-validate
-  when: lm_sensors_effective_modules | length > 0
   copy:
     dest: /etc/modules-load.d/lm_sensors.conf
-    content: "{{ lm_sensors_effective_modules | join('\n') }}\n"
+    content: "{{ lm_sensors_modules | join('\n') }}\n"
     mode: "0644"
     owner: root
     group: root
@@ -43,17 +31,7 @@
   tags:
     - lm_sensors
 
-- name: Remove the persisted module list when empty
-  when: lm_sensors_effective_modules | length == 0
-  file:
-    path: /etc/modules-load.d/lm_sensors.conf
-    state: absent
-  become: true
-  tags:
-    - lm_sensors
-
 - name: Write the libsensors configuration
-  when: lm_sensors_effective_config | trim | length > 0
   template:
     src: libsensors.conf.j2
     dest: /etc/sensors.d/zz_homelab.conf
@@ -69,83 +47,26 @@
   tags:
     - lm_sensors
 
-- name: Remove the libsensors configuration when empty
-  when: lm_sensors_effective_config | trim | length == 0
-  file:
-    path: /etc/sensors.d/zz_homelab.conf
-    state: absent
-  register: lm_sensors_config_removed
-  become: true
-  tags:
-    - lm_sensors
-
-# Set directives need `sensors -s` now and lm-sensors.service at boot.
-- name: Check whether lm-sensors.service exists  # noqa: command-instead-of-module
-  when: lm_sensors_has_set
-  command: systemctl list-unit-files lm-sensors.service
-  register: lm_sensors_unit
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - lm_sensors
-
-- name: Ensure lm-sensors.service is enabled to re-apply limits at boot
+# The package enables lm-sensors.service without starting it. Its
+# ExecStart=-/usr/bin/sensors -s applies `set` limits and tolerates a host
+# without hwmon chips.
+- name: Restart lm-sensors to apply the libsensors limits
   when:
-    - lm_sensors_has_set
-    - "'lm-sensors.service' in lm_sensors_unit.stdout"
+    - lm_sensors_config_file.changed
+    - not (ansible_check_mode and lm_sensors_package.changed)
   systemd:
     name: lm-sensors.service
-    enabled: true
-  become: true
-  tags:
-    - lm_sensors
-
-# Sensorless fixtures make `sensors -s` fail; apply only where hwmon chips exist.
-- name: Detect whether any hwmon chip is present
-  when: lm_sensors_has_set
-  find:
-    paths: /sys/class/hwmon
-    patterns: hwmon*
-    file_type: any
-  register: lm_sensors_hwmon
-  become: true
-  tags:
-    - lm_sensors
-
-- name: Apply the libsensors limits live
-  when:
-    - lm_sensors_has_set
-    - lm_sensors_config_file.changed | default(false)
-    - lm_sensors_hwmon.matched | int > 0
-  command: sensors -s
-  changed_when: true
-  become: true
-  tags:
-    - lm_sensors
-
-# debugfs.plugin reads libsensors at startup. Restart only a running Netdata;
-# an inactive instance will read the new config when it starts.
-- name: Check whether netdata is running  # noqa: command-instead-of-module
-  command: systemctl is-active --quiet netdata
-  register: lm_sensors_netdata_active
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - lm_sensors
-
-- name: Restart netdata to re-read the libsensors configuration
-  when:
-    - >-
-      (lm_sensors_config_file.changed | default(false))
-      or (lm_sensors_config_removed.changed | default(false))
-    - lm_sensors_netdata_active.rc == 0
-  systemd:
-    name: netdata
     state: restarted
+  become: true
+  tags:
+    - lm_sensors
+
+# debugfs.plugin reads libsensors at startup. try-restart leaves an inactive
+# Netdata alone; it reads the new config when it starts.
+- name: Restart netdata to re-read the libsensors configuration  # noqa: command-instead-of-module
+  when: lm_sensors_config_file.changed
+  command: systemctl try-restart netdata.service
+  changed_when: true
   become: true
   tags:
     - lm_sensors

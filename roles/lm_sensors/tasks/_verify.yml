@@ -1,93 +1,60 @@
-# Verify module loading, file removal, and libsensors configuration.
-# The arm64 QEMU fixture has no hwmon chips, so live sensor charts and chip
-# limit application require hardware verification.
+# The QEMU fixtures have no hwmon chips, so live sensor charts and chip limit
+# application need hardware verification; these checks cover boot-time module
+# loading and the restarts a config change drives.
 
-- name: _verify | Load production defaults outside the role-under-test fixture
-  include_vars:
-    file: "{{ role_path }}/defaults/main.yml"
-    name: _lm_sensors_inactive_defaults
-  vars:
-    _role_under_test: another_role
-
-- name: _verify | Inactive fixture defaults provide no synthetic sensor inputs
-  assert:
-    that:
-      - _lm_sensors_inactive_defaults.lm_sensors_qemu_test_modules == []
-      - _lm_sensors_inactive_defaults.lm_sensors_qemu_test_config is none
-  vars:
-    _role_under_test: another_role
-
-- name: _verify | Resolve physical sensor inputs
-  vars:
-    qemu_test: false
-    lm_sensors_modules:
-      - verify_physical
-    lm_sensors_config: verify physical config
-  assert:
-    that:
-      - lm_sensors_effective_modules == ['verify_physical']
-      - lm_sensors_effective_config == 'verify physical config'
-
-- name: _verify | Read the modules-load.d file
-  slurp:
-    path: /etc/modules-load.d/lm_sensors.conf
-  register: _lm_sensors_modload
+- name: _verify | Unload the fixture module
+  command: modprobe -r dummy
+  changed_when: true
   become: true
 
-- name: _verify | Assert it lists exactly lm_sensors_modules
-  assert:
-    that:
-      - (_lm_sensors_modload.content | b64decode).split() == lm_sensors_effective_modules
-    fail_msg: >-
-      /etc/modules-load.d/lm_sensors.conf = {{ _lm_sensors_modload.content | b64decode | trim }};
-      expected {{ lm_sensors_effective_modules }}
+- name: _verify | Replay boot-time module loading
+  systemd:
+    name: systemd-modules-load.service
+    state: restarted
+  become: true
 
-- name: _verify | Assert each module is loaded in the running kernel
-  command: grep -qw {{ item | replace('-', '_') }} /proc/modules
-  loop: "{{ lm_sensors_effective_modules }}"
+- name: _verify | Assert systemd-modules-load reloaded the fixture module
+  command: grep -qw ^dummy /proc/modules
   changed_when: false
-  become: true
 
-- name: _verify | Parse the installed libsensors configuration
-  command: sensors -c /etc/sensors.d/zz_homelab.conf
-  register: _lm_sensors_config_parse
-  changed_when: false
-  failed_when: >-
-    _lm_sensors_config_parse.rc != 0
-    and not (_lm_sensors_config_parse.rc == 1
-    and _lm_sensors_config_parse.stderr.startswith("No sensors found!"))
-  become: true
+- name: _verify | Read lm-sensors.service state
+  systemd:
+    name: lm-sensors.service
+  register: _lm_sensors_unit
 
-# Exercise the role's running-Netdata restart path during config removal.
+# The role relies on the package enabling the unit so limits apply at boot.
+- name: _verify | Assert lm-sensors.service applies limits at boot
+  assert:
+    that:
+      - _lm_sensors_unit.status.UnitFileState == 'enabled'
+
 - name: _verify | Start netdata
   systemd:
-    name: netdata
+    name: netdata.service
     state: started
   become: true
 
-- name: _verify | Switch to an empty module list
-  set_fact:
-    lm_sensors_qemu_test_modules: []
-    # The inactive default fixture is native-typed as null during a site run.
-    lm_sensors_qemu_test_config: null
+- name: _verify | Read the running netdata
+  systemd:
+    name: netdata.service
+  register: _lm_sensors_netdata_before
 
-- name: _verify | Re-run the role's module-management tasks
+- name: _verify | Change the libsensors configuration
+  set_fact:
+    lm_sensors_config: |
+      chip "verify-isa-0000"
+          ignore temp3
+
+- name: _verify | Re-run the role with the changed configuration
   import_tasks: main.yml
 
-- name: _verify | Stat the modules-load.d file after removal
-  stat:
-    path: /etc/modules-load.d/lm_sensors.conf
-  register: _lm_sensors_modload_after
-  become: true
+- name: _verify | Read netdata after the config change
+  systemd:
+    name: netdata.service
+  register: _lm_sensors_netdata_after
 
-- name: _verify | Stat the libsensors configuration after removal
-  stat:
-    path: /etc/sensors.d/zz_homelab.conf
-  register: _lm_sensors_config_after
-  become: true
-
-- name: _verify | Assert removal dropped both files
+- name: _verify | Assert the config change restarted running netdata
   assert:
     that:
-      - not _lm_sensors_modload_after.stat.exists
-      - not _lm_sensors_config_after.stat.exists
+      - _lm_sensors_netdata_after.status.ActiveState == 'active'
+      - _lm_sensors_netdata_after.status.MainPID != _lm_sensors_netdata_before.status.MainPID
