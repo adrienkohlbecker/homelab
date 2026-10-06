@@ -6,7 +6,6 @@
     netdata_args:
       src: web_log.conf.j2
       dest: go.d/web_log.conf
-      condition: "{{ nginx_netdata_condition | default(true) }}"
       validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   tags:
     - nginx

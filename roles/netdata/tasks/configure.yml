@@ -104,28 +104,11 @@
   tags:
     - netdata
 
-- name: Ensure the netdata config directories exist
-  when: netdata_package_ready
-  file:
-    path: /etc/netdata/{{ item }}
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - go.d
-    - health.d
-  become: true
-  tags:
-    - netdata
-
 # The role's own go.d collector jobs and health.d alerts. Sibling roles install
 # theirs through config.yml (metrics.yml). go.d jobs are YAML; health configs
 # are a netdata-specific DSL with no offline parser, so only go.d/ validates.
 - name: Configure go.d collectors and health alerts
-  when:
-    - netdata_package_ready
-    - item.condition | default(true)
+  when: item.condition | default(true)
   vars:
     _netdata_yaml_validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   template:
@@ -186,7 +169,6 @@
 # alarm-notify.sh reads this on every notification, so it needs no restart.
 # Owner and mode keep the telegram bot token away from other users.
 - name: Configure alarm notifications
-  when: netdata_package_ready
   template:
     src: health_alarm_notify.conf.j2
     dest: /etc/netdata/health_alarm_notify.conf

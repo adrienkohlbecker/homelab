@@ -38,7 +38,6 @@
       name: hdparm
       script: hdparm.chart.sh
       conf: charts_d_hdparm.conf.j2
-      condition: "{{ hdparm_netdata_condition | default(true) }}"
   tags:
     - hdparm
 
@@ -50,6 +49,5 @@
     netdata_args:
       src: hdparm_alerts.conf
       dest: health.d/hdparm.conf
-      condition: "{{ hdparm_netdata_condition | default(true) }}"
   tags:
     - hdparm

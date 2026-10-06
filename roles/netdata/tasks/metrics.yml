@@ -16,15 +16,11 @@
   import_role:
     name: systemd_timer
     tasks_from: netdata
-  vars:
-    systemd_timer_netdata_condition: "{{ netdata_package_ready }}"
   tags:
     - netdata
 
 - name: Install netdata_presence metrics
   import_tasks: presence.yml
-  vars:
-    netdata_presence_condition: "{{ netdata_package_ready }}"
   tags:
     - netdata
 
@@ -32,8 +28,6 @@
   import_role:
     name: certbot
     tasks_from: netdata
-  vars:
-    certbot_netdata_condition: "{{ netdata_package_ready }}"
   tags:
     - netdata
 
@@ -41,8 +35,6 @@
   import_role:
     name: nginx
     tasks_from: netdata
-  vars:
-    nginx_netdata_condition: "{{ netdata_package_ready }}"
   tags:
     - netdata
 
@@ -56,6 +48,6 @@
       name: keepalived_vrrp
       script: keepalived_vrrp.chart.sh
       conf: charts_d_keepalived_vrrp.conf.j2
-      condition: "{{ dns_vrrp_enabled and netdata_package_ready }}"
+      condition: "{{ dns_vrrp_enabled }}"
   tags:
     - netdata

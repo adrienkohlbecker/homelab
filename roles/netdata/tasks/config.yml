@@ -21,26 +21,8 @@
 #
 # _module and validate stay inline on the action: _module must resolve before
 # `when` to load the module argument spec, and validate uses default(omit).
-- name: config | Ensure netdata directory exists
-  when: netdata_args.condition | default(true)
-  file:
-    dest: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/netdata/
-    - /etc/netdata/{{ netdata_args.dest | dirname }}/
-  register: netdata_config_dir
-  become: true
-
-# In check mode on a fresh host the directory only "would" exist, so writing
-# into it would fail.
 - name: config | Install netdata config ({{ _module }})
-  when:
-    - netdata_args.condition | default(true)
-    - not (ansible_check_mode and netdata_config_dir.changed)
+  when: netdata_args.condition | default(true)
   vars:
     _module: "{{ 'template' if (netdata_args.src | default('')).endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"

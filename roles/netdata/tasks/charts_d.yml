@@ -32,16 +32,6 @@
   register: _netdata_charts_d_chart_sh
   become: true
 
-- name: charts_d | Ensure /etc/netdata/charts.d/ exists
-  when: netdata_args.condition | default(true)
-  file:
-    path: /etc/netdata/charts.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
 # Inline rather than via config.yml so every charts.d conf, which the plugin
 # sources as shell, gets the bash parse check.
 - name: "charts_d | Install charts.d conf for {{ netdata_args.name }}"
