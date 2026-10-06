@@ -76,18 +76,20 @@ _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, 
 
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
-ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/")
+ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/(.+)$")
 
 
 class ChangeClassification(NamedTuple):
     direct_roles: list[str]
     full_universe_paths: list[str]
     machine_universe: set[str]
+    # Role -> changed paths relative to the role directory.
+    role_paths: dict[str, list[str]]
 
 
 def classify_changed_files(paths: list[str]) -> ChangeClassification:
     """Classify changed file paths into CI-relevant categories."""
-    roles: set[str] = set()
+    roles: dict[str, list[str]] = defaultdict(list)
     full_universe: list[str] = []
     machine_universe: set[str] = set()
 
@@ -102,12 +104,13 @@ def classify_changed_files(paths: list[str]) -> ChangeClassification:
                 break
         m = ROLE_PATH_RE.match(path)
         if m:
-            roles.add(m.group(1))
+            roles[m.group(1)].append(m.group(2))
 
     return ChangeClassification(
         direct_roles=sorted(roles),
         full_universe_paths=full_universe,
         machine_universe=machine_universe,
+        role_paths=dict(roles),
     )
 
 
@@ -486,8 +489,32 @@ def sort_specs_by_runtime(specs: list[str], runtimes: dict[str, float]) -> list[
     return sorted(specs, key=lambda s: (s in runtimes, -runtimes.get(s, 0.0), s))
 
 
-def _walk_tasks(tasks, role: str, inv: dict) -> None:
-    """Recurse a task list, collecting import/include_role references."""
+# Stands for "any task file": a templated or subdirectory reference the import
+# graph cannot resolve statically, so it conservatively reaches everything.
+ANY_TASK_FILE = "*"
+TASK_FILE_RE = re.compile(r"^tasks/([^/]+)\.ya?ml$")
+
+
+class RoleImports(NamedTuple):
+    """Static import graph over roles/*/tasks/*.yml.
+
+    importers: helper role -> entry point (tasks_from stem) -> importing roles.
+    includes:  role -> task file stem -> stems it imports or includes.
+    """
+
+    importers: dict[str, dict[str, set[str]]]
+    includes: dict[str, dict[str, set[str]]]
+
+
+def _task_stem(ref: object) -> str:
+    """Normalise a tasks_from / import_tasks reference to its tasks/ stem."""
+    if not isinstance(ref, str) or "{{" in ref or "/" in ref:
+        return ANY_TASK_FILE
+    return re.sub(r"\.ya?ml$", "", ref)
+
+
+def _walk_tasks(tasks, role: str, stem: str, imports: RoleImports) -> None:
+    """Recurse a task list, recording role imports and same-role task includes."""
     if not isinstance(tasks, list):
         return
     for t in tasks:
@@ -496,21 +523,67 @@ def _walk_tasks(tasks, role: str, inv: dict) -> None:
         for k in ("import_role", "include_role"):
             body = t.get(k)
             if isinstance(body, dict) and "name" in body:
-                inv[body["name"]].add(role)
+                entry = _task_stem(body.get("tasks_from", "main"))
+                imports.importers[body["name"]][entry].add(role)
+        for k in ("import_tasks", "include_tasks"):
+            ref = t.get(k)
+            if ref is not None:
+                ref = ref.get("file") if isinstance(ref, dict) else ref
+                imports.includes[role][stem].add(_task_stem(ref))
         for nest in ("block", "rescue", "always"):
             if nest in t:
-                _walk_tasks(t[nest], role, inv)
+                _walk_tasks(t[nest], role, stem, imports)
 
 
-def build_role_deps_map() -> dict[str, list[str]]:
-    """Build helper -> [consumers] inverse dependency map."""
-    inv: dict[str, set[str]] = defaultdict(set)
+def build_role_imports() -> RoleImports:
+    """Parse every role task file into the static import graph."""
+    imports = RoleImports(defaultdict(lambda: defaultdict(set)), defaultdict(lambda: defaultdict(set)))
     for task_file in sorted(Path("roles").glob("*/tasks/*.yml")):
         role = task_file.parts[-3]
         with task_file.open() as fh:
             tasks = yaml.safe_load(fh)
-        _walk_tasks(tasks, role, inv)
-    return {k: sorted(v) for k, v in inv.items()}
+        imports.includes[role].setdefault(task_file.stem, set())
+        _walk_tasks(tasks, role, task_file.stem, imports)
+    return imports
+
+
+def _reaches(imports: RoleImports, role: str, entry: str, stem: str) -> bool:
+    """True when `role`'s entry point runs task file `stem` via static includes."""
+    seen: set[str] = set()
+    pending = [entry]
+    while pending:
+        current = pending.pop()
+        if current in (stem, ANY_TASK_FILE):
+            return True
+        if current not in seen:
+            seen.add(current)
+            pending.extend(imports.includes.get(role, {}).get(current, ()))
+    return False
+
+
+def change_consumers(role: str, paths: list[str], imports: RoleImports) -> set[str]:
+    """Roles whose cells exercise the changed `paths` (role-relative) of `role`.
+
+    A task file fans out only to importers of an entry point that reaches it,
+    so test scaffolding (_setup, _verify) and unimported entry points stay
+    within the role's own cells. meta/test.yml shapes only those cells.
+    Anything else (templates, files, defaults, vars, handlers, an unparsed or
+    deleted task file) is reachable from every entry point.
+    """
+    entries = imports.importers.get(role, {})
+    consumers: set[str] = set()
+    for path in paths:
+        if path == "meta/test.yml":
+            continue
+        m = TASK_FILE_RE.match(path)
+        if m and m.group(1) in imports.includes.get(role, {}):
+            for entry, importers in entries.items():
+                if _reaches(imports, role, entry, m.group(1)):
+                    consumers |= importers
+        else:
+            for importers in entries.values():
+                consumers |= importers
+    return consumers
 
 
 def _full_universe_specs() -> list[str]:
@@ -701,19 +774,21 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
             log(f"machine-universe changed -> all {machine} roles: {' '.join(machine_roles)}")
             roles.update(machine_roles)
 
-    deps_map = build_role_deps_map()
+    imports = build_role_imports()
+    consumers_by_role: dict[str, list[str]] = {}
 
     for role in classification.direct_roles:
         if role in universe:
             roles.add(role)
-        consumers = deps_map.get(role, [])
+        consumers = sorted(change_consumers(role, classification.role_paths[role], imports))
+        consumers_by_role[role] = consumers
         if consumers:
             log(f"role '{role}' changed -> consumers: {' '.join(consumers)}")
-        for consumer in consumers:
-            if consumer in universe:
-                roles.add(consumer)
+        elif role in imports.importers:
+            log(f"role '{role}' changed -> no consumer-reachable files")
+        roles.update(consumer for consumer in consumers if consumer in universe)
 
-    release_cells = propagate_release_cells(classification.direct_roles, deps_map, universe)
+    release_cells = propagate_release_cells(classification.direct_roles, consumers_by_role, universe)
     if release_cells:
         log(f"  propagated release cells: {' '.join(cell_to_ci_spec(cell) for cell in release_cells)}")
 

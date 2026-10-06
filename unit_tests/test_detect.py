@@ -114,7 +114,7 @@ class TestClassifyChangedFiles:
         assert result.full_universe_paths == ["group_vars/all/main.yml"]
 
     def test_empty_paths_and_blank_lines(self) -> None:
-        assert detect.classify_changed_files([]) == detect.ChangeClassification([], [], set())
+        assert detect.classify_changed_files([]) == detect.ChangeClassification([], [], set(), {})
         assert detect.classify_changed_files(["", "roles/nginx/tasks/main.yml", ""]).direct_roles == ["nginx"]
 
     def test_deduplicates_roles(self) -> None:
@@ -910,72 +910,191 @@ class TestRecentPipelineIds:
 # ---------------------------------------------------------------------------
 
 
+def _write_role_tree(root: Path, files: dict[str, str]) -> None:
+    for relative, content in files.items():
+        path = root / "roles" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+
+# A podman-shaped helper: install and image are imported entry points, main
+# chains install and prune, and the underscore files are test scaffolding.
+# nginx's test_fixture entry point pulls in an underscore file of its own.
+_IMPORT_TREE = {
+    "podman/tasks/main.yml": "- import_tasks: install.yml\n- import_tasks: prune.yml\n",
+    "podman/tasks/install.yml": "- debug:\n",
+    "podman/tasks/image.yml": "- debug:\n",
+    "podman/tasks/prune.yml": "- debug:\n",
+    "podman/tasks/_setup.yml": "- debug:\n",
+    "podman/tasks/_verify.yml": "- import_tasks: main.yml\n",
+    "podman/meta/test.yml": "ubuntu:\n  - resolute\n",
+    "podman/templates/podman.conf.j2": "",
+    "redis/tasks/main.yml": (
+        "- import_role:\n    name: podman\n    tasks_from: install\n"
+        "- import_role:\n    name: podman\n    tasks_from: image.yml\n"
+    ),
+    "kuma/tasks/main.yml": "- import_role:\n    name: podman\n    tasks_from: install\n",
+    "nginx/tasks/main.yml": "- debug:\n",
+    "nginx/tasks/test_fixture.yml": "- include_tasks:\n    file: _setup_snakeoil.yml\n",
+    "nginx/tasks/_setup_snakeoil.yml": "- debug:\n",
+    "nginx/tasks/_verify.yml": "- debug:\n",
+    "homepage/tasks/main.yml": "- debug:\n",
+    "homepage/tasks/_setup.yml": "- import_role:\n    name: nginx\n    tasks_from: test_fixture\n",
+}
+
+
 class TestWalkTasks:
-    def test_finds_import_role(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks([{"import_role": {"name": "nginx"}}], "homepage", inv)
-        assert "homepage" in inv["nginx"]
+    @staticmethod
+    def _walk(tasks, role: str = "consumer", stem: str = "main"):
+        imports = detect.RoleImports(defaultdict(lambda: defaultdict(set)), defaultdict(lambda: defaultdict(set)))
+        detect._walk_tasks(tasks, role, stem, imports)
+        return imports
 
-    def test_finds_include_role(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks([{"include_role": {"name": "podman"}}], "redis", inv)
-        assert "redis" in inv["podman"]
+    @pytest.mark.parametrize("key", ["import_role", "include_role"])
+    def test_records_role_entry_point(self, key: str) -> None:
+        imports = self._walk([{key: {"name": "podman", "tasks_from": "image.yml"}}])
+        assert imports.importers == {"podman": {"image": {"consumer"}}}
 
-    def test_walks_block(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks([{"block": [{"import_role": {"name": "systemd_unit"}}]}], "nginx", inv)
-        assert "nginx" in inv["systemd_unit"]
+    def test_entry_point_defaults_to_main(self) -> None:
+        assert self._walk([{"import_role": {"name": "nginx"}}]).importers == {"nginx": {"main": {"consumer"}}}
 
-    def test_walks_rescue(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks([{"rescue": [{"import_role": {"name": "helper"}}]}], "consumer", inv)
-        assert "consumer" in inv["helper"]
+    @pytest.mark.parametrize("nest", ["block", "rescue", "always"])
+    def test_walks_nested_blocks(self, nest: str) -> None:
+        imports = self._walk([{nest: [{"import_role": {"name": "helper", "tasks_from": "unit"}}]}])
+        assert imports.importers == {"helper": {"unit": {"consumer"}}}
 
-    def test_walks_always(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks([{"always": [{"import_role": {"name": "cleanup"}}]}], "svc", inv)
-        assert "svc" in inv["cleanup"]
+    @pytest.mark.parametrize(
+        ("task", "expected"),
+        [
+            ({"import_tasks": "install.yml"}, "install"),
+            ({"include_tasks": {"file": "site.yml", "apply": {"tags": ["nginx"]}}}, "site"),
+            ({"include_tasks": "{{ ansible_config_file | dirname }}/test/x.yml"}, detect.ANY_TASK_FILE),
+            ({"import_tasks": "sub/x.yml"}, detect.ANY_TASK_FILE),
+        ],
+        ids=["import-tasks", "include-tasks-file", "templated-path", "subdirectory"],
+    )
+    def test_records_same_role_includes(self, task: dict, expected: str) -> None:
+        assert self._walk([task]).includes == {"consumer": {"main": {expected}}}
 
-    def test_skips_non_dict_tasks(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks(["string_task", 42, None], "role", inv)
-        assert len(inv) == 0
+    def test_templated_tasks_from_reaches_any_file(self) -> None:
+        imports = self._walk([{"import_role": {"name": "helper", "tasks_from": "{{ entry }}"}}])
+        assert imports.importers == {"helper": {detect.ANY_TASK_FILE: {"consumer"}}}
 
-    def test_skips_non_list(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks("not a list", "role", inv)
-        assert len(inv) == 0
+    @pytest.mark.parametrize(
+        "tasks",
+        [["string_task", 42, None], "not a list", [{"import_role": {"tasks_from": "site"}}]],
+        ids=["non-dict-tasks", "non-list", "role-without-name"],
+    )
+    def test_ignores_unattributable_entries(self, tasks) -> None:
+        imports = self._walk(tasks)
+        assert not imports.importers
+        assert not imports.includes
 
-    def test_ignores_role_without_name_key(self) -> None:
-        inv = defaultdict(set)
-        detect._walk_tasks([{"import_role": {"tasks_from": "site"}}], "consumer", inv)
-        assert len(inv) == 0
 
-
-class TestBuildRoleDepsMap:
-    def test_builds_map(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+class TestBuildRoleImports:
+    def test_builds_graph(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        consumer_dir = tmp_path / "roles" / "consumer" / "tasks"
-        consumer_dir.mkdir(parents=True)
-        (consumer_dir / "main.yml").write_text("- import_role:\n    name: helper\n")
-        helper_dir = tmp_path / "roles" / "helper" / "tasks"
-        helper_dir.mkdir(parents=True)
-        (helper_dir / "main.yml").write_text("- debug:\n    msg: hello\n")
-        result = detect.build_role_deps_map()
-        assert result.get("helper") == ["consumer"]
+        _write_role_tree(tmp_path, _IMPORT_TREE)
+        imports = detect.build_role_imports()
+        assert imports.importers["podman"] == {"install": {"kuma", "redis"}, "image": {"redis"}}
+        assert imports.includes["podman"]["main"] == {"install", "prune"}
+        assert imports.includes["podman"]["image"] == set()
 
     def test_empty_roles_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         (tmp_path / "roles").mkdir()
-        assert detect.build_role_deps_map() == {}
+        assert detect.build_role_imports() == ({}, {})
 
     def test_rejects_parse_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        bad_dir = tmp_path / "roles" / "broken" / "tasks"
-        bad_dir.mkdir(parents=True)
-        (bad_dir / "main.yml").write_text(": : :\n  - [\n")
+        _write_role_tree(tmp_path, {"broken/tasks/main.yml": ": : :\n  - [\n"})
         with pytest.raises(detect.yaml.YAMLError):
-            detect.build_role_deps_map()
+            detect.build_role_imports()
+
+
+class TestChangeConsumers:
+    @pytest.fixture
+    def imports(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.chdir(tmp_path)
+        _write_role_tree(tmp_path, _IMPORT_TREE)
+        return detect.build_role_imports()
+
+    @pytest.mark.parametrize(
+        ("role", "paths", "expected"),
+        [
+            ("podman", ["tasks/_verify.yml", "tasks/_setup.yml", "meta/test.yml"], set()),
+            ("podman", ["tasks/prune.yml"], set()),
+            ("podman", ["tasks/main.yml"], set()),
+            ("podman", ["tasks/image.yml"], {"redis"}),
+            ("podman", ["tasks/install.yml"], {"kuma", "redis"}),
+            ("podman", ["templates/podman.conf.j2"], {"kuma", "redis"}),
+            ("podman", ["defaults/main.yml"], {"kuma", "redis"}),
+            ("podman", ["tasks/deleted.yml"], {"kuma", "redis"}),
+            ("nginx", ["tasks/_setup_snakeoil.yml"], {"homepage"}),
+            ("nginx", ["tasks/_verify.yml"], set()),
+            ("redis", ["templates/redis.conf.j2"], set()),
+        ],
+        ids=[
+            "test-scaffolding",
+            "unimported-file",
+            "unimported-main",
+            "image-entry",
+            "install-entry",
+            "template",
+            "defaults",
+            "unparsed-task-file",
+            "imported-underscore-file",
+            "nginx-verify",
+            "leaf-role",
+        ],
+    )
+    def test_fan_out(self, imports, role: str, paths: list[str], expected: set[str]) -> None:
+        assert detect.change_consumers(role, paths, imports) == expected
+
+    def test_include_chain_reaches_entry_importers(self, imports) -> None:
+        imports.importers["podman"]["main"].add("firewall")
+        assert detect.change_consumers("podman", ["tasks/prune.yml"], imports) == {"firewall"}
+
+    def test_any_file_include_reaches_everything(self, imports) -> None:
+        imports.includes["podman"]["image"].add(detect.ANY_TASK_FILE)
+        assert detect.change_consumers("podman", ["tasks/prune.yml"], imports) == {"redis"}
+
+
+class TestChangeMatrixFanOut:
+    """End-to-end change detection over the synthetic role tree."""
+
+    @pytest.fixture(autouse=True)
+    def _tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        _write_role_tree(tmp_path, _IMPORT_TREE)
+        monkeypatch.setenv("CI_BASE_REF", "explicit")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
+        monkeypatch.setattr(detect, "git_rev_parse_short", lambda ref: ref)
+
+    @staticmethod
+    def _cells(monkeypatch: pytest.MonkeyPatch, changed: list[str]) -> set[tuple[str, str]]:
+        monkeypatch.setattr(detect, "git_diff_files", lambda base: changed)
+        specs, site_test = detect._gitlab_change_matrix(None, lambda _: None)
+        assert site_test is False
+        return {(cell.role, cell.ubuntu) for cell in map(detect.ci_spec_to_cell, specs)}
+
+    def test_verify_only_change_runs_only_the_helper(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cells = self._cells(monkeypatch, ["roles/podman/tasks/_verify.yml", "roles/podman/meta/test.yml"])
+        assert {role for role, _ in cells} == {"podman"}
+
+    def test_entry_point_change_runs_its_callers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cells = self._cells(monkeypatch, ["roles/podman/tasks/image.yml"])
+        assert {role for role, _ in cells} == {"podman", "redis"}
+        assert ("redis", "resolute") in cells
+
+    def test_imported_underscore_file_runs_its_importer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cells = self._cells(monkeypatch, ["roles/nginx/tasks/_setup_snakeoil.yml"])
+        assert {role for role, _ in cells} == {"nginx", "homepage"}
+
+    def test_template_change_fans_out_to_every_consumer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cells = self._cells(monkeypatch, ["roles/podman/templates/podman.conf.j2"])
+        assert {role for role, _ in cells} == {"podman", "redis", "kuma"}
+        assert {("redis", "resolute"), ("kuma", "resolute")} <= cells
 
 
 class TestListTestableRoles:
@@ -1008,7 +1127,7 @@ class TestGitlabChangeMatrix:
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
         monkeypatch.setattr(detect, "git_diff_files", lambda base: seen.append(base) or [])
         monkeypatch.setattr(detect, "list_testable_roles", list)
-        monkeypatch.setattr(detect, "build_role_deps_map", dict)
+        monkeypatch.setattr(detect, "build_role_imports", lambda: detect.RoleImports({}, {}))
         return seen
 
     @pytest.mark.parametrize("branch", ["master", "feature"])
@@ -1045,7 +1164,7 @@ class TestGitlabChangeMatrix:
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
         monkeypatch.setattr(detect, "git_diff_files", lambda base: ["site.yml"])
         monkeypatch.setattr(detect, "list_testable_roles", list)
-        monkeypatch.setattr(detect, "build_role_deps_map", dict)
+        monkeypatch.setattr(detect, "build_role_imports", lambda: detect.RoleImports({}, {}))
 
         assert detect._gitlab_change_matrix(None, lambda _: None) == ([], True)
 
