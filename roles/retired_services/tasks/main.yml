@@ -178,6 +178,16 @@
     - retired_services
     - fluentbit
 
+# Drop once lab, pug, and fox have converged. No filter loads it any more.
+- name: Remove the retired conmon partial-message Lua filter
+  file:
+    path: /etc/fluent-bit/conmon_partial_message.lua
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - fluentbit
+
 # Drop once lab, pug, and fox have converged. The user role stopped shipping
 # i7z and now copies the compiled Ghostty entry directly; the source copy and
 # its ghostty alias are inert.

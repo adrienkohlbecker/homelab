@@ -68,7 +68,6 @@
     mode: "0644"
     backup: true
   loop:
-    - conmon_partial_message.lua
     - level_from_message.lua
     - podman_events.lua
     - lnav_shape.lua
