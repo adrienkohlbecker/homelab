@@ -1,5 +1,8 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(mise run ansible:check:*)"
+    ],
     "ask": [
       "Bash(mise run ansible:*)",
       "Bash(ansible-playbook:*)",

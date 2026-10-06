@@ -1,6 +1,7 @@
 # Commands whose effect lands on prod or an external service need operator
-# approval every time (AGENTS.md hard rule). A --check run prompts too: prefix
-# rules cannot tell it apart.
+# approval every time (AGENTS.md hard rule). Dry runs go through ansible:check,
+# allowed below; a --check flag on the plain task still prompts, since prefix
+# rules cannot see it.
 prefix_rule(
     pattern = ["mise", "run", "ansible"],
     decision = "prompt",
@@ -29,6 +30,15 @@ prefix_rule(
     justification = "Deploys Home Assistant config to lab",
     match = ["mise run ha:sync push"],
     not_match = ["mise run ha:sync pull"],
+)
+
+# The dry-run wrapper always passes --check, so it runs without approval.
+prefix_rule(
+    pattern = ["mise", "run", "ansible:check"],
+    decision = "allow",
+    justification = "Dry-runs site.yml without changing hosts",
+    match = ["mise run ansible:check --limit lab --tags nginx"],
+    not_match = ["mise run ansible --limit lab --check"],
 )
 
 # Commands that print decrypted secrets into the session transcript.

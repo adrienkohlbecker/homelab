@@ -303,6 +303,12 @@ run = 'HCLOUD_TOKEN="$HCLOUD_TOKEN_OP" op run -- tofu "$@"'
 description = "ansible-playbook against site.yml (forwards args)"
 run = 'ansible-playbook site.yml "$@"'
 
+# Dry run, so agents may run it without a prompt. ansible.cfg always diffs,
+# so a changed secret-bearing template still prints its rendered content.
+[tasks."ansible:check"]
+description = "ansible-playbook --check against site.yml (forwards args)"
+run = 'ansible-playbook site.yml --check "$@"'
+
 # worktree:add / worktree:rm / worktree:merge / worktree:update live under
 # mise-tasks/worktree/ so shellcheck and shfmt cover them. The populate helper
 # is factored out separately so Claude Code's WorktreeCreate hook can call it
