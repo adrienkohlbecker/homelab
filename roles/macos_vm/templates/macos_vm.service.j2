@@ -1,6 +1,10 @@
 [Unit]
 Description=macOS VM {{ macos_vm_name }}
 After=zfs-volumes.target
+{% if zfs_root %}
+After=zfs_mount_var_lib_macos_vm.service
+Requires=zfs_mount_var_lib_macos_vm.service
+{% endif %}
 StartLimitIntervalSec=0
 ConditionPathExists={{ macos_vm_workdir }}/OpenCore.qcow2
 ConditionPathExists={{ macos_vm_workdir }}/OVMF_VARS.fd
