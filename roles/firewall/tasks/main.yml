@@ -16,10 +16,8 @@
   tags:
     - firewall
 
-# policy_rc_d: 101 prevents the dpkg postinst from auto-starting
-# nftables.service before our drop-in / template lands. Without it
-# there's a sub-second window where stock Ubuntu's example ruleset
-# (or no ruleset) is active. Matches the keepalived pattern.
+# policy_rc_d: 101 keeps the postinst from starting nftables.service
+# with the stock ruleset before the drop-in and template land.
 - name: Install nftables
   apt:
     pkg:
@@ -31,10 +29,8 @@
   tags:
     - firewall
 
-# Stock nftables.service ships `ExecStop=/usr/sbin/nft flush ruleset`,
-# which would tear down netavark's tables in the
-# same kernel ruleset on any `systemctl stop` or `restart`. Scope the
-# stop to our own table.
+# Stock nftables.service stops with `nft flush ruleset`, which would
+# tear down netavark's tables too. Scope the stop to our own table.
 - name: Install nftables.service ExecStop drop-in
   import_role:
     name: systemd_unit
@@ -60,29 +56,22 @@
   tags:
     - firewall
 
-# Network-stack hardening sysctls. Ubuntu's defaults are inconsistent
-# (log_martians=0, send_redirects=1) — pin the secure values where they
-# differ. The module writes /etc/sysctl.d/90-firewall-hardening.conf AND
-# applies each key live.
-#
-# The 90- prefix is load-bearing: systemd-sysctl applies files in
-# basename order, so this file must sort after 50-default.conf.
+# Network-stack hardening sysctls, written and applied live. The 90-
+# prefix is load-bearing: systemd-sysctl applies files in basename
+# order, so this file must sort after 50-default.conf.
 - name: Install network-stack hardening sysctls
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
     sysctl_file: /etc/sysctl.d/90-firewall-hardening.conf
   loop:
-    # Disable IPv6 entirely. Cuts the stack at the kernel layer so
-    # services binding `::` end up on a dead listener, neighbor
-    # discovery churn stops, and we don't maintain a parallel
-    # ip6tables ruleset.
+    # Disable IPv6 at the kernel so no parallel v6 policy is needed.
     - { name: net.ipv6.conf.all.disable_ipv6, value: "{{ '1' if firewall_disable_ipv6 else '0' }}" }
     - { name: net.ipv6.conf.default.disable_ipv6, value: "{{ '1' if firewall_disable_ipv6 else '0' }}" }
     # Ignore inbound ICMP redirects (no attacker-controlled reroute).
     - { name: net.ipv4.conf.all.accept_redirects, value: '0' }
     - { name: net.ipv4.conf.default.accept_redirects, value: '0' }
-    # Don't emit ICMP redirects either — we're not a transit router.
+    # Don't emit ICMP redirects either.
     - { name: net.ipv4.conf.all.send_redirects, value: '0' }
     - { name: net.ipv4.conf.default.send_redirects, value: '0' }
     # Log packets with bogus source IPs (e.g. RFC1918 on WAN). Real
@@ -182,13 +171,8 @@
   tags:
     - firewall
 
-# The ExecReload drop-in installed above maps `state: reloaded` to atomic
-# `nft -f` (per-table flush+rebuild inside the file replaces only our
-# table; netavark's tables are untouched). On an inactive
-# unit, Ansible starts it instead of reloading; otherwise a changed
-# ruleset fires ExecReload with no stop/start window. The condition
-# skips check-mode runs where the apt install reported changed but
-# didn't actually run (nft isn't on disk yet for the unit's ExecStart).
+# The ExecReload drop-in makes `reloaded` an atomic `nft -f` with no
+# firewall-less window; an inactive unit is started instead.
 - name: Apply nftables.service ruleset and lifecycle
   when: not (ansible_check_mode and firewall_apt_nftables.changed)
   systemd:
@@ -256,15 +240,7 @@
   tags:
     - firewall
 
-# Dynamically attach wg0 to the homelab `bulk` flowtable. Kept out of
-# the static `devices = { ... }` clause in nftables.conf so the firewall
-# can come up at boot before wg-quick@wg0 brings the iface up (nft
-# errors out with ENOENT when a flowtable device doesn't exist yet,
-# which would leave the host without a firewall on every boot until
-# manual restart). The unit's lifecycle is bound to wg-quick@wg0 via
-# WantedBy/PartOf, and nftables.service's ExecReload drop-in re-runs it
-# after a reload wipes the runtime flowtable. See the unit-file header
-# for the BindsTo-vs-WantedBy rationale.
+# Attach wg0 to the `bulk` flowtable once it exists; see the unit header.
 - name: Manage wg0_flowtable.service
   import_role:
     name: systemd_unit

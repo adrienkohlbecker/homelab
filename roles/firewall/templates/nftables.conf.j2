@@ -1,7 +1,6 @@
 #!/usr/sbin/nft -f
 
-# Central definitions make repeated values parse-time checked and keep
-# the rendered policy readable.
+# Central definitions keep repeated values parse-time checked.
 define WAN_IFACE = "{{ default_interface }}"
 define HOME_LAN = {{ network.sites.home.cidr }}
 define WG_SUBNET = {{ network.partitions.wireguard.cidr }}
@@ -9,21 +8,14 @@ define PODMAN_DEFAULT = {{ podman_default_network }}
 define PODMAN_POOL = {{ podman_bridge_pool }}
 {% set samba_exposed = (samba_shares | default([]) | length) > 0 %}
 
-# Atomically replace only this table; netavark's tables in
-# the same kernel ruleset remain untouched.
+# Replace only this table; netavark's tables in the same ruleset stay
+# untouched. Delete and recreate it so constant sets do not retain stale
+# ifindexes; the batch stays atomic under `nft -f`.
 #
-# Family is `inet` (dual-stack) even though the role disables IPv6
-# at the stack layer (the firewall_disable_ipv6 sysctls in
-# tasks/main.yml). The `ip saddr` / `ip protocol` / `icmp type`
-# matches below are IPv4-only by construction; an `inet` family hook
-# means that where IPv6 is enabled, v6 packets enter THIS table:
-# port- and interface-only rules still apply, and everything
-# address-scoped falls through to the policy-drop catch-all rather
-# than silently bypassing our filter. v6 first-class rules would land
-# here via `ip6 saddr` / `icmpv6 type` once they're wanted.
-#
-# Delete and recreate the whole table so constant set definitions do
-# not retain stale ifindexes. The batch remains atomic under `nft -f`.
+# The `inet` family means v6 packets enter this table wherever IPv6 is
+# enabled (see firewall_disable_ipv6): port- and interface-only rules
+# still apply, and the IPv4-only address matches fall through to the
+# policy drop instead of bypassing the filter.
 add table inet homelab
 delete table inet homelab
 table inet homelab {
@@ -69,11 +61,9 @@ table inet homelab {
     counter forward_silenced_vip {}
 {% endif %}
 
-    # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
-    # *intersection*, not union: home-LAN saddrs must arrive on the WAN
-    # iface (which is also the LAN iface behind the UDM), and wg-subnet
-    # saddrs must arrive on wg0. A concatenated set expresses the pair
-    # directly so adding a future site is one element edit.
+    # Admin services require an (iif, saddr) pair, not a union of the two:
+    # home-LAN sources must arrive on the WAN iface (also the LAN iface
+    # behind the UDM) and wireguard sources on wg0.
     #
     # mac_mgmt (macvlan child of $WAN_IFACE in mode bridge) is included
     # on hosts that run the macvlan role: L2 broadcasts to $WAN_IFACE --
@@ -91,15 +81,10 @@ table inet homelab {
         }
     }
 
-    # Ingress ifaces for FORWARD reach into published containers + for
-    # the catch-all TCP reject (LAN-side fast-fail). Pinning iif keeps
-    # an attacker on a future LAN bridge / guest VLAN / mgmt net from
-    # speculatively probing these paths.
-    #
-    # vrrp.<vrid> is the keepalived use_vmac child of $WAN_IFACE that
-    # carries the DNS VIP (see roles/keepalived/templates/keepalived.conf.j2).
-    # Inbound DNS to the VIP enters on this vmac before PREROUTING DNAT.
-    # The vmac shares $WAN_IFACE's physical L2 and trust scope.
+    # Trusted ingress for reaching published containers and for the
+    # catch-all TCP reset, so a future guest VLAN or bridge stays out.
+    # vrrp.<vrid> is keepalived's use_vmac child of $WAN_IFACE: DNS to
+    # the VIP enters there before PREROUTING DNAT, on the same L2.
     set lan_admin_ifaces {
         type ifname
         flags constant
@@ -112,17 +97,11 @@ table inet homelab {
         }
     }
 
-    # Kernel-offloaded conntrack fastpath. Established TCP/UDP flows
-    # that ingress on a listed device skip the forward chain entirely
-    # via the ingress hook, which materially cuts CPU on bulk traffic
-    # (BT and media streams). Listed devices are limited to $WAN_IFACE — wg0 is
-    # attached dynamically by wg0_flowtable.service (tied to
-    # wg-quick@wg0's lifecycle) so the firewall can load at boot
-    # before the wg iface exists; nft errors out with ENOENT here if
-    # a device in the static clause isn't up yet. podman bridges
-    # (host-specific count and naming) can't be wildcarded either, so
-    # container-egress packets still walk the chain on their outbound
-    # side; the WAN-ingress reply path is offloaded.
+    # Established TCP/UDP flows ingressing on a listed device skip the
+    # forward chain, which cuts CPU on bulk traffic. Only $WAN_IFACE is
+    # static: a missing device fails the whole load with ENOENT, so
+    # wg0_flowtable.service attaches wg0 once it exists. Podman bridges
+    # cannot be wildcarded and stay on the slow path.
     flowtable bulk {
         hook ingress priority filter;
         devices = { $WAN_IFACE };
@@ -135,8 +114,8 @@ table inet homelab {
         type filter hook input priority filter; policy drop;
 
         # Established/related and loopback unconditionally; INVALID
-        # dropped. After these, every remaining packet is NEW — no
-        # rule below needs an explicit ct-state qualifier.
+        # dropped. Every remaining packet is NEW, so no rule below needs
+        # a ct-state qualifier.
         ct state established,related accept
         iifname "lo" counter name "input_loopback" accept
 {% if tailscale_advertise_routes is defined %}
@@ -151,7 +130,7 @@ table inet homelab {
         # TCP NEW must have SYN. Conntrack's loose mode (default)
         # classifies mid-stream non-SYN packets as NEW rather than
         # INVALID, so without this an attacker could probe TCP
-        # services with crafted ACKs. The named counter verifies this path.
+        # services with crafted ACKs.
         tcp flags & (fin|syn|rst|ack) != syn counter name "input_nonsyn" drop comment "input non-syn drop"
 
         # DNS allows. Source-scope what doesn't need WAN reach: 5333 is
@@ -170,9 +149,7 @@ table inet homelab {
         # LAN snooping querier for groups they joined.
         ip protocol igmp counter name "igmp_accept" accept comment "IGMP (link-local group mgmt)"
 
-        # Wireguard ingress only on the WAN iface. Pinning iif means
-        # an attacker on a future LAN bridge can't speculatively send
-        # to udp/51820 from inside.
+        # Wireguard ingress only on the WAN iface.
         iifname $WAN_IFACE udp dport {{ service_ports.wireguard }} counter name "wireguard_accept" accept comment "wireguard (WAN ingress only)"
 {% if tailscale_wan_direct | default(false) %}
 
@@ -199,29 +176,22 @@ table inet homelab {
 {% endif %}
         iifname . ip saddr @lan_admin_pairs tcp dport {{ service_ports.nut }} counter name "input_admin_nut" accept comment "nut (admin)"
 
-        # Home Assistant reaches NUT from a named podman bridge. Grant
-        # container access only to NUT, not the broader admin services.
+        # Home Assistant reaches NUT from a named podman bridge.
         #
         # Known gap: this trusts every container on every podman bridge,
-        # not just HA's. upsd exposes INSTCMD (UPS shutdown) — a
-        # compromised container could power-off the rack. Tightening
-        # needs either pinning HA's bridge subnet here or restricting
-        # NUT clients via upsd.users; not implemented (home-environment
-        # trade).
+        # and upsd exposes INSTCMD, so a compromised container could shut
+        # the UPS down. Tightening needs HA's bridge subnet pinned here or
+        # NUT clients restricted in upsd.users (home-environment trade).
         ip saddr $PODMAN_POOL tcp dport {{ service_ports.nut }} counter name "input_nut_podman" accept comment "nut (podman bridges, e.g. HA NUT integration)"
 
-        # ICMP — only echo-request, rate-limited. Other ICMP types
-        # come back as RELATED. Overflow falls through to the catch-all,
-        # which drops non-TCP silently.
+        # Only echo-request, rate-limited; other ICMP types arrive as
+        # RELATED. Overflow falls through to the catch-all drop.
         icmp type echo-request limit rate 10/second burst 20 packets counter name "input_icmp_accept" accept
 
-        # keepalived runs in unicast mode (not multicast 224.0.0.18)
-        # with peers on the home LAN (see roles/keepalived/templates/
-        # keepalived.conf.j2). Scope VRRP to WAN-iif + the literal
-        # set of named peer IPs (not the whole HOME_LAN) — a
-        # compromised LAN device could otherwise forge a high-priority
-        # VRRP packet and demote keepalived's MASTER role, stealing
-        # the DNS VIP. Rule is suppressed where VRRP is disabled.
+        # keepalived runs unicast with home-LAN peers. Scope VRRP to the
+        # WAN iface and the named peers, not the whole HOME_LAN, so a
+        # compromised LAN device cannot forge a higher-priority advert
+        # and steal the DNS VIP.
 {% if dns_vrrp_enabled %}
 {% set vrrp_peer_ips = dns_keepalived_peers | reject('eq', inventory_hostname) | map('extract', external_ips) | list %}
 {% if vrrp_peer_ips %}
@@ -229,19 +199,13 @@ table inet homelab {
 {% endif %}
 {% endif %}
 
-        # Recurring benign LAN discovery noise. Drop rather than reject to
-        # avoid amplifying broadcast traffic while preserving log signal.
-        #   67    — DHCP DISCOVER from 0.0.0.0 (IoT devices booting, UDM
-        #           is the DHCP server, lab isn't)
-        #   1900  — SSDP/UPnP M-SEARCH (homeassistant doing UPnP
-        #           discovery on its podman bridge)
-        #   10001 — UBNT discovery protocol; UniFi gateway broadcasts
-        #           4-byte `01 00 00 00` every ~10s on every VLAN it
-        #           has an interface in. ~6k/day. We don't run a UBNT
-        #           agent on this host
-        #   137/138 — NetBIOS name/datagram broadcasts; nmbd is disabled
-        #           and SMB3 listens directly on 445
-        #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
+        # Recurring benign LAN discovery noise, dropped before it can crowd
+        # out real hits in the catch-all's rate-limited log.
+        #   67      DHCP DISCOVER (the UDM is the DHCP server)
+        #   137/138 NetBIOS broadcasts (nmbd is disabled; SMB uses 445)
+        #   1900    SSDP/UPnP M-SEARCH
+        #   10001   UniFi discovery broadcasts, every ~10s per VLAN
+        #   57621   Spotify Connect LAN discovery
         udp dport { 67, 137, 138, 1900, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
 {% if dns_vrrp_enabled %}
 
@@ -272,42 +236,26 @@ table inet homelab {
     ##################################################
     #                  FORWARD CHAIN                 #
     ##################################################
-    # Interface naming: `wg0` is the literal iface name from the
-    # wireguard role; podman bridges follow the `podmanN` pattern
-    # (podman0 = default bridge, podman1+ = named bridges allocated
-    # from podman_bridge_pool). nft's prefix-wildcard `iifname "podman*"`
-    # collapses the per-bridge fan-out into one rule. The WAN iface
-    # (eth0 on prod, enpXsY on test VMs) is templated via the
-    # group_vars `default_interface` because it does vary per host.
+    # Podman bridges match `podman*`: podman0 is the default bridge and
+    # podman1+ the named bridges allocated from podman_bridge_pool.
     chain forward {
         type filter hook forward priority filter; policy drop;
 
-        # Offload established TCP/UDP flows to the `bulk` flowtable.
-        # Non-terminating verdict — falls through to the established
-        # accept below for the first packet; subsequent packets in
-        # the same flow hit the ingress hook and skip this chain.
+        # Offload established flows; this packet still takes the accept
+        # below, later ones skip the chain via the ingress hook.
         ip protocol { tcp, udp } ct state established flow add @bulk
 
         ct state established,related accept
         ct state invalid drop
 
-        # Mirror of input ! --syn drop — see input rule for the
-        # conntrack tcp_loose rationale. Counter for _verify.yml.
+        # Mirror of the input chain's non-SYN drop.
         tcp flags & (fin|syn|rst|ack) != syn counter name "forward_nonsyn" drop comment "forward non-syn drop"
 
-        # Egress paths from internal interfaces. Netavark masquerades
-        # every bridge it manages, the default one included, under both
-        # its iptables and nftables drivers: any saddr-in-its-own-subnet
-        # packet whose daddr is outside that subnet is SNATed in its own
-        # rules, so this table carries no NAT chain.
-        # The egress oifname set is "anything that isn't another
-        # podman bridge" — deliberately covers WAN, the home LAN
-        # (containers reaching the UDM / other LAN hosts), host VLAN
-        # sub-interfaces (the iot macvlan parent on lab), wireguard —
-        # without hardcoding host-specific iface names.
-        # Cross-bridge container traffic still has to go through the
-        # DNAT-reach rule below; direct podman → podman is still
-        # dropped.
+        # Container egress to anything but another podman bridge: WAN,
+        # home LAN, VLAN sub-interfaces and wireguard. Netavark masquerades
+        # every bridge it manages under both of its firewall drivers, so
+        # this table carries no NAT chain. Cross-bridge traffic must take
+        # the DNAT rules below.
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
 
         # Authelia publishes its forward-auth backend on every host address.
@@ -322,57 +270,34 @@ table inet homelab {
             counter name "forward_authelia_drop" drop comment "Authelia forward-auth (outside the wireguard mesh)"
 {% if tailscale_advertise_routes is defined %}
 
-        # Tailscale subnet router + exit node forwarding. As a subnet router this
-        # host relays tailnet clients to home LAN hosts (daddr in the advertised
-        # 10.123.0.0/21, out $WAN_IFACE); as an exit node it relays them to the
-        # internet (also out $WAN_IFACE). One ingress accept covers both roles:
-        # tailscaled SNATs subnet-route/exit traffic in its own ts-postrouting,
-        # and return flows match the established,related accept at the top of this
-        # chain. Same policy-drop-wins rationale as the netavark DNAT accepts
-        # below -- ts-forward's accept can't survive this chain's policy drop.
-        # tailscale0 is a trusted overlay (the headscale ACL gates who can send),
-        # so it's left unscoped on oifname rather than pinned to $WAN_IFACE --
-        # this also lets a tailnet client reach a published container port via
-        # the host's DNAT. iifname (not iif) so it loads before the iface exists.
+        # Tailscale subnet router and exit node: relay tailnet clients to the
+        # advertised routes and the internet. tailscaled SNATs that traffic
+        # itself, and ts-forward's accept cannot survive this chain's policy
+        # drop. The headscale ACL gates the overlay, so oifname stays open,
+        # which also lets tailnet clients reach published containers.
         iifname "tailscale0" counter name "tailscale_forward_accept" accept comment "tailscale subnet router + exit node"
 {% endif %}
 
-        # Reach containers via netavark's DNAT. PREROUTING rewrites every
-        # host-published port (transmission's BT peers, Authelia), so those
-        # flows meet these rules and never the INPUT chain. Three ingress
-        # paths, all targeting any podman bridge:
-        #   - WAN: external clients hitting a published container
-        #   - wg0: wireguard peers hitting a published container
-        #   - any podman bridge: a container querying a VIP/host-IP
-        #     that PREROUTING DNATs back into a bridge (e.g. container
-        #     → 10.123.1.224:53 → DNAT to adguard at 10.88.0.76, or
-        #     nginx → 127.0.0.1:8123 → DNAT to homeassistant at
-        #     10.89.0.21). Without these accepts, the multi-base-chain
-        #     interaction with netavark drops them: netavark's chain
-        #     accepts the egress, but our default-drop forward fires
-        #     regardless (any chain's drop wins under nft hook
-        #     semantics, even if another chain returned accept).
-        # WAN/wg0 scoping still prevents reachability from any future
-        # interface (guest VLAN, mgmt net) we haven't trusted.
+        # Reach containers through netavark's DNAT: PREROUTING rewrites
+        # every published port, so those flows meet these rules and never
+        # INPUT. Ingress is a trusted iface (LAN, wireguard, the DNS vmac)
+        # or a podman bridge, for a container querying a VIP or host IP
+        # that DNATs back into a bridge. Netavark's own chain accepts these
+        # flows, but a drop in any base chain at the hook wins, so this
+        # chain's policy drop would discard them without these accepts.
         #
-        # Known gap on the second rule: trusts any container to reach
-        # any DNAT-marked tuple — including 0.0.0.0-published services
-        # on the host's LAN IP and other bridges via their gateway IPs.
-        # A compromised container (e.g. transmission running untrusted
-        # BT peer code) could pivot to internal services this way.
-        # Tightening would need an oifname allowlist of bridges that
-        # should be cross-reachable, or a dport blacklist for sensitive
-        # services; not implemented (home-environment trade).
+        # Known gap on the second rule: any container reaches any
+        # DNAT-marked tuple, including 0.0.0.0-published services on other
+        # bridges. A compromised container could pivot to internal services;
+        # tightening needs an oifname allowlist or a sensitive-dport
+        # denylist (home-environment trade).
         iifname @lan_admin_ifaces oifname "podman*" \
             ct status dnat accept comment "Reach containers (LAN + wireguard ingress)"
         iifname "podman*" oifname "podman*" ct status dnat \
             accept comment "container → VIP → container (cross- or same-bridge DNAT)"
 
-        # Direct podman cross-network traffic: deny container-IP lateral
-        # movement between the default bridge and named bridge pool.
-        # Same-network traffic is L2-switched inside one bridge and never
-        # reaches this routed FORWARD hook; published/VIP access is handled
-        # by the ct-status-dnat allow above. Enforce the boundary here.
+        # Deny direct container-IP lateral movement between bridges.
+        # Same-bridge traffic is switched at L2 and never reaches FORWARD.
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } ip daddr { $PODMAN_DEFAULT, $PODMAN_POOL } \
             counter name "forward_podman_isolation" drop comment "podman direct cross-network isolation"
 
@@ -383,8 +308,8 @@ table inet homelab {
         iifname "vrrp.{{ dns_keepalived_vrid }}" ct original ip daddr {{ network.virtual_ips.dns }} counter name "forward_silenced_vip" drop comment "DNS VIP handoff leakage"
 {% endif %}
 
-        # Catch-all log+drop. Counter for _verify.yml.
-        limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "
+        # Catch-all: log and drop.
+        limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:DROP: "
         counter name "forward_catchall" drop comment "forward catch-all"
     }
 }
