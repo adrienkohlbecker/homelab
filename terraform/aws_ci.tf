@@ -34,11 +34,11 @@ locals {
     role = {
       # Instance-type-agnostic name: aws_autoscaling_group.name and
       # aws_launch_template.name are ForceNew, so encoding the type in the name
-      # would churn the runner default and IAM groupName condition on a resize.
+      # would churn the runner asg_name and IAM groupName condition on a resize.
       name = "homelab-ci-qemu-host"
       # 16 vCPU / 32 GiB / 950 GB NVMe, at 10 cells each plus room for the
       # _site_test guest. Six hosts use 96 of the 160-vCPU Frankfurt Spot
-      # quota. max_size must match gitlab_runner_aws_qemu_max_instances in
+      # quota. max_size must match its gitlab_runner_aws_pools max_instances in
       # group_vars/physical_fox.yml.
       instance_type           = "c8id.4xlarge"
       instance_type_overrides = []
@@ -59,7 +59,7 @@ locals {
       # vCPUs. Its Spot pool scores 1/10 and prices at On-Demand, and Frankfurt
       # On-Demand reliably yields one host per AZ, so the pool runs On-Demand
       # in the two AZs that offer the type. max_size must match
-      # gitlab_runner_aws_qemu_arm_max_instances in group_vars/physical_fox.yml.
+      # its gitlab_runner_aws_pools max_instances in group_vars/physical_fox.yml.
       instance_type_overrides = ["a1.metal"]
       max_size                = 2
       on_demand               = true

@@ -8,39 +8,22 @@ gitlab_runner_shell_token: ""
 # independent `limit`; AWS host capacity is managed separately.
 gitlab_runner_concurrent: 8
 
-# ── AWS qemu runner (instance / fleeting) ───────────────────────────────────
-# Instance executor that scales an ASG from zero and runs the qemu harness on
-# nested-KVM hosts. Capacity starts at one job on one host.
-gitlab_runner_aws_qemu_enabled: false
-gitlab_runner_aws_qemu_token: ""
+# ── AWS qemu runners (instance / fleeting) ──────────────────────────────────
+# Instance executors that scale Terraform-owned ASGs from zero and run the qemu
+# harness on nested-KVM hosts. One entry per pool:
+#   suffix           runner name suffix, after the inventory hostname
+#   token            vaulted project-runner token
+#   asg_name         Auto Scaling Group the plugin scales
+#   capacity         concurrent jobs per instance
+#   max_instances    autoscaler ceiling; keep it at the ASG max_size
+#   idle_time        how long an idle instance survives
+#   acquire_timeout  bound on waiting for a ready instance
+#   ssh_key          optional static connector key whose public half the AMI
+#                    bakes in; without it the plugin pushes a per-connection
+#                    key through EC2 Instance Connect
+gitlab_runner_aws_pools: []
 
-# AWS SDK profile rendered under /mnt/services/gitlab_runner/.aws when the
-# runner is enabled. fox is not an EC2 instance, so the plugin needs a
-# manager-side AWS identity rather than an instance profile.
-gitlab_runner_aws_qemu_profile: homelab-ci-fleeting
-gitlab_runner_aws_qemu_region: eu-central-1
+# Manager-side AWS identity for every pool. fox is not an EC2 instance, so the
+# plugin needs static credentials rather than an instance profile.
 gitlab_runner_aws_qemu_access_key_id: ""
 gitlab_runner_aws_qemu_secret_access_key: ""
-
-# Terraform owns the matching ASG.
-gitlab_runner_aws_qemu_asg_name: homelab-ci-qemu-host
-gitlab_runner_aws_qemu_capacity_per_instance: 1
-gitlab_runner_aws_qemu_max_instances: 1
-gitlab_runner_aws_qemu_idle_time: "15m"
-gitlab_runner_aws_qemu_username: ubuntu
-gitlab_runner_aws_qemu_connector_timeout: "2m0s"
-gitlab_runner_aws_qemu_instance_acquire_timeout: "10m0s"
-
-# ── AWS ARM qemu runner (instance / fleeting) ───────────────────────────────
-# A second runner block uses the same manager AWS profile and an independent
-# autoscaler ceiling.
-gitlab_runner_aws_qemu_arm_enabled: false
-gitlab_runner_aws_qemu_arm_token: ""
-gitlab_runner_aws_qemu_arm_asg_name: homelab-ci-qemu-arm
-gitlab_runner_aws_qemu_arm_capacity_per_instance: 1
-gitlab_runner_aws_qemu_arm_max_instances: 1
-gitlab_runner_aws_qemu_arm_idle_time: "15m"
-gitlab_runner_aws_qemu_arm_connector_timeout: "2m0s"
-gitlab_runner_aws_qemu_arm_instance_acquire_timeout: "20m0s"
-gitlab_runner_aws_qemu_arm_ssh_private_key: ""
-gitlab_runner_aws_qemu_arm_ssh_private_key_path: /mnt/services/gitlab_runner/.ssh/fleeting_arm
