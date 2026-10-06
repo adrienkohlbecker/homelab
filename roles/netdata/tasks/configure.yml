@@ -129,8 +129,6 @@
       dest: go.d/docker.conf
     - src: systemdunits.conf.j2
       dest: go.d/systemdunits.conf
-    - src: sensors.conf.j2
-      dest: go.d/sensors.conf
     - src: intelgpu.conf.j2
       dest: go.d/intelgpu.conf
       condition: "{{ 'go.d:collector:intelgpu:intelgpu' in netdata_collectors and ansible_architecture == 'x86_64' }}"

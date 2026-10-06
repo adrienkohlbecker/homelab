@@ -43,6 +43,18 @@
       Expected the explicit Postfix collector job to emit its queue chart;
       got {{ _netdata_postfix_chart.json | default({}) }}.
 
+# Hardware sensors reach netdata through debugfs.plugin's bundled libsensors.
+# The fixture has no hwmon chip to chart, but the module logs its probe
+# latency once libsensors initialises.
+- name: _verify | Wait for debugfs.plugin to initialise libsensors
+  command: journalctl -u netdata.service -b --no-pager --grep "SENSORS max data collection latency"
+  register: _netdata_libsensors_log
+  until: _netdata_libsensors_log.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+  become: true
+
 - name: _verify | Read netdata apt policy
   command: apt-cache policy netdata
   changed_when: false

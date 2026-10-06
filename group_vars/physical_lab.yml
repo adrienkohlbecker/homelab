@@ -150,6 +150,8 @@ netdata_contexts:
   - system.softirqs
   - systemd.service.cpu.utilization
   - system.uptime
+  # debugfs.plugin libsensors charts; read through /etc/sensors.d.
+  - system.hw.sensor.temperature.input
   - mem.swapio
   - zfs.arc_size
 netdata_collectors:
@@ -162,7 +164,6 @@ netdata_collectors:
   - go.d:collector:prometheus:fluentbit
   - go.d:collector:prometheus:kuma
   - go.d:collector:prometheus:minio
-  - go.d:collector:sensors:sensors
   - go.d:collector:smartctl:smartctl
   - go.d:collector:systemdunits:service-units
   - go.d:collector:upsd:local
