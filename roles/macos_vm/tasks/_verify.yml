@@ -7,50 +7,41 @@
 # machine's accel property, so the appended accel=kvm:tcg (not -accel, which
 # QEMU rejects alongside it) falls back to TCG where the fixture has no
 # /dev/kvm. QEMU keeps the last -m, so the appended small guest RAM fits the
-# fixture: -S still allocates it up front.
-- name: _verify | Start the installed QEMU command
-  block:
-    # -S holds the guest before its first instruction; QMP then quits.
-    - name: _verify | Start QEMU paused and quit
-      command:
-        argv:
-          - python3
-          - -c
-          - |
-            import os
-            import shlex
-            import subprocess
-            import sys
+# fixture: -S still allocates it up front. -S holds the guest before its
+# first instruction; QMP then quits.
+- name: _verify | Start QEMU paused and quit
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import os
+        import shlex
+        import subprocess
+        import sys
 
-            unit = open(sys.argv[1]).read().replace("\\\n", " ")
-            exec_start = next(line for line in unit.splitlines() if line.startswith("ExecStart="))
-            argv = shlex.split(exec_start.removeprefix("ExecStart="))
-            env = dict(os.environ)
-            env.update(
-                line.removeprefix("Environment=").split("=", 1)
-                for line in unit.splitlines()
-                if line.startswith("Environment=")
-            )
-            os.makedirs("/run/macos-vm", exist_ok=True)
-            proc = subprocess.run(
-                [*argv, "-m", "512", "-machine", "accel=kvm:tcg", "-S", "-qmp", "stdio"],
-                input='{"execute": "qmp_capabilities"}\n{"execute": "quit"}\n',
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=120,
-            )
-            sys.stderr.write(proc.stderr)
-            sys.exit(proc.returncode)
-          - /etc/systemd/system/macos-vm-{{ macos_vm_name }}.service
-      register: macos_vm_start
-      changed_when: false
-      failed_when: macos_vm_start.rc != 0 or 'deprecated' in (macos_vm_start.stderr | lower)
-      become: true
-
-  always:
-    - name: _verify | Remove the QEMU monitor socket
-      file:
-        path: /run/macos-vm/{{ macos_vm_name }}.monitor
-        state: absent
-      become: true
+        unit = open(sys.argv[1]).read().replace("\\\n", " ")
+        exec_start = next(line for line in unit.splitlines() if line.startswith("ExecStart="))
+        argv = shlex.split(exec_start.removeprefix("ExecStart="))
+        env = dict(os.environ)
+        env.update(
+            line.removeprefix("Environment=").split("=", 1)
+            for line in unit.splitlines()
+            if line.startswith("Environment=")
+        )
+        os.makedirs("/run/macos-vm", exist_ok=True)
+        proc = subprocess.run(
+            [*argv, "-m", "512", "-machine", "accel=kvm:tcg", "-S", "-qmp", "stdio"],
+            input='{"execute": "qmp_capabilities"}\n{"execute": "quit"}\n',
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+        sys.stderr.write(proc.stderr)
+        sys.exit(proc.returncode)
+      - /etc/systemd/system/macos-vm-{{ macos_vm_name }}.service
+  register: macos_vm_start
+  changed_when: false
+  failed_when: macos_vm_start.rc != 0 or 'deprecated' in (macos_vm_start.stderr | lower)
+  become: true
