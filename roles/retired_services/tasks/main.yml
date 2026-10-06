@@ -179,21 +179,6 @@
     - retired_services
     - fluentbit
 
-# Drop once lab, pug, and fox have converged. Fluent Bit no longer tails the
-# package-manager logs, so their tail cursor is unused.
-- name: Remove the retired host_packages tail cursor
-  file:
-    path: /var/lib/fluent-bit/{{ item }}
-    state: absent
-  loop:
-    - host_packages.db
-    - host_packages.db-shm
-    - host_packages.db-wal
-  become: true
-  tags:
-    - retired_services
-    - fluentbit
-
 # Drop once lab, pug, and fox have converged. The user role stopped shipping
 # i7z and now copies the compiled Ghostty entry directly; the source copy and
 # its ghostty alias are inert.

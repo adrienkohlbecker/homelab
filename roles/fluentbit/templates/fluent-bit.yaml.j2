@@ -70,6 +70,20 @@ pipeline:
       storage.type: filesystem
       storage.pause_on_chunks_overlimit: true
 
+    - name: tail
+      tag: host_packages
+      path: /var/log/apt/*.log,/var/log/dpkg.log,/var/log/unattended-upgrades/*.log,/var/log/alternatives.log,/var/log/ubuntu-advantage.log,/var/log/ubuntu-advantage-apt-hook.log
+      db: /var/lib/fluent-bit/host_packages.db
+      db.locking: true
+      path_key: filepath
+      read_from_head: false
+      skip_long_lines: true
+      skip_empty_lines: true
+      rotate_wait: 30
+      buffer_max_size: 256k
+      storage.type: filesystem
+      storage.pause_on_chunks_overlimit: true
+
   outputs:
     # The file output opens and closes the path on every flush, so logrotate
     # can rename it and create a fresh one without restarting the daemon.
