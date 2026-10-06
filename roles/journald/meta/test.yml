@@ -1,0 +1,5 @@
+# Persistent journal compression follows the root filesystem: Lab leaves it
+# to ZFS, Minimal enables journald's own compression on ext4.
+machines:
+  lab:
+  minimal:

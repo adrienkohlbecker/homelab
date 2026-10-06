@@ -9,43 +9,6 @@
 # down on a mode flip, so its presence is uncorrelated with the *current*
 # Storage= mode (a reused fixture image may retain it).
 
-- name: _verify | Render persistent ext4 and ZFS journal configs
-  template:
-    src: 99-custom.conf.j2
-    dest: "/tmp/journald-{{ item.label }}.conf"
-    mode: "0644"
-  vars:
-    journald_storage: persistent
-    zfs_root: "{{ item.zfs_root }}"
-  loop:
-    - label: ext4
-      zfs_root: false
-    - label: zfs
-      zfs_root: true
-  become: true
-
-- name: _verify | Verify journal compression follows its filesystem
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-
-        assert "Compress=yes" in pathlib.Path("/tmp/journald-ext4.conf").read_text()
-        assert "Compress=no" in pathlib.Path("/tmp/journald-zfs.conf").read_text()
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate journal configs
-  file:
-    path: "/tmp/journald-{{ item }}.conf"
-    state: absent
-  loop:
-    - ext4
-    - zfs
-  become: true
-
 - name: _verify | Emit sentinel log line
   command: logger -t journald_verify -- {{ _journald_verify_token | quote }}
   vars:
@@ -88,3 +51,41 @@
   delay: 1
   until: "'unit=journald_audit_verify' in journald_verify_audit.stdout"
   become: true
+
+# Test fixtures run a volatile journal, where Compress=yes on every host.
+# Converge persistent storage to reach the filesystem-dependent branch, then
+# rotate so the active file is created under the live setting rather than
+# reused from the fixture image. journald records its compression choice in
+# the incompatible flags of each new file header.
+- name: _verify | Converge persistent journal storage
+  import_tasks: main.yml
+  vars:
+    journald_storage: persistent
+
+- name: _verify | Move the runtime journal to persistent storage
+  command: journalctl --flush
+  changed_when: false
+  become: true
+
+- name: _verify | Start a fresh persistent journal file
+  command: journalctl --rotate
+  changed_when: false
+  become: true
+
+- name: _verify | Read the active persistent journal header
+  shell: |
+    set -euo pipefail
+    journalctl --header --file="/var/log/journal/$(cat /etc/machine-id)/system.journal"
+  args:
+    executable: /bin/bash
+  register: journald_verify_header
+  changed_when: false
+  become: true
+
+- name: _verify | Journal compression is on only outside a ZFS root
+  assert:
+    that:
+      - (journald_verify_header.stdout is search('^Incompatible flags:.*COMPRESSED-', multiline=True)) == (not zfs_root)
+    fail_msg: >-
+      zfs_root={{ zfs_root }} but the journal header reads:
+      {{ journald_verify_header.stdout_lines | select('search', 'flags') | list }}
