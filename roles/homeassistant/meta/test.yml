@@ -1,6 +1,2 @@
-# Converge pulls and starts large container images; 4 GiB lacks headroom.
-machines:
-  lab:
-    memory_mb: 5120
 ubuntu:
   - resolute
