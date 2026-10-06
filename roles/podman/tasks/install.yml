@@ -9,7 +9,19 @@
 # install layer creates the device; this role formats and mounts it. Minimal
 # fixtures have zfs_root=false and intentionally keep Podman on the root
 # filesystem.
-#
+- name: install | Assert podman_storage_device is set on ZFS-root hosts
+  when: zfs_root
+  assert:
+    that:
+      - podman_storage_device is defined
+      - podman_storage_device | length > 0
+    fail_msg: >-
+      ZFS-root hosts require podman_storage_device (the partition or /dev/md
+      path) in inventory vars; got
+      {{ podman_storage_device | default('<unset>') }}.
+  tags:
+    - podman
+
 # resizefs grows ext4 to fill a deliberately enlarged partition and is a no-op
 # on fixed fixtures. On mdadm, mke2fs derives stripe geometry from the array.
 - name: install | Create ext4 filesystem on the podman partition
