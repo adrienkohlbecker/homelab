@@ -20,33 +20,6 @@
   tags:
     - lm_sensors
 
-# Read the owned boot list before replacing it to identify dropped modules.
-- name: Stat the persisted sensor module list
-  stat:
-    path: /etc/modules-load.d/lm_sensors.conf
-  register: lm_sensors_modload_stat
-  become: true
-  tags:
-    - lm_sensors
-
-- name: Read the persisted sensor module list
-  when: lm_sensors_modload_stat.stat.exists
-  slurp:
-    path: /etc/modules-load.d/lm_sensors.conf
-  register: lm_sensors_modload_old
-  become: true
-  tags:
-    - lm_sensors
-
-- name: Compute which sensor modules are being dropped
-  set_fact:
-    lm_sensors_dropped: >-
-      {{ ((lm_sensors_modload_old.content | default('') | b64decode).split()
-          if lm_sensors_modload_stat.stat.exists else [])
-         | difference(lm_sensors_effective_modules) }}
-  tags:
-    - lm_sensors
-
 # Load before persisting so unavailable modules never enter the boot list.
 - name: Load sensor modules now
   modprobe:
@@ -79,44 +52,6 @@
   tags:
     - lm_sensors
 
-# modprobe refuses to unload in-use modules; leave them loaded and flag a
-# reboot below. A single owned boot list lets us identify dropped modules.
-- name: Unload dropped sensor modules (best effort)
-  modprobe:
-    name: "{{ item }}"
-    state: absent
-  loop: "{{ lm_sensors_dropped }}"
-  failed_when: false
-  become: true
-  tags:
-    - lm_sensors
-
-# Flag a reboot only for modules still loaded after the attempt.
-# modprobe maps hyphens to underscores in /proc/modules.
-- name: Check whether dropped modules are still loaded
-  command: grep -qw {{ item | replace('-', '_') }} /proc/modules
-  loop: "{{ lm_sensors_dropped }}"
-  register: lm_sensors_dropped_loaded
-  changed_when: false
-  failed_when: false
-  become: true
-  tags:
-    - lm_sensors
-
-- name: Ask to reboot
-  when: >-
-    lm_sensors_dropped_loaded.results | default([])
-    | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length > 0
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  tags:
-    - lm_sensors
-
 - name: Write the libsensors configuration
   when: lm_sensors_effective_config | trim | length > 0
   template:
@@ -126,15 +61,9 @@
     owner: root
     group: root
     backup: true
-    # A sensor-less fixture returns 1 after a successful parse. Syntax errors
-    # start with an Error line, so accept only the explicit no-sensors result.
-    validate: >-
-      python3 -c 'import subprocess,sys;
-      p=subprocess.run(["sensors","-c",sys.argv[1]],capture_output=True,text=True);
-      sys.stdout.write(p.stdout); sys.stderr.write(p.stderr);
-      errors=any(line.lstrip().startswith("Error:") for line in p.stderr.splitlines());
-      sys.exit(1 if errors else 0 if p.returncode == 1
-      and p.stderr.startswith("No sensors found!") else p.returncode)' %s
+    # sensors exits 1 both on a parse error and on a sensorless host after a
+    # clean parse, so only the parser "Error:" lines on stderr tell them apart.
+    validate: sh -c '! sensors -c "$1" 2>&1 >/dev/null | grep "Error:" >&2' sh %s
   register: lm_sensors_config_file
   become: true
   tags:

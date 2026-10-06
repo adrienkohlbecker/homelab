@@ -1,4 +1,4 @@
-# Verify module loading/removal and libsensors configuration.
+# Verify module loading, file removal, and libsensors configuration.
 # The arm64 QEMU fixture has no hwmon chips, so live sensor charts and chip
 # limit application require hardware verification.
 
@@ -65,13 +65,6 @@
     state: started
   become: true
 
-# The unused dummy module should unload cleanly without requiring a reboot.
-- name: _verify | Clear any pre-existing reboot-required sentinel
-  file:
-    path: /var/run/reboot-required
-    state: absent
-  become: true
-
 - name: _verify | Switch to an empty module list
   set_fact:
     lm_sensors_qemu_test_modules: []
@@ -93,28 +86,8 @@
   register: _lm_sensors_config_after
   become: true
 
-- name: _verify | Check whether the dropped module is still loaded
-  command: grep -qw dummy /proc/modules
-  register: _lm_sensors_dummy_loaded
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | Stat the reboot-required sentinel
-  stat:
-    path: /var/run/reboot-required
-  register: _lm_sensors_reboot_after
-  become: true
-
-- name: _verify | Assert removal dropped the files and live-unloaded the module
+- name: _verify | Assert removal dropped both files
   assert:
     that:
       - not _lm_sensors_modload_after.stat.exists
       - not _lm_sensors_config_after.stat.exists
-      - _lm_sensors_dummy_loaded.rc != 0
-      - not _lm_sensors_reboot_after.stat.exists
-    fail_msg: >-
-      empty-list removal arm: modules-load.d exists={{ _lm_sensors_modload_after.stat.exists }},
-      sensors.d config exists={{ _lm_sensors_config_after.stat.exists }},
-      dummy still loaded={{ _lm_sensors_dummy_loaded.rc == 0 }},
-      reboot-required exists={{ _lm_sensors_reboot_after.stat.exists }}
