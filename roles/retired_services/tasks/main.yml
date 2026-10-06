@@ -179,16 +179,6 @@
     - retired_services
     - fluentbit
 
-# Drop once lab, pug, and fox have converged. No filter loads it any more.
-- name: Remove the retired conmon partial-message Lua filter
-  file:
-    path: /etc/fluent-bit/conmon_partial_message.lua
-    state: absent
-  become: true
-  tags:
-    - retired_services
-    - fluentbit
-
 # Drop once lab, pug, and fox have converged. Fluent Bit no longer tails the
 # package-manager logs, so their tail cursor is unused.
 - name: Remove the retired host_packages tail cursor
