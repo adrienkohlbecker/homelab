@@ -1,7 +1,21 @@
-# Optional input: nginx_test_fixture_args.authelia_mode installs the auth stub
-# in gate or authed mode after nginx starts.
+# Optional inputs in nginx_test_fixture_args:
+#   authelia_mode  installs the auth stub in gate or authed mode after nginx
+#                  starts.
+#   subdomains     vhost subdomains to resolve on loopback.
 - name: test_fixture | Lay down snakeoil certs at letsencrypt paths
   import_tasks: _setup.yml
+
+# Local TLS probes must use the vhost FQDN in the URL: a Host header on
+# https://localhost leaves SNI=localhost and nginx rejects the handshake. The
+# Packer fixtures run no cloud-init, so nothing rewrites /etc/hosts and the
+# lines survive the converge and a reboot in _verify.
+- name: test_fixture | Resolve test vhosts on loopback
+  lineinfile:
+    path: /etc/hosts
+    line: "127.0.0.1 {{ item }}.{{ inventory_hostname }}.{{ domain }}"
+    backup: true
+  loop: "{{ (nginx_test_fixture_args | default({})).subdomains | default([]) }}"
+  become: true
 
 - name: test_fixture | Install nginx
   import_tasks: install.yml

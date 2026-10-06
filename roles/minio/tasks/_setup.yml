@@ -2,6 +2,11 @@
   import_role:
     name: nginx
     tasks_from: test_fixture
+  vars:
+    nginx_test_fixture_args:
+      subdomains:
+        - minio-api
+        - minio
 
 - name: _setup | Install fluent-bit for structured-log integration
   import_role:

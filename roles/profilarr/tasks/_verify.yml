@@ -1,12 +1,3 @@
-- name: _verify | Map the profilarr vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "profilarr.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | Profilarr answers /ping through the nginx vhost
   uri:
     url: https://profilarr.{{ inventory_hostname }}.{{ domain }}/ping

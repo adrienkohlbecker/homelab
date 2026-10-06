@@ -1,12 +1,3 @@
-- name: _verify | Map the z2m vhost to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "z2m.{{ inventory_hostname }}.{{ domain }}"
-
 # The vhost has `auth: true`, so the browser path goes through Authelia.
 # A cookieless GET must redirect to the portal -- the only probe that fails if
 # `auth: true` is dropped from nginx_site_args. The returnUrl (rd=) echoing

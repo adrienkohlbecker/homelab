@@ -1,12 +1,3 @@
-- name: _verify | Map the homepage vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "homepage.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | Homepage answers through nginx
   uri:
     url: https://homepage.{{ inventory_hostname }}.{{ domain }}/api/healthcheck

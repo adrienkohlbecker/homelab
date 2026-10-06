@@ -170,15 +170,6 @@
 # End-to-end through the nginx vhost -- the production ingress every fleet
 # host's apt/docker pulls traverse. A typo in proxy_pass, a missing
 # proxy_set_header, or a dropped site surfaces here.
-- name: _verify | Map the nexus vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "nexus.{{ inventory_hostname }}.{{ domain }}"
-
 # Auth uses the bootstrap admin password Nexus writes on first boot -- the
 # setup wizard never runs under test, so the file persists. Test-only.
 - name: _verify | Read the bootstrap admin password

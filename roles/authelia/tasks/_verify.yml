@@ -1,12 +1,3 @@
-- name: _verify | Map the authelia vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "auth.{{ authelia_cookie_domain }}"
-
 - name: _verify | Authelia runs as a non-root container user
   command:
     argv:

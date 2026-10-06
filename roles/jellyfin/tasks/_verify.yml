@@ -1,12 +1,3 @@
-- name: _verify | Map the jellyfin vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "jellyfin.{{ inventory_hostname }}.{{ domain }}"
-
 # Exercise both the published host port and nginx vhost. Together they verify
 # valid Jellyfin JSON and catch proxy routing regressions that the container
 # healthcheck cannot see.

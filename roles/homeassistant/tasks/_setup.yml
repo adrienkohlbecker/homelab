@@ -7,6 +7,10 @@
   import_role:
     name: nginx
     tasks_from: test_fixture
+  vars:
+    nginx_test_fixture_args:
+      subdomains:
+        - homeassistant
 
 - name: _setup | Install fluent-bit
   import_role:

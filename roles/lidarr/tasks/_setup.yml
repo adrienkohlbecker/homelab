@@ -5,6 +5,8 @@
   vars:
     nginx_test_fixture_args:
       authelia_mode: gate
+      subdomains:
+        - lidarr
 
 - name: _setup | Install podman
   import_role:

@@ -5,3 +5,5 @@
   vars:
     nginx_test_fixture_args:
       authelia_mode: authed
+      subdomains:
+        - nut

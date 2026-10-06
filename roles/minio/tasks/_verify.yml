@@ -5,17 +5,6 @@
     that:
       - "'Requires=zfs_mount_mnt_minio.service' in lookup('template', 'override_service.conf.j2')"
 
-# Use the real vhost names so both TLS SNI and the Host header match nginx.
-- name: _verify | Map the MinIO vhosts to loopback
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "minio-api.{{ inventory_hostname }}.{{ domain }}"
-        - "minio.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | Wait for normalized minio record in lnav store
   import_role:
     name: fluentbit

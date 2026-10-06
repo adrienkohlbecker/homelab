@@ -57,16 +57,6 @@
       {{ mirror_apt_netdata }}; got policy:
       {{ _netdata_apt_policy.stdout | default('') }}
 
-- name: _verify | Map the netdata vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "netdata.{{ inventory_hostname }}.{{ domain }}"
-      regexp: '^127\.0\.0\.1\s+netdata\.'
-
 # --- nginx Authelia gate ---
 # Browser path through `https://netdata.<host>.<domain>` is gated by Authelia
 # forward-auth: an unauthenticated hit must 302 to the auth portal. The generic

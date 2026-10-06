@@ -34,15 +34,6 @@
   changed_when: false
   failed_when: nut_winnut_login.stdout_lines != ['OK', 'OK', 'OK']
 
-- name: _verify | Map the nut vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "nut.{{ inventory_hostname }}.{{ domain }}"
-
 # The CGI status page: nginx 301s / -> /upsstats.cgi, proxied to nut-cgi over
 # the role-managed fcgiwrap socket. The site has auth enabled,
 # so _setup's Authelia stub admits the auth_request subrequest.

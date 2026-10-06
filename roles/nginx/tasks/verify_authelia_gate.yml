@@ -1,13 +1,6 @@
 # Input: nginx_verify_authelia_gate_args.subdomain, the gated vhost subdomain.
-- name: verify_authelia_gate | Map the vhost FQDN to loopback
-  import_tasks: test_loopback_hosts.yml
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "{{ nginx_verify_authelia_gate_args.subdomain }}.{{ inventory_hostname }}.{{ domain }}"
-  tags:
-    - nginx
-
+# The caller's _setup resolves it on loopback through test_fixture's
+# `subdomains`.
 - name: verify_authelia_gate | Verify unauthenticated redirect for {{ nginx_verify_authelia_gate_args.subdomain }}
   uri:
     url: >-

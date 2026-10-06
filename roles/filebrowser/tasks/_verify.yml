@@ -1,14 +1,5 @@
 ---
 
-- name: _verify | Map the filebrowser vhost FQDN to loopback for SNI-correct probing
-  import_role:
-    name: nginx
-    tasks_from: test_loopback_hosts
-  vars:
-    nginx_test_loopback_hosts_args:
-      hostnames:
-        - "filebrowser.{{ inventory_hostname }}.{{ domain }}"
-
 - name: _verify | Filebrowser root autoindex serves
   uri:
     url: https://filebrowser.{{ inventory_hostname }}.{{ domain }}/

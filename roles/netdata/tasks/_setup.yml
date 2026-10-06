@@ -5,6 +5,8 @@
   vars:
     nginx_test_fixture_args:
       authelia_mode: gate
+      subdomains:
+        - netdata
 
 # Mirror the production prerequisites: Fluent Bit needs the earlier logrotate
 # layer, and netdata validates its Fluent Bit extension with the real binary.
