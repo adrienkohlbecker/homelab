@@ -111,6 +111,7 @@ uv sync --locked --quiet
 uv run --quiet python test/setup_mitogen.py
 hook=$(git rev-parse --path-format=absolute --git-common-dir)/hooks/pre-push
 test -x "$hook" || {
+  mkdir -p "${hook%/*}"
   printf '#!/bin/sh\nexec mise run lint\n' >"$hook"
   chmod +x "$hook"
 }
