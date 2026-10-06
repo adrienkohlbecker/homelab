@@ -21,5 +21,7 @@ LogFilterPatterns=~^magicsock: disco: node [[][^]]+[]] d:[^ ]+ now using [^ ]+ m
 ExecStartPost=-/usr/sbin/ethtool -K {{ ansible_default_ipv4.interface }} rx-udp-gro-forwarding on rx-gro-list off
 {% endif %}
 
+{% if zfs_root %}
 [Install]
 WantedBy=zfs_autosnapshot.target
+{% endif %}
