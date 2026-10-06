@@ -153,6 +153,10 @@ depends = [
 
 [tasks."lint:secrets"]
 description = "Scan git history for leaked secrets (gitleaks; baseline in .gitleaksignore)"
+# Fingerprints carry the commit and line a hunk attributes the secret to, which
+# shifts with the diff algorithm; pin the one the baseline was generated under
+# so a user's git config cannot change the result.
+env = { GIT_CONFIG_COUNT = "1", GIT_CONFIG_KEY_0 = "diff.algorithm", GIT_CONFIG_VALUE_0 = "histogram" }
 run = "gitleaks git --no-banner --redact --config .gitleaks.toml ."
 
 [tasks."lint:ansible"]
