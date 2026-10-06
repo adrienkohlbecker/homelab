@@ -438,7 +438,7 @@
         connect-src tile.openstreetmap.org a.tile.openstreetmap.org b.tile.openstreetmap.org c.tile.openstreetmap.org {{ nginx_csp_default }};
         img-src *.cartocdn.com *.home-assistant.io {{ nginx_csp_default }};
         default-src {{ nginx_csp_default }}; frame-ancestors 'self';
-      location_conf: |
+      server_conf: |
         add_header Access-Control-Allow-Origin "https://brands.home-assistant.io";
   tags:
     - homeassistant

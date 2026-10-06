@@ -221,17 +221,19 @@
         location = / {
           return 301 /upsstats.cgi;
         }
-      location_conf: |
-        gzip off;
 
-        # Admit only the read-only status and image programs. auth_request is
-        # inherited from the enclosing `location /`, so both stay
-        # Authelia-gated while the state-changing upsset.cgi remains absent.
-        location ~ ^/(upsstats|upsimage)\.cgi$ {
-          include /etc/nginx/fastcgi_params;
+        location / {
+          gzip off;
 
-          fastcgi_pass  unix:/var/run/fcgiwrap.socket;
-          fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
+          # Admit only the read-only status and image programs, Authelia-gated
+          # like the rest of the site; the state-changing upsset.cgi stays
+          # absent.
+          location ~ ^/(upsstats|upsimage)\.cgi$ {
+            include /etc/nginx/fastcgi_params;
+
+            fastcgi_pass  unix:/var/run/fcgiwrap.socket;
+            fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
+          }
         }
   tags:
     - nut

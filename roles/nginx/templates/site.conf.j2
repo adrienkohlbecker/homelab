@@ -22,9 +22,7 @@ server {
   }
 {% endif %}
 
-  # A location with its own add_header inherits none from the server, so reuse
-  # this block inside location / when location_conf is present.
-{% set security_headers %}
+  # Every location without an add_header of its own inherits these.
   add_header X-Content-Type-Options    "nosniff" always;
   add_header Referrer-Policy           "same-origin" always;
 {% if _nginx_site_csp is not false %}
@@ -34,12 +32,22 @@ server {
   add_header Permissions-Policy        "browsing-topics=()" always;
 {# TLSRef/Mozilla Intermediate: two years, deliberately without preload. #}
   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
-{% endset %}
-{{ security_headers }}
-
 {% if _nginx_site_auth_enabled %}
+
+  # Gate every location in this server; one opts out with `auth_request off;`.
+  # Subrequests skip the access phase, so /internal/authelia cannot recurse,
+  # and return-only locations and rewrites finish before the gate runs.
+  auth_request /internal/authelia;
+  # Authelia sends Remote-User on every authenticated 200.
+  auth_request_set $authelia_user $upstream_http_remote_user;
+  # Preserve Authelia's portal target for navigation redirects.
+  auth_request_set $redirection_url $upstream_http_location;
+  # Only auth_request 401s reach this handler; upstream 401s pass through
+  # because proxy_intercept_errors and fastcgi_intercept_errors remain off.
+  error_page 401 = @authelia_unauth;
+
   # Internal auth subrequest: 200 allows the request; 401 reaches the handler
-  # below. The URL is host-configurable for remote Authelia access.
+  # above. The URL is host-configurable for remote Authelia access.
   location /internal/authelia {
     internal;
     proxy_pass {{ nginx_authelia_internal_url }};
@@ -78,19 +86,19 @@ server {
     proxy_set_header X-Forwarded-Uri         $request_uri_safe;
   }
 
-{% endif %}
-  location / {
-{% if _nginx_site_auth_enabled %}
-    auth_request /internal/authelia;
-    # Authelia sends Remote-User on every authenticated 200.
-    auth_request_set $authelia_user $upstream_http_remote_user;
-    # Preserve Authelia's portal target for navigation redirects.
-    auth_request_set $redirection_url $upstream_http_location;
-    # Only auth_request 401s reach this handler; upstream 401s pass through
-    # because proxy_intercept_errors remains off.
-    error_page 401 = @authelia_unauth;
+  # Redirect navigations to Authelia, but return 401 to XHR/fetch to avoid SPA
+  # redirect loops. nginx.conf.j2 derives the choice from Sec-Fetch-Mode; this
+  # return-only if is safe and both responses inherit the security headers.
+  location @authelia_unauth {
+    if ($authelia_unauth_redirect) {
+      return 302 $redirection_url;
+    }
+    return 401;
+  }
 {% endif %}
 {% if nginx_site_args.proxy_pass is defined %}
+
+  location / {
     proxy_pass         {{ nginx_site_args.proxy_pass }};
 
     proxy_http_version 1.1;
@@ -121,25 +129,6 @@ server {
     # subrequest; never disclose the reusable service password upstream.
     proxy_set_header Authorization      "";
 {% endif %}
-
-{% endif %}
-{% if nginx_site_args.location_conf is defined %}
-    # location_conf may add a header and suppress server-scope inheritance.
-{{ security_headers }}
-
-    {{ nginx_site_args.location_conf | trim | indent(4) }}
-{% endif %}
-  }
-{% if _nginx_site_auth_enabled %}
-
-  # Redirect navigations to Authelia, but return 401 to XHR/fetch to avoid SPA
-  # redirect loops. nginx.conf.j2 derives the choice from Sec-Fetch-Mode; this
-  # return-only if is safe and both responses inherit the security headers.
-  location @authelia_unauth {
-    if ($authelia_unauth_redirect) {
-      return 302 $redirection_url;
-    }
-    return 401;
   }
 {% endif %}
 {% if nginx_site_args.server_conf is defined %}

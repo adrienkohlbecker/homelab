@@ -379,7 +379,7 @@
       csp: >-
         script-src www.gstatic.com {{ nginx_csp_default }};
         default-src {{ nginx_csp_default }}; frame-ancestors 'self';
-      location_conf: |
+      server_conf: |
         # Jellyfin's reverse-proxy guide recommends 20M for plugin
         # uploads and custom poster art.
         client_max_body_size 20m;

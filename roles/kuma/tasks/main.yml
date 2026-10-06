@@ -84,6 +84,7 @@
         # Anchor the token-shaped path so future push routes stay authenticated.
         # A regex location requires proxy_pass without a URI component.
         location ~ ^/api/push/[A-Za-z0-9_-]+/?$ {
+          auth_request off;
           proxy_pass http://127.0.0.1:{{ service_ports.kuma }};
           proxy_http_version 1.1;
           proxy_set_header Host              $host;

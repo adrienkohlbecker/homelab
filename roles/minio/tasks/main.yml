@@ -142,7 +142,7 @@
       # MINIO_PROMETHEUS_AUTH_TYPE=public leaves the metrics endpoint
       # unauthenticated; the scrapers hit it on loopback, so close the
       # public path rather than expose bucket names/sizes.
-      location_conf: |
+      server_conf: |
         # Stream uploads without temporary files; the proxy uses HTTP/1.1
         # so this also applies to chunked request bodies.
         proxy_request_buffering off;

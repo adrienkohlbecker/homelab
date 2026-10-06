@@ -60,7 +60,7 @@
       # minute poll out of nginx temporary files. See notes/authelia_nginx_gating.md.
       auth: true
       auth_request_authorization: true
-      location_conf: |
+      server_conf: |
         proxy_buffer_size 16k;
         proxy_buffers 32 128k;
   tags:
