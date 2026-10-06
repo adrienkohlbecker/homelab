@@ -1,8 +1,7 @@
 # --cert-name keeps the lineage path stable for every consumer. Omitting
 # --reuse-key rotates the private key on renewal, and the persisted deploy
 # hook makes timer-driven renewals reload nginx. Exact SAN comparison forces
-# reissuance after host, domain, or extra-SAN changes and rejects fixtures at
-# the same path whose certificate contents do not match.
+# reissuance after host, domain, or extra-SAN changes.
 - name: certificate | Stat existing certificate
   stat:
     path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
@@ -18,13 +17,14 @@
   tags:
     - certbot
 
-# A certificate path can be a test fixture without a Certbot lineage. Treat a
-# missing renewal config as drift so issuance replaces the incomplete fixture.
+# A live certificate without its renewal configuration is not a lineage
+# Certbot can renew: certonly refuses the populated live directory and leaves
+# an empty renewal file behind that diverts later runs to a -0001 lineage.
+# Fail here instead so an operator repairs or removes the stray directory.
 - name: certificate | Read existing renewal configuration
   slurp:
     src: /etc/letsencrypt/renewal/{{ inventory_hostname }}.{{ domain }}.conf
   register: certbot_renewal
-  failed_when: false
   when: certbot_cert_stat.stat.exists
   tags:
     - certbot
