@@ -53,45 +53,66 @@
       advertised={{ _tailscale_node.available_routes | default([], true) | sort }}
       approved={{ _tailscale_node.approved_routes | default([], true) | sort }}
 
+# A non-ZFS host has no snapshot target or services dataset, so the loaded
+# daemon must carry no ordering, binding, or install link to any ZFS unit.
+- name: _verify | Tailscaled carries no ZFS unit dependencies on a non-ZFS root
+  when: not zfs_root
+  systemd:
+    name: tailscaled.service
+  register: _tailscale_unit_deps
+  failed_when: >-
+    'After' not in _tailscale_unit_deps.status
+    or _tailscale_unit_deps.status | dict2items
+    | selectattr('key', 'in', ['After', 'Requires', 'PartOf', 'WantedBy'])
+    | map(attribute='value') | select('search', 'zfs_') | list | length > 0
+
+# `systemctl reenable` follows any drop-in WantedBy, even to an absent target.
+- name: _verify | No snapshot target wants directory exists on a non-ZFS root
+  when: not zfs_root
+  stat:
+    path: /etc/systemd/system/zfs_autosnapshot.target.wants
+  register: _tailscale_snapshot_wants
+  failed_when: _tailscale_snapshot_wants.stat.exists
+
 # The snapshot binding (tasks/main.yml): PartOf carries the target's stop to
 # tailscaled, and the WantedBy link brings it back with the target's start.
-# Kept last because it bounces the daemon; the harness reaches the VM over the
-# qemu port-forward, not the tailnet.
-- name: _verify | Start the snapshot target fixture
-  systemd:
-    name: zfs_autosnapshot.target
-    state: started
+# Kept after the registration checks because it bounces the daemon; the
+# harness reaches the VM over the qemu port-forward, not the tailnet.
+- name: _verify | Snapshot target stop and start propagate to tailscaled
+  when: zfs_root
   become: true
+  block:
+    - name: _verify | Start the snapshot target fixture
+      systemd:
+        name: zfs_autosnapshot.target
+        state: started
 
-- name: _verify | Stop the snapshot target
-  systemd:
-    name: zfs_autosnapshot.target
-    state: stopped
-  become: true
+    - name: _verify | Stop the snapshot target
+      systemd:
+        name: zfs_autosnapshot.target
+        state: stopped
 
-- name: _verify | Tailscaled stopped with the snapshot target
-  systemd:
-    name: tailscaled.service
-  register: _tailscale_after_target_stop
-  failed_when: _tailscale_after_target_stop.status.ActiveState != 'inactive'
-  become: true
+    - name: _verify | Tailscaled stopped with the snapshot target
+      systemd:
+        name: tailscaled.service
+      register: _tailscale_after_target_stop
+      failed_when: _tailscale_after_target_stop.status.ActiveState != 'inactive'
 
-- name: _verify | Start the snapshot target again
-  systemd:
-    name: zfs_autosnapshot.target
-    state: started
-  become: true
+    - name: _verify | Start the snapshot target again
+      systemd:
+        name: zfs_autosnapshot.target
+        state: started
 
-# tailscaled is ordered after the target, so the target's start job returns
-# while the daemon is still activating.
-- name: _verify | Tailscaled came back with the snapshot target
-  systemd:
-    name: tailscaled.service
-  register: _tailscale_after_target_start
-  until: _tailscale_after_target_start.status.ActiveState == 'active'
-  retries: 15
-  delay: 2
-  become: true
+    # tailscaled is ordered after the target, so the target's start job returns
+    # while the daemon is still activating.
+    - name: _verify | Tailscaled came back with the snapshot target
+      systemd:
+        name: tailscaled.service
+      register: _tailscale_after_target_start
+      until: _tailscale_after_target_start.status.ActiveState == 'active'
+      retries: 15
+      delay: 2
+
 - name: _verify | Render production overrides for alternate host layouts
   template:
     src: tailscaled-override.conf.j2

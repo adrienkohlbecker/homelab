@@ -444,6 +444,10 @@ homepage_alerts_authelia_password: homepage-alerts-test-credential-0123456789abc
 tailscale_login_server: "http://localhost:{{ service_ports.headscale }}"
 tailscale_headscale_host: "{{ inventory_hostname }}"
 tailscale_headscale_user: test-harness
+# The advertised subnet is integration-specific so _verify can exercise the
+# approve round-trip without colliding with the test topology.
+tailscale_advertise_routes:
+  - 10.99.99.0/24
 
 # Headscale keeps OIDC fail-open in tests; these placeholders exercise the
 # rendered secret-backed configuration without requiring an issuer fixture.

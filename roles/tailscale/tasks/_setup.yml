@@ -18,6 +18,13 @@
     name: nginx
     tasks_from: test_fixture
 
+# Fluent Bit's logrotate drop-in validates with the binary, which the Minimal
+# cloud image does not ship.
+- name: _setup | Install logrotate
+  import_role:
+    name: logrotate
+    tasks_from: main
+
 # headscale:main registers and dry-run validates a fluent-bit extension.
 - name: _setup | Install fluent-bit for the headscale log extension
   import_role:
@@ -34,9 +41,11 @@
   become: true
 
 # The standalone role fixture normally omits the snapshot target. Install a
-# real target so converge also exercises the cross-role PartOf/Wants binding
-# used on production ZFS hosts.
+# real target on ZFS-root fixtures so converge also exercises the cross-role
+# PartOf/Wants binding used on production ZFS hosts. Non-ZFS hosts have no such
+# target, and the role must not reference one there.
 - name: _setup | Install a snapshot target fixture
+  when: zfs_root
   copy:
     dest: /etc/systemd/system/zfs_autosnapshot.target
     content: |
@@ -48,6 +57,7 @@
   become: true
 
 - name: _setup | Reload systemd after installing the target fixture
+  when: zfs_root
   systemd:
     daemon_reload: true
   become: true

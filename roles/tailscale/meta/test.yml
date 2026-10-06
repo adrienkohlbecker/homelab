@@ -1,0 +1,5 @@
+# Lab exercises the ZFS-root snapshot binding against a target fixture; Minimal
+# keeps node state in a plain /mnt/services directory with no ZFS units.
+machines:
+  lab:
+  minimal:
