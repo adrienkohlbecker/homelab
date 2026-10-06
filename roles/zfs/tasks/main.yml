@@ -6,13 +6,10 @@
 - name: Assert required inputs
   assert:
     that:
-      - zfs_root | bool
+      - zfs_root is defined
       - zfs_trim_pools is defined
       - zfs_mount_cache_pools is defined
       - zfs_pool_properties is defined
-    fail_msg: >-
-      The zfs role manages ZFS-root hosts only and needs zfs_trim_pools,
-      zfs_mount_cache_pools, and zfs_pool_properties in inventory vars.
   tags:
     - zfs
 
@@ -37,6 +34,7 @@
     - zfs
 
 - name: Read zfs userspace + kmod versions
+  when: not (ansible_check_mode and zfs_apt.changed)
   command: zfs --version
   register: zfs_version_out
   changed_when: false
@@ -70,7 +68,8 @@
     - zfs
 
 # init_on_alloc=0 — the kernel's page-zeroing-on-alloc default taxes ZFS's
-# alloc-heavy ARC. The boot cmdline engine threads it into the ZBM property.
+# alloc-heavy ARC. The boot cmdline engine threads it into the ZBM property; a
+# host without a ZFS root (only the minimal fixture) keeps the kernel default.
 - name: Disable init_on_alloc
   import_role:
     name: boot
@@ -163,6 +162,7 @@
 
 # zfs-trim@.service runs `zpool trim -w`, so a failed trim leaves a failed unit.
 - name: Enable the weekly ZFS trim timer for each pool
+  when: not (ansible_check_mode and zfs_apt.changed)
   systemd:
     name: zfs-trim-weekly@{{ item }}.timer
     enabled: true
@@ -181,6 +181,7 @@
 # at its 0 default so clean scrub completions don't mail; only faults and
 # errored scrubs do.
 - name: Configure ZED email notifications
+  when: not (ansible_check_mode and zfs_apt.changed)
   lineinfile:
     path: /etc/zfs/zed.d/zed.rc
     regexp: "{{ item.regexp }}"
@@ -202,13 +203,14 @@
   tags:
     - zfs
 
-# A zed.rc change requires the running daemon to reload its notification
-# settings; otherwise leave a healthy process alone.
+# A package upgrade or zed.rc change requires the running daemon to reload its
+# binary or notification settings; otherwise leave a healthy process alone.
 - name: Manage ZED service
+  when: not (ansible_check_mode and zfs_apt.changed)
   systemd:
     name: zfs-zed
     enabled: true
-    state: '{{ "restarted" if zfs_zedrc.changed else "started" }}'
+    state: '{{ "restarted" if zfs_apt.changed or zfs_zedrc.changed else "started" }}'
   become: true
   tags:
     - zfs
@@ -217,6 +219,9 @@
 # any root-on-ZFS host (it wouldn't boot otherwise) — enable them explicitly so
 # an ansible-from-stock-Ubuntu host owns the state rather than inheriting it.
 - name: Enable core ZFS boot services
+  when:
+    - zfs_root
+    - not (ansible_check_mode and zfs_apt.changed)
   systemd:
     name: "{{ item }}"
     enabled: true
@@ -241,6 +246,7 @@
 # `zfs recv` can keep autobackup:bak=true with source=received, which
 # zfs-autobackup's `-s local` picker ignores, so the source must match too.
 - name: Read owned pool and root dataset properties
+  when: zfs_root
   vars:
     zfs_owned_properties: >-
       {{ zfs_pool_properties
@@ -260,9 +266,11 @@
     - zfs
 
 - name: Set owned pool and root dataset properties
-  when: item.stdout.split() != [item.item.value, 'local']
+  when:
+    - zfs_root
+    - item.stdout.split() != [item.item.value, 'local']
   command: "{{ item.item.cmd }} set {{ item.item.name }}={{ item.item.value }} {{ item.item.pool }}"
-  loop: "{{ zfs_owned_properties_current.results }}"
+  loop: "{{ zfs_owned_properties_current.results | default([]) }}"
   loop_control:
     label: "{{ item.item.pool }} {{ item.item.name }}={{ item.item.value }}"
   changed_when: true
@@ -277,6 +285,7 @@
 # boots another BE without a converge, generic failed-unit monitoring reports
 # the mismatch immediately. Re-converge after a deliberate BE switch.
 - name: Add zfs mount service for root pool
+  when: zfs_root
   import_tasks: mount_unit.yml
   vars:
     zfs_mount_args:

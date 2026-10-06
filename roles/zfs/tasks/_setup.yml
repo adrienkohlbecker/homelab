@@ -9,6 +9,7 @@
 # pass then exercises the already-correct direction.
 - name: _setup | Drift the fixture autotrim property
   when:
+    - zfs_root
     - item.name == 'autotrim'
     - item.value == 'on'
   command: zpool set autotrim=off {{ item.pool }}

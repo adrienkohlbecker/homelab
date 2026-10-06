@@ -6,6 +6,12 @@
     name: reboot
     tasks_from: reboot
 
+- name: _verify | Load ZFS on hosts without a ZFS root
+  when: not zfs_root
+  command: modprobe zfs
+  changed_when: false
+  become: true
+
 - name: _verify | Live ARC parameters match the configured limits
   command: cat /sys/module/zfs/parameters/{{ item.name }}
   loop:
@@ -21,12 +27,14 @@
 # --- Root mount guard ---
 
 - name: _verify | Check root mount guard is active
+  when: zfs_root
   systemd:
     name: zfs_mount_root.service
   register: _zfs_verify_root_mount_unit
   become: true
 
 - name: _verify | Root mount guard is active
+  when: zfs_root
   assert:
     that: _zfs_verify_root_mount_unit.status.ActiveState == 'active'
 
@@ -110,6 +118,7 @@
 # scrubs mid-run (scan progress suspended so they cannot finish first) and
 # require the unit to fail on the incomplete scrub.
 - name: _verify | Scrub failure drill
+  when: zfs_root
   become: true
   block:
     - name: _verify | Scrub drill | Record ZED mail instead of sending it
