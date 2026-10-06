@@ -62,25 +62,12 @@
       {{ tailscale_users.stdout | from_json | default([], true)
          | selectattr('name', 'eq', tailscale_headscale_user) | list }}
   block:
-    # Convert delegated control-plane failures into the explicit assertion below.
     # A control plane without users prints `null`, not an empty list.
     - name: register | List headscale users
       command: podman exec headscale headscale users list -o json
       delegate_to: "{{ tailscale_headscale_host }}"
       register: tailscale_users
       changed_when: false
-      failed_when: false
-
-    - name: register | Assert the headscale control plane is reachable
-      assert:
-        that:
-          - tailscale_users.rc == 0
-        fail_msg: >-
-          headscale control plane on {{ tailscale_headscale_host }} is not
-          answering (rc={{ tailscale_users.rc | default('n/a') }}). It must be
-          converged and up before {{ inventory_hostname }} can register: this
-          path mints its pre-auth key and approves routes by delegating to
-          {{ tailscale_headscale_host }}. Converge fox/headscale there first.
 
     # A fresh control plane has no user for this node yet.
     - name: register | Create the headscale user for this node
