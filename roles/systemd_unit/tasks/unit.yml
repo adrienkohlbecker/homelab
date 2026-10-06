@@ -12,13 +12,10 @@
 - name: unit | Validate lifecycle target for {{ systemd_unit_args.src }}
   assert:
     quiet: true
-    that:
-      - systemd_unit_args.for is not defined
-      - _systemd_unit_name is match('^.+\.(service|socket|target|timer|mount|automount|path|slice|scope|device|swap)$')
+    that: systemd_unit_args.for is not defined
     fail_msg: >-
-      tasks_from=unit manages a complete unit file with a standard systemd
-      suffix; use tasks_from=install for drop-ins. Got
-      {{ systemd_unit_args | default('<unset>') }}
+      tasks_from=unit manages a complete unit file; use tasks_from=install for
+      drop-ins. Got {{ systemd_unit_args | default('<unset>') }}
 
 - name: unit | Manage the lifecycle of {{ systemd_unit_args.src }}
   when: _systemd_unit_condition
