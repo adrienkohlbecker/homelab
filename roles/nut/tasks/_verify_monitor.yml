@@ -199,35 +199,22 @@
   changed_when: false
   become: true
 
-- name: _verify | Clear the mail capture
-  copy:
-    dest: /tmp/nut-mail.out
-    mode: "0666"
-    content: ""
-  become: true
-
-# The errexit-tolerance fix: the events that fire when the UPS is gone must
-# still mail, falling back to "unknown" rather than aborting before `mail`.
-- name: _verify | Notification still mails when upsd is down
-  command: /usr/local/bin/nut_notify commbad
-  changed_when: false
-  become: true
-
-- name: _verify | Degraded notification falls back to unknown fields
-  command: 'grep -qF "Status: unknown" /tmp/nut-mail.out'
-  changed_when: false
-  become: true
-
-# The catch-all arm: an event without a bespoke sentence (2.8+ device-status
-# events, a future timer name) must still deliver a mail naming it, never
-# vanish.
-- name: _verify | Unknown events fall back to a generic mail
+# The catch-all arm with the UPS gone: an event without a bespoke sentence
+# (2.8+ device-status events, a future timer name) must still mail, naming
+# the event, and the failed upsc query must fall back to "unknown" fields
+# rather than abort before `mail`. The bogus mail is the last one captured,
+# so the field check only reads lines after its subject sentence.
+- name: _verify | Unknown events mail when upsd is down
   command: /usr/local/bin/nut_notify bogus
   changed_when: false
   become: true
 
-- name: _verify | The generic mail names the event
-  command: 'grep -qF "UPS event: bogus" /tmp/nut-mail.out'
+- name: _verify | The degraded mail names the event with unknown fields
+  command:
+    argv:
+      - awk
+      - '/^UPS event: bogus$/ { seen = 1 } seen && /^Status: unknown$/ { ok = 1 } END { exit !ok }'
+      - /tmp/nut-mail.out
   changed_when: false
   become: true
 
