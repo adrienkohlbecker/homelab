@@ -116,9 +116,9 @@
 # ZED must mail the scrub_finish report. A stand-in mail command, replacing any
 # installed one on the throwaway fixture, records what ZED sends. Then cancel
 # scrubs mid-run (scan progress suspended so they cannot finish first) and
-# require the unit to fail on the incomplete scrub.
+# require the unit to fail on the incomplete scrub. The pool needs no ZFS root,
+# so hosts without one exercise ZED and the scrub unit against a real pool too.
 - name: _verify | Scrub failure drill
-  when: zfs_root
   become: true
   block:
     - name: _verify | Scrub drill | Record ZED mail instead of sending it
