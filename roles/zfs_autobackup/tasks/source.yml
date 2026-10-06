@@ -26,27 +26,26 @@
   tags:
     - zfs_autobackup
 
-- name: source | Configure backup dataset permissions
-  when: zfs_root
+- name: source | Get backed-up datasets
+  shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: _zfs_autobackup_datasets
   become: true
   tags:
     - zfs_autobackup
-  block:
-    # The permission machinery runs everywhere the root pool exists.
-    - name: source | Get backed-up datasets
-      shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
-      args:
-        executable: /bin/bash
-      changed_when: false
-      register: _zfs_autobackup_datasets
 
-    - name: source | Grant ZFS permissions on backed-up datasets
-      community.general.zfs_delegate_admin:
-        name: "{{ item }}"
-        users:
-          - zfs_autobackup
-        permissions:
-          - send
-          - hold
-          - release
-      loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
+- name: source | Grant ZFS permissions on backed-up datasets
+  community.general.zfs_delegate_admin:
+    name: "{{ item }}"
+    users:
+      - zfs_autobackup
+    permissions:
+      - send
+      - hold
+      - release
+  loop: "{{ _zfs_autobackup_datasets.stdout_lines }}"
+  become: true
+  tags:
+    - zfs_autobackup

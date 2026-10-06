@@ -4,18 +4,6 @@
   import_role:
     name: services
 
-# A locally-tagged leaf dataset so converge's source.yml grants zfs allow on
-# it and _verify can drive a real local backup. rpool exists on every ZFS
-# fixture (Lab/Pug).
-- name: _setup | Create and tag a scratch dataset for backup testing
-  community.general.zfs:
-    name: rpool/zfs_autobackup_test
-    state: present
-    extra_zfs_properties:
-      autobackup:bak: "true"
-      mountpoint: none
-  become: true
-
 # A tagged tree for the onsite pull and restore round-trip. Created before
 # converge so source.yml delegates send/hold/release on each dataset; _verify
 # snapshots it, pulls it, and restores the pulled replica. The child carries a
@@ -38,10 +26,9 @@
         canmount: "off"
   become: true
 
-# A mounted, tagged dataset for exercising zfs_backup_offsite's change-gate.
-# The mountpoint=none dataset above suffices for the local-backup test but can't
-# pass zfs_check_mount (mounted=no), which the gate's no-skip path reaches.
-# atime=off so a stray read can't bump `written` and perturb the gate.
+# A mounted, tagged dataset for exercising zfs_backup_offsite's change-gate,
+# whose no-skip path reaches zfs_check_mount. atime=off so a stray read can't
+# bump `written` and perturb the gate.
 - name: _setup | Create a mounted scratch dataset for offsite-gate testing
   community.general.zfs:
     name: rpool/zfs_autobackup_offsite_test

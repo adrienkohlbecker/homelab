@@ -1,34 +1,14 @@
 - name: Assert backup inputs are configured
   assert:
     that:
+      - zfs_autobackup_ssh_public_key | default('') | length > 0
       - zfs_autobackup_sources is defined
-      - zfs_autobackup_sources is iterable
-      - zfs_autobackup_sources is not string
-      - zfs_autobackup_sources is not mapping
-      - zfs_autobackup_ssh_public_key is defined
-      - zfs_autobackup_ssh_public_key is string
-      - zfs_autobackup_ssh_public_key | length > 0
+      - zfs_autobackup_sources | map(attribute='host', default='') | reject('in', external_ips) | list == []
+      - zfs_autobackup_sources | map(attribute='dest_dataset', default='') | reject | list == []
     fail_msg: >-
-      zfs_autobackup_sources must be a list of { host, dest_dataset } dicts and
-      zfs_autobackup_ssh_public_key must be a non-empty string in inventory vars.
-  tags:
-    - zfs_autobackup
-
-- name: Assert backup source entries are configured
-  assert:
-    that:
-      - item is mapping
-      - (item.host | default(none)) is string
-      - item.host | length > 0
-      - item.host in external_ips
-      - (item.dest_dataset | default(none)) is string
-      - item.dest_dataset | length > 0
-    fail_msg: >-
-      zfs_autobackup_sources entries must contain a host from external_ips and
-      a non-empty dest_dataset.
-  loop: "{{ zfs_autobackup_sources }}"
-  loop_control:
-    label: "{{ item.host | default('(invalid)') }}"
+      zfs_autobackup_ssh_public_key must be a non-empty string and
+      zfs_autobackup_sources a list of { host, dest_dataset } dicts whose host
+      is in external_ips.
   tags:
     - zfs_autobackup
 
