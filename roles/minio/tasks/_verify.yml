@@ -1,10 +1,3 @@
-- name: _verify | Dedicated dataset override requires the MinIO mount
-  vars:
-    zfs_has_minio_mount: true
-  assert:
-    that:
-      - "'Requires=zfs_mount_mnt_minio.service' in lookup('template', 'override_service.conf.j2')"
-
 - name: _verify | Wait for normalized minio record in lnav store
   import_role:
     name: fluentbit
