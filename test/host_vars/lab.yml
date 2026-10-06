@@ -42,6 +42,10 @@ dns_keepalived_priority: 5
 # site.yml reboot gate would refuse every post-upgrade reboot.
 dns_reboot_guard_enabled: false
 
+# The fixture stands in for the UDM in roles/udm_dns_failover but has no
+# firmware bridge (br0), so keepalived tracks its uplink instead.
+udm_dns_failover_interface: "{{ default_interface }}"
+
 netdata_contexts:
   - system.cpu              # always-live chart, baseline
   - foo.does_not_exist      # never-existed chart, probes the "missing-chart" gap
