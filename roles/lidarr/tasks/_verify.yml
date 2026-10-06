@@ -53,38 +53,19 @@
   become: true
 
 - name: _verify | Wait for normalized lidarr startup record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "lidarr"
-                    and record.get("message") == "Data directory is being overridden to [/config]"
-                    and record.get("level") == "info"
-                    and fields.get("source") == "AppFolderInfo"
-                    and "CONTAINER_TAG" not in fields
-                    and "CMDLINE" not in fields
-                ):
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _lidarr_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _lidarr_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: lidarr
+          message: Data directory is being overridden to [/config]
+          level: info
+          fields.source: AppFolderInfo
+          _absent:
+            - fields.CONTAINER_TAG
+            - fields.CMDLINE
 
 - name: _verify | Exercise lidarr fluent-bit record contracts
   import_role:

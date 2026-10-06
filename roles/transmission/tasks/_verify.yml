@@ -189,34 +189,19 @@
       would restart-churn. Re-capture settings.json.j2 from a running instance.
 
 - name: _verify | Wait for normalized transmission output in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "transmission"
-                    and record.get("message", "").startswith("Rejected request from 127.0.0.1")
-                ):
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _transmission_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _transmission_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: transmission
+          level: warn
+          _contains:
+            message: Rejected request from 127.0.0.1
+          _present:
+            - fields.source
+            - fields.source_line
 
 - name: _verify | Exercise transmission fluent-bit record contracts
   import_role:

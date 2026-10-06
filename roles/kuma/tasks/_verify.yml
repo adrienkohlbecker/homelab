@@ -105,42 +105,23 @@
   changed_when: false
 
 - name: _verify | Wait for normalized kuma record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "kuma"
-                    and fields.get("source")
-                    and fields.get("CONTAINER_ID")
-                    and "time" not in fields
-                    and "module" not in fields
-                    and "level" not in fields
-                    and "msg" not in fields
-                    and "CONTAINER_TAG" not in fields
-                    and "CONTAINER_ID_FULL" not in fields
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _kuma_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _kuma_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: kuma
+          _present:
+            - fields.source
+            - fields.CONTAINER_ID
+          _absent:
+            - fields.time
+            - fields.module
+            - fields.level
+            - fields.msg
+            - fields.CONTAINER_TAG
+            - fields.CONTAINER_ID_FULL
 
 - name: _verify | Exercise kuma fluent-bit record contracts
   import_role:

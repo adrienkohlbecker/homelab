@@ -120,37 +120,18 @@
   until: _gitlab_runner_metrics.status | default(0) == 200
 
 - name: _verify | Wait for normalized runner record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "gitlab-runner"
-                    and fields.get("builds") is not None
-                    and "time" not in fields
-                    and "msg" not in fields
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _gitlab_runner_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _gitlab_runner_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: gitlab-runner
+          _present:
+            - fields.builds
+          _absent:
+            - fields.time
+            - fields.msg
 
 # Re-read after the metrics probe to reject a brief active crash-loop window.
 - name: _verify | Runner stayed up since the smoke start

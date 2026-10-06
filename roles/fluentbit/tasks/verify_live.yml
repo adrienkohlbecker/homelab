@@ -1,0 +1,32 @@
+# Poll the live lnav store until records of the expected shapes arrive, so a
+# service _verify proves its real log output still parses end to end.
+#
+# Inputs: `fluentbit_verify_live_args.expected`, a non-empty list of record
+# matchers that must each match a stored record, and optional `unexpected`,
+# matchers no stored record may satisfy. files/lnav_match.py documents the
+# matcher syntax.
+- name: _verify | Validate fluent-bit live check arguments
+  assert:
+    quiet: true
+    that:
+      - fluentbit_verify_live_args.keys() | list | difference(['expected', 'unexpected']) | length == 0
+      - fluentbit_verify_live_args.expected | length > 0
+
+# Exit 1 means an expected record has not arrived yet; exit 2 means an
+# unexpected one already has, which waiting cannot fix.
+- name: _verify | Wait for the expected records in the lnav store
+  command:
+    argv:
+      - python3
+      - -c
+      - "{{ lookup('file', 'lnav_match.py') }}"
+      - /var/log/fluent-bit/lnav.jsonl
+      - "{{ fluentbit_verify_live_args.expected | to_json }}"
+      - "{{ fluentbit_verify_live_args.unexpected | default([]) | to_json }}"
+  register: fluentbit_verify_live_result
+  changed_when: false
+  failed_when: fluentbit_verify_live_result.rc != 0
+  retries: 60
+  delay: 2
+  until: fluentbit_verify_live_result.rc != 1
+  become: true

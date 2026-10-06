@@ -101,48 +101,29 @@
   become: true
 
 - name: _verify | Wait for normalized sonarr record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if record.get("message") != sys.argv[2]:
-                    continue
-                fields = record.get("fields", {})
-                exception = fields.get("exception", "")
-                if (
-                    record.get("service") == "sonarr"
-                    and record.get("unit") == "sonarr.service"
-                    and record.get("level") == "warn"
-                    and fields.get("source") == "VerifySonarr"
-                    and fields.get("app_version") == "4.0.15.2941"
-                    and exception.startswith("System.InvalidOperationException: failed")
-                    and "at Verify.Run()" in exception
-                    and fields.get("CONTAINER_ID")
-                    and "CONTAINER_TAG" not in fields
-                    and "CONTAINER_ID_FULL" not in fields
-                    and "PRIORITY" not in fields
-                    and "SYSTEMD_UNIT" not in fields
-                ):
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-      - "{{ sonarr_lnav_marker }}"
-  register: _sonarr_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 1
-  until: _sonarr_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - message: "{{ sonarr_lnav_marker }}"
+          service: sonarr
+          unit: sonarr.service
+          level: warn
+          fields.source: VerifySonarr
+          fields.app_version: 4.0.15.2941
+          _contains:
+            fields.exception:
+              - "System.InvalidOperationException: failed"
+              - at Verify.Run()
+          _present:
+            - fields.CONTAINER_ID
+          _absent:
+            - fields.CONTAINER_TAG
+            - fields.CONTAINER_ID_FULL
+            - fields.PRIORITY
+            - fields.SYSTEMD_UNIT
 
 - name: _verify | Exercise sonarr fluent-bit record contracts
   import_role:

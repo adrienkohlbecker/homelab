@@ -81,35 +81,19 @@
   become: true
 
 - name: _verify | Wait for normalized Homepage records in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        marker = sys.argv[2]
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if record.get("service") != "homepage":
-                    continue
-                if marker in record.get("message", ""):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-      - "{{ _homepage_lnav_marker }}"
-  register: _homepage_lnav_normalized
-  changed_when: false
-  retries: 30
-  delay: 1
-  until: _homepage_lnav_normalized.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: homepage
+          level: error
+          fields.source: homepage.verify
+          _contains:
+            message:
+              - "Error: {{ _homepage_lnav_marker }}"
+              - at verify (/app/verify.js:7:1)
 
 - name: _verify | Exercise homepage fluent-bit record contracts
   import_role:

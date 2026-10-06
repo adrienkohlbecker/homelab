@@ -134,48 +134,29 @@
   become: true
 
 - name: _verify | Wait for parsed nexus application and audit output in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        application_seen = False
-        audit_seen = False
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") != "nexus"
-                    or record.get("parse_error")
-                    or not record.get("message")
-                ):
-                    continue
-                assert not (
-                    record.get("level") == "info"
-                    and fields.get("source")
-                    == "org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo"
-                ), record
-                if not application_seen and fields.get("source"):
-                    assert "timestamp" not in fields, record
-                    assert "formattedMessage" not in fields, record
-                    application_seen = True
-                if fields.get("audit_domain") and fields.get("event"):
-                    audit_seen = True
-        sys.exit(0 if application_seen and audit_seen else 1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _nexus_lnav_records
-  changed_when: false
-  retries: 60
-  delay: 2
-  until: _nexus_lnav_records.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: nexus
+          _present:
+            - fields.source
+          _absent:
+            - parse_error
+            - fields.timestamp
+            - fields.formattedMessage
+        - service: nexus
+          _present:
+            - fields.audit_domain
+            - fields.event
+      # logback.xml holds QuartzTaskInfo at WARN, so routine task state
+      # changes never reach the store.
+      unexpected:
+        - service: nexus
+          level: info
+          fields.source: org.sonatype.nexus.quartz.internal.task.QuartzTaskInfo
 
 # Nexus creates this path as in-container uid 200. A broken +200 uidmap lands
 # it on the wrong host uid and breaks container writes and ZFS portability.

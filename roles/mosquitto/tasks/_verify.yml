@@ -61,25 +61,16 @@
   delay: 2
 
 - name: _verify | Broker startup reaches the lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        expected = dict(service="mosquitto", unit="mosquitto.service", level="info", message=sys.argv[1])
-        with open("/var/log/fluent-bit/lnav.jsonl") as logs:
-            assert any(all(record.get(key) == value for key, value in expected.items())
-                       for record in map(json.loads, logs))
-      - "{{ mosquitto_startup.stdout }}"
-  become: true
-  register: mosquitto_lnav
-  changed_when: false
-  until: mosquitto_lnav.rc == 0
-  retries: 15
-  delay: 2
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: mosquitto
+          unit: mosquitto.service
+          level: info
+          message: "{{ mosquitto_startup.stdout }}"
 
 - name: _verify | Anonymous connection is refused
   command: >-

@@ -16,31 +16,16 @@
   failed_when: (_bazarr_http.json.data | default({})) | length == 0
 
 - name: _verify | Wait for normalized bazarr record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if record.get("service") == "bazarr" and fields.get("source_line") is not None:
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _bazarr_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _bazarr_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: bazarr
+          _present:
+            - fields.source
+            - fields.source_line
 
 # The loopback API probes bypass nginx; verify browser traffic stays gated.
 - name: _verify | Verify Bazarr Authelia gate

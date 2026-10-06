@@ -100,113 +100,45 @@
   become: true
 
 - name: _verify | JSONL | wait for shaped records
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        path, marker, service = sys.argv[1:4]
-        extra = sys.argv[4] if len(sys.argv) > 4 else ""
-
-        with open(path, encoding="utf-8") as handle:
-            for line in handle:
-                if marker not in line:
-                    continue
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                message = record.get("message", "")
-                if record.get("service") == service and marker in message and (not extra or extra in message):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-      - "{{ item.marker }}"
-      - "{{ item.service }}"
-      - "{{ item.extra | default('') }}"
-  register: _fluentbit_lnav_records
-  changed_when: false
-  retries: 60
-  delay: 2
-  until: _fluentbit_lnav_records.rc == 0
-  loop:
-    - name: journald
-      marker: "{{ fluentbit_lnav_journald_marker }}"
-      service: fluentbit_verify_journald
-    - name: certbot
-      marker: "{{ fluentbit_lnav_certbot_marker }}"
-      service: certbot
-      extra: Traceback
-    - name: multiline
-      marker: "{{ fluentbit_lnav_multiline_marker }}"
-      service: fluentbit_verify_multiline
-      extra: Traceback
-  loop_control:
-    label: "{{ item.name }}"
-  become: true
-
-- name: _verify | JSONL | collect shaped records
-  set_fact:
-    _fluentbit_lnav_by_name: >-
-      {{ _fluentbit_lnav_by_name | default({}) |
-         combine({item.item.name: (item.stdout | from_json)}) }}
-  loop: "{{ _fluentbit_lnav_records.results }}"
-  loop_control:
-    label: "{{ item.item.name }}"
-
-- name: _verify | Journald path | assert JSONL shape
+  import_tasks: verify_live.yml
   vars:
-    row: "{{ _fluentbit_lnav_by_name.journald }}"
-  assert:
-    that:
-      - "row.level == 'error'"
-      - "row.service == 'fluentbit_verify_journald'"
-      - "fluentbit_lnav_journald_marker in row.message"
-      - "row.unit == 'fluentbit_verify_journald.service'"
-      - "row.identifier == 'fluentbit_verify_journald'"
-      - "row.host == inventory_hostname"
-      - "row.stream == 'journald'"
-      - "row.fields.verify_glob == 'reloaded'"
-      - "'SYSTEMD_UNIT' not in row.fields"
-      - "'SYSLOG_IDENTIFIER' not in row.fields"
-      # The lua filters must use the classic 3-arg signature so Fluent Bit does
-      # not serialize event metadata into the JSONL as an __internal__ object.
-      - "'__internal__' not in row"
-      - "'level_number' not in row"
-    fail_msg: "journald record landed with wrong shape: {{ row }}"
-
-- name: _verify | Certbot tail | assert parsed multiline shape
-  vars:
-    row: "{{ _fluentbit_lnav_by_name.certbot }}"
-  assert:
-    that:
-      - "row.level == 'error'"
-      - "row.service == 'certbot'"
-      - "row.unit == 'certbot.service'"
-      - "row.identifier == 'certbot'"
-      - "row.stream == 'certbot_file'"
-      - "fluentbit_lnav_certbot_marker in row.message"
-      - "'Traceback' in row.message"
-      - "'ValueError' in row.message"
-      - "row.fields.source == 'certbot._internal.main'"
-      - "'parse_error' not in row"
-    fail_msg: "certbot file record did not parse into one shaped record: {{ row }}"
-
-- name: _verify | Multiline | assert traceback joined
-  vars:
-    row: "{{ _fluentbit_lnav_by_name.multiline }}"
-  assert:
-    that:
-      - "'Traceback' in row.message"
-      - "'ValueError' in row.message"
-      - "fluentbit_lnav_multiline_marker in row.message"
-      - "row.service == 'fluentbit_verify_multiline'"
-    fail_msg: "Multiline traceback not joined: {{ row }}"
+    fluentbit_verify_live_args:
+      expected:
+        - message: ERROR {{ fluentbit_lnav_journald_marker }}
+          level: error
+          service: fluentbit_verify_journald
+          unit: fluentbit_verify_journald.service
+          identifier: fluentbit_verify_journald
+          host: "{{ inventory_hostname }}"
+          stream: journald
+          fields.verify_glob: reloaded
+          _absent:
+            - fields.SYSTEMD_UNIT
+            - fields.SYSLOG_IDENTIFIER
+            # The lua filters must use the classic 3-arg signature so Fluent
+            # Bit does not serialize event metadata as an __internal__ object.
+            - __internal__
+            - level_number
+        # The certbot multiline parser joins the traceback into one record.
+        - service: certbot
+          level: error
+          unit: certbot.service
+          identifier: certbot
+          stream: certbot_file
+          fields.source: certbot._internal.main
+          _contains:
+            message:
+              - "{{ fluentbit_lnav_certbot_marker }}"
+              - Traceback
+              - ValueError
+          _absent:
+            - parse_error
+        - service: fluentbit_verify_multiline
+          _contains:
+            message:
+              - "{{ fluentbit_lnav_multiline_marker }}"
+              - Traceback
+              - ValueError
 
 - name: _verify | Rotation | record the daemon PID
   systemd:

@@ -19,40 +19,18 @@
   become: true
 
 - name: _verify | Wait for normalized wolweb record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if record.get("message") != sys.argv[2]:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "wolweb"
-                    and record.get("unit") == "wolweb.service"
-                    and record.get("level") == "warn"
-                    and fields.get("CONTAINER_ID")
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-      - "{{ wolweb_lnav_marker }}"
-  register: _wolweb_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _wolweb_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - message: "{{ wolweb_lnav_marker }}"
+          service: wolweb
+          unit: wolweb.service
+          level: warn
+          _present:
+            - fields.CONTAINER_ID
 
 # Host networking removes port isolation, so prove the unauthenticated UI's
 # loopback bind does not regress to the management LAN.

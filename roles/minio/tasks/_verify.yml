@@ -17,37 +17,18 @@
         - "minio.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Wait for normalized minio record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "minio"
-                    and fields.get("errKind")
-                    and "time" not in fields
-                    and "message" not in fields
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: _minio_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: _minio_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: minio
+          _present:
+            - fields.errKind
+          _absent:
+            - fields.time
+            - fields.message
 
 - name: _verify | Exercise minio fluent-bit record contracts
   import_role:

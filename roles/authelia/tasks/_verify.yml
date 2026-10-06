@@ -125,43 +125,24 @@
   delay: 2
 
 - name: _verify | Wait for normalized authelia record in lnav store
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import json
-        import sys
-
-        with open(sys.argv[1], encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                fields = record.get("fields", {})
-                if (
-                    record.get("service") == "authelia"
-                    and record.get("level") == "info"
-                    and fields.get("method") == "GET"
-                    and fields.get("path") == "/api/authz/auth-request"
-                    and fields.get("remote_ip")
-                    and "time" not in fields
-                    and "level" not in fields
-                    and "msg" not in fields
-                    and "CONTAINER_TAG" not in fields
-                    and "PRIORITY" not in fields
-                ):
-                    print(json.dumps(record, sort_keys=True))
-                    sys.exit(0)
-        sys.exit(1)
-      - /var/log/fluent-bit/lnav.jsonl
-  register: authelia_verify_lnav_record
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: authelia_verify_lnav_record.rc == 0
-  become: true
+  import_role:
+    name: fluentbit
+    tasks_from: verify_live
+  vars:
+    fluentbit_verify_live_args:
+      expected:
+        - service: authelia
+          level: info
+          fields.method: GET
+          fields.path: /api/authz/auth-request
+          _present:
+            - fields.remote_ip
+          _absent:
+            - fields.time
+            - fields.level
+            - fields.msg
+            - fields.CONTAINER_TAG
+            - fields.PRIORITY
 
 # OIDC discovery endpoint. Asserts the identity_providers.oidc block
 # in configuration.yml.j2 parsed, the JWKS loaded the RSA private
