@@ -113,6 +113,10 @@ lint:
   variables:
     # Syntax-check loads vaulted vars; CI must never attempt the prod identity.
     ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+    # lint:secrets needs full history: a shallow clone's boundary commit
+    # diffs as adding the whole tree, so baselined hits resurface under a
+    # fingerprint .gitleaksignore does not carry.
+    GIT_DEPTH: "0"
   script:
     - mise run lint
 
