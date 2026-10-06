@@ -25,6 +25,8 @@
   vars:
     service_user_args:
       name: transmission
+      # Matches the image's startup chown to PUID:PGID, so converges
+      # don't flap the config dir's group back to `transmission`.
       shared_group: media
   tags:
     - transmission
