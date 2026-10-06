@@ -49,6 +49,8 @@ zfs_dozer_filesystem: rpool
 zfs_tank_filesystem: rpool
 zfs_trim_pools:
   - rpool
+# Pool properties the zfs role owns, as {pool, name, value}. List only
+# non-default values; pools left at a default stay unmanaged.
 zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
 # The pool roots exist before service datasets, so the mount cache can be

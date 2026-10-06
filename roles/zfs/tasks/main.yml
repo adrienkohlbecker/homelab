@@ -3,22 +3,13 @@
   tags:
     - zfs
 
-- name: Assert required inputs and list shapes
+- name: Assert required inputs
   assert:
     that:
       - zfs_root is defined
-      - zfs_root is boolean
       - zfs_trim_pools is defined
-      - zfs_trim_pools is not string
-      - zfs_trim_pools is iterable
       - zfs_mount_cache_pools is defined
-      - zfs_mount_cache_pools is not string
-      - zfs_mount_cache_pools is iterable
-      - zfs_trim_pools | select('search', '/') | list | length == 0
-      - zfs_mount_cache_pools | select('search', '/') | list | length == 0
-    fail_msg: >-
-      zfs_root must be a bool; zfs_trim_pools must contain bare pool names; and
-      zfs_mount_cache_pools must contain bare pool names.
+      - zfs_pool_properties is defined
   tags:
     - zfs
 
@@ -243,59 +234,45 @@
   tags:
     - zfs
 
-# Assert the pool-level properties the install set at creation (autotrim=on on
-# the SSD-backed pools; autoexpand=on on a grow-on-first-boot Hetzner rpool) so
-# an ansible-from-stock-Ubuntu host owns them rather than inheriting them from
-# the bootstrap scripts. Read-then-set via `zpool get`/`set` rather than
+# Own the pool-level properties the install set at creation (autotrim=on on the
+# SSD-backed pools; autoexpand=on on a grow-on-first-boot Hetzner rpool) so an
+# ansible-from-stock-Ubuntu host owns them rather than inheriting them from the
+# bootstrap scripts. Read-then-set via `zpool get`/`set` rather than
 # community.general.zpool: that module can create AND destroy pools -- too sharp
-# an edge to point at the prod pools holding every household dataset. `zpool set`
-# can only change a property (it cannot lose a pool), and the get-guard gives
-# correct idempotence without it.
-- name: Read current pool properties
+# an edge to point at the prod pools holding every household dataset. `zpool
+# set` can only change a property (it cannot lose a pool).
+#
+# The root dataset's autobackup:bak rides the same loop: a root restored via
+# `zfs recv` can keep autobackup:bak=true with source=received, which
+# zfs-autobackup's `-s local` picker ignores, so the source must match too.
+- name: Read owned pool and root dataset properties
   when: zfs_root
-  command: zpool get -H -o value {{ item.name }} {{ item.pool }}
-  loop: "{{ zfs_pool_properties }}"
+  vars:
+    zfs_owned_properties: >-
+      {{ zfs_pool_properties
+         | map('combine', {'cmd': 'zpool'})
+         | list
+         + [{'cmd': 'zfs', 'pool': 'rpool/ROOT/' ~ ansible_distribution_release,
+             'name': 'autobackup:bak', 'value': 'true'}] }}
+  command: "{{ item.cmd }} get -H -o value,source {{ item.name }} {{ item.pool }}"
+  loop: "{{ zfs_owned_properties }}"
   loop_control:
     label: "{{ item.pool }} {{ item.name }}"
-  register: zfs_pool_prop_current
+  register: zfs_owned_properties_current
   changed_when: false
   check_mode: false
   become: true
   tags:
     - zfs
 
-- name: Set pool properties
+- name: Set owned pool and root dataset properties
   when:
     - zfs_root
-    - item.stdout | trim != item.item.value
-  command: zpool set {{ item.item.name }}={{ item.item.value }} {{ item.item.pool }}
-  loop: "{{ zfs_pool_prop_current.results | default([]) }}"
+    - item.stdout.split() != [item.item.value, 'local']
+  command: "{{ item.item.cmd }} set {{ item.item.name }}={{ item.item.value }} {{ item.item.pool }}"
+  loop: "{{ zfs_owned_properties_current.results | default([]) }}"
   loop_control:
     label: "{{ item.item.pool }} {{ item.item.name }}={{ item.item.value }}"
-  changed_when: true
-  become: true
-  tags:
-    - zfs
-
-# A root restored via `zfs recv` can keep autobackup:bak=true with
-# source=received, which zfs-autobackup's `-s local` picker ignores. Read both
-# fields and set once unless the existing root dataset already carries the
-# required local value.
-- name: Read autobackup:bak value and source on the root dataset
-  when: zfs_root
-  command: zfs get -H -o value,source autobackup:bak rpool/ROOT/{{ ansible_distribution_release }}
-  register: zfs_root_autobackup
-  changed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - zfs
-
-- name: Set autobackup:bak locally on the root dataset
-  when:
-    - zfs_root
-    - (zfs_root_autobackup.stdout | trim).split() != ['true', 'local']
-  command: zfs set autobackup:bak=true rpool/ROOT/{{ ansible_distribution_release }}
   changed_when: true
   become: true
   tags:

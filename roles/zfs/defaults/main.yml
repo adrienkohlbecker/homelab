@@ -1,9 +1,0 @@
----
-# Pool-level properties to assert on existing pools, as a flat list of
-# {pool, name, value}. Optional + host-overridable; a zfs_root host names only
-# its own pools, and an empty list no-ops.
-# Only non-default values are worth listing (autotrim=on on the SSD-backed
-# pools); pools left at the autotrim=off default stay unmanaged per the no-churn
-# convention. autoexpand=on belongs here for a Hetzner ZFS-root rpool that
-# grows into its disk on first boot (see chroot.sh).
-zfs_pool_properties: []
