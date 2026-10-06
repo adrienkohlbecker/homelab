@@ -40,45 +40,18 @@
 
 # -- keepalived (apt) -----------------------------------------------------
 
-# The UDM does not reliably ship python3-apt after firmware updates. Bootstrap
-# the binding with apt-get before using Ansible's apt module.
-- name: Update apt cache  # noqa: command-instead-of-module -- bootstraps the module dependency
-  when: not ansible_check_mode
-  command: apt-get update
+# The same install the on-boot script runs after a firmware wipe: no role
+# maintains the appliance's package cache, so refresh it first. In check mode
+# `creates` reports a pending install on a fresh host without running it.
+- name: Install keepalived  # noqa: command-instead-of-module -- mirrors files/on-boot-keepalived.sh
+  shell: |
+    set -euo pipefail
+    apt-get update -qq
+    apt-get install -y -qq keepalived
   args:
-    creates: /usr/lib/python3/dist-packages/apt/__init__.py
-  become: true
-  changed_when: false
-  tags:
-    - udm_dns_failover
-
-- name: Install python3-apt for Ansible's apt module  # noqa: command-instead-of-module -- bootstraps the module dependency
-  when: not ansible_check_mode
-  command: apt-get install -y -qq python3-apt
-  args:
-    creates: /usr/lib/python3/dist-packages/apt/__init__.py
-  become: true
-  tags:
-    - udm_dns_failover
-
-# The install must skip check mode outright: no role maintains the appliance's
-# package cache, so a fresh appliance has nothing for a no-refresh dry run to
-# resolve keepalived against. The stat probe stands in as the fresh-host signal
-# (binary absent <=> apt would install), same shape as roles/adguard's guard.
-- name: Check whether keepalived is installed
-  stat:
-    path: /usr/sbin/keepalived
-  register: udm_dns_failover_keepalived
-  tags:
-    - udm_dns_failover
-
-- name: Install keepalived
-  when: not ansible_check_mode
-  apt:
-    pkg:
-      - keepalived
-    cache_valid_time: 3600
-    policy_rc_d: 101
+    executable: /bin/bash
+    creates: /usr/sbin/keepalived
+  register: udm_dns_failover_keepalived_install
   become: true
   tags:
     - udm_dns_failover
@@ -181,10 +154,10 @@
 # -- services ---------------------------------------------------------------
 
 # Check-mode guard: on a fresh host apt hasn't installed keepalived yet, so
-# a check-mode start can't find the unit. On a converged host the binary
-# exists and the start/reload idempotence check still runs under --check.
+# a check-mode start can't find the unit. On a converged host the install is
+# a no-op and the start/reload idempotence check still runs under --check.
 - name: Start keepalived
-  when: not (ansible_check_mode and not udm_dns_failover_keepalived.stat.exists)
+  when: not (ansible_check_mode and udm_dns_failover_keepalived_install.changed)
   systemd:
     name: keepalived.service
     state: "{{ udm_dns_failover_conf.changed | ternary('reloaded', 'started') }}"
