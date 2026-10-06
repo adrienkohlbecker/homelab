@@ -113,10 +113,10 @@
 # Build a throwaway mirror over two backing files and corrupt one leg's data
 # region underneath ZFS. The scrub repairs the damage from the other leg, but
 # the checksum errors leave the pool unhealthy, so the scrub unit must fail and
-# ZED must mail the scrub_finish report. A stand-in mail command records what
-# ZED sends. Then cancel scrubs mid-run (scan progress suspended so they cannot
-# finish first) and require the unit to fail on the incomplete scrub. Torn down
-# at the end of the block.
+# ZED must mail the scrub_finish report. A stand-in mail command, replacing any
+# installed one on the throwaway fixture, records what ZED sends. Then cancel
+# scrubs mid-run (scan progress suspended so they cannot finish first) and
+# require the unit to fail on the incomplete scrub.
 - name: _verify | Scrub failure drill
   when: zfs_root
   become: true
@@ -127,7 +127,7 @@
           #!/bin/sh
           { echo "mail $*"; cat; } >>/var/tmp/zfs_scrub_test_mail.log
         dest: /usr/bin/mail
-        force: false
+        force: true
         mode: "0755"
 
     - name: _verify | Scrub drill | Create backing files for a throwaway pool
@@ -218,24 +218,3 @@
           - _zfs_scrub_canceled.stdout_lines[0] == 'failed'
           - "'scrub on zfs_scrub_test did not complete' in _zfs_scrub_canceled.stdout"
         fail_msg: "{{ _zfs_scrub_canceled.stdout }}"
-
-  always:
-    - name: _verify | Scrub drill | Resume scan progress
-      shell: echo 0 >/sys/module/zfs/parameters/zfs_scan_suspend_progress
-      changed_when: true
-
-    - name: _verify | Scrub drill | Destroy the throwaway pool
-      command: zpool destroy zfs_scrub_test
-      changed_when: true
-      failed_when: false
-
-    - name: _verify | Scrub drill | Remove backing files, mountpoint, and mail stand-in
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /var/tmp/zfs_scrub_test_0.img
-        - /var/tmp/zfs_scrub_test_1.img
-        - /var/tmp/zfs_scrub_test_mail.log
-        - /zfs_scrub_test
-        - /usr/bin/mail
