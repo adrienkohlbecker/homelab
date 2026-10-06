@@ -129,6 +129,18 @@
   tags:
     - adguard
 
+# The config validate below runs the image, so pull it first with retries.
+- name: Pull adguard image
+  import_role:
+    name: podman
+    tasks_from: image
+  vars:
+    podman_image_args:
+      name: adguard
+      image: "{{ adguard_image }}"
+  tags:
+    - adguard
+
 - name: Configure adguard
   when:
     - not ansible_check_mode or adguard_user.uid is defined
@@ -162,17 +174,6 @@
   vars:
     fluentbit_extension_args:
       name: adguard
-  tags:
-    - adguard
-
-- name: Pull adguard image
-  import_role:
-    name: podman
-    tasks_from: image
-  vars:
-    podman_image_args:
-      name: adguard
-      image: "{{ adguard_image }}"
   tags:
     - adguard
 
