@@ -1,7 +1,42 @@
 # Podman's storage database records its graph driver the first time any podman
-# command, including an apt postinst trigger, touches it. Install the complete
-# configuration before the package so that first initialization sees the same
-# driver and paths every later command will use.
+# command, including an apt postinst trigger, touches it. Mount the dedicated
+# store and install the complete configuration before the package, so that
+# first initialization lands on the final device with the same driver and
+# paths every later command will use.
+
+# ZFS-root hosts keep the reconstructible container store outside rpool on a
+# dedicated raw ext4 partition (single-disk) or mdadm array (multi-disk). The
+# install layer creates the device; this role formats and mounts it. Minimal
+# fixtures have zfs_root=false and intentionally keep Podman on the root
+# filesystem.
+#
+# resizefs grows ext4 to fill a deliberately enlarged partition and is a no-op
+# on fixed fixtures. On mdadm, mke2fs derives stripe geometry from the array.
+- name: install | Create ext4 filesystem on the podman partition
+  when: zfs_root
+  filesystem:
+    fstype: ext4
+    dev: "{{ podman_storage_device }}"
+    resizefs: true
+  become: true
+  tags:
+    - podman
+
+# A raw partition is exposed by udev early, and an mdadm array assembles from
+# mdadm.conf in the initramfs/udev, both well before local-fs.target.
+- name: install | Mount the podman partition
+  when: zfs_root
+  mount:
+    path: /var/lib/containers
+    src: "{{ podman_storage_device }}"
+    fstype: ext4
+    opts: defaults,noatime
+    state: mounted
+    backup: true
+  become: true
+  tags:
+    - podman
+
 - name: install | Ensure /etc/containers exists
   file:
     path: /etc/containers
@@ -166,52 +201,16 @@
   tags:
     - podman
 
-# 0755 (up from the 0700 the dir is first created with) lets netdata's
-# disk-space collector traverse to the mountpoint. The value is
-# load-bearing on zfs_root hosts: this task runs before the dedicated mount,
-# so on the second converge it sees the partition's ext4 root, which mkfs
-# makes 0755 — matching that keeps the task idempotent. Tightening it
-# (e.g. 0711) fights the mkfs default and the task never converges.
-- name: install | Update containers permissions for netdata disk space monitoring
+# Rootless users reach their stores under /var/lib/containers/rootless, so the
+# store root must be traversable. On root-filesystem hosts podman creates
+# it 0700; on ZFS-root hosts mkfs already makes the dedicated ext4 root 0755.
+- name: install | Let rootless users traverse /var/lib/containers
   file:
     dest: /var/lib/containers
     state: directory
     owner: root
     group: root
     mode: "0755"
-  become: true
-  tags:
-    - podman
-
-# ZFS-root hosts keep the reconstructible container store outside rpool on a
-# dedicated raw ext4 partition (single-disk) or mdadm array (multi-disk). The
-# install layer creates the device; this role formats and mounts it. Minimal
-# fixtures have zfs_root=false and intentionally keep Podman on the root
-# filesystem.
-#
-# resizefs grows ext4 to fill a deliberately enlarged partition and is a no-op
-# on fixed fixtures. On mdadm, mke2fs derives stripe geometry from the array.
-- name: install | Create ext4 filesystem on the podman partition
-  when: zfs_root
-  filesystem:
-    fstype: ext4
-    dev: "{{ podman_storage_device }}"
-    resizefs: true
-  become: true
-  tags:
-    - podman
-
-# A raw partition is exposed by udev early, and an mdadm array assembles from
-# mdadm.conf in the initramfs/udev, both well before local-fs.target.
-- name: install | Mount the podman partition
-  when: zfs_root
-  mount:
-    path: /var/lib/containers
-    src: "{{ podman_storage_device }}"
-    fstype: ext4
-    opts: defaults,noatime
-    state: mounted
-    backup: true
   become: true
   tags:
     - podman
