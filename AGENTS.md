@@ -54,7 +54,7 @@ Repository map and bootstrap: [README.md](README.md).
 - Gate test-only branches on `qemu_test`, set by the test inventory's `test` group.
 - Per-role test hooks live alongside the role's tasks:
   - `tasks/_setup.yml` — pre-role fixture bringup. Never runs against prod.
-  - `tasks/_verify.yml` — post-converge assertions. Only invoked by the harness against a qemu VM — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](roles/console/tasks/_verify.yml)).
+  - `tasks/_verify.yml` — post-converge assertions. Only invoked by the harness against a qemu VM — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](roles/console/tasks/_verify.yml)). Fixture VMs are ephemeral: no end-of-run teardown — only mid-run resets that a later check in the same file depends on.
 - **Check mode:** every test cell runs `--check` on a fresh fixture first (see *Testing*), and it predicts user, group, and unit creation without exporting numeric ids. Gate consumers of a fresh `<svc>_user`'s ids or directories on `not ansible_check_mode or <svc>_user.uid is defined` (a real run must never silently skip), and start/restart on `not (ansible_check_mode and (...changed))` over the pending user/unit results. `ansible_check_mode` reflects only the CLI flag: under task-level `check_mode: true` in `_verify` these guards don't fire, so import only the task file under test, assert on its published results, and keep `check_mode: false` out of that file unless something else gates it.
 - Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope. (lint, warning only: `prefer-import`)
 - Static fixture playbooks under `test/playbooks/` must set `tasks_from` on every `import_role`. Their dependencies are named role entrypoints, never an implicit `tasks/main.yml`; the dynamic `site.yml` driver is the exception because it deliberately exercises the role under test through its normal entrypoint. (lint: `require-named-role-entrypoint`)
@@ -94,7 +94,7 @@ A new service role mirrors a recent sibling and wires these shared places:
 
 ### Helper roles
 
-Prefer these over re-implementing boilerplate. Call them with `tasks_from` and a single `*_args` dict, passing any `condition` inside it rather than as `when:` on the import. Authoring contract (empty `main.yml`, `condition`, removal entry points, tag scope) and full API: [notes/helper-roles-reference.md](notes/helper-roles-reference.md).
+Prefer these over re-implementing boilerplate. Call them with `tasks_from` and a single `*_args` dict, passing any `condition` inside it rather than as `when:` on the import. Entry points that publish no result (the `remove` ones) take no `condition`; gate those with `when:`. Authoring contract (empty `main.yml`, `condition`, removal entry points, tag scope) and full API: [notes/helper-roles-reference.md](notes/helper-roles-reference.md).
 
 | Helper | Entry point | Exposes / creates |
 |--------|-------------|-------------------|
