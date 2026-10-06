@@ -12,7 +12,7 @@ Host *
     ControlPersist 300
     ForwardAgent no
     HashKnownHosts yes
-    IdentityFile ~/.ssh/id_ed25519
+    IdentityFile /mnt/services/zfs_autobackup/id_ed25519
     IdentitiesOnly yes
     PreferredAuthentications publickey
     ServerAliveCountMax 2

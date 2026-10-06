@@ -104,3 +104,18 @@
   register: retired_services_eaton_ipp
   failed_when: retired_services_eaton_ipp.stat.exists
   become: true
+
+- name: _verify | Stat the backup key paths
+  stat:
+    path: /root/.ssh/id_ed25519{{ item }}
+  loop:
+    - ""
+    - .pub
+  register: retired_services_backup_keys
+  become: true
+
+- name: _verify | Backup key link is gone and the regular file survives
+  assert:
+    that:
+      - not retired_services_backup_keys.results[0].stat.exists
+      - retired_services_backup_keys.results[1].stat.isreg

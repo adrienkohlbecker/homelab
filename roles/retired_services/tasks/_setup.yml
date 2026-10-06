@@ -181,3 +181,29 @@
     group: root
     mode: "0755"
   become: true
+
+- name: _setup | Create the root SSH directory
+  file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+# The private key is a retired link; the public key is a regular file the
+# teardown must leave alone.
+- name: _setup | Seed the retired backup private key link
+  file:
+    src: /mnt/services/zfs_autobackup/id_ed25519
+    dest: /root/.ssh/id_ed25519
+    state: link
+    force: true
+  become: true
+
+- name: _setup | Seed a regular backup public key
+  copy:
+    content: "regular\n"
+    dest: /root/.ssh/id_ed25519.pub
+    mode: "0644"
+  become: true

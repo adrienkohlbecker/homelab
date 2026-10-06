@@ -1,5 +1,7 @@
 # Root's outbound SSH identity authenticates the automated onsite pulls and
-# offsite rsync. The key lives on rpool/services and /root/.ssh links to it.
+# offsite rsync, which both read /etc/zfs_autobackup_ssh_config. The key lives
+# on rpool/services so it survives a rebuild. /root/.ssh keeps the backup
+# transports' known_hosts and ControlMaster sockets.
 - name: identity | Create the root SSH directory
   file:
     dest: /root/.ssh
@@ -8,7 +10,6 @@
     group: root
     mode: "0700"
   become: true
-  register: zfs_autobackup_identity_directory
   tags:
     - zfs_autobackup
 
@@ -32,17 +33,6 @@
   tags:
     - zfs_autobackup
 
-- name: identity | Inspect the existing identities
-  stat:
-    path: "{{ item.path }}"
-  loop:
-    - path: /mnt/services/zfs_autobackup/id_ed25519
-    - path: /root/.ssh/id_ed25519
-  register: zfs_autobackup_identity_existing
-  become: true
-  tags:
-    - zfs_autobackup
-
 - name: identity | Create the persistence directory
   file:
     dest: /mnt/services/zfs_autobackup
@@ -55,25 +45,6 @@
   tags:
     - zfs_autobackup
 
-# A pre-existing live key predates the canonical persistent path. Copy it once
-# before replacing /root/.ssh with links so authorized_keys remain valid.
-- name: identity | Migrate an existing live private key
-  when:
-    - not zfs_autobackup_identity_existing.results[0].stat.exists
-    - zfs_autobackup_identity_existing.results[1].stat.exists
-    - not (ansible_check_mode and zfs_autobackup_identity_persist_dir.changed)
-  copy:
-    src: /root/.ssh/id_ed25519
-    remote_src: true
-    dest: /mnt/services/zfs_autobackup/id_ed25519
-    owner: root
-    group: root
-    mode: "0600"
-    backup: true
-  become: true
-  tags:
-    - zfs_autobackup
-
 - name: identity | Generate or validate the persistent keypair
   when: not (ansible_check_mode and zfs_autobackup_identity_persist_dir.changed)
   community.crypto.openssh_keypair:
@@ -81,45 +52,9 @@
     type: ed25519
     owner: root
     group: root
+    mode: "0600"
     regenerate: fail
     backend: opensshbin
-  become: true
-  register: zfs_autobackup_identity_keypair
-  tags:
-    - zfs_autobackup
-
-# openssh_keypair applies its single mode argument to both files. Let ssh-keygen
-# use native split modes, then enforce the private key permission independently.
-- name: identity | Normalize the private key permissions
-  when: >-
-    not (ansible_check_mode and
-    (zfs_autobackup_identity_persist_dir.changed
-    or zfs_autobackup_identity_keypair.changed | default(false)))
-  file:
-    path: /mnt/services/zfs_autobackup/id_ed25519
-    owner: root
-    group: root
-    mode: "0600"
-  become: true
-  register: zfs_autobackup_identity_private_key
-  tags:
-    - zfs_autobackup
-
-- name: identity | Link the live SSH keypair to persistent storage
-  when: >-
-    not (ansible_check_mode and
-    (zfs_autobackup_identity_directory.changed
-    or zfs_autobackup_identity_persist_dir.changed
-    or zfs_autobackup_identity_keypair.changed | default(false)))
-  file:
-    src: "/mnt/services/zfs_autobackup/id_ed25519{{ item }}"
-    dest: "/root/.ssh/id_ed25519{{ item }}"
-    state: link
-    force: true
-  loop:
-    - ""
-    - .pub
-  register: zfs_autobackup_identity_links
   become: true
   tags:
     - zfs_autobackup

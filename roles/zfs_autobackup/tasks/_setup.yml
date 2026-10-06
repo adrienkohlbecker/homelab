@@ -1,4 +1,4 @@
-# Mirror the production producer so identity migration gets the real services
+# Mirror the production producer so the backup identity gets the real services
 # dataset, mount unit, and zfs_check_mount dependency.
 - name: _setup | Configure the services datasets
   import_role:

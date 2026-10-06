@@ -280,3 +280,31 @@
   tags:
     - retired_services
     - firewall
+
+# Drop once lab, pug, and fox have converged. The backup SSH config names the
+# persistent key on rpool/services directly, so the old /root/.ssh links to it
+# are unused. Remove only links: a regular key file there is not ours to drop.
+- name: Inspect the retired backup key links
+  stat:
+    path: /root/.ssh/id_ed25519{{ item }}
+  loop:
+    - ""
+    - .pub
+  register: retired_services_backup_key_links
+  become: true
+  tags:
+    - retired_services
+    - zfs_autobackup
+
+- name: Remove the retired backup key links
+  when: item.stat.islnk | default(false)
+  file:
+    path: /root/.ssh/id_ed25519{{ item.item }}
+    state: absent
+  loop: "{{ retired_services_backup_key_links.results }}"
+  loop_control:
+    label: /root/.ssh/id_ed25519{{ item.item }}
+  become: true
+  tags:
+    - retired_services
+    - zfs_autobackup

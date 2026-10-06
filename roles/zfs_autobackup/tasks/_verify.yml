@@ -27,17 +27,15 @@
   failed_when: zfs_autobackup_verify_repaired_receive_root.stdout != 'off'
   become: true
 
-- name: _verify | Exercise backup identity migration and persistence
-  import_tasks: _verify_identity.yml
-
 # Functional onsite pull. The fixture's onsite source is the fixture itself
-# (external_ips maps it to its own address), so authorizing root's generated
-# key for the source-side user lets the installed nightly orchestrator run a
-# real pull end to end: the backup SSH client config, the first-connection
-# host-key pin, the delegated send/hold/release, and the replica scrub.
+# (external_ips maps it to its own address), so authorizing the generated
+# backup key for the source-side user lets the installed nightly orchestrator
+# run a real pull end to end: the backup SSH client config and its persistent
+# identity, the first-connection host-key pin, the delegated
+# send/hold/release, and the replica scrub.
 - name: _verify | Read the backup public key
   slurp:
-    src: /root/.ssh/id_ed25519.pub
+    src: /mnt/services/zfs_autobackup/id_ed25519.pub
   register: zfs_autobackup_verify_root_pubkey
   become: true
 
