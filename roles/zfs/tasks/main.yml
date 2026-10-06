@@ -68,8 +68,8 @@
     - zfs
 
 # init_on_alloc=0 — the kernel's page-zeroing-on-alloc default taxes ZFS's
-# alloc-heavy ARC. The boot cmdline engine threads it into the ZBM property; a
-# host without a ZFS root (only the minimal fixture) keeps the kernel default.
+# alloc-heavy ARC. The boot cmdline engine threads it into grub.d
+# (GRUB_CMDLINE_LINUX_DEFAULT) or the ZBM property per the host's bootloader.
 - name: Disable init_on_alloc
   import_role:
     name: boot

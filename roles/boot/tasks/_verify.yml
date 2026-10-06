@@ -1,20 +1,20 @@
 # Functional checks for the boot role. The converge proves the tasks exit-code
 # cleanly; these assert the end-state they're responsible for.
 #
-# The checks assume the ZFS-root, ZBM-booted Lab fixture (meta/test.yml), the
-# only boot chain site.yml runs this role on.
-#
 # Reboot before the checks so /proc/cmdline reflects the role's writes. Same
 # pattern as console/_verify.yml.
 
 # The fixture's Dracut image is built without host-only mode, and a converge
 # that changes no image input leaves it alone. Rebuild before the reboot so the
-# host boots the host-only image. The fixture must already have a nonempty
-# pool cache, or its absence from the image would prove nothing.
+# host boots the host-only image. A ZFS-root fixture must already have a
+# nonempty pool cache, or its absence from the image would prove nothing.
 - name: _verify | Rebuild the host-only boot images
-  when: initramfs_use_dracut
+  when:
+    - not qemu_test_minimal
+    - initramfs_use_dracut
   block:
-    - name: _verify | Fixture has a nonempty pool cache
+    - name: _verify | ZFS-root fixture has a nonempty pool cache
+      when: zfs_root
       stat:
         path: /etc/zfs/zpool.cache
       register: _boot_verify_zpool_cache
@@ -33,6 +33,7 @@
 
 # No grub package was installed during converge.
 - name: _verify | Dpkg install status for grub*
+  when: not grub_bootloader
   command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
   changed_when: false
   register: _boot_verify_grub_status
@@ -44,6 +45,7 @@
 
 # A masked unit cannot be started, whether or not its package is installed.
 - name: _verify | Unused multipath monitor refuses to start # noqa: command-instead-of-module
+  when: zfs_root | bool
   command: systemctl start multipathd.service
   register: _boot_verify_multipathd
   changed_when: false
@@ -52,10 +54,51 @@
     or 'is masked' not in _boot_verify_multipathd.stderr
   become: true
 
+- name: _verify | Exercise the all-kernel GRUB command-line scope
+  when: grub_bootloader
+  block:
+    - name: _verify | Install an all-kernel command-line contribution
+      import_role:
+        name: boot
+        tasks_from: cmdline
+      vars:
+        boot_cmdline_args:
+          name: _verify_all_scope
+          contents: verify_scope=all
+          grub_scope: all
+
+    - name: _verify | Read the all-kernel GRUB fragment
+      slurp:
+        src: /etc/default/grub.d/99-_verify_all_scope.cfg
+      register: _boot_verify_all_scope
+      become: true
+
+    - name: _verify | All-kernel scope selected GRUB_CMDLINE_LINUX
+      assert:
+        that:
+          - (_boot_verify_all_scope.content | b64decode).startswith('GRUB_CMDLINE_LINUX=')
+          - "'verify_scope=all' in (_boot_verify_all_scope.content | b64decode)"
+
+  always:
+    - name: _verify | Remove the all-kernel command-line contribution
+      import_role:
+        name: boot
+        tasks_from: cmdline
+      vars:
+        boot_cmdline_args:
+          name: _verify_all_scope
+          contents: ""
+          grub_scope: all
+
+# Minimal boots a pre-baked initrd outside /boot, as in console/_verify.yml.
+# Deployment-shaped fixtures boot the per-kernel image inspected here.
+#
 # Noble keeps its broad driver policy. Resolute's host-only image, rebuilt
 # before the reboot above, booted the host; the checks below inspect it.
 - name: _verify | Boot image carries non-virtio drivers (ahci/e1000)
-  when: not initramfs_use_dracut
+  when:
+    - not qemu_test_minimal
+    - not initramfs_use_dracut
   shell:
     cmd: >-
       set -euo pipefail;
@@ -67,20 +110,23 @@
 # The shared Dracut policy keeps the pool cache out of every image (panic's
 # verify covers its panic policy exclusion).
 - name: _verify | Exercise the Dracut image exclusions
-  when: initramfs_use_dracut
+  when:
+    - not qemu_test_minimal
+    - initramfs_use_dracut
   block:
     - name: _verify | Image carries the boot modules but not the pool cache
       command: lsinitrd /boot/initrd.img-{{ ansible_kernel }}
       register: _boot_verify_dracut_files
       changed_when: false
       failed_when: >-
-        'zfs' not in _boot_verify_dracut_files.stdout_lines
+        (zfs_root and 'zfs' not in _boot_verify_dracut_files.stdout_lines)
         or _boot_verify_dracut_files.stdout is search('(?m)\setc/zfs/zpool\.cache$')
       become: true
 
     # Sloppy host-only mode keeps the NVMe and Intel VMD drivers even on this
     # virtio-only fixture, so a board swap that keeps rpool on NVMe still boots.
     - name: _verify | Host-only image keeps the NVMe root drivers
+      when: zfs_root
       assert:
         that:
           - _boot_verify_dracut_files.stdout is search('(?m)/nvme\.ko(\.(zst|xz|gz))?$')
@@ -93,6 +139,7 @@
 # /proc/cmdline proves the ZBM property propagated through the boot chain into
 # the running kernel, not just that the ZFS property was set.
 - name: _verify | Running kernel booted with the base console args
+  when: not grub_bootloader
   slurp:
     src: /proc/cmdline
   register: _boot_verify_proc_cmdline
@@ -106,6 +153,7 @@
 # --- EFI NVRAM boot entries ---
 
 - name: _verify | EFI entries are converged
+  when: not grub_bootloader
   script:
     cmd: efi_entries.py --check
     executable: /usr/bin/python3
@@ -120,6 +168,7 @@
   register: _boot_verify_efi
 
 - name: _verify | No EFI entry drift
+  when: not grub_bootloader
   vars:
     _efi_result: "{{ _boot_verify_efi.stdout | from_json }}"
   assert:
@@ -131,6 +180,7 @@
 # firmware falls through to the next entry. Ansible keeps both backslashes of
 # the Jinja literal, so the regex matches one backslash.
 - name: _verify | First EFI entry loader exists on the ESP
+  when: not grub_bootloader
   stat:
     path: '/boot/efi{{ boot_efi_entries[0].loader | regex_replace("\\", "/") }}'
   register: _boot_verify_loader

@@ -1,3 +1,6 @@
+machines:
+  lab:
+  minimal:
 arm:
   - lab
 ubuntu:

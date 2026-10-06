@@ -1,8 +1,8 @@
 # Cross-cutting boot setup. This role owns the kernel-cmdline engine
-# (tasks/cmdline.yml, imported by zfs/console to contribute a ZFSBootMenu
-# command-line fragment) plus the boot-chain config below that no feature role
-# owns. site.yml runs the role on the ZBM hosts; tasks specific to ZBM skip on
-# a host without a ZFS root.
+# (tasks/cmdline.yml, imported by zfs/console to contribute a fragment to
+# whichever bootloader the host uses) plus the boot-chain config below that no
+# feature role owns. site.yml runs the role on the ZBM hosts; tasks specific to
+# ZBM skip on grub hosts.
 # Bootloader install + image staging stay owned by the refind role;
 # disk/ESP creation stays one-time bootstrap, while this role owns its mount
 # policy.
@@ -11,7 +11,7 @@
 # grub-* alternation; hold the whole grub family, including packages not yet
 # installed, so a later kernel upgrade cannot pull it in.
 - name: Hold grub packages
-  when: zfs_root | bool
+  when: not grub_bootloader
   command: apt-mark hold 'grub*'
   register: boot_grub_hold
   changed_when: >-
@@ -102,6 +102,7 @@
 # which selects the arch-specific QEMU UART on test VMs and boot_serial_console
 # on real hardware (unset on lab/pug, which have no UART).
 - name: Set the base console command line
+  when: not grub_bootloader
   import_role:
     name: boot
     tasks_from: cmdline
@@ -116,7 +117,7 @@
 # Firmware points at boot loaders on the ESP; per-loader config carries the
 # loader-specific kernel command line.
 - name: Manage EFI boot entries
-  when: zfs_root | bool
+  when: not grub_bootloader
   import_tasks: efi_entries.yml
   tags:
     - boot
