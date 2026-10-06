@@ -77,6 +77,14 @@ local function unit_from_tag(tag)
     return nil
 end
 
+-- The file output writes only the record body, so the record carries its own
+-- event time, rendered as Fluent Bit's iso8601 json_date_format would.
+local function iso8601(ts)
+    local sec = math.floor(ts)
+    local usec = math.floor((ts - sec) * 1000000)
+    return os.date("!%Y-%m-%dT%H:%M:%S", sec) .. string.format(".%06dZ", usec)
+end
+
 local SOURCE_SHAPES = {
     ["certbot.file"] = {
         service = "certbot",
@@ -171,6 +179,7 @@ function shape_lnav(tag, ts, record)
     end
 
     local shaped = {
+        time = iso8601(ts),
         host = scrub(record["host"]),
         service = scrub(service),
         unit = scrub(unit),

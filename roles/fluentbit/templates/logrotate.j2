@@ -10,9 +10,8 @@
 {% endif %}
     missingok
     notifempty
-    # systemd holds the file open with O_APPEND for the daemon lifetime, so
-    # truncating in place keeps fluent-bit writing to the live path without a
-    # restart, which would drop its in-memory backlog.
-    copytruncate
+    # fluent-bit reopens the path on every flush, so it moves to the new file
+    # without a restart.
+    create 0640 root adm
     su root adm
 }

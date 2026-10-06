@@ -13,5 +13,4 @@
 ExecStart=
 ExecStart=/opt/fluent-bit/bin/fluent-bit --config=/etc/fluent-bit/fluent-bit.yaml
 ExecReload=/bin/kill -s HUP $MAINPID
-StandardOutput=append:/var/log/fluent-bit/lnav.jsonl
 StandardError=journal

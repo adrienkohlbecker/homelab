@@ -194,3 +194,8 @@ do
     check("certbot.failure.level", rec.level, "warn")
     check("certbot.failure.parse_error", rec.parse_error, "certbot_file")
 end
+
+do
+    local _, _, rec = shape_lnav("svc.cron.service", 1781179200.25, { log = "tick" })
+    check("time.iso8601", rec.time, "2026-06-11T12:00:00.250000Z")
+end
