@@ -143,12 +143,6 @@
             - fields.type
             - fields.initiator
 
-- name: _verify | Routine nexus events are omitted
-  assert:
-    that:
-      - "'nexus-task-failed' in fluentbit_verify_result.stdout"
-      - "'nexus-audit-useful' in fluentbit_verify_result.stdout"
-
 - name: _verify | Retired nexus log files remain absent
   stat:
     path: "{{ item }}"

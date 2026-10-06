@@ -48,10 +48,12 @@ LogFilterPatterns=~\x22domain\x22:\x22repository[.]asset\x22,\x22type\x22:\x22(c
 # re-proxies on demand; a DB restore against an empty default store is
 # expected, not corruption.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
-# INSTALL4J_ADD_VM_PARAMS relocates the java.util.prefs userRoot onto the
-# /user-root volume so it sits beside encryption.json, off the snapshotted
-# /nexus-data mount. The healthcheck uses the Alpine base image's busybox
-# wget (a -ubi image tag would not ship it).
+# INSTALL4J_ADD_VM_PARAMS relocates the java.util.prefs userRoot out of the
+# container's home directory, which --rm discards, onto /user-root. That
+# volume holds the role-rendered encryption.json and logback.xml apart from
+# the /nexus-data tree Nexus owns; both live on the snapshotted services
+# dataset. The healthcheck uses the Alpine base image's busybox wget (a -ubi
+# image tag would not ship it).
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \

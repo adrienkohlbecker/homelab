@@ -225,8 +225,8 @@ bazarr_opensubtitles_com_password: changeme
 nexus_encryption_key: changeme
 nexus_encryption_salt: changeme
 nexus_encryption_iv: changeme
-# Shrink the JVM so nexus fits the 3.6 GB podman test VM. Real prod
-# uses the 4G/4G/2g defaults baked into the template.
+# Shrink the JVM so nexus fits its 5 GiB test cell (roles/nexus/meta/test.yml).
+# Prod uses the 4G-heap default in roles/nexus/defaults/main.yml.
 nexus_jvm_params: -Xms512M -Xmx1G -XX:MaxDirectMemorySize=512m
 spouse_firstname: changeme
 udm_dns_failover_heartbeat_url: http://127.0.0.1:9/api/push/lab-test
