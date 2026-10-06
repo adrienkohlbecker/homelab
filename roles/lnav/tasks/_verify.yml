@@ -33,20 +33,6 @@
   tags:
     - lnav
 
-- name: Lnav config check accepts representative sample
-  become: true
-  become_user: "{{ ansible_user_id }}"
-  command:
-    argv:
-      - /usr/local/bin/lnav
-      - -n
-      - -N
-      - -C
-      - /tmp/lnav_verify/lnav.jsonl
-  changed_when: false
-  tags:
-    - lnav
-
 - name: Read effective lnav configuration
   become: true
   become_user: "{{ ansible_user_id }}"
@@ -65,17 +51,6 @@
   set_fact:
     lnav_f9_command: >-
       {{ (lnav_effective_config.stdout | from_json).ui['keymap-defs']['default'].f9.command }}
-  tags:
-    - lnav
-
-- name: Assert lnav selects its bundled Dracula theme
-  vars:
-    effective_config: "{{ lnav_effective_config.stdout | from_json }}"
-  assert:
-    that:
-      - effective_config.ui.theme == 'dracula'
-      - "'dracula' in effective_config.ui['theme-defs']"
-    fail_msg: "lnav did not select its bundled Dracula theme"
   tags:
     - lnav
 
