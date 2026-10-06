@@ -35,8 +35,6 @@
         enabled: true
       become: true
 
-    # The role owns only this origin. Others, such as cloud-init's
-    # 50-cloud-init.yaml on fox, stay in place and Netplan merges them in.
     - name: Read the Ansible-managed netplan origin
       slurp:
         src: /etc/netplan/01-netcfg.yaml
@@ -46,12 +44,24 @@
         and not netplan_managed_config.msg.startswith('File not found')
       become: true
 
+    # Netplan merges every origin, so an installer or cloud-init definition
+    # left behind once cleanup purges cloud-init keeps configuring the NIC
+    # beside the managed one. Hosts where cloud-init owns networking keep its
+    # rendered configuration and layer the managed origin over it.
+    - name: Find superseded netplan origins
+      find:
+        paths: /etc/netplan
+        patterns: "{{ ['00-installer-config.yaml'] + ([] if cloud_init_managed else ['50-cloud-init.yaml']) }}"
+      register: netplan_superseded_origins
+      become: true
+
     - name: Detect changed netplan configuration
       set_fact:
         netplan_config_changed: >-
           {{ ((netplan_managed_config.content | b64decode | from_yaml)
               if netplan_managed_config.content is defined else {})
-             != {'network': {'version': 2} | combine(netplan)} }}
+             != {'network': {'version': 2} | combine(netplan)}
+             or netplan_superseded_origins.matched > 0 }}
       changed_when: netplan_config_changed
 
     # A conditional import leaks its condition onto reset_connection, which
@@ -66,4 +76,7 @@
       become: true
       vars:
         netplan_apply_config: "{{ netplan }}"
-        netplan_remove_origins: "{{ ['01-netcfg'] if netplan_managed_config.content is defined else [] }}"
+        netplan_remove_origins: >-
+          {{ (['01-netcfg'] if netplan_managed_config.content is defined else [])
+             + (netplan_superseded_origins.files | map(attribute='path') | map('basename')
+                | map('splitext') | map('first') | list) }}

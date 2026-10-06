@@ -1,3 +1,18 @@
+# _setup seeded installer and cloud-init origins, and Minimal also carries its
+# cloud image's own. Netplan merges every origin, so its merged view proves no
+# leftover definition still configures an interface beside the managed ones.
+- name: _verify origins | Read the merged netplan ethernets
+  command: netplan get ethernets
+  register: netplan_verify_merged
+  changed_when: false
+  become: true
+
+- name: _verify origins | Confirm only the managed definitions remain
+  assert:
+    that:
+      - (netplan_verify_merged.stdout | from_yaml).keys() | sort == netplan.ethernets.keys() | sort
+    fail_msg: "Netplan still merges other origins: {{ netplan_verify_merged.stdout }}"
+
 # Exercise Netplan's automatic rejection with a candidate that removes DHCP.
 - name: _verify rejection | Run the apply path against a known-broken config
   become: true
@@ -147,3 +162,47 @@
       Routes seen by the probe: {{ _netplan_probe_routes }}
       wait-online: ActiveState={{ _netplan_wait_online.ActiveState }}
       ExecStart={{ _netplan_wait_online.ExecStart }}
+
+# Where cloud-init owns networking (fox), its origin stays and the managed one
+# layers over it. Dropping the managed origin replays a cloud image's first
+# converge through the transaction.
+- name: _verify layering | Seed a cloud-init netplan origin
+  copy:
+    dest: /etc/netplan/50-cloud-init.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          cloudinit0:
+            dhcp4: true
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: _verify layering | Drop the managed netplan origin
+  file:
+    path: /etc/netplan/01-netcfg.yaml
+    state: absent
+  become: true
+
+- name: _verify layering | Converge with cloud-init owning networking
+  import_role:
+    name: netplan
+    tasks_from: main
+  vars:
+    cloud_init_managed: true  # noqa: var-naming[no-role-prefix]
+
+- name: _verify layering | Read the merged netplan ethernets
+  command: netplan get ethernets
+  register: netplan_verify_layered
+  changed_when: false
+  become: true
+
+- name: _verify layering | Confirm the managed definitions layer over cloud-init
+  assert:
+    that:
+      - >-
+        (netplan_verify_layered.stdout | from_yaml).keys() | sort
+        == (netplan.ethernets.keys() | list + ['cloudinit0']) | sort
+    fail_msg: "Unexpected merged netplan ethernets: {{ netplan_verify_layered.stdout }}"

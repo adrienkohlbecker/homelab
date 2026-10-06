@@ -1,0 +1,30 @@
+# Leave the definitions an Ubuntu Server install would hand over. Minimal's
+# cloud image already carries its own cloud-init origin, which stays as is.
+- name: _setup | Seed an installer-owned netplan origin
+  copy:
+    dest: /etc/netplan/00-installer-config.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          installer0:
+            dhcp4: true
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: _setup | Seed a cloud-init netplan origin
+  copy:
+    dest: /etc/netplan/50-cloud-init.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          cloudinit0:
+            dhcp4: true
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+  become: true
