@@ -1,11 +1,13 @@
 #jinja2: lstrip_blocks: True
 [Unit]
+{% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
+{% endif %}
 
 [Service]
 # Discard routine path churn while retaining connectivity probes and failures.
