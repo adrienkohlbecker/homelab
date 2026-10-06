@@ -18,21 +18,22 @@
   tags:
     - headscale
 
-# A half-set pair makes DERP advertise its private container address for the
-# missing family. Fox sets both; the IPv4-only test fixture sets neither.
-- name: Assert headscale DERP advertised IPs are set together (both or neither)
+# Headscale cannot discover its public addresses behind nginx and Podman, so
+# fox pins its reserved primary IPs while the IPv4-only fixture sets neither.
+# A half-set pair or a stale Terraform pin would advertise an unreachable
+# address, and the estate has no IPv6 egress probe to catch it later.
+- name: Assert headscale DERP advertised IPs are unset or both held by this host
   assert:
-    that:
-      - (headscale_derp_ipv4 is defined) == (headscale_derp_ipv6 is defined)
+    that: >-
+      (headscale_derp_ipv4 is not defined and headscale_derp_ipv6 is not defined)
+      or (headscale_derp_ipv4 | default('') in ansible_all_ipv4_addresses
+          and headscale_derp_ipv6 | default('') in ansible_all_ipv6_addresses)
     fail_msg: >-
-      Exactly one of headscale_derp_ipv4 / headscale_derp_ipv6 is set; set both
-      (a dual-stack relay like fox) or neither (IPv4-only) -- a half-set pair
-      makes the embedded DERP advertise a private address for the missing family.
-  tags:
-    - headscale
-
-- name: Validate headscale DERP advertised IPs
-  import_tasks: validate_derp_ips.yml
+      headscale_derp_ipv4 ({{ headscale_derp_ipv4 | default("unset") }}) and
+      headscale_derp_ipv6 ({{ headscale_derp_ipv6 | default("unset") }}) must be
+      both unset (IPv4-only) or both configured on this host. Reconcile with the
+      reserved primary IPs in terraform/hetzner.tf (the IPv6 is
+      cidrhost(ip_network, 1), not ip_address).
   tags:
     - headscale
 
