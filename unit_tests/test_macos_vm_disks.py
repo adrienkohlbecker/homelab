@@ -22,6 +22,7 @@ def test_only_installer_writes_are_disposable(tmp_path):
         macos_vm_disk_source=str(tmp_path / "disk.raw"),
         macos_vm_mac_address="52:54:00:00:00:01",
         macos_vm_install_mode=True,
+        zfs_root=False,
     )
     unit = (
         jinja2.Environment(undefined=jinja2.StrictUndefined)
