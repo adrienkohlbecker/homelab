@@ -1,12 +1,9 @@
 # Loopback /health probe -- confirms influxd is up and the publish path
 # is wired. Retries cover cold-start (--health-start-period is 30s; the
-# budget below gives ~60s headroom). Host header matches the nginx leg
-# below to future-proof against ALLOWED_HOSTS-style restrictions.
+# budget below gives ~60s headroom).
 - name: _verify | Influxdb /health on loopback port
   uri:
     url: http://localhost:{{ service_ports.influxdb }}/health
-    headers:
-      Host: influxdb.{{ inventory_hostname }}.{{ domain }}
     return_content: true
   register: _influxdb_loopback
   retries: 30
