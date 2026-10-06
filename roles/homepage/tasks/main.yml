@@ -210,6 +210,10 @@
         - "ProtectHome=yes"
         - "NoNewPrivileges=yes"
         - "ReadWritePaths=/var/www/homepage_alerts"
+        # The cap also covers PID 1's messages about this unit, dropping the
+        # info-level Starting/Finished/Deactivated lines of every per-minute
+        # run while failures (warning and above) and stderr (err) still land.
+        - "LogLevelMax=notice"
   tags:
     - homepage
 

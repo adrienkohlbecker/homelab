@@ -11,15 +11,6 @@ pipeline:
       emitter_name: multiline_emitter
       emitter_storage.type: filesystem
 
-    # systemd logs a unit's own lifecycle from init.scope, so the target unit
-    # is named by UNIT, not by SYSTEMD_UNIT (the logging process's unit).
-    - name: grep
-      match: svc.*
-      logical_op: and
-      exclude:
-        - 'UNIT ^homepage_alerts\.service$'
-        - 'MESSAGE \A(Starting homepage_alerts\.service - Generate homepage alerts panel static files\.\.\.|Finished homepage_alerts\.service - Generate homepage alerts panel static files\.|homepage_alerts\.service: Deactivated successfully\.)\z'
-
     - name: lua
       match: svc.*
       script: /etc/fluent-bit/podman_events.lua

@@ -126,3 +126,29 @@
           fields.source: homepage.verify
         - message: homepage-raw
           service: homepage
+
+# LogLevelMax also caps PID 1's messages about the unit, so a run leaves no
+# Starting/Finished/Deactivated lines behind for the per-minute timer.
+- name: _verify | Record the clock before a homepage_alerts run
+  command: date +%s
+  register: _homepage_alerts_since
+  changed_when: false
+
+- name: _verify | Run homepage_alerts once
+  systemd:
+    name: homepage_alerts.service
+    state: started
+  become: true
+
+- name: _verify | PID 1 logged nothing about the homepage_alerts run
+  command:
+    argv:
+      - journalctl
+      - --since=@{{ _homepage_alerts_since.stdout }}
+      - --output=cat
+      - _PID=1
+      - UNIT=homepage_alerts.service
+  register: _homepage_alerts_pid1
+  changed_when: false
+  failed_when: _homepage_alerts_pid1.rc != 0 or _homepage_alerts_pid1.stdout | length > 0
+  become: true

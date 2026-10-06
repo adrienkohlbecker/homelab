@@ -240,27 +240,6 @@
         - /etc/fluent-bit/filters-pre.yaml
         - /etc/fluent-bit/filters-post.yaml
       records:
-        - _tag: svc.init.scope
-          MESSAGE: Starting homepage_alerts.service - Generate homepage alerts panel static files...
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          marker: homepage-start-drop
-        - _tag: svc.init.scope
-          MESSAGE: Finished homepage_alerts.service - Generate homepage alerts panel static files.
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          marker: homepage-finish-drop
-        - _tag: svc.init.scope
-          MESSAGE: "homepage_alerts.service: Deactivated successfully."
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          marker: homepage-deactivated-drop
-        - _tag: svc.init.scope
-          MESSAGE: "homepage_alerts.service: Failed with result exit-code."
-          SYSLOG_IDENTIFIER: systemd
-          UNIT: homepage_alerts.service
-          PRIORITY: "3"
-          marker: homepage-failed-keep
         - _tag: svc.podman.service
           MESSAGE: verbose podman event
           SYSLOG_IDENTIFIER: podman
@@ -317,8 +296,6 @@
           log: nginx-unparsed
           filepath: /var/log/nginx/access.log
       expected:
-        - level: error
-          fields.marker: homepage-failed-keep
         - service: certbot
           unit: certbot.service
           identifier: certbot
