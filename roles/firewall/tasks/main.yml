@@ -187,12 +187,13 @@
 # it alive under any ruleset, so only a new connection from the controller
 # proves SSH still gets in. Wait for the server banner: a port forward in
 # front of the host, like the test harness's, completes the TCP handshake
-# itself. A failure here leaves the timer to revert.
+# itself. A failure here leaves the timer to revert. Delegation swaps in
+# localhost's connection vars, so read the target's through hostvars.
 - name: Confirm a new SSH connection reaches the host
   when: firewall_revert_timer is not skipped
   wait_for:
-    host: "{{ ansible_host | default(ansible_ssh_host) | default(inventory_hostname) }}"
-    port: "{{ ansible_port | default(ansible_ssh_port) | default(22) }}"
+    host: "{{ hostvars[inventory_hostname].ansible_host | default(hostvars[inventory_hostname].ansible_ssh_host) | default(inventory_hostname) }}"
+    port: "{{ hostvars[inventory_hostname].ansible_port | default(hostvars[inventory_hostname].ansible_ssh_port) | default(22) }}"
     search_regex: SSH-2\.0-
     timeout: 15
   delegate_to: localhost
