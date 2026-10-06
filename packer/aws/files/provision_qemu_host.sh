@@ -96,8 +96,12 @@ sudo install -dm 0755 /opt/mise /opt/uv-cache /etc/mise /tmp/homelab-ci-build
 sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
 (
   cd /tmp/homelab-ci-build
+  # mise install runs the project postinstall hook, whose uv sync fills the
+  # environment; pointing it at the shared cache keeps that from leaving the
+  # warm-up below nothing to fetch into /opt/uv-cache.
   mise_environment=(
     MISE_DATA_DIR=/opt/mise
+    UV_CACHE_DIR=/opt/uv-cache
     PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
   )
   sudo env "${mise_environment[@]}" mise trust /tmp/homelab-ci-build/mise.toml
