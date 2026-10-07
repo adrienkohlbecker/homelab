@@ -15,7 +15,7 @@ umask 002
 
 # mise folds a repeated --ubuntu flag into one space-joined value; fan out by
 # re-invoking this script once per release so the body below stays
-# single-release (its own traps, tmpdir, and netlog per process).
+# single-release (its own tmpdir per process).
 read -r -a ubuntus <<<"${usage_ubuntu}"
 if [ "${#ubuntus[@]}" -gt 1 ]; then
   for ubuntu in "${ubuntus[@]}"; do
@@ -46,29 +46,6 @@ mkdir -p "${base}"
 tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-XXXXXX")
 # mktemp uses 0700 regardless of umask; restore the shared-workspace contract.
 chmod 2770 "${tmp}"
-
-# Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs slirp,
-# the passt command + advertised DNS, the netdev rewrite) plus passt's own startup
-# banner. packer routes the shim's stderr through Go's logger, which it discards
-# without PACKER_LOG, so the shim writes to QEMU_NET_WRAPPER_LOG instead. Keep
-# it in system temporary storage: packer can delete a failed source's output
-# directory before the ERR trap dumps the log. Successful runs remove it.
-netlog=$(mktemp "${TMPDIR:-/tmp}/homelab-packer-netlog.XXXXXX")
-export QEMU_NET_WRAPPER_LOG="${netlog}"
-dump_net_logs() {
-  local f
-  if [ -s "${netlog}" ]; then
-    echo "=== qemu_net_wrapper NIC-backend decision log ==="
-    cat "${netlog}"
-  fi
-  for f in "${netlog}".passt-*; do
-    [ -f "${f}" ] || continue
-    echo "=== ${f##*/} (passt sidecar startup banner) ==="
-    grep -v '^Failed to send .* bytes to syslog$' "${f}" || true
-  done
-}
-trap 'dump_net_logs; rm -f "${netlog}" "${netlog}".passt-*' ERR
-trap 'rm -f "${netlog}" "${netlog}".passt-*' EXIT
 
 # Build -only filter when sources are specified. Packer parallelizes
 # the matched sources internally (one VM per source, non-overlapping

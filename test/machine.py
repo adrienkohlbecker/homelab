@@ -1215,10 +1215,9 @@ class Machine:
         # (the ZFS qemu-image volume, sized for the multi-GB disks), where
         # passt's listening socket immediately epoll-errors and the sidecar
         # exits ("Error on listening Unix socket, exiting"). Give it a private
-        # dir on the system tmpfs instead -- the same constraint packer/
-        # qemu_net_wrapper.py meets via tempfile.mkdtemp(). qemu reaches it
-        # since both run in this container. Launched in boot() so its lifetime
-        # brackets qemu's; torn down in _stop_passt. None on the slirp path.
+        # dir on the system tmpfs instead. qemu reaches it since both run in
+        # this container. Launched in boot() so its lifetime brackets qemu's;
+        # torn down in _stop_passt. None on the slirp path.
         if self._net_backend == "passt":
             self._passt_socket_dir = tempfile.TemporaryDirectory(prefix="homelab-passt-", ignore_cleanup_errors=True)
             self._passt_socket = Path(self._passt_socket_dir.name) / "passt.sock"

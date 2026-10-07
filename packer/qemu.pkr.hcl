@@ -242,13 +242,7 @@ source "qemu" "ubuntu" {
   machine_type = local.guest.machine_type
   memory       = 4096
   net_device   = local.guest.net_device
-  # Shim over the arch's real emulator (which it resolves from PATH): on a
-  # host with passt + qemu's `-netdev stream` (the lab CI shell runner) it
-  # backs the build-VM NIC with passt instead of libslirp, whose UDP drops
-  # under parallel-build contention flake the VM's DNS. Falls back to
-  # running qemu untouched (slirp) on a dev Mac or older qemu. See the file
-  # header and test/machine.py for the matching harness-side change.
-  qemu_binary          = "${path.root}/qemu_net_wrapper.py"
+  qemu_binary          = "qemu-system-${local.arch}"
   shutdown_command     = "sudo /usr/sbin/shutdown -h now"
   skip_compaction      = true
   ssh_private_key_file = "${path.root}/vagrant.key"

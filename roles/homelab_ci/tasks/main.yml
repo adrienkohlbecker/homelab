@@ -58,15 +58,10 @@
   tags:
     - homelab_ci
 
-- name: Point packer build VMs at the lab resolver
-  template:
-    src: homelab_ci.sh.j2
-    dest: /etc/profile.d/homelab_ci.sh
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: sh -n %s
+- name: Remove the packer passt settings from login shells
+  file:
+    path: /etc/profile.d/homelab_ci.sh
+    state: absent
   become: true
   tags:
     - homelab_ci
