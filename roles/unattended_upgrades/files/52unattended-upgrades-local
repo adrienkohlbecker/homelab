@@ -1,0 +1,33 @@
+// Overrides on top of the package's stock 50unattended-upgrades, which stays
+// untouched. Scalars here win because this file sorts after it; list blocks
+// append to the stock lists.
+//
+// Allowed-Origins stays stock (release, security, ESM): -updates and
+// third-party repos ride operator-driven converge via apt_upgrade.
+
+// Keep kernel upgrades operator-controlled so the swap reboots under
+// supervision. Scoped to the packages that replace the running kernel and set
+// /var/run/reboot-required -- image, headers, modules (incl. modules-extra) --
+// so userland kernel bits (linux-libc-dev, linux-firmware) still receive
+// security updates. Matched with re.match, so anchored at the start.
+Unattended-Upgrade::Package-Blacklist {
+    "^linux-(image|headers|modules)";
+};
+
+// Delivery routes via the postfix root alias (roles/postfix). The postfix role
+// converges after this one, but mail only fires on the later apt-daily timer.
+Unattended-Upgrade::Mail "root";
+Unattended-Upgrade::MailReport "only-on-error";
+
+// Kernel package GC is operator-driven: an unattended autoremove of a kernel
+// the bootloader or initrd still references risks an unbootable host with no
+// operator present. Superseded kernels are pruned during converge.
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "false";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+// Explicit although "false" is the default: site.yml's reboot check drains
+// /var/run/reboot-required serially behind the DNS-safety gate, which an
+// unattended reboot would bypass.
+Unattended-Upgrade::Automatic-Reboot "false";
+
+Unattended-Upgrade::SyslogEnable "true";

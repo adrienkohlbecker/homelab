@@ -25,6 +25,8 @@
   tags:
     - unattended_upgrades
 
+# The stock 50unattended-upgrades conffile stays pristine; the local override
+# sorts after it.
 - name: Configure unattended-upgrades
   copy:
     src: "{{ item }}"
@@ -37,7 +39,7 @@
   become: true
   loop:
     - 20auto-upgrades
-    - 50unattended-upgrades
+    - 52unattended-upgrades-local
   register: unattended_upgrades_config
   tags:
     - unattended_upgrades
