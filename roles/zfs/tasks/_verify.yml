@@ -38,6 +38,21 @@
   assert:
     that: _zfs_verify_root_mount_unit.status.ActiveState == 'active'
 
+- name: _verify | Root mount guard rejects invalid mount states
+  when: zfs_root
+  command:
+    argv: "{{ ['/usr/local/bin/zfs_check_mount'] + item.args }}"
+  register: _zfs_verify_mount_negative
+  changed_when: false
+  failed_when: _zfs_verify_mount_negative.rc == 0
+  loop:
+    - { label: mountpoint mismatch, args: [ "rpool/ROOT/{{ ansible_distribution_release }}", /nonexistent ] }
+    - { label: missing dataset, args: [ rpool/nonexistent_dataset, / ] }
+    - { label: extra argument, args: [ "rpool/ROOT/{{ ansible_distribution_release }}", /, "on" ] }
+  loop_control:
+    label: "{{ item.label }}"
+  become: true
+
 # --- Mount generator ---
 
 # Check the initial refresh before child creation triggers another zed update.
