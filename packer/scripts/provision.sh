@@ -44,78 +44,41 @@ SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
 ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
 ROLE_FILES=(console-setup keyboard modules_most dracut_host.conf)
 
+fail() {
+  echo "provision.sh: $*" >&2
+  exit 1
+}
+
 preflight() {
-  local name disk role_file
+  local disk role_file
   local -A seen_disks=()
-  local required=(
-    DISKS EXTRA_DISKS LAYOUT SWAP_SIZE PODMAN_SIZE META_SIZE EXTRA_POOLS
-    UBUNTU_NAME UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY
-    UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM
-    ZBM_VERSION
-  )
 
-  for name in "${required[@]}"; do
-    if ! [[ -v $name ]]; then
-      echo "provision.sh: required variable $name is not set" >&2
-      return 1
-    fi
-  done
+  # Optional layout features may be empty but must be set explicitly.
+  : "${EXTRA_DISKS?}" "${LAYOUT?}" "${PODMAN_SIZE?}" "${META_SIZE?}" "${EXTRA_POOLS?}"
+  : "${DISKS:?}" "${SWAP_SIZE:?}" "${UBUNTU_NAME:?}" "${ZBM_VERSION:?}"
+  : "${UBUNTU_MIRROR:?}" "${UBUNTU_MIRROR_SECURITY:?}"
+  : "${UBUNTU_MIRROR_UPSTREAM:?}" "${UBUNTU_MIRROR_SECURITY_UPSTREAM:?}"
 
-  for name in DISKS SWAP_SIZE UBUNTU_NAME UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM ZBM_VERSION; do
-    if [ -z "${!name}" ]; then
-      echo "provision.sh: required variable $name is empty" >&2
-      return 1
-    fi
-  done
-
-  case $LAYOUT in '' | mirror) ;; *)
-    echo "provision.sh: LAYOUT must be empty or mirror (got '$LAYOUT')" >&2
-    return 1
-    ;;
-  esac
-  case $INSTALL_TARGET in bare_metal | qemu | hetzner) ;; *)
-    echo "provision.sh: INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')" >&2
-    return 1
-    ;;
-  esac
-  if { [[ -v TARGET_HOSTNAME ]] && ! [[ -v TARGET_USERNAME ]]; } ||
-    { [[ -v TARGET_USERNAME ]] && ! [[ -v TARGET_HOSTNAME ]]; }; then
-    echo "provision.sh: TARGET_HOSTNAME and TARGET_USERNAME must be set together" >&2
-    return 1
-  fi
-  if [[ -v TARGET_HOSTNAME ]] && ! [[ $TARGET_HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
-    echo "provision.sh: invalid TARGET_HOSTNAME '$TARGET_HOSTNAME'" >&2
-    return 1
-  fi
-  if [[ -v TARGET_USERNAME ]] && ! [[ $TARGET_USERNAME =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
-    echo "provision.sh: invalid TARGET_USERNAME '$TARGET_USERNAME'" >&2
-    return 1
-  fi
-
-  if [ "$INSTALL_TARGET" != hetzner ]; then
-    if ! [[ -v SSH_KEY_PUB ]] || ! [[ $SSH_KEY_PUB =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]]; then
-      echo "provision.sh: SSH_KEY_PUB must contain a supported public key" >&2
-      return 1
-    fi
-  fi
+  [[ $LAYOUT =~ ^(mirror)?$ ]] || fail "LAYOUT must be empty or mirror (got '$LAYOUT')"
+  [[ $INSTALL_TARGET =~ ^(bare_metal|qemu|hetzner)$ ]] ||
+    fail "INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')"
+  [ "${TARGET_HOSTNAME+set}" = "${TARGET_USERNAME+set}" ] ||
+    fail "TARGET_HOSTNAME and TARGET_USERNAME must be set together"
+  [[ ! -v TARGET_HOSTNAME || $TARGET_HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] ||
+    fail "invalid TARGET_HOSTNAME '$TARGET_HOSTNAME'"
+  [[ ! -v TARGET_USERNAME || $TARGET_USERNAME =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] ||
+    fail "invalid TARGET_USERNAME '$TARGET_USERNAME'"
+  [[ $INSTALL_TARGET == hetzner || ${SSH_KEY_PUB-} =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]] ||
+    fail "SSH_KEY_PUB must contain a supported public key"
 
   for disk in $DISKS $EXTRA_DISKS; do
-    if [[ $disk != /dev/* ]]; then
-      echo "provision.sh: disk path must start with /dev/ (got '$disk')" >&2
-      return 1
-    fi
-    if [[ -v seen_disks[$disk] ]]; then
-      echo "provision.sh: disk '$disk' is listed more than once" >&2
-      return 1
-    fi
+    [[ $disk == /dev/* ]] || fail "disk path must start with /dev/ (got '$disk')"
+    [[ ! -v seen_disks[$disk] ]] || fail "disk '$disk' is listed more than once"
     seen_disks[$disk]=1
   done
 
   for role_file in "${ROLE_FILES[@]}"; do
-    if [ ! -f "$ROLE_FILES_DIR/$role_file" ]; then
-      echo "provision.sh: required role file not found: $ROLE_FILES_DIR/$role_file" >&2
-      return 1
-    fi
+    [ -f "$ROLE_FILES_DIR/$role_file" ] || fail "required role file not found: $ROLE_FILES_DIR/$role_file"
   done
 }
 
@@ -249,10 +212,7 @@ pop_extra_disks() {
   local n=$1 pool=$2 i
   POPPED_EXTRA_DISKS=()
   for ((i = 0; i < n; i++)); do
-    if [ "${#EXTRA_DISK_QUEUE[@]}" -eq 0 ]; then
-      echo >&2 "provision.sh: ran out of EXTRA_DISKS while allocating $n for $pool"
-      exit 1
-    fi
+    ((${#EXTRA_DISK_QUEUE[@]})) || fail "ran out of EXTRA_DISKS while allocating $n for $pool"
     POPPED_EXTRA_DISKS+=("${EXTRA_DISK_QUEUE[0]}")
     EXTRA_DISK_QUEUE=("${EXTRA_DISK_QUEUE[@]:1}")
   done
@@ -324,10 +284,7 @@ create_extra_pools() {
     apoc) create_extra_apoc ;;
     dozer) create_extra_dozer ;;
     tank_mouse) create_extra_tank_mouse ;;
-    *)
-      echo >&2 "provision.sh: unknown EXTRA_POOLS entry '$pool'"
-      exit 1
-      ;;
+    *) fail "unknown EXTRA_POOLS entry '$pool'" ;;
     esac
   done
 
