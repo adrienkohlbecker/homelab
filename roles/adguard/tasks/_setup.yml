@@ -18,6 +18,15 @@
     name: fluentbit
     tasks_from: configure
 
+# The fixture uses snakeoil certs and never runs certbot, which creates the
+# deploy hook directory on prod.
+- name: _setup | Create the certbot deploy hook directory
+  file:
+    dest: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    mode: "0755"
+  become: true
+
 - name: _setup | Install dependencies
   apt:
     pkg:
