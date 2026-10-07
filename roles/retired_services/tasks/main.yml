@@ -120,3 +120,28 @@
   tags:
     - retired_services
     - macvlan
+
+# Drop once lab, pug, and fox have converged. Removing the fragment requests
+# the reboot that drops consoleblank=0 from the running command line.
+- name: Retire console_noblank.service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: console_noblank.service
+  tags:
+    - retired_services
+    - console
+
+- name: Remove the retired consoleblank kernel argument
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: consoleblank
+      contents: ''
+  tags:
+    - retired_services
+    - console

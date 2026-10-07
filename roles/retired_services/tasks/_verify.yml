@@ -5,6 +5,7 @@
   loop:
     - wolweb.service
     - mac_iot.service
+    - console_noblank.service
   register: retired_services_units
   failed_when: retired_services_units.status.LoadState != 'not-found'
   become: true
@@ -73,3 +74,22 @@
   register: retired_services_mac_iot_link
   changed_when: false
   failed_when: retired_services_mac_iot_link.rc == 0
+
+# ZFSBootMenu boots the next kernel with this property.
+- name: _verify | Next ZFSBootMenu boot omits consoleblank
+  when: not grub_bootloader
+  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
+  register: retired_services_zbm_cmdline
+  changed_when: false
+  failed_when: >-
+    retired_services_zbm_cmdline.rc != 0
+    or 'consoleblank' in retired_services_zbm_cmdline.stdout
+  become: true
+
+- name: _verify | Rendered GRUB menu omits consoleblank
+  when: grub_bootloader
+  command: grep -q consoleblank /boot/grub/grub.cfg
+  register: retired_services_grub_cmdline
+  changed_when: false
+  failed_when: retired_services_grub_cmdline.rc != 1
+  become: true

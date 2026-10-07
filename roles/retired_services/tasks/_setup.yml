@@ -166,3 +166,40 @@
     group: root
     mode: "0644"
   become: true
+
+# The retired console no-blank unit and its kernel argument.
+- name: _setup | Install a disposable console_noblank unit
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/console_noblank.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Start the disposable console_noblank unit
+  systemd:
+    name: console_noblank.service
+    daemon_reload: true
+    enabled: true
+    state: started
+  become: true
+
+- name: _setup | Set the retired consoleblank kernel argument
+  import_role:
+    name: boot
+    tasks_from: cmdline
+  vars:
+    boot_cmdline_args:
+      name: consoleblank
+      contents: consoleblank=0

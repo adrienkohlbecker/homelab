@@ -56,28 +56,3 @@
       reboot: false
   tags:
     - console
-
-# The kernel argument below disables VT blanking; this unit separately disables
-# monitor DPMS after console setup.
-- name: Manage console_noblank.service
-  import_role:
-    name: systemd_unit
-    tasks_from: unit
-  vars:
-    systemd_unit_args:
-      src: console_noblank.service
-  tags:
-    - console
-
-# Apply the argument to recovery entries too.
-- name: Set consoleblank=0 kernel arg
-  import_role:
-    name: boot
-    tasks_from: cmdline
-  vars:
-    boot_cmdline_args:
-      name: consoleblank
-      contents: consoleblank=0
-      grub_scope: all
-  tags:
-    - console

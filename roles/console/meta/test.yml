@@ -1,8 +1,6 @@
-# Lab checks the ZFSBootMenu property (including its ARM handoff to rEFInd);
-# Minimal checks GRUB command-line delivery after reboot.
-machines:
-  lab:
-  minimal:
+# Lab covers both image generators (initramfs-tools on Noble, Dracut on
+# Resolute). Minimal boots a pre-baked initrd outside /boot, so it would add
+# only the live keymap check Lab already runs.
 arm:
   - lab
 ubuntu:
