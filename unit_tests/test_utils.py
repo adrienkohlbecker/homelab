@@ -124,29 +124,17 @@ class TestTerminateSubprocess:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await utils.terminate_subprocess(
-                proc,
-                grace_seconds=1.0,
-                initial_signal=signal.SIGINT,
-            )
-            assert proc.returncode is not None
+            await utils.terminate_subprocess(proc, grace_seconds=1.0)
+            assert proc.returncode == -signal.SIGINT
 
         asyncio.run(_run())
 
-    def test_zero_grace_non_sigkill_raises(self) -> None:
+    def test_grace_escalates_to_sigkill(self) -> None:
         async def _run() -> None:
-            proc = await asyncio.create_subprocess_exec(
-                "true",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await proc.wait()
-            with pytest.raises(ValueError, match="grace_seconds must be > 0"):
-                await utils.terminate_subprocess(
-                    proc,
-                    grace_seconds=0,
-                    initial_signal=signal.SIGINT,
-                )
+            proc = await asyncio.create_subprocess_exec("sh", "-c", "trap '' INT; sleep 60")
+            await asyncio.sleep(0.2)
+            await utils.terminate_subprocess(proc, grace_seconds=0.5)
+            assert proc.returncode == -signal.SIGKILL
 
         asyncio.run(_run())
 
@@ -158,18 +146,18 @@ class TestTerminateSubprocess:
 
 class TestRunCommand:
     def test_success(self) -> None:
-        result = asyncio.run(utils.run_command(["echo", "hello"], quiet=True))
+        result = asyncio.run(utils.run_command(["echo", "hello"]))
         assert result.exitcode == 0
         assert any("hello" in line for line in result.stdout)
 
     def test_failure_raises(self) -> None:
         with pytest.raises(utils.CommandFailedException):
-            asyncio.run(utils.run_command(["false"], quiet=True))
+            asyncio.run(utils.run_command(["false"]))
 
     def test_failure_no_check(self) -> None:
-        result = asyncio.run(utils.run_command(["false"], check=False, quiet=True))
+        result = asyncio.run(utils.run_command(["false"], check=False))
         assert result.exitcode != 0
 
     def test_captures_stderr(self) -> None:
-        result = asyncio.run(utils.run_command(["sh", "-c", "echo err >&2"], check=False, quiet=True))
+        result = asyncio.run(utils.run_command(["sh", "-c", "echo err >&2"], check=False))
         assert any("err" in line for line in result.stderr)

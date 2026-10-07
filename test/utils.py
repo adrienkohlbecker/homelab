@@ -187,19 +187,8 @@ def print_line(line: str, error: bool = False) -> None:
     _write_line(line, "red" if error else None)
 
 
-async def read_and_write_stream(
-    stream: asyncio.StreamReader,
-    color: str | None,
-    capture: list[str],
-    *,
-    quiet: bool = False,
-) -> None:
-    """Relay a process stream to stdout and the log, capturing each line.
-
-    When *quiet* is True the line is captured but not echoed -- useful for
-    probe-style commands whose JSON/structured output would drown the
-    transcript.
-    """
+async def read_and_write_stream(stream: asyncio.StreamReader, color: str | None, capture: list[str]) -> None:
+    """Relay a process stream to stdout and the log, capturing each line."""
     while True:
         line_bytes = await stream.readline()
         if not line_bytes:
@@ -207,18 +196,11 @@ async def read_and_write_stream(
 
         line = line_bytes.decode("utf-8", errors="replace").rstrip("\r\n")
         capture.append(line)
-        if not quiet:
-            _write_line(line, color)
+        _write_line(line, color)
 
 
-async def terminate_pid(
-    pid: int,
-    *,
-    grace_seconds: float,
-    initial_signal: int = signal.SIGTERM,
-    poll_interval: float = 0.2,
-) -> None:
-    """Stop *pid*, escalating to SIGKILL after *grace_seconds* if needed.
+async def terminate_pid(pid: int, *, grace_seconds: float) -> None:
+    """SIGTERM *pid*, escalating to SIGKILL after *grace_seconds* if needed.
 
     The pid-based counterpart to terminate_subprocess: used when the parent
     has only the child's PID (e.g. read out of a hypervisor pidfile), not
@@ -226,7 +208,7 @@ async def terminate_pid(
     process having already gone.
     """
     with contextlib.suppress(ProcessLookupError):
-        os.kill(pid, initial_signal)
+        os.kill(pid, signal.SIGTERM)
 
     deadline = asyncio.get_running_loop().time() + grace_seconds
     while asyncio.get_running_loop().time() < deadline:
@@ -234,82 +216,40 @@ async def terminate_pid(
             os.kill(pid, 0)
         except ProcessLookupError:
             return
-        await asyncio.sleep(poll_interval)
+        await asyncio.sleep(0.2)
 
     with contextlib.suppress(ProcessLookupError):
         os.kill(pid, signal.SIGKILL)
 
 
-async def terminate_subprocess(
-    proc: asyncio.subprocess.Process,
-    *,
-    grace_seconds: float = 0.0,
-    initial_signal: int = signal.SIGKILL,
-) -> None:
-    """Stop *proc*, escalating to SIGKILL after *grace_seconds* if needed.
+async def terminate_subprocess(proc: asyncio.subprocess.Process, *, grace_seconds: float = 0.0) -> None:
+    """Stop *proc*: SIGINT first when *grace_seconds* > 0, then SIGKILL.
 
-    Default (grace=0, signal=SIGKILL) is the immediate-kill-and-drain used
-    when a caller's own coroutine has failed and just needs the child gone.
-    Pass a non-zero grace and signal=SIGINT for graceful shutdown -- useful
-    when the child runs its own cleanup (qemu/podman teardown, log drain,
-    etc.) and SIGKILL would leak resources.
+    The default kills and drains immediately, for a caller whose own
+    coroutine failed and just needs the child gone. A grace lets a child
+    that runs its own teardown (testrole.py stopping its qemu) finish it.
     """
-    if grace_seconds <= 0 and initial_signal != signal.SIGKILL:
-        # Without a deadline, the final wait() is unbounded -- a child that
-        # ignores the signal would hang us forever.
-        raise ValueError(
-            f"grace_seconds must be > 0 when initial_signal is not SIGKILL "
-            f"(got grace_seconds={grace_seconds}, signal={initial_signal})"
-        )
-    with contextlib.suppress(ProcessLookupError):
-        proc.send_signal(initial_signal)
     if grace_seconds > 0:
-        try:
+        with contextlib.suppress(ProcessLookupError):
+            proc.send_signal(signal.SIGINT)
+        # The child outlived its grace when the bounded wait times out.
+        with contextlib.suppress(TimeoutError):
             async with asyncio.timeout(grace_seconds):
                 await proc.wait()
             return
-        except TimeoutError:
-            # asyncio.timeout converts the inner CancelledError into
-            # TimeoutError; only here can we tell the wait actually timed
-            # out and escalate.
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
+    with contextlib.suppress(ProcessLookupError):
+        proc.kill()
     await proc.wait()
 
 
-async def run_command(
-    cmd: list[str],
-    check: bool = True,
-    quiet: bool = False,
-    *,
-    env: dict[str, str] | None = None,
-    cleanup_grace_seconds: float = 0.0,
-    cleanup_signal: int = signal.SIGKILL,
-) -> CommandResult:
-    """
-    Execute a subprocess, stream its output live and colorized.
+async def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | None = None) -> CommandResult:
+    """Execute a subprocess, stream its output live and colorized.
 
-    Args:
-        cmd: Command and arguments to execute.
-        check: If True, raise CommandFailedException on non-zero exit.
-        quiet: If True, capture output without echoing it -- for probe
-            commands (podman inspect, lsof) whose output is parsed, not
-            displayed. The cmd line itself is also not printed.
-        env: Environment overrides layered on top of os.environ. Pass
-            `{"K": "V"}` to set/override variables; pass None to inherit
-            unmodified. Avoids needing to prepend `env K=V ...` to cmd.
-        cleanup_grace_seconds: Grace window when the call is cancelled or
-            its readers fail. Pair with cleanup_signal=SIGINT for commands
-            that need to run their own teardown (default is immediate KILL).
-        cleanup_signal: Signal sent to the child when the call is cancelled
-            or its readers fail. SIGKILL by default; use SIGINT (with a
-            non-zero grace) when the child needs to release resources.
-
-    Returns:
-        CommandResult with the exit code and captured stdout/stderr lines.
+    check raises CommandFailedException on a non-zero exit. env layers
+    overrides on top of os.environ. The child is killed if the call is
+    cancelled or a reader fails.
     """
-    if not quiet:
-        print_cmd_line(cmd, env=env)
+    print_cmd_line(cmd, env=env)
 
     subprocess_env: dict[str, str] | None = None
     if env is not None:
@@ -339,17 +279,13 @@ async def run_command(
         # use stderr=asyncio.subprocess.STDOUT, which costs the per-stream
         # color tagging.
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(read_and_write_stream(process.stdout, None, stdout, quiet=quiet))
-            tg.create_task(read_and_write_stream(process.stderr, "red", stderr, quiet=quiet))
+            tg.create_task(read_and_write_stream(process.stdout, None, stdout))
+            tg.create_task(read_and_write_stream(process.stderr, "red", stderr))
         exitcode = await process.wait()
     except BaseException:
         # Any failure (cancellation, reader error, etc.) leaves the subprocess
         # behind unless we tear it down here.
-        await terminate_subprocess(
-            process,
-            grace_seconds=cleanup_grace_seconds,
-            initial_signal=cleanup_signal,
-        )
+        await terminate_subprocess(process)
         raise
 
     if check and exitcode != 0:

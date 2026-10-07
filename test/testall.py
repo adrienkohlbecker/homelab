@@ -15,7 +15,6 @@ import argparse
 import asyncio
 import contextlib
 import csv
-import signal
 import sys
 import time
 from collections.abc import Callable, Collection, Sequence
@@ -223,7 +222,7 @@ async def _run_role(
                 # qemu) without SIGKILL'ing testrole.py mid-cleanup and
                 # leaking the VM. SIGINT mirrors what Machine.stop()
                 # sends to its qemu child so the whole chain reacts the same.
-                await terminate_subprocess(proc, grace_seconds=30, initial_signal=signal.SIGINT)
+                await terminate_subprocess(proc, grace_seconds=30)
                 raise
         finally:
             liveness.cancel()
