@@ -519,7 +519,6 @@ EOF
   # Configure vagrant user
 
   adduser --disabled-password --gecos "" "$USERNAME"
-  cp -a /etc/skel/. "/home/$USERNAME"
 
   mkdir "/home/$USERNAME/.ssh"
   echo "$SSH_KEY_PUB" >"/home/$USERNAME/.ssh/authorized_keys"
