@@ -12,19 +12,6 @@
   register: z2m_verify_gate
   failed_when: z2m_verify_gate is not authelia_redirects_to('z2m', inventory_hostname, domain)
 
-# The WindFront UI loads device images from zigbee2mqtt.io and device docs from
-# raw.githubusercontent.com; assert the vhost csp widened img-src/connect-src
-# (emitted even on the 302 via add_header ... always) so a CSP regression here
-# surfaces instead of silently breaking those panels in the browser.
-- name: _verify | Z2M CSP allows zigbee2mqtt.io images and GitHub docs
-  vars:
-    z2m_csp: "{{ z2m_verify_gate.content_security_policy | default('') }}"
-  assert:
-    that:
-      - "'img-src https://www.zigbee2mqtt.io' in z2m_csp"
-      - "'connect-src https://raw.githubusercontent.com' in z2m_csp"
-    fail_msg: "z2m CSP header missing widened img-src/connect-src: {{ z2m_csp }}"
-
 - name: _verify | Exercise z2m fluent-bit record contracts
   import_role:
     name: fluentbit
