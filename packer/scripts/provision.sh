@@ -394,13 +394,13 @@ export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_META PARTITIO
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Apt retries individual downloads itself. Error-Mode=any additionally rejects
+# Apt retries individual downloads itself. --error-on=any additionally rejects
 # a partial index update, and this outer backoff absorbs a longer mirror outage
 # before the package install encounters misleading missing-package failures.
 apt_update() {
   local attempt
   for attempt in 1 2 3 4 5; do
-    if apt-get update -o APT::Update::Error-Mode=any; then
+    if apt-get update --error-on=any; then
       return 0
     fi
     echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2

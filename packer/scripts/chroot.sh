@@ -71,20 +71,16 @@ ff02::1         ip6-allnodes
 ff02::2         ip6-allrouters
 EOF
 
-# apt already retries transient fetch failures (Nexus restart, packet loss)
-# three times with backoff by default on every release we build, so the new
-# install needs no drop-in for the per-file case. apt_update below is the
-# coarse absorb for a restart that outlasts those retries.
-
 # apt-get update exits 0 even when one component's Packages index fails to
 # download (Nexus restart, dropped packet), leaving a partial cache that makes
-# a later install fail with a baffling "Unable to locate package". Error-Mode
-# =any turns a failed fetch into a non-zero exit; the loop retries with backoff
-# so a brief blip is absorbed. Same helper as provision.sh's build-VM apt.
+# a later install fail with a baffling "Unable to locate package".
+# --error-on=any turns a failed fetch into a non-zero exit. apt retries each
+# file itself; the loop absorbs a mirror outage that outlasts those retries.
+# Same helper as provision.sh's build-VM apt.
 apt_update() {
   local attempt
   for attempt in 1 2 3 4 5; do
-    if apt-get update -o APT::Update::Error-Mode=any; then
+    if apt-get update --error-on=any; then
       return 0
     fi
     echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
