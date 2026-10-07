@@ -77,6 +77,34 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
   on_error=ask
 fi
 
+# rename(2), never mv: mv would move the build inside a directory that another
+# build published first, instead of failing.
+rename() { python3 -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' "$1" "$2"; }
+
+# Swap a verified build in with two renames, deleting the previous version only
+# once it is out of the way; the harness links a version only after checking
+# its path still names it (test/machine.py link_packer_artifacts). A concurrent
+# publish of the same source makes the second rename fail and leaves the
+# published version intact.
+publish() {
+  local build_dir=$1 published=$2
+  local old="${published%/*}/.${published##*/}.old-$$"
+
+  # packer creates directories 0755, which narrows the shared directory's
+  # default ACL mask; restore group write so the other homelab_ci identity
+  # can replace this tree on a later publish.
+  find "${build_dir}" -type d -exec chmod g+rwx {} +
+  if [ -e "${published}" ]; then
+    rename "${published}" "${old}"
+  fi
+  if ! rename "${build_dir}" "${published}"; then
+    rm -rf "${old}"
+    echo "publish of ${published} lost a race with another build; rerun packer:build" >&2
+    return 1
+  fi
+  rm -rf "${old}"
+}
+
 # Turn one built source into a published fixture: drop the cloud-image OS disk
 # (packer-ubuntu; provision.sh installs onto packer-ubuntu-1..N), give the
 # rest their format suffix, prove a qemu fixture boots, compress on Mac, and
@@ -118,7 +146,7 @@ finalize() {
   if [ "${usage_no_publish:-false}" = true ]; then
     echo "==> Skipping publish of ${source} (--no-publish)"
   else
-    packer/publish.py "${HOMELAB_CI_DIR}/.publish-lock" "${build_dir}" "${base}/${source}"
+    publish "${build_dir}" "${base}/${source}"
   fi
 }
 

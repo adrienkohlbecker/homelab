@@ -94,29 +94,71 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
     assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus)
 
 
-def test_build_publishes_only_sources_packer_built(tmp_path: Path) -> None:
+def _fake_hetzner_build(tmp_path: Path, packer_status: int = 0) -> tuple[dict[str, str], Path]:
+    """Fake a packer run whose hetzner source built (lab failed, leaving
+    debris) and return build.sh's environment plus the published root."""
     fake_bin = tmp_path / "bin"
     _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'Linux\\n'\n")
-    # hetzner builds and lands in the manifest; lab fails and leaves debris.
     _executable(
         fake_bin / "packer",
         "#!/bin/sh\n"
         "set -eu\n"
         'for arg; do case "$arg" in build_directory=*) dir=${arg#build_directory=} ;; esac; done\n'
         'mkdir -p "$dir/hetzner" "$dir/lab"\n'
-        'touch "$dir/hetzner/packer-ubuntu" "$dir/hetzner/packer-ubuntu-1" "$dir/lab/packer-ubuntu-1"\n'
+        'chmod 0755 "$dir/hetzner"\n'
+        'echo new >"$dir/hetzner/packer-ubuntu-1"\n'
+        'touch "$dir/hetzner/packer-ubuntu" "$dir/lab/packer-ubuntu-1"\n'
         """printf '{"builds":[{"name":"ubuntu","custom_data":{"source":"hetzner"}}]}' >"$dir/packer-manifest.json"\n"""
-        "exit 1\n",
+        f"exit {packer_status}\n",
     )
     env = _environment(tmp_path, "noble")
     env.update(PATH=f"{fake_bin}:{env['PATH']}", usage_no_publish="false", usage_sources="hetzner lab")
-    published = tmp_path / "homelab_ci" / "noble"
+    return env, tmp_path / "homelab_ci" / "noble"
+
+
+def test_build_publishes_only_sources_packer_built(tmp_path: Path) -> None:
+    env, published = _fake_hetzner_build(tmp_path, packer_status=1)
+    (published / "hetzner").mkdir(parents=True)
+    (published / "hetzner" / "packer-ubuntu-1.raw").write_text("old")
 
     result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
 
     assert result.returncode == 1, result.stderr
     assert sorted(path.name for path in (published / "hetzner").iterdir()) == ["packer-ubuntu-1.raw"]
+    assert (published / "hetzner" / "packer-ubuntu-1.raw").read_text() == "new\n"
+    # The other homelab_ci identity must be able to replace the tree later.
+    assert (published / "hetzner").stat().st_mode & 0o070 == 0o070
     assert not (published / "lab").exists()
+    assert sorted(path.name for path in published.iterdir()) == ["hetzner"]
+
+
+def test_build_publish_losing_a_race_keeps_the_winner(tmp_path: Path) -> None:
+    """Another build publishing between the two renames wins intact."""
+    env, published = _fake_hetzner_build(tmp_path)
+    (published / "hetzner").mkdir(parents=True)
+    (published / "hetzner" / "packer-ubuntu-1.raw").write_text("old")
+    calls = tmp_path / "rename_calls"
+    # Wrap the python3 behind build.sh's rename: after the first rename parks
+    # the old version, the competing build lands its own.
+    _executable(
+        tmp_path / "bin" / "python3",
+        "#!/bin/sh\n"
+        f'echo x >>"{calls}"\n'
+        f'"{sys.executable}" "$@" || exit\n'
+        f'if [ "$(wc -l <"{calls}")" -eq 1 ]; then\n'
+        f'  mkdir "{published}/hetzner" && echo winner >"{published}/hetzner/packer-ubuntu-1.raw"\n'
+        "fi\n",
+    )
+
+    result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode != 0
+    assert "lost a race" in result.stderr
+    assert sorted(path.name for path in published.iterdir()) == ["hetzner"]
+    assert (published / "hetzner" / "packer-ubuntu-1.raw").read_text() == "winner\n"
+    # The verified build stays staged for a rerun.
+    (staged,) = (tmp_path / "homelab_ci").glob(".build-*/hetzner")
+    assert (staged / "packer-ubuntu-1.raw").read_text() == "new\n"
 
 
 @pytest.mark.parametrize("fixture_machine", ["lab", "pug"])

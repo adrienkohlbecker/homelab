@@ -44,7 +44,7 @@
     - homelab_ci
 
 # The operator and CI runner replace each other's QEMU artifacts. Setgid and the
-# default ACL share new trees; publish.py repairs explicitly narrowed modes.
+# default ACL share new trees; packer:build repairs explicitly narrowed modes.
 - name: Create /mnt/scratch/homelab_ci packer artifacts dir
   file:
     path: /mnt/scratch/homelab_ci
