@@ -1,0 +1,174 @@
+# Run the deployed getmail.service unmodified against a local Dovecot posing as
+# imap.gmail.com: a throwaway CA joins the system bundle and /etc/hosts maps
+# the name to loopback, so the rendered rc exercises TLS validation against
+# ca_certs + ssl_cert_hostname, the normalized app password, the localized
+# "[Gmail]/All Mail" mailbox, Maildir delivery as the operator, BODY.PEEK, and
+# oldmail dedup in the shared getmaildir.
+
+- name: _verify | Map imap.gmail.com to loopback
+  lineinfile:
+    path: /etc/hosts
+    line: 127.0.0.1 imap.gmail.com
+  become: true
+
+- name: _verify | Install Dovecot IMAP
+  apt:
+    package:
+      - dovecot-imapd
+    cache_valid_time: 3600
+  become: true
+
+# Python 3.13+ verifies with VERIFY_X509_STRICT, so the CA carries critical
+# basicConstraints/keyUsage and the leaf a SAN plus serverAuth.
+- name: _verify | Issue a throwaway CA and imap.gmail.com certificate
+  shell: |
+    set -euo pipefail
+    mkdir -p /srv/getmail_verify
+    cd /srv/getmail_verify
+    openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=getmail verify CA" \
+      -addext "basicConstraints=critical,CA:TRUE" \
+      -addext "keyUsage=critical,keyCertSign,cRLSign" \
+      -keyout ca.key -out ca.crt
+    openssl req -new -newkey rsa:2048 -nodes -subj "/CN=imap.gmail.com" -keyout server.key -out server.csr
+    printf "%s\n" "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature,keyEncipherment" \
+      "extendedKeyUsage=serverAuth" "subjectAltName=DNS:imap.gmail.com" \
+      "subjectKeyIdentifier=hash" "authorityKeyIdentifier=keyid" >server.ext
+    openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 \
+      -extfile server.ext -out server.crt
+    cp ca.crt /usr/local/share/ca-certificates/getmail_verify.crt
+    update-ca-certificates
+  args:
+    executable: /bin/bash
+    creates: /usr/local/share/ca-certificates/getmail_verify.crt
+  become: true
+
+- name: _verify | Create the Gmail stand-in mailbox
+  file:
+    path: "/srv/getmail_verify/mail/[Gmail]/All Mail/{{ item }}"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0700"
+  loop: [ cur, new, tmp ]
+  become: true
+
+- name: _verify | Plant an unread message on the IMAP server
+  copy:
+    dest: "/srv/getmail_verify/mail/[Gmail]/All Mail/new/1700000000.getmailverify.lab"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0600"
+    content: |
+      From: Test Sender <sender@example.com>
+      To: {{ root_email }}
+      Subject: Getmail Verify
+      Date: Tue, 14 Nov 2023 22:13:20 +0000
+      Message-ID: <getmailverify@example.com>
+
+      GETMAILVERIFYBODY
+  become: true
+
+# Replaces the packaged config wholesale so its PAM passdb, snakeoil cert, and
+# default mail_location cannot leak in. The fixture lives under /srv because
+# dovecot.service runs with PrivateTmp= and cannot see /var/tmp. The static
+# passdb accepts any username but only the password getmail must send after
+# normalization.
+- name: _verify | Configure Dovecot as the Gmail stand-in
+  copy:
+    dest: /etc/dovecot/dovecot.conf
+    mode: "0644"
+    content: |
+      protocols = imap
+      listen = 127.0.0.1
+      ssl = required
+      ssl_cert = </srv/getmail_verify/server.crt
+      ssl_key = </srv/getmail_verify/server.key
+      ssl_dh = </usr/share/dovecot/dh.pem
+      passdb {
+        driver = static
+        args = password={{ gmail_app_password | trim | replace(' ', '') }}
+      }
+      userdb {
+        driver = static
+        args = uid={{ ansible_user_uid }} gid={{ ansible_user_gid }} home=/srv/getmail_verify
+      }
+      mail_location = maildir:/srv/getmail_verify/mail:LAYOUT=fs
+      namespace inbox {
+        inbox = yes
+        separator = /
+      }
+      service imap-login {
+        inet_listener imap {
+          port = 0
+        }
+      }
+    validate: doveconf -n -c %s
+  become: true
+
+- name: _verify | Restart Dovecot on the stand-in config
+  systemd:
+    name: dovecot.service
+    state: restarted
+  become: true
+
+# Type=oneshot: start returns once the fetch finishes and fails the task on a
+# nonzero getmail exit (TLS, auth, or mailbox errors).
+- name: _verify | Fetch through the managed getmail unit
+  systemd:
+    name: getmail.service
+    state: started
+  become: true
+
+- name: _verify | Find delivered messages
+  find:
+    paths: /mnt/services/getmail/new
+    contains: GETMAILVERIFYBODY
+  register: _getmail_delivered
+  become: true
+
+- name: _verify | Read the delivered message
+  slurp:
+    path: "{{ _getmail_delivered.files[0].path }}"
+  register: _getmail_message
+  when: _getmail_delivered.matched == 1
+  become: true
+
+- name: _verify | Message is delivered once, owned by the operator, without getmail headers
+  assert:
+    that:
+      - _getmail_delivered.matched == 1
+      - _getmail_delivered.files[0].pw_name == ansible_user_id
+      - "'Received:' not in (_getmail_message.content | b64decode)"
+      - "'Delivered-To:' not in (_getmail_message.content | b64decode)"
+
+- name: _verify | Find server-side messages flagged as seen
+  find:
+    paths:
+      - "/srv/getmail_verify/mail/[Gmail]/All Mail/cur"
+      - "/srv/getmail_verify/mail/[Gmail]/All Mail/new"
+    patterns: "*:2,*S*"
+  register: _getmail_seen
+  become: true
+
+- name: _verify | Fetching leaves the Gmail message unread
+  assert:
+    that:
+      - _getmail_seen.matched == 0
+
+- name: _verify | Fetch again through the managed getmail unit
+  systemd:
+    name: getmail.service
+    state: started
+  become: true
+
+- name: _verify | Find delivered messages after the second fetch
+  find:
+    paths: /mnt/services/getmail/new
+    contains: GETMAILVERIFYBODY
+  register: _getmail_redelivered
+  become: true
+
+- name: _verify | Oldmail state in the getmaildir prevents refetching
+  assert:
+    that:
+      - _getmail_redelivered.matched == 1
