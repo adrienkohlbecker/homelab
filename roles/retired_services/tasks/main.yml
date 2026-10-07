@@ -278,6 +278,45 @@
     - retired_services
     - firewall
 
+# Drop once lab, pug, and fox have converged. netdata 2.11+ has no go.d sensors
+# module, and fox's runner reads the default AWS profile and names the ARM key
+# after its pool.
+- name: Remove retired netdata and runner leftovers
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/netdata/go.d/sensors.conf
+    - /mnt/services/gitlab_runner/.aws/config
+    - /mnt/services/gitlab_runner/.ssh/fleeting_arm
+  become: true
+  tags:
+    - retired_services
+    - netdata
+    - gitlab_runner
+
+# Drop once lab, pug, and fox have converged. The apt roles stopped installing
+# python3-debian for deb822_repository. Marking it automatic lets a later
+# autoremove take it only if nothing else depends on it.
+- name: Read whether python3-debian is marked manually installed  # noqa: command-instead-of-module
+  command: apt-mark showmanual python3-debian
+  register: retired_services_python3_debian
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - retired_services
+    - apt
+
+- name: Mark python3-debian as automatically installed  # noqa: command-instead-of-module
+  when: retired_services_python3_debian.stdout | trim == 'python3-debian'
+  command: apt-mark auto python3-debian
+  changed_when: true
+  become: true
+  tags:
+    - retired_services
+    - apt
+
 # Drop once lab, pug, and fox have converged. The backup SSH config names the
 # persistent key on rpool/services directly, so the old /root/.ssh links to it
 # are unused. Remove only links: a regular key file there is not ours to drop.

@@ -103,6 +103,9 @@
     - /boot/efi/EFI/refind/BOOT.CSV
     - /boot/efi/EFI/refind/keys
     - /boot/efi/EFI/refind/refind.conf-sample
+    - /etc/netdata/go.d/sensors.conf
+    - /mnt/services/gitlab_runner/.aws/config
+    - /mnt/services/gitlab_runner/.ssh/fleeting_arm
   register: retired_services_leftovers
   become: true
 
@@ -110,6 +113,12 @@
   assert:
     that: retired_services_leftovers.results | selectattr('stat.exists') | list | length == 0
     fail_msg: "left behind: {{ retired_services_leftovers.results | selectattr('stat.exists') | map(attribute='item') | join(', ') }}"
+
+- name: _verify | The python3-debian package is marked automatically installed
+  command: apt-mark showauto python3-debian
+  register: retired_services_python3_debian_auto
+  changed_when: false
+  failed_when: retired_services_python3_debian_auto.stdout | trim != 'python3-debian'
 
 # The teardown names exact files; tailscale's live state must survive.
 - name: _verify | Tailscale state survives the teardown

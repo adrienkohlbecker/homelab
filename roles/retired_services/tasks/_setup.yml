@@ -173,6 +173,23 @@
     mode: "0755"
   become: true
 
+- name: _setup | Create the retired leftover directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/netdata/go.d
+    - /mnt/services/gitlab_runner/.aws
+    - /mnt/services/gitlab_runner/.ssh
+  become: true
+
+- name: _setup | Install python3-debian as a manual package
+  apt:
+    pkg: python3-debian
+    install_recommends: false
+  become: true
+
 - name: _setup | Seed retired leftovers
   copy:
     content: "stale\n"
@@ -187,6 +204,9 @@
     - /boot/efi/EFI/refind/BOOT.CSV
     - /boot/efi/EFI/refind/refind.conf-sample
     - /boot/efi/EFI/refind/keys/refind.cer
+    - /etc/netdata/go.d/sensors.conf
+    - /mnt/services/gitlab_runner/.aws/config
+    - /mnt/services/gitlab_runner/.ssh/fleeting_arm
   become: true
 
 - name: _setup | Seed the retired Eaton IPP state
