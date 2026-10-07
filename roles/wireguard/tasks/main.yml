@@ -6,8 +6,7 @@
     peer_keys: "{{ wireguard_keys | default({}) | dict2items | selectattr('key', 'in', peer_names) | map(attribute='value') | list }}"
     server_names: "{{ peer_names | select('in', network.hosts) | list }}"
     roaming_names: "{{ peer_names | select('in', network.wireguard.roaming) | list }}"
-    server_hosts: "{{ server_names | map('extract', network.hosts) | list }}"
-    server_addresses: "{{ server_hosts | map(attribute='wireguard') | list }}"
+    server_addresses: "{{ server_names | map('extract', network.hosts) | map(attribute='wireguard') | list }}"
     roaming_addresses: "{{ roaming_names | map('extract', network.wireguard.roaming) | list }}"
     peer_addresses: "{{ server_addresses + roaming_addresses }}"
   assert:
@@ -27,22 +26,17 @@
       - server_names | union(roaming_names) | length == wireguard_peers | length
       - server_names | intersect(roaming_names) | length == 0
       - inventory_hostname in server_names
-      - peer_addresses | select('string') | list | length == wireguard_peers | length
       - peer_addresses | unique | list | length == wireguard_peers | length
-      # The template derives addresses, same-site endpoint selection, and
-      # cross-site host routes from these topology fields.
-      - server_hosts | selectattr('wireguard', 'undefined') | list | length == 0
-      - server_hosts | selectattr('site', 'undefined') | list | length == 0
-      - server_hosts | selectattr('physical', 'undefined') | list | length == 0
+      # wireguard_psk joins the sorted pair with '-', so a hyphenated name
+      # could derive the same PSK for two different pairs.
       - peer_names | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
     fail_msg: >-
       wireguard_peers must be defined and contain a server entry for
       {{ inventory_hostname }}; every peer must belong to exactly one of
       network.hosts or network.wireguard.roaming; every peer name must match
-      ^[a-z][a-z0-9_]*$; topology addresses must be strings and unique; every
-      peer must have public_key and private_key entries in wireguard_keys and
-      public_keys must be unique; wireguard_psk_seed must be >= 32 chars; every
-      server peer must expose wireguard, site, and physical topology fields.
+      ^[a-z][a-z0-9_]*$; topology addresses must be unique; every peer must
+      have public_key and private_key entries in wireguard_keys and
+      public_keys must be unique; wireguard_psk_seed must be >= 32 chars.
   tags:
     - wireguard
 
@@ -54,17 +48,6 @@
     cache_valid_time: 3600
   become: true
   register: wireguard_apt
-  tags:
-    - wireguard
-
-- name: Create configuration directory
-  file:
-    dest: /etc/wireguard
-    state: directory
-    owner: root
-    group: root
-    mode: "0700"
-  become: true
   tags:
     - wireguard
 

@@ -94,8 +94,9 @@ mac_addresses:
 
 # 5-peer test fixture (lab/pug/pom + fox + laptop). pom is same-site with
 # no public endpoint to exercise the topology-derived LAN endpoint; fox is
-# cross-site (hetzner) to exercise the AllowedIPs physical-/32 branch; laptop
-# is a roaming peer with no endpoint to exercise the client
+# cross-site (hetzner) with a public endpoint and keepalive from lab, as in
+# prod, to exercise the AllowedIPs physical-/32, Endpoint, and keepalive
+# branches; laptop is a roaming peer with no endpoint to exercise the client
 # [Peer] branch — plain /32, no Endpoint, no keepalive — in wg.conf.j2.
 wireguard_peers:
   lab:
@@ -103,7 +104,9 @@ wireguard_peers:
   pug:
     public_endpoint: 192.0.2.1:51823
   pom: {}
-  fox: {}
+  fox:
+    public_endpoint: 192.0.2.2:51820
+    keepalive_from: [ lab ]
   laptop: {}
 
 # Master seed for deriving per-pair PSKs (filter_plugins/wireguard_psk.py):

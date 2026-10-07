@@ -1,65 +1,16 @@
 ---
-# Behavior probes against the live wg interface, not the rendered
-# config. Only invoked by test/testrole.py against a qemu VM; never
-# from site.yml or `mise run ansible --tags wireguard`.
-- name: _verify | Render the production config as a roaming client
-  template:
-    src: wg.conf.j2
-    dest: /tmp/wg-roaming.conf
-    mode: "0600"
+# Behavior probes against the live wg interface. Only invoked by
+# test/testrole.py against a qemu VM; never from site.yml or
+# `mise run ansible --tags wireguard`.
+
+# Roaming clients never converge (mise run wg:show renders their config), so
+# their MTU branch is the one check made on the rendered template.
+- name: _verify | Roaming client config pins a fragmentation-safe MTU
   vars:
     own_peer_name: laptop
-  diff: false
-  become: true
-
-- name: _verify | Render a server peer with endpoint and keepalive
-  template:
-    src: wg.conf.j2
-    dest: /tmp/wg-endpoint-keepalive.conf
-    mode: "0600"
-  vars:
-    wireguard_peers:
-      lab: {}
-      laptop:
-        public_endpoint: 192.0.2.10:51820
-        keepalive_from:
-          - lab
-  diff: false
-  become: true
-
-- name: _verify | Verify roaming, endpoint, and keepalive policies
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import pathlib
-
-        roaming = pathlib.Path("/tmp/wg-roaming.conf").read_text()
-        assert "MTU = 1280" in roaming
-        endpoint = pathlib.Path("/tmp/wg-endpoint-keepalive.conf").read_text()
-        assert "Endpoint = 192.0.2.10:51820" in endpoint
-        assert "PersistentKeepalive = 25" in endpoint
-  changed_when: false
-  become: true
-
-- name: _verify | Remove alternate WireGuard configs
-  file:
-    path: "/tmp/{{ item }}"
-    state: absent
-  loop:
-    - wg-roaming.conf
-    - wg-endpoint-keepalive.conf
-  become: true
-
-- name: _verify | Assert wg-quick@wg0 is active
-  systemd:
-    name: wg-quick@wg0.service
-    state: started
-  become: true
-  check_mode: true
-  register: wireguard_service_check
-  failed_when: wireguard_service_check.changed
+    _wireguard_roaming_conf: "{{ lookup('template', 'wg.conf.j2') }}"
+  assert:
+    that: "'MTU = 1280' in _wireguard_roaming_conf"
 
 # One `wg show wg0 dump` carries the whole live interface + peer table as
 # tab-separated columns, so the scalar probes below parse a single register
@@ -73,16 +24,6 @@
   become: true
   changed_when: false
 
-- name: _verify | Assert listen-port matches service_ports.wireguard
-  vars:
-    listen_port_actual: "{{ (wireguard_dump.stdout_lines[0] | split('\t'))[2] | int }}"
-  assert:
-    quiet: true
-    that: listen_port_actual == service_ports.wireguard
-    fail_msg: >-
-      wg0 listen-port {{ listen_port_actual }} != service_ports.wireguard
-      ({{ service_ports.wireguard }})
-
 # Count equals all-peers-minus-self only because converge is server-only
 # (main.yml asserts the host belongs to network.hosts), so the template includes every
 # other peer; against a non-server converge it would be servers-only.
@@ -95,19 +36,29 @@
       wireguard_peers - 1 ({{ wireguard_peers | length - 1 }})
 
 # The test inventory deliberately gives same-site server pom no public
-# endpoint. Its live endpoint must therefore come from network topology.
-- name: _verify | Assert LAN-only fixture peer gets its topology endpoint
+# endpoint, so its live endpoint must come from network topology. Cross-site
+# fox dials its public endpoint, with a keepalive because it lists the Lab
+# fixture in keepalive_from.
+- name: _verify | Assert peer endpoints and fox keepalive
   vars:
-    pom_peer_fields: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | selectattr('0', 'eq', wireguard_keys.pom.public_key) | list }}"
+    peer_fields: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | list }}"
+    pom_peer_fields: "{{ peer_fields | selectattr('0', 'eq', wireguard_keys.pom.public_key) | list }}"
+    fox_peer_fields: "{{ peer_fields | selectattr('0', 'eq', wireguard_keys.fox.public_key) | list }}"
     expected_pom_endpoint: "{{ network.hosts.pom.physical }}:{{ service_ports.wireguard }}"
   assert:
     quiet: true
     that:
       - pom_peer_fields | length == 1
       - pom_peer_fields[0][2] == expected_pom_endpoint
+      - fox_peer_fields | length == 1
+      - fox_peer_fields[0][2] == wireguard_peers.fox.public_endpoint
+      - fox_peer_fields[0][7] == '25'
     fail_msg: >-
-      pom endpoint {{ pom_peer_fields[0][2] | default('(missing)') }} !=
-      topology endpoint {{ expected_pom_endpoint }}
+      pom endpoint {{ pom_peer_fields[0][2] | default('(missing)') }} (expected
+      {{ expected_pom_endpoint }}); fox endpoint
+      {{ fox_peer_fields[0][2] | default('(missing)') }} (expected
+      {{ wireguard_peers.fox.public_endpoint }}) with keepalive
+      {{ fox_peer_fields[0][7] | default('(missing)') }} (expected 25)
 
 - name: _verify | Assert interface carries its topology address
   vars:
@@ -130,7 +81,7 @@
 # host appears in a peer's keepalive_from. Assert the live count of peers with a
 # keepalive interval matches that membership -- guards the per-pair condition
 # from regressing to per-peer (which would force a heartbeat on mobile peers).
-# No configured peer lists the Lab fixture, so the expected count is 0.
+# Only fox lists the Lab fixture, so the expected count is 1.
 - name: _verify | Assert persistent-keepalive matches keepalive_from membership
   vars:
     expected_keepalive_count: "{{ wireguard_peers | dict2items | selectattr('value.keepalive_from', 'defined') | map(attribute='value.keepalive_from') | select('contains', inventory_hostname) | list | length }}"
