@@ -299,8 +299,35 @@ class TestMachineArtifactOwnership:
 
         for artifact in artifacts:
             artifact.write_text("current")
-        instance.cleanup_logs()
+
+        async def passing() -> None:
+            pass
+
+        assert instance.run(passing(), "lab.testrole") == 0
         assert all(not artifact.exists() for artifact in artifacts)
+
+    @pytest.mark.parametrize(
+        ("exc", "rc"),
+        [
+            (machine.CommandFailedException(["false"], 1, []), 1),
+            (machine.CheckFailedException("settle"), 1),
+            (machine.IdempotenceFailedException("changed"), 125),
+            (TimeoutError(), 124),
+            (ValueError("bug"), 1),
+        ],
+    )
+    def test_run_maps_failures_to_exit_codes_and_keeps_logs(
+        self, machine_factory: Callable[..., machine.Machine], exc: Exception, rc: int
+    ) -> None:
+        instance = machine_factory()
+        instance.journal_file.write_text("evidence")
+
+        async def failing() -> None:
+            raise exc
+
+        assert instance.run(failing(), "lab.testrole") == rc
+        assert instance.journal_file.exists()
+        assert instance.output_file.exists()
 
 
 class TestSystemReadiness:

@@ -28,6 +28,10 @@ class IdempotenceFailedException(Exception):
     """Raised when re-running an ansible play reports changed tasks."""
 
 
+class CheckFailedException(Exception):
+    """Raised when a harness check on the converged guest fails."""
+
+
 class CommandResult(NamedTuple):
     """Outcome of a subprocess invocation."""
 

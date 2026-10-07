@@ -22,7 +22,6 @@ import asyncio
 import re
 import shutil
 import sys
-import traceback
 from pathlib import Path
 
 from machine import (
@@ -33,11 +32,7 @@ from machine import (
     sweep_stale_workdirs,
 )
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
-from utils import (
-    CommandFailedException,
-    print_line,
-    tee_output,
-)
+from utils import CheckFailedException, CommandFailedException, print_line
 
 # Backstop for the post-poweroff wait. With the settle gate below, the fleet is
 # healthy before SIGTERM, so a real poweroff drains in well under a minute (the
@@ -59,18 +54,6 @@ POWEROFF_COMMAND = ("sudo", "systemctl", "start", "--no-block", "--job-mode=repl
 # mode renders the same site without starting them.
 SITE_CONVERGE_OPTIONS = MachineRunOptions(vcpus=8, memory_mb=12288, quiet_ansible=True)
 SITE_CHECK_OPTIONS = MachineRunOptions(quiet_ansible=True)
-
-
-class PoweroffTimeoutError(Exception):
-    """The guest failed to power off within POWEROFF_TIMEOUT after a passed converge."""
-
-
-class SettleTimeoutError(Exception):
-    """The fleet was still starting units SYSTEM_RUNNING_WAIT_TIMEOUT after the converge."""
-
-
-class UnitRestartedError(Exception):
-    """A unit failed during the settled boot, even though it recovered later."""
 
 
 # podman runs each container's --health-startup-cmd and periodic --health-cmd
@@ -232,22 +215,16 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             # legitimately degraded under the test harness (e.g. z2m has no
             # live adapter) and waiting longer won't change that -- the point
             # is only that nothing is still mid-bootstrap.
-            settle = await m.ssh_command(
-                "timeout", str(SYSTEM_RUNNING_WAIT_TIMEOUT), "systemctl", "is-system-running", "--wait", check=False
-            )
-            if settle.exitcode == 124:
-                print_line(f"Fleet still starting units after {SYSTEM_RUNNING_WAIT_TIMEOUT}s", error=True)
-                raise SettleTimeoutError(
+            settle_rc, settle_state = await m.wait_system_running()
+            if settle_rc == 124:
+                raise CheckFailedException(
                     f"systemd did not finish starting within {SYSTEM_RUNNING_WAIT_TIMEOUT}s of the converge "
                     "(a unit is stuck activating -- see the serial console and journal mirror)"
                 )
-            settle_state = "\n".join(settle.stdout).strip()
             if settle_state == "running":
                 print_line(f"Fleet settled: {settle_state}")
             else:
-                failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
-                failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                print_line(f"Fleet settled as {settle_state!r}; failed units:\n{failed_units}")
+                print_line(f"Fleet settled as {settle_state!r}; failed units:\n{await m.failed_units()}")
             restarted = await print_boot_profile(m)
 
             await m.ssh_command(*POWEROFF_COMMAND, check=False)
@@ -259,21 +236,16 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             try:
                 await asyncio.wait_for(m.wait(), timeout=POWEROFF_TIMEOUT)
             except TimeoutError:
-                print_line(
-                    f"Guest did not power off within {POWEROFF_TIMEOUT}s after a passed converge",
-                    error=True,
-                )
-                raise PoweroffTimeoutError(
-                    f"poweroff did not complete within {POWEROFF_TIMEOUT}s "
-                    "(a stop job wedged on its TimeoutStopSec -- see the "
-                    "serial console for which units)"
+                raise CheckFailedException(
+                    f"poweroff did not complete within {POWEROFF_TIMEOUT}s after a passed converge "
+                    "(a stop job wedged on its TimeoutStopSec -- see the serial console for which units)"
                 ) from None
 
         # Raised after the guest is down so the shutdown path and its
         # artifacts are still exercised. A unit that recovers on a retry is
         # still a unit that could not start the fleet as converged.
         if restarted:
-            raise UnitRestartedError(
+            raise CheckFailedException(
                 f"units failed during the settled boot: {' '.join(restarted)} "
                 "(each recovered later, so the fleet still reports running -- "
                 "see the per-unit logs above)"
@@ -296,33 +268,7 @@ def main() -> int:
         run_options=SITE_CHECK_OPTIONS if args.check else SITE_CONVERGE_OPTIONS,
     )
 
-    rc = 0
-    with tee_output(m.output_file):
-        try:
-            asyncio.run(run_site_test(m, timeout=args.timeout, check_mode=args.check))
-        except CommandFailedException as exc:
-            print_line(str(exc), error=True)
-            print_line("site_test failed", error=True)
-            rc = 1
-        except (PoweroffTimeoutError, SettleTimeoutError, UnitRestartedError) as exc:
-            print_line(str(exc), error=True)
-            print_line("site_test failed", error=True)
-            rc = 1
-        except TimeoutError:
-            print_line(f"site_test timed out after {args.timeout}s", error=True)
-            rc = 124
-        except asyncio.CancelledError:
-            print_line("\nInterrupted, shutting down...")
-            rc = 130
-        except Exception:
-            print_line(traceback.format_exc().rstrip(), error=True)
-            print_line("site_test crashed", error=True)
-            rc = 1
-
-    if rc == 0:
-        m.cleanup_logs()
-
-    return rc
+    return m.run(run_site_test(m, timeout=args.timeout, check_mode=args.check), "site_test")
 
 
 if __name__ == "__main__":

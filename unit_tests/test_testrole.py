@@ -1,7 +1,8 @@
 """Unit tests for test/testrole.py — idempotence regex, argparse, constants."""
 
 import argparse
-from contextlib import nullcontext
+import asyncio
+from collections.abc import Coroutine
 from pathlib import Path
 
 import pytest
@@ -105,7 +106,6 @@ def test_main_passes_role_memory_to_machine(
     monkeypatch.setattr("sys.argv", ["testrole.py", "fixture_role", "--machine", machine_name])
     monkeypatch.setattr(testrole, "imagedir_for_host", lambda: tmp_path)
     monkeypatch.setattr(testrole, "sweep_stale_workdirs", lambda _: None)
-    monkeypatch.setattr(testrole, "tee_output", lambda _: nullcontext())
 
     seen: dict = {}
 
@@ -115,8 +115,9 @@ def test_main_passes_role_memory_to_machine(
         def __init__(self, **kwargs: object) -> None:
             seen.update(kwargs)
 
-        def cleanup_logs(self) -> None:
-            pass
+        def run(self, coro: Coroutine[object, object, None], label: str) -> int:
+            asyncio.run(coro)
+            return 0
 
     async def fake_run_test(*args: object, **kwargs: object) -> None:
         pass

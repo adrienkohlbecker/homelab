@@ -7,10 +7,8 @@ streaming around an end-to-end converge of one role.
 """
 
 import argparse
-import asyncio
 import re
 import sys
-import traceback
 from pathlib import Path
 
 from machine import (
@@ -26,12 +24,7 @@ from matrix import (
     RoleTestConfig,
     load_role_test_config,
 )
-from utils import (
-    CommandFailedException,
-    IdempotenceFailedException,
-    print_line,
-    tee_output,
-)
+from utils import IdempotenceFailedException, print_line
 
 
 def _positive_int(value: str) -> int:
@@ -132,53 +125,46 @@ async def run_test(
     """Provision a machine, run the role under test, and stream output."""
 
     async with m.session(timeout):
-        try:
-            await m.ensure_booted()
-            print_line("Booted")
+        await m.ensure_booted()
+        print_line("Booted")
 
-            await m.ensure_ssh()
-            print_line("SSH up")
+        await m.ensure_ssh()
+        print_line("SSH up")
 
-            # SSH opens before the vanilla cloud image finishes cloud-init, so
-            # settle it before touching packages or /etc/hosts.
-            if m.machine == "minimal":
-                await m.ensure_cloud_init()
+        # SSH opens before the vanilla cloud image finishes cloud-init, so
+        # settle it before touching packages or /etc/hosts.
+        if m.machine == "minimal":
+            await m.ensure_cloud_init()
 
-            if not base_prerequisites:
-                print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
+        if not base_prerequisites:
+            print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
 
-            await m.ansible_command(
-                str(m.workdir_path / "_environment.yml"),
-                "-e",
-                f"test_base_prerequisites={str(base_prerequisites).lower()}",
-            )
+        await m.ansible_command(
+            str(m.workdir_path / "_environment.yml"),
+            "-e",
+            f"test_base_prerequisites={str(base_prerequisites).lower()}",
+        )
 
-            if m.machine == "minimal" and m.role != "cleanup":
-                # Avoid validating the cloud image's newer snapd unit against
-                # the older systemd shipped by the fixture.
-                await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
+        if m.machine == "minimal" and m.role != "cleanup":
+            # Avoid validating the cloud image's newer snapd unit against
+            # the older systemd shipped by the fixture.
+            await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
-            site_yml = str(m.workdir_path / "site.yml")
+        site_yml = str(m.workdir_path / "site.yml")
 
-            # Invoke the setup entrypoint only when the role ships it.
-            if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
-                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
+        # Invoke the setup entrypoint only when the role ships it.
+        if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
+            await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
 
-            await m.ansible_command(site_yml, "--check", *pass_args)
+        await m.ansible_command(site_yml, "--check", *pass_args)
 
-            await m.ansible_command(site_yml, *pass_args)
+        await m.ansible_command(site_yml, *pass_args)
 
-            await _verify_idempotence(site_yml, m, pass_args)
+        await _verify_idempotence(site_yml, m, pass_args)
 
-            # Post-role assertions, if the role declares any.
-            if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
-                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
-        except CommandFailedException:
-            print_line("Command failed")
-            raise
-        except IdempotenceFailedException:
-            print_line("Idempotence check failed")
-            raise
+        # Post-role assertions, if the role declares any.
+        if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
+            await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
 
 
 def main() -> int:
@@ -214,59 +200,10 @@ def main() -> int:
         run_options=MachineRunOptions(memory_mb=role_config.memory_mb.get(parsed_args.machine)),
     )
 
-    rc = 0
-    with tee_output(m.output_file):
-        try:
-            asyncio.run(
-                run_test(
-                    m,
-                    pass_args,
-                    base_prerequisites=role_config.base_prerequisites,
-                    timeout=parsed_args.timeout,
-                )
-            )
-        except CommandFailedException as exc:
-            print_line(str(exc), error=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} failed", error=True)
-            rc = 1
-        except IdempotenceFailedException as exc:
-            print_line(str(exc), error=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", error=True)
-            rc = 125
-        except TimeoutError as exc:
-            # The outer asyncio.timeout deadline raises a message-less
-            # TimeoutError; the phase guards (ensure_booted, ensure_ssh) each
-            # raise one carrying a specific cause.
-            # Surface that cause when present so a slow boot-to-sshd is
-            # attributable as such, not misread as the overall per-test timeout.
-            if str(exc):
-                print_line(str(exc), error=True)
-            print_line(
-                f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
-                error=True,
-            )
-            rc = 124  # GNU `timeout`'s exit code for "command timed out"
-        except asyncio.CancelledError:
-            print_line("\nInterrupted, shutting down...")
-            rc = 130
-        except Exception:
-            # Anything else (RuntimeError from _ensure_minimal_cloudimg
-            # rejecting an unsupported arch/release combo, KeyError on
-            # missing CLI shape, etc.) would otherwise be raised by
-            # asyncio.run and traceback'd straight to sys.stderr, which
-            # bypasses tee_output and never lands in the per-run log.
-            # Route it through print_line so the log captures the same
-            # diagnostic the user sees on the terminal.
-            print_line(traceback.format_exc().rstrip(), error=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} crashed", error=True)
-            rc = 1
-
-    # Clean passes keep the joblog summary and drop noisy per-run artifacts;
-    # failures keep everything for post-mortem inspection.
-    if rc == 0:
-        m.cleanup_logs()
-
-    return rc
+    return m.run(
+        run_test(m, pass_args, base_prerequisites=role_config.base_prerequisites, timeout=parsed_args.timeout),
+        f"{parsed_args.role}.{parsed_args.machine}",
+    )
 
 
 if __name__ == "__main__":

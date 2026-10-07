@@ -38,6 +38,12 @@ class SiteTestMachine:
     def session(self, timeout: int):
         return Machine.session(cast(Machine, self), timeout)
 
+    def wait_system_running(self):
+        return Machine.wait_system_running(cast(Machine, self))
+
+    def failed_units(self):
+        return Machine.failed_units(cast(Machine, self))
+
     async def ensure_booted(self) -> None:
         return None
 
@@ -167,7 +173,7 @@ def test_a_recovered_unit_fails_the_converge_after_the_guest_powered_off(
         pid1_journal=["lab systemd[1]: jellyfin.service: Failed with result 'exit-code'."],
     )
 
-    with pytest.raises(site_test.UnitRestartedError, match=r"jellyfin\.service"):
+    with pytest.raises(site_test.CheckFailedException, match=r"jellyfin\.service"):
         asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
 
     # The shutdown path is still exercised, so a wedged stop job is not hidden.
@@ -181,7 +187,7 @@ def test_a_fleet_that_never_settles_fails_before_the_poweroff(
     monkeypatch.setattr("machine.cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = SiteTestMachine(tmp_path, settle_exitcode=124)
 
-    with pytest.raises(site_test.SettleTimeoutError):
+    with pytest.raises(site_test.CheckFailedException, match="did not finish starting"):
         asyncio.run(site_test.run_site_test(cast(site_test.Machine, machine), timeout=10))
 
     assert site_test.POWEROFF_COMMAND not in machine.ssh_calls

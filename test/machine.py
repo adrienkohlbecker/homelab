@@ -12,7 +12,8 @@ import shutil
 import socket
 import tempfile
 import time
-from collections.abc import AsyncIterator
+import traceback
+from collections.abc import AsyncIterator, Coroutine
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
@@ -22,12 +23,16 @@ from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from matrix import UBUNTU_RELEASES
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
+    CheckFailedException,
+    CommandFailedException,
     CommandResult,
+    IdempotenceFailedException,
     cancel_on_signal,
     print_cmd_line,
     print_line,
     run_command,
     sleep_tick,
+    tee_output,
     terminate_pid,
 )
 
@@ -760,19 +765,28 @@ class Machine:
 
         await self._open_ssh_master()
 
-    async def ensure_system_running(self) -> None:
-        """Require systemd to finish booting in a healthy running state."""
+    async def wait_system_running(self) -> tuple[int, str]:
+        """Wait, bounded, for systemd to stop starting units; return (rc, state).
+
+        rc is 124 when the bound expired with units still activating.
+        """
         result = await self.ssh_command(
             "timeout", str(SYSTEM_RUNNING_WAIT_TIMEOUT), "systemctl", "is-system-running", "--wait", check=False
         )
-        state = "\n".join(result.stdout).strip()
-        if result.exitcode == 0 and state == "running":
+        return result.exitcode, "\n".join(result.stdout).strip()
+
+    async def failed_units(self) -> str:
+        """The guest's failed units, one per line, or "(none)"."""
+        failed = await self.ssh_command("systemctl", "--failed", "--no-legend", check=False)
+        return "\n".join(failed.stdout).rstrip() or "(none)"
+
+    async def ensure_system_running(self) -> None:
+        """Require systemd to finish booting in a healthy running state."""
+        rc, state = await self.wait_system_running()
+        if rc == 0 and state == "running":
             print_line(f"System fully booted: {state}")
             return
-
-        failed = await self.ssh_command("systemctl", "--failed", "--no-legend", check=False)
-        failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-        raise RuntimeError(f"System reached state {state!r} (rc={result.exitcode}); failed units:\n{failed_units}")
+        raise RuntimeError(f"System reached state {state!r} (rc={rc}); failed units:\n{await self.failed_units()}")
 
     async def _open_ssh_master(self) -> None:
         """Background a persistent `ssh -M -N` master on the cell-stable ControlPath.
@@ -857,10 +871,46 @@ class Machine:
             with contextlib.suppress(OSError, TimeoutError):
                 await asyncio.wait_for(writer.wait_closed(), timeout=2)
 
-    def cleanup_logs(self) -> None:
-        """Remove all per-run log artifacts."""
-        for path in self._artifact_files:
-            path.unlink(missing_ok=True)
+    def run(self, coro: Coroutine[object, object, None], label: str) -> int:
+        """Run an entry point's *coro* with output mirrored to the run log.
+
+        Returns the harness exit code: 0 passed, 1 failed, 124 timed out, 125
+        not idempotent, 130 interrupted. A pass deletes the per-run logs;
+        anything else keeps them for the post-mortem.
+        """
+        rc = 0
+        with tee_output(self.output_file):
+            try:
+                asyncio.run(coro)
+            except IdempotenceFailedException as exc:
+                print_line(str(exc), error=True)
+                print_line(f"{label} not idempotent", error=True)
+                rc = 125
+            except (CommandFailedException, CheckFailedException) as exc:
+                print_line(str(exc), error=True)
+                print_line(f"{label} failed", error=True)
+                rc = 1
+            except TimeoutError as exc:
+                # The session deadline raises a message-less TimeoutError; the
+                # phase guards (ensure_booted, ensure_ssh) carry their cause,
+                # so a slow boot-to-sshd isn't misread as the overall timeout.
+                if str(exc):
+                    print_line(str(exc), error=True)
+                print_line(f"{label} timed out after {self.machine_timeout}s", error=True)
+                rc = 124  # GNU `timeout`'s exit code for "command timed out"
+            except asyncio.CancelledError:
+                print_line("\nInterrupted, shutting down...")
+                rc = 130
+            except Exception:
+                # asyncio.run would otherwise traceback straight to stderr,
+                # bypassing tee_output, so the run log would miss it.
+                print_line(traceback.format_exc().rstrip(), error=True)
+                print_line(f"{label} crashed", error=True)
+                rc = 1
+        if rc == 0:
+            for path in self._artifact_files:
+                path.unlink(missing_ok=True)
+        return rc
 
     async def wait(self) -> None:
         if self.proc:
