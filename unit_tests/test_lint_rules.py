@@ -14,6 +14,7 @@ from lint.ansible_rules.homelab import (
     RequireBackup,
     RequireNamedRoleEntrypoint,
     RequireRoleTag,
+    RequireRoleVerify,
     RequireValidate,
     ShellStrictMode,
 )
@@ -249,3 +250,35 @@ class TestRequireRoleTag:
 
         assert self._matches(tmp_path, "web", "reload.yml", files["web/tasks/reload.yml"]) == []
         assert self._matches(tmp_path, "web", "other.yml", "- name: Other\n  ping:\n") == [1]
+
+
+class TestRequireRoleVerify:
+    @staticmethod
+    def _messages(tmp_path: Path, files: list[str], target: str) -> list[str]:
+        for relative in files:
+            (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / relative).write_text("- name: Check\n  ping:\n")
+        return [match.message for match in RequireRoleVerify().matchyaml(Lintable(tmp_path / target, kind="tasks"))]
+
+    def test_role_without_verify_fails(self, tmp_path: Path) -> None:
+        messages = self._messages(tmp_path, ["roles/app/tasks/main.yml"], "roles/app/tasks/main.yml")
+        assert messages == ["role `app` has no tasks/_verify.yml"]
+
+    def test_role_with_verify_passes(self, tmp_path: Path) -> None:
+        files = ["roles/app/tasks/main.yml", "roles/app/tasks/_verify.yml"]
+        assert self._messages(tmp_path, files, "roles/app/tasks/main.yml") == []
+
+    def test_only_main_stands_in_for_the_role(self, tmp_path: Path) -> None:
+        files = ["roles/app/tasks/main.yml", "roles/app/tasks/install.yml"]
+        assert self._messages(tmp_path, files, "roles/app/tasks/install.yml") == []
+
+    def test_tasks_outside_roles_are_ignored(self, tmp_path: Path) -> None:
+        assert self._messages(tmp_path, ["playbooks/tasks/main.yml"], "playbooks/tasks/main.yml") == []
+
+    def test_every_repository_role_has_verify(self) -> None:
+        missing = [
+            main.parent.parent.name
+            for main in sorted((_ROOT / "roles").glob("*/tasks/main.yml"))
+            if RequireRoleVerify().matchyaml(Lintable(main, kind="tasks"))
+        ]
+        assert missing == []

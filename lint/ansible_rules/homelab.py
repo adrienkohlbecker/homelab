@@ -321,3 +321,23 @@ def _untagged_tasks(tasks: object, role: str, *, inherited: bool) -> Iterator[di
                 yield from _untagged_tasks(task.get(key), role, inherited=tagged)
         elif not tagged and not any(_short_module(key) in _IMPORT_MODULES for key in task):
             yield task
+
+
+class RequireRoleVerify(_HomelabRule):
+    """Every role ships a `tasks/_verify.yml` the harness runs after converge."""
+
+    id = "require-role-verify"
+
+    def matchyaml(self, file: Lintable) -> list[MatchError]:
+        # tasks/main.yml stands in for the role: every role has one, and it is
+        # the file a new role's lint run is guaranteed to touch.
+        path = file.path.resolve()
+        if file.kind != "tasks" or path.name != "main.yml" or path.parent.name != "tasks":
+            return []
+        if path.parent.parent.parent.name != "roles" or (path.parent / "_verify.yml").is_file():
+            return []
+        return [
+            self.create_matcherror(
+                message=f"role `{path.parent.parent.name}` has no tasks/_verify.yml", filename=file, lineno=1
+            )
+        ]
