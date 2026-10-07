@@ -172,11 +172,8 @@ def main() -> int:
         return 1
 
     # Reap orphaned workdirs from prior SIGKILL'd / OOM'd / power-cut runs
-    # before constructing this run's Machine. testall.py also sweeps once
-    # before fanning out; the .live-file flock check inside
-    # sweep_stale_workdirs keeps parallel workers from racing on each other's
-    # freshly-minted workdirs. Scope is imagedir-only, and it only matters for
-    # local parallel runs sharing an imagedir.
+    # before constructing this run's Machine; the .live-file flock check keeps
+    # parallel runs from reaping each other's fresh workdirs.
     sweep_stale_workdirs(imagedir_for_host())
 
     m = Machine(

@@ -48,31 +48,20 @@ PIDFILE_NAME = "pid"
 def _cell_loopback_host() -> str:
     """Per-process loopback bind address for this cell's qemu hostfwds.
 
-    qemu's user-net (SLIRP) opens its own hostfwd listening sockets, so the
-    harness can't pre-bind a socket and hand it to qemu -- it can only reserve a
-    port, close it, and rely on qemu rebinding it before anything else grabs it
-    (prepare()'s _reserve dance). Under a burst of co-tenant cells on one CI
-    host that close->rebind window loses: two cells' `bind(addr, 0)` (or a host
-    outbound connection) draw the same port from the shared ephemeral range and
-    qemu dies on launch with "Could not set up host forwarding rule".
+    qemu opens its own hostfwd sockets, so the harness can only reserve a port,
+    close it, and rely on qemu rebinding it first (prepare()'s _reserve). Under
+    a burst of cells on one CI host that window loses to a sibling drawing the
+    same ephemeral port, and qemu dies with "Could not set up host forwarding
+    rule". A private 127.x.y.z per cell makes a collision impossible: bind
+    uniqueness is per (addr, port), and all of 127/8 is loopback on Linux.
 
-    Giving each cell its own 127.x.y.z address removes the contention by
-    construction: bind uniqueness is per (addr, port), nothing else on the host
-    sources traffic from this address, and sibling cells live on different
-    addresses -- so a reused or freshly-released port can't collide. The whole
-    127.0.0.0/8 is loopback on Linux, bindable with no setup.
-
-    Keyed on PID: testall.py spawns one testrole.py subprocess per cell, so the
-    PID is unique among the cells live on a host. Only 127.0.0.1 is configured
-    on macOS by default (the rest of 127/8 needs `ifconfig lo0 alias`), and the
-    Mac path isn't the bursty one, so non-Linux keeps the single loopback.
+    Keyed on PID, unique among a host's live cells (one testrole.py each).
+    macOS configures only 127.0.0.1, and its runs aren't bursty.
     """
     if platform.system() != "Linux":
         return SSH_HOST
-    # PID fits the low 24 bits of 127.0.0.0/8 (default pid_max is 2^22, and the
-    # kernel max is 2^22 on 32-bit / configurable to 2^30 on 64-bit -- masking
-    # keeps us in-range, and live PIDs stay distinct in practice). pid >= 1, so
-    # the network address 127.0.0.0 never occurs.
+    # The low 24 bits keep live PIDs distinct in practice; pid >= 1, so the
+    # network address 127.0.0.0 never occurs.
     pid = os.getpid() & 0xFFFFFF
     return f"127.{(pid >> 16) & 0xFF}.{(pid >> 8) & 0xFF}.{pid & 0xFF}"
 
@@ -93,14 +82,9 @@ def _load_wan_probe_ports() -> dict[str, tuple[int, ...]]:
 
 DEFAULT_WAN_FORWARDS = _load_wan_probe_ports()
 
-# Absolute path to the repo's ansible.cfg. Pinned via ANSIBLE_CONFIG (see
-# ansible_env) so it loads even when ansible would otherwise skip auto-discovery
-# -- the GitLab CI checkout (/builds/akohlbecker/homelab) is world-writable, and
-# ansible silently ignores an ansible.cfg in a world-writable cwd. Dropping it
-# loses host_key_checking=False, the mitogen strategy, the vault ids, and the
-# UserKnownHostsFile=/dev/null ssh_args, so the first connect to a fresh cell
-# dies on "Host key verification failed". An explicit ANSIBLE_CONFIG bypasses
-# the world-writable skip entirely.
+# Pinned through ANSIBLE_CONFIG (ansible_env): ansible silently ignores an
+# ansible.cfg in a world-writable cwd, which the GitLab CI checkout is, and
+# without it the first connect to a fresh cell fails host key verification.
 ANSIBLE_CONFIG_PATH = Path(__file__).parent.parent / "ansible.cfg"
 
 
@@ -291,9 +275,7 @@ class Machine:
     # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
     # of the Machine. Liveness signal consumed by sweep_stale_workdirs(): the
     # kernel releases the lock on process death (clean or SIGKILL/OOM), so a
-    # crashed run's workdir becomes reapable without a polling daemon. Survives
-    # PID namespaces -- the lock is on the inode, shared across containers
-    # that bind-mount the same imagedir.
+    # crashed run's workdir becomes reapable without a polling daemon.
     _live_lock_fd: int
     # Controller-side WAN probe endpoint, so `delegate_to: localhost`
     # probes in roles/firewall's _verify can exercise rules keying on the
@@ -384,8 +366,8 @@ class Machine:
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
         self.workdir_path = Path(self.workdir.name)
         # Claim the liveness lock immediately after the workdir exists so a
-        # sweep racing us from another container can't reap the dir between
-        # mkdtemp and the first qemu/ansible spawn. LOCK_NB so a contended
+        # concurrent sweep can't reap the dir between mkdtemp and the first
+        # qemu/ansible spawn. LOCK_NB so a contended
         # lock fails loudly (would only happen if two Machines somehow shared
         # a workdir, which mkdtemp prevents -- a BlockingIOError here is a
         # bug, not a race).
@@ -710,12 +692,11 @@ class Machine:
                 start_new_session=True,
             )
         # Parent's handle can close once the child holds its own dup'd FD.
-        # stdin=DEVNULL keeps qemu's `-serial stdio` (and any podman quirk)
-        # from competing with the parent terminal for keystrokes, especially
-        # under parallel testall.py runs.
+        # stdin=DEVNULL keeps qemu's `-serial stdio` from competing with the
+        # parent terminal for keystrokes.
 
     async def ensure_booted(self) -> None:
-        """Block until the hypervisor writes the PID/CID file or the launch fails."""
+        """Block until qemu writes its pidfile or the launch fails."""
 
         deadline = time.monotonic() + IDFILE_TIMEOUT
         id_path = self.pid_file
@@ -833,15 +814,11 @@ class Machine:
             return False
         finally:
             writer.close()
-            # wait_closed() returns immediately for a healthy transport, but a
-            # half-open connection through qemu's SLIRP hostfwd (port accepted
-            # while sshd is still coming up at first boot) can stall the close
-            # handshake indefinitely. Left unbounded it hangs the whole probe,
-            # so the SSH_WAIT_TIMEOUT deadline never gets re-checked and a flaky
-            # boot burns the full per-test timeout instead of failing in ~2min.
-            # This is best-effort cleanup -- the transport is reaped with the VM
-            # regardless -- so cap it and move on. OSError covers a peer that
-            # dropped the connection before our close completed.
+            # A half-open connection through qemu's hostfwd (accepted while
+            # sshd is still starting) can stall the close indefinitely, which
+            # would starve the SSH_WAIT_TIMEOUT deadline check. The transport
+            # dies with the VM anyway, so cap the best-effort close; OSError
+            # covers a peer that already dropped it.
             with contextlib.suppress(OSError, TimeoutError):
                 await asyncio.wait_for(writer.wait_closed(), timeout=2)
 
@@ -1020,20 +997,12 @@ class Machine:
     async def prepare(self) -> None:
         """Create overlay images and seed data for the selected template."""
 
-        # Reserve every hostfwd port up front by binding an ephemeral socket on
-        # self.ssh_host and reading back the assigned port. Avoids an lsof-poll
-        # heuristic, which would have to filter VNC ports and re-tangle if any
-        # future qemu service published TCP. Every reservation socket stays
-        # open until all ports are picked: closing one before the next bind
-        # lets the kernel re-hand-out the just-released port, and two forwards
-        # sharing a host port make qemu refuse to launch outright ("Could not
-        # set up host forwarding rule"). Uniqueness only has to hold within a
-        # protocol -- qemu keys hostfwd on proto+hostport -- so the TCP and UDP
-        # reservations are independent. There is still a tiny race between
-        # closing the sockets and qemu's bind, but each cell binds a private
-        # loopback address (_cell_loopback_host), so the only contender for a
-        # just-released (addr, port) is this same sequential process -- no
-        # co-tenant cell or host outbound connection sources from this address.
+        # Reserve every hostfwd port by binding an ephemeral socket on
+        # self.ssh_host. All reservations stay open until every port is picked,
+        # so the kernel can't hand one out twice (qemu refuses duplicate
+        # forwards); TCP and UDP are independent because qemu keys on
+        # proto+port. The close->qemu-bind window is safe because each cell
+        # binds a private loopback address (_cell_loopback_host).
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
         reserved: list[socket.socket] = []
 

@@ -274,8 +274,8 @@ async def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str]
         # Ordering: lines within stdout (and within stderr) are FIFO, but
         # cross-stream order is NOT preserved -- the two pipes are independent
         # kernel objects and which reader is scheduled first decides the
-        # interleave. Acceptable here because callers (ansible-playbook, ssh,
-        # podman) emit ~all output on one stream; for source-order fidelity
+        # interleave. Acceptable here because callers (ansible-playbook, ssh)
+        # emit ~all output on one stream; for source-order fidelity
         # use stderr=asyncio.subprocess.STDOUT, which costs the per-stream
         # color tagging.
         async with asyncio.TaskGroup() as tg:
