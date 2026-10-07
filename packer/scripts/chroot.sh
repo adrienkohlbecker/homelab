@@ -21,13 +21,12 @@ trap 'exit 130' INT TERM
 #
 # Env consumed by this script:
 # - From packer's shell-provisioner env block (qemu.pkr.hcl):
-#   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
-#   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
-#   SSH_KEY_PUB, ZBM_VERSION, and optionally REFIND_DEB_URL/REFIND_DEB_SHA256
-#   (a pinned rEFInd package; empty installs the distribution's).
+#   UBUNTU_NAME, SSH_KEY_PUB, ZBM_VERSION, and optionally
+#   REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs
+#   the distribution's).
 # - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_ROLE_FILES, INSTALL_TARGET,
-#   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN,
-#   HOSTNAME, USERNAME.
+#   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME, and
+#   the UBUNTU_MIRROR* build and upstream URLs.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
 #   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
 #   when PODMAN_SIZE is (raid5 /dev/md/podman on a mirror).

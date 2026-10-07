@@ -63,39 +63,17 @@ locals {
   architectures = yamldecode(file("${path.cwd}/data/architectures.yml"))
   guest         = local.architectures[local.arch].guest
 
-  # Architecture also controls the build-only guest devices and mirrors. Host OS
-  # independently controls the accelerator.
-  #
-  # Field notes:
-  # - qemuargs: aarch64's `virt` machine ships no default graphics or
-  #   input devices so VNC would be blank without these. q35 already
-  #   has std VGA + PS/2 keyboard, so the x86_64 list is empty.
-  # - upstream/nexus_archive/security: APT mirror URLs
-  nexus_base = "http://nexus.lab.fahm.fr/repository"
-  arch_table = {
-    x86_64 = {
-      zbm_version       = local.versions.zfsbootmenu_release.x86_64.version
-      qemuargs          = []
-      upstream_archive  = "http://archive.ubuntu.com/ubuntu"
-      upstream_security = "http://security.ubuntu.com/ubuntu"
-      nexus_archive     = "${local.nexus_base}/ubuntu-archive"
-      nexus_security    = "${local.nexus_base}/ubuntu-security"
-    }
-    aarch64 = {
-      zbm_version = local.versions.zfsbootmenu_release.aarch64.version
-      qemuargs = [
-        ["-device", "virtio-gpu-pci"],
-        ["-device", "qemu-xhci"],
-        ["-device", "usb-kbd"],
-        ["-device", "usb-tablet"],
-      ]
-      upstream_archive  = "http://ports.ubuntu.com/ubuntu-ports"
-      upstream_security = "http://ports.ubuntu.com/ubuntu-ports"
-      nexus_archive     = "${local.nexus_base}/ubuntu-ports"
-      nexus_security    = "${local.nexus_base}/ubuntu-ports"
-    }
-  }
-  arch_cfg = local.arch_table[local.arch]
+  # aarch64's `virt` machine ships no default graphics or input devices, so VNC
+  # would be blank without these. q35 already has std VGA + PS/2 keyboard.
+  display_qemuargs = {
+    x86_64 = []
+    aarch64 = [
+      ["-device", "virtio-gpu-pci"],
+      ["-device", "qemu-xhci"],
+      ["-device", "usb-kbd"],
+      ["-device", "usb-tablet"],
+    ]
+  }[local.arch]
 
   accelerator = { linux = "kvm", darwin = "hvf" }[local.host_os]
 
@@ -168,23 +146,19 @@ locals {
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key",
   ]
 
+  # The build pulls the cloud image and apt packages through the lab Nexus
+  # proxy unless `-var upstream_mirrors=true`. Like group_vars' nexus_url, an
+  # empty host means upstream; provision.sh derives the apt mirror URLs from it
+  # and always ships the upstream ones.
+  nexus_url = var.upstream_mirrors ? "" : "nexus.lab.fahm.fr"
+
   # Canonical retains dated release builds, unlike the short-lived daily image
   # stream. Pinning that immutable directory keeps the image and SHA256SUMS
   # coherent even when Nexus caches their raw paths at different times.
-  cloud_release_path  = "releases/${local.ubuntu_name}/release-${local.ubuntu_release.image_release}"
-  upstream_cloud_base = "https://cloud-images.ubuntu.com/${local.cloud_release_path}"
-  nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/${local.cloud_release_path}"
-  cloud_base          = var.upstream_mirrors ? local.upstream_cloud_base : local.nexus_cloud_base
-  cloud_checksum      = "file:${local.cloud_base}/SHA256SUMS"
-  cloud_url           = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.guest.cloud_image_suffix}.img"
-
-  # Apt mirrors. By default the build pulls through the lab Nexus proxy
-  # (`group_vars/all/main.yml` uses the same `repository/ubuntu-*` layout); set
-  # `-var upstream_mirrors=true` to bypass it. The `upstream_*` pair is
-  # always the canonical Ubuntu URL — chroot.sh writes those into the
-  # final `/etc/apt/sources.list` so we don't ship Nexus-internal URLs.
-  build_archive  = var.upstream_mirrors ? local.arch_cfg.upstream_archive : local.arch_cfg.nexus_archive
-  build_security = var.upstream_mirrors ? local.arch_cfg.upstream_security : local.arch_cfg.nexus_security
+  cloud_release_path = "releases/${local.ubuntu_name}/release-${local.ubuntu_release.image_release}"
+  cloud_base         = local.nexus_url == "" ? "https://cloud-images.ubuntu.com/${local.cloud_release_path}" : "https://${local.nexus_url}/repository/ubuntu-cloud-images/${local.cloud_release_path}"
+  cloud_checksum     = "file:${local.cloud_base}/SHA256SUMS"
+  cloud_url          = "${local.cloud_base}/ubuntu-${local.ubuntu_version}-server-cloudimg-${local.guest.cloud_image_suffix}.img"
 }
 
 source "qemu" "ubuntu" {
@@ -238,7 +212,7 @@ source "qemu" "ubuntu" {
   qemuargs = concat([
     ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
     ["-device", "virtio-rng-pci,rng=rng0"],
-  ], local.arch_cfg.qemuargs)
+  ], local.display_qemuargs)
 
   # QMP socket lands at <output_dir>/qmp.sock and lets the build be poked
   # out-of-band: `echo '{"execute":"qmp_capabilities"}{"execute":"system_reset"}' \
@@ -307,21 +281,14 @@ build {
     # neither classic sudo nor Resolute's sudo-rs needs to preserve it.
     execute_command = "chmod +x {{ .Path }}; sudo env {{ .Vars }} {{ .Path }}"
     inline          = ["bash /home/vagrant/provision.sh"]
-    # Mirror URLs are resolved here (HCL) and passed as env. provision.sh
-    # uses UBUNTU_MIRROR* during the build; chroot.sh swaps in the
-    # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image
-    # never points at Nexus.
     env = merge(local.variants[source.name].env, {
-      "UBUNTU_NAME"                     = local.ubuntu_name
-      "UBUNTU_MIRROR"                   = local.build_archive
-      "UBUNTU_MIRROR_SECURITY"          = local.build_security
-      "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
-      "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
-      "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
-      "INSTALL_TARGET"                  = source.name == "hetzner" ? "hetzner" : "qemu"
-      "ZBM_VERSION"                     = local.arch_cfg.zbm_version
-      "REFIND_DEB_URL"                  = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""
-      "REFIND_DEB_SHA256"               = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""
+      "UBUNTU_NAME"       = local.ubuntu_name
+      "NEXUS_URL"         = local.nexus_url
+      "SSH_KEY_PUB"       = join("\n", local.vagrant_ssh_keys)
+      "INSTALL_TARGET"    = source.name == "hetzner" ? "hetzner" : "qemu"
+      "ZBM_VERSION"       = local.versions.zfsbootmenu_release[local.arch].version
+      "REFIND_DEB_URL"    = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""
+      "REFIND_DEB_SHA256" = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""
     })
   }
 

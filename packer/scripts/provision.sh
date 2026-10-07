@@ -30,12 +30,11 @@
 set -euxo pipefail
 
 # DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, PODMAN_SIZE, META_SIZE, EXTRA_POOLS,
-# INSTALL_TARGET, UBUNTU_NAME, and UBUNTU_MIRROR
-# come from packer's shell-provisioner env block. Bare-metal callers export
-# them by hand.
-# This script consumes the disk/pool vars and passes the exported install vars
-# through to chroot.sh. The ZBM_*/UBUNTU_MIRROR_* vars used downstream
-# are documented at the top of chroot.sh.
+# INSTALL_TARGET, UBUNTU_NAME, and the optional NEXUS_URL come from packer's
+# shell-provisioner env block. Bare-metal callers export them by hand.
+# This script consumes the disk/pool vars, derives the UBUNTU_MIRROR* URLs, and
+# passes the exported install vars through to chroot.sh. The ZBM_* vars used
+# downstream are documented at the top of chroot.sh.
 
 # Directories holding chroot.sh, optional installer extensions, and the
 # role-owned bootstrap files. Packer uploads them to /home/vagrant; bare-metal
@@ -119,8 +118,6 @@ preflight() {
   # Optional layout features may be empty but must be set explicitly.
   : "${EXTRA_DISKS?}" "${LAYOUT?}" "${PODMAN_SIZE?}" "${META_SIZE?}" "${EXTRA_POOLS?}"
   : "${DISKS:?}" "${SWAP_SIZE:?}" "${UBUNTU_NAME:?}" "${ZBM_VERSION:?}"
-  : "${UBUNTU_MIRROR:?}" "${UBUNTU_MIRROR_SECURITY:?}"
-  : "${UBUNTU_MIRROR_UPSTREAM:?}" "${UBUNTU_MIRROR_SECURITY_UPSTREAM:?}"
 
   [[ $LAYOUT =~ ^(mirror)?$ ]] || fail "LAYOUT must be empty or mirror (got '$LAYOUT')"
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu|hetzner)$ ]] ||
@@ -149,6 +146,31 @@ preflight() {
 export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
 
 preflight
+
+# Ubuntu mirrors for this architecture. The install pulls through Nexus when
+# NEXUS_URL names its host (empty or unset means upstream, as with group_vars'
+# nexus_url); the installed system always ships the upstream pair.
+case $(uname -m) in
+x86_64)
+  UBUNTU_MIRROR_UPSTREAM=http://archive.ubuntu.com/ubuntu
+  UBUNTU_MIRROR_SECURITY_UPSTREAM=http://security.ubuntu.com/ubuntu
+  nexus_repositories=(ubuntu-archive ubuntu-security)
+  ;;
+aarch64)
+  UBUNTU_MIRROR_UPSTREAM=http://ports.ubuntu.com/ubuntu-ports
+  UBUNTU_MIRROR_SECURITY_UPSTREAM=$UBUNTU_MIRROR_UPSTREAM
+  nexus_repositories=(ubuntu-ports ubuntu-ports)
+  ;;
+*) fail "unsupported architecture $(uname -m)" ;;
+esac
+if [ -n "${NEXUS_URL:-}" ]; then
+  UBUNTU_MIRROR=http://$NEXUS_URL/repository/${nexus_repositories[0]}
+  UBUNTU_MIRROR_SECURITY=http://$NEXUS_URL/repository/${nexus_repositories[1]}
+else
+  UBUNTU_MIRROR=$UBUNTU_MIRROR_UPSTREAM
+  UBUNTU_MIRROR_SECURITY=$UBUNTU_MIRROR_SECURITY_UPSTREAM
+fi
+export UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM
 
 # Placeholder hostname for the shipped image — the deploy step
 # (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
