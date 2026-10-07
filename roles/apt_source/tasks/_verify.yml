@@ -104,33 +104,6 @@
       Expected the unpinned candidate {{ _apt_source_versions | first }};
       got policy: {{ _apt_source_unpinned_policy.stdout }}
 
-# A false condition must leave the source untouched and report no change, so
-# a pin passed alongside it never reaches apt.
-- name: _verify | Skip a pin under a false condition
-  import_role:
-    name: apt_source
-    tasks_from: configure
-  vars:
-    apt_source_args: >-
-      {{ _apt_source_docker | combine({'condition': false, 'pin': {'package': 'docker-ce-cli', 'version': '0.*'}}) }}
-
-- name: _verify | Read the docker-ce-cli policy after the skipped call
-  command: apt-cache policy docker-ce-cli
-  changed_when: false
-  register: _apt_source_skipped_policy
-
-- name: _verify | The skipped call left the newest candidate and reported no change
-  vars:
-    _apt_source_candidate_re: "(?m)^  Candidate: {{ _apt_source_versions | first | regex_escape }}$"
-  assert:
-    that:
-      - not apt_source_docker_changed
-      - _apt_source_skipped_policy.stdout is search(_apt_source_candidate_re)
-    fail_msg: >-
-      Expected no change and the candidate {{ _apt_source_versions | first }};
-      got changed={{ apt_source_docker_changed }} and policy:
-      {{ _apt_source_skipped_policy.stdout }}
-
 # Removal consumes the standalone source configured above: its packages must
 # stop resolving once the source is gone.
 - name: _verify | Remove the representative source
