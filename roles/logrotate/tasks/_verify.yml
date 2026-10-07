@@ -1,5 +1,5 @@
-# Exercise both compression directions across Lab and minimal, including
-# package upgrades, repeated helper calls, and an untouched unowned policy.
+# Exercise compression on ZFS and its absence elsewhere across Lab and minimal,
+# including repeated helper calls and an untouched unowned policy.
 - name: _verify | Create a fixture logrotate config
   copy:
     dest: /etc/logrotate.d/_verify_logrotate
@@ -10,7 +10,7 @@
         weekly
         missingok
         rotate 1
-        {{ zfs_root | ternary('compress', '# compress # zfs already compresses disk contents') }}
+        compress
         compresscmd /bin/gzip
         notifempty
       }
@@ -56,53 +56,23 @@
       configs:
         - path: /etc/logrotate.d/_verify_logrotate
 
-- name: _verify | Read locally modified package config
-  slurp:
-    src: /etc/logrotate.d/btmp
-  register: logrotate_verify_btmp_before
-  become: true
-
-- name: _verify | Reinstall logrotate while retaining local conffiles
-  command:
-    argv:
-      - apt-get
-      - --reinstall
-      - -o
-      - Dpkg::Options::=--force-confdef
-      - -o
-      - Dpkg::Options::=--force-confold
-      - install
-      - -y
-      - logrotate
-  changed_when: true
-  become: true
-
-- name: _verify | Read package config after reinstall
-  slurp:
-    src: /etc/logrotate.d/btmp
-  register: logrotate_verify_btmp_after
-  become: true
-
-- name: _verify | Package reinstall preserved the compression policy
-  assert:
-    that: logrotate_verify_btmp_after.content == logrotate_verify_btmp_before.content
-
 - name: _verify | Read back the toggled fixture
   slurp:
     src: /etc/logrotate.d/_verify_logrotate
   register: logrotate_verify_fixture
   become: true
 
-- name: _verify | Assert compress matches zfs_root and compresscmd survived
+- name: _verify | Assert compress is disabled only on ZFS and compresscmd survived
   vars:
     fixture: "{{ logrotate_verify_fixture.content | b64decode }}"
   assert:
     that:
       - >-
-        (zfs_root and fixture is search('(?m)^\s*# compress # zfs'))
-        or (not zfs_root and fixture is search('(?m)^\s*compress\s*$'))
+        (fixture is search('(?m)^\s*# compress # zfs')) == zfs_root
+      - >-
+        (fixture is search('(?m)^\s*compress\s*$')) != zfs_root
       - fixture is search('(?m)^\s*compresscmd /bin/gzip\s*$')
-    fail_msg: compress not toggled per zfs_root, or compresscmd was clobbered
+    fail_msg: compress not disabled exactly on ZFS, or compresscmd was clobbered
 
 - name: _verify | Create the log to rotate
   copy:

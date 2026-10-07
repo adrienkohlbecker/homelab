@@ -22,15 +22,18 @@
   register: logrotate_configs
   become: true
 
-- name: compression | Configure logrotate compression
+# ZFS already compresses on disk, so ZFS-root hosts comment out the package
+# compress directive; other hosts keep the package default untouched.
+- name: compression | Disable logrotate compression on ZFS
   when:
+    - zfs_root
     - logrotate_args.condition | default(true)
     - not (item.item.optional | default(false)) or item.stat.exists
   replace:
-    # Match only a bare compress directive or the exact marker written here;
-    # [ \t] avoids matching across lines or clobbering compresscmd/options/ext.
-    regexp: "{{ zfs_root | ternary(disable_rx, enable_rx) }}"
-    replace: "{{ zfs_root | ternary(disable_to, enable_to) }}"
+    # Match only a bare compress directive; [ \t] avoids matching across lines
+    # or clobbering compresscmd/options/ext.
+    regexp: ^(\s*)compress([ \t].*)?$
+    replace: '\1# compress # zfs already compresses disk contents'
     path: "{{ item.item.path }}"
     backup: true
     # Package snippets can fail whole-file validation for unrelated reasons.
@@ -38,9 +41,3 @@
   loop_control:
     label: "{{ item.item.path }}"
   become: true
-  vars:
-    disabled_line: '# compress # zfs already compresses disk contents'
-    disable_rx: ^(\s*)compress([ \t].*)?$
-    enable_rx: '^(\s*){{ disabled_line }}[ \t]*$'
-    disable_to: '\1{{ disabled_line }}'
-    enable_to: '\1compress'

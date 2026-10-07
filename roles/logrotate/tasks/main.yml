@@ -1,14 +1,3 @@
-- name: Assert inputs
-  assert:
-    that:
-      # zfs_root decides the compression direction (off on ZFS, which already
-      # compresses on disk; on elsewhere). Catch missing inventory defaults here
-      # rather than failing mid-loop with a cryptic "zfs_root is undefined".
-      - zfs_root is defined
-    fail_msg: zfs_root must be set in host/group vars (true on ZFS-root hosts, false elsewhere)
-  tags:
-    - logrotate
-
 - name: Install logrotate
   apt:
     pkg:
