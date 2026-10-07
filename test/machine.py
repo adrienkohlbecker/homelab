@@ -339,12 +339,6 @@ class Machine:
         self.machine_timeout = machine_timeout
         self.upstream_mirrors = upstream_mirrors
         self.proc: asyncio.subprocess.Process | None = None
-        # Backgrounded `ssh -M -N` master, opened in ensure_ssh() once the
-        # banner is up and torn down in stop(). Keeps a single ControlMaster
-        # socket hot so every ansible-playbook phase (mirrors/_setup/check/
-        # apply/idempotence/_verify) reuses it instead of paying a fresh
-        # handshake + agent round-trip + mitogen bootstrap each.
-        self._ssh_master_proc: asyncio.subprocess.Process | None = None
         self._live_lock_fd = -1
         self._ansible_staged = False
         self._last_ansible_cmd: tuple[str, ...] | None = None
@@ -428,11 +422,10 @@ class Machine:
         return [
             "-o",
             f"ControlPath={self.ssh_control_path}",
-            # auto: reuse the master if it's up (the harness pre-opens it in
-            # ensure_ssh), create one otherwise. ControlPersist keeps it warm
-            # between the harness's intermittent ssh calls and the ansible
-            # phases. Matches ansible.cfg's [ssh_connection] ssh_args so both
-            # sides land on the same socket.
+            # auto: the first connection, harness or ansible, opens the cell's
+            # master and every later one reuses it. ControlPersist keeps it
+            # warm between phases. Matches ANSIBLE_SSH_ARGS so both sides land
+            # on the same socket.
             "-o",
             "ControlMaster=auto",
             "-o",
@@ -496,8 +489,7 @@ class Machine:
             # own master; sharing one keeps the socket hot across phases. The
             # rest of the flags mirror ansible.cfg verbatim (ControlMaster,
             # ControlPersist, UserKnownHostsFile, ForwardAgent) so this doesn't
-            # regress any of them -- the harness pre-opens the master in
-            # ensure_ssh() and shares it via the same path.
+            # regress any of them; the harness's own ssh shares the same path.
             "ANSIBLE_SSH_ARGS": (
                 f"-o ControlMaster=auto -o ControlPersist=600s -o ControlPath={self.ssh_control_path} "
                 "-o UserKnownHostsFile=/dev/null -o ForwardAgent=yes"
@@ -718,8 +710,6 @@ class Machine:
                 raise TimeoutError("SSH daemon did not become ready in time")
             await sleep_tick()
 
-        await self._open_ssh_master()
-
     async def wait_system_running(self) -> tuple[int, str]:
         """Wait, bounded, for systemd to stop starting units; return (rc, state).
 
@@ -742,47 +732,6 @@ class Machine:
             print_line(f"System fully booted: {state}")
             return
         raise RuntimeError(f"System reached state {state!r} (rc={rc}); failed units:\n{await self.failed_units()}")
-
-    async def _open_ssh_master(self) -> None:
-        """Background a persistent `ssh -M -N` master on the cell-stable ControlPath.
-
-        Opened the moment the banner is ready so the socket is hot before the
-        mirrors phase, sparing every later ansible/harness connection a fresh
-        handshake + agent round-trip + mitogen bootstrap. `-N` (no command) +
-        `-M` (master) just establishes the multiplexing socket and parks; it
-        carries ForwardAgent so the master seeds an agent channel for roles
-        that ssh out to git@github.com (see format_ssh_cmd's block comment).
-        Best-effort: if it can't come up, ControlMaster=auto on the individual
-        connections still creates a master on first use -- we don't gate the
-        run on it. Torn down in stop() via `ssh -O exit`.
-        """
-        cmd = [
-            "ssh",
-            "-M",
-            "-N",
-            "-f",
-            "-i",
-            SSH_KEY,
-            "-p",
-            str(self.ssh_port),
-            *self._ssh_options(),
-            "-o",
-            "ForwardAgent=yes",
-            f"{self.ssh_user}@{self.ssh_host}",
-        ]
-        print_cmd_line(cmd)
-        # -f backgrounds ssh itself once the master socket is up, so the
-        # subprocess exits promptly and we don't hold a Process handle. The
-        # parked master lives on past it, reaped by `ssh -O exit` in stop().
-        self._ssh_master_proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        with contextlib.suppress(TimeoutError):
-            async with asyncio.timeout(15):
-                await self._ssh_master_proc.wait()
 
     async def ensure_cloud_init(self) -> None:
         """Block until cloud-init's config and final stages finish.
@@ -1330,17 +1279,14 @@ class Machine:
         return cmd
 
     async def _close_ssh_master(self) -> None:
-        """Tear down the persistent ssh ControlMaster so no socket leaks across runs.
+        """Tear down the cell's ssh ControlMaster so no socket leaks across runs.
 
-        `ssh -O exit` signals the parked master to close cleanly and unlink its
+        `ssh -O exit` signals the master to close cleanly and unlink its
         socket; without it the master would linger ControlPersist=600s past the
         cell, and a same-port future cell could reuse a stale socket pointing at
-        a dead guest. Best-effort -- the master may already be gone (ssh -f's
-        wrapper exited, ControlPersist expired). No-op when never opened.
+        a dead guest. Best-effort -- no master may ever have opened, or
+        ControlPersist may have expired it.
         """
-        if self._ssh_master_proc is None:
-            return
-        self._ssh_master_proc = None
         cmd = [
             "ssh",
             "-O",
