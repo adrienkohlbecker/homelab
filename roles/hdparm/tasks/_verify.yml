@@ -38,12 +38,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Start netdata
-  systemd:
-    name: netdata
-    state: started
-  become: true
-
 - name: _verify | Install hdparm netdata collector
   import_tasks: netdata.yml
 
@@ -150,23 +144,13 @@
     state: restarted
   become: true
 
-- name: _verify | Wait for the hdparm chart
-  uri:
-    url: http://localhost:19999/api/v1/charts
-    return_content: true
-  register: _hdparm_charts
-  retries: 30
-  delay: 2
-  until: >-
-    _hdparm_charts.status == 200
-    and 'hdparm.verify_active' in (_hdparm_charts.content | from_json).charts.keys()
-
 - name: _verify | Live chart reports active state
   uri:
     url: http://localhost:19999/api/v1/data?chart=hdparm.verify_active&points=1&after=-30&format=json
     return_content: true
   register: _hdparm_active_data
-  retries: 30
+  # Covers the chart's first appearance after the restart as well as its data.
+  retries: 60
   delay: 2
   until: >-
     _hdparm_active_data.status == 200
