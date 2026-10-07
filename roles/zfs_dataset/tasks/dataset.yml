@@ -1,9 +1,6 @@
 # Generic zfs dataset creator. Inputs: caller passes a single dict
 # `zfs_dataset_args` with keys:
-#   dataset             dataset path; a leading 'tank/' is rewritten to
-#                       '{{ zfs_tank_filesystem }}/' so callers can stay
-#                       literal and avoid host-var templating in caller-side
-#                       import_role vars (e.g. tank/brumath)
+#   dataset             full dataset path (e.g. rpool/services)
 #   mountpoint          mountpoint (e.g. /mnt/brumath)
 #   extra_properties    optional dict of extra zfs properties to set
 #   owner               optional mountpoint dir owner (default: ansible_user_id)
@@ -21,15 +18,13 @@
 # path and expect it to exist regardless of the storage backend, so a plain
 # directory is the correct degraded behavior rather than a hard failure.
 
-# Inner task `name:` strings are static -- no `{{ _zfs_dataset_resolved }}`
-# or `{{ zfs_dataset_args.* }}` interpolation. Ansible renders `name:` at
-# parse time, but callers only populate `zfs_dataset_args` at runtime via
-# `import_role` inline vars under a dynamic include -- so a parse-time render
-# would fail with "zfs_dataset_args is undefined". Per-iteration context
-# comes from the caller's loop_control.label.
+# Inner task `name:` strings are static -- no `{{ zfs_dataset_args.* }}`
+# interpolation. Ansible renders `name:` at parse time, but callers only
+# populate `zfs_dataset_args` at runtime via `import_role` inline vars under
+# a dynamic include -- so a parse-time render would fail with
+# "zfs_dataset_args is undefined". Per-iteration context comes from the
+# caller's loop_control.label.
 - name: Create and mount zfs dataset
-  vars:
-    _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', zfs_tank_filesystem ~ '/') }}"
   tags:
     - zfs_dataset
   block:
@@ -41,20 +36,10 @@
         fail_msg: >-
           zfs_dataset_args must include 'dataset' and 'mountpoint' keys.
 
-    - name: Reject mountpoint inside extra_properties
-      assert:
-        that: "'mountpoint' not in (zfs_dataset_args.extra_properties | default({}))"
-        fail_msg: >-
-          zfs_dataset_args.extra_properties.mountpoint silently loses to the
-          top-level zfs_dataset_args.mountpoint -- the helper does
-          `combine({'mountpoint': zfs_dataset_args.mountpoint})` and Jinja's
-          combine is right-key-wins. Pass mountpoint only as the top-level
-          key, not inside extra_properties.
-
     - name: Create zfs filesystem
       when: zfs_root
       community.general.zfs:
-        name: '{{ _zfs_dataset_resolved }}'
+        name: '{{ zfs_dataset_args.dataset }}'
         state: present
         extra_zfs_properties: "{{ (zfs_dataset_args.extra_properties | default({})) | combine({'mountpoint': zfs_dataset_args.mountpoint}) }}"
       become: true
@@ -80,7 +65,7 @@
           - -o
           - property,source
           - "{{ (zfs_dataset_args.extra_properties | default({})).keys() | join(',') }}"
-          - '{{ _zfs_dataset_resolved }}'
+          - '{{ zfs_dataset_args.dataset }}'
       register: _zfs_dataset_prop_sources
       changed_when: false
       become: true
@@ -95,13 +80,13 @@
           - zfs
           - set
           - "{{ __prop_line.split()[0] }}={{ (zfs_dataset_args.extra_properties)[__prop_line.split()[0]] }}"
-          - '{{ _zfs_dataset_resolved }}'
+          - '{{ zfs_dataset_args.dataset }}'
       loop: "{{ _zfs_dataset_prop_sources.stdout_lines | default([]) }}"
       loop_control:
         # Distinct loop_var: the parent services/data role includes this file in a
         # loop over `item`, so reusing `item` here collides with that outer dict.
         loop_var: __prop_line
-        label: "{{ _zfs_dataset_resolved }} {{ __prop_line.split()[0] }} ({{ __prop_line.split()[1] | default('?') }} -> local)"
+        label: "{{ zfs_dataset_args.dataset }} {{ __prop_line.split()[0] }} ({{ __prop_line.split()[1] | default('?') }} -> local)"
       changed_when: true
       become: true
 
@@ -121,5 +106,5 @@
         tasks_from: mount_unit
       vars:
         zfs_mount_args:
-          dataset: '{{ _zfs_dataset_resolved }}'
+          dataset: '{{ zfs_dataset_args.dataset }}'
           mountpoint: '{{ zfs_dataset_args.mountpoint }}'

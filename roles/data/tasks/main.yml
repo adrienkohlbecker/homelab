@@ -8,12 +8,12 @@
         - data
   vars:
     zfs_dataset_args:
-      dataset: "tank/{{ data_dataset.name }}"
+      dataset: "{{ zfs_tank_filesystem }}/{{ data_dataset.name }}"
       mountpoint: "{{ data_dataset.mountpoint }}"
       extra_properties: "{{ data_extra_properties }}"
   loop: "{{ data_datasets }}"
   loop_control:
     loop_var: data_dataset
-    label: "tank/{{ data_dataset.name }}"
+    label: "{{ zfs_tank_filesystem }}/{{ data_dataset.name }}"
   tags:
     - data
