@@ -40,14 +40,6 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
     # Pin the host platform to Darwin and the imagedir to a writable tmp path.
     monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
     monkeypatch.setenv("HOMELAB_CI_DIR", str(tmp_path / "artifacts"))
-    # These tests only build command lines -- they never spawn qemu -- so the
-    # emulator binary needn't actually be installed. The x86 CI image ships
-    # qemu-system-x86 but not the aarch64 emulator, so an unmocked which()
-    # fails the aarch64 cases there (and the suite would otherwise silently
-    # depend on whatever happens to be on PATH). Fake which() so preflight
-    # passes for any arch; test_preflight overrides this per-test to exercise
-    # the missing-binary path.
-    monkeypatch.setattr(machine.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
     monkeypatch.chdir(tmp_path)
     instances: list[machine.Machine] = []

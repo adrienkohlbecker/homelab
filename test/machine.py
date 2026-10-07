@@ -391,35 +391,11 @@ class Machine:
         # bug, not a race).
         self._live_lock_fd = os.open(self.workdir_path / ".live", os.O_WRONLY | os.O_CREAT, 0o644)
         fcntl.flock(self._live_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        self._preflight()
-
-    def _preflight(self) -> None:
-        """Normalize the SSH key mode and verify required binaries.
-
-        Called once at the end of __init__, after self.workdir exists, so the
-        failure surface (binary checks, image cache lookups, etc.) is bounded
-        to "things the harness will need before the next subprocess spawn".
-        Failures raise RuntimeError with installation guidance.
-        """
-        ssh_key_path = Path(SSH_KEY)
-        if ssh_key_path.exists():
-            ssh_key_path.chmod(0o600)
-
-        self._require_binary(
-            self.qemu_binary,
-            f"Install via `brew install qemu` (macOS) or `apt install qemu-system-{self.arch}` (Debian/Ubuntu).",
-        )
-        # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
-        # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
-        self._require_binary(
-            "timeout",
-            "Install via `brew install coreutils` (macOS) or via the coreutils package on Linux.",
-        )
-
-    @staticmethod
-    def _require_binary(name: str, hint: str) -> None:
-        if shutil.which(name) is None:
-            raise RuntimeError(f"Required binary {name!r} not found on PATH. {hint}")
+        # git can't store mode 0600, and ssh rejects a private key with looser
+        # permissions.
+        ssh_key = Path(SSH_KEY)
+        if ssh_key.exists():
+            ssh_key.chmod(0o600)
 
     @property
     def pid_file(self) -> Path:

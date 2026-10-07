@@ -1,45 +1,10 @@
-"""Tests for the construction-time preflight checks.
-
-Machine validates its required binaries during construction. Failures raise
-RuntimeError with installation guidance. Linux image-root discovery also
-rejects a missing /mnt/scratch/homelab_ci so the caller gets a clearer message
-than tempfile's FileNotFoundError.
-"""
+"""Tests for the construction-time checks: the SSH key mode and the imagedir."""
 
 from collections.abc import Callable
 from pathlib import Path
 
 import machine
 import pytest
-
-
-def _which_excluding(missing: set[str]) -> Callable[[str], str | None]:
-    """Return a shutil.which stub that pretends *missing* binaries aren't on PATH."""
-
-    def _which(name: str) -> str | None:
-        if name in missing:
-            return None
-        return f"/usr/local/bin/{name}"
-
-    return _which
-
-
-def test_qemu_preflight_raises_when_qemu_binary_missing(
-    machine_factory: Callable[..., machine.Machine],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(machine.shutil, "which", _which_excluding({"qemu-system-x86_64"}))
-    with pytest.raises(RuntimeError, match="qemu-system-x86_64"):
-        machine_factory(host_arch="x86_64")
-
-
-def test_qemu_preflight_raises_when_timeout_missing(
-    machine_factory: Callable[..., machine.Machine],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(machine.shutil, "which", _which_excluding({"timeout"}))
-    with pytest.raises(RuntimeError, match="'timeout' not found"):
-        machine_factory()
 
 
 def test_qemu_preflight_normalizes_ssh_key_mode(
