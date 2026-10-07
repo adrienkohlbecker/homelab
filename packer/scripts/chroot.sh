@@ -58,7 +58,6 @@ DISKS_COUNT=$(wc -w <<<"$DISKS")
 
 # Set a hostname
 
-hostname "$HOSTNAME"
 echo "$HOSTNAME" >/etc/hostname
 
 cat <<EOF >/etc/hosts
