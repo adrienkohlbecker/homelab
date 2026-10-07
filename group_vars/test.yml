@@ -2,12 +2,15 @@ qemu_test: true
 _role_under_test: "{{ _test_role_under_test }}"
 # Recovery downloads belong to macos_vm role cells; site fixtures omit them.
 macos_vm_install_mode: "{{ _role_under_test == 'macos_vm' }}"
-# Synthetic sensor inputs belong to lm_sensors cells; site fixtures would
-# otherwise gain the dummy module's dummy0 netdev. The fixture has no hwmon
-# chip, so the config only exercises parsing and the set-limit restart.
-lm_sensors_modules: "{{ ['dummy'] if _role_under_test == 'lm_sensors' else [] }}"
-lm_sensors_config: "{{ 'chip \"verify-isa-0000\"\n    ignore temp2\n    set temp1_max 95\n'
-  if _role_under_test == 'lm_sensors' else '' }}"
+# Synthetic sensor inputs. The fixture has no hwmon chip, so the config only
+# exercises parsing and the set-limit restart; dummy stands in for a hwmon
+# driver in the boot list.
+lm_sensors_modules:
+  - dummy
+lm_sensors_config: |
+  chip "verify-isa-0000"
+      ignore temp2
+      set temp1_max 95
 
 # Every test guest is disposable and uses the insecure fixture key. Keep these
 # environment properties independent from the selected storage image.
