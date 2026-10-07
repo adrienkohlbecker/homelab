@@ -1,30 +1,11 @@
 """Unit tests for test/testall.py — joblog I/O and result types."""
 
-import argparse
 import asyncio
 from pathlib import Path
 from typing import cast
 
 import pytest
 import testall
-
-
-def test_comma_separated_normalizes_values() -> None:
-    parse = testall._comma_separated()
-
-    assert parse(" nginx, podman,nginx ") == frozenset({"nginx", "podman"})
-
-
-def test_comma_separated_rejects_empty_values() -> None:
-    with pytest.raises(argparse.ArgumentTypeError, match="at least one value"):
-        testall._comma_separated()(" , ")
-
-
-def test_comma_separated_rejects_unknown_choices() -> None:
-    parse = testall._comma_separated(choices=("lab", "minimal"), label="machine profile")
-
-    with pytest.raises(argparse.ArgumentTypeError, match=r"unknown machine profile\(s\): pug"):
-        parse("lab,pug")
 
 
 def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -52,7 +33,6 @@ def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch)
         testall._run_role(
             1,
             testall.TestCell("lab", "noble", "test"),
-            [],
             asyncio.Semaphore(1),
         )
     )
@@ -90,3 +70,24 @@ class TestJoblogRoundTrip:
     def test_read_missing_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(testall, "LOG_FILE", tmp_path / "nonexistent.tsv")
         assert testall._read_joblog() == []
+
+
+def test_retry_failed_reruns_failures_and_updates_them_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(testall, "LOG_FILE", tmp_path / "out.tsv")
+    passed = testall.JobResult(testall.TestCell("lab", "noble", "nginx"), 1.0, 0, "t0")
+    failed = testall.JobResult(testall.TestCell("lab", "noble", "podman"), 2.0, 1, "t0")
+    testall._write_joblog([passed, failed])
+    rerun: list[testall.TestCell] = []
+
+    async def run_all(cells: list[testall.TestCell], jobs: int) -> tuple[list[testall.JobResult], bool]:
+        rerun.extend(cells)
+        return [testall.JobResult(cell, 3.0, 0, "t1") for cell in cells], False
+
+    monkeypatch.setattr(testall, "run_all", run_all)
+    monkeypatch.setattr(testall.sys, "argv", ["testall.py", "--retry-failed"])
+
+    assert testall.main() == 0
+    assert rerun == [failed.cell]
+    assert testall._read_joblog() == [passed, testall.JobResult(failed.cell, 3.0, 0, "t1")]
