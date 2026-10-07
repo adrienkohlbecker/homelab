@@ -360,7 +360,7 @@ create_extra_pools() {
 #   5 = rpool (BF00)
 # rpool is always number 5 (single-disk and mirror) and always carved last
 # (-n5:0:0) so it grows into the rest of the disk -- a cloud-image deploy grows
-# p5 (chroot.sh's hetzner_growpart). The mirror-only meta partition is numbered
+# p5 (cloud-init growpart, packer/hetzner). The mirror-only meta partition is numbered
 # 6 but carved physically *before* rpool, so rpool's number never shifts with
 # disk count. Each gets a GPT name (sgdisk -c) for readable lsblk/gdisk output;
 # consumers resolve by filesystem UUID, /dev/md path, or pool label, never
@@ -582,11 +582,10 @@ for role_file in "${ROLE_FILES[@]}"; do
 done
 export CHROOT_ROLE_FILES
 
-# Stage the Hetzner image setup (cloud-init drop-in for this release,
-# datasource pin, first-boot growpart unit) so chroot.sh can run it inside
-# the target root. Under /var/tmp, not /tmp: arch-chroot shadows the
-# chroot's /tmp with a private tmpfs, hiding files pre-staged there. Skipped
-# on the qemu fixtures and the bare-metal path.
+# Stage the Hetzner image setup (cloud-init drop-ins and install script) so
+# chroot.sh can run it inside the target root. Under /var/tmp, not /tmp:
+# arch-chroot shadows the chroot's /tmp with a private tmpfs, hiding files
+# pre-staged there. Skipped on the qemu fixtures and the bare-metal path.
 if [ "$INSTALL_TARGET" = "hetzner" ]; then
   cp -a "$SCRIPTS_DIR/hetzner" /mnt/var/tmp/hetzner
 fi

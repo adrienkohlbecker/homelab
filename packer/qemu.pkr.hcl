@@ -165,7 +165,7 @@ locals {
     }
     # hetzner: ZFS-root image for Hetzner Cloud. The 40G Podman partition must
     # be present in the image because p5 follows it and ZFS cannot be shrunk or
-    # moved on first boot. chroot.sh's hetzner_growpart.service grows p5 into
+    # moved on first boot. cloud-init's growpart (99-hetzner.cfg) grows p5 into
     # the cpx22's remaining ~16G on first boot.
     hetzner = {
       disks       = "/dev/vdb"
@@ -306,8 +306,8 @@ build {
     destination = "/home/vagrant/"
   }
 
-  # Hetzner image setup: per-release cloud-init drop-in, datasource pin,
-  # first-boot growpart unit + install script. provision.sh stages the whole
+  # Hetzner image setup: cloud-init drop-in, datasource and growpart pin, and
+  # install script. provision.sh stages the whole
   # packer/hetzner dir into the build VM; chroot.sh runs install.sh inside
   # the target root.
   provisioner "file" {

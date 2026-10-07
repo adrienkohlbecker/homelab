@@ -223,7 +223,7 @@ main() {
   # The streamed image's GPT backup header sits at the image's own end, not the
   # true ~76G disk end the firmware expects. Relocate it so the GPT
   # is consistent with the real disk and the firmware boots the snapshot cleanly.
-  # hetzner_growpart.service relocates it too, but only after a successful boot --
+  # cloud-init's growpart relocates it too, but only after a successful boot --
   # fixing it here keeps a misplaced backup header from blocking that boot.
   echo "==> relocating the GPT backup header to the disk end"
   ssh_rescue 'sgdisk -e /dev/sda'
