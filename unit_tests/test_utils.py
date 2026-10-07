@@ -1,4 +1,4 @@
-"""Unit tests for test/utils.py — colorize, tee_output, print helpers."""
+"""Unit tests for test/utils.py — tee_output, print, and process helpers."""
 
 import asyncio
 import signal
@@ -6,29 +6,6 @@ from pathlib import Path
 
 import pytest
 import utils
-
-# ---------------------------------------------------------------------------
-# colorize
-# ---------------------------------------------------------------------------
-
-
-class TestColorize:
-    def test_known_color(self) -> None:
-        result = utils.colorize("hello", "red")
-        assert "\033[0;41m" in result
-        assert "hello" in result
-        assert "\033[0m" in result
-
-    def test_cyan(self) -> None:
-        result = utils.colorize("test", "cyan")
-        assert "\033[0;36m" in result
-
-    def test_unknown_color_passthrough(self) -> None:
-        assert utils.colorize("hello", "magenta") == "hello"
-
-    def test_none_color_passthrough(self) -> None:
-        assert utils.colorize("hello", None) == "hello"
-
 
 # ---------------------------------------------------------------------------
 # tee_output

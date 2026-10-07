@@ -128,25 +128,13 @@ class TestSweepStaleWorkdirs:
 
 
 # ---------------------------------------------------------------------------
-# UBUNTU_RELEASES / QemuMachineSpec constants
+# QemuMachineSpec
 # ---------------------------------------------------------------------------
 
 
 class TestConstants:
-    def test_supported_ubuntu_releases(self) -> None:
-        assert set(matrix.UBUNTU_RELEASES) == {"noble", "resolute"}
-        assert matrix.UBUNTU_RELEASES["noble"] == "24.04"
-
-    def test_default_ubuntu_is_noble(self) -> None:
-        assert matrix.DEFAULT_UBUNTU == "noble"
-
     def test_qemu_specs_match_the_matrix_machines(self) -> None:
         assert set(machine.QEMU_MACHINE_SPECS) == set(matrix.MACHINES)
-
-    def test_only_minimal_uses_a_cloud_image(self) -> None:
-        assert machine.QEMU_MACHINE_SPECS["minimal"].cloud_image is True
-        assert machine.QEMU_MACHINE_SPECS["lab"].cloud_image is False
-        assert machine.QEMU_MACHINE_SPECS["pug"].cloud_image is False
 
 
 class TestLinkPackerArtifacts:

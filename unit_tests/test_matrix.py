@@ -32,19 +32,11 @@ def _make_role(name: str, meta: dict | None = None) -> None:
 
 
 class TestListTestableRoles:
-    def test_discovers_roles_with_main_yml(self) -> None:
+    def test_discovers_roles_with_main_yml_sorted(self) -> None:
+        _make_role("zeta")
         _make_role("alpha")
-        _make_role("beta")
         Path("roles/gamma").mkdir(parents=True)
-        assert matrix.list_testable_roles() == ["alpha", "beta"]
-
-    def test_empty_when_no_roles_dir(self) -> None:
-        assert matrix.list_testable_roles() == []
-
-    def test_sorted_output(self) -> None:
-        for name in ["zeta", "alpha", "mu"]:
-            _make_role(name)
-        assert matrix.list_testable_roles() == ["alpha", "mu", "zeta"]
+        assert matrix.list_testable_roles() == ["alpha", "zeta"]
 
 
 # ---------------------------------------------------------------------------

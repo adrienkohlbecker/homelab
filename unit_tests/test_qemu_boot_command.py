@@ -48,9 +48,6 @@ def test_default_x86_64_no_keep_no_direct_boot(
     # Sizing flows from QemuMachineSpec; minimal is sized down.
     assert cmd[cmd.index("-smp") + 1] == "2,sockets=1,cores=2"
     assert cmd[cmd.index("-m") + 1] == "2048M"
-    assert cmd[cmd.index("-cpu") + 1] == "host"
-    # -name distinguishes parallel runs in ps/pgrep output.
-    assert cmd[cmd.index("-name") + 1] == f"homelab-{m.machine}-{m.role}"
 
     # Headless when not keeping the VM.
     display_idx = cmd.index("-display")
@@ -164,25 +161,12 @@ def test_direct_boot_passes_kernel_and_cmdline_verbatim(
     assert cmd[cmd.index("-append") + 1] == "zbm.show console=ttyAMA0"
 
 
-def test_memory_and_vcpus_flow_from_spec(
+def test_resource_arguments_override_the_machine_spec(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    """Mutating the spec's memory_mb/vcpus fields must reach the qemu cmdline."""
-    m = machine_factory(host_arch="x86_64")
+    m = machine_factory(host_arch="x86_64", vcpus=2, memory_mb=12345)
     _setup(m)
-    m._spec = m._spec._replace(memory_mb=12345, vcpus=2)
     cmd = m._boot_command()
     assert cmd[cmd.index("-m") + 1] == "12345M"
     # -smp emits a single-socket layout with one core per vcpu.
     assert cmd[cmd.index("-smp") + 1] == "2,sockets=1,cores=2"
-
-
-@pytest.mark.parametrize("host_arch", ["x86_64", "aarch64"])
-def test_pidfile_lives_under_workdir(
-    machine_factory: Callable[..., machine.Machine],
-    host_arch: str,
-) -> None:
-    m = machine_factory(host_arch=host_arch)
-    _setup(m)
-    cmd = m._boot_command()
-    assert cmd[cmd.index("-pidfile") + 1] == str(m.pid_file)

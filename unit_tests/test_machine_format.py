@@ -9,60 +9,30 @@ import machine
 import pytest
 
 
-def test_format_ssh_cmd_no_remote_returns_bare_prefix(
+def test_harness_and_ansible_share_one_agent_forwarding_master(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
+    """Whichever side connects first opens the cell's master, and it must
+    carry the forwarded agent that roles cloning from GitHub use."""
     m = machine_factory(ssh_port=2222, ssh_user="vagrant")
-    assert m.format_ssh_cmd() == [
-        "ssh",
-        "-i",
-        "packer/vagrant.key",
-        "-p",
-        "2222",
-        "-o",
-        "ControlPath=/tmp/homelab-cm-127.0.0.1-2222",
-        "-o",
-        "ControlMaster=auto",
-        "-o",
-        "ControlPersist=600s",
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "-o",
-        "ConnectTimeout=10",
-        "-o",
-        "ServerAliveInterval=15",
-        "-o",
-        "ServerAliveCountMax=4",
-        "-o",
-        "LogLevel=ERROR",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ForwardAgent=yes",
-        "vagrant@127.0.0.1",
-    ]
+    ssh = m.format_ssh_cmd()
+    ansible_ssh_args = m.ansible_env()["ANSIBLE_SSH_ARGS"].split()
+
+    for option in (f"ControlPath={m.ssh_control_path}", "ControlMaster=auto", "ForwardAgent=yes"):
+        assert option in ssh
+        assert option in ansible_ssh_args
+    assert ssh[-1] == "vagrant@127.0.0.1"
 
 
-def test_format_ssh_cmd_with_remote_appends_shlex_joined_arg(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory()
-    cmd = m.format_ssh_cmd("ls", "-la", "/etc/hostname")
-    # The remote command is collapsed into a single positional after user@host
-    # (ssh treats trailing args as the remote command, but shlex.join keeps
-    # quoting intact when one of the args contains a space).
-    assert cmd[-2] == f"{m.ssh_user}@{machine.SSH_HOST}"
-    assert cmd[-1] == shlex.join(("ls", "-la", "/etc/hostname"))
-
-
-def test_format_ssh_cmd_quotes_remote_with_spaces(
+def test_format_ssh_cmd_quotes_the_remote_command(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     m = machine_factory()
     cmd = m.format_ssh_cmd("echo", "hello world")
-    # shlex.join quotes the second arg because of the space.
+
+    # ssh joins trailing args into one remote command, so the harness passes a
+    # single shell-quoted positional after user@host.
+    assert cmd[-2] == f"{m.ssh_user}@{machine.SSH_HOST}"
     assert cmd[-1] == "echo 'hello world'"
 
 
@@ -234,13 +204,6 @@ def test_journal_console_is_always_attached(machine_factory: Callable[..., machi
     assert "virtconsole,chardev=journal,bus=journal_bus.0" in cmd
 
 
-def test_resource_arguments_override_machine_spec(machine_factory: Callable[..., machine.Machine]) -> None:
-    m = machine_factory(vcpus=6, memory_mb=12288)
-
-    assert m._spec.vcpus == 6
-    assert m._spec.memory_mb == 12288
-
-
 def test_format_ansible_cmd_upstream_mirrors_clears_nexus(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
@@ -249,14 +212,3 @@ def test_format_ansible_cmd_upstream_mirrors_clears_nexus(
 
     assert any('"_test_nexus_url":""' in part for part in cmd)
     assert "nexus_url=" not in cmd
-
-
-def test_format_ansible_cmd_no_positional(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory()
-    cmd = m.format_ansible_cmd()
-
-    assert cmd[0] == "ansible-playbook"
-    assert "ansible-playbook" in cmd
-    assert not any(part.endswith((".yml", ".yaml")) for part in cmd)

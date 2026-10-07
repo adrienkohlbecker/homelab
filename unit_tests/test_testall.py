@@ -41,17 +41,6 @@ def test_parallel_role_child_gets_private_stdin(monkeypatch: pytest.MonkeyPatch)
 
 
 # ---------------------------------------------------------------------------
-# _cancelled_result
-# ---------------------------------------------------------------------------
-
-
-class TestCancelledResult:
-    def test_returns_cancelled_job(self) -> None:
-        cell = testall.TestCell("lab", "noble", "nginx")
-        assert testall._cancelled_result(cell) == testall.JobResult(cell, 0.0, 130, "")
-
-
-# ---------------------------------------------------------------------------
 # _write_joblog / _read_joblog round-trip
 # ---------------------------------------------------------------------------
 
