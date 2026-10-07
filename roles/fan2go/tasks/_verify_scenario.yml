@@ -1,0 +1,33 @@
+# One heat scenario: every sensor at 20°C except those in heat. Wait until
+# the fans in high run near full PWM while the fans in low stay low; a low fan
+# wrongly wired to a heated sensor rises with the others and fails the wait.
+- name: _verify | Set sensor temperatures ({{ fan2go_scenario.heat }})
+  copy:
+    dest: "{{ fan2go_verify_dir }}/{{ item.id }}.temp"
+    content: "{{ (fan2go_scenario.heat[item.id] | default(20)) * 1000 }}\n"
+    mode: "0644"
+  loop: "{{ fan2go_verify_config.sensors }}"
+  loop_control:
+    label: "{{ item.id }}"
+  become: true
+
+- name: _verify | Wait for the fan PWM split ({{ fan2go_scenario.heat }})
+  vars:
+    fan_ids: "{{ fan2go_verify_config.fans | map(attribute='id') | list }}"
+    pwm: "{{ dict(fan_ids | zip(fan2go_verify_pwm.stdout_lines | map('int'))) }}"
+  command:
+    # fan2go writes PWM without a trailing newline; awk prints one per file.
+    argv: >-
+      {{ ['awk', '1'] + (fan_ids | map('regex_replace', '^', fan2go_verify_dir ~ '/')
+                             | map('regex_replace', '$', '.pwm') | list) }}
+  register: fan2go_verify_pwm
+  changed_when: false
+  until: >-
+    (pwm | length) == (fan_ids | length)
+    and (pwm | dict2items | selectattr('key', 'in', fan2go_scenario.high)
+         | map(attribute='value') | select('lt', 230) | list | length) == 0
+    and (pwm | dict2items | selectattr('key', 'in', fan2go_scenario.low)
+         | map(attribute='value') | select('gt', 128) | list | length) == 0
+  retries: 60
+  delay: 1
+  become: true

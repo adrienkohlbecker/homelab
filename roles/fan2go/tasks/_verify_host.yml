@@ -1,0 +1,109 @@
+# One per-host config: validate it as rendered, then run it file-backed.
+# Input: fan2go_verify = {host, scenarios: [{heat: {sensor: °C}, high, low}]}.
+- name: _verify | Set the scratch paths for {{ fan2go_verify.host }}
+  set_fact:
+    fan2go_verify_dir: /run/fan2go_verify/{{ fan2go_verify.host }}
+    # Two disks prove the per-disk curves aggregate through the maximum.
+    fan2go_verify_config: >-
+      {{ lookup('template', fan2go_verify.host ~ '.yaml.j2',
+                template_vars={'rotational_disks_by_id': ['ata-disk-1', 'ata-disk-2']})
+         | from_yaml }}
+
+- name: _verify | Create the scratch directory for {{ fan2go_verify.host }}
+  file:
+    path: "{{ fan2go_verify_dir }}"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _verify | Write the rendered config for {{ fan2go_verify.host }}
+  copy:
+    dest: "{{ fan2go_verify_dir }}/rendered.yaml"
+    content: "{{ fan2go_verify_config | to_nice_yaml }}"
+    mode: "0644"
+  become: true
+
+- name: _verify | Validate the rendered config for {{ fan2go_verify.host }}
+  command:
+    argv: [/usr/local/bin/fan2go, -c, "{{ fan2go_verify_dir }}/rendered.yaml", --no-style, config, validate]
+  changed_when: false
+  become: true
+
+# Rebind every fan to a PWM file plus an RPM file and every sensor to a
+# millidegree file, keeping ids, curves, and fan limits as rendered.
+- name: _verify | Write the file-backed config for {{ fan2go_verify.host }}
+  copy:
+    dest: "{{ fan2go_verify_dir }}/file_backed.yaml"
+    content: |
+      {% set fans = [] %}
+      {% for fan in fan2go_verify_config.fans %}
+      {%   set _ = fans.append(fan | dict2items | rejectattr('key', 'eq', 'hwmon') | items2dict
+             | combine({'file': {'path': fan2go_verify_dir ~ '/' ~ fan.id ~ '.pwm',
+                                 'rpmPath': fan2go_verify_dir ~ '/' ~ fan.id ~ '.rpm'}})) %}
+      {% endfor %}
+      {% set sensors = [] %}
+      {% for sensor in fan2go_verify_config.sensors %}
+      {%   set _ = sensors.append({'id': sensor.id,
+                                   'file': {'path': fan2go_verify_dir ~ '/' ~ sensor.id ~ '.temp'}}) %}
+      {% endfor %}
+      {{ fan2go_verify_config
+         | combine({'fans': fans, 'sensors': sensors, 'dbPath': fan2go_verify_dir ~ '/fan2go.db'})
+         | to_nice_yaml }}
+    mode: "0644"
+  become: true
+
+- name: _verify | Seed full-speed fans with a steady RPM for {{ fan2go_verify.host }}
+  copy:
+    dest: "{{ fan2go_verify_dir }}/{{ item.0.id }}.{{ item.1.ext }}"
+    content: "{{ item.1.value }}\n"
+    mode: "0644"
+  loop: "{{ fan2go_verify_config.fans | product([{'ext': 'pwm', 'value': 255}, {'ext': 'rpm', 'value': 1000}]) | list }}"
+  loop_control:
+    label: "{{ item.0.id }}.{{ item.1.ext }}"
+  become: true
+
+- name: _verify | Seed every sensor cold for {{ fan2go_verify.host }}
+  copy:
+    dest: "{{ fan2go_verify_dir }}/{{ item.id }}.temp"
+    content: "20000\n"
+    mode: "0644"
+  loop: "{{ fan2go_verify_config.sensors }}"
+  loop_control:
+    label: "{{ item.id }}"
+  become: true
+
+- name: _verify | Start fan2go on the file-backed config for {{ fan2go_verify.host }}
+  command:
+    argv:
+      - systemd-run
+      - --unit=fan2go-verify-{{ fan2go_verify.host }}
+      - /usr/local/bin/fan2go
+      - -c
+      - "{{ fan2go_verify_dir }}/file_backed.yaml"
+      - --no-style
+  changed_when: true
+  become: true
+
+- name: _verify | Wait for the API to list every configured fan on {{ fan2go_verify.host }}
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.fan2go_api }}/fan"
+  register: fan2go_verify_api
+  until: >-
+    fan2go_verify_api.status | default(0) == 200
+    and (fan2go_verify_api.json | default({}) | list | sort)
+        == (fan2go_verify_config.fans | map(attribute='id') | sort)
+  retries: 60
+  delay: 1
+
+- name: _verify | Run each heat scenario for {{ fan2go_verify.host }}
+  include_tasks: _verify_scenario.yml
+  loop: "{{ fan2go_verify.scenarios }}"
+  loop_control:
+    loop_var: fan2go_scenario
+
+# Mid-run reset: the next host's daemon binds the same API port.
+- name: _verify | Stop fan2go for {{ fan2go_verify.host }}
+  systemd:
+    name: fan2go-verify-{{ fan2go_verify.host }}.service
+    state: stopped
+  become: true

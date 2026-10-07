@@ -1,3 +1,49 @@
-# No fixture enables fan2go (see meta/test.yml), so there is no converged
-# state to assert. unit_tests/test_fan2go_curves.py renders the per-host
-# configs and checks their sensor and curve wiring.
+# No fixture has the nct6798/coretemp hwmon chips or SATA disks the per-host
+# configs bind to, so the converge is a no-op here. Exercise the pinned
+# binary against the real per-host configs instead: validate each one as
+# rendered, then run the daemon on it with every fan and sensor rebound to a
+# file, and drive the sensor files to check the curves wire each fan to the
+# right sensors. unit_tests/test_fan2go_curves.py covers the curve arithmetic.
+- name: _verify | Install libsensors
+  apt:
+    pkg: libsensors5
+    cache_valid_time: 3600
+  become: true
+
+- name: _verify | Download the pinned fan2go binary
+  get_url:
+    url: "{{ fan2go_artifacts[ansible_architecture].url }}"
+    dest: /usr/local/bin/fan2go
+    checksum: "sha256:{{ fan2go_artifacts[ansible_architecture].sha256 }}"
+    mode: "0755"
+  become: true
+
+- name: _verify | Exercise each per-host config
+  include_tasks: _verify_host.yml
+  loop:
+    - host: lab
+      # cold: every sensor at 20°C; each later scenario heats one sensor.
+      scenarios:
+        - heat: {}
+          high: []
+          low: [ cpu_fan, cha_fan1_exhaust, cha_fan3_intake, cha_fan2_intake ]
+        - heat: {hdd_2_temp: 60}
+          high: [ cha_fan1_exhaust, cha_fan3_intake, cha_fan2_intake ]
+          low: [ cpu_fan ]
+        - heat: {cpu_package: 90}
+          high: [ cpu_fan, cha_fan1_exhaust ]
+          low: [ cha_fan3_intake, cha_fan2_intake ]
+    - host: pug
+      scenarios:
+        - heat: {}
+          high: []
+          low: [ cha_fan_2, cha_fan_1_hdd ]
+        - heat: {hdd_2_temp: 60}
+          high: [ cha_fan_2, cha_fan_1_hdd ]
+          low: []
+        - heat: {cpu_package_temp: 90}
+          high: [ cha_fan_2 ]
+          low: [ cha_fan_1_hdd ]
+  loop_control:
+    loop_var: fan2go_verify
+    label: "{{ fan2go_verify.host }}"

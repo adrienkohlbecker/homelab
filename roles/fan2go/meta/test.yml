@@ -1,7 +1,2 @@
-# Every task is gated on fan2go_enabled, which only the physical hosts set:
-# QEMU exposes no hwmon fans for the daemon to drive, so a cell would converge
-# a no-op. unit_tests/test_fan2go_curves.py covers the per-host configs.
-skip:
-  lab: >-
-    No fixture can run fan2go; the per-host configs are covered by
-    unit_tests/test_fan2go_curves.py.
+arm:
+  - lab
