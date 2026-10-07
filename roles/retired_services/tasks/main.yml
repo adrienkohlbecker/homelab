@@ -321,28 +321,45 @@
     - retired_services
     - podman
 
-- name: Remove the retired operator prune user timer
-  when: retired_services_operator_prune_units.results[0].stat.exists
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: podman_prune.timer
-      user: "{{ ansible_user_id }}"
+# The systemd module derives XDG_RUNTIME_DIR from the become_user uid, which
+# reaches the operator's lingered user manager; disable also drops the links
+# under ~/.config/systemd/user.
+- name: Stop and disable the retired operator prune user units
+  when: item.stat.exists
+  systemd:
+    name: podman_prune.{{ item.item }}
+    state: stopped
+    enabled: false
+    scope: user
+  loop: "{{ retired_services_operator_prune_units.results }}"
+  loop_control:
+    label: podman_prune.{{ item.item }}
+  become: true
+  become_user: "{{ ansible_user_id }}"
   tags:
     - retired_services
     - podman
 
-- name: Remove the retired operator prune user service
-  when: retired_services_operator_prune_units.results[1].stat.exists
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: podman_prune.service
-      user: "{{ ansible_user_id }}"
+- name: Remove the retired operator prune user unit files
+  file:
+    path: /etc/systemd/user/podman_prune.{{ item }}
+    state: absent
+  loop:
+    - timer
+    - service
+  register: retired_services_operator_prune_removed
+  become: true
+  tags:
+    - retired_services
+    - podman
+
+- name: Reload the operator user manager
+  when: retired_services_operator_prune_removed.changed
+  systemd:
+    daemon_reload: true
+    scope: user
+  become: true
+  become_user: "{{ ansible_user_id }}"
   tags:
     - retired_services
     - podman
