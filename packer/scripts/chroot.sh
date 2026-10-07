@@ -217,13 +217,6 @@ apt-get install --yes "$initramfs_generator" linux-generic
 
 apt-get install --yes curl dosfstools "$zfs_initramfs_package" zfsutils-linux
 
-# Enable systemd ZFS services
-
-systemctl enable zfs.target
-systemctl enable zfs-import-cache
-systemctl enable zfs-mount
-systemctl enable zfs-import.target
-
 # Cap the ARC on small-RAM cloud VMs (hetzner cpx22 = 3.7 GB; default ARC
 # of ~50% of RAM would starve headscale). Written to modprobe.d so it applies
 # both at boot and inside the initramfs (both providers include modprobe.d),
