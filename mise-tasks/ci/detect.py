@@ -48,9 +48,9 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"group_vars/all/[^/]+\.(yml|yaml)",
     r"group_vars/test\.yml",
     r"group_vars/storage_lab\.yml",
-    r"test/[^/]+\.py",
+    # The harness, its inventory, and fixture files packer bakes into every image.
+    r"test/[^/]+",
     r"test/host_vars/lab\.yml",
-    r"test/inventory\.ini",
     r"test/playbooks/.+",
     r"ansible\.cfg",
     r"vault-client\.sh",

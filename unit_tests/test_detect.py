@@ -55,6 +55,7 @@ class TestClassifyChangedFiles:
             ("test/testall.py", True),
             ("test/matrix.py", True),
             ("test/inventory.ini", True),
+            ("test/homelab_guest_journal.service", True),
             ("test/playbooks/site.yml", True),
             ("ansible.cfg", True),
             ("vault-client.sh", True),

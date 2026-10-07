@@ -67,20 +67,22 @@ def _cell_loopback_host() -> str:
 
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
-WAN_PROBE_PORTS_PATH = Path(__file__).parent.parent / "data" / "wan_probe_ports.yml"
 GUEST_JOURNAL_UNIT_PATH = Path(__file__).parent / "homelab_guest_journal.service"
 
 
-def _load_wan_probe_ports() -> dict[str, tuple[int, ...]]:
-    """Load the shared controller-side WAN probe surface.
-
-    QEMU maps these guest ports to random localhost ports.
-    """
-    data = yaml.safe_load(WAN_PROBE_PORTS_PATH.read_text()) or {}
-    return {proto: tuple(int(port) for port in data.get(proto, ())) for proto in ("tcp", "udp")}
-
-
-DEFAULT_WAN_FORWARDS = _load_wan_probe_ports()
+# Guest ports the controller-side firewall _verify probes reach as WAN traffic;
+# qemu forwards each from a free port on the cell's loopback.
+DEFAULT_WAN_FORWARDS: dict[str, tuple[int, ...]] = {
+    "tcp": (
+        18080,  # published-container DNAT fixture
+        9092,  # Authelia forward-auth negative WAN-source probe
+    ),
+    "udp": (
+        51820,  # WireGuard
+        5353,  # mDNS negative WAN-source probe
+        41641,  # Tailscale direct underlay
+    ),
+}
 
 # Pinned through ANSIBLE_CONFIG (ansible_env): ansible silently ignores an
 # ansible.cfg in a world-writable cwd, which the GitLab CI checkout is, and
@@ -971,10 +973,7 @@ class Machine:
             for proto, guest_ports in DEFAULT_WAN_FORWARDS.items():
                 sock_type = socket.SOCK_STREAM if proto == "tcp" else socket.SOCK_DGRAM
                 for guest_port in guest_ports:
-                    key = str(guest_port)
-                    if key in self.wan_forward_ports[proto]:
-                        continue
-                    self.wan_forward_ports[proto][key] = _reserve(sock_type)
+                    self.wan_forward_ports[proto][str(guest_port)] = _reserve(sock_type)
         finally:
             for s in reserved:
                 s.close()
