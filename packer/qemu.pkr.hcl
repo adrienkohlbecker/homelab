@@ -104,56 +104,60 @@ locals {
   firmware_cfg = local.guest.uefi_firmware[local.host_os]
 
   # Each qemu source below has one entry. disk_sizes covers every attached disk
-  # in device order; the space-delimited disks prefix becomes rpool and
-  # extra_disks supplies the remaining devices to extra_pools in order.
-  # Supported layouts are "" and mirror; extra_pools accepts apoc, dozer, and
-  # tank_mouse. Empty optional fields disable their feature; zfs_arc_max=0
-  # disables the cap. The source name selects qemu versus Hetzner installation.
-  # Keep pug and lab explicit here to document the physical hosts in the rack.
-  variant_config = {
+  # in device order; env is the variant's part of provision.sh's environment.
+  # The space-delimited DISKS prefix becomes rpool and EXTRA_DISKS supplies the
+  # remaining devices to EXTRA_POOLS in order. Supported layouts are "" and
+  # mirror; EXTRA_POOLS accepts apoc, dozer, and tank_mouse. Empty optional
+  # fields disable their feature. The source name selects qemu versus Hetzner
+  # installation. Keep pug and lab explicit here to document the physical hosts
+  # in the rack.
+  variants = {
     # pug: single-disk rpool + a dedicated podman partition + apoc mirror.
     # The small fixture partition proves the prod backend without carrying the
     # full service-image footprint.
     pug = {
-      disks       = "/dev/vdb"
-      extra_disks = "/dev/vdc /dev/vdd"
-      disk_sizes  = ["40G", "1G", "1G"]
-      layout      = ""
-      swap_size   = "8G"
-      podman_size = "4G"
-      meta_size   = ""
-      extra_pools = "apoc"
-      zfs_arc_max = 0
+      disk_sizes = ["40G", "1G", "1G"]
+      env = {
+        DISKS       = "/dev/vdb"
+        EXTRA_DISKS = "/dev/vdc /dev/vdd"
+        LAYOUT      = ""
+        SWAP_SIZE   = "8G"
+        PODMAN_SIZE = "4G"
+        META_SIZE   = ""
+        EXTRA_POOLS = "apoc"
+      }
     }
     # lab: mdadm EFI/swap/podman, 3-disk mirror rpool, dozer mirror, tank raidz2
     # + special mirror, and mouse mirror. The podman RAID5 needs room for the
     # full-site container fleet; the dozer mirror needs transcode scratch space.
     # Prod sizing lives in notes/unified_disk_layout.md.
     lab = {
-      disks       = "/dev/vdb /dev/vdc /dev/vdd"
-      extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes  = ["60G", "60G", "60G", "4G", "4G", "1.5G", "1.5G", "1G", "1G"]
-      layout      = "mirror"
-      swap_size   = "8G"
-      podman_size = "25G"
-      meta_size   = "2G"
-      extra_pools = "dozer tank_mouse"
-      zfs_arc_max = 0
+      disk_sizes = ["60G", "60G", "60G", "4G", "4G", "1.5G", "1.5G", "1G", "1G"]
+      env = {
+        DISKS       = "/dev/vdb /dev/vdc /dev/vdd"
+        EXTRA_DISKS = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
+        LAYOUT      = "mirror"
+        SWAP_SIZE   = "8G"
+        PODMAN_SIZE = "25G"
+        META_SIZE   = "2G"
+        EXTRA_POOLS = "dozer tank_mouse"
+      }
     }
     # hetzner: ZFS-root image for Hetzner Cloud. The 40G Podman partition must
     # be present in the image because p5 follows it and ZFS cannot be shrunk or
     # moved on first boot. cloud-init's growpart (99-hetzner.cfg) grows p5 into
     # the cpx22's remaining ~16G on first boot.
     hetzner = {
-      disks       = "/dev/vdb"
-      extra_disks = ""
-      disk_sizes  = ["60G"]
-      layout      = ""
-      swap_size   = "4G"
-      podman_size = "40G"
-      meta_size   = ""
-      extra_pools = ""
-      zfs_arc_max = 536870912
+      disk_sizes = ["60G"]
+      env = {
+        DISKS       = "/dev/vdb"
+        EXTRA_DISKS = ""
+        LAYOUT      = ""
+        SWAP_SIZE   = "4G"
+        PODMAN_SIZE = "40G"
+        META_SIZE   = ""
+        EXTRA_POOLS = ""
+      }
     }
   }
 
@@ -257,19 +261,19 @@ build {
   source "qemu.ubuntu" {
     name                 = "pug"
     output_directory     = "${var.build_directory}/${source.name}"
-    disk_additional_size = local.variant_config[source.name].disk_sizes
+    disk_additional_size = local.variants[source.name].disk_sizes
   }
 
   source "qemu.ubuntu" {
     name                 = "lab"
     output_directory     = "${var.build_directory}/${source.name}"
-    disk_additional_size = local.variant_config[source.name].disk_sizes
+    disk_additional_size = local.variants[source.name].disk_sizes
   }
 
   source "qemu.ubuntu" {
     name                 = "hetzner"
     output_directory     = "${var.build_directory}/${source.name}"
-    disk_additional_size = local.variant_config[source.name].disk_sizes
+    disk_additional_size = local.variants[source.name].disk_sizes
   }
 
   provisioner "file" {
@@ -310,14 +314,7 @@ build {
     # uses UBUNTU_MIRROR* during the build; chroot.sh swaps in the
     # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image
     # never points at Nexus.
-    env = {
-      "DISKS"                           = local.variant_config[source.name].disks
-      "EXTRA_DISKS"                     = local.variant_config[source.name].extra_disks
-      "LAYOUT"                          = local.variant_config[source.name].layout
-      "SWAP_SIZE"                       = local.variant_config[source.name].swap_size
-      "PODMAN_SIZE"                     = local.variant_config[source.name].podman_size
-      "META_SIZE"                       = local.variant_config[source.name].meta_size
-      "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
+    env = merge(local.variants[source.name].env, {
       "UBUNTU_NAME"                     = local.ubuntu_name
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
@@ -328,8 +325,7 @@ build {
       "ZBM_VERSION"                     = local.arch_cfg.zbm_version
       "REFIND_DEB_URL"                  = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""
       "REFIND_DEB_SHA256"               = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""
-      "ZFS_ARC_MAX"                     = "${local.variant_config[source.name].zfs_arc_max}"
-    }
+    })
   }
 
   # Records only the sources that built successfully; packer:build finalizes

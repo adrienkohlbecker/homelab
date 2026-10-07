@@ -198,14 +198,6 @@ apt-get install --yes "$initramfs_generator" linux-generic
 
 apt-get install --yes curl dosfstools "$zfs_initramfs_package" zfsutils-linux
 
-# Cap the ARC on small-RAM cloud VMs (hetzner cpx22 = 3.7 GB; default ARC
-# of ~50% of RAM would starve headscale). Written to modprobe.d so it applies
-# both at boot and inside the initramfs (both providers include modprobe.d),
-# which matters because zfs loads from the initramfs on a root-on-ZFS host.
-if [ "${ZFS_ARC_MAX:-0}" != "0" ]; then
-  echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
-fi
-
 # Keep VGA output on every target. QEMU adds the architecture-specific serial
 # console consumed by verify-boot and disables mitigations only in disposable
 # nested-KVM cells. The fragment preserves that tuning when the boot role
