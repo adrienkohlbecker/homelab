@@ -19,6 +19,8 @@ UBUNTU_RELEASES: dict[str, str] = {
     codename: release["version"] for codename, release in _UBUNTU_CATALOG["releases"].items()
 }
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
+# The qemu fixtures machine.py can boot.
+MACHINES = ("minimal", "lab", "pug")
 DEFAULT_MACHINES = ("lab",)
 # ARM Lab uses a published Packer image; Minimal downloads Ubuntu's cloud image.
 ARM_CAPABLE_MACHINES = frozenset({"lab", "minimal"})
@@ -42,7 +44,8 @@ class RoleTestConfig:
     machines: tuple[str, ...]
     ubuntu: tuple[str, ...]
     skip: frozenset[tuple[str, str]]
-    arm_machines: tuple[str, ...]
+    # (machine, codename) cells that also run on the ARM lane.
+    arm_cells: tuple[tuple[str, str], ...]
     # Guest RAM overrides in MiB, keyed by machine; unlisted machines keep
     # their QemuMachineSpec default.
     memory_mb: Mapping[str, int] = field(default_factory=dict)
@@ -64,15 +67,14 @@ def list_testable_roles() -> list[str]:
     return [d.name for d in sorted(roles_dir.iterdir()) if d.is_dir() and (d / "tasks" / "main.yml").exists()]
 
 
-def load_role_test_config(role: str, machine_names: tuple[str, ...] = ()) -> RoleTestConfig:
+def load_role_test_config(role: str) -> RoleTestConfig:
     """Load and validate one role's cached test metadata."""
 
-    meta_path = Path(f"roles/{role}/meta/test.yml").resolve()
-    return _load_role_test_config(meta_path, machine_names)
+    return _load_role_test_config(Path(f"roles/{role}/meta/test.yml").resolve())
 
 
 @functools.cache
-def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> RoleTestConfig:
+def _load_role_test_config(meta_path: Path) -> RoleTestConfig:
     """Parse one absolute metadata path once per process."""
 
     if not meta_path.exists():
@@ -86,8 +88,6 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
         raise RoleTestConfigError(meta_path, [f"top-level must be a mapping, got {type(data).__name__}"])
 
     errors: list[str] = []
-    if "machine" in data:
-        errors.append("uses legacy 'machine:' key -- migrate to 'machines:'")
     errors.extend(
         f"unknown top-level key {key!r}; expected one of {sorted(_ROLE_META_KEYS)}"
         for key in sorted(set(data) - _ROLE_META_KEYS)
@@ -112,8 +112,8 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
             if not isinstance(name, str):
                 errors.append(f"machines key must be a string, got {type(name).__name__}")
                 continue
-            if machine_names and name not in machine_names:
-                errors.append(f"machines key {name!r} not in {list(machine_names)}")
+            if name not in MACHINES:
+                errors.append(f"machines key {name!r} not in {list(MACHINES)}")
             if isinstance(machine_config, dict) and set(machine_config) == {"memory_mb"}:
                 value = machine_config["memory_mb"]
                 if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
@@ -158,8 +158,8 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 continue
             machine = parts[0]
             codename = parts[1] if len(parts) == 2 else DEFAULT_UBUNTU
-            if machine_names and machine not in machine_names:
-                errors.append(f"skip {spec!r}: machine {machine!r} not in {list(machine_names)}")
+            if machine not in MACHINES:
+                errors.append(f"skip {spec!r}: machine {machine!r} not in {list(MACHINES)}")
             if len(parts) == 2 and codename == DEFAULT_UBUNTU:
                 errors.append(
                     f"skip {spec!r}: {DEFAULT_UBUNTU!r} is the default release,"
@@ -172,7 +172,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
             skip.add((machine, codename))
 
     raw_arm = data.get("arm", [])
-    arm_machines: list[str] = []
+    arm_cells: list[tuple[str, str]] = []
     if not isinstance(raw_arm, list):
         errors.append(f"arm must be a list, got {type(raw_arm).__name__}")
     else:
@@ -190,10 +190,10 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
                 errors.append(f"arm entry {entry!r}: ubuntu {codename!r} not in {sorted(UBUNTU_RELEASES)}")
             elif (name, codename) in skip:
                 errors.append(f"arm entry {entry!r} skips its own release")
-            elif entry in arm_machines:
+            elif (name, codename) in arm_cells:
                 errors.append(f"duplicate arm machine {entry!r}")
             else:
-                arm_machines.append(entry)
+                arm_cells.append((name, codename))
 
     errors.extend(
         f"ubuntu={codename!r} expands to no test cell"
@@ -205,7 +205,7 @@ def _load_role_test_config(meta_path: Path, machine_names: tuple[str, ...]) -> R
         raise RoleTestConfigError(meta_path, errors)
 
     return RoleTestConfig(
-        base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip), tuple(arm_machines), memory_mb
+        base_prerequisites, tuple(machines), tuple(ubuntu), frozenset(skip), tuple(arm_cells), memory_mb
     )
 
 

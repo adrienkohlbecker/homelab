@@ -140,14 +140,8 @@ class TestConstants:
     def test_default_ubuntu_is_noble(self) -> None:
         assert matrix.DEFAULT_UBUNTU == "noble"
 
-    def test_machine_choices_tuple(self) -> None:
-        assert isinstance(machine.MACHINE_CHOICES, tuple)
-        assert "minimal" in machine.MACHINE_CHOICES
-        assert "lab" in machine.MACHINE_CHOICES
-        assert "pug" in machine.MACHINE_CHOICES
-
-    def test_qemu_specs_match_choices(self) -> None:
-        assert set(machine.QEMU_MACHINE_SPECS.keys()) == set(machine.MACHINE_CHOICES)
+    def test_qemu_specs_match_the_matrix_machines(self) -> None:
+        assert set(machine.QEMU_MACHINE_SPECS) == set(matrix.MACHINES)
 
     def test_only_minimal_uses_a_cloud_image(self) -> None:
         assert machine.QEMU_MACHINE_SPECS["minimal"].cloud_image is True

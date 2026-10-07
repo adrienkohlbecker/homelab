@@ -180,7 +180,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
 }
 
 
-MACHINE_CHOICES: tuple[str, ...] = tuple(QEMU_MACHINE_SPECS)
 _PACKER_DISK_RE = re.compile(r"packer-ubuntu-(\d+)\.(raw|qcow2)")
 
 

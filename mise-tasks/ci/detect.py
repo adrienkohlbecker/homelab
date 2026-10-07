@@ -633,10 +633,9 @@ def _arm_specs(specs: list[str], target: str) -> list[str]:
         return []
     arm_specs: set[str] = set()
     for cell in (ci_spec_to_cell(spec) for spec in specs):
-        for entry in load_role_test_config(cell.role).arm_machines:
-            machine, _, codename = entry.partition(":")
+        for machine, codename in load_role_test_config(cell.role).arm_cells:
             if machine == cell.machine:
-                arm_specs.add(cell_to_ci_spec(cell._replace(ubuntu=codename or DEFAULT_UBUNTU)))
+                arm_specs.add(cell_to_ci_spec(cell._replace(ubuntu=codename)))
     return sorted(arm_specs)
 
 

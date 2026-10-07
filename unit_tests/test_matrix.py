@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import machine
 import matrix
 import pytest
 
@@ -57,7 +56,7 @@ class TestRoleMeta:
     @pytest.mark.parametrize("role", _REPOSITORY_META_ROLES)
     def test_repository_metadata_is_valid(self, role: str, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(_REPO_ROOT)
-        matrix.load_role_test_config(role, tuple(sorted(machine.MACHINE_CHOICES)))
+        matrix.load_role_test_config(role)
 
     def test_default_machine_falls_back_to_lab(self) -> None:
         _make_role("plain")
@@ -99,17 +98,17 @@ class TestRoleMeta:
         with pytest.raises(matrix.RoleTestConfigError, match="base_prerequisites must be a boolean"):
             matrix.load_role_test_config("foundation")
 
-    def test_arm_machines_default_to_empty(self) -> None:
+    def test_arm_cells_default_to_empty(self) -> None:
         _make_role("plain")
-        assert matrix.load_role_test_config("plain").arm_machines == ()
+        assert matrix.load_role_test_config("plain").arm_cells == ()
 
-    def test_arm_machines_read_declared_subset(self) -> None:
+    def test_arm_cells_read_declared_subset(self) -> None:
         _make_role("svc", {"machines": {"lab": None, "minimal": None}, "arm": ["lab", "minimal"]})
-        assert matrix.load_role_test_config("svc").arm_machines == ("lab", "minimal")
+        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "noble"), ("minimal", "noble"))
 
-    def test_arm_machines_accept_a_release_suffix(self) -> None:
+    def test_arm_cells_accept_a_release_suffix(self) -> None:
         _make_role("svc", {"arm": ["lab", "lab:resolute"]})
-        assert matrix.load_role_test_config("svc").arm_machines == ("lab", "lab:resolute")
+        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "noble"), ("lab", "resolute"))
 
     @pytest.mark.parametrize(
         ("arm", "error"),
@@ -120,6 +119,8 @@ class TestRoleMeta:
             (["minimal"], "not in machines"),
             (["pug"], "has no ARM image"),
             (["lab", "lab"], "duplicate arm machine"),
+            (["lab", "lab:noble"], "duplicate arm machine"),
+            (["bogus"], "not in machines"),
         ],
     )
     def test_invalid_arm_machines_are_rejected(self, arm: object, error: str) -> None:

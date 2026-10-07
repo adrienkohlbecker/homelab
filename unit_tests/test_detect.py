@@ -1351,9 +1351,9 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(specs, site_test=True)
         x86_jobs = [name for name in specs if name in doc]
         arm_jobs = {
-            f"{role}:{entry}:aarch64"
+            f"{detect.cell_to_ci_spec(detect.TestCell(machine, codename, role))}:aarch64"
             for role in detect.list_testable_roles()
-            for entry in detect.load_role_test_config(role).arm_machines
+            for machine, codename in detect.load_role_test_config(role).arm_cells
         }
 
         assert len(x86_jobs) == len(specs)

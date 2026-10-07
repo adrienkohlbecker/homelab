@@ -12,13 +12,13 @@ import sys
 from pathlib import Path
 
 from machine import (
-    MACHINE_CHOICES,
     Machine,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
 from matrix import (
     DEFAULT_UBUNTU,
+    MACHINES,
     UBUNTU_RELEASES,
     RoleTestConfig,
     load_role_test_config,
@@ -35,7 +35,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
     parser.add_argument(
         "--machine",
         default=None,
-        choices=MACHINE_CHOICES,
+        choices=MACHINES,
         help="Machine profile to run against (default: first roles/<role>/meta/test.yml `machines:` key, else 'lab')",
     )
     parser.add_argument(
@@ -72,14 +72,11 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
     while pass_args and pass_args[0] == "--":
         pass_args = pass_args[1:]
 
-    # --machine defaults to the role's primary machines: entry. An explicit
-    # CLI value still wins, and argparse's choices validate that path before
-    # this branch runs.
+    # --machine defaults to the role's primary machines: entry, which the
+    # metadata loader has validated. An explicit CLI value still wins.
     role_config = load_role_test_config(args.role)
     if args.machine is None:
         args.machine = next(iter(role_config.machines))
-        if args.machine not in MACHINE_CHOICES:
-            parser.error(f"roles/{args.role}/meta/test.yml: machine {args.machine!r} not in {sorted(MACHINE_CHOICES)}")
 
     return args, pass_args, role_config
 
