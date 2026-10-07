@@ -3,7 +3,7 @@
 
 Usage: publish.py <lockfile> <src_dir> <dst_dir>
 
-Pure-Python wrapper invoked by packer/scripts/postprocess.sh.
+Pure-Python wrapper invoked by mise-tasks/packer/build.sh.
 Holds an exclusive fcntl.flock on <lockfile> for the duration of a
 three-step atomic rename of <src_dir> over <dst_dir>. The test harness
 takes a shared flock on the same path across prepare→ensure_booted in

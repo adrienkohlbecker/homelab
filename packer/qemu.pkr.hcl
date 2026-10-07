@@ -1,7 +1,7 @@
-# Keep `inline` shell to one or two simple commands. Longer provisioner or
-# post-processor logic goes in a checked-in .sh under packer/scripts/ (with
-# `set -euo pipefail`), so shellcheck and shfmt cover it and this stays
-# declarative.
+# Keep `inline` shell to one or two simple commands. Longer provisioner logic
+# goes in a checked-in .sh under packer/scripts/ (with `set -euo pipefail`), so
+# shellcheck and shfmt cover it and this stays declarative. packer:build
+# verifies and publishes each built source after packer returns.
 
 packer {
   required_plugins {
@@ -35,15 +35,9 @@ variable "build_directory" {
   description = "Staging root for per-source build artifacts."
 }
 
-variable "output_directory" {
+variable "image_format" {
   type        = string
-  description = "Parent directory for published per-source artifact dirs."
-}
-
-variable "publish" {
-  type        = bool
-  default     = true
-  description = "When false, build and verify without publishing artifacts."
+  description = "Disk image format: raw or qcow2."
 }
 
 variable "upstream_mirrors" {
@@ -70,7 +64,7 @@ locals {
   guest         = local.architectures[local.arch].guest
 
   # Architecture also controls the build-only guest devices and mirrors. Host OS
-  # independently controls the accelerator and image format.
+  # independently controls the accelerator.
   #
   # Field notes:
   # - qemuargs: aarch64's `virt` machine ships no default graphics or
@@ -103,19 +97,7 @@ locals {
   }
   arch_cfg = local.arch_table[local.arch]
 
-  host_os_table = {
-    linux = {
-      accelerator = "kvm"
-      # ZFS already provides CoW and zstd compression on the Linux builders.
-      image_format = "raw"
-    }
-    darwin = {
-      accelerator = "hvf"
-      # APFS has no filesystem-level compression for these sparse artifacts.
-      image_format = "qcow2"
-    }
-  }
-  host_os_cfg = local.host_os_table[local.host_os]
+  accelerator = { linux = "kvm", darwin = "hvf" }[local.host_os]
 
   # UEFI firmware for this host OS; unsupported pairs (x86_64 on darwin) have
   # no entry and fail the lookup.
@@ -202,7 +184,7 @@ locals {
 }
 
 source "qemu" "ubuntu" {
-  accelerator        = local.host_os_cfg.accelerator
+  accelerator        = local.accelerator
   boot_wait          = "2s"
   cpu_model          = "host"
   cores              = 4
@@ -215,13 +197,13 @@ source "qemu" "ubuntu" {
   disk_interface     = "virtio"
   # Cloud-image disk gets resized to this during boot so cloud-init has
   # room to grow into. provision.sh installs onto packer-ubuntu-1..N
-  # and the drop-cloudimg-disk post-processor deletes this one before
-  # ship — the size only matters for the build-time pivot.
+  # and packer:build deletes this one before publishing — the size only
+  # matters for the build-time pivot.
   disk_size         = "10G"
   efi_boot          = true
   efi_firmware_code = local.firmware_cfg.code
   efi_firmware_vars = local.firmware_cfg.vars
-  format            = local.host_os_cfg.image_format
+  format            = var.image_format
   headless          = true
   iso_checksum      = local.cloud_checksum
   iso_url           = local.cloud_url
@@ -239,9 +221,9 @@ source "qemu" "ubuntu" {
     })
     "meta-data" = ""
   }
-  machine_type = local.guest.machine_type
-  memory       = 4096
-  net_device   = local.guest.net_device
+  machine_type         = local.guest.machine_type
+  memory               = 4096
+  net_device           = local.guest.net_device
   qemu_binary          = "qemu-system-${local.arch}"
   shutdown_command     = "sudo /usr/sbin/shutdown -h now"
   skip_compaction      = true
@@ -348,22 +330,11 @@ build {
     }
   }
 
-  # Final image steps live in a script so the shell is linted and the HCL stays
-  # declarative.
-  post-processors {
-    post-processor "shell-local" {
-      name   = "finalize"
-      script = "${path.root}/scripts/postprocess.sh"
-      environment_vars = [
-        "BUILD_DIRECTORY=${var.build_directory}",
-        "SOURCE_NAME=${source.name}",
-        "IMAGE_FORMAT=${local.host_os_cfg.image_format}",
-        "INSTALL_TARGET=${source.name == "hetzner" ? "hetzner" : "qemu"}",
-        "UBUNTU_NAME=${local.ubuntu_name}",
-        "PUBLISH=${var.publish}",
-        "OUTPUT_DIRECTORY=${var.output_directory}",
-      ]
-    }
+  # Records only the sources that built successfully; packer:build finalizes
+  # exactly those. The manifest's own name field is the source type (ubuntu).
+  post-processor "manifest" {
+    output      = "${var.build_directory}/packer-manifest.json"
+    custom_data = { source = source.name }
   }
 
 }

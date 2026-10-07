@@ -139,8 +139,8 @@ def parse_args() -> argparse.Namespace:
         metavar="PATH",
         help="Override the packer artifact directory the harness reads "
         "(packer-ubuntu-1..N.{raw,qcow2} + efivars.fd) instead of the variant's "
-        "default <imagedir>/<ubuntu>/<machine>. Lets qemu.pkr.hcl's "
-        "verify-boot post-processor smoke-test a freshly-built `.new` "
+        "default <imagedir>/<ubuntu>/<machine>. Lets packer:build "
+        "smoke-test a freshly-built staging "
         "directory before it's swapped over the previous good artifact.",
     )
     parser.add_argument(
@@ -315,7 +315,7 @@ def main() -> int:
             display_window=args.display_window,
             # Automated verify runs have no display consumer. Keeping them
             # off VNC also removes the port-selection race between
-            # parallel Packer post-processors on the shared builder.
+            # concurrent packer:build verifies on the shared builder.
             headless=args.exit_after_ready,
             qmp_socket=args.qmp,
             extra_hostfwds=tuple(args.extra_hostfwds),

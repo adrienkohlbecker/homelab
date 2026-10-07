@@ -25,10 +25,15 @@ if [ "${#ubuntus[@]}" -gt 1 ]; then
 fi
 
 # Linux: keep packer's ISO cache off the root FS; falls through to
-# packer's default (./packer_cache in cwd) on Mac.
+# packer's default (./packer_cache in cwd) on Mac. Linux builders keep raw
+# disks because ZFS already provides CoW and zstd compression; APFS has no
+# filesystem-level compression, so Mac ships zstd-compressed qcow2.
 case "$(uname -s)" in
-Linux) export PACKER_CACHE_DIR="${HOMELAB_CI_DIR}/packer_cache" ;;
-Darwin) ;;
+Linux)
+  export PACKER_CACHE_DIR="${HOMELAB_CI_DIR}/packer_cache"
+  image_format=raw
+  ;;
+Darwin) image_format=qcow2 ;;
 *)
   echo "Unsupported OS: $(uname -s)" >&2
   exit 1
@@ -39,10 +44,9 @@ base="${HOMELAB_CI_DIR}/${usage_ubuntu}"
 mkdir -p "${base}"
 
 # Build into a tmpdir at HOMELAB_CI_DIR root so the previous good artifacts
-# at ${base}/<source> stay intact while the new ones build. packer's
-# install post-processor moves each per-source output into ${base};
-# we just rmdir the (empty) tmpdir afterwards. On failure the tmpdir
-# is left behind for inspection (cleanup via packer:clean).
+# at ${base}/<source> stay intact while the new ones build. finalize moves
+# each verified per-source output into ${base}. On failure the tmpdir is left
+# behind for inspection (cleanup via packer:clean).
 tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-XXXXXX")
 # mktemp uses 0700 regardless of umask; restore the shared-workspace contract.
 chmod 2770 "${tmp}"
@@ -73,27 +77,74 @@ if [ -t 0 ] && [ -z "${CI:-}" ]; then
   on_error=ask
 fi
 
-publish=true
-if [ "${usage_no_publish:-false}" = "true" ]; then
-  publish=false
-fi
+# Turn one built source into a published fixture: drop the cloud-image OS disk
+# (packer-ubuntu; provision.sh installs onto packer-ubuntu-1..N), give the
+# rest their format suffix, prove a qemu fixture boots, compress on Mac, and
+# atomically swap it in.
+finalize() {
+  local source=$1
+  local build_dir="${tmp}/${source}" disk
+  local vcpus_args=()
 
+  rm "${build_dir}/packer-ubuntu"
+  for disk in "${build_dir}"/packer-ubuntu-*; do
+    mv "${disk}" "${disk}.${image_format}"
+  done
+
+  if [ "${source}" != hetzner ]; then
+    # Stock QEMU's HVF never applies the reset state on PSCI CPU_ON, so a
+    # kernel that ZFSBootMenu kexecs into cannot bring its secondary CPUs
+    # online; a Mac builder verifies on one vCPU unless it runs the patched
+    # qemu-hvf build.
+    if [ "$(uname -s)" = Darwin ] && [[ "$(command -v qemu-system-aarch64)" != */qemu-hvf/* ]]; then
+      vcpus_args=(--vcpus 1)
+    fi
+    timeout --kill-after=30s 300 test/launch.py \
+      --machine "${source}" \
+      --ubuntu "${usage_ubuntu}" \
+      --exit-after-ready \
+      --image-dir "${build_dir}" \
+      ${vcpus_args[@]+"${vcpus_args[@]}"}
+  fi
+
+  if [ "${image_format}" = qcow2 ]; then
+    for disk in "${build_dir}"/packer-ubuntu-*.qcow2; do
+      echo "==> compressing ${disk##*/}"
+      qemu-img convert -W -c -O qcow2 -o compression_type=zstd "${disk}" "${disk}.tmp"
+      mv "${disk}.tmp" "${disk}"
+    done
+  fi
+
+  if [ "${usage_no_publish:-false}" = true ]; then
+    echo "==> Skipping publish of ${source} (--no-publish)"
+  else
+    packer/publish.py "${HOMELAB_CI_DIR}/.publish-lock" "${build_dir}" "${base}/${source}"
+  fi
+}
+
+packer_status=0
 packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
   -var "host_arch=$(uname -m)" \
   -var "host_os=$(uname -s)" \
+  -var "image_format=${image_format}" \
   -var "ubuntu_name=${usage_ubuntu}" \
   -var "upstream_mirrors=${usage_upstream:-false}" \
-  -var "publish=${publish}" \
   -var "build_directory=${tmp}" \
-  -var "output_directory=${base}" \
   "${only_args[@]}" \
-  packer
+  packer || packer_status=$?
 
-if [ "${publish}" = "true" ]; then
-  rmdir "${tmp}"
-else
-  rm -rf "${tmp}"
+# The manifest lists only the sources that built successfully, so a failed
+# source never reaches finalize while its siblings still publish.
+manifest="${tmp}/packer-manifest.json"
+if [ -f "${manifest}" ]; then
+  for built in $(yq -r '.builds[].custom_data.source' "${manifest}"); do
+    finalize "${built}"
+  done
 fi
+if [ "${packer_status}" -ne 0 ]; then
+  exit "${packer_status}"
+fi
+rm -rf "${tmp}"

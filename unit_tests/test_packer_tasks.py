@@ -87,9 +87,35 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
     assert len(calls) == len(ubuntus)
     for ubuntu, call in zip(ubuntus, calls, strict=True):
         assert f"ubuntu_name={ubuntu}" in call
-        assert f"output_directory={env['HOMELAB_CI_DIR']}/{ubuntu}" in call
+        assert f"build_directory={env['HOMELAB_CI_DIR']}/.build-" in call
+        assert "image_format=raw" in call
         assert "-only=qemu.lab" in call
     assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus)
+
+
+def test_build_publishes_only_sources_packer_built(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'Linux\\n'\n")
+    # hetzner builds and lands in the manifest; lab fails and leaves debris.
+    _executable(
+        fake_bin / "packer",
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'for arg; do case "$arg" in build_directory=*) dir=${arg#build_directory=} ;; esac; done\n'
+        'mkdir -p "$dir/hetzner" "$dir/lab"\n'
+        'touch "$dir/hetzner/packer-ubuntu" "$dir/hetzner/packer-ubuntu-1" "$dir/lab/packer-ubuntu-1"\n'
+        """printf '{"builds":[{"name":"ubuntu","custom_data":{"source":"hetzner"}}]}' >"$dir/packer-manifest.json"\n"""
+        "exit 1\n",
+    )
+    env = _environment(tmp_path, "noble")
+    env.update(PATH=f"{fake_bin}:{env['PATH']}", usage_no_publish="false", usage_sources="hetzner lab")
+    published = tmp_path / "homelab_ci" / "noble"
+
+    result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 1, result.stderr
+    assert sorted(path.name for path in (published / "hetzner").iterdir()) == ["packer-ubuntu-1.raw"]
+    assert not (published / "lab").exists()
 
 
 @pytest.mark.parametrize("fixture_machine", ["lab", "pug"])

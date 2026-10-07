@@ -364,8 +364,8 @@ class Machine:
     # that bind-mount the same workdir parent.
     _live_lock_fd: int
     # Shared flock on <imagedir>/.publish-lock held across prepare→
-    # ensure_booted so packer-build's brief exclusive lock around its
-    # install post-processor's atomic-rename (packer/publish.py) can't
+    # ensure_booted so packer:build's brief exclusive lock around its
+    # atomic-rename publish (packer/publish.py) can't
     # tear our backing-file reads. Applies on both Linux (lab) and macOS
     # (a local `mise run packer:build` can race parallel testall.py cells
     # reading the same artifacts/ tree). Released at the end of
@@ -1154,7 +1154,7 @@ class Machine:
 
         # Acquire the publish-lock before any read of the imagedir starts.
         # _create_overlay's qemu-img embeds the backing file's absolute path
-        # by value, so a packer install post-processor that rm+mv's the
+        # by value, so a packer:build publish that rm+mv's the
         # parent dir between overlay-create and qemu-launch would silently
         # corrupt the boot. The shared lock composes with packer's exclusive
         # lock on the same path -- packer waits for all in-flight test
@@ -1312,9 +1312,8 @@ class Machine:
         Applies on macOS too (parallel `test/testall.py` cells can race
         against a local `mise run packer:build` rebuild on the same
         artifacts/ tree). Skipped only when the lockfile is absent --
-        packer's install post-processor touches it before flocking, so
-        any imagedir that has had at least one packer-build will have
-        the file. On a fresh imagedir with no packer history we fall
+        packer/publish.py touches it before flocking, so any imagedir that
+        has had at least one packer-build will have the file. On a fresh imagedir with no packer history we fall
         through to the unlocked path rather than failing the boot.
 
         LOCK_NB+deadline rather than blocking LOCK_SH: a wedged packer
