@@ -10,8 +10,8 @@
 # One dict replaces the complete input at each import, preventing optional
 # values from an earlier call leaking into the next call at play-var scope.
 #
-# Publishes `<name>_user` with changed, name, config_group, uid, and gid. The
-# fact key replaces non-identifier characters with `_` (foo-bar -> foo_bar_user).
+# Publishes `<name>_user` with changed, uid, and gid. The fact key replaces
+# non-identifier characters with `_` (foo-bar -> foo_bar_user).
 # On a fresh host in check mode, uid/gid are undefined; gate consumers with
 # `not ansible_check_mode or <name>_user.uid is defined` so a proper run does
 # not silently skip work if the expected fact is missing.
@@ -86,11 +86,7 @@
   set_fact:
     "{{ service_user_resolved.name | ansible_var_key }}_user": >-
       {{
-        {
-          'changed': service_user_result.changed,
-          'name': service_user_resolved.name,
-          'config_group': service_user_resolved.config_dir_group
-        }
+        {'changed': service_user_result.changed}
         | combine(
             {'uid': service_user_result.uid, 'gid': service_user_result.group}
             if service_user_result.uid is defined and service_user_result.group is defined
