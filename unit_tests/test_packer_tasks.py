@@ -11,6 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import machine
 import pytest
 import yaml
 
@@ -752,15 +753,12 @@ def test_qemu_host_prehydrate_runs_on_the_toolchain_python_and_is_bounded() -> N
 
 def test_minimal_fixture_mirrors_journal_with_the_same_unit_as_packer_fixtures() -> None:
     """The stock cloud image has no baked-in mirror, so cloud-init installs it."""
-    chroot = QEMU_CHROOT_SH.read_text()
-    match = re.search(r"<<'UNIT' >/etc/systemd/system/homelab_guest_journal\.service\n(.*?)\nUNIT\n", chroot, re.S)
-    assert match
-
-    user_data = yaml.safe_load((REPO_ROOT / "test" / "minimal" / "user-data").read_text())
+    user_data = yaml.safe_load(machine._minimal_user_data())
     (unit,) = user_data["write_files"]
 
     assert unit["path"] == "/etc/systemd/system/homelab_guest_journal.service"
-    assert unit["content"].rstrip("\n") == match.group(1)
+    assert unit["content"] == machine.GUEST_JOURNAL_UNIT_PATH.read_text()
+    assert "homelab_guest_journal.service" in QEMU_TEMPLATE.read_text()
     # StartLimitIntervalSec is a [Unit] key; in [Service] systemd only warns,
     # which fails every later `systemd-analyze verify` on the fixture.
     assert unit["content"].index("StartLimitIntervalSec=0") < unit["content"].index("\n[Service]\n")

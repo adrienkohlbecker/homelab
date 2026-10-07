@@ -506,57 +506,14 @@ EOF
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
-# Mirror the journal onto the virtio console the harness always attaches. A
-# guest that never reaches SSH -- a broken NIC backend, a wedged boot -- then
-# still explains itself in an artifact, and the stream survives the reboots
-# that wipe the fixture's volatile journal.
-#
-# journalctl --follow and not journald's own ForwardToConsole: forwarding
-# starts only once journald opens the console, drops everything logged before
-# that, and never replays the kernel records it imported from /dev/kmsg, so
-# the artifact opened mid-boot with no kernel lines at all. --lines=all
-# replays the journal from its first entry, so a late start costs nothing and
-# the mirror begins where the boot does. It also buys journalctl's formatting
-# -- ISO timestamps with an offset (the guest runs UTC, the harness rarely
-# does), hostname, and priority colour -- which ForwardToConsole hardcodes
-# away behind a bare monotonic counter.
-#
-# --cursor-file keeps a Restart= from replaying the whole journal again; /run
-# scopes it to the boot, which is also the lifetime of the volatile journal.
+# Mirror the journal onto the virtio console the harness always attaches;
+# provision.sh staged the unit (test/homelab_guest_journal.service, shared with
+# the minimal fixture's cloud-init seed) on qemu targets.
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  cat <<'UNIT' >/etc/systemd/system/homelab_guest_journal.service
-[Unit]
-Description=Mirror the journal to the harness virtio console
-DefaultDependencies=no
-After=systemd-journald.service
-Before=sysinit.target
-# No start rate limit: journald may not have a readable journal on the first
-# attempt this early in boot, and a burst of quick exits must not retire the
-# unit for the rest of the run. StartLimitIntervalSec is a [Unit] key -- in
-# [Service] systemd only warns, and that warning then fails every later
-# `systemd-analyze verify` the systemd_unit helper runs.
-StartLimitIntervalSec=0
-
-[Service]
-Type=exec
-Environment=SYSTEMD_COLORS=true
-ExecStart=/usr/bin/journalctl --follow --lines=all --output=short-iso-precise --cursor-file=/run/homelab_guest_journal.cursor
-StandardOutput=file:/dev/hvc0
-StandardError=null
-Restart=always
-RestartSec=1
-OOMScoreAdjust=-900
-
-[Install]
-WantedBy=sysinit.target
-UNIT
   # verify exits 0 on "Unknown key name ... ignoring", so a misplaced
   # directive passes the bake and then fails every unit the systemd_unit
   # helper validates on the fixture. Treat any complaint as fatal here.
-  guest_journal_verify=$(systemd-analyze verify /etc/systemd/system/homelab_guest_journal.service 2>&1)
-  if [ -n "$guest_journal_verify" ]; then
-    echo "homelab_guest_journal.service did not verify cleanly:" >&2
-    echo "$guest_journal_verify" >&2
+  if systemd-analyze verify /etc/systemd/system/homelab_guest_journal.service 2>&1 | grep .; then
     exit 1
   fi
   systemctl enable homelab_guest_journal.service

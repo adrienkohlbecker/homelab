@@ -533,6 +533,12 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
   cp -a "$SCRIPTS_DIR/hetzner" /mnt/var/tmp/hetzner
 fi
 
+# The qemu fixtures mirror their journal onto the harness console; chroot.sh
+# verifies and enables the unit.
+if [ "$INSTALL_TARGET" = qemu ]; then
+  install -m 0644 "$SCRIPTS_DIR/homelab_guest_journal.service" /mnt/etc/systemd/system/
+fi
+
 # Chroot into the new OS via arch-chroot (arch-install-scripts). It
 # bind-mounts proc/sys/dev/devpts/run/efivarfs and /etc/resolv.conf
 # under /mnt for the chroot's lifetime, so apt can resolve hostnames

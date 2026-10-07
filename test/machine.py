@@ -79,6 +79,7 @@ def _cell_loopback_host() -> str:
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
 WAN_PROBE_PORTS_PATH = Path(__file__).parent.parent / "data" / "wan_probe_ports.yml"
+GUEST_JOURNAL_UNIT_PATH = Path(__file__).parent / "homelab_guest_journal.service"
 
 
 def _load_wan_probe_ports() -> dict[str, tuple[int, ...]]:
@@ -267,6 +268,20 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
 
 MACHINE_CHOICES: tuple[str, ...] = tuple(QEMU_MACHINE_SPECS)
 _PACKER_DISK_RE = re.compile(r"packer-ubuntu-(\d+)\.(raw|qcow2)")
+
+
+def _minimal_user_data() -> str:
+    """The minimal fixture's cloud-init user-data with the journal mirror unit
+    the Packer fixtures bake, so both install the same file."""
+    user_data = yaml.safe_load((Path(__file__).parent / "minimal" / "user-data").read_text())
+    user_data["write_files"] = [
+        {
+            "path": "/etc/systemd/system/homelab_guest_journal.service",
+            "permissions": "0644",
+            "content": GUEST_JOURNAL_UNIT_PATH.read_text(),
+        }
+    ]
+    return "#cloud-config\n" + yaml.safe_dump(user_data, sort_keys=False)
 
 
 def discover_packer_disks(image_dir: Path) -> tuple[list[Path], str]:
@@ -1231,6 +1246,8 @@ class Machine:
             cloud_image = await self._ensure_minimal_cloudimg()
             seed_img = self.workdir_path / "seed.img"
             disk_img = self.workdir_path / "disk.img"
+            user_data = self.workdir_path / "user-data"
+            user_data.write_text(_minimal_user_data())
             await run_command(
                 [
                     "xorrisofs",
@@ -1240,7 +1257,7 @@ class Machine:
                     "cidata",
                     "-joliet",
                     "-rock",
-                    "test/minimal/user-data",
+                    str(user_data),
                     "test/minimal/meta-data",
                 ]
             )

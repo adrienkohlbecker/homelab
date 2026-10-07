@@ -287,14 +287,16 @@ build {
     destination = "/home/vagrant/"
   }
 
-  # Bootstrap files shared with their owning Ansible roles. Upload the exact
-  # working-tree bytes rather than packaging the repository around them.
+  # Bootstrap files shared with their owning Ansible roles, plus the harness
+  # journal mirror the qemu fixtures bake. Upload the exact working-tree bytes
+  # rather than packaging the repository around them.
   provisioner "file" {
     sources = [
       "${path.cwd}/roles/boot/files/modules_most",
       "${path.cwd}/roles/boot/files/dracut_host.conf",
       "${path.cwd}/roles/console/files/console-setup",
       "${path.cwd}/roles/console/files/keyboard",
+      "${path.cwd}/test/homelab_guest_journal.service",
     ]
     destination = "/home/vagrant/"
   }
