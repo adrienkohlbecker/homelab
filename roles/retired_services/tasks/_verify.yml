@@ -1,1 +1,67 @@
 ---
+- name: _verify | Query retired units
+  systemd:
+    name: "{{ item }}"
+  loop:
+    - wolweb.service
+  register: retired_services_units
+  failed_when: retired_services_units.status.LoadState != 'not-found'
+  become: true
+
+- name: _verify | Dump the nginx configuration
+  command: nginx -T
+  register: retired_services_nginx_config
+  changed_when: false
+  become: true
+
+- name: _verify | Nginx no longer loads the retired wolweb vhost
+  assert:
+    that: retired_services_nginx_config.stdout is not search('server_name +wolweb[.]')
+
+- name: _verify | Stat retired leftovers
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/nginx/sites-available/wolweb
+    - /etc/fluent-bit/services/wolweb.yaml
+    - /mnt/services/wolweb
+  register: retired_services_leftovers
+  become: true
+
+- name: _verify | Retired leftovers are gone
+  assert:
+    that: retired_services_leftovers.results | selectattr('stat.exists') | list | length == 0
+    fail_msg: "left behind: {{ retired_services_leftovers.results | selectattr('stat.exists') | map(attribute='item') | join(', ') }}"
+
+- name: _verify | Fluent-bit accepts its configuration without the wolweb extension
+  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.yaml --dry-run
+  changed_when: false
+  become: true
+
+- name: _verify | List retired wolweb images
+  command:
+    argv:
+      - podman
+      - images
+      - --quiet
+      - --filter
+      - reference=ghcr.io/sameerdhoot/wolweb
+  register: retired_services_wolweb_images
+  changed_when: false
+  failed_when: >-
+    retired_services_wolweb_images.rc != 0
+    or retired_services_wolweb_images.stdout | length > 0
+  become: true
+
+- name: _verify | Retired wolweb account and group are absent
+  command:
+    argv:
+      - getent
+      - "{{ item }}"
+      - wolweb
+  loop:
+    - passwd
+    - group
+  register: retired_services_wolweb_identity
+  changed_when: false
+  failed_when: retired_services_wolweb_identity.rc != 2

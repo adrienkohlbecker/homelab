@@ -1,1 +1,125 @@
 ---
+# Recreate what the retired wolweb role left on lab and pug: its unit, nginx
+# vhost, fluent-bit extension, image, rendered state, and account.
+- name: _setup | Install nginx
+  import_role:
+    name: nginx
+    tasks_from: test_fixture
+
+- name: _setup | Install podman
+  import_role:
+    name: podman
+    tasks_from: install
+
+- name: _setup | Install fluent-bit
+  import_role:
+    name: fluentbit
+    tasks_from: configure
+
+- name: _setup | Create the retired wolweb group
+  group:
+    name: wolweb
+    gid: 60737
+    system: true
+  become: true
+
+- name: _setup | Create the retired wolweb account
+  user:
+    name: wolweb
+    uid: 60737
+    group: wolweb
+    home: /nonexistent
+    create_home: false
+    shell: /usr/sbin/nologin
+    system: true
+  become: true
+
+- name: _setup | Create the retired wolweb state directory
+  file:
+    path: /mnt/services/wolweb
+    state: directory
+    owner: wolweb
+    group: wolweb
+    mode: "0750"
+  become: true
+
+- name: _setup | Seed the retired wolweb device list
+  copy:
+    content: '{"devices": []}'
+    dest: /mnt/services/wolweb/devices.json
+    owner: wolweb
+    group: wolweb
+    mode: "0600"
+  become: true
+
+- name: _setup | Install a disposable wolweb unit
+  copy:
+    content: |
+      [Unit]
+      Description=retired fixture
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/wolweb.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Start the disposable wolweb unit
+  systemd:
+    name: wolweb.service
+    daemon_reload: true
+    enabled: true
+    state: started
+  become: true
+
+- name: _setup | Install the retired wolweb nginx site
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: wolweb
+      proxy_pass: http://127.0.0.1:8089/
+
+- name: _setup | Install the retired wolweb fluent-bit extension
+  copy:
+    content: |
+      parsers:
+        - name: wolweb_text
+          format: regex
+          regex: '/^(?:[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})(?: (?<_level>ERROR|Warning):)? (?<log>.*)$/m'
+
+      pipeline:
+        filters:
+          - name: parser
+            match: svc.wolweb.service
+            key_name: MESSAGE
+            parser: wolweb_text
+            reserve_data: true
+    dest: /etc/fluent-bit/services/wolweb.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Load the retired wolweb fluent-bit extension
+  systemd:
+    name: fluent-bit.service
+    state: reloaded
+  become: true
+
+- name: _setup | Pull the retired wolweb image
+  containers.podman.podman_image:
+    name: ghcr.io/sameerdhoot/wolweb:alpine@sha256:4dacd33d9d1d747efa4018a7fcf07c62e3a4afd348c0ef45ca31fe4ecd51c36a
+  register: retired_services_wolweb_pull
+  retries: 3
+  delay: 10
+  until: retired_services_wolweb_pull is not failed
+  become: true

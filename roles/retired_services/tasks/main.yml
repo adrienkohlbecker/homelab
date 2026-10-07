@@ -1,2 +1,98 @@
 ---
 # Add temporary teardown tasks here when retiring services from the fleet.
+
+# Drop once lab and pug have converged. Wolweb's only state was its rendered
+# device list; uid 60737 stays reserved in legacy_service_ids.
+- name: Retire the wolweb service
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: wolweb.service
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Remove the retired wolweb nginx site
+  file:
+    path: /etc/nginx/{{ item }}/wolweb
+    state: absent
+  loop:
+    - sites-enabled
+    - sites-available
+  register: retired_services_wolweb_site
+  become: true
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Reload nginx without the retired wolweb site
+  when:
+    - not ansible_check_mode
+    - retired_services_wolweb_site.changed
+  systemd:
+    name: nginx
+    state: reloaded
+  become: true
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Remove the retired wolweb fluent-bit extension
+  import_role:
+    name: fluentbit
+    tasks_from: extension_remove
+  vars:
+    fluentbit_extension_remove_args:
+      names:
+        - wolweb
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Check whether podman is installed for the retired wolweb image
+  stat:
+    path: /usr/bin/podman
+  register: retired_services_podman
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Remove the retired wolweb image
+  when: retired_services_podman.stat.exists
+  containers.podman.podman_image:
+    name: ghcr.io/sameerdhoot/wolweb:alpine@sha256:4dacd33d9d1d747efa4018a7fcf07c62e3a4afd348c0ef45ca31fe4ecd51c36a
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Remove the retired wolweb state
+  file:
+    path: /mnt/services/wolweb
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Remove the retired wolweb account
+  user:
+    name: wolweb
+    state: absent
+    force: true
+  become: true
+  tags:
+    - retired_services
+    - wolweb
+
+- name: Remove the retired wolweb group
+  group:
+    name: wolweb
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - wolweb

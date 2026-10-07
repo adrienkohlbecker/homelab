@@ -80,7 +80,6 @@
     - resolved
     - avahi
     - panic
-    - wolweb
     - keepalived
     - nut
     - adguard

@@ -30,7 +30,6 @@ static_service_ids:
   seerr: 60732
   sonarr: 60733
   transmission: 60736
-  wolweb: 60737
   z2m: 60738
   zfs_autobackup: 60739
 
@@ -47,6 +46,7 @@ legacy_service_ids:
   plex: 60728
   speedtest: 60734
   tautulli: 60735
+  wolweb: 60737
 
 static_group_ids:
   homelab_ci: 60800

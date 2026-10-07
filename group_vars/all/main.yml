@@ -229,7 +229,6 @@ service_ports:
   transmission: 9091
   transmission_bt: 51413
   wireguard: 51820
-  wolweb: 8089
   z2m: 8081
 
 # Sonatype Nexus pull-through cache. Empty = use upstream URLs directly.

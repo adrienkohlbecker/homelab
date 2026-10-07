@@ -29,7 +29,6 @@ homepage_bookmarks:
     - { name: Keepalived (lab), abbr: KL, sub: keepalived-exporter }
     - { name: Keepalived (pug), abbr: KP, sub: keepalived-exporter, host: pug }
     - { name: Headscale,     abbr: HS, sub: headscale,     icon: headscale, host: fox }
-    - { name: WolWeb,        abbr: WW, sub: wolweb }
   Personal:
     - { name: Home Assistant, abbr: HA, sub: homeassistant, icon: home-assistant }
     - { name: Zigbee2MQTT,    abbr: Z2, sub: z2m,           icon: zigbee2mqtt }

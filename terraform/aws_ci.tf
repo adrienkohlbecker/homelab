@@ -358,8 +358,8 @@ resource "aws_ecr_pull_through_cache_rule" "ci" {
 # approximated: each repo keeps its newest tag, the role's current pin, and
 # superseded pins go at once; a cache miss re-imports from upstream. Untagged
 # images are an index's per-arch children (protected while it is referenced),
-# indexes orphaned by an upstream re-tag, and digest-pinned pulls such as
-# wolweb, which the 30-day window keeps from re-importing on every run.
+# indexes orphaned by an upstream re-tag, and digest-pinned pulls, which the
+# 30-day window keeps from re-importing on every run.
 locals {
   ci_ecr_lifecycle_policy = jsonencode({
     rules = [

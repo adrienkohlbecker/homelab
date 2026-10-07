@@ -1,9 +1,10 @@
 # Relay generic WoL clients from operator-controlled VLANs into the target VLANs.
-# wolweb and nut still send only on their local L2 segment; this UDM
-# service is the cross-VLAN bridge for clients that can target the gateway.
+# nut still sends only on its local L2 segment; this UDM service is the
+# cross-VLAN bridge for clients that can target the gateway, such as Home
+# Assistant's wake button.
 #
 # Role-owned constants, deliberately not host-tunable: udp/9 is the WoL
-# convention that wolweb's wake_destination entries hardcode, and the VLAN
+# convention that Home Assistant's wake button hardcodes, and the VLAN
 # sets are a segmentation boundary — widening them is a reviewed code change,
 # not a host_var. Everything below derives from data/network_topology.yml.
 udm_wol_relay_port: 9
@@ -22,7 +23,7 @@ udm_wol_relay_source_cidrs: >-
 # The relay binds these instead of the wildcard: they are the addresses
 # clients actually target, and unicast-bound sockets neither exist on the WAN
 # interface nor receive broadcasts (so the relay cannot re-ingest its own
-# rebroadcasts or the directed broadcasts wolweb already emits on-segment).
+# rebroadcasts or directed broadcasts that on-segment senders emit).
 udm_wol_relay_source_gateways: >-
   {{ udm_wol_relay_source_vlans
      | map('extract', network.sites.home.vlans, 'gateway')
