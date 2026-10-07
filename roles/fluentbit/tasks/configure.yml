@@ -150,15 +150,19 @@
   tags:
     - fluentbit
 
+# logrotate is a timer-fired oneshot: the next run picks up the drop-in, so
+# nothing restarts. -d parses without rotating or touching the state file.
 - name: Configure Fluent Bit lnav JSONL rotation
-  import_role:
-    name: logrotate
-    tasks_from: template
-  vars:
-    logrotate_args:
-      src: logrotate.j2
-      dest: /etc/logrotate.d/fluent-bit-lnav
-      condition: "{{ fluentbit_package_ready }}"
+  when: fluentbit_package_ready
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/fluent-bit-lnav
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: /usr/sbin/logrotate -d %s
+  become: true
   tags:
     - fluentbit
 
