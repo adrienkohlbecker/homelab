@@ -19,7 +19,6 @@
 # Pre-create persistent and scratch paths before the container starts so their
 # ownership and cleanup policy are deterministic on a fresh deployment.
 - name: Create jellyfin state directories
-  when: not ansible_check_mode or jellyfin_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -62,7 +61,6 @@
 # (not Serilog) and are unaffected -- they're per-stream and not tailed
 # by fluent-bit either way.
 - name: Configure jellyfin structured console logging
-  when: not ansible_check_mode or jellyfin_user.uid is defined
   copy:
     src: logging.json
     dest: /mnt/services/jellyfin/config/logging.default.json
@@ -105,7 +103,6 @@
     - jellyfin
 
 - name: Create SSO plugin directories
-  when: not ansible_check_mode or jellyfin_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -184,7 +181,8 @@
 # bump re-extracts (overwriting the stable-named DLLs) while an unchanged
 # version is a no-op.
 - name: Extract SSO plugin
-  when: not ansible_check_mode or jellyfin_user.uid is defined
+  # unarchive needs its source zip and destination directory to exist.
+  when: not (ansible_check_mode and jellyfin_user.changed)
   unarchive:
     src: /tmp/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
     dest: /mnt/services/jellyfin/plugins/sso
@@ -198,9 +196,7 @@
     - jellyfin
 
 - name: Stamp installed SSO plugin version
-  when:
-    - not ansible_check_mode or jellyfin_user.uid is defined
-    - jellyfin_sso_extract is changed
+  when: jellyfin_sso_extract is changed
   file:
     path: /mnt/services/jellyfin/plugins/sso/.installed-{{ jellyfin_sso_plugin_version }}
     state: touch
@@ -233,9 +229,7 @@
 # touched the file would re-diff and trigger a needless restart. Same
 # pattern as roles/sonarr (config.xml).
 - name: Configure Jellyfin network settings
-  when:
-    - not ansible_check_mode or jellyfin_user.uid is defined
-    - jellyfin_media_network.networks | default([]) | length > 0
+  when: jellyfin_media_network.networks | default([]) | length > 0
   copy:
     content: "{{ lookup('template', 'network.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/jellyfin/config/network.xml
@@ -250,7 +244,6 @@
     - jellyfin
 
 - name: Configure Jellyfin branding (SSO login button)
-  when: not ansible_check_mode or jellyfin_user.uid is defined
   copy:
     content: "{{ lookup('template', 'branding.xml.j2') | rstrip_newlines }}"
     dest: /mnt/services/jellyfin/config/branding.xml

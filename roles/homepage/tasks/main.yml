@@ -34,7 +34,6 @@
     - homepage
 
 - name: Configure homepage YAML config
-  when: not ansible_check_mode or homepage_user.uid is defined
   template:
     src: "{{ item }}.yaml.j2"
     dest: "/mnt/services/homepage/{{ item }}.yaml"
@@ -81,7 +80,6 @@
   vars:
     systemd_unit_args:
       src: homepage.service.j2
-      condition: "{{ not ansible_check_mode or homepage_user.uid is defined }}"
       restart: "{{ homepage_network.changed or homepage_config.changed }}"
   tags:
     - homepage
@@ -140,7 +138,6 @@
     owner: homepage
     group: homepage
     mode: "0755"
-  when: not ansible_check_mode or homepage_user.uid is defined
   become: true
   tags:
     - homepage
@@ -149,7 +146,6 @@
 # password is available only to the oneshot poller and never enters its
 # environment or command line.
 - name: Deploy Homepage alerts Authelia password
-  when: not ansible_check_mode or homepage_user.uid is defined
   copy:
     content: "{{ homepage_alerts_authelia_password }}\n"
     dest: /opt/homepage_alerts/authelia_password

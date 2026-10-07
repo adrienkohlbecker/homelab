@@ -12,7 +12,6 @@
 # modes prevents Ansible/container flapping. Token files inside config remain
 # 0600, and the host group contains only the influxdb user.
 - name: Create influxdb config and data directories
-  when: not ansible_check_mode or influxdb_user.uid is defined
   file:
     dest: "{{ item.path }}"
     state: directory
@@ -127,7 +126,6 @@
   vars:
     systemd_unit_args:
       src: influxdb.service.j2
-      condition: "{{ not ansible_check_mode or influxdb_user.uid is defined }}"
       restart: >-
         {{ influxdb_network.changed
            or (_influxdb_root_password_secret.changed | default(false)) }}
@@ -137,7 +135,6 @@
 # Keep the per-exec CLI on the vaulted operator token across bootstrap and
 # rotation. Influxd does not read this file, so updates need no restart.
 - name: Template the influx CLI default config
-  when: not ansible_check_mode or influxdb_user.uid is defined
   template:
     src: influx-configs.j2
     dest: /mnt/services/influxdb/config/influx-configs

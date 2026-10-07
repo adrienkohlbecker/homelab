@@ -49,7 +49,6 @@
 
 # Persistent DB, keys, and CLI socket, owned by the container's direct host uid.
 - name: Create headscale data dir
-  when: not ansible_check_mode or headscale_user.uid is defined
   file:
     dest: /mnt/services/headscale/data
     state: directory
@@ -62,7 +61,6 @@
 
 # The native configtest below validates HuJSON before restart.
 - name: Render headscale ACL policy
-  when: not ansible_check_mode or headscale_user.uid is defined
   copy:
     src: acl.hujson
     dest: /mnt/services/headscale/acl.hujson
@@ -97,7 +95,6 @@
     - headscale
 
 - name: Render headscale config
-  when: not ansible_check_mode or headscale_user.uid is defined
   template:
     src: config.yaml.j2
     dest: /mnt/services/headscale/config.yaml
@@ -170,7 +167,6 @@
   vars:
     systemd_unit_args:
       src: headscale.service.j2
-      condition: "{{ not ansible_check_mode or headscale_user.uid is defined }}"
       # The mounted OIDC secret is read only at container start.
       restart: >-
         {{ headscale_config_result.changed

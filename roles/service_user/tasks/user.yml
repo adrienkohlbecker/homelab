@@ -12,9 +12,8 @@
 #
 # Publishes `<name>_user` with changed, uid, and gid. The fact key replaces
 # non-identifier characters with `_` (foo-bar -> foo_bar_user).
-# On a fresh host in check mode, uid/gid are undefined; gate consumers with
-# `not ansible_check_mode or <name>_user.uid is defined` so a proper run does
-# not silently skip work if the expected fact is missing.
+# uid and gid come from static_service_ids, which the group and user tasks pin,
+# so they are published even when check mode only predicts the account.
 - name: "Validate inputs for {{ service_user_args.name | default('<unset>') }}"
   assert:
     quiet: true
@@ -84,15 +83,10 @@
 # Same filter as systemd_unit's per-unit fact.
 - name: Record user record for {{ service_user_args.name }}
   set_fact:
-    "{{ service_user_resolved.name | ansible_var_key }}_user": >-
-      {{
-        {'changed': service_user_result.changed}
-        | combine(
-            {'uid': service_user_result.uid, 'gid': service_user_result.group}
-            if service_user_result.uid is defined and service_user_result.group is defined
-            else {}
-          )
-      }}
+    "{{ service_user_resolved.name | ansible_var_key }}_user":
+      changed: "{{ service_user_result.changed }}"
+      uid: "{{ service_user_resolved.id | int }}"
+      gid: "{{ service_user_resolved.id | int }}"
 
 # Stateless services (no config / no on-host state) opt out via
 # config_dir: false. The helper still owns user/group/uid capture; callers

@@ -63,9 +63,7 @@
 
     # The unit's HOME puts this file at the AWS SDK default path.
     - name: Render AWS qemu runner credentials
-      when:
-        - gitlab_runner_aws_pools | length > 0
-        - not ansible_check_mode or gitlab_runner_user.uid is defined
+      when: gitlab_runner_aws_pools | length > 0
       block:
         - name: Create gitlab_runner AWS config directory
           file:
@@ -91,9 +89,7 @@
           become: true
 
     - name: Render Fleeting static SSH keys
-      when:
-        - gitlab_runner_aws_pools | selectattr('ssh_key', 'defined') | list | length > 0
-        - not ansible_check_mode or gitlab_runner_user.uid is defined
+      when: gitlab_runner_aws_pools | selectattr('ssh_key', 'defined') | list | length > 0
       block:
         - name: Create gitlab_runner SSH config directory
           file:
@@ -123,7 +119,6 @@
     # Parse TOML locally; `gitlab-runner verify` is an online registration check,
     # not a configuration linter.
     - name: Render gitlab-runner config.toml
-      when: not ansible_check_mode or gitlab_runner_user.uid is defined
       template:
         src: config.toml.j2
         dest: /mnt/services/gitlab_runner/config.toml
@@ -153,7 +148,6 @@
       vars:
         systemd_unit_args:
           src: gitlab_runner.service.j2
-          condition: "{{ not ansible_check_mode or gitlab_runner_user.uid is defined }}"
           restart: >-
             {{ gitlab_runner_binary.changed
                or gitlab_runner_fleeting_aws_binary.changed

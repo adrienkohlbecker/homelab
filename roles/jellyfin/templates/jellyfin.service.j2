@@ -53,7 +53,7 @@ ExecStart=/usr/bin/podman run \
     --uidmap=+0:{{ jellyfin_user.uid }}:1 \
     --gidmap=0:0:65536 \
     --gidmap=+0:{{ jellyfin_user.gid }}:1 \
-    --group-add={{ media_group.gid }} \
+    --group-add={{ static_group_ids.media }} \
     --log-driver journald \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \

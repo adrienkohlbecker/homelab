@@ -113,7 +113,6 @@
   vars:
     systemd_unit_args:
       src: z2m.service.j2
-      condition: "{{ not ansible_check_mode or z2m_user.uid is defined }}"
       restart: "{{ z2m_conf.changed or z2m_secret.changed or z2m_cover_patch.changed }}"
       # QEMU has no coordinator, so z2m waits for the serial adapter and never
       # becomes healthy. Left enabled, it would hold every fixture boot for its

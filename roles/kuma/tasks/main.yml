@@ -58,7 +58,6 @@
   vars:
     systemd_unit_args:
       src: kuma.service.j2
-      condition: "{{ not ansible_check_mode or kuma_user.uid is defined }}"
       restart: "{{ kuma_network.changed }}"
   tags:
     - kuma

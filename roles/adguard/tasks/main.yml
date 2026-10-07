@@ -29,7 +29,6 @@
     - adguard
 
 - name: Create adguard directories
-  when: not ansible_check_mode or adguard_user.uid is defined
   file:
     dest: "{{ item.path }}"
     state: directory
@@ -55,7 +54,8 @@
 # blast radius). Copy the pair into service state owned by the adguard
 # user instead; renewals re-copy through the certbot deploy hook below.
 - name: Copy host certificate for DoT
-  when: not ansible_check_mode or adguard_user.uid is defined
+  # remote_src runs the copy module on the host, which needs conf/tls to exist.
+  when: not (ansible_check_mode and adguard_user.changed)
   copy:
     src: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/{{ item }}
     remote_src: true
@@ -75,7 +75,6 @@
 # certbot creates /etc/letsencrypt/renewal-hooks/deploy on its first run,
 # which every host's certificate issuance precedes.
 - name: Install certbot deploy hook for DoT certs
-  when: not ansible_check_mode or adguard_user.uid is defined
   template:
     src: adguard_certbot_deploy.j2
     dest: /etc/letsencrypt/renewal-hooks/deploy/adguard
@@ -121,9 +120,7 @@
     - adguard
 
 - name: Configure adguard
-  when:
-    - not ansible_check_mode or adguard_user.uid is defined
-    - adguard_network_info.networks | default([]) | length > 0
+  when: adguard_network_info.networks | default([]) | length > 0
   template:
     src: AdGuardHome.yaml.j2
     dest: /mnt/services/adguard/conf/AdGuardHome.yaml
@@ -164,9 +161,7 @@
   vars:
     systemd_unit_args:
       src: adguard.service.j2
-      condition: >-
-        {{ (not ansible_check_mode or adguard_user.uid is defined)
-           and adguard_network_info.networks | default([]) | length > 0 }}
+      condition: "{{ adguard_network_info.networks | default([]) | length > 0 }}"
       restart: "{{ adguard_network.changed or adguard_config.changed or adguard_tls_certs.changed }}"
   throttle: 1
   tags:

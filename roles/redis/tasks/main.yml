@@ -48,7 +48,6 @@
 
 # Ansible-owned config is mounted read-only, apart from the RDB data redis writes.
 - name: Create redis config and data directories
-  when: not ansible_check_mode or redis_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -66,7 +65,6 @@
 # only at full startup, which the unit's Type=notify/--sdnotify=healthy gate
 # catches.
 - name: Configure redis  # noqa: require-validate
-  when: not ansible_check_mode or redis_user.uid is defined
   template:
     src: redis.conf.j2
     dest: /mnt/services/redis/config/redis.conf
@@ -86,7 +84,6 @@
   vars:
     systemd_unit_args:
       src: redis.service.j2
-      condition: "{{ not ansible_check_mode or redis_user.uid is defined }}"
       restart: "{{ redis_conf.changed }}"
   tags:
     - redis

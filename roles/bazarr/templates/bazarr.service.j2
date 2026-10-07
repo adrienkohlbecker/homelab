@@ -47,7 +47,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="bazarr" \
     {# linuxserver's s6 init maps its abc user to these ids. #}
     --env PUID={{ bazarr_user.uid }} \
-    --env PGID={{ media_group.gid }} \
+    --env PGID={{ static_group_ids.media }} \
     --env UMASK=002 \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/bazarr:/config \

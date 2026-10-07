@@ -51,7 +51,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="lidarr" \
     --env PUID={{ lidarr_user.uid }} \
-    --env PGID={{ media_group.gid }} \
+    --env PGID={{ static_group_ids.media }} \
     --env UMASK=002 \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/lidarr:/config \

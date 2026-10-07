@@ -51,7 +51,6 @@
 
 # Gitea creates its data/ tree under the work path on first start.
 - name: Create gitea work directory
-  when: not ansible_check_mode or git_user.uid is defined
   file:
     dest: /mnt/services/gitea
     state: directory
@@ -66,7 +65,6 @@
 # app.ini. Stricter dir mode contains app.ini backup files left by
 # `template: backup:` (they may not inherit 0600).
 - name: Create /etc/gitea
-  when: not ansible_check_mode or git_user.uid is defined
   file:
     dest: /etc/gitea
     state: directory
@@ -116,7 +114,6 @@
   vars:
     systemd_unit_args:
       src: gitea.service.j2
-      condition: "{{ not ansible_check_mode or git_user.uid is defined }}"
       restart: "{{ gitea_conf.changed or gitea_installed.changed }}"
   tags:
     - gitea

@@ -44,8 +44,6 @@
     validate: python3 -c 'import xml.etree.ElementTree as ET, sys; ET.parse(sys.argv[1])' "%s"
   register: radarr_conf
   become: true
-  # A fresh check-mode run has no resolved user or config directory yet.
-  when: not ansible_check_mode or radarr_user.uid is defined
   tags:
     - radarr
 
@@ -67,7 +65,6 @@
   vars:
     systemd_unit_args:
       src: radarr.service.j2
-      condition: "{{ not ansible_check_mode or radarr_user.uid is defined }}"
       restart: "{{ radarr_conf.changed or radarr_user.changed or media_group.changed }}"
   tags:
     - radarr

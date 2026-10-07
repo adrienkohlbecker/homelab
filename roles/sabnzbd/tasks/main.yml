@@ -52,7 +52,6 @@
 # sabnzbd creates the dirs, each *arr app (own uid, media group) reads/moves
 # from them -- so the 0775 group-write is load-bearing, not cosmetic.
 - name: Create storage directories
-  when: not ansible_check_mode or sabnzbd_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -113,7 +112,6 @@
 # malformed rendering before SABnzbd silently rewrites the file from defaults.
 # The [__top__] prepend hosts __encoding__ and __version__ above any section.
 - name: Configure sabnzbd.ini
-  when: not ansible_check_mode or sabnzbd_user.uid is defined
   template:
     src: sabnzbd.ini.j2
     dest: /mnt/services/sabnzbd/sabnzbd.ini
@@ -130,7 +128,6 @@
 # SABnzbd downloads incomplete jobs here before unpacking them into the
 # category-specific directories shared with the import applications.
 - name: Create incomplete download directory
-  when: not ansible_check_mode or sabnzbd_user.uid is defined
   file:
     dest: /mnt/scratch/sabnzbd
     state: directory
@@ -169,7 +166,6 @@
   vars:
     systemd_unit_args:
       src: sabnzbd.service.j2
-      condition: "{{ not ansible_check_mode or sabnzbd_user.uid is defined }}"
       restart: "{{ sabnzbd_conf.changed or sabnzbd_user.changed or media_group.changed }}"
   tags:
     - sabnzbd

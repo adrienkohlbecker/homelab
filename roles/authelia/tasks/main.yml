@@ -9,7 +9,6 @@
     - authelia
 
 - name: Configure authelia files
-  when: not ansible_check_mode or authelia_user.uid is defined
   template:
     src: "{{ item }}.j2"
     dest: "/mnt/services/authelia/{{ item }}"
@@ -98,7 +97,6 @@
   vars:
     systemd_unit_args:
       src: authelia.service.j2
-      condition: "{{ not ansible_check_mode or authelia_user.uid is defined }}"
       restart: >-
         {{ authelia_network.changed
            or authelia_files.changed

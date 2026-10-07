@@ -43,7 +43,6 @@
   vars:
     systemd_unit_args:
       src: profilarr.service.j2
-      condition: "{{ not ansible_check_mode or profilarr_user.uid is defined }}"
       restart: "{{ profilarr_user.changed }}"
   tags:
     - profilarr

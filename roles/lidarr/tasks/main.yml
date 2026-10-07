@@ -40,8 +40,6 @@
     validate: python3 -c 'import xml.etree.ElementTree as ET, sys; ET.parse(sys.argv[1])' "%s"
   register: lidarr_conf
   become: true
-  # A fresh check-mode run has no resolved user or config directory yet.
-  when: not ansible_check_mode or lidarr_user.uid is defined
   tags:
     - lidarr
 
@@ -73,7 +71,6 @@
   vars:
     systemd_unit_args:
       src: lidarr.service.j2
-      condition: "{{ not ansible_check_mode or lidarr_user.uid is defined }}"
       restart: "{{ lidarr_conf.changed or lidarr_user.changed or media_group.changed }}"
   tags:
     - lidarr

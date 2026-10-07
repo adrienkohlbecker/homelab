@@ -88,7 +88,6 @@
     - homeassistant
 
 - name: Create homeassistant state directories
-  when: not ansible_check_mode or homeassistant_user.uid is defined
   file:
     dest: "{{ item }}"
     state: directory
@@ -295,9 +294,7 @@
     - homeassistant
 
 - name: Unpack HACS
-  when:
-    - not ansible_check_mode or homeassistant_user.uid is defined
-    - not (ansible_check_mode and homeassistant_hacs_download.changed)
+  when: not (ansible_check_mode and (homeassistant_user.changed or homeassistant_hacs_download.changed))
   unarchive:
     src: /var/cache/homeassistant_hacs.zip
     remote_src: true
@@ -462,7 +459,6 @@
   vars:
     systemd_unit_args:
       src: homeassistant.service.j2
-      condition: "{{ not ansible_check_mode or homeassistant_user.uid is defined }}"
       restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed or homeassistant_silam_pollen_patch.changed }}"
   tags:
     - homeassistant

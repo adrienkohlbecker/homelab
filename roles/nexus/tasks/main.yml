@@ -23,7 +23,6 @@
     - nexus
 
 - name: Create nexus directories
-  when: not ansible_check_mode or nexus_user.uid is defined
   file:
     path: "{{ item.path }}"
     state: directory
@@ -77,7 +76,6 @@
     - nexus
 
 - name: Configure nexus encryption
-  when: not ansible_check_mode or nexus_user.uid is defined
   template:
     src: encryption.json.j2
     dest: /mnt/services/nexus/user/encryption.json
@@ -96,7 +94,6 @@
 # data-dir override is for logger levels, not appenders; the read-only bind
 # mount below replaces the installation config without modifying the image.
 - name: Configure nexus structured console logging
-  when: not ansible_check_mode or nexus_user.uid is defined
   copy:
     src: logback.xml
     dest: /mnt/services/nexus/user/logback.xml
@@ -149,7 +146,6 @@
   vars:
     systemd_unit_args:
       src: nexus.service.j2
-      condition: "{{ not ansible_check_mode or nexus_user.uid is defined }}"
       restart: "{{ nexus_network.changed or nexus_logback.changed }}"
   tags:
     - nexus

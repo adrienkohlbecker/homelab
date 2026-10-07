@@ -44,7 +44,6 @@
     - mosquitto
 
 - name: Configure mosquitto state
-  when: not ansible_check_mode or mosquitto_user.uid is defined
   become: true
   tags:
     - mosquitto
@@ -104,7 +103,6 @@
   vars:
     systemd_unit_args:
       src: mosquitto.service.j2
-      condition: "{{ not ansible_check_mode or mosquitto_user.uid is defined }}"
       restart: "{{ mosquitto_conf.changed or mosquitto_pwfile.changed }}"
   tags:
     - mosquitto

@@ -18,7 +18,6 @@
     - bazarr
 
 - name: Create bazarr config subdirectory
-  when: not ansible_check_mode or bazarr_user.uid is defined
   file:
     dest: /mnt/services/bazarr/config
     state: directory
@@ -40,7 +39,6 @@
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   register: bazarr_conf
   become: true
-  when: not ansible_check_mode or bazarr_user.uid is defined
   tags:
     - bazarr
 
@@ -72,7 +70,6 @@
   vars:
     systemd_unit_args:
       src: bazarr.service.j2
-      condition: "{{ not ansible_check_mode or bazarr_user.uid is defined }}"
       restart: "{{ bazarr_conf.changed or bazarr_user.changed or media_group.changed }}"
   tags:
     - bazarr

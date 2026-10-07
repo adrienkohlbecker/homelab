@@ -8,6 +8,28 @@
       service_user_test: 61180
       service-user-test-hyphen: 61181
 
+# Check mode only predicts the account, yet consumers still need its ids.
+- name: _verify | Predict a test service user in check mode
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: service_user_test
+  check_mode: true
+
+- name: _verify | Read passwd database after the prediction
+  getent:
+    database: passwd
+
+- name: _verify | Predicted user publishes its static ids
+  assert:
+    that:
+      - "'service_user_test' not in ansible_facts.getent_passwd"
+      - service_user_test_user.changed
+      - service_user_test_user.uid == 61180
+      - service_user_test_user.gid == 61180
+
 - name: _verify | Provision a test service user
   import_role:
     name: service_user
@@ -16,12 +38,17 @@
     service_user_args:
       name: service_user_test
 
-- name: _verify | User record fact is exposed
+- name: _verify | Read passwd database after provisioning
+  getent:
+    database: passwd
+
+# getent_passwd[user]: [password, uid, gid, gecos, home, shell]
+- name: _verify | Real account matches the published ids
   assert:
     that:
-      - service_user_test_user is defined
+      - ansible_facts.getent_passwd['service_user_test'][1] | int == service_user_test_user.uid
+      - ansible_facts.getent_passwd['service_user_test'][2] | int == service_user_test_user.gid
       - service_user_test_user.uid == 61180
-      - service_user_test_user.gid == 61180
 
 # Second scenario exercises every override plus hyphenated fact-key
 # sanitization (foo-bar -> foo_bar_user).
