@@ -1,8 +1,6 @@
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   dest              exact unit filename; mutually exclusive with for
 #   for               drop-in parent; derives dest=<for>.d/override.conf
-#   user              default 'root'; non-root acts on the named user's
-#                     user manager (linger must already be on).
 #
 # Stop and disable units, remove their files, and reload after deletion. Callers
 # gate a conditional removal with `when:` on the import: remove publishes no
@@ -15,33 +13,18 @@
       - systemd_unit_args is mapping
       - systemd_unit_args.dest is defined or systemd_unit_args.for is defined
       - systemd_unit_args.dest is not defined or systemd_unit_args.for is not defined
-      - systemd_unit_args.keys() | difference(['dest', 'for', 'user']) | length == 0
+      - systemd_unit_args.keys() | difference(['dest', 'for']) | length == 0
     fail_msg: >-
-      systemd_unit_args needs exactly one of dest or for and accepts only user
-      as an optional key;
+      systemd_unit_args needs exactly one of dest or for and no other keys;
       got dest={{ systemd_unit_args.dest | default('<unset>') }},
       for={{ systemd_unit_args.for | default('<unset>') }}
 
 - name: remove | Resolve caller defaults for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
   set_fact:
-    _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_name: >-
       {{ systemd_unit_args.dest
          if systemd_unit_args.dest is defined
          else systemd_unit_args.for ~ '.d/override.conf' }}
-
-- name: remove | Derive scope for {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
-  set_fact:
-    _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
-    _systemd_unit_remove_path: "{{ ('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') }}/{{ _systemd_unit_name }}"
-
-# See install.yml for linger check-mode and task-name constraints.
-- name: remove | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
-  when: _systemd_unit_scope == 'user'
-  stat:
-    path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
-  register: _systemd_unit_linger
-  failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
 # Missing units are already in the desired state. Drop-ins have no lifecycle.
 - name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.for | default('?')) }}
@@ -50,9 +33,7 @@
     name: "{{ _systemd_unit_name }}"
     state: stopped
     enabled: false
-    scope: "{{ _systemd_unit_scope }}"
   become: true
-  become_user: "{{ _systemd_unit_user }}"
   register: _systemd_unit_stop
   failed_when: >-
     _systemd_unit_stop.failed | default(false) and
@@ -60,7 +41,7 @@
 
 - name: remove | Delete the unit file
   file:
-    path: "{{ _systemd_unit_remove_path }}"
+    path: /etc/systemd/system/{{ _systemd_unit_name }}
     state: absent
   become: true
   register: systemd_unit_file
@@ -69,6 +50,4 @@
   when: systemd_unit_file.changed
   systemd:
     daemon_reload: true
-    scope: "{{ _systemd_unit_scope }}"
   become: true
-  become_user: "{{ _systemd_unit_user }}"

@@ -7,12 +7,10 @@
 #   dest              optional on-disk filename; defaults to src with .j2 stripped
 #   for               drop-in only: parent unit (e.g. podman.socket); derives
 #                     dest=<for>.d/override.conf and verify=<for>
-#   user              default 'root'; non-root drives /etc/systemd/user
 #   condition         default true; gates the whole call
 #
 # Replacing this dict on every import prevents caller arguments leaking between
-# calls. A non-root user selects /etc/systemd/user and its lingered user manager.
-# The src suffix selects template (.j2) or copy; .j2 is stripped on disk.
+# calls. The src suffix selects template (.j2) or copy; .j2 is stripped on disk.
 - name: install | Validate install args
   assert:
     quiet: true
@@ -23,17 +21,14 @@
       - systemd_unit_args.src is string
       - systemd_unit_args.for is not defined or systemd_unit_args.for is string
       - systemd_unit_args.dest is not defined or systemd_unit_args.for is not defined
-      - systemd_unit_args.keys() | difference(['src', 'dest', 'for', 'user', 'condition', 'enable', 'start', 'restart']) | length == 0
+      - systemd_unit_args.keys() | difference(['src', 'dest', 'for', 'condition', 'enable', 'start', 'restart']) | length == 0
     fail_msg: >-
       systemd_unit_args needs src (source filename); dest and for are mutually
       exclusive, for must be a string when set, and no other keys are accepted;
       got {{ systemd_unit_args | default('<unset>') }}
 
-# set_fact keys resolve concurrently, so defaults and their derivatives need
-# separate tasks.
 - name: install | Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
-    _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
     _systemd_unit_name: >-
       {{ systemd_unit_args.dest
@@ -45,42 +40,22 @@
          else (systemd_unit_args.dest
                | default(systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
 
-- name: install | Derive install scope for {{ systemd_unit_args.src }}
-  set_fact:
-    _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
-    _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
-    # Raw systemctl calls reach a user manager only through its runtime dir,
-    # which become_user does not set; the systemd module derives it the same way.
-    _systemd_unit_systemctl: >-
-      {{ ['systemctl'] if _systemd_unit_user == 'root'
-         else ['sh', '-c', 'XDG_RUNTIME_DIR=/run/user/$(id -u) exec systemctl --user "$@"', 'systemctl'] }}
-
 - name: install | Install systemd unit for {{ systemd_unit_args.src }}
   when: _systemd_unit_condition
   block:
     - name: install | Create drop-in directory for {{ systemd_unit_args.src }}
       when: systemd_unit_args.for is defined
       file:
-        path: "{{ _systemd_unit_dir }}/{{ systemd_unit_args.for }}.d"
+        path: "/etc/systemd/system/{{ systemd_unit_args.for }}.d"
         state: directory
         owner: root
         group: root
         mode: "0755"
       become: true
 
-    # A user manager must be lingered to survive logout. Task names use the caller
-    # var because imports render them before set_fact runs. Check mode may predict
-    # linger creation without creating its marker; real applies still fail closed.
-    - name: install | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
-      when: _systemd_unit_scope == 'user'
-      stat:
-        path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
-      register: _systemd_unit_linger
-      failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
-
     - name: install | Write and validate the unit file
       vars:
-        _systemd_unit_path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+        _systemd_unit_path: /etc/systemd/system/{{ _systemd_unit_name }}
       block:
         # Keep dispatch task-local so a host fact cannot poison the next call. The
         # action string form avoids the mapping form deprecated in ansible-core 2.23.
@@ -99,8 +74,7 @@
           register: systemd_unit_file
 
         # Skip man-page completeness checks that fail on minimal images; --man=no
-        # works on systemd 249+. Verify user units by path in the system context to
-        # avoid user-manager resolution warnings becoming false rollbacks.
+        # works on systemd 249+.
         - name: install | Validate unit file
           when: systemd_unit_file.changed
           command:
@@ -109,7 +83,7 @@
               - verify
               - --no-pager
               - --man=no
-              - "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
+              - "/etc/systemd/system/{{ _systemd_unit_verify }}"
           register: systemd_unit_verify
           changed_when: false
           # Ignore removed-option notices from stock dependencies and blank lines.
@@ -124,9 +98,7 @@
           when: systemd_unit_file.changed
           systemd:
             daemon_reload: true
-            scope: "{{ _systemd_unit_scope }}"
           become: true
-          become_user: "{{ _systemd_unit_user }}"
 
       # Validation needs the production path. Restore the backup or delete a new
       # file on failure so one broken unit cannot poison daemon-reload host-wide.
