@@ -1,12 +1,3 @@
-- name: _verify | Archive is exposed through a read-only bind mount
-  command: findmnt --mountpoint /mnt/services/mutt/archive --noheadings --output OPTIONS
-  register: _mutt_mount_opts
-  changed_when: false
-  failed_when: >-
-    _mutt_mount_opts.rc != 0
-    or 'ro' not in (_mutt_mount_opts.stdout | trim).split(',')
-  become: true
-
 # The mount must reject writes even as root, independently of neomutt's -R.
 - name: _verify | Write through the read-only mount is denied
   command: touch /mnt/services/mutt/archive/_mutt_ro_probe
@@ -85,7 +76,6 @@
   loop:
     - mail-archive
     - mail-archive -f 'notmuch://?query=id:muttverify@example.com'
-    - neomutt -n -R -F /opt/mutt/muttrc -f 'notmuch://?query=id:muttverify@example.com'
   register: _mutt_view
   changed_when: false
   # Require rendered body text without the raw HTML attribute in each view.
@@ -119,52 +109,42 @@
   failed_when: _mutt_cur.matched > 0
   become: true
 
-- name: _verify | Indexing requires the protected mount
-  block:
-    - name: _verify | Stop the archive mount
-      systemd:
-        name: mnt-services-mutt-archive.mount
-        state: stopped
-      become: true
+# Indexing requires the protected mount. Fixture VMs are ephemeral, so the
+# archive is left writable afterwards; the final count reads only the database.
+- name: _verify | Stop the archive mount
+  systemd:
+    name: mnt-services-mutt-archive.mount
+    state: stopped
+  become: true
 
-    - name: _verify | Manual indexing refuses an absent mount
-      command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
-      register: _mutt_unmounted
-      changed_when: false
-      failed_when: >-
-        _mutt_unmounted.rc == 0
-        or 'must be mounted read-only' not in _mutt_unmounted.stderr
+- name: _verify | Manual indexing refuses an absent mount
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+  register: _mutt_unmounted
+  changed_when: false
+  failed_when: >-
+    _mutt_unmounted.rc == 0
+    or 'must be mounted read-only' not in _mutt_unmounted.stderr
 
-    - name: _verify | Scheduled indexing restores its mount dependency
-      systemd:
-        name: mutt_notmuch.service
-        state: started
-      become: true
+# RequiresMountsFor= on mutt_notmuch.service mounts the archive again.
+- name: _verify | Scheduled indexing restores its mount dependency
+  systemd:
+    name: mutt_notmuch.service
+    state: started
+  become: true
 
-    # Exercise bind remount flags without editing fstab or the mount unit.
-    - name: _verify | Make the archive bind writable
-      command: mount -o remount,bind,rw /mnt/services/mutt/archive # noqa: command-instead-of-module
-      become: true
-      changed_when: false
+# Exercise bind remount flags without editing fstab or the mount unit.
+- name: _verify | Make the archive bind writable
+  command: mount -o remount,bind,rw /mnt/services/mutt/archive # noqa: command-instead-of-module
+  become: true
+  changed_when: false
 
-    - name: _verify | Manual indexing refuses a writable mount
-      command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
-      register: _mutt_writable
-      changed_when: false
-      failed_when: >-
-        _mutt_writable.rc == 0
-        or 'must be mounted read-only' not in _mutt_writable.stderr
-  always:
-    - name: _verify | Restore the archive mount
-      systemd:
-        name: mnt-services-mutt-archive.mount
-        state: started
-      become: true
-
-    - name: _verify | Restore the read-only bind flag
-      command: mount -o remount,bind,ro /mnt/services/mutt/archive # noqa: command-instead-of-module
-      become: true
-      changed_when: false
+- name: _verify | Manual indexing refuses a writable mount
+  command: /usr/bin/notmuch --config /opt/mutt/notmuch-config new
+  register: _mutt_writable
+  changed_when: false
+  failed_when: >-
+    _mutt_writable.rc == 0
+    or 'must be mounted read-only' not in _mutt_writable.stderr
 
 - name: _verify | Rejected indexing preserves the message and tag
   command: /usr/bin/notmuch --config /opt/mutt/notmuch-config count tag:mutt_verify

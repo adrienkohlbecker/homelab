@@ -22,11 +22,10 @@ virtual-mailboxes "All Mail Search" "notmuch://?query=tag:archive"
 bind index,pager X change-vfolder
 bind index,pager \eX vfolder-from-query-readonly
 
-# Reinforce the launcher's -R: no moving, aging, or trashing archived mail.
-set read_only     = yes
-set move          = no
-set mark_old      = no
-set maildir_trash = no
+# Reinforce the launcher's -R and never age archived mail; moving and trashing
+# are already off by default.
+set read_only = yes
+set mark_old  = no
 unset confirm_append
 
 # Browsing ergonomics for one big flat archive.
