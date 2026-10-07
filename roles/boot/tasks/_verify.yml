@@ -54,42 +54,6 @@
     or 'is masked' not in _boot_verify_multipathd.stderr
   become: true
 
-- name: _verify | Exercise the all-kernel GRUB command-line scope
-  when: grub_bootloader
-  block:
-    - name: _verify | Install an all-kernel command-line contribution
-      import_role:
-        name: boot
-        tasks_from: cmdline
-      vars:
-        boot_cmdline_args:
-          name: _verify_all_scope
-          contents: verify_scope=all
-          grub_scope: all
-
-    - name: _verify | Read the all-kernel GRUB fragment
-      slurp:
-        src: /etc/default/grub.d/99-_verify_all_scope.cfg
-      register: _boot_verify_all_scope
-      become: true
-
-    - name: _verify | All-kernel scope selected GRUB_CMDLINE_LINUX
-      assert:
-        that:
-          - (_boot_verify_all_scope.content | b64decode).startswith('GRUB_CMDLINE_LINUX=')
-          - "'verify_scope=all' in (_boot_verify_all_scope.content | b64decode)"
-
-  always:
-    - name: _verify | Remove the all-kernel command-line contribution
-      import_role:
-        name: boot
-        tasks_from: cmdline
-      vars:
-        boot_cmdline_args:
-          name: _verify_all_scope
-          contents: ""
-          grub_scope: all
-
 # Minimal boots a pre-baked initrd outside /boot, as in console/_verify.yml.
 # Deployment-shaped fixtures boot the per-kernel image inspected here.
 #

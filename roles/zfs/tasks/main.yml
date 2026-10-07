@@ -78,7 +78,6 @@
     boot_cmdline_args:
       name: zfs
       contents: init_on_alloc=0
-      grub_scope: default
   tags:
     - zfs
 
