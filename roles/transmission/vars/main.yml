@@ -4,3 +4,8 @@
 # settings.json (which must pre-match that post-init value or idempotence
 # flaps). Single-sourcing the literal here keeps the twin from desyncing.
 transmission_host_whitelist: "transmission.{{ inventory_hostname }}.{{ domain }},transmission.dns.podman,localhost"
+
+# Peer port inside the container, shared by settings.json and the unit's
+# publish. Transmission announces it to trackers, so keep the host side
+# (service_ports.transmission_bt) on the same number.
+transmission_peer_port: 51413
