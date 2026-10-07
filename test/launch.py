@@ -3,15 +3,13 @@
 
 Pick a variant and the harness prepares its image overlays and launches QEMU.
 After boot it prints the SSH command, leaves the VM up, and blocks until
-Ctrl-C. Pass
---kernel/--append (plus --initrd for a bare kernel Image) to direct-boot a
-custom kernel against the variant's qcow2. A unified ZBM EFI image embeds its
-own initrd, so --initrd is optional with one:
+Ctrl-C; --exit-after-ready instead shuts down once systemd is running, which
+is packer:build's verify boot. Pass --kernel/--append to direct-boot a unified
+EFI image such as ZFSBootMenu's against the variant's disks:
 
-  test/launch.py --machine lab \\
-      --kernel /tmp/zbm/zfsbootmenu.EFI --with-pflash \\
+  test/launch.py --machine lab --kernel /tmp/zbm/zfsbootmenu.EFI \\
       --append 'earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200 zbm.show' \\
-      --no-ssh-wait --foreground
+      --foreground
 """
 
 import argparse
@@ -22,23 +20,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from machine import (
-    QEMU_MACHINE_SPECS,
-    SSH_HOST,
-    LaunchOptions,
-    Machine,
-    MachineRunOptions,
-)
+from machine import QEMU_MACHINE_SPECS, LaunchOptions, Machine, MachineRunOptions
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
-from utils import cancel_on_signal, print_cmd_line, print_line, tee_output
+from utils import print_cmd_line, print_line, tee_output
 
-
-def _virtfs_arg(spec: str) -> tuple[Path, str]:
-    """Parse one PATH:TAG --virtfs value."""
-    path, sep, tag = spec.rpartition(":")
-    if not sep or not path or not tag:
-        raise argparse.ArgumentTypeError(f"--virtfs expects PATH:TAG, got {spec!r}")
-    return Path(path).resolve(), tag
+# Bounds an --exit-after-ready verify end to end: boot, SSH, and systemd
+# settling.
+EXIT_AFTER_READY_TIMEOUT = 300
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,27 +49,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--kernel",
         type=Path,
-        help="Override kernel for direct -kernel boot. A bare kernel Image "
-        "also requires --initrd; a unified EFI image (e.g. ZBM's "
-        "zfsbootmenu.EFI, with --with-pflash) embeds its own and needs none.",
-    )
-    parser.add_argument(
-        "--initrd",
-        type=Path,
-        help="Override initrd for a direct -kernel boot of a bare kernel Image.",
+        help="Unified EFI image (e.g. ZBM's zfsbootmenu.EFI) to direct-boot; it "
+        "embeds its own initrd. Needs a Packer variant, which attaches UEFI.",
     )
     parser.add_argument(
         "--append",
         default="",
-        help="Kernel cmdline (used with --kernel/--initrd). The harness "
-        "auto-appends an arch-appropriate serial console= + earlycon= unless "
-        "you already supplied one (ttyAMA on aarch64, ttyS on x86_64).",
+        help="Kernel cmdline (used with --kernel). The harness auto-appends an "
+        "arch-appropriate serial console= + earlycon= unless you already "
+        "supplied one (ttyAMA on aarch64, ttyS on x86_64).",
     )
     parser.add_argument(
         "--mem",
+        type=int,
         default=None,
-        metavar="SIZE",
-        help="qemu memory size, e.g. '8192' or '8G'. Default 4096M.",
+        metavar="MIB",
+        help="Guest RAM in MiB, overriding the machine spec.",
     )
     parser.add_argument(
         "--vcpus",
@@ -92,45 +75,19 @@ def parse_args() -> argparse.Namespace:
         "ZFSBootMenu need 1 under stock HVF QEMU: a kexec'd kernel cannot bring its "
         "secondary CPUs online there (fixed by `mise run qemu:install_hvf_patched`).",
     )
-    parser.add_argument(
-        "--with-pflash",
-        action="store_true",
-        help="Attach EDK2/OVMF UEFI pflash for either arch using auto-detected "
-        "code (Homebrew / Linux distro paths) and an empty vars file sized "
-        "to the code. Needed for kernels that expect EFI runtime services; "
-        "direct --kernel boots and the default x86_64 minimal BIOS boot skip "
-        "UEFI firmware. No-op when pflash is already attached (Packer images "
-        "and aarch64 minimal).",
-    )
-    parser.add_argument(
-        "--virtfs",
-        action="append",
-        type=_virtfs_arg,
-        default=[],
-        metavar="PATH:TAG",
-        help="Mount PATH on the host as a 9p share with mount_tag=TAG inside "
-        "the guest (`mount -t 9p TAG /mnt`). Repeatable.",
-    )
     # Operator-only interactive mode; automated callers use the default async path.
     parser.add_argument(
         "--foreground",
         action="store_true",
         help="Inherit qemu's stdio and use -serial mon:stdio so HMP is "
         "reachable via Ctrl-A,c (Ctrl-A,x to quit). The boot log is NOT "
-        "captured to a file; implies --no-ssh-wait.",
+        "captured to a file, and nothing waits for SSH.",
     )
     parser.add_argument(
         "--display-window",
         action="store_true",
-        help="Use qemu's local GUI display backend instead of VNC for keep-VM "
-        "runs. Mainly useful with --foreground when testing boot UIs.",
-    )
-    parser.add_argument(
-        "--qmp",
-        type=Path,
-        default=None,
-        metavar="SOCKET",
-        help="Bind qemu's QMP server to the given unix socket path.",
+        help="Use qemu's local GUI display backend instead of VNC. Mainly "
+        "useful with --foreground when testing boot UIs.",
     )
     parser.add_argument(
         "--image-dir",
@@ -139,51 +96,20 @@ def parse_args() -> argparse.Namespace:
         metavar="PATH",
         help="Override the packer artifact directory the harness reads "
         "(packer-ubuntu-1..N.{raw,qcow2} + efivars.fd) instead of the variant's "
-        "default <imagedir>/<ubuntu>/<machine>. Lets packer:build "
-        "smoke-test a freshly-built staging "
-        "directory before it's swapped over the previous good artifact.",
-    )
-    parser.add_argument(
-        "--no-ssh-wait",
-        action="store_true",
-        help="Skip the SSH ready-check after boot -- e.g. when launching ZBM or any payload that doesn't expose sshd",
+        "default <imagedir>/<ubuntu>/<machine>. Lets packer:build smoke-test a "
+        "freshly-built staging directory before publishing it.",
     )
     parser.add_argument(
         "--exit-after-ready",
         action="store_true",
-        help="Exit cleanly after the SSH ready-check succeeds instead of "
-        "blocking until Ctrl-C. Smoke-test mode: prove the image boots, "
-        "then shut down. Mutually exclusive with --foreground and "
-        "--no-ssh-wait (nothing to wait on for either).",
-    )
-    parser.add_argument(
-        "--extra-hostfwd",
-        action="append",
-        type=int,
-        default=[],
-        metavar="GUEST_PORT",
-        dest="extra_hostfwds",
-        help="Forward an additional TCP guest port to a free host port. The "
-        "allocated host:port mapping is printed before qemu starts. "
-        "Repeatable.",
-    )
-    parser.add_argument(
-        "--write-hostfwds",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="As soon as the ports are allocated, write one "
-        "'HOST_PORT GUEST_PORT' line per --extra-hostfwd to PATH. "
-        "Lets scripts and second terminals find the forwarded ports — in "
-        "--foreground mode the serial console immediately floods the "
-        "terminal and the printed port line scrolls away.",
+        help="Shut down once systemd reports running instead of blocking "
+        "until Ctrl-C: prove the image boots, then exit. Headless, and "
+        "incompatible with --foreground and --display-window.",
     )
 
     args = parser.parse_args()
-    if args.initrd is not None and args.kernel is None:
-        parser.error("--initrd requires --kernel")
-    if args.exit_after_ready and (args.foreground or args.no_ssh_wait):
-        parser.error("--exit-after-ready requires waiting for SSH; cannot combine with --foreground or --no-ssh-wait")
+    if args.exit_after_ready and (args.foreground or args.display_window):
+        parser.error("--exit-after-ready runs headless; cannot combine with --foreground or --display-window")
     return args
 
 
@@ -208,53 +134,28 @@ def _dump_boot_console(m: Machine, lines: int = 200) -> None:
     print_line("--- end boot console ---")
 
 
-def _write_hostfwds(m: Machine, path: Path | None) -> None:
-    if path is None:
-        return
-    with path.open("w") as fh:
-        for guest_port, host_port in m.extra_hostfwd_ports.items():
-            fh.write(f"{host_port} {guest_port}\n")
+async def _run_async(m: Machine, *, exit_after_ready: bool) -> None:
+    """Boot and wait for SSH under the harness session.
 
-
-async def _run_async(m: Machine, *, wait_for_ssh: bool, exit_after_ready: bool, write_hostfwds: Path | None) -> None:
-    """Default flow: prepare + boot + ensure_ssh + wait, all under asyncio.
-
-    With exit_after_ready, skip the m.wait() block — the async with unwinds
-    after ensure_ssh succeeds and `systemctl is-system-running --wait` returns
-    a clean state. Boot, SSH, or systemd-state failure surfaces as an
-    exception (non-zero exit).
-
+    A kept VM stays up afterwards until Ctrl-C (the session prints the SSH
+    command and waits); --exit-after-ready instead checks systemd and shuts
+    down. Boot, SSH, or systemd-state failure dumps the boot console and
+    raises.
     """
-    task = asyncio.current_task()
-    assert task is not None
-    with cancel_on_signal(task):
-        async with m:
-            _write_hostfwds(m, write_hostfwds)
-            try:
-                await m.ensure_booted()
-            except (RuntimeError, TimeoutError) as exc:
-                print_line(f"Machine did not start: {exc}")
-                _dump_boot_console(m)
-                raise
+    async with m.session(EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None):
+        try:
+            await m.ensure_booted()
             print_line("Booted")
-            if wait_for_ssh:
-                try:
-                    await m.ensure_ssh()
-                    print_line("SSH up")
-                    if not exit_after_ready:
-                        m.print_ssh_instructions()
-                except TimeoutError as exc:
-                    print_line(f"SSH did not come up in time: {exc}")
-                    _dump_boot_console(m)
-                    if exit_after_ready:
-                        raise
+            await m.ensure_ssh()
+            print_line("SSH up")
             if exit_after_ready:
                 await m.ensure_system_running()
-            if not exit_after_ready:
-                await m.wait()
+        except RuntimeError, TimeoutError:
+            _dump_boot_console(m)
+            raise
 
 
-def _run_foreground(m: Machine, write_hostfwds: Path | None = None) -> int:
+def _run_foreground(m: Machine) -> int:
     """Sync qemu spawn -- no asyncio for the long-running wait.
 
     asyncio's subprocess machinery installs its own SIGCHLD/fd plumbing in
@@ -272,9 +173,6 @@ def _run_foreground(m: Machine, write_hostfwds: Path | None = None) -> int:
     """
     try:
         asyncio.run(m.prepare())
-        for guest_port, host_port in m.extra_hostfwd_ports.items():
-            print_line(f"Extra hostfwd: {m.ssh_host}:{host_port} -> guest:{guest_port}")
-        _write_hostfwds(m, write_hostfwds)
         cmd = m._boot_command()
         print_cmd_line(cmd)
         proc = subprocess.Popen(cmd)
@@ -300,46 +198,26 @@ def main() -> int:
     m = Machine(
         machine=args.machine,
         role="_launch",
-        keep_vm=True,
+        keep_vm=not args.exit_after_ready,
         ubuntu_name=args.ubuntu,
-        machine_timeout=0,
+        machine_timeout=EXIT_AFTER_READY_TIMEOUT if args.exit_after_ready else 0,
         launch=LaunchOptions(
             image_dir=args.image_dir,
             kernel=args.kernel,
-            initrd=args.initrd,
             append=args.append,
-            mem=args.mem,
-            with_pflash=args.with_pflash,
-            virtfs=tuple(args.virtfs),
             foreground=args.foreground,
             display_window=args.display_window,
-            # Automated verify runs have no display consumer. Keeping them
-            # off VNC also removes the port-selection race between
-            # concurrent packer:build verifies on the shared builder.
-            headless=args.exit_after_ready,
-            qmp_socket=args.qmp,
-            extra_hostfwds=tuple(args.extra_hostfwds),
         ),
-        # Pin the default loopback: --write-hostfwds emits ports only, and the
-        # ZBM smoke test connects at 127.0.0.1.
-        loopback_host=SSH_HOST,
-        run_options=MachineRunOptions(vcpus=args.vcpus),
+        run_options=MachineRunOptions(vcpus=args.vcpus, memory_mb=args.mem),
     )
 
     if args.foreground:
-        return _run_foreground(m, write_hostfwds=args.write_hostfwds)
+        return _run_foreground(m)
 
     rc = 0
     try:
         with tee_output(m.output_file):
-            asyncio.run(
-                _run_async(
-                    m,
-                    wait_for_ssh=not args.no_ssh_wait,
-                    exit_after_ready=args.exit_after_ready,
-                    write_hostfwds=args.write_hostfwds,
-                )
-            )
+            asyncio.run(_run_async(m, exit_after_ready=args.exit_after_ready))
     except asyncio.CancelledError:
         print_line("\nInterrupted, shutting down...")
         rc = 130

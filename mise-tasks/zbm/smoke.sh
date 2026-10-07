@@ -75,15 +75,13 @@ base_cmdline=$(cat "${workdir}/cmdline")
 
 # Boot the unified EFI image rEFInd actually loads in production, not the
 # components-mode kernel+initrd pair -- it embeds its own initrd/cmdline PE
-# sections, read the same way as a real firmware boot (--with-pflash), so no
-# --initrd is needed.
+# sections, read the same way as a real firmware boot through the lab
+# variant's UEFI.
 "${repo_root}/test/launch.py" \
   --machine lab \
   --kernel "${workdir}/zfsbootmenu.EFI" \
   --append "$base_cmdline loglevel=7 zbm.show" \
   --mem 2048 \
-  --with-pflash \
-  --no-ssh-wait \
   --foreground <"$serial_fifo" >"$boot_log" 2>&1 &
 launcher_pid=$!
 

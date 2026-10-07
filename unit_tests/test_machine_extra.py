@@ -425,21 +425,25 @@ class TestCellLoopbackHost:
         monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
         assert machine._cell_loopback_host() == machine.SSH_HOST
 
-    def test_explicit_loopback_threads_through_ssh_and_ansible(
-        self, machine_factory: Callable[..., machine.Machine]
+    def test_cell_loopback_threads_through_ssh_and_ansible(
+        self, machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # A pinned per-cell address must reach every controller-side endpoint:
-        # the SSH target, the ControlMaster socket path (host-keyed so two cells
+        # The per-cell address must reach every controller-side endpoint: the
+        # SSH target, the ControlMaster socket path (host-keyed so two cells
         # reusing a port don't share one socket), and ansible's connection vars.
-        m = machine_factory(ssh_port=2222, ssh_user="vagrant", loopback_host="127.5.6.7")
+        monkeypatch.setattr(machine, "_cell_loopback_host", lambda: "127.5.6.7")
+        m = machine_factory(ssh_port=2222, ssh_user="vagrant")
         assert m.format_ssh_cmd()[-1] == "vagrant@127.5.6.7"
         assert m.ssh_control_path == "/tmp/homelab-cm-127.5.6.7-2222"
         m._write_connection_inventory()
         assert "ansible_ssh_host=127.5.6.7 " in m.connection_inventory_path.read_text()
         assert "wan_probe_host=127.5.6.7" in m.format_ansible_cmd("site.yml")
 
-    def test_explicit_loopback_binds_hostfwds(self, machine_factory: Callable[..., machine.Machine]) -> None:
-        m = machine_factory(machine="lab", loopback_host="127.5.6.7")
+    def test_cell_loopback_binds_hostfwds(
+        self, machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(machine, "_cell_loopback_host", lambda: "127.5.6.7")
+        m = machine_factory(machine="lab")
         m.ssh_port = 2222
         m.wan_forward_ports = {"tcp": {}, "udp": {}}
         netdev, _ = m._netdev_args()

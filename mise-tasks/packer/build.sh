@@ -127,7 +127,7 @@ finalize() {
     if [ "$(uname -s)" = Darwin ] && [[ "$(command -v qemu-system-aarch64)" != */qemu-hvf/* ]]; then
       vcpus_args=(--vcpus 1)
     fi
-    timeout --kill-after=30s 300 test/launch.py \
+    test/launch.py \
       --machine "${source}" \
       --ubuntu "${usage_ubuntu}" \
       --exit-after-ready \

@@ -28,9 +28,8 @@ def test_default_x86_64_no_keep_no_direct_boot(
     cmd = m._boot_command()
 
     # GNU timeout wrapper -- the 10s kill-after gives the qemu signal handler
-    # a window before SIGKILL. wrapper_timeout = machine_timeout +
-    # WRAPPER_GRACE_SECONDS (60s); the wrapper has to outlast the inner
-    # asyncio.timeout in run_test.
+    # a window before SIGKILL. The wrapper outlasts machine_timeout by
+    # WRAPPER_GRACE_SECONDS (60s), so the inner asyncio.timeout fires first.
     assert cmd[0] == "timeout"
     assert cmd[1] == "--kill-after=10s"
     assert cmd[2] == str(600 + machine.Machine.WRAPPER_GRACE_SECONDS)
@@ -59,7 +58,6 @@ def test_default_x86_64_no_keep_no_direct_boot(
 
     # No direct -kernel boot in this configuration.
     assert "-kernel" not in cmd
-    assert "-initrd" not in cmd
     assert "-append" not in cmd
 
     # Pidfile under the workdir.
@@ -107,8 +105,8 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
     _setup(m)
     cmd = m._boot_command()
 
-    # keep_vm collapses the wrapper timeout to 0 ("no timeout" in GNU timeout).
-    assert cmd[2] == "0"
+    # A kept VM runs unwrapped, until the operator stops it.
+    assert cmd[0] == "qemu-system-x86_64"
 
     # x86_64 q35 has VGA / PS/2 / ICH9 USB by default; only usb-tablet is
     # added (absolute mouse for VNC). No virtio-gpu-pci.
@@ -138,18 +136,6 @@ def test_keep_vm_display_window_uses_local_qemu_backend(
     assert not any(a.startswith("vnc=") for a in cmd)
 
 
-def test_keep_vm_headless_disables_display_devices(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory(host_arch="x86_64", keep_vm=True, launch=machine.LaunchOptions(headless=True))
-    _setup(m)
-    cmd = m._boot_command()
-
-    assert cmd[cmd.index("-display") + 1] == "none"
-    assert "-k" not in cmd
-    assert "usb-tablet" not in cmd
-
-
 def test_keep_vm_aarch64_adds_full_input_stack(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
@@ -171,7 +157,6 @@ def test_direct_boot_aarch64_appends_console_when_missing(
         keep_vm=False,
         launch=machine.LaunchOptions(
             kernel=Path("/cache/kernel"),
-            initrd=Path("/cache/initrd"),
             append="root=zfs:rpool/ROOT/ubuntu_xyz",
         ),
     )
@@ -179,7 +164,6 @@ def test_direct_boot_aarch64_appends_console_when_missing(
     cmd = m._boot_command()
 
     assert cmd[cmd.index("-kernel") + 1] == "/cache/kernel"
-    assert cmd[cmd.index("-initrd") + 1] == "/cache/initrd"
 
     append = cmd[cmd.index("-append") + 1]
     # Original cmdline preserved verbatim, followed by the arch-specific UART.
@@ -190,26 +174,6 @@ def test_direct_boot_aarch64_appends_console_when_missing(
     assert "console=tty0" not in append
 
 
-def test_direct_boot_kernel_alone_omits_initrd(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory(
-        host_arch="aarch64",
-        keep_vm=False,
-        launch=machine.LaunchOptions(
-            kernel=Path("/cache/zfsbootmenu.EFI"),
-            append="root=zfs:rpool/ROOT/ubuntu_xyz",
-        ),
-    )
-    _setup(m)
-    cmd = m._boot_command()
-
-    # A unified EFI image carries its own initrd/cmdline PE sections; no
-    # separate -initrd is needed or added.
-    assert cmd[cmd.index("-kernel") + 1] == "/cache/zfsbootmenu.EFI"
-    assert "-initrd" not in cmd
-
-
 def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
@@ -218,7 +182,6 @@ def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
         keep_vm=False,
         launch=machine.LaunchOptions(
             kernel=Path("/cache/kernel"),
-            initrd=Path("/cache/initrd"),
             append="root=zfs:rpool/ROOT/ubuntu_xyz console=ttyAMA0 quiet",
         ),
     )
@@ -236,7 +199,6 @@ def test_direct_boot_x86_64_appends_ttyS(
         keep_vm=False,
         launch=machine.LaunchOptions(
             kernel=Path("/cache/kernel"),
-            initrd=Path("/cache/initrd"),
             append="root=zfs:rpool/ROOT/ubuntu_xyz",
         ),
     )
@@ -254,7 +216,6 @@ def test_direct_boot_keep_vm_inserts_tty0_first(
         keep_vm=True,
         launch=machine.LaunchOptions(
             kernel=Path("/cache/kernel"),
-            initrd=Path("/cache/initrd"),
             append="root=zfs:rpool/ROOT/ubuntu_xyz",
         ),
     )

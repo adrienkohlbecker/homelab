@@ -202,8 +202,8 @@ def main() -> int:
     # local parallel runs sharing an imagedir.
     sweep_stale_workdirs(imagedir_for_host())
 
-    # Machine.wrapper_timeout layers WRAPPER_GRACE_SECONDS on top of this so
-    # the inner `timeout` wrapper outlasts the Python deadline.
+    # Machine._boot_command layers WRAPPER_GRACE_SECONDS on top of this so
+    # the qemu `timeout` wrapper outlasts the Python deadline.
     m = Machine(
         machine=parsed_args.machine,
         role=parsed_args.role,

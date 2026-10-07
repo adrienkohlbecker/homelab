@@ -34,9 +34,8 @@ from utils import (
 OUT_DIR = Path("test/out")
 
 SSH_KEY = "packer/vagrant.key"
-# Default loopback endpoint for qemu hostfwd binds, VNC displays, SSH, and
-# delegated WAN probes. Each harness-driven cell overrides this with a private
-# 127.x.y.z address (see _cell_loopback_host); launch.py pins it back here.
+# Loopback endpoint for qemu hostfwd binds, VNC displays, SSH, and delegated
+# WAN probes on hosts without per-cell addresses (see _cell_loopback_host).
 SSH_HOST = "127.0.0.1"
 PIDFILE_NAME = "pid"
 
@@ -258,16 +257,9 @@ class LaunchOptions:
 
     image_dir: Path | None = None
     kernel: Path | None = None
-    initrd: Path | None = None
     append: str = ""
-    mem: str | None = None
-    with_pflash: bool = False
-    virtfs: tuple[tuple[Path, str], ...] = ()
     foreground: bool = False
     display_window: bool = False
-    headless: bool = False
-    qmp_socket: Path | None = None
-    extra_hostfwds: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -331,10 +323,6 @@ class Machine:
     # consumed by _boot_command for the `-display vnc=` argument. Bound on
     # 5900+display so qemu won't try to walk the band itself.
     vnc_display: int
-    # Extra guest ports to forward in addition to the configured probe ports.
-    # Set by LaunchOptions.extra_hostfwds; populated in
-    # prepare() as {guest_port: host_port}.
-    extra_hostfwd_ports: dict[int, int]
 
     def __init__(
         self,
@@ -347,17 +335,11 @@ class Machine:
         *,
         launch: LaunchOptions | None = None,
         run_options: MachineRunOptions | None = None,
-        loopback_host: str | None = None,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
         launch carries launch.py-only qemu overrides. run_options carries
         explicit per-run resource and logging policy.
-
-        loopback_host pins the 127.x bind address for this cell's hostfwds/SSH;
-        None derives a per-process address (see _cell_loopback_host) so parallel
-        cells don't collide. launch.py passes 127.0.0.1 to keep its
-        --write-hostfwds contract (consumers assume the default loopback).
         """
         self.launch = launch or LaunchOptions()
         self.run_options = run_options or MachineRunOptions()
@@ -376,15 +358,12 @@ class Machine:
         self._spec = spec
         if self.launch.image_dir is not None and spec.cloud_image:
             raise ValueError(f"image_dir override requires an artifact-backed variant, got {machine!r}")
-        if self.launch.initrd is not None and self.launch.kernel is None:
-            raise ValueError("launch initrd requires a kernel")
-        self.extra_hostfwd_ports: dict[int, int] = {}
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
         self.arch: ArchProfile = detect_host_arch()
 
         self.ssh_port = 0
-        self.ssh_host = loopback_host if loopback_host is not None else _cell_loopback_host()
+        self.ssh_host = _cell_loopback_host()
         self.ssh_user = spec.ssh_user
         self.inventory_host = spec.inventory_host
         self.machine = machine
@@ -463,20 +442,6 @@ class Machine:
     def pid_file(self) -> Path:
         """QEMU pidfile path under the per-run workdir."""
         return self.workdir_path / PIDFILE_NAME
-
-    @property
-    def wrapper_timeout(self) -> int:
-        """Last-resort timeout passed to coreutils `timeout` / podman --timeout.
-
-        0 disables the wrapper (`timeout 0` runs forever, podman --timeout 0
-        is "no timeout") so an interactive --keep session isn't cut short.
-        Otherwise it's machine_timeout (the Python deadline) plus a small
-        grace window so Machine.stop() finishes its graceful->SIGKILL
-        escalation before the wrapper kills its child.
-        """
-        if self.keep_vm:
-            return 0
-        return self.machine_timeout + self.WRAPPER_GRACE_SECONDS
 
     @property
     def ssh_control_path(self) -> str:
@@ -902,7 +867,7 @@ class Machine:
             await self.proc.wait()
 
     @contextlib.asynccontextmanager
-    async def session(self, timeout: int) -> AsyncIterator[None]:
+    async def session(self, timeout: int | None) -> AsyncIterator[None]:
         """Run under the harness timeout, signal, and keep-VM policy."""
         task = asyncio.current_task()
         assert task is not None
@@ -1068,18 +1033,11 @@ class Machine:
                     if key in self.wan_forward_ports[proto]:
                         continue
                     self.wan_forward_ports[proto][key] = _reserve(sock_type)
-            for guest_port in self.launch.extra_hostfwds:
-                key = str(guest_port)
-                if key in self.wan_forward_ports["tcp"]:
-                    self.extra_hostfwd_ports[guest_port] = self.wan_forward_ports["tcp"][key]
-                    continue
-                self.extra_hostfwd_ports[guest_port] = _reserve(socket.SOCK_STREAM)
-                self.wan_forward_ports["tcp"][key] = self.extra_hostfwd_ports[guest_port]
         finally:
             for s in reserved:
                 s.close()
 
-        if self.keep_vm and not self.launch.display_window and not self.launch.headless:
+        if self.keep_vm and not self.launch.display_window:
             # qemu's vnc= syntax interprets the number as a display
             # (port = 5900+display); pick it up front so we can print it.
             self.vnc_display = self._pick_vnc_display()
@@ -1137,11 +1095,6 @@ class Machine:
 
             self.drives = [self._virtio_drive(path, "qcow2") for path in os_disk_paths]
             shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
-            self.drives += await self._uefi_drives()
-
-        # Attach pflash when launch.py requested it and the selected path did
-        # not already require it (for example x86_64 minimal under SeaBIOS).
-        if self.launch.with_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
 
     async def _create_overlay(self, src: str, dest: str, *, backing_fmt: str, size: str | None = None) -> None:
@@ -1312,9 +1265,7 @@ class Machine:
         """
         accel = "hvf" if platform.system() == "Darwin" else "kvm"
 
-        if self.launch.headless:
-            display_args = ["-display", "none"]
-        elif self.keep_vm:
+        if self.keep_vm:
             # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
             # (machine flag usb=on, applied below); usb-tablet then attaches
             # to the built-in EHCI/UHCI for absolute-coordinate mouse.
@@ -1343,23 +1294,27 @@ class Machine:
             display_args = ["-display", "none"]
 
         # A unified ZBM EFI image embeds its own initrd/cmdline PE sections
-        # (read by qemu's aarch64 PE loader when pflash/UEFI is attached, the
-        # same LoadOptions-override rEFInd uses); no -initrd is needed for it.
-        # A bare kernel Image still requires one.
+        # (read by qemu's PE loader when pflash/UEFI is attached, the same
+        # LoadOptions-override rEFInd uses), so no -initrd is needed.
         direct_boot: list[str] = []
         if self.launch.kernel is not None:
             cmdline = self._augment_kernel_cmdline(self.launch.append)
-            direct_boot = ["-kernel", str(self.launch.kernel.resolve())]
-            if self.launch.initrd is not None:
-                direct_boot += ["-initrd", str(self.launch.initrd.resolve())]
-            direct_boot += ["-append", cmdline]
+            direct_boot = ["-kernel", str(self.launch.kernel.resolve()), "-append", cmdline]
 
         netdev_arg, net_device_arg = self._netdev_args()
 
+        # Last-resort GNU timeout around qemu, outlasting machine_timeout (the
+        # Python deadline) by a grace window so Machine.stop() finishes its
+        # graceful->SIGKILL escalation first. A kept VM runs until the operator
+        # stops it, and runs unwrapped: GNU timeout detaches its child from the
+        # controlling tty, which would leave --foreground's mon:stdio unusable.
+        wrapper = (
+            []
+            if self.keep_vm
+            else ["timeout", "--kill-after=10s", str(self.machine_timeout + self.WRAPPER_GRACE_SECONDS)]
+        )
         cmd = [
-            "timeout",
-            "--kill-after=10s",
-            str(self.wrapper_timeout),
+            *wrapper,
             self.arch.qemu_binary,
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
@@ -1409,37 +1364,11 @@ class Machine:
             str(self.pid_file),
         ]
 
-        # launch.py-only post-process. Each branch is a no-op when the
-        # corresponding kwarg is at its default, so testrole.py / production
-        # callers see the cmdline above verbatim.
-        if self.launch.mem is not None:
-            cmd[cmd.index("-m") + 1] = self.launch.mem
-
         if self.launch.foreground:
-            # Strip the `timeout --kill-after=10s 0 ...` wrapper. GNU timeout,
-            # when not invoked directly from a shell prompt, detaches the
-            # child from the controlling tty (it has a `--foreground` flag
-            # specifically to opt out of that). Without that flag qemu can't
-            # put the terminal into raw mode, so mon:stdio is unusable. We
-            # don't need the wrapper in interactive mode anyway -- the user
-            # quits via Ctrl-A,x.
-            if cmd[0] != "timeout":
-                # Raise so a future change to the wrapper layout surfaces
-                # cleanly instead of silently slicing the wrong prefix.
-                raise RuntimeError(f"expected timeout wrapper, got {cmd[:4]}")
-            cmd = cmd[3:]
             # mon:stdio multiplexes the guest's first serial port with qemu's
             # HMP. Press Ctrl-A,c at the terminal to switch to HMP, Ctrl-A,c
             # again to return; Ctrl-A,x to quit qemu.
             cmd[cmd.index("-serial") + 1] = "mon:stdio"
-
-        if self.launch.qmp_socket is not None:
-            cmd += ["-qmp", f"unix:{self.launch.qmp_socket},server=on,wait=off"]
-        for path, tag in self.launch.virtfs:
-            cmd += [
-                "-virtfs",
-                f"local,id={tag},path={path},mount_tag={tag},security_model=mapped-xattr",
-            ]
         return cmd
 
     async def _close_ssh_master(self) -> None:

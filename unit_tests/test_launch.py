@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+from collections.abc import AsyncIterator
 from typing import cast
 
 import launch
@@ -10,14 +11,13 @@ import pytest
 
 class LaunchMachine:
     def __init__(self) -> None:
-        self.printed_ssh_instructions = False
+        self.session_timeout: int | None = 0
         self.system_running_checked = False
 
-    async def __aenter__(self) -> LaunchMachine:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        return None
+    @contextlib.asynccontextmanager
+    async def session(self, timeout: int | None) -> AsyncIterator[None]:
+        self.session_timeout = timeout
+        yield
 
     async def ensure_booted(self) -> None:
         return None
@@ -28,28 +28,27 @@ class LaunchMachine:
     async def ensure_system_running(self) -> None:
         self.system_running_checked = True
 
-    def print_ssh_instructions(self) -> None:
-        self.printed_ssh_instructions = True
 
-
-def test_exit_after_ready_skips_interactive_ssh_instructions(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(launch, "cancel_on_signal", lambda _task: contextlib.nullcontext())
+@pytest.mark.parametrize("exit_after_ready", [True, False])
+def test_only_exit_after_ready_checks_systemd_under_a_deadline(exit_after_ready: bool) -> None:
     machine = LaunchMachine()
 
-    asyncio.run(
-        launch._run_async(
-            cast(launch.Machine, machine),
-            wait_for_ssh=True,
-            exit_after_ready=True,
-            write_hostfwds=None,
-        )
-    )
+    asyncio.run(launch._run_async(cast(launch.Machine, machine), exit_after_ready=exit_after_ready))
 
-    assert machine.printed_ssh_instructions is False
-    assert machine.system_running_checked is True
+    assert machine.system_running_checked is exit_after_ready
+    assert machine.session_timeout == (launch.EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None)
 
 
-def test_vcpus_flag_reaches_the_machine(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("argv", "keep_vm", "run_options"),
+    [
+        (["--vcpus", "1", "--mem", "2048"], True, launch.MachineRunOptions(vcpus=1, memory_mb=2048)),
+        (["--exit-after-ready"], False, launch.MachineRunOptions()),
+    ],
+)
+def test_flags_reach_the_machine(
+    monkeypatch: pytest.MonkeyPatch, argv: list[str], keep_vm: bool, run_options: launch.MachineRunOptions
+) -> None:
     captured: dict[str, object] = {}
 
     def fake_machine(**kwargs: object) -> object:
@@ -57,9 +56,10 @@ def test_vcpus_flag_reaches_the_machine(monkeypatch: pytest.MonkeyPatch) -> None
         raise SystemExit(0)
 
     monkeypatch.setattr(launch, "Machine", fake_machine)
-    monkeypatch.setattr(launch.sys, "argv", ["launch.py", "--machine", "lab", "--vcpus", "1"])
+    monkeypatch.setattr(launch.sys, "argv", ["launch.py", "--machine", "lab", *argv])
 
     with pytest.raises(SystemExit):
         launch.main()
 
-    assert captured["run_options"] == launch.MachineRunOptions(vcpus=1)
+    assert captured["keep_vm"] is keep_vm
+    assert captured["run_options"] == run_options
