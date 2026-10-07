@@ -92,21 +92,6 @@
   failed_when: mosquitto_badpw.rc == 0
   changed_when: false
 
-# Clear the retained test messages so a re-run against a --keep VM starts clean.
-- name: _verify | Clear retained test messages
-  command: >-
-    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
-    mosquitto_pub -h mosquitto.dns.podman -p 1883
-    -u {{ item.key | quote }} -P {{ item.value.password | quote }}
-    -t {{ ('homelab/verify/' ~ item.key) | quote }} -r -n
-  args:
-    expand_argument_vars: false
-  become: true
-  changed_when: false
-  loop: "{{ mosquitto_accounts | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-
 - name: _verify | Broker restart and disposable clients create no volumes
   command: podman volume ls --quiet
   become: true
