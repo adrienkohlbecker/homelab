@@ -137,18 +137,6 @@
   tags:
     - user
 
-# Importing a key already in the keyring merges nothing; IMPORT_OK reports a
-# zero reason bitmask then, and nonzero for a new key or new subkeys, UIDs or
-# signatures, so an updated vendored key (extended expiry) lands on next run.
-- name: Import the operator GPG public key
-  command:
-    argv: [ gpg, --batch, --status-fd, "1", --import ]
-    stdin: "{{ lookup('file', 'operator_gpg_public_key.asc') }}"
-  register: user_gpg_import
-  changed_when: user_gpg_import.stdout is search('(?m)^\[GNUPG:\] IMPORT_OK [1-9]')
-  tags:
-    - user
-
 # Clone direct from github.com, not mirror_github: the Nexus github proxy is a
 # raw artifact proxy for release downloads and can't speak git smart-HTTP, so
 # a clone through it 404s.
@@ -196,8 +184,9 @@
   tags:
     - user
 
-# Dotfiles own the Stow package set and flags. Its verbose actions report link
-# changes; an existing mise config must not prevent repairing other missing links.
+# Dotfiles own the Stow package set, its flags, and the operator GPG public key
+# import. Its verbose actions report link changes; an existing mise config must
+# not prevent repairing other missing links.
 # On a fresh check run the predicted clone cannot be used as a working directory.
 - name: Deploy dotfiles into $HOME (mise stow task)
   when: not (ansible_check_mode and (user_dotfiles_clone is skipped or user_dotfiles_clone.changed))
