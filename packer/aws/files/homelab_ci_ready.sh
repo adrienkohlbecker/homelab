@@ -19,5 +19,4 @@ done
 env -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null
 command -v "qemu-system-$(uname -m)" >/dev/null
 command -v qemu-img >/dev/null
-command -v passt >/dev/null
 command -v mise >/dev/null

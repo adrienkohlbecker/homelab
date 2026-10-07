@@ -23,14 +23,13 @@
     - homelab_ci
 
 # The harness and Packer boot native-architecture guests with the UEFI pair
-# that data/architectures.yml names. Packer's network wrapper prefers passt,
-# image bundles are zstd tarballs, and the Hetzner upload pipes through mbuffer.
+# that data/architectures.yml names. Image bundles are zstd tarballs, and the
+# Hetzner upload pipes through mbuffer.
 - name: Install CI host packages
   apt:
     name:
       - acl
       - mbuffer
-      - passt
       - qemu-utils
       - xorriso
       - zstd

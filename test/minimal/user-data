@@ -1,9 +1,8 @@
 #cloud-config
 # Render /etc/hosts (including `127.0.1.1 test2`, the meta-data local-hostname)
 # so sudo/PAM's name lookup during the first `become` resolves locally instead
-# of hitting DNS. Minimal is absent from data/network_topology.yml, so passt
-# assigns it off the container's default interface with the passt gateway as
-# its only resolver -- a slow/flaky NAT-DNS path that intermittently exceeded
+# of hitting DNS. Minimal is absent from data/network_topology.yml, so its only
+# resolver is qemu's user-net DNS forwarder -- a NAT-DNS path that can exceed
 # Mitogen's 10-second become-bootstrap deadline. Lab and Pug avoid this through
 # Packer's etc_hosts seeding plus topology addressing; the cloud image has
 # neither, so seed it here.

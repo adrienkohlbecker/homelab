@@ -44,7 +44,6 @@ sudo apt-get update -qq
     qemu-utils \
     openssh-client \
     netcat-openbsd \
-    passt \
     xorriso \
     python3-yaml \
     build-essential \

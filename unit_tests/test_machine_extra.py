@@ -290,7 +290,7 @@ class TestMachineArtifactOwnership:
     ) -> None:
         out = tmp_path / "out"
         out.mkdir()
-        artifacts = [out / f"lab.noble.testrole.{suffix}.ansi" for suffix in ("output", "journal", "boot", "passt")]
+        artifacts = [out / f"lab.noble.testrole.{suffix}.ansi" for suffix in ("output", "journal", "boot")]
         for artifact in artifacts:
             artifact.write_text("stale")
 
@@ -442,6 +442,5 @@ class TestCellLoopbackHost:
         m = machine_factory(machine="lab", loopback_host="127.5.6.7")
         m.ssh_port = 2222
         m.wan_forward_ports = {"tcp": {}, "udp": {}}
-        m._net_backend = "slirp"
         netdev, _ = m._netdev_args()
         assert "hostfwd=tcp:127.5.6.7:2222-:22" in netdev

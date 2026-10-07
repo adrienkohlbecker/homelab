@@ -77,7 +77,7 @@ base_cmdline=$(cat "${workdir}/cmdline")
 # components-mode kernel+initrd pair -- it embeds its own initrd/cmdline PE
 # sections, read the same way as a real firmware boot (--with-pflash), so no
 # --initrd is needed.
-HOMELAB_NET_BACKEND=slirp "${repo_root}/test/launch.py" \
+"${repo_root}/test/launch.py" \
   --machine lab \
   --kernel "${workdir}/zfsbootmenu.EFI" \
   --append "$base_cmdline loglevel=7 zbm.show" \
