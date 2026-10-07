@@ -9,24 +9,20 @@ packer {
       version = "~> 1"
       source  = "github.com/hashicorp/qemu"
     }
-    external = {
-      version = ">= 0.0.2"
-      source  = "github.com/joomcode/external"
-    }
   }
 }
 
 # Native host architecture and operating system are separate dimensions: both
 # Linux/KVM and macOS/HVF can build aarch64 images. The table lookups below fail
 # loudly for unsupported values.
-data "external-raw" "host_arch" {
-  program = ["uname", "-m"]
-  query   = ""
+variable "host_arch" {
+  type        = string
+  description = "Build host `uname -m`."
 }
 
-data "external-raw" "host_os" {
-  program = ["uname", "-s"]
-  query   = ""
+variable "host_os" {
+  type        = string
+  description = "Build host `uname -s`."
 }
 
 variable "ubuntu_name" {
@@ -59,9 +55,8 @@ variable "upstream_mirrors" {
 locals {
   # Normalize Mac's "arm64" to "aarch64" (qemu / refind / ZBM use the
   # latter; uname -m reports the former). Pass-through for x86_64.
-  arch_raw = trimspace(data.external-raw.host_arch.result)
-  arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
-  host_os  = lower(trimspace(data.external-raw.host_os.result))
+  arch     = var.host_arch == "arm64" ? "aarch64" : var.host_arch
+  host_os  = lower(var.host_os)
   versions = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
 
   # Codename -> Ubuntu version and immutable released-image serial.

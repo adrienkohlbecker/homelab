@@ -186,7 +186,7 @@ description = "Validate Packer templates"
 # qemu.pkr.hcl, so it can't sit in the same directory-mode namespace);
 # directory-mode validate doesn't recurse, so list it explicitly.
 run = [
-  "packer validate -evaluate-datasources -var upstream_mirrors=true -var publish=false -var build_directory=/tmp -var output_directory=/tmp packer",
+  "packer validate -var host_arch=x86_64 -var host_os=Linux -var upstream_mirrors=true -var publish=false -var build_directory=/tmp -var output_directory=/tmp packer",
   "packer validate packer/aws",
 ]
 

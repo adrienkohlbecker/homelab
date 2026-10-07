@@ -105,6 +105,8 @@ packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
   "--on-error=${on_error}" \
+  -var "host_arch=$(uname -m)" \
+  -var "host_os=$(uname -s)" \
   -var "ubuntu_name=${usage_ubuntu}" \
   -var "upstream_mirrors=${usage_upstream:-false}" \
   -var "publish=${publish}" \
