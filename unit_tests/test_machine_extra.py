@@ -250,12 +250,11 @@ class TestUefiDrives:
         self,
         machine_factory: Callable[..., machine.Machine],
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         code = tmp_path / "code.fd"
         code.write_bytes(b"code")
-        monkeypatch.setattr(machine, "uefi_code_path_for", lambda _arch: code)
         instance = machine_factory(host_arch="aarch64")
+        instance.guest = {"uefi_firmware": {"darwin": {"code": str(code)}}}
 
         drives = asyncio.run(instance._uefi_drives())
 

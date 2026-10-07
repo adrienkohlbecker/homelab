@@ -59,8 +59,7 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
         ssh_user: str | None = None,
         **overrides: Any,
     ) -> machine.Machine:
-        # detect_host_arch() runs once inside Machine.__init__ and the
-        # ArchProfile gets cached on the instance, so the patch must be in
+        # Machine.__init__ resolves the host arch once, so the patch must be in
         # place before make() constructs the machine below.
         monkeypatch.setattr(machine.platform, "machine", lambda: host_arch)
         kwargs: dict[str, Any] = dict(

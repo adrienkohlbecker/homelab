@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import NamedTuple, Self
 
 import yaml
-from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from matrix import UBUNTU_RELEASES
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
@@ -68,6 +67,25 @@ def _cell_loopback_host() -> str:
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
 GUEST_JOURNAL_UNIT_PATH = Path(__file__).parent / "homelab_guest_journal.service"
+# Guest machine, NIC, cloud-image token, and UEFI pairs per architecture,
+# shared with the Packer fixture build and the CI image stores.
+ARCHITECTURES = yaml.safe_load((Path(__file__).parent.parent / "data" / "architectures.yml").read_text())
+# Extra -device flags for interactive (VNC) mode. q35 brings std VGA / PS/2 /
+# ICH9 USB, so x86_64 only needs usb-tablet for an absolute mouse; aarch64 virt
+# has no default graphics or input.
+KEEP_VM_DEVICES = {
+    "x86_64": ("-device", "usb-tablet"),
+    "aarch64": ("-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"),
+}
+
+
+def host_arch() -> str:
+    """This host's platform.machine(), as a data/architectures.yml key."""
+    machine = platform.machine()
+    arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+    if arch not in ARCHITECTURES:
+        raise RuntimeError(f"Unsupported host architecture: {machine}")
+    return arch
 
 
 # Guest ports the controller-side firewall _verify probes reach as WAN traffic;
@@ -329,7 +347,9 @@ class Machine:
             raise ValueError(f"image_dir override requires an artifact-backed variant, got {machine!r}")
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
-        self.arch: ArchProfile = detect_host_arch()
+        self.arch = host_arch()
+        self.guest: dict = ARCHITECTURES[self.arch]["guest"]
+        self.qemu_binary = f"qemu-system-{self.arch}"
 
         self.ssh_port = 0
         self.ssh_host = _cell_loopback_host()
@@ -384,8 +404,8 @@ class Machine:
             ssh_key_path.chmod(0o600)
 
         self._require_binary(
-            self.arch.qemu_binary,
-            f"Install via `brew install qemu` (macOS) or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
+            self.qemu_binary,
+            f"Install via `brew install qemu` (macOS) or `apt install qemu-system-{self.arch}` (Debian/Ubuntu).",
         )
         # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
         # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
@@ -1013,7 +1033,7 @@ class Machine:
                 f"file={seed_img},if=virtio,format=raw",
             ]
             # x86_64 q35 can fall back to SeaBIOS; aarch64 virt requires UEFI.
-            if not self.arch.bios_boot_supported:
+            if self.arch != "x86_64":
                 self.drives += await self._uefi_drives()
         else:
             # Artifact-backed variants overlay every disk Packer published,
@@ -1070,7 +1090,7 @@ class Machine:
         Local runs use the Nexus proxy by default; AWS cells and
         --upstream-mirrors fetch directly from cloud-images.ubuntu.com.
         """
-        name = f"ubuntu-{UBUNTU_RELEASES[self.ubuntu_name]}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img"
+        name = f"ubuntu-{UBUNTU_RELEASES[self.ubuntu_name]}-minimal-cloudimg-{self.guest['cloud_image_suffix']}.img"
         cache = self.imagedir / "cloud-images"
         cache.mkdir(parents=True, exist_ok=True)
         target = cache / name
@@ -1123,7 +1143,7 @@ class Machine:
     async def _uefi_drives(self) -> list[str]:
         """Return the auto-detected UEFI code and writable vars pair.
 
-        The CODE blob comes from arch.uefi_code_path_for. The VARS blob is
+        The CODE blob is the host OS's pair in data/architectures.yml. The VARS blob is
         one of:
 
         - {workdir}/efivars.fd, copied from the packer image for ZFS
@@ -1134,7 +1154,11 @@ class Machine:
         aren't uniform: aarch64 EDK2 ships at 64 MiB, x86_64 OVMF typically at
         4 MiB.
         """
-        code_path = uefi_code_path_for(self.arch)
+        host_os = platform.system().lower()
+        try:
+            code_path = Path(self.guest["uefi_firmware"][host_os]["code"])
+        except KeyError:
+            raise RuntimeError(f"No {self.arch} UEFI firmware is defined for {host_os} hosts") from None
         packer_vars = self.workdir_path / "efivars.fd"
         if packer_vars.exists():
             vars_path = packer_vars
@@ -1163,13 +1187,13 @@ class Machine:
                 for guest_port, host_port in self.wan_forward_ports[proto].items()
             )
         netdev = f"user,id=user.0,{','.join(hostfwds)}{qemu_user_net_args(self.machine)}"
-        return netdev, f"{self.arch.net_device},netdev=user.0"
+        return netdev, f"{self.guest['net_device']},netdev=user.0"
 
     def _boot_command(self) -> list[str]:
         """Assemble the qemu command line for the prepared disks.
 
-        Arch- and OS-aware: ArchProfile supplies the qemu binary, machine
-        type, and keep-VM device set; this method
+        Arch- and OS-aware: data/architectures.yml supplies the machine type
+        and NIC, KEEP_VM_DEVICES the keep-VM device set; this method
         only chooses accel based on platform.system(). Display hardware
         (virtio-gpu-pci + qemu-xhci) works identically on both arches.
         """
@@ -1181,7 +1205,7 @@ class Machine:
             # to the built-in EHCI/UHCI for absolute-coordinate mouse.
             # aarch64 virt has no default graphics or input devices, so it
             # needs the full virtio-gpu + xhci + usb-kbd set; both come from
-            # ArchProfile.keep_vm_extra_devices.
+            # KEEP_VM_DEVICES.
             display_backend = "cocoa" if platform.system() == "Darwin" else "gtk"
             display_args = [
                 "-display",
@@ -1196,7 +1220,7 @@ class Machine:
                     # different loopbacks would still collide on the wildcard port.
                     else f"vnc={self.ssh_host}:{self.vnc_display}"
                 ),
-                *self.arch.keep_vm_extra_devices,
+                *KEEP_VM_DEVICES[self.arch],
                 "-k",
                 "fr",
             ]
@@ -1221,7 +1245,7 @@ class Machine:
         wrapper = [] if self.keep_vm else ["timeout", "--kill-after=10s", str(self.machine_timeout + 60)]
         cmd = [
             *wrapper,
-            self.arch.qemu_binary,
+            self.qemu_binary,
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
             "-netdev",
@@ -1235,7 +1259,7 @@ class Machine:
             # for usb-tablet under --keep-vm. Default-off has no cost when
             # usb-tablet isn't attached. virt machine ignores the flag and
             # uses qemu-xhci added above instead.
-            f"type={self.arch.machine_type},accel={accel},usb=on",
+            f"type={self.guest['machine_type']},accel={accel},usb=on",
             "-smp",
             f"{self._spec.vcpus},sockets=1,cores={self._spec.vcpus}",
             "-name",
