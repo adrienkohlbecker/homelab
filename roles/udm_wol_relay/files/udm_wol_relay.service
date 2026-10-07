@@ -5,15 +5,12 @@ Wants=network-online.target
 
 [Service]
 # exec (not simple): the start job only succeeds once execve() does, so a
-# missing script or broken python3 -- the post-firmware-wipe window this
-# design exists for -- fails `systemctl start` loudly instead of flapping
-# invisibly under Restart=always.
+# missing script or broken python3 fails `systemctl start` loudly instead of
+# flapping invisibly under Restart=always.
 Type=exec
 ExecStart=/data/wol_relay/wol_relay.py
 Restart=always
 RestartSec=5
-User=root
-Group=root
 Environment=PYTHONUNBUFFERED=1
 SyslogIdentifier=udm_wol_relay
 

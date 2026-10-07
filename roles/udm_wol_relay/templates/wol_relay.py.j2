@@ -40,10 +40,6 @@ def is_magic_packet(payload: bytes) -> bool:
 
 
 def check_config() -> None:
-    if LISTEN_PORT < 1 or LISTEN_PORT > 65535:
-        raise SystemExit(f"invalid listen port: {LISTEN_PORT}")
-    if not BIND_ADDRESSES or not ALLOWED_SOURCES or not TARGET_BROADCASTS:
-        raise SystemExit("bind addresses, allowed sources, and target broadcasts are all required")
     for host in BIND_ADDRESSES:
         address = ipaddress.ip_address(host)
         if not any(address in network for network in ALLOWED_SOURCES) or any(

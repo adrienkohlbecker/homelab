@@ -1,3 +1,30 @@
-- name: _setup | Install the site-level UDM on-boot prerequisite
-  import_role:
-    name: udm_on_boot
+# Seed the superseded layout -- a /data master unit symlinked into /etc and an
+# on-boot re-enable script -- so converge proves it replaces the link even when
+# the content already matches, and removes the masters. Drop with the role's
+# cleanup task.
+- name: _setup | Seed the superseded on-boot script
+  shell: |
+    set -euo pipefail
+    mkdir -p /data/wol_relay /data/on_boot.d
+    printf '#!/bin/bash\nexit 0\n' >/data/on_boot.d/40-wol-relay.sh
+    chmod 0755 /data/on_boot.d/40-wol-relay.sh
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _setup | Seed the superseded unit master with current content
+  copy:
+    src: udm_wol_relay.service
+    dest: /data/wol_relay/udm_wol_relay.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Link the superseded unit master into systemd
+  file:
+    src: /data/wol_relay/udm_wol_relay.service
+    dest: /etc/systemd/system/udm_wol_relay.service
+    state: link
+  become: true

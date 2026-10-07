@@ -1,9 +1,18 @@
+# Reboot so the relay must come up from its enabled /etc unit alone, with no
+# on-boot script and after converge removed the superseded /data master.
+- name: _verify | Reboot to start the relay from its installed unit
+  import_role:
+    name: reboot
+    tasks_from: reboot
+
 - name: _verify | Relay is listening on each source-VLAN gateway
   command: ss -H -lun 'sport = :{{ udm_wol_relay_port }}'
   register: _udm_wol_relay_socket
   changed_when: false
-  failed_when: >-
-    udm_wol_relay_source_gateways | reject('in', _udm_wol_relay_socket.stdout) | list | length > 0
+  retries: 10
+  delay: 1
+  until: >-
+    udm_wol_relay_source_gateways | reject('in', _udm_wol_relay_socket.stdout) | list | length == 0
   become: true
 
 # -- functional path -------------------------------------------------------
@@ -61,37 +70,3 @@
           )
         | list
         | length == 2
-
-# -- firmware-wipe recovery ------------------------------------------------
-- name: _verify | Stop relay before firmware recovery
-  systemd:
-    name: udm_wol_relay.service
-    state: stopped
-  become: true
-
-- name: _verify | Run recovery through the on-boot framework
-  systemd:
-    name: on-boot.service
-    state: restarted
-  become: true
-
-- name: _verify | Stat the recovered unit symlink
-  stat:
-    path: /etc/systemd/system/udm_wol_relay.service
-  register: _udm_wol_relay_unit_link
-  become: true
-
-- name: _verify | Recovered unit points at the persistent master
-  assert:
-    that:
-      - _udm_wol_relay_unit_link.stat.islnk
-      - _udm_wol_relay_unit_link.stat.lnk_target == '/data/wol_relay/udm_wol_relay.service'
-
-- name: _verify | Relay is active and enabled after recovery
-  systemd:
-    name: udm_wol_relay.service
-  register: _udm_wol_relay_after_recovery
-  failed_when: >-
-    _udm_wol_relay_after_recovery.status.ActiveState != 'active' or
-    _udm_wol_relay_after_recovery.status.UnitFileState != 'enabled'
-  become: true
