@@ -19,8 +19,12 @@
           if netdata_args.name is defined else []) }}
   register: _netdata_remove
   become: true
+  tags:
+    - netdata
 
 - name: remove | Request a netdata restart after removing files
   when: _netdata_remove.changed
   set_fact:
     netdata_restart_needed: true
+  tags:
+    - netdata

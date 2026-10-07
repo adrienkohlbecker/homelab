@@ -16,8 +16,12 @@
     name: netdata.service
     state: restarted
   become: true
+  tags:
+    - netdata
 
 - name: restart | Clear the pending netdata restart
   when: netdata_restart_needed | default(false)
   set_fact:
     netdata_restart_needed: false
+  tags:
+    - netdata
