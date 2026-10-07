@@ -15,15 +15,11 @@
    if that /mnt/<x> is also a samba_shares entry. Today lab's `data` share pins
    /mnt/data for the spouse home. If a future host homes a user on an /mnt/<x>
    not in samba_shares, add that mount as a share (or extend this derivation). #}
-{% set seen = [] %}
 [Unit]
 {% for share in samba_shares if share.path is match('^/mnt/[^/]+(?:/|$)') %}
 {% set mountpoint = share.path | regex_replace('^(/mnt/[^/]+).*$', '\\1') %}
-{% if mountpoint not in seen %}
-{% set _ = seen.append(mountpoint) %}
 Requires={{ mountpoint | zfs_mount_unit }}
 After={{ mountpoint | zfs_mount_unit }}
-{% endif %}
 {% endfor %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target

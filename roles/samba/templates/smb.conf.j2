@@ -282,6 +282,8 @@ use sendfile = yes
 ; load-bearing for fruit:metadata = stream -- extended attributes store resource
 ; forks and Finder metadata; must be on for every share including [homes].
 ea support = yes
+; shares are writable unless a samba_shares entry sets `read only = yes`
+read only = no
 
 [homes]
 writeable = yes
@@ -307,7 +309,4 @@ path = {{ share.path }}
 {% for key, value in share.items() if key not in ['name', 'path'] %}
 {{ key }} = {{ value }}
 {% endfor %}
-{% if 'writeable' not in share and 'writable' not in share and 'read only' not in share %}
-writeable = yes
-{% endif %}
 {% endfor %}

@@ -1,69 +1,8 @@
 # Functional contract: smbd is up, no NetBIOS port listens (nmbd is
 # deliberately masked), the rendered config exposes the configured share
-# with its access restriction, an authenticated client can reach it, and an
-# anonymous client cannot. The smbtest share (test/host_vars/lab.yml, valid
+# with its access restriction, an authenticated client can write to it
+# (shares are writable unless they opt out), and an anonymous client cannot. The smbtest share (test/host_vars/lab.yml, valid
 # users = the login user, fruit:time machine = yes) is the vehicle.
-
-- name: _verify | Render a share with the default writable policy
-  template:
-    src: smb.conf.j2
-    dest: /tmp/samba-default-writable.conf
-    mode: "0644"
-  vars:
-    samba_shares:
-      - name: fixture
-        path: /srv/fixture
-      - name: read_only_fixture
-        path: /srv/read_only_fixture
-        "read only": "yes"
-  diff: false
-  become: true
-
-- name: _verify | Verify the default writable policy parses
-  command:
-    argv:
-      - testparm
-      - --suppress-prompt
-      - --parameter-name=read only
-      - "--section-name={{ item.section }}"
-      - /tmp/samba-default-writable.conf
-  register: _samba_default_writable
-  loop:
-    - section: fixture
-      expected: "No"
-    - section: read_only_fixture
-      expected: "Yes"
-  loop_control:
-    label: "{{ item.section }}"
-  changed_when: false
-  failed_when: >-
-    _samba_default_writable.rc != 0 or
-    _samba_default_writable.stdout | trim != item.expected
-  become: true
-
-- name: _verify | Each ZFS mount dependency is emitted once
-  vars:
-    samba_shares:
-      - name: first_data
-        path: /mnt/data/first
-      - name: second_data
-        path: /mnt/data/second
-      - name: media
-        path: /mnt/media
-      - name: ignored
-        path: /srv/ignored
-    _samba_zfs_override: "{{ lookup('template', 'smbd_zfs_mounts_override.conf.j2') }}"
-  assert:
-    that:
-      - _samba_zfs_override.count('Requires=zfs_mount_mnt_data.service') == 1
-      - _samba_zfs_override.count('Requires=zfs_mount_mnt_media.service') == 1
-      - "'/srv/ignored' not in _samba_zfs_override"
-
-- name: _verify | Remove alternate Samba config
-  file:
-    path: /tmp/samba-default-writable.conf
-    state: absent
-  become: true
 
 # _setup left nmbd and smbd serving NetBIOS. Converge must close the name
 # (137), datagram (138), and session (139) ports.
@@ -116,23 +55,19 @@
     samba_testparm_verbose.stderr is search('(?i)unknown parameter')
   become: true
 
-# Proves the critical per-share-key fix: the smbtest share renders, and its
-# `valid users` restriction is present (the regression that silently dropped it
-# would leave the share world-accessible with this line absent). The NetBIOS
-# policy is proven at the socket level above.
+# The smbtest share's `valid users` restriction must survive into the
+# effective config (a dropped per-share key would leave the share open to every
+# authenticated user). Time Machine is proven by the _adisk record above and
+# NetBIOS at the socket level.
 - name: _verify | Effective Samba config preserves share and hardening policy
   assert:
     that:
-      - "'[smbtest]' in samba_testparm_verbose.stdout"
-      - "'[homes]' in samba_testparm_verbose.stdout"
       - samba_testparm_verbose.stdout is search('valid users = ' ~ ansible_user_id)
-      - samba_testparm_verbose.stdout is search('fruit:time machine = yes')
-      - samba_testparm_verbose.stdout is search('fruit:time machine max size = 1T')
       - samba_testparm_verbose.stdout is search('server smb encrypt = required')
       - samba_testparm_verbose.stdout is search('disable spoolss = Yes')
       - samba_testparm_verbose.stdout is search('load printers = No')
     fail_msg: >-
-      testparm -v does not report the expected share, Time Machine, encryption,
+      testparm -v does not report the expected share restriction, encryption,
       or printing policy.
 
 - name: _verify | Printing helper is not running

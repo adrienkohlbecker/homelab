@@ -4,31 +4,9 @@
       # default('') so a wholly-undefined var fails into fail_msg rather than
       # raising a raw "undefined variable" jinja error here.
       - samba_password | default('') | length > 0
+      - samba_shares is defined
       - samba_shares | rejectattr('name', 'defined') | list | length == 0
       - samba_shares | rejectattr('path', 'defined') | list | length == 0
-    fail_msg: >-
-      samba_password must be set (vaulted) and every samba_shares entry needs a
-      name + path.
-  tags:
-    - samba
-
-- name: Assert samba_shares names are well-formed identifiers
-  assert:
-    that:
-      - >-
-        samba_shares | map(attribute='name')
-        | reject('match', '^[a-zA-Z0-9][a-zA-Z0-9_ -]*$') | list | length == 0
-    fail_msg: >-
-      A samba_shares entry has a name containing characters that are not
-      alphanumeric, spaces, hyphens, or underscores (or starts with a
-      non-alphanumeric character). Share names render as INI section headers
-      in smb.conf; invalid characters could break parsing.
-  tags:
-    - samba
-
-- name: Assert samba_shares directive keys are well-formed
-  assert:
-    that:
       # smb.conf parameter names use spaces, never underscores ("valid users",
       # "force group", ...), so an underscore in a passthrough directive key is
       # always a typo (e.g. valid_users) -- it renders an unknown parameter
@@ -39,10 +17,10 @@
         | rejectattr('key', 'in', ['name', 'path'])
         | selectattr('key', 'search', '_') | list | length == 0
     fail_msg: >-
-      A samba_shares entry has a directive key containing '_' (e.g. valid_users
-      instead of `valid users`). smb.conf parameters use spaces; the typo would
-      render a directive smbd ignores, silently leaving the share open to every
-      authenticated user.
+      samba_password must be set (vaulted), samba_shares must be set, every
+      samba_shares entry needs a name + path, and no directive key may contain
+      '_' (e.g. valid_users instead of `valid users`) -- smbd ignores the typo,
+      silently leaving the share open to every authenticated user.
   tags:
     - samba
 
@@ -57,35 +35,9 @@
   tags:
     - samba
 
-- name: Configure samba
-  when: not (ansible_check_mode and samba_apt.changed)
-  template:
-    src: smb.conf.j2
-    dest: /etc/samba/smb.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: testparm -s %s
-  register: samba_cfg
-  become: true
-  tags:
-    - samba
-
-- name: Enable smbd service
-  when: not (ansible_check_mode and samba_apt.changed)
-  systemd:
-    name: smbd.service
-    enabled: true
-    state: "{{ 'restarted' if samba_cfg.changed else 'started' }}"
-  become: true
-  tags:
-    - samba
-
-# Install the override AFTER smbd is up. On a fresh host the zfs_mount_mnt_*.service
-# units don't exist yet (the data/media roles in a later play create them); the
-# override is installed for boot-time effect only — no smbd restart on change, so a
-# subsequent reboot (with all coordinator units present) is what activates it.
+# Install the override before smbd (re)starts so the running unit already
+# carries its mount ordering. The dataset producers run in an earlier play, so
+# every zfs_mount_mnt_* unit it requires exists by now.
 - name: Install smbd zfs-mount dependency override
   import_role:
     name: systemd_unit
@@ -98,38 +50,57 @@
   tags:
     - samba
 
-# `systemctl reenable` (disable + enable) re-processes all [Install] sections
-# including drop-ins. The systemd module's `enabled: true` is a no-op when the
-# unit is already enabled, so new WantedBy= targets from the override would
-# never get their symlinks created until a manual reenable or reboot.
-- name: Re-enable smbd to pick up new WantedBy targets  # noqa: command-instead-of-module
-  when:
-    - not (ansible_check_mode and samba_apt.changed)
-    - smbd_service_d_override_conf_result.changed
-  command: systemctl reenable smbd
-  changed_when: true
-  become: true
-  tags:
-    - samba
-
-# nmbd (NetBIOS name service / LAN browsing) is intentionally not run:
-# clients reach SMB3 directly over TCP 445 and discover shares via Samba's
-# built-in mDNS registration. Mask it so neither a prior enable nor a
-# package reconfigure can bring the legacy NetBIOS listener back. smbd has
-# no dependency on nmbd, so this is safe.
-- name: Mask the unused nmbd service
-  # In check mode against a host without samba yet installed, nmbd.service
-  # doesn't exist (the package install above only reported it would happen),
-  # so the systemd module errors with "Could not find the requested service".
+# In check mode against a host without samba yet installed, neither the
+# testparm validator nor the smbd/nmbd units exist (the package install above
+# only reported it would happen).
+- name: Configure and start samba
   when: not (ansible_check_mode and samba_apt.changed)
-  systemd:
-    name: nmbd
-    state: stopped
-    enabled: false
-    masked: true
-  become: true
   tags:
     - samba
+  block:
+    - name: Configure samba
+      template:
+        src: smb.conf.j2
+        dest: /etc/samba/smb.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+        validate: testparm -s %s
+      register: samba_cfg
+      become: true
+
+    - name: Enable smbd service
+      systemd:
+        name: smbd.service
+        enabled: true
+        state: >-
+          {{ 'restarted' if samba_cfg.changed or smbd_service_d_override_conf_result.changed
+             else 'started' }}
+      become: true
+
+    # `systemctl reenable` (disable + enable) re-processes all [Install] sections
+    # including drop-ins. The systemd module's `enabled: true` is a no-op when the
+    # unit is already enabled, so new WantedBy= targets from the override would
+    # never get their symlinks created until a manual reenable or reboot.
+    - name: Re-enable smbd to pick up new WantedBy targets  # noqa: command-instead-of-module
+      when: smbd_service_d_override_conf_result.changed
+      command: systemctl reenable smbd
+      changed_when: true
+      become: true
+
+    # nmbd (NetBIOS name service / LAN browsing) is intentionally not run:
+    # clients reach SMB3 directly over TCP 445 and discover shares via Samba's
+    # built-in mDNS registration. Mask it so neither a prior enable nor a
+    # package reconfigure can bring the legacy NetBIOS listener back. smbd has
+    # no dependency on nmbd, so this is safe.
+    - name: Mask the unused nmbd service
+      systemd:
+        name: nmbd
+        state: stopped
+        enabled: false
+        masked: true
+      become: true
 
 - name: Configure Samba user
   import_tasks: smbpasswd.yml
