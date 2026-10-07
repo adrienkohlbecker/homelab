@@ -86,7 +86,7 @@ def test_check_mode_forwards_flag_and_skips_poweroff(
     assert machine.ssh_calls == []
 
 
-def test_converge_profiles_settled_boot_before_poweroff(
+def test_converge_audits_settled_boot_before_poweroff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -97,8 +97,6 @@ def test_converge_profiles_settled_boot_before_poweroff(
 
     assert [call[:2] for call in machine.ssh_calls] == [
         ("timeout", str(site_test.SYSTEM_RUNNING_WAIT_TIMEOUT)),
-        ("systemd-analyze", "blame"),
-        ("systemd-analyze", "critical-chain"),
         ("journalctl", "--boot"),
         ("sudo", "systemctl"),
     ]

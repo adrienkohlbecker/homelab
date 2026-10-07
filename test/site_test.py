@@ -87,32 +87,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def print_boot_profile(m: Machine) -> list[str]:
-    """Print where the settled boot spent its time.
-
-    The settle waits out the whole post-reboot fleet start, so the slowest
-    units and the critical chain are what bound it. The timings are diagnostic
-    only, but the returned list of units that failed during the boot is not:
-    see report_restarted_units.
-    """
-    blame = await m.ssh_command("systemd-analyze", "blame", "--no-pager", check=False)
-    slowest = "\n".join(blame.stdout[:25]).rstrip() or "(unavailable)"
-    print_line(f"Slowest units this boot:\n{slowest}")
-    chain = await m.ssh_command("systemd-analyze", "critical-chain", "--no-pager", check=False)
-    print_line("Boot critical chain:\n" + ("\n".join(chain.stdout).rstrip() or "(unavailable)"))
-    # critical-chain skips units without an active-enter timestamp (oneshots
-    # without RemainAfterExit, failed units), so it can credit multi-user.target
-    # to a unit that finished minutes earlier. PID 1's own log shows what really
-    # completed last before the target. It also drives the failed-unit check
-    # below, so a failed query must raise rather than read as "nothing failed".
-    journal = await m.ssh_command("journalctl", "--boot", "--no-pager", "--output=short-monotonic", "_PID=1")
-    reached = [i for i, line in enumerate(journal.stdout) if "Reached target multi-user.target" in line]
-    if reached:
-        tail = journal.stdout[max(0, reached[-1] - 40) : reached[-1] + 1]
-        print_line("systemd log before multi-user.target:\n" + "\n".join(tail))
-    return await report_restarted_units(m, journal.stdout)
-
-
 async def report_restarted_units(m: Machine, pid1_journal: list[str]) -> list[str]:
     """Print the logs of units that failed during this boot, and name them.
 
@@ -218,7 +192,10 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
                 print_line(f"Fleet settled: {settle_state}")
             else:
                 print_line(f"Fleet settled as {settle_state!r}; failed units:\n{await m.failed_units()}")
-            restarted = await print_boot_profile(m)
+            # PID 1's journal drives the restart audit, so a failed query must
+            # raise rather than read as "nothing failed".
+            journal = await m.ssh_command("journalctl", "--boot", "--no-pager", "--output=short-monotonic", "_PID=1")
+            restarted = await report_restarted_units(m, journal.stdout)
 
             await m.ssh_command(*POWEROFF_COMMAND, check=False)
             # Bound the shutdown wait separately from the converge
