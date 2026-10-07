@@ -324,15 +324,10 @@ build {
   }
 
   provisioner "shell" {
-    # Resolute ships sudo-rs as the default `sudo` alternative (priority 50 vs
-    # classic sudo's 40). sudo-rs silently ignores the SETENV sudoers tag, so
-    # `sudo -E` strips the env block below. Switch the alternative back to
-    # classic sudo (which honors SETENV + -E) on resolute only; noble ships
-    # classic sudo as the default already.
-    inline = concat(
-      local.ubuntu_name == "resolute" ? ["sudo update-alternatives --set sudo /usr/bin/sudo.ws"] : [],
-      ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"],
-    )
+    # `env` applies the block below after sudo has reset the environment, so
+    # neither classic sudo nor Resolute's sudo-rs needs to preserve it.
+    execute_command = "chmod +x {{ .Path }}; sudo env {{ .Vars }} {{ .Path }}"
+    inline          = ["bash /home/vagrant/provision.sh"]
     # Mirror URLs are resolved here (HCL) and passed as env. provision.sh
     # uses UBUNTU_MIRROR* during the build; chroot.sh swaps in the
     # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image
