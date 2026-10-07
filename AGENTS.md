@@ -105,7 +105,6 @@ Prefer these over re-implementing boilerplate. Call them with `tasks_from` and a
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
 | `boot` | `import_role: name: boot, tasks_from: {cmdline,initramfs_provider,initramfs_rebuild}` | kernel cmdline fragment; release image generator + policy; image rebuild with an optional reboot request (boot's `main.yml` is a real role entry point) |
 | `zfs_dataset` | `tasks_from: dataset` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts |
-| `macvlan` | driven by `macvlan_blocks:` in inventory vars | ifaces + optional podman networks |
 
 ## Podman Service Conventions
 

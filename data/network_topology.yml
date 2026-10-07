@@ -23,9 +23,8 @@
 #                      = cidrhost(host_subnet, 2 + slot)
 #   per-host /28 block = vlan_cidr | ansible.utils.ipsubnet(28, 8 + slot)
 #                      = cidrsubnet(vlan_cidr, 4, 8 + slot)
-#     → host's `mac_<vlan>` peer at block's first IP
-#     → macvtap VMs at block + .1 … .7
-#     → podman containers at block + .8 … .15
+#     → lower /29 (block + .0 … .7) unallocated
+#     → podman macvlan containers at block + .8 … .15
 #
 #
 # Each /24 VLAN's static / DHCP layout (also derived):
@@ -142,7 +141,7 @@ hosts:
 # mirror — they live in the wg mirror of the home VLAN's DHCP block:
 # `home.cidr | ipsubnet(26, 1) | ipmath('64.0.0')` = 10.123.66.64/26
 # (range .64–.127). Sits cleanly between server peers (10.123.64.x,
-# wg mirror of mgmt's static_fixed) and the home-VLAN macvlan blocks
+# wg mirror of mgmt's static_fixed) and the home-VLAN per-host blocks
 # under the +64 mirror (10.123.66.128–.255), so no collision.
 wireguard:
   roaming:

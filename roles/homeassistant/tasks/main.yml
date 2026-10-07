@@ -1,16 +1,57 @@
-# Precondition: the host must have a `mac_iot` macvlan_block in inventory vars
-# with `podman_network: true` (Lab has both). The macvlan
-# role provisions the iface + the podman network named `mac_iot` on
-# the IoT VLAN; HA attaches via --network=mac_iot (see
-# homeassistant_networks in vars/main.yml).
-#
-# The podman network gives HA an L2 presence on the IoT VLAN
-# (netplan-named `iot`, vlan id 4 on nic0) so it can do mDNS/SSDP
-# discovery of Sonos / HomeKit / Zigbee-bridge targets and talk
-# directly to IoT devices on the /24 (Philips airpurifier CoAP,
-# etc.). ip_range is the upper /29 of lab's IoT block (.136/29 — 8
-# container slots, lower /29 = mac_iot iface + VMs); HA gets
-# whatever netavark allocates first.
+# The `mac_iot` podman macvlan network gives HA an L2 presence on the IoT VLAN
+# so it can do mDNS/SSDP discovery of Sonos / HomeKit / Zigbee-bridge targets
+# and talk directly to IoT devices on the /24 (Philips airpurifier CoAP, etc.).
+# homeassistant_iot_parent names the host interface that carries the IoT VLAN
+# (lab: the netplan-named `iot` subinterface). The network takes its subnet and
+# gateway from that parent's gathered IPv4 fact; its container pool is the
+# upper /29 of this host's slot-indexed IoT /28 from data/network_topology.yml
+# (lab: .136/29, 8 container slots), and HA gets whatever netavark allocates
+# first. HA attaches via --network=mac_iot (see homeassistant_networks in
+# vars/main.yml).
+- name: Validate homeassistant IoT macvlan inputs
+  vars:
+    _homeassistant_iot_block: "{{ network | host_vlan_block(inventory_hostname, 'iot') }}"
+  assert:
+    that:
+      - homeassistant_iot_parent is defined
+      # parent allows a `.` for VLAN subinterfaces (e.g. eth0.4).
+      - homeassistant_iot_parent is string and homeassistant_iot_parent is match('^[a-z][a-z0-9_.]*$')
+      # Podman derives the subnet and gateway from the parent IPv4 fact.
+      - homeassistant_iot_parent in ansible_facts
+      - ansible_facts[homeassistant_iot_parent].ipv4 is defined
+      # The container pool must lie within that parent network.
+      - >-
+        (_homeassistant_iot_block | ansible.utils.ipaddr('network'))
+        | ansible.utils.ipaddr(ansible_facts[homeassistant_iot_parent].ipv4.network ~ '/' ~ ansible_facts[homeassistant_iot_parent].ipv4.prefix)
+        != false
+    fail_msg: >-
+      homeassistant_iot_parent must name an interface on the IoT VLAN, set in
+      inventory vars, with a gathered IPv4 fact whose subnet contains this
+      host's IoT block {{ _homeassistant_iot_block }}.
+  tags:
+    - homeassistant
+
+- name: Create homeassistant IoT macvlan podman network
+  containers.podman.podman_network:
+    name: mac_iot
+    driver: macvlan
+    subnet: "{{ ansible_facts[homeassistant_iot_parent].ipv4.network }}/{{ ansible_facts[homeassistant_iot_parent].ipv4.prefix }}"
+    gateway: "{{ ansible_facts[homeassistant_iot_parent].ipv4.network | ansible.utils.ipmath(1) }}"
+    ip_range: "{{ network | host_vlan_block(inventory_hostname, 'iot') | ansible.utils.ipsubnet(29, 1) }}"
+    opt:
+      parent: "{{ homeassistant_iot_parent }}"
+      # Macvlan endpoints on the same parent can reach each other directly.
+      mode: bridge
+      # Macvlan provides direct LAN presence, not an ordinary egress path.
+      # Inert on noble's netavark 1.4.0, which predates the option (>= 1.7):
+      # podman stores it, netavark installs the default route anyway. Kept so
+      # the intent is declared where it belongs; until netavark catches up,
+      # the homeassistant bridge network below down-ranks the macvlan default
+      # with a lower route metric.
+      no_default_route: "1"
+  become: true
+  tags:
+    - homeassistant
 
 # Shared backend network for HA, mosquitto, z2m, and influxdb. Keeping HA's
 # backend dependencies in one aardvark-dns view avoids multi-network resolver

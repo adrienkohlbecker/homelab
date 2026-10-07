@@ -132,7 +132,7 @@ def qemu_user_net_args(machine: str) -> str:
     supernet = topo["partitions"]["physical"]["cidr"]
     net = ipaddress.ip_network(supernet)
     # Router + DNS at the top of the supernet, well above every host
-    # slot (.0.2-.0.9) and every per-VLAN macvlan block (.X.128-.255),
+    # slot (.0.2-.0.9) and every per-VLAN host block (.X.128-.255),
     # so the qemu router never collides with a topology-claimed address.
     host_ip = str(net.broadcast_address - 1)
     dns_ip = str(net.broadcast_address - 2)

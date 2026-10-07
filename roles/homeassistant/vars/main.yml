@@ -10,15 +10,14 @@ homeassistant_networks:
   - name: homeassistant
     interface_name: eth0
   # mac_iot: HA's L2 presence on the IoT VLAN. Netavark allocates its address
-  # from the role-derived /29; discovery uses mDNS/UPnP identity and nothing
-  # downstream keys on a specific IP.
+  # from the topology-derived /29 (see tasks/main.yml); discovery uses
+  # mDNS/UPnP identity and nothing downstream keys on a specific IP.
   #
   # mac IS pinned: without it podman mints a fresh random MAC every
   # container recreate (unit restart / image bump), UniFi sees that as
   # a new IoT-VLAN client each time, and lab's UniFi client list grows
-  # a stale entry per HA recreate. Same prefix + seed shape as the
-  # host-iface MACs in roles/macvlan so all L2 identities under this
-  # repo are derived from one rule.
+  # a stale entry per HA recreate. The 82:48:10 prefix seeded by
+  # inventory_hostname keeps it stable per host.
   - name: mac_iot
     interface_name: eth1
     mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname ~ '_homeassistant') }}"

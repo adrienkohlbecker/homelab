@@ -123,3 +123,46 @@
   delay: 10
   until: retired_services_wolweb_pull is not failed
   become: true
+
+# The retired macvlan role's per-block unit on lab: it creates the host-side
+# mac_iot child on start and deletes it on stop.
+- name: _setup | Install the retired mac_iot interface unit
+  copy:
+    content: |
+      [Unit]
+      Description=mac_iot interface setup
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStartPre=-/bin/ip link delete mac_iot
+      ExecStart=/bin/ip link add mac_iot link {{ ansible_facts.default_ipv4.interface }} type macvlan mode bridge
+      ExecStart=/bin/ip link set mac_iot up
+      ExecStop=-/bin/ip link delete mac_iot
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/mac_iot.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Start the retired mac_iot interface unit
+  systemd:
+    name: mac_iot.service
+    daemon_reload: true
+    enabled: true
+    state: started
+  become: true
+
+- name: _setup | Install the retired per-interface macvlan ARP policy
+  copy:
+    content: |
+      net.ipv4.conf.mac_iot.arp_ignore = 1
+      net.ipv4.conf.mac_iot.arp_announce = 2
+    dest: /etc/sysctl.d/30-macvlan.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

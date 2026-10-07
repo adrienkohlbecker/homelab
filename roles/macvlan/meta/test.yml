@@ -1,3 +1,0 @@
-# Resolute: Netavark 1.16 honours no_default_route on macvlan networks.
-ubuntu:
-  - resolute

@@ -76,7 +76,6 @@
     - lm_sensors
     - fan2go
     - powertop
-    - macvlan
     - resolved
     - avahi
     - panic

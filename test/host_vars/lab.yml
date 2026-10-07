@@ -10,25 +10,12 @@ nginx_static_proxies_enabled: true
 # Mirror Lab, which prunes the operator's rootless podman store nightly.
 podman_operator_prune_enabled: true
 
-# Two blocks on the same en* parent: exercises the multi-block iteration
-# in main.yml's loop, distinct MAC seeds across sibling blocks, and an
-# iface-only block beside a podman macvlan network on one parent NIC. Prod
-# uses VLAN sub-interface parents; QEMU collapses them onto en* because the
-# QEMU NIC is not trunked.
-#
-# Macvlan blocks derive from data/network_topology.yml inside the role. Works
-# under qemu because test/machine.py pins slirp's user-net to the test-view
-# supernet (10.234.0.0/18), so the parent en* iface lands on a subnet that
-# contains every per-host /28 the topology emits.
-macvlan_blocks:
-  - name: mac_test
-    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    vlan: management
-    # Omitting podman_network exercises the iface-only default.
-  - name: mac_iot
-    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    vlan: iot
-    podman_network: true
+# Prod parents homeassistant's mac_iot network on the IoT VLAN subinterface;
+# the QEMU NIC is not trunked, so the fixture uses the en* NIC instead. The
+# pool still derives from data/network_topology.yml: test/machine.py pins
+# slirp's user-net to the test-view supernet (10.234.0.0/18), so the en* iface
+# lands on a subnet that contains every per-host /28 the topology emits.
+homeassistant_iot_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
 
 # Prod-shaped self-reference: external_ips maps lab to the fixture's own
 # address, so the onsite source is the fixture itself. The placeholder key only

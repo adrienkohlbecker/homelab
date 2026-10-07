@@ -42,17 +42,9 @@ lm_sensors_config: |
       ignore temp7
       ignore in6
 
-# Each entry names a VLAN; the macvlan role derives this host's slot-indexed
-# /28 from data/network_topology.yml and uses its first IP for the host.
-# lab is slot 0, so its IoT block resolves to .128/28.
-macvlan_blocks:
-  - name: mac_iot
-    parent: iot              # netplan-named eth0.4 subif (see vlans.iot below)
-    vlan: iot
-    # The podman network (also named mac_iot) takes the upper /29
-    # (.136/29 = 8 container slots); homeassistant attaches via
-    # --network=mac_iot.
-    podman_network: true
+# Parent of homeassistant's mac_iot podman macvlan network: the netplan-named
+# eth0.4 subinterface (see vlans.iot below).
+homeassistant_iot_parent: iot
 
 # First SMT sibling of four P-cores. CPUs 12-19 are E-cores on this i5-13500.
 macos_vm_cpu_pinset: "0,2,4,6"

@@ -97,10 +97,9 @@
     # the target IP is on the receiving interface. arp_announce=2:
     # source ARPs with the local address best-matched for the dest
     # instead of leaking another iface's IP. Same as keepalived's
-    # canonical VRRP recommendation. The `all` pins also carry the
-    # macvlan role's ARP-flux contract: the kernel applies the stricter
-    # of `all` and the interface, so every macvlan parent and child is
-    # covered without per-interface keys.
+    # canonical VRRP recommendation. The kernel applies the stricter of
+    # `all` and the interface, so the `all` pins cover VLAN subinterfaces
+    # and keepalived's vrrp macvlan without per-interface keys.
     - { name: net.ipv4.conf.all.arp_ignore, value: '1' }
     - { name: net.ipv4.conf.default.arp_ignore, value: '1' }
     - { name: net.ipv4.conf.all.arp_announce, value: '2' }

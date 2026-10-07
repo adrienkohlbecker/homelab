@@ -96,3 +96,27 @@
   tags:
     - retired_services
     - wolweb
+
+# Drop once lab and pug have converged. Stopping the unit runs its ExecStop,
+# which deletes lab's host-side mac_iot child interface and its block route;
+# the homeassistant role keeps the same-named podman network.
+- name: Retire the mac_iot host interface unit
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: mac_iot.service
+  tags:
+    - retired_services
+    - macvlan
+
+# The firewall role's all.arp_ignore/arp_announce pins cover every interface.
+- name: Remove the retired per-interface macvlan ARP policy
+  file:
+    path: /etc/sysctl.d/30-macvlan.conf
+    state: absent
+  become: true
+  tags:
+    - retired_services
+    - macvlan

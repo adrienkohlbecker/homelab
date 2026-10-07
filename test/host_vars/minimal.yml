@@ -12,8 +12,6 @@ zfs_mount_cache_pools: []
 # renders its unset-minimum branch; Lab and Pug test fixtures set both bounds.
 zfs_arc_min: 0
 zfs_arc_max: 536870912
-# Minimal inherits empty macvlan_blocks: it does not trunk VLANs or need an
-# L2-on-LAN presence for containers.
 grub_bootloader: true
 
 # The role installs the optional kernel-module package omitted by this trimmed

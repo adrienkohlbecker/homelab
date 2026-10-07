@@ -145,6 +145,24 @@
     )
   become: true
 
+# Netavark allocates HA's IoT address from the network's ip_range, so this
+# proves the role derived the pool from this host's topology /28.
+- name: _verify | Homeassistant mac_iot address lies in the topology-derived pool
+  command:
+    argv:
+      - podman
+      - inspect
+      - homeassistant
+      - --format
+      - "{{ '{{.NetworkSettings.Networks.mac_iot.IPAddress}}' }}"
+  register: _homeassistant_mac_iot_ip
+  changed_when: false
+  failed_when: >-
+    not (_homeassistant_mac_iot_ip.stdout | trim | ansible.utils.ipaddr(
+      network | host_vlan_block(inventory_hostname, 'iot') | ansible.utils.ipsubnet(29, 1)
+    ))
+  become: true
+
 # Exercise the complete nginx-proxied path.
 - name: _verify | Homeassistant answers /manifest.json via nginx vhost
   uri:
@@ -239,6 +257,9 @@
 # *strictly* outrank every other default. That holds whether the macvlan
 # default is down-ranked or absent entirely, and fails on a tie.
 #
+# Netavark >= 1.7 honours the mac_iot network's no_default_route, so off
+# noble (netavark 1.4) the macvlan must hold no default at all.
+#
 # Parsing /proc/net/route rather than `ip` keeps this independent of which
 # iproute2 flavour the image ships (busybox `ip` has no --json).
 - name: _verify | Homeassistant bridge default strictly outranks the macvlan default
@@ -252,7 +273,7 @@
       - |
         import sys
 
-        bridge = sys.argv[1]
+        bridge, macvlan, macvlan_may_default = sys.argv[1], sys.argv[2], sys.argv[3] == "True"
         defaults = []
         with open("/proc/net/route") as fh:
             next(fh)
@@ -271,8 +292,12 @@
             sys.exit(f"defaults tie at metric {defaults[0][0]}, winner is insertion-order luck: {defaults}")
         if best[0][1] != bridge:
             sys.exit(f"lowest-metric default is on {best[0][1]}, expected {bridge}: {defaults}")
+        if not macvlan_may_default and any(iface == macvlan for _, iface in defaults):
+            sys.exit(f"no_default_route ignored, {macvlan} holds a default: {defaults}")
         print(f"ok: {defaults}")
       - "{{ homeassistant_networks | selectattr('name', 'equalto', 'homeassistant') | map(attribute='interface_name') | first }}"
+      - "{{ homeassistant_networks | selectattr('name', 'equalto', 'mac_iot') | map(attribute='interface_name') | first }}"
+      - "{{ ansible_distribution_release == 'noble' }}"
   changed_when: false
   become: true
 

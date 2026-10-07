@@ -4,6 +4,7 @@
     name: "{{ item }}"
   loop:
     - wolweb.service
+    - mac_iot.service
   register: retired_services_units
   failed_when: retired_services_units.status.LoadState != 'not-found'
   become: true
@@ -25,6 +26,7 @@
     - /etc/nginx/sites-available/wolweb
     - /etc/fluent-bit/services/wolweb.yaml
     - /mnt/services/wolweb
+    - /etc/sysctl.d/30-macvlan.conf
   register: retired_services_leftovers
   become: true
 
@@ -65,3 +67,9 @@
   register: retired_services_wolweb_identity
   changed_when: false
   failed_when: retired_services_wolweb_identity.rc != 2
+
+- name: _verify | Retired mac_iot host interface is gone
+  command: ip link show dev mac_iot
+  register: retired_services_mac_iot_link
+  changed_when: false
+  failed_when: retired_services_mac_iot_link.rc == 0
