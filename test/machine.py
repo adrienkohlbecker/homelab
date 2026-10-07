@@ -16,7 +16,7 @@ import traceback
 from collections.abc import AsyncIterator, Coroutine
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, NamedTuple, Self
+from typing import NamedTuple, Self
 
 import yaml
 from arch import ArchProfile, detect_host_arch, uefi_code_path_for
@@ -142,7 +142,6 @@ def qemu_user_net_args(machine: str) -> str:
 
 class QemuMachineSpec(NamedTuple):
     ssh_user: str
-    inventory_host: str
     cloud_image: bool = False
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
     # 4 vCPUs keeps 6 concurrent VMs at 24 logical cores (1.2x oversub
@@ -157,21 +156,18 @@ class QemuMachineSpec(NamedTuple):
 QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "minimal": QemuMachineSpec(
         ssh_user="ubuntu",
-        inventory_host="minimal",
         cloud_image=True,
         memory_mb=2048,
         vcpus=2,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
-        inventory_host="lab",
         # lab: matches the lab prod host. mdadm-EFI + mdadm-swap +
         # 3-disk mirror rpool + dozer + tank + mouse, all baked in.
         # Default integration fixture and promoted CI image.
     ),
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
-        inventory_host="pug",
         # Pug-specific single-disk rpool + apoc mirror fixture.
     ),
 }
@@ -267,15 +263,6 @@ class LaunchOptions:
     display_window: bool = False
 
 
-@dataclass(frozen=True)
-class MachineRunOptions:
-    """Per-run policy that is independent of the role or artifact name."""
-
-    vcpus: int | None = None
-    memory_mb: int | None = None
-    quiet_ansible: bool = False
-
-
 SSH_WAIT_TIMEOUT = 120
 
 # Bound on `systemctl is-system-running --wait`, which otherwise waits for as
@@ -295,13 +282,6 @@ CLOUDIMG_LOCK_TIMEOUT = 600
 
 class Machine:
     """Start disposable QEMU guests for role-level integration tests."""
-
-    # Extra seconds added on top of machine_timeout for the GNU `timeout` /
-    # `podman --timeout` last-resort wrapper. Has to outlast the inner
-    # asyncio.timeout in run_test so testrole.py's own deadline fires first
-    # (and we get a clean rc=124 + stop()), with enough headroom for
-    # Machine.stop() to do its graceful->SIGKILL escalation.
-    WRAPPER_GRACE_SECONDS: ClassVar[int] = 60
 
     output_file: Path
     journal_file: Path
@@ -339,24 +319,24 @@ class Machine:
         upstream_mirrors: bool = False,
         *,
         launch: LaunchOptions | None = None,
-        run_options: MachineRunOptions | None = None,
+        vcpus: int | None = None,
+        memory_mb: int | None = None,
+        quiet_ansible: bool = False,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
-        launch carries launch.py-only qemu overrides. run_options carries
-        explicit per-run resource and logging policy.
+        launch carries launch.py-only qemu overrides. vcpus and memory_mb
+        override the machine spec; quiet_ansible trims playbook output to
+        changes and failures.
         """
         self.launch = launch or LaunchOptions()
-        self.run_options = run_options or MachineRunOptions()
+        self.quiet_ansible = quiet_ansible
         try:
             spec = QEMU_MACHINE_SPECS[machine]
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
-        spec = spec._replace(
-            vcpus=self.run_options.vcpus if self.run_options.vcpus is not None else spec.vcpus,
-            memory_mb=self.run_options.memory_mb if self.run_options.memory_mb is not None else spec.memory_mb,
-        )
+        spec = spec._replace(vcpus=vcpus or spec.vcpus, memory_mb=memory_mb or spec.memory_mb)
 
         self.imagedir: Path = imagedir_for_host()
 
@@ -370,7 +350,6 @@ class Machine:
         self.ssh_port = 0
         self.ssh_host = _cell_loopback_host()
         self.ssh_user = spec.ssh_user
-        self.inventory_host = spec.inventory_host
         self.machine = machine
         self.role = role
         self.keep_vm = keep_vm
@@ -402,7 +381,6 @@ class Machine:
             stale.unlink(missing_ok=True)
         # The workdir lands alongside the packer artifacts, on the same
         # filesystem, so prepare() can hardlink the disks it boots from.
-        self.imagedir.mkdir(parents=True, exist_ok=True)
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
         self.workdir_path = Path(self.workdir.name)
         # Claim the liveness lock immediately after the workdir exists so a
@@ -567,7 +545,7 @@ class Machine:
         # regardless of verbosity), so drop the ok/skipped firehose and the
         # -v result bodies for non-failing tasks here. Per-role tests keep the
         # verbose detail for single-role debugging.
-        if self.run_options.quiet_ansible:
+        if self.quiet_ansible:
             env["ANSIBLE_DISPLAY_OK_HOSTS"] = "false"
             env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "false"
             env["ANSIBLE_VERBOSITY"] = "0"
@@ -601,7 +579,7 @@ class Machine:
             # Static playbooks declare `hosts: all`; --limit pins the play to
             # the inventory host we actually provisioned.
             "--limit",
-            self.inventory_host,
+            self.machine,
             # The static role dispatcher consumes the internal input directly;
             # group_vars/test.yml exposes the public fixture variable at normal
             # inventory precedence so task-scoped checks can vary it.
@@ -665,7 +643,7 @@ class Machine:
         path = self.connection_inventory_path
         path.parent.mkdir(exist_ok=True)
         path.write_text(
-            f"{self.inventory_host} ansible_ssh_host={self.ssh_host} ansible_ssh_port={self.ssh_port}"
+            f"{self.machine} ansible_ssh_host={self.ssh_host} ansible_ssh_port={self.ssh_port}"
             f" ansible_ssh_user={self.ssh_user} ansible_ssh_private_key_file={SSH_KEY}\n"
         )
 
@@ -703,12 +681,8 @@ class Machine:
             if src.exists():
                 src.copy_into(self.workdir_path)
 
-        # site_test.py may stage the production site.yml before its first
-        # Ansible call; preserve that caller-owned override.
         for playbook in Path("test/playbooks").glob("*.yml"):
-            destination = self.workdir_path / playbook.name
-            if not destination.exists():
-                playbook.copy_into(self.workdir_path)
+            playbook.copy_into(self.workdir_path)
         self._ansible_staged = True
 
     async def boot(self) -> None:
@@ -1263,7 +1237,7 @@ class Machine:
         the firewall `_verify` probes that `delegate_to: localhost`.
         """
         # Ports pre-picked in prepare(). qemu_user_net_args pins the VM's eth0
-        # to network.hosts[inventory_host].physical (10.234.x test view); it is
+        # to network.hosts[machine].physical (10.234.x test view); it is
         # empty for minimal, which has no topology identity.
         hostfwds = [f"hostfwd=tcp:{self.ssh_host}:{self.ssh_port}-:22"]
         for proto in ("tcp", "udp"):
@@ -1271,7 +1245,7 @@ class Machine:
                 f"hostfwd={proto}:{self.ssh_host}:{host_port}-:{guest_port}"
                 for guest_port, host_port in self.wan_forward_ports[proto].items()
             )
-        netdev = f"user,id=user.0,{','.join(hostfwds)}{qemu_user_net_args(self.inventory_host)}"
+        netdev = f"user,id=user.0,{','.join(hostfwds)}{qemu_user_net_args(self.machine)}"
         return netdev, f"{self.arch.net_device},netdev=user.0"
 
     def _boot_command(self) -> list[str]:
@@ -1322,15 +1296,12 @@ class Machine:
         netdev_arg, net_device_arg = self._netdev_args()
 
         # Last-resort GNU timeout around qemu, outlasting machine_timeout (the
-        # Python deadline) by a grace window so Machine.stop() finishes its
-        # graceful->SIGKILL escalation first. A kept VM runs until the operator
-        # stops it, and runs unwrapped: GNU timeout detaches its child from the
-        # controlling tty, which would leave --foreground's mon:stdio unusable.
-        wrapper = (
-            []
-            if self.keep_vm
-            else ["timeout", "--kill-after=10s", str(self.machine_timeout + self.WRAPPER_GRACE_SECONDS)]
-        )
+        # Python deadline) by 60s so the entry point's own rc=124 and
+        # Machine.stop()'s graceful->SIGKILL escalation come first. A kept VM
+        # runs until the operator stops it, and runs unwrapped: GNU timeout
+        # detaches its child from the controlling tty, which would leave
+        # --foreground's mon:stdio unusable.
+        wrapper = [] if self.keep_vm else ["timeout", "--kill-after=10s", str(self.machine_timeout + 60)]
         cmd = [
             *wrapper,
             self.arch.qemu_binary,
@@ -1423,23 +1394,20 @@ class Machine:
 
 
 def imagedir_for_host() -> Path:
-    """Return the platform's packer-image cache root.
+    """Return the packer-image cache root, HOMELAB_CI_DIR from mise.toml.
 
-    HOMELAB_CI_DIR is authoritative under mise. Direct invocations fall back
-    to /mnt/scratch/homelab_ci on Linux or <repo>/packer/artifacts on Mac.
-    Linux raises if the selected mountpoint is missing; Mac creates it.
+    Created on first use, but never its parent: on Linux that is the scratch
+    volume, and a missing mount must fail rather than fill the root disk.
     """
-    system = platform.system()
-    if system == "Darwin":
-        d = Path(os.environ.get("HOMELAB_CI_DIR", "packer/artifacts")).resolve()
-        d.mkdir(parents=True, exist_ok=True)
-        return d
-    if system == "Linux":
-        d = Path(os.environ.get("HOMELAB_CI_DIR", "/mnt/scratch/homelab_ci")).resolve()
-        if not d.is_dir():
-            raise RuntimeError(f"Imagedir {d!s} does not exist; mount or create the configured qemu image volume.")
-        return d
-    raise RuntimeError(f"Unknown operating system: {system}")
+    try:
+        d = Path(os.environ["HOMELAB_CI_DIR"]).resolve()
+    except KeyError:
+        raise RuntimeError("HOMELAB_CI_DIR is unset; run the harness through mise") from None
+    try:
+        d.mkdir(exist_ok=True)
+    except FileNotFoundError:
+        raise RuntimeError(f"Imagedir parent {d.parent} does not exist; mount the qemu image volume") from None
+    return d
 
 
 def sweep_stale_workdirs(imagedir: Path) -> None:

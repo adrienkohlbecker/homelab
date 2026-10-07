@@ -154,10 +154,6 @@ class TestConstants:
         assert machine.QEMU_MACHINE_SPECS["lab"].cloud_image is False
         assert machine.QEMU_MACHINE_SPECS["pug"].cloud_image is False
 
-    def test_each_packer_machine_uses_its_inventory_host(self) -> None:
-        assert machine.QEMU_MACHINE_SPECS["lab"].inventory_host == "lab"
-        assert machine.QEMU_MACHINE_SPECS["pug"].inventory_host == "pug"
-
 
 class TestLinkPackerArtifacts:
     @staticmethod
@@ -405,7 +401,6 @@ class TestAnsibleControllerStaging:
         monkeypatch.setattr(machine, "run_command", run_command)
 
         m = machine_factory()
-        (m.workdir_path / "site.yml").write_text("production site\n")
         assert not (m.workdir_path / "roles").exists()
 
         asyncio.run(m.ansible_command(str(m.workdir_path / "site.yml")))
@@ -414,7 +409,7 @@ class TestAnsibleControllerStaging:
         assert staged_calls == 1
         assert (m.workdir_path / "roles").is_dir()
         assert (m.workdir_path / "_environment.yml").read_text() == "environment\n"
-        assert (m.workdir_path / "site.yml").read_text() == "production site\n"
+        assert (m.workdir_path / "site.yml").read_text() == "fixture site\n"
 
 
 def test_ensure_booted_reports_early_qemu_exit(

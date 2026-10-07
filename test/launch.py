@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from machine import QEMU_MACHINE_SPECS, LaunchOptions, Machine, MachineRunOptions
+from machine import QEMU_MACHINE_SPECS, LaunchOptions, Machine
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import print_cmd_line, print_line, tee_output
 
@@ -208,7 +208,8 @@ def main() -> int:
             foreground=args.foreground,
             display_window=args.display_window,
         ),
-        run_options=MachineRunOptions(vcpus=args.vcpus, memory_mb=args.mem),
+        vcpus=args.vcpus,
+        memory_mb=args.mem,
     )
 
     if args.foreground:

@@ -14,7 +14,6 @@ from pathlib import Path
 from machine import (
     MACHINE_CHOICES,
     Machine,
-    MachineRunOptions,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
@@ -25,14 +24,6 @@ from matrix import (
     load_role_test_config,
 )
 from utils import IdempotenceFailedException, print_line
-
-
-def _positive_int(value: str) -> int:
-    """argparse type for flags that must be a positive integer."""
-    n = int(value)
-    if n <= 0:
-        raise argparse.ArgumentTypeError(f"must be a positive integer, got {n}")
-    return n
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
@@ -54,7 +45,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
     )
     parser.add_argument(
         "--timeout",
-        type=_positive_int,
+        type=int,
         default=30 * 60,
         metavar="SECONDS",
         help="Abort the test if it doesn't complete within this many seconds",
@@ -188,8 +179,6 @@ def main() -> int:
     # local parallel runs sharing an imagedir.
     sweep_stale_workdirs(imagedir_for_host())
 
-    # Machine._boot_command layers WRAPPER_GRACE_SECONDS on top of this so
-    # the qemu `timeout` wrapper outlasts the Python deadline.
     m = Machine(
         machine=parsed_args.machine,
         role=parsed_args.role,
@@ -197,7 +186,7 @@ def main() -> int:
         ubuntu_name=parsed_args.ubuntu,
         machine_timeout=parsed_args.timeout,
         upstream_mirrors=parsed_args.upstream_mirrors,
-        run_options=MachineRunOptions(memory_mb=role_config.memory_mb.get(parsed_args.machine)),
+        memory_mb=role_config.memory_mb.get(parsed_args.machine),
     )
 
     return m.run(

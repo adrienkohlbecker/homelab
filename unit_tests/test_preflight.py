@@ -57,32 +57,22 @@ def test_qemu_preflight_normalizes_ssh_key_mode(
     assert ssh_key.stat().st_mode & 0o777 == 0o600
 
 
-def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Machine on Linux fails fast when /mnt/scratch/homelab_ci isn't mounted.
-
-    The Mac branch mkdirs packer/artifacts on the fly; the Linux branch
-    hardcodes /mnt/scratch/homelab_ci and assumes the volume is mounted. Surface a
-    clear error before tempfile fails later during Machine construction.
-    """
-    monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
-    monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(machine.platform, "machine", lambda: "x86_64")
-    monkeypatch.delenv("HOMELAB_CI_DIR", raising=False)
-    monkeypatch.setattr(machine.Path, "is_dir", lambda self: False)
+def test_qemu_imagedir_fails_without_its_volume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The imagedir is created on demand, but its parent volume never is."""
+    monkeypatch.setenv("HOMELAB_CI_DIR", str(tmp_path / "unmounted" / "homelab_ci"))
     with pytest.raises(RuntimeError, match="does not exist"):
-        machine.Machine(
-            machine="minimal",
-            role="testrole",
-            keep_vm=False,
-            ubuntu_name="noble",
-            machine_timeout=300,
-        )
+        machine.imagedir_for_host()
+
+
+def test_qemu_imagedir_requires_mise_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOMELAB_CI_DIR", raising=False)
+    with pytest.raises(RuntimeError, match="through mise"):
+        machine.imagedir_for_host()
 
 
 def test_qemu_imagedir_uses_configured_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     configured = tmp_path / "configured"
-    configured.mkdir()
-    monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
     monkeypatch.setenv("HOMELAB_CI_DIR", str(configured))
 
     assert machine.imagedir_for_host() == configured
+    assert configured.is_dir()

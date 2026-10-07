@@ -1,6 +1,5 @@
 """Unit tests for test/testrole.py — idempotence regex, argparse, constants."""
 
-import argparse
 import asyncio
 from collections.abc import Coroutine
 from pathlib import Path
@@ -53,31 +52,6 @@ def test_count_changed_tasks(stdout: list[str], expected: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _positive_int — argparse type
-# ---------------------------------------------------------------------------
-
-
-class TestPositiveInt:
-    def test_valid_positive(self) -> None:
-        assert testrole._positive_int("42") == 42
-
-    def test_one_is_valid(self) -> None:
-        assert testrole._positive_int("1") == 1
-
-    def test_zero_raises(self) -> None:
-        with pytest.raises(argparse.ArgumentTypeError, match="positive integer"):
-            testrole._positive_int("0")
-
-    def test_negative_raises(self) -> None:
-        with pytest.raises(argparse.ArgumentTypeError, match="positive integer"):
-            testrole._positive_int("-5")
-
-    def test_non_numeric_raises(self) -> None:
-        with pytest.raises(ValueError, match="invalid literal"):
-            testrole._positive_int("abc")
-
-
-# ---------------------------------------------------------------------------
 # parse_args
 # ---------------------------------------------------------------------------
 
@@ -127,4 +101,4 @@ def test_main_passes_role_memory_to_machine(
 
     assert testrole.main() == 0
     assert seen["machine"] == machine_name
-    assert seen["run_options"].memory_mb == expected_memory
+    assert seen["memory_mb"] == expected_memory

@@ -27,7 +27,6 @@ from pathlib import Path
 from machine import (
     SYSTEM_RUNNING_WAIT_TIMEOUT,
     Machine,
-    MachineRunOptions,
     imagedir_for_host,
     sweep_stale_workdirs,
 )
@@ -48,12 +47,6 @@ POWEROFF_TIMEOUT = 120
 # DNS server. Start poweroff.target through PID1, which has no inhibitors and
 # needs no polkit, rather than asking logind to skip the lock.
 POWEROFF_COMMAND = ("sudo", "systemctl", "start", "--no-block", "--job-mode=replace-irreversibly", "poweroff.target")
-
-# The converge runs dozens of services; its 12-GiB guest books three cells'
-# worth of a shared 16-vCPU/32-GiB CI worker (capacity_per_instance). Check
-# mode renders the same site without starting them.
-SITE_CONVERGE_OPTIONS = MachineRunOptions(vcpus=8, memory_mb=12288, quiet_ansible=True)
-SITE_CHECK_OPTIONS = MachineRunOptions(quiet_ansible=True)
 
 
 # podman runs each container's --health-startup-cmd and periodic --health-cmd
@@ -260,12 +253,18 @@ def main() -> int:
     m = Machine(
         machine="lab",
         # Distinct artifact names keep simultaneous check and converge logs
-        # separate; run behavior is carried explicitly by run_options.
+        # separate.
         role="_site_check" if args.check else "_site_test",
         keep_vm=args.keep,
         ubuntu_name=args.ubuntu,
         machine_timeout=args.timeout,
-        run_options=SITE_CHECK_OPTIONS if args.check else SITE_CONVERGE_OPTIONS,
+        # The converge runs dozens of services; its 12-GiB guest books three
+        # cells' worth of a shared 16-vCPU/32-GiB CI worker
+        # (capacity_per_instance). Check mode renders the same site without
+        # starting them.
+        vcpus=None if args.check else 8,
+        memory_mb=None if args.check else 12288,
+        quiet_ansible=True,
     )
 
     return m.run(run_site_test(m, timeout=args.timeout, check_mode=args.check), "site_test")

@@ -84,13 +84,13 @@ def test_format_ansible_cmd_default_envelope(
     assert inventories == ["test/inventory.ini", str(m.connection_inventory_path)]
     m._write_connection_inventory()
     assert m.connection_inventory_path.read_text() == (
-        f"{m.inventory_host} ansible_ssh_host=127.0.0.1 ansible_ssh_port=2222"
+        f"{m.machine} ansible_ssh_host=127.0.0.1 ansible_ssh_port=2222"
         " ansible_ssh_user=vagrant ansible_ssh_private_key_file=packer/vagrant.key\n"
     )
 
     # --limit pins the static `hosts: all` playbook to the inventory host
     assert "--limit" in cmd
-    assert cmd[cmd.index("--limit") + 1] == m.inventory_host
+    assert cmd[cmd.index("--limit") + 1] == m.machine
     # The internal input injects the immutable role name into the static
     # dispatcher; group_vars publishes _role_under_test at normal precedence.
     assert f"_test_role_under_test={m.role}" in cmd
@@ -209,7 +209,7 @@ def test_ansible_env_default_envelope(
 def test_ansible_env_quiet_runs_suppress_verbose_output(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
-    env = machine_factory(run_options=machine.MachineRunOptions(quiet_ansible=True)).ansible_env()
+    env = machine_factory(quiet_ansible=True).ansible_env()
 
     assert env["ANSIBLE_DISPLAY_OK_HOSTS"] == "false"
     assert env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] == "false"
@@ -235,8 +235,8 @@ def test_journal_console_is_always_attached(machine_factory: Callable[..., machi
     assert "virtconsole,chardev=journal,bus=journal_bus.0" in cmd
 
 
-def test_run_options_override_machine_resources(machine_factory: Callable[..., machine.Machine]) -> None:
-    m = machine_factory(run_options=machine.MachineRunOptions(vcpus=6, memory_mb=12288))
+def test_resource_arguments_override_machine_spec(machine_factory: Callable[..., machine.Machine]) -> None:
+    m = machine_factory(vcpus=6, memory_mb=12288)
 
     assert m._spec.vcpus == 6
     assert m._spec.memory_mb == 12288

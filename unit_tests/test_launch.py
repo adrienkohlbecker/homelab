@@ -40,14 +40,14 @@ def test_only_exit_after_ready_checks_systemd_under_a_deadline(exit_after_ready:
 
 
 @pytest.mark.parametrize(
-    ("argv", "keep_vm", "run_options"),
+    ("argv", "keep_vm", "vcpus", "memory_mb"),
     [
-        (["--vcpus", "1", "--mem", "2048"], True, launch.MachineRunOptions(vcpus=1, memory_mb=2048)),
-        (["--exit-after-ready"], False, launch.MachineRunOptions()),
+        (["--vcpus", "1", "--mem", "2048"], True, 1, 2048),
+        (["--exit-after-ready"], False, None, None),
     ],
 )
 def test_flags_reach_the_machine(
-    monkeypatch: pytest.MonkeyPatch, argv: list[str], keep_vm: bool, run_options: launch.MachineRunOptions
+    monkeypatch: pytest.MonkeyPatch, argv: list[str], keep_vm: bool, vcpus: int | None, memory_mb: int | None
 ) -> None:
     captured: dict[str, object] = {}
 
@@ -62,4 +62,4 @@ def test_flags_reach_the_machine(
         launch.main()
 
     assert captured["keep_vm"] is keep_vm
-    assert captured["run_options"] == run_options
+    assert (captured["vcpus"], captured["memory_mb"]) == (vcpus, memory_mb)
