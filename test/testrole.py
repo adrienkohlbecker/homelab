@@ -8,7 +8,6 @@ streaming around an end-to-end converge of one role.
 
 import argparse
 import asyncio
-import os
 import re
 import sys
 import traceback
@@ -78,13 +77,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
         action="store_true",
         default=False,
         help="Use public apt/podman mirrors instead of the local Nexus cache (escape hatch when the lab mirror is unreachable)",
-    )
-    parser.add_argument(
-        "--workdir-parent",
-        type=Path,
-        default=os.environ.get("HOMELAB_WORKDIR_PARENT") or None,
-        metavar="PATH",
-        help="Place the per-run TempDir under this path instead of the imagedir. Lets CI keep the qcow2 tree mounted ro and stage scratch in a container-local /tmp. Falls back to $HOMELAB_WORKDIR_PARENT, then to the imagedir.",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -219,7 +211,6 @@ def main() -> int:
         ubuntu_name=parsed_args.ubuntu,
         machine_timeout=parsed_args.timeout,
         upstream_mirrors=parsed_args.upstream_mirrors,
-        workdir_parent=parsed_args.workdir_parent,
         run_options=MachineRunOptions(memory_mb=role_config.memory_mb.get(parsed_args.machine)),
     )
 
@@ -245,7 +236,7 @@ def main() -> int:
         except TimeoutError as exc:
             # The outer asyncio.timeout deadline raises a message-less
             # TimeoutError; the phase guards (ensure_booted, ensure_ssh, passt
-            # socket, publish-lock) each raise one carrying a specific cause.
+            # socket) each raise one carrying a specific cause.
             # Surface that cause when present so a slow boot-to-sshd is
             # attributable as such, not misread as the overall per-test timeout.
             if str(exc):

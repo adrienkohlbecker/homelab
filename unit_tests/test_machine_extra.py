@@ -3,11 +3,12 @@
 import asyncio
 import fcntl
 import os
+import shutil
 import time
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import machine
 import matrix
@@ -156,6 +157,65 @@ class TestConstants:
     def test_each_packer_machine_uses_its_inventory_host(self) -> None:
         assert machine.QEMU_MACHINE_SPECS["lab"].inventory_host == "lab"
         assert machine.QEMU_MACHINE_SPECS["pug"].inventory_host == "pug"
+
+
+class TestLinkPackerArtifacts:
+    @staticmethod
+    def _publish(path: Path, version: str) -> None:
+        path.mkdir()
+        for name in ("packer-ubuntu-1.raw", "packer-ubuntu-2.raw", "efivars.fd"):
+            (path / name).write_text(version)
+
+    @pytest.fixture(autouse=True)
+    def _no_tick_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def no_sleep() -> None:
+            pass
+
+        monkeypatch.setattr(machine, "sleep_tick", no_sleep)
+
+    def test_links_the_published_artifacts(self, tmp_path: Path) -> None:
+        published = tmp_path / "lab"
+        self._publish(published, "v1")
+        (published / "notes.txt").touch()
+        dest = tmp_path / "base"
+
+        asyncio.run(machine.link_packer_artifacts(published, dest))
+
+        assert sorted(p.name for p in dest.iterdir()) == ["efivars.fd", "packer-ubuntu-1.raw", "packer-ubuntu-2.raw"]
+        assert (dest / "packer-ubuntu-1.raw").stat().st_ino == (published / "packer-ubuntu-1.raw").stat().st_ino
+
+    @pytest.mark.parametrize("delete_old", [True, False])
+    def test_retries_onto_the_version_swapped_in_mid_link(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, delete_old: bool
+    ) -> None:
+        """A publish renames the old version away, swaps in the new one, and
+        then deletes the old one; either state must yield only the new set."""
+        published = tmp_path / "lab"
+        self._publish(published, "v1")
+        dest = tmp_path / "base"
+        real_link = os.link
+        swapped = False
+
+        def link_with_swap(*args: Any, **kwargs: Any) -> None:
+            nonlocal swapped
+            if not swapped:
+                swapped = True
+                published.rename(tmp_path / ".lab.old")
+                self._publish(published, "v2")
+                if delete_old:
+                    shutil.rmtree(tmp_path / ".lab.old")
+            real_link(*args, **kwargs)
+
+        monkeypatch.setattr(machine.os, "link", link_with_swap)
+
+        asyncio.run(machine.link_packer_artifacts(published, dest))
+
+        assert {p.read_text() for p in dest.iterdir()} == {"v2"}
+        assert len(list(dest.iterdir())) == 3
+
+    def test_gives_up_when_nothing_is_published(self, tmp_path: Path) -> None:
+        with pytest.raises(RuntimeError, match="kept changing"):
+            asyncio.run(machine.link_packer_artifacts(tmp_path / "lab", tmp_path / "base"))
 
 
 class TestDiscoverPackerDisks:

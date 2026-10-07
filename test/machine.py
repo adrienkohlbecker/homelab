@@ -284,6 +284,42 @@ def _minimal_user_data() -> str:
     return "#cloud-config\n" + yaml.safe_dump(user_data, sort_keys=False)
 
 
+async def link_packer_artifacts(published: Path, dest: Path) -> None:
+    """Hardlink one complete version of *published*'s artifacts into *dest*.
+
+    packer:build and the CI hydrate both publish by renaming the current
+    directory away, renaming the new one into place, and only then deleting the
+    old one. Linking relative to one open directory fd keeps every link from a
+    single version; the path still naming that directory afterwards proves it
+    was never renamed away, so nothing in it was deleted mid-link. Otherwise
+    the swap happened under us and the next attempt takes the new version.
+    """
+    for _ in range(ARTIFACT_LINK_ATTEMPTS):
+        shutil.rmtree(dest, ignore_errors=True)
+        dest.mkdir()
+        try:
+            dir_fd = os.open(published, os.O_RDONLY | os.O_DIRECTORY)
+        except FileNotFoundError:
+            # Between a publish's two renames, the path briefly names nothing.
+            await sleep_tick()
+            continue
+        try:
+            for name in os.listdir(dir_fd):
+                if name == "efivars.fd" or name.startswith("packer-ubuntu-"):
+                    os.link(name, dest / name, src_dir_fd=dir_fd)
+            current = os.stat(published)
+            linked = os.fstat(dir_fd)
+            if (current.st_dev, current.st_ino) == (linked.st_dev, linked.st_ino):
+                return
+        except FileNotFoundError:
+            # The directory was renamed away and its files deleted mid-link.
+            pass
+        finally:
+            os.close(dir_fd)
+        await sleep_tick()
+    raise RuntimeError(f"{published} kept changing; could not link one version in {ARTIFACT_LINK_ATTEMPTS} attempts")
+
+
 def discover_packer_disks(image_dir: Path) -> tuple[list[Path], str]:
     """Return contiguous Packer disks and their common on-disk format."""
 
@@ -343,11 +379,9 @@ SSH_WAIT_TIMEOUT = 120
 # timeout to end a wedged start.
 SYSTEM_RUNNING_WAIT_TIMEOUT = 600
 IDFILE_TIMEOUT = 60
-# Bounded shared-acquire window on the publish-lock. A wedged packer
-# publish (holding LOCK_EX) would otherwise stall every concurrent test
-# cell past its own --timeout; surface it as a clear TimeoutError with
-# a debugging hint instead.
-PUBLISH_LOCK_TIMEOUT = 300
+# Bounded retries for hardlinking one published image version; each retry
+# follows a publish or hydrate swapping the directory mid-link.
+ARTIFACT_LINK_ATTEMPTS = 20
 # Bounded exclusive-acquire window on the per-image cloud-image download lock.
 # The holder keeps it across the curl, so a waiter must outlast a full download
 # of a few-hundred-MB image off a slow mirror; bounded so a wedged downloader
@@ -376,23 +410,8 @@ class Machine:
     # kernel releases the lock on process death (clean or SIGKILL/OOM), so a
     # crashed run's workdir becomes reapable without a polling daemon. Survives
     # PID namespaces -- the lock is on the inode, shared across containers
-    # that bind-mount the same workdir parent.
+    # that bind-mount the same imagedir.
     _live_lock_fd: int
-    # Shared flock on <imagedir>/.publish-lock held across prepare→
-    # ensure_booted so packer:build's brief exclusive lock around its
-    # atomic-rename publish (packer/publish.py) can't
-    # tear our backing-file reads. Applies on both Linux (lab) and macOS
-    # (a local `mise run packer:build` can race parallel testall.py cells
-    # reading the same artifacts/ tree). Released at the end of
-    # ensure_booted() once qemu's -drive open(2) has completed -- not at
-    # the end of boot(), because create_subprocess_exec returns once the
-    # kernel has fork+exec'd qemu but qemu doesn't open backing files
-    # until after BIOS init (the qcow2-overlay backing path is embedded
-    # by value in the overlay header, so a packer swap of that inode
-    # between exec and open would silently corrupt the boot). -1 = not
-    # held (also the steady state when the lockfile is absent -- a fresh
-    # imagedir with no packer history).
-    _publish_lock_fd: int
     # Controller-side WAN probe endpoint, so `delegate_to: localhost`
     # probes in roles/firewall's _verify can exercise rules keying on the
     # WAN interface (traffic originating inside the VM never ingresses on
@@ -431,7 +450,6 @@ class Machine:
         machine_timeout: int,
         upstream_mirrors: bool = False,
         *,
-        workdir_parent: Path | None = None,
         launch: LaunchOptions | None = None,
         run_options: MachineRunOptions | None = None,
         loopback_host: str | None = None,
@@ -488,7 +506,6 @@ class Machine:
         # handshake + agent round-trip + mitogen bootstrap each.
         self._ssh_master_proc: asyncio.subprocess.Process | None = None
         self._live_lock_fd = -1
-        self._publish_lock_fd = -1
         self._ansible_staged = False
         self._last_ansible_cmd: tuple[str, ...] | None = None
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
@@ -510,14 +527,10 @@ class Machine:
         )
         for stale in self._artifact_files:
             stale.unlink(missing_ok=True)
-        # The workdir lands alongside the packer qcow2s by default. An explicit
-        # workdir_parent (CI flag) overrides so the imagedir can be ro-mounted.
-        # Auto-create the parent so --workdir-parent /some/new/path just works
-        # without callers having to mkdir -p first; tempfile itself doesn't
-        # create the dir argument, only the per-run subdir under it.
-        wd_parent = workdir_parent or self.imagedir
-        Path(wd_parent).mkdir(parents=True, exist_ok=True)
-        self.workdir = tempfile.TemporaryDirectory(dir=wd_parent)
+        # The workdir lands alongside the packer artifacts, on the same
+        # filesystem, so prepare() can hardlink the disks it boots from.
+        self.imagedir.mkdir(parents=True, exist_ok=True)
+        self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
         self.workdir_path = Path(self.workdir.name)
         # Claim the liveness lock immediately after the workdir exists so a
         # sweep racing us from another container can't reap the dir between
@@ -891,17 +904,6 @@ class Machine:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
             await sleep_tick()
 
-        # Drop the publish-lock now that qemu has opened its -drive
-        # backing files. The PID/CID file is written by qemu after
-        # device init (which includes the qcow2-overlay open(2) and
-        # therefore the backing-file open(2)), so by the time we get
-        # here the kernel holds open fds on every inode our overlays
-        # point at -- a packer rename of those paths from this point
-        # on is invisible to us. Holding the lock longer would block
-        # packer's publish (which is rare but bounded; our acquire is
-        # shared, packer's is exclusive).
-        self._release_publish_lock()
-
     async def ensure_ssh(self) -> None:
         """Wait for the daemon banner on the port reserved in prepare()."""
 
@@ -1099,11 +1101,6 @@ class Machine:
                             self.proc.kill()
                         await self.proc.wait()
             finally:
-                # Defensive release: boot() drops the publish-lock on its happy
-                # path, but if it raised between acquire and release we'd leak
-                # the fd into the process beyond. Re-call is idempotent (no-op
-                # when fd<0).
-                self._release_publish_lock()
                 # Release the liveness lock before rmtree -- the kernel would
                 # release it on close()/exit anyway, but doing it explicitly
                 # keeps the ordering obvious.
@@ -1112,18 +1109,6 @@ class Machine:
                         os.close(self._live_lock_fd)
                     self._live_lock_fd = -1
                 self.workdir.cleanup()
-
-    def _release_publish_lock(self) -> None:
-        """Drop the shared publish-lock fd if held; no-op otherwise.
-
-        Idempotent so callers (ensure_booted's happy path + stop's finally) can both
-        invoke it without coordinating. The kernel would release the flock
-        on close() anyway; explicit close keeps the ordering legible.
-        """
-        if self._publish_lock_fd >= 0:
-            with contextlib.suppress(OSError):
-                os.close(self._publish_lock_fd)
-            self._publish_lock_fd = -1
 
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
@@ -1166,16 +1151,6 @@ class Machine:
 
     async def prepare(self) -> None:
         """Create overlay images and seed data for the selected template."""
-
-        # Acquire the publish-lock before any read of the imagedir starts.
-        # _create_overlay's qemu-img embeds the backing file's absolute path
-        # by value, so a packer:build publish that rm+mv's the
-        # parent dir between overlay-create and qemu-launch would silently
-        # corrupt the boot. The shared lock composes with packer's exclusive
-        # lock on the same path -- packer waits for all in-flight test
-        # launches to drop, then publishes, then we re-acquire. Released at
-        # the end of boot() once qemu has pinned the inodes via open fds.
-        self._acquire_publish_lock_shared()
 
         # Reserve every hostfwd port up front by binding an ephemeral socket on
         # self.ssh_host and reading back the assigned port. Avoids an lsof-poll
@@ -1275,11 +1250,16 @@ class Machine:
             if not self.arch.bios_boot_supported:
                 self.drives += await self._uefi_drives()
         else:
-            # Artifact-backed variants overlay every disk Packer published.
+            # Artifact-backed variants overlay every disk Packer published,
+            # through private hardlinks: qemu-img records the backing path by
+            # value, and a later publish or hydrate must not swap it out from
+            # under this run.
             if self.launch.image_dir is not None:
-                image_dir = self.launch.image_dir.resolve()
+                published = self.launch.image_dir.resolve()
             else:
-                image_dir = self.imagedir / self.ubuntu_name / self.machine
+                published = self.imagedir / self.ubuntu_name / self.machine
+            image_dir = self.workdir_path / "base"
+            await link_packer_artifacts(published, image_dir)
             os_src_paths, artifact_format = discover_packer_disks(image_dir)
 
             os_disk_paths: list[str] = []
@@ -1322,43 +1302,6 @@ class Machine:
         if size:
             args.append(size)
         await run_command(args)
-
-    def _acquire_publish_lock_shared(self) -> None:
-        """Hold a shared flock on <imagedir>/.publish-lock until ensure_booted returns.
-
-        Applies on macOS too (parallel `test/testall.py` cells can race
-        against a local `mise run packer:build` rebuild on the same
-        artifacts/ tree). Skipped only when the lockfile is absent --
-        packer/publish.py touches it before flocking, so any imagedir that
-        has had at least one packer-build will have the file. On a fresh imagedir with no packer history we fall
-        through to the unlocked path rather than failing the boot.
-
-        LOCK_NB+deadline rather than blocking LOCK_SH: a wedged packer
-        publish (holding LOCK_EX) would otherwise block every concurrent
-        test cell indefinitely, past the harness's own --timeout --
-        surface it as a clear error with a debugging hint instead.
-        """
-        lockfile = self.imagedir / ".publish-lock"
-        if not lockfile.exists():
-            return
-        fd = os.open(str(lockfile), os.O_RDONLY)
-        end = time.monotonic() + PUBLISH_LOCK_TIMEOUT
-        while True:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
-                self._publish_lock_fd = fd
-                return
-            except OSError as e:
-                if e.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
-                    os.close(fd)
-                    raise
-                if time.monotonic() >= end:
-                    os.close(fd)
-                    raise TimeoutError(
-                        f"publish-lock held >{PUBLISH_LOCK_TIMEOUT:.0f}s; "
-                        f"concurrent packer-build wedged? check `lsof {lockfile}`"
-                    ) from e
-                time.sleep(0.5)
 
     async def _ensure_minimal_cloudimg(self) -> Path:
         """Download and cache the Ubuntu minimal cloud image.

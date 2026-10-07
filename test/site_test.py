@@ -108,13 +108,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep the machine running after the test (for debugging)",
     )
-    parser.add_argument(
-        "--workdir-parent",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="Parent directory for the per-run workdir (default: imagedir)",
-    )
     return parser.parse_args()
 
 
@@ -300,7 +293,6 @@ def main() -> int:
         keep_vm=args.keep,
         ubuntu_name=args.ubuntu,
         machine_timeout=args.timeout,
-        workdir_parent=args.workdir_parent,
         run_options=SITE_CHECK_OPTIONS if args.check else SITE_CONVERGE_OPTIONS,
     )
 
