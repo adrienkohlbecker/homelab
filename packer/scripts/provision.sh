@@ -49,6 +49,25 @@ fail() {
   exit 1
 }
 
+# apt-get update exits 0 even when one component's Packages index fails to
+# download (Nexus restart, dropped packet), leaving a partial cache that makes a
+# later install fail with a baffling "Unable to locate package". --error-on=any
+# turns a failed fetch into a non-zero exit. apt retries each file itself; the
+# loop absorbs a mirror outage that outlasts those retries. Shared with
+# chroot.sh like write_sources_list.
+apt_update() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if apt-get update --error-on=any; then
+      return 0
+    fi
+    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
+    sleep "$((attempt * 5))"
+  done
+  echo "apt-get update failed after 5 attempts" >&2
+  return 1
+}
+
 # Write deb822 apt sources for release $1 from archive mirror $2 and security
 # mirror $3, matching both the stock layout and what roles/apt converges to.
 # Shared with chroot.sh, which receives it through `declare -f`.
@@ -408,9 +427,7 @@ cloud-init status --wait || true
 # shellcheck source=/dev/null  # the live environment's own release file
 write_sources_list "$(. /etc/os-release && echo "$VERSION_CODENAME")" "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
 
-# --error-on=any fails on a partial index update instead of leaving a cache
-# that later reports a baffling "Unable to locate package".
-apt-get update --error-on=any
+apt_update
 (
   # mdadm and zfsutils-linux both start storage units from their package
   # postinst. Hold those units while the live environment still has its stock
@@ -590,7 +607,7 @@ fi
 # which bash refuses to put in env); chroot.sh consumes it the same way via
 # unquoted `for d in $DISKS` word-splitting.
 {
-  declare -f write_sources_list
+  declare -f apt_update write_sources_list
   cat "$SCRIPTS_DIR/chroot.sh"
 } | unshare --mount --propagation private arch-chroot /mnt bash
 

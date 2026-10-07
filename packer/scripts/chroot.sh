@@ -16,8 +16,8 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# provision.sh prepends its shared helpers (write_sources_list) to this script
-# on the way into the chroot.
+# provision.sh prepends its shared helpers (apt_update, write_sources_list) to
+# this script on the way into the chroot.
 #
 # Env consumed by this script:
 # - From packer's shell-provisioner env block (qemu.pkr.hcl):
@@ -95,9 +95,9 @@ install -m 0644 \
   "${CHROOT_ROLE_FILES}/keyboard" \
   /etc/default/keyboard
 
-# Update the repository cache. --error-on=any fails on a partial index update
-# instead of leaving a cache that later reports "Unable to locate package".
-apt-get update --error-on=any
+# Update the repository cache
+
+apt_update
 
 # Update system
 
@@ -492,7 +492,7 @@ write_sources_list "$UBUNTU_NAME" "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECU
 # just cleared the build-time Nexus lists) so the shipped image carries a
 # coherent cache: package tasks using cache_valid_time may skip their own update
 # and would otherwise find no candidate.
-apt-get update --error-on=any
+apt_update
 
 # Drop the downloaded .deb cache (build-only, ~hundreds of MB) so it doesn't
 # ride into every deployment. Clears /var/cache/apt/archives only — the
