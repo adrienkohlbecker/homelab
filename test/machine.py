@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple, Self
 
+import ansible_mitogen
 import yaml
 from matrix import UBUNTU_RELEASES
-from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CheckFailedException,
     CommandFailedException,
@@ -106,6 +106,9 @@ DEFAULT_WAN_FORWARDS: dict[str, tuple[int, ...]] = {
 # ansible.cfg in a world-writable cwd, which the GitLab CI checkout is, and
 # without it the first connect to a fresh cell fails host key verification.
 ANSIBLE_CONFIG_PATH = Path(__file__).parent.parent / "ansible.cfg"
+# The venv's mitogen strategy plugins, passed straight to ansible so a run
+# never depends on (or rewrites) the repo's .ansible-mitogen-strategy symlink.
+MITOGEN_STRATEGY_DIR = Path(ansible_mitogen.__file__).parent / "plugins" / "strategy"
 
 
 def _load_test_topology() -> dict:
@@ -504,6 +507,7 @@ class Machine:
         """
         env = {
             "ANSIBLE_CONFIG": str(ANSIBLE_CONFIG_PATH),
+            "ANSIBLE_STRATEGY_PLUGINS": str(MITOGEN_STRATEGY_DIR),
             # Override [ssh_connection] ssh_args wholesale so ansible pins its
             # ControlPath to the cell-stable socket (ssh_control_path) instead
             # of its default per-invocation path. Without an explicit
@@ -656,7 +660,6 @@ class Machine:
         if self._ansible_staged:
             return
 
-        ensure_mitogen_symlink()
         self._write_connection_inventory()
 
         for required_tree in ("group_vars", "host_vars", "roles", "data"):

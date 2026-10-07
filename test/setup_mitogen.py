@@ -6,15 +6,14 @@ ansible.cfg points strategy_plugins at this stable path so mitogen survives
 Python version bumps in the venv. The symlink target is computed by
 importing ansible_mitogen, which fails loudly if mitogen isn't installed.
 
-Imported by machine.py for the test harness; runnable on its own when a
-user wants to repair the symlink without invoking the test harness (e.g.
-after `uv sync` upgraded Python and ansible.cfg started rejecting plays
-with "Invalid play strategy specified: mitogen_linear").
+Run by the mise postinstall hook, and on its own to repair the symlink (e.g.
+after `uv sync` upgraded Python and ansible.cfg started rejecting plays with
+"Invalid play strategy specified: mitogen_linear"). The test harness passes
+the plugin dir to ansible directly instead.
 """
 
 import os
 import sys
-import uuid
 from pathlib import Path
 
 SYMLINK_NAME = ".ansible-mitogen-strategy"
@@ -32,19 +31,8 @@ def ensure_mitogen_symlink(repo_root: Path | None = None) -> Path:
         raise RuntimeError(f"ansible_mitogen is installed but {target} is missing -- mitogen package layout changed?")
 
     link = repo_root / SYMLINK_NAME
-    current: str | None = None
-    if link.is_symlink():
-        current = os.readlink(link)
-    if current == str(target):
-        return link
-
-    replacement = link.with_name(f".{link.name}.{uuid.uuid4().hex}")
-    try:
-        replacement.symlink_to(target)
-        replacement.replace(link)
-    finally:
-        # A failed replace must not leave its private candidate behind.
-        replacement.unlink(missing_ok=True)
+    link.unlink(missing_ok=True)
+    link.symlink_to(target)
     return link
 
 

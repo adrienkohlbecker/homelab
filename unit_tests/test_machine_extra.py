@@ -389,14 +389,14 @@ class TestAnsibleControllerStaging:
 
         staged_calls = 0
 
-        def ensure_mitogen() -> None:
+        def write_connection_inventory(self: machine.Machine) -> None:
             nonlocal staged_calls
             staged_calls += 1
 
         async def run_command(*args: object, **kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(exitcode=0, stdout=[])
 
-        monkeypatch.setattr(machine, "ensure_mitogen_symlink", ensure_mitogen)
+        monkeypatch.setattr(machine.Machine, "_write_connection_inventory", write_connection_inventory)
         monkeypatch.setattr(machine, "run_command", run_command)
 
         m = machine_factory()
