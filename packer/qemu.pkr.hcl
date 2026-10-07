@@ -213,15 +213,12 @@ source "qemu" "ubuntu" {
   iso_url           = local.cloud_url
   # NoCloud datasource: cloud-init auto-detects an attached CD/ISO
   # labelled `cidata` containing user-data + meta-data. cd_content
-  # renders these inline via templatefile() so the vagrant pubkey and
-  # build-time apt mirror URLs land in the seed without an on-disk
-  # template file. meta-data is empty but the file must exist.
+  # renders the vagrant pubkey into user-data via templatefile().
+  # meta-data is empty but the file must exist.
   cd_label = "cidata"
   cd_content = {
     "user-data" = templatefile("http/user-data.pkrtpl", {
-      archive_url  = local.build_archive
-      security_url = local.build_security
-      ssh_keys     = local.vagrant_ssh_keys
+      ssh_keys = local.vagrant_ssh_keys
     })
     "meta-data" = ""
   }

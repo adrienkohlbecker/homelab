@@ -16,6 +16,9 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
+# provision.sh prepends its shared helpers (write_sources_list) to this script
+# on the way into the chroot.
+#
 # Env consumed by this script:
 # - From packer's shell-provisioner env block (qemu.pkr.hcl):
 #   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
@@ -70,60 +73,9 @@ ff02::1         ip6-allnodes
 ff02::2         ip6-allrouters
 EOF
 
-# Configure apt. Called twice: once now with the build-time mirror
-# ($UBUNTU_MIRROR, defaults to Nexus), and once at the very end with
-# the upstream pair so the shipped image points at canonical Ubuntu
-# URLs regardless of build-time routing. Supported releases use deb822
-# .sources files, matching both the stock Noble layout and what roles/apt
-# converges to.
-write_sources_list() {
-  # Twin of the sources roles/apt/tasks/configure.yml writes, byte for byte
-  # apart from the mirror URLs, so a first converge changes only the mirror.
-  local deb_arch
-  if [ "$ZBM_ARCH" = "aarch64" ]; then
-    deb_arch=arm64
-  else
-    deb_arch=amd64
-  fi
-
-  truncate -s0 /etc/apt/sources.list
-  mkdir -p /etc/apt/sources.list.d
-
-  cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
-Architectures: $deb_arch
-Components: main universe restricted multiverse
-Languages: none
-X-Repolib-Name: ubuntu
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-Suites: $UBUNTU_NAME $UBUNTU_NAME-updates $UBUNTU_NAME-backports
-Types: deb
-URIs: $1
-EOF
-
-  cat <<EOF >/etc/apt/sources.list.d/ubuntu-security.sources
-Architectures: $deb_arch
-Components: main universe restricted multiverse
-Languages: none
-X-Repolib-Name: ubuntu-security
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-Suites: $UBUNTU_NAME-security
-Types: deb
-URIs: $2
-EOF
-
-  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
-  # here orphans the cached indices. The frozen base suite's InRelease is
-  # byte-identical whichever mirror serves it (Nexus just proxies
-  # upstream), so the next apt-get update records a content "Hit", skips
-  # the re-download, then can't open the list file that was never written
-  # under the new URL ("can not open …InRelease"). Drop the cache so each
-  # rewrite re-fetches cleanly under the current URLs. No-op on the first
-  # call (debootstrap leaves the dir empty); load-bearing on the upstream
-  # rewrite below.
-  find /var/lib/apt/lists -type f -delete
-}
-
-write_sources_list "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
+# Build-time mirror first ($UBUNTU_MIRROR, Nexus by default); the upstream
+# pair replaces it at the very end.
+write_sources_list "$UBUNTU_NAME" "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
 
 # Configure locale
 
@@ -534,7 +486,7 @@ fi
 # (Nexus by default); ansible's mirror_apt_ubuntu_* may rewrite this
 # again on first run, but the at-rest image must point at canonical
 # Ubuntu mirrors.
-write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
+write_sources_list "$UBUNTU_NAME" "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
 
 # Refresh /var/lib/apt/lists/ under the upstream URLs (write_sources_list
 # just cleared the build-time Nexus lists) so the shipped image carries a

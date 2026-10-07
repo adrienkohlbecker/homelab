@@ -10,11 +10,3 @@ users:
 %{ for k in ssh_keys ~}
       - ${k}
 %{ endfor ~}
-apt:
-  preserve_sources_list: false
-  primary:
-    - arches: [default]
-      uri: "${archive_url}"
-  security:
-    - arches: [default]
-      uri: "${security_url}"

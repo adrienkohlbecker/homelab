@@ -49,6 +49,50 @@ fail() {
   exit 1
 }
 
+# Write deb822 apt sources for release $1 from archive mirror $2 and security
+# mirror $3, matching both the stock layout and what roles/apt converges to.
+# Shared with chroot.sh, which receives it through `declare -f`.
+write_sources_list() {
+  # Twin of the sources roles/apt/tasks/configure.yml writes, byte for byte
+  # apart from the mirror URLs, so a first converge changes only the mirror.
+  local deb_arch
+  deb_arch=$(dpkg --print-architecture)
+
+  truncate -s0 /etc/apt/sources.list
+  mkdir -p /etc/apt/sources.list.d
+
+  cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
+Architectures: $deb_arch
+Components: main universe restricted multiverse
+Languages: none
+X-Repolib-Name: ubuntu
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Suites: $1 $1-updates $1-backports
+Types: deb
+URIs: $2
+EOF
+
+  cat <<EOF >/etc/apt/sources.list.d/ubuntu-security.sources
+Architectures: $deb_arch
+Components: main universe restricted multiverse
+Languages: none
+X-Repolib-Name: ubuntu-security
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Suites: $1-security
+Types: deb
+URIs: $3
+EOF
+
+  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
+  # orphans the cached indices. The frozen base suite's InRelease is
+  # byte-identical whichever mirror serves it (Nexus just proxies upstream),
+  # so the next apt-get update records a content "Hit", skips the
+  # re-download, then can't open the list file that was never written under
+  # the new URL ("can not open …InRelease"). A cloud image's primed indices
+  # trip the same way. Drop the cache so each rewrite re-fetches cleanly.
+  find /var/lib/apt/lists -type f -delete
+}
+
 preflight() {
   local disk role_file
   local -A seen_disks=()
@@ -351,31 +395,18 @@ export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_META PARTITIO
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Block until cloud-init has finished applying user-data before touching apt.
-# preserve_sources_list:false + apt.primary in user-data.pkrtpl rewrite
-# sources.list to the Nexus mirror, but that runs in cloud-init's config stage
-# -- which is still going when packer's SSH provisioner connects (sshd opens in
-# the earlier network stage). Without this wait the apt below races the rewrite
-# and falls back to the base image's upstream archive.ubuntu.com; multi-disk
-# variants (lab/pug) boot slower and lose the race deterministically, failing
-# with "Unable to locate package" once the wipe below drops the primed indices.
-# --wait can exit non-zero on a degraded-but-complete run, which is fine here.
+# cloud-init's apt module rewrites the build VM's sources in its config stage,
+# which is still running when packer's SSH provisioner connects (sshd opens in
+# the earlier network stage); let it finish before replacing them. --wait can
+# exit non-zero on a degraded-but-complete run, and a live ISO may lack
+# cloud-init entirely; neither matters here.
 cloud-init status --wait || true
 
-# The cloud base image ships a primed /var/lib/apt/lists whose cached base
-# InRelease lets apt-get update record a "Hit" and skip re-fetching the base
-# suite -- but its Packages files aren't all present, so apt rejects the whole
-# base suite and the install below can't locate base packages
-# (debootstrap, zfsutils-linux, ...). Wipe the dir so update re-fetches every
-# index cleanly -- the same guard write_sources_list applies in chroot.sh.
-find /var/lib/apt/lists -type f -delete
-
-# A live ISO adds a cdrom source that has no Release file once the installer
-# media is copied into RAM. Remove only that entry so any network mirrors in
-# the same file survive.
-if [ -f /etc/apt/sources.list ]; then
-  sed -i '\|^[[:space:]]*deb[[:space:]]\+cdrom:|d' /etc/apt/sources.list
-fi
+# Install the tools below from the same mirror as the target. Replacing the
+# live environment's sources (for its own release) also drops a live ISO's
+# cdrom entry.
+# shellcheck source=/dev/null  # the live environment's own release file
+write_sources_list "$(. /etc/os-release && echo "$VERSION_CODENAME")" "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
 
 # --error-on=any fails on a partial index update instead of leaving a cache
 # that later reports a baffling "Unable to locate package".
@@ -558,7 +589,10 @@ fi
 # exported above. DISKS rides as a space-delimited string (not a bash array,
 # which bash refuses to put in env); chroot.sh consumes it the same way via
 # unquoted `for d in $DISKS` word-splitting.
-unshare --mount --propagation private arch-chroot /mnt bash <"$SCRIPTS_DIR/chroot.sh"
+{
+  declare -f write_sources_list
+  cat "$SCRIPTS_DIR/chroot.sh"
+} | unshare --mount --propagation private arch-chroot /mnt bash
 
 cleanup_chroot_role_files
 trap - EXIT
