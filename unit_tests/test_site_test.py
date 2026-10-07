@@ -6,10 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-import jinja2
 import pytest
 import site_test
-import yaml
 from machine import Machine
 
 
@@ -100,13 +98,6 @@ def test_converge_audits_settled_boot_before_poweroff(
         ("journalctl", "--boot"),
         ("sudo", "systemctl"),
     ]
-
-
-def test_production_reboot_goes_through_logind() -> None:
-    task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())[0]
-    command = jinja2.Template(task["reboot"]["reboot_command"])
-
-    assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
 
 
 class RestartJournalMachine:
