@@ -149,83 +149,19 @@ def test_keep_vm_aarch64_adds_full_input_stack(
         assert needed in devices
 
 
-def test_direct_boot_aarch64_appends_console_when_missing(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory(
-        host_arch="aarch64",
-        keep_vm=False,
-        launch=machine.LaunchOptions(
-            kernel=Path("/cache/kernel"),
-            append="root=zfs:rpool/ROOT/ubuntu_xyz",
-        ),
-    )
-    _setup(m)
-    cmd = m._boot_command()
-
-    assert cmd[cmd.index("-kernel") + 1] == "/cache/kernel"
-
-    append = cmd[cmd.index("-append") + 1]
-    # Original cmdline preserved verbatim, followed by the arch-specific UART.
-    assert append.startswith("root=zfs:rpool/ROOT/ubuntu_xyz")
-    assert "console=ttyAMA0,115200" in append
-    assert "earlycon=pl011,0x9000000" in append
-    # No tty0 added without keep_vm (no graphics device to bind fbcon to).
-    assert "console=tty0" not in append
-
-
-def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory(
-        host_arch="aarch64",
-        keep_vm=False,
-        launch=machine.LaunchOptions(
-            kernel=Path("/cache/kernel"),
-            append="root=zfs:rpool/ROOT/ubuntu_xyz console=ttyAMA0 quiet",
-        ),
-    )
-    _setup(m)
-    append = m._boot_command()[m._boot_command().index("-append") + 1]
-    # Only one console=ttyAMA in the final cmdline -- the user-provided one.
-    assert append.count("console=ttyAMA") == 1
-
-
-def test_direct_boot_x86_64_appends_ttyS(
-    machine_factory: Callable[..., machine.Machine],
-) -> None:
-    m = machine_factory(
-        host_arch="x86_64",
-        keep_vm=False,
-        launch=machine.LaunchOptions(
-            kernel=Path("/cache/kernel"),
-            append="root=zfs:rpool/ROOT/ubuntu_xyz",
-        ),
-    )
-    _setup(m)
-    append = m._boot_command()[m._boot_command().index("-append") + 1]
-    assert "console=ttyS0,115200" in append
-    assert "earlycon=uart8250,io,0x3f8" in append
-
-
-def test_direct_boot_keep_vm_inserts_tty0_first(
+def test_direct_boot_passes_kernel_and_cmdline_verbatim(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     m = machine_factory(
         host_arch="aarch64",
         keep_vm=True,
-        launch=machine.LaunchOptions(
-            kernel=Path("/cache/kernel"),
-            append="root=zfs:rpool/ROOT/ubuntu_xyz",
-        ),
+        launch=machine.LaunchOptions(kernel=Path("/cache/zfsbootmenu.EFI"), append="zbm.show console=ttyAMA0"),
     )
     _setup(m)
-    append = m._boot_command()[m._boot_command().index("-append") + 1]
-    # tty0 must appear before the serial console=, because Linux makes the
-    # LAST console= the primary /dev/console (we want serial primary).
-    tty0_idx = append.index("console=tty0")
-    serial_idx = append.index("console=ttyAMA")
-    assert tty0_idx < serial_idx
+    cmd = m._boot_command()
+
+    assert cmd[cmd.index("-kernel") + 1] == "/cache/zfsbootmenu.EFI"
+    assert cmd[cmd.index("-append") + 1] == "zbm.show console=ttyAMA0"
 
 
 def test_memory_and_vcpus_flow_from_spec(

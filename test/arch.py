@@ -32,13 +32,6 @@ class ArchProfile:
     machine_type: str
     net_device: str
     cloud_image_suffix: str
-    # Substring used to detect whether a user-supplied kernel cmdline
-    # already configures this arch's serial UART -- if found, we don't
-    # append a duplicate console=/earlycon= line.
-    serial_console_token: str
-    # The full "console=<device>,<baud> earlycon=<...>" string we append
-    # when the cmdline doesn't already wire up the UART.
-    serial_console_default: str
     # Extra -device flags qemu needs in interactive (VNC) mode. q35 brings
     # std VGA / PS/2 / ICH9 USB by default, so x86_64 only needs usb-tablet
     # for absolute-coordinate mouse; aarch64 virt has no default graphics
@@ -59,8 +52,6 @@ X86_64 = ArchProfile(
     machine_type=_X86_64_GUEST["machine_type"],
     net_device=_X86_64_GUEST["net_device"],
     cloud_image_suffix=_X86_64_GUEST["cloud_image_suffix"],
-    serial_console_token="console=ttyS",
-    serial_console_default="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200",
     keep_vm_extra_devices=("-device", "usb-tablet"),
     uefi_firmware=_X86_64_GUEST["uefi_firmware"],
     bios_boot_supported=True,
@@ -73,8 +64,6 @@ AARCH64 = ArchProfile(
     machine_type=_AARCH64_GUEST["machine_type"],
     net_device=_AARCH64_GUEST["net_device"],
     cloud_image_suffix=_AARCH64_GUEST["cloud_image_suffix"],
-    serial_console_token="console=ttyAMA",
-    serial_console_default="console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200",
     keep_vm_extra_devices=(
         "-device",
         "virtio-gpu-pci",

@@ -8,7 +8,7 @@ is packer:build's verify boot. Pass --kernel/--append to direct-boot a unified
 EFI image such as ZFSBootMenu's against the variant's disks:
 
   test/launch.py --machine lab --kernel /tmp/zbm/zfsbootmenu.EFI \\
-      --append 'earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200 zbm.show' \\
+      --append 'zbm.show earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200' \\
       --foreground
 """
 
@@ -55,9 +55,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--append",
         default="",
-        help="Kernel cmdline (used with --kernel). The harness auto-appends an "
-        "arch-appropriate serial console= + earlycon= unless you already "
-        "supplied one (ttyAMA on aarch64, ttyS on x86_64).",
+        help="Kernel cmdline (used with --kernel), passed verbatim. Include the "
+        "arch's serial console= (ttyAMA0 on aarch64, ttyS0 on x86_64) to capture "
+        "kernel output.",
     )
     parser.add_argument(
         "--mem",

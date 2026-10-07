@@ -72,6 +72,17 @@ for member in cmdline zfsbootmenu.EFI; do
   fi
 done
 base_cmdline=$(cat "${workdir}/cmdline")
+# The image's own cmdline names no console; point the kernel at this arch's
+# QEMU UART, which launch.py --foreground captures as the serial log asserted
+# on below.
+case "$arch" in
+x86_64) serial_console="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200" ;;
+aarch64) serial_console="console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200" ;;
+*)
+  echo "no serial console for $arch" >&2
+  exit 1
+  ;;
+esac
 
 # Boot the unified EFI image rEFInd actually loads in production, not the
 # components-mode kernel+initrd pair -- it embeds its own initrd/cmdline PE
@@ -80,7 +91,7 @@ base_cmdline=$(cat "${workdir}/cmdline")
 "${repo_root}/test/launch.py" \
   --machine lab \
   --kernel "${workdir}/zfsbootmenu.EFI" \
-  --append "$base_cmdline loglevel=7 zbm.show" \
+  --append "$base_cmdline loglevel=7 zbm.show $serial_console" \
   --mem 2048 \
   --foreground <"$serial_fifo" >"$boot_log" 2>&1 &
 launcher_pid=$!
