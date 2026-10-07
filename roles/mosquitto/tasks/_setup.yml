@@ -3,6 +3,15 @@
     name: podman
     tasks_from: install
 
+- name: _setup | Create /mnt/services
+  file:
+    path: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: _setup | Install fluent-bit for broker logging
   import_role:
     name: fluentbit
