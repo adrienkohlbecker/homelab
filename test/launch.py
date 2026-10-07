@@ -22,7 +22,7 @@ from pathlib import Path
 
 from machine import QEMU_MACHINE_SPECS, LaunchOptions, Machine
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
-from utils import print_cmd_line, print_line, tee_output
+from utils import print_cmd_line, print_line
 
 # Bounds an --exit-after-ready verify end to end: boot, SSH, and systemd
 # settling.
@@ -215,16 +215,7 @@ def main() -> int:
     if args.foreground:
         return _run_foreground(m)
 
-    rc = 0
-    try:
-        with tee_output(m.output_file):
-            asyncio.run(_run_async(m, exit_after_ready=args.exit_after_ready))
-    except asyncio.CancelledError:
-        print_line("\nInterrupted, shutting down...")
-        rc = 130
-    except KeyboardInterrupt:
-        rc = 130
-    return rc
+    return m.run(_run_async(m, exit_after_ready=args.exit_after_ready), "launch")
 
 
 if __name__ == "__main__":

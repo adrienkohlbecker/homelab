@@ -796,7 +796,8 @@ class Machine:
                 # so a slow boot-to-sshd isn't misread as the overall timeout.
                 if str(exc):
                     print_line(str(exc), error=True)
-                print_line(f"{label} timed out after {self.machine_timeout}s", error=True)
+                deadline = f" after {self.machine_timeout}s" if self.machine_timeout else ""
+                print_line(f"{label} timed out{deadline}", error=True)
                 rc = 124  # GNU `timeout`'s exit code for "command timed out"
             except asyncio.CancelledError:
                 print_line("\nInterrupted, shutting down...")
