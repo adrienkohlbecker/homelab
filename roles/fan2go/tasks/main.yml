@@ -1,5 +1,15 @@
 # Hardware-specific fan and curve definitions live in templates/<host>.yaml.j2.
 
+# The fan2go binary links libsensors dynamically.
+- name: Install libsensors
+  when: fan2go_enabled
+  apt:
+    pkg: libsensors5
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - fan2go
+
 - name: Download fan2go binary
   when: fan2go_enabled
   get_url:
