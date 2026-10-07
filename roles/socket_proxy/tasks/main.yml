@@ -3,12 +3,6 @@
 # host-root-equivalent direct socket access. See the .service.j2
 # header for the trust rationale. Deployed wherever podman + netdata co-locate
 # (site.yml), ordered before netdata so its docker collector finds the proxy.
-# socket_proxy sits in the base band, ahead of most podman consumers, so a
-# fresh-host `--check` run reaches the pull before the podman role has actually
-# installed podman (its apt install was only simulated). podman_image would then
-# fail invoking a missing /usr/bin/podman. Probe for the binary (stat runs for
-# real in check mode) and skip the pull only in that case; a real converge --
-# where podman is installed by the time this runs -- always pulls.
 - name: Pull socket_proxy image
   import_role:
     name: podman

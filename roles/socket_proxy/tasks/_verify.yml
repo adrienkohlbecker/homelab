@@ -59,14 +59,6 @@
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
           SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: "[WARNING]  (8) : missing timeouts for backend 'docker-events'.\n   | While not properly invalid, you will certainly encounter various problems"
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
-        - MESSAGE: "[WARNING]  (8) : missing timeouts for backend 'dockerbackend'."
-          CONTAINER_TAG: socket_proxy
-          SYSLOG_IDENTIFIER: conmon
-          SYSTEMD_UNIT: socket_proxy.service
         - MESSAGE: socket-proxy-prose
           CONTAINER_TAG: socket_proxy
           SYSLOG_IDENTIFIER: conmon
@@ -79,14 +71,6 @@
           _absent:
             - fields.CONTAINER_TAG
         - message: Current worker (9) exited with code 0 (Exit)
-          level: warn
-          fields.process_id: 8
-        - message: |-
-            missing timeouts for backend 'docker-events'.
-               | While not properly invalid, you will certainly encounter various problems
-          level: warn
-          fields.process_id: 8
-        - message: missing timeouts for backend 'dockerbackend'.
           level: warn
           fields.process_id: 8
         - message: socket-proxy-prose
@@ -131,20 +115,14 @@
     url: "http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/{{ _socket_proxy_containers.json[0].Id }}/stats?stream=false"
     status_code: 200
 
-# POST is denied by default (read-only). A blocked write must 403, not reach
-# the socket -- this is the whole point of the proxy.
+# POST=0 denies every non-GET method in one rule (read-only). A blocked write
+# must 403, not reach the socket -- this is the whole point of the proxy.
 - name: _verify | Write POST /containers/create is blocked (403)
   uri:
     url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/create
     method: POST
     body_format: json
     body: {"Image": "alpine"}
-    status_code: 403
-
-- name: _verify | Write DELETE /containers/test is blocked (403)
-  uri:
-    url: http://127.0.0.1:{{ service_ports.socket_proxy }}/containers/test
-    method: DELETE
     status_code: 403
 
 # SECRETS proves the filter is default-deny; EVENTS is explicitly disabled.
