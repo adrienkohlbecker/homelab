@@ -67,6 +67,9 @@ def test_case_fans_follow_either_disk_without_losing_cpu_response(
         "cpu_package_temp": 55,
     }
     disk_sensors = [sensor["id"] for sensor in config["sensors"] if "disk" in sensor]
+    assert [sensor["disk"]["device"] for sensor in config["sensors"] if "disk" in sensor] == [
+        f"/dev/disk/by-id/ata-disk-{index}" for index in range(len(disk_sensors))
+    ]
     temperatures.update({sensor: 38 for sensor in disk_sensors})
     assert _fan_demand(config, case_fan, temperatures) == 10
 

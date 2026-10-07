@@ -1,2 +1,2 @@
-# Per-host opt-in. Disabled hosts remove the managed config and unit.
+# Per-host opt-in; the role is a no-op elsewhere.
 fan2go_enabled: false

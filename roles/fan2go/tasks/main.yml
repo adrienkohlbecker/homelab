@@ -77,29 +77,6 @@
   tags:
     - fan2go
 
-- name: Remove fan2go systemd unit (disabled)
-  when: not fan2go_enabled
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: fan2go.service
-  tags:
-    - fan2go
-
-- name: Remove fan2go config (disabled)
-  when: not fan2go_enabled
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/fan2go/fan2go.yaml
-    - /etc/fan2go-tui/fan2go-tui.yaml
-  become: true
-  tags:
-    - fan2go
-
 - name: Manage fan2go systemd unit
   import_role:
     name: systemd_unit
