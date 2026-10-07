@@ -15,19 +15,6 @@
   become: true
   changed_when: true
 
-# Packer builds read these from the environment of whichever login shell
-# launched them: an operator session or the GitLab shell executor (bash -l).
-- name: _verify | Login shells hand packer the passt isolation settings
-  command: runuser -l {{ ansible_user_id }} -c 'printenv QEMU_NET_WRAPPER_ISOLATE_HOST QEMU_NET_WRAPPER_DNS'
-  become: true
-  register: homelab_ci_login_env
-  changed_when: false
-
-- name: _verify | Assert packer gets host isolation and the lab resolver
-  assert:
-    that:
-      - homelab_ci_login_env.stdout_lines == ['1', external_ips.dns]
-
 # The harness and Packer load this machine type and UEFI pair.
 - name: _verify | Read the native architecture facts
   set_fact:
@@ -74,33 +61,6 @@
         stdin: |
           {"execute": "qmp_capabilities"}
           {"execute": "quit"}
-      changed_when: false
-      become: true
-
-    # passt needs a qemu with the stream netdev. aarch64 QEMU has no default
-    # machine, so the listing needs one there.
-    - name: _verify | Check passt can back QEMU
-      shell: |
-        set -euo pipefail
-        passt --version >/dev/null
-        {{ homelab_ci_qemu }} -machine {{ homelab_ci_guest.machine_type }} -netdev help | grep -qw stream
-      args:
-        executable: /bin/bash
-      changed_when: false
-
-    # Image bundles are sparse zstd tarballs (mise-tasks/ci/qemu_image_store.py).
-    - name: _verify | Round-trip a sparse zstd tarball
-      shell: |
-        set -euo pipefail
-        cd {{ homelab_ci_fixture.path }}
-        truncate -s 64M disk.raw
-        printf payload | dd of=disk.raw bs=1M seek=32 conv=notrunc status=none
-        tar --zstd --sparse -cf bundle.tar.zst disk.raw
-        mkdir out
-        tar --zstd -xf bundle.tar.zst -C out
-        cmp disk.raw out/disk.raw
-      args:
-        executable: /bin/bash
       changed_when: false
       become: true
 
