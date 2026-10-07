@@ -351,22 +351,6 @@ export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_META PARTITIO
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Apt retries individual downloads itself. --error-on=any additionally rejects
-# a partial index update, and this outer backoff absorbs a longer mirror outage
-# before the package install encounters misleading missing-package failures.
-apt_update() {
-  local attempt
-  for attempt in 1 2 3 4 5; do
-    if apt-get update --error-on=any; then
-      return 0
-    fi
-    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
-    sleep "$((attempt * 5))"
-  done
-  echo "apt-get update failed after 5 attempts" >&2
-  return 1
-}
-
 # Block until cloud-init has finished applying user-data before touching apt.
 # preserve_sources_list:false + apt.primary in user-data.pkrtpl rewrite
 # sources.list to the Nexus mirror, but that runs in cloud-init's config stage
@@ -393,7 +377,9 @@ if [ -f /etc/apt/sources.list ]; then
   sed -i '\|^[[:space:]]*deb[[:space:]]\+cdrom:|d' /etc/apt/sources.list
 fi
 
-apt_update
+# --error-on=any fails on a partial index update instead of leaving a cache
+# that later reports a baffling "Unable to locate package".
+apt-get update --error-on=any
 (
   # mdadm and zfsutils-linux both start storage units from their package
   # postinst. Hold those units while the live environment still has its stock

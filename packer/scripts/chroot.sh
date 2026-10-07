@@ -70,25 +70,6 @@ ff02::1         ip6-allnodes
 ff02::2         ip6-allrouters
 EOF
 
-# apt-get update exits 0 even when one component's Packages index fails to
-# download (Nexus restart, dropped packet), leaving a partial cache that makes
-# a later install fail with a baffling "Unable to locate package".
-# --error-on=any turns a failed fetch into a non-zero exit. apt retries each
-# file itself; the loop absorbs a mirror outage that outlasts those retries.
-# Same helper as provision.sh's build-VM apt.
-apt_update() {
-  local attempt
-  for attempt in 1 2 3 4 5; do
-    if apt-get update --error-on=any; then
-      return 0
-    fi
-    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
-    sleep "$((attempt * 5))"
-  done
-  echo "apt-get update failed after 5 attempts" >&2
-  return 1
-}
-
 # Configure apt. Called twice: once now with the build-time mirror
 # ($UBUNTU_MIRROR, defaults to Nexus), and once at the very end with
 # the upstream pair so the shipped image points at canonical Ubuntu
@@ -162,9 +143,9 @@ install -m 0644 \
   "${CHROOT_ROLE_FILES}/keyboard" \
   /etc/default/keyboard
 
-# Update the repository cache
-
-apt_update
+# Update the repository cache. --error-on=any fails on a partial index update
+# instead of leaving a cache that later reports "Unable to locate package".
+apt-get update --error-on=any
 
 # Update system
 
@@ -610,7 +591,7 @@ write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
 # just cleared the build-time Nexus lists) so the shipped image carries a
 # coherent cache: package tasks using cache_valid_time may skip their own update
 # and would otherwise find no candidate.
-apt_update
+apt-get update --error-on=any
 
 # Drop the downloaded .deb cache (build-only, ~hundreds of MB) so it doesn't
 # ride into every deployment. Clears /var/cache/apt/archives only — the
