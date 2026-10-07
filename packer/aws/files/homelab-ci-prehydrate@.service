@@ -1,0 +1,21 @@
+# Instanced by Ubuntu release: homelab-ci-prehydrate@<codename>.service.
+[Unit]
+Description=Pre-hydrate the default %i qemu image for homelab CI jobs
+Requires=homelab-ci-scratch.service
+After=homelab-ci-scratch.service network-online.target
+Wants=network-online.target
+
+[Service]
+# exec: boot and host readiness proceed while the download runs.
+Type=exec
+User=ubuntu
+Environment=MISE_DATA_DIR=/opt/mise
+Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
+# The script needs the toolchain's Python (3.14 syntax, zstd tarfile), not the
+# distro's, so it runs through mise like every CI job does.
+ExecStart=/usr/bin/mise exec -- python3 /opt/homelab-ci/hydrate/hydrate-qemu-images.py lab --ubuntu %i
+# TimeoutStartSec does not bound a Type=exec unit once its process is running.
+RuntimeMaxSec=10min
+
+[Install]
+WantedBy=multi-user.target

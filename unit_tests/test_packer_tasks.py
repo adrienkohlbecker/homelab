@@ -740,14 +740,12 @@ def test_qemu_host_prehydrate_runs_on_the_toolchain_python_and_is_bounded() -> N
     Type=exec is not bounded by TimeoutStartSec once the process runs, so a
     stalled download needs RuntimeMaxSec to release the hydrate lock.
     """
-    provision = QEMU_HOST_PROVISION_SH.read_text()
-    unit = re.search(r"homelab-ci-prehydrate\.service >/dev/null <<UNIT\n(.*?)\nUNIT\n", provision, re.S)
-    assert unit
+    unit = (QEMU_HOST_PROVISION_SH.parent / "homelab-ci-prehydrate@.service").read_text()
 
-    (exec_start,) = re.findall(r"^ExecStart=(.*)$", unit.group(1), re.M)
+    (exec_start,) = re.findall(r"^ExecStart=(.*)$", unit, re.M)
     assert exec_start.startswith("/usr/bin/mise exec -- python3 ")
-    assert "RuntimeMaxSec=" in unit.group(1)
-    assert not re.search(r"^TimeoutStartSec=", unit.group(1), re.M)
+    assert "RuntimeMaxSec=" in unit
+    assert not re.search(r"^TimeoutStartSec=", unit, re.M)
     assert "sys.version_info >= (3, 14)" in QEMU_HOST_SMOKE_SH.read_text()
 
 

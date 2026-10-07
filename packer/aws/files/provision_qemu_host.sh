@@ -121,45 +121,8 @@ sudo awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/homelab-ci-build/mis
   sudo tee /etc/mise/config.toml >/dev/null
 sudo chown -R ubuntu:ubuntu /opt/mise /opt/uv-cache
 
-sudo tee /usr/local/bin/homelab_ci_ready >/dev/null <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-for _ in {1..90}; do
-  scratch_state=$(systemctl is-active homelab-ci-scratch.service 2>/dev/null || true)
-  case "$scratch_state" in
-    active) break ;;
-    failed | inactive | deactivating) exit 1 ;;
-  esac
-  sleep 1
-done
-[ "$scratch_state" = active ]
-[ -c /dev/kvm ]
-[ -r /dev/kvm ]
-[ -w /dev/kvm ]
-[ -w /mnt/scratch/gitlab-runner/builds ]
-[ -w /mnt/scratch/homelab_ci ]
-env -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null
-command -v __QEMU_SYSTEM_BINARY__ >/dev/null
-command -v qemu-img >/dev/null
-command -v passt >/dev/null
-command -v mise >/dev/null
-EOF
-sudo sed -i "s/__QEMU_SYSTEM_BINARY__/${QEMU_SYSTEM_BINARY}/" /usr/local/bin/homelab_ci_ready
-sudo chmod 0755 /usr/local/bin/homelab_ci_ready
-
-sudo tee /etc/systemd/system/homelab-ci-scratch.service >/dev/null <<'EOF'
-[Unit]
-Description=Format and mount ephemeral scratch for homelab CI qemu host
-Before=multi-user.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/homelab_ci_prepare_scratch
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
+sudo install -m 0755 -o root -g root /tmp/homelab_ci_ready.sh /usr/local/bin/homelab_ci_ready
+sudo install -m 0644 -o root -g root /tmp/homelab-ci-scratch.service /etc/systemd/system/
 sudo systemctl enable homelab-ci-scratch.service
 
 # Hydrate the default Lab image as soon as scratch is up, so the first job on
@@ -172,30 +135,9 @@ sudo systemctl enable homelab-ci-scratch.service
 hydrate_root=/opt/homelab-ci/hydrate
 sudo install -D -m 0755 /tmp/hydrate-qemu-images.py "$hydrate_root/hydrate-qemu-images.py"
 sudo install -D -m 0644 /tmp/qemu_image_store.py "$hydrate_root/qemu_image_store.py"
-sudo tee /etc/systemd/system/homelab-ci-prehydrate.service >/dev/null <<UNIT
-[Unit]
-Description=Pre-hydrate the default qemu image for homelab CI jobs
-Requires=homelab-ci-scratch.service
-After=homelab-ci-scratch.service network-online.target
-Wants=network-online.target
-
-[Service]
-# exec: boot and host readiness proceed while the download runs.
-Type=exec
-User=ubuntu
-Environment=MISE_DATA_DIR=/opt/mise
-Environment=PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin
-# The script needs the toolchain's Python (3.14 syntax, zstd tarfile), not the
-# distro's, so it runs through mise like every CI job does.
-ExecStart=/usr/bin/mise exec -- python3 $hydrate_root/hydrate-qemu-images.py lab --ubuntu $PREHYDRATE_UBUNTU
-# TimeoutStartSec does not bound a Type=exec unit once its process is running.
-RuntimeMaxSec=10min
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-sudo systemd-analyze verify /etc/systemd/system/homelab-ci-prehydrate.service
-sudo systemctl enable homelab-ci-prehydrate.service
+sudo install -m 0644 -o root -g root /tmp/homelab-ci-prehydrate@.service /etc/systemd/system/
+sudo systemd-analyze verify "/etc/systemd/system/homelab-ci-prehydrate@${PREHYDRATE_UBUNTU}.service"
+sudo systemctl enable "homelab-ci-prehydrate@${PREHYDRATE_UBUNTU}.service"
 
 bash /tmp/qemu_host_smoke.sh kernel
 bash /tmp/qemu_host_smoke.sh toolchain
@@ -209,6 +151,9 @@ sudo rm -rf \
   /tmp/cloudwatch_agent.json \
   /tmp/gitlab_runner_fleeting_arm.pub \
   /tmp/homelab_ci_prepare_scratch.sh \
+  /tmp/homelab_ci_ready.sh \
+  /tmp/homelab-ci-scratch.service \
+  /tmp/homelab-ci-prehydrate@.service \
   /tmp/qemu_host_smoke.sh \
   /tmp/hydrate-qemu-images.py \
   /tmp/qemu_image_store.py \

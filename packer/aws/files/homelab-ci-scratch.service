@@ -1,0 +1,11 @@
+[Unit]
+Description=Format and mount ephemeral scratch for homelab CI qemu host
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/homelab_ci_prepare_scratch
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
