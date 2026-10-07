@@ -1,7 +1,6 @@
 qemu_test: true
-_role_under_test: "{{ _test_role_under_test }}"
 # Recovery downloads belong to macos_vm role cells; site fixtures omit them.
-macos_vm_install_mode: "{{ _role_under_test == 'macos_vm' }}"
+macos_vm_install_mode: "{{ _test_role_under_test | default('') == 'macos_vm' }}"
 # Synthetic sensor inputs. The fixture has no hwmon chip, so the config only
 # exercises parsing and the set-limit restart; dummy stands in for a hwmon
 # driver in the boot list.

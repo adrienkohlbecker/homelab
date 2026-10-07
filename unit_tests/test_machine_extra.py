@@ -250,7 +250,7 @@ class TestUefiDrives:
         instance = machine_factory(host_arch="aarch64")
         instance.guest = {"uefi_firmware": {"darwin": {"code": str(code)}}}
 
-        drives = asyncio.run(instance._uefi_drives())
+        drives = instance._uefi_drives()
 
         blank_vars = instance.workdir_path / "uefi-vars.fd"
         assert blank_vars.read_bytes() == b"\0" * len(b"code")
@@ -258,17 +258,6 @@ class TestUefiDrives:
             f"file={code},if=pflash,unit=0,format=raw,readonly=on",
             f"file={blank_vars},if=pflash,unit=1,format=raw",
         ]
-
-
-# ---------------------------------------------------------------------------
-# Machine.__init__ ubuntu validation
-# ---------------------------------------------------------------------------
-
-
-class TestMachineUbuntuValidation:
-    def test_unknown_ubuntu_raises(self, machine_factory: Callable[..., machine.Machine]) -> None:
-        with pytest.raises(ValueError, match="Unknown Ubuntu release"):
-            machine_factory(machine="lab", role="test", ubuntu_name="bogus")
 
 
 class TestMachineArtifactOwnership:

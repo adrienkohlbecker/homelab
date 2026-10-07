@@ -1,6 +1,5 @@
 """Architecture data the harness boots from."""
 
-import asyncio
 from collections.abc import Callable
 from unittest import mock
 
@@ -34,4 +33,4 @@ def test_host_arch_rejects_unknown() -> None:
 def test_uefi_needs_the_host_os_pair(machine_factory: Callable[..., machine.Machine]) -> None:
     m = machine_factory(host_arch="x86_64")  # the fixture pins a Darwin host
     with pytest.raises(RuntimeError, match="No x86_64 UEFI firmware is defined for darwin hosts"):
-        asyncio.run(m._uefi_drives())
+        m._uefi_drives()

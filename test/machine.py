@@ -335,18 +335,12 @@ class Machine:
         """
         self.launch = launch or LaunchOptions()
         self.quiet_ansible = quiet_ansible
-        try:
-            spec = QEMU_MACHINE_SPECS[machine]
-        except KeyError:
-            raise AttributeError(f"Unknown machine: {machine}") from None
-
+        spec = QEMU_MACHINE_SPECS[machine]
         spec = spec._replace(vcpus=vcpus or spec.vcpus, memory_mb=memory_mb or spec.memory_mb)
 
         self.imagedir: Path = imagedir_for_host()
 
         self._spec = spec
-        if self.launch.image_dir is not None and spec.cloud_image:
-            raise ValueError(f"image_dir override requires an artifact-backed variant, got {machine!r}")
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
         self.arch = host_arch()
@@ -368,8 +362,6 @@ class Machine:
         self._last_ansible_cmd: tuple[str, ...] | None = None
         self.wan_forward_ports = {"tcp": {}, "udp": {}}
 
-        if self.ubuntu_name not in UBUNTU_RELEASES:
-            raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
         output_dir = OUT_DIR
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1013,7 +1005,7 @@ class Machine:
             ]
             # x86_64 q35 can fall back to SeaBIOS; aarch64 virt requires UEFI.
             if self.arch != "x86_64":
-                self.drives += await self._uefi_drives()
+                self.drives += self._uefi_drives()
         else:
             # Artifact-backed variants overlay every disk Packer published,
             # through private hardlinks: qemu-img records the backing path by
@@ -1033,9 +1025,9 @@ class Machine:
                 await self._create_overlay(str(src), str(dest), backing_fmt=artifact_format)
                 os_disk_paths.append(str(dest))
 
-            self.drives = [self._virtio_drive(path, "qcow2") for path in os_disk_paths]
+            self.drives = [self._virtio_drive(path) for path in os_disk_paths]
             shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
-            self.drives += await self._uefi_drives()
+            self.drives += self._uefi_drives()
 
     async def _create_overlay(self, src: str, dest: str, *, backing_fmt: str, size: str | None = None) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize.
@@ -1113,13 +1105,13 @@ class Machine:
         finally:
             os.close(fd)
 
-    def _virtio_drive(self, path: str, format: str = "qcow2") -> str:
+    def _virtio_drive(self, path: str) -> str:
         """Return a virtio drive string with sensible cache/discard flags."""
 
         aio = "io_uring" if platform.system() == "Linux" else "threads"
-        return f"file={path},if=virtio,cache=unsafe,aio={aio},discard=unmap,format={format},detect-zeroes=unmap"
+        return f"file={path},if=virtio,cache=unsafe,aio={aio},discard=unmap,format=qcow2,detect-zeroes=unmap"
 
-    async def _uefi_drives(self) -> list[str]:
+    def _uefi_drives(self) -> list[str]:
         """Return the auto-detected UEFI code and writable vars pair.
 
         The CODE blob is the host OS's pair in data/architectures.yml. The VARS blob is

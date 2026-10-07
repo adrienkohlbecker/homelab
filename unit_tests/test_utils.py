@@ -158,6 +158,7 @@ class TestRunCommand:
         result = asyncio.run(utils.run_command(["false"], check=False))
         assert result.exitcode != 0
 
-    def test_captures_stderr(self) -> None:
-        result = asyncio.run(utils.run_command(["sh", "-c", "echo err >&2"], check=False))
-        assert any("err" in line for line in result.stderr)
+    def test_failure_carries_stderr(self) -> None:
+        with pytest.raises(utils.CommandFailedException) as exc:
+            asyncio.run(utils.run_command(["sh", "-c", "echo err >&2; exit 1"]))
+        assert exc.value.stderr == ["err"]

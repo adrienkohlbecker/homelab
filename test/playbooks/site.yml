@@ -1,9 +1,8 @@
 - name: Run the selected role task file
   hosts: all
   vars:
-    # Real harness runs override this internal dispatcher input. The fallback
-    # keeps standalone syntax checks resolvable without fixing the public
-    # _role_under_test fixture variable at extra-vars precedence.
+    # Real harness runs override this; the fallback keeps standalone syntax
+    # checks resolvable.
     _test_role_under_test: apt
   tasks:
     - name: Import the selected role task file

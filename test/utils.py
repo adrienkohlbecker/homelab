@@ -37,7 +37,6 @@ class CommandResult(NamedTuple):
 
     exitcode: int
     stdout: list[str]
-    stderr: list[str]
 
 
 # Templates expand `{line}` between an ANSI prefix and reset.
@@ -290,4 +289,4 @@ async def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str]
 
     if check and exitcode != 0:
         raise CommandFailedException(cmd, exitcode, stderr)
-    return CommandResult(exitcode=exitcode, stdout=stdout, stderr=stderr)
+    return CommandResult(exitcode=exitcode, stdout=stdout)
