@@ -209,6 +209,15 @@
     - /mnt/services/gitlab_runner/.ssh/fleeting_arm
   become: true
 
+# apt parses every apt.conf.d file, so the seed must stay valid config.
+- name: _setup | Seed the retired apt retries config
+  copy:
+    content: |
+      Acquire::Retries "3";
+    dest: /etc/apt/apt.conf.d/80-retries
+    mode: "0644"
+  become: true
+
 - name: _setup | Seed the retired Eaton IPP state
   file:
     path: /mnt/services/eaton_ipp/configs

@@ -278,20 +278,22 @@
     - retired_services
     - firewall
 
-# Drop once lab, pug, and fox have converged. netdata 2.11+ has no go.d sensors
-# module, and fox's runner reads the default AWS profile and names the ARM key
-# after its pool.
-- name: Remove retired netdata and runner leftovers
+# Drop once lab, pug, and fox have converged. The apt role writes its lock
+# timeout to 80-lock-timeout; netdata 2.11+ has no go.d sensors module; fox's
+# runner reads the default AWS profile and names the ARM key after its pool.
+- name: Remove retired apt, netdata, and runner leftovers
   file:
     path: "{{ item }}"
     state: absent
   loop:
+    - /etc/apt/apt.conf.d/80-retries
     - /etc/netdata/go.d/sensors.conf
     - /mnt/services/gitlab_runner/.aws/config
     - /mnt/services/gitlab_runner/.ssh/fleeting_arm
   become: true
   tags:
     - retired_services
+    - apt
     - netdata
     - gitlab_runner
 

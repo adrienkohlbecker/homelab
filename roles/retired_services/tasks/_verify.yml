@@ -103,6 +103,7 @@
     - /boot/efi/EFI/refind/BOOT.CSV
     - /boot/efi/EFI/refind/keys
     - /boot/efi/EFI/refind/refind.conf-sample
+    - /etc/apt/apt.conf.d/80-retries
     - /etc/netdata/go.d/sensors.conf
     - /mnt/services/gitlab_runner/.aws/config
     - /mnt/services/gitlab_runner/.ssh/fleeting_arm
