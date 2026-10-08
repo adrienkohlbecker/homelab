@@ -1,5 +1,7 @@
 """Tests for the shared machine lifecycle."""
 
+import os
+import signal
 import time
 from typing import cast
 
@@ -83,3 +85,22 @@ def test_ctrl_c_skips_the_keep_hold() -> None:
 
     assert not machine.waited
     assert machine.stopped
+
+
+def test_sigterm_in_the_body_still_stops_the_machine() -> None:
+    machine = FakeMachine(keep_vm=True)
+
+    def terminated_body() -> None:
+        with Machine.session(cast(Machine, machine), 10):
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(5)
+
+    previous = signal.signal(signal.SIGTERM, signal.default_int_handler)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            terminated_body()
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+    assert machine.stopped
+    assert not machine.waited

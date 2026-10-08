@@ -547,3 +547,17 @@ def test_stop_kills_members_that_outlive_the_group_leader(
     with pytest.raises((ProcessLookupError, PermissionError)):
         os.killpg(m.proc.pid, 0)
 
+
+def test_sigterm_stops_a_cell_like_ctrl_c(machine_factory: Callable[..., machine.Machine]) -> None:
+    """GNU parallel's --termseq and CI cancels send SIGTERM."""
+    m = machine_factory()
+
+    def terminated() -> None:
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(5)
+
+    previous = signal.getsignal(signal.SIGTERM)
+    try:
+        assert m.run(terminated, "lab.testrole") == 130
+    finally:
+        signal.signal(signal.SIGTERM, previous)
