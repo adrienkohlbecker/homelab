@@ -3,6 +3,7 @@
 import contextlib
 import os
 import signal
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -280,22 +281,32 @@ class TestCompactConsole:
         assert f"log: {log}" in terminal
         assert "fatal: [lab]: FAILED!" in log.read_text()
 
-    def test_a_long_phase_reports_progress_until_it_ends(
+    def test_no_heartbeat_follows_the_result_line(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        monkeypatch.setattr(utils, "PHASE_HEARTBEAT_SECONDS", 0.1)
+        monkeypatch.setattr(utils, "PHASE_HEARTBEAT_SECONDS", 0.01)
         utils.use_compact_console("nginx", "lab:noble")
+        beat = threading.Event()
+        print_line = utils.print_line
+
+        def noting_heartbeats(line: str, error: bool = False) -> None:
+            print_line(line, error)
+            if "still running" in line:
+                beat.set()
+
+        monkeypatch.setattr(utils, "print_line", noting_heartbeats)
 
         with utils.phase("converge"):
-            time.sleep(0.35)
-        time.sleep(0.3)
+            assert beat.wait(5)
+        # Heartbeats were due every 10ms; any that slipped past the result
+        # line would show up in this window.
+        time.sleep(0.2)
         utils._drain_stdout()
 
         lines = capsys.readouterr().out.splitlines()
-        heartbeats = [line for line in lines if "converge still running" in line]
-        assert len(heartbeats) >= 2
-        # No heartbeat after the phase's result line.
-        assert lines.index(heartbeats[-1]) < next(i for i, line in enumerate(lines) if "✓ converge" in line)
+        result = next(i for i, line in enumerate(lines) if "✓ converge" in line)
+        assert any("still running" in line for line in lines[:result])
+        assert not any("still running" in line for line in lines[result:])
 
     def test_roles_keep_their_colour(self) -> None:
         utils.use_compact_console("nginx", "lab:noble")

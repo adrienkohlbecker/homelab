@@ -106,18 +106,27 @@ def phase(name: str) -> Iterator[None]:
     start = time.monotonic()
     print_line(f"▶ {name}")
     done = threading.Event()
+    # Marking the phase done and printing a heartbeat are ordered, so no
+    # heartbeat that already woke up can land after the result line.
+    reporting = threading.Lock()
 
     def heartbeat() -> None:
         while not done.wait(PHASE_HEARTBEAT_SECONDS):
-            print_line(f"  {name} still running ({_elapsed(start)})")
+            with reporting:
+                if not done.is_set():
+                    print_line(f"  {name} still running ({_elapsed(start)})")
 
     threading.Thread(target=heartbeat, name=f"phase-{name}", daemon=True).start()
     try:
         yield
     except BaseException:
+        with reporting:
+            done.set()
         print_line(f"✗ {name} ({_elapsed(start)})", error=True)
         raise
     else:
+        with reporting:
+            done.set()
         _write_line(f"✓ {name} ({_elapsed(start)})", "green", status=True)
     finally:
         done.set()
