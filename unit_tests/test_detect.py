@@ -1314,7 +1314,7 @@ class TestRenderChildPipeline:
 
         assert "apt:lab:aarch64" in doc
         assert "boot:minimal:aarch64" not in doc
-        assert "fan2go:lab:aarch64" not in doc
+        assert "fan2go:lab:aarch64" in doc
         assert "nginx:lab:aarch64" not in doc
         assert doc["stages"][-1] == "arm"
         assert "when" not in doc["apt:lab:aarch64"]

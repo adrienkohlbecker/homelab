@@ -25,7 +25,7 @@
 
 - name: _verify | Validate the rendered config for {{ fan2go_verify.host }}
   command:
-    argv: [/usr/local/bin/fan2go, -c, "{{ fan2go_verify_dir }}/rendered.yaml", --no-style, config, validate]
+    argv: [ /usr/local/bin/fan2go, -c, "{{ fan2go_verify_dir }}/rendered.yaml", --no-style, config, validate ]
   changed_when: false
   become: true
 
