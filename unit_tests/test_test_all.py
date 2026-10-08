@@ -70,7 +70,32 @@ def test_retry_starts_cells_an_interrupt_skipped(repo: Path) -> None:
     assert sorted(call.split()[4] for call in calls) == ["bravo", "charlie"]
 
 
-def test_retry_sets_aside_an_old_format_joblog(repo: Path) -> None:
+def write_matrix(repo: Path, roles: tuple[str, ...]) -> None:
+    lines = "".join(f"lab\\tnoble\\t{role}\\n" for role in roles)
+    (repo / "test" / "matrix.py").write_text(f"#!/bin/sh\nprintf '{lines}'\n")
+
+
+def test_retry_replays_the_saved_cells_after_the_matrix_changes(repo: Path) -> None:
+    """A role added since the run would shift every sequence number."""
+    run(repo, failing=("bravo",))
+    write_matrix(repo, ("aardvark", *ROLES))
+
+    result, calls = run(repo, retry=True)
+
+    assert result.returncode == 0, result.stderr
+    assert [call.split()[4] for call in calls] == ["bravo"]
+
+
+def test_retry_without_a_previous_run_runs_every_cell(repo: Path) -> None:
+    result, calls = run(repo, retry=True)
+
+    assert result.returncode == 0, result.stderr
+    assert len(calls) == len(ROLES)
+
+
+def test_retry_archives_an_old_format_joblog_without_clobbering(repo: Path) -> None:
+    earlier = repo / "test" / "out.tsv.legacy.earlier"
+    earlier.write_text("kept\n")
     joblog = repo / "test" / "out.tsv"
     joblog.write_text("Role\tUbuntu\tMachine\tRuntime\tExitval\tStarted\nalpha\tnoble\tlab\t1\t1\t0\n")
 
@@ -78,7 +103,19 @@ def test_retry_sets_aside_an_old_format_joblog(repo: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert len(calls) == len(ROLES)
-    assert (repo / "test" / "out.tsv.legacy").exists()
+    assert earlier.read_text() == "kept\n"
+    (archive,) = (path for path in (repo / "test").glob("out.tsv.legacy.*") if path != earlier)
+    assert archive.read_text().startswith("Role\t")
+
+
+def test_retry_refuses_an_unknown_joblog(repo: Path) -> None:
+    (repo / "test" / "out.tsv").write_text("something else\n")
+
+    result, calls = run(repo, retry=True)
+
+    assert result.returncode != 0
+    assert "not a GNU parallel joblog" in result.stderr
+    assert calls == []
 
 
 @pytest.mark.parametrize("jobs", ["0", "-1", "many"])

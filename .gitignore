@@ -6,6 +6,8 @@ __pycache__
 .vscode
 test/out.tsv
 test/out.tsv.prev
+test/out.tsv.legacy.*
+test/out.cells.tsv
 test/out/
 test/out_*.log
 /.ansible-mitogen-strategy

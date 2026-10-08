@@ -15,6 +15,10 @@ if ! [[ "${usage_jobs}" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 joblog=test/out.tsv
+# The cells of the last full run. --resume-failed matches the joblog to its
+# input by sequence number, so a retry must replay exactly this list: a
+# regenerated matrix with a role added or removed would shift every number.
+cells=test/out.cells.tsv
 # Each testrole.py prints tagged, role-coloured status lines, so whole lines
 # interleave readably. On Ctrl-C, SIGINT gives each cell 30s to stop its VM.
 parallel_args=(
@@ -23,20 +27,36 @@ parallel_args=(
   --joblog "${joblog}"
   --termseq 'INT,30000,TERM,5000,KILL,25'
 )
+full_run=true
 if [ "${usage_retry_failed:-false}" = true ]; then
-  # --resume-failed replays the same matrix against the joblog by sequence
-  # number: it reruns failed cells and starts the ones an interrupt kept from
-  # starting. A joblog from before GNU parallel ran the matrix has its own
-  # columns; set it aside and run every cell.
-  if [ -f "${joblog}" ] && [ "$(head -c 4 "${joblog}")" != Seq$'\t' ]; then
-    mv "${joblog}" "${joblog}.legacy"
-    echo "Moved an old-format ${joblog} to ${joblog}.legacy; running every cell" >&2
+  # --resume-failed reruns failed cells and starts the ones an interrupt kept
+  # from starting. The test:all that predates GNU parallel wrote its own
+  # columns to the joblog; archive that, and refuse anything else unknown.
+  header=""
+  if [ -s "${joblog}" ]; then
+    header=$(head -n 1 "${joblog}")
   fi
-  parallel_args+=(--resume-failed)
+  if [ "${header}" = $'Role\tUbuntu\tMachine\tRuntime\tExitval\tStarted' ]; then
+    archive="${joblog}.legacy.$(date +%Y%m%d%H%M%S).$$"
+    mv "${joblog}" "${archive}"
+    echo "Archived an old-format ${joblog} as ${archive}; running every cell" >&2
+  elif [ -n "${header}" ] && [[ "${header}" != Seq$'\t'* ]]; then
+    echo "${joblog} is not a GNU parallel joblog; delete it to run every cell" >&2
+    exit 1
+  elif [ -s "${joblog}" ] && [ -f "${cells}" ]; then
+    full_run=false
+    parallel_args+=(--resume-failed)
+  else
+    echo "No previous run to retry; running every cell" >&2
+  fi
+fi
+if [ "${full_run}" = true ]; then
+  test/matrix.py >"${cells}.tmp"
+  mv "${cells}.tmp" "${cells}"
 fi
 
 status=0
-test/matrix.py | parallel "${parallel_args[@]}" --colsep '\t' \
+parallel "${parallel_args[@]}" --colsep '\t' --arg-file "${cells}" \
   test/testrole.py --machine '{1}' --ubuntu '{2}' '{3}' || status=$?
 
 # A retry appends to the joblog, so judge each cell (Seq, column 1) by its
