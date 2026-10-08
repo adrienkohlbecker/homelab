@@ -89,6 +89,12 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
     for ubuntu, call in zip(ubuntus, calls, strict=True):
         assert f"ubuntu_name={ubuntu}" in call
         assert f"build_directory={env['HOMELAB_CI_DIR']}/.build-" in call
+        qmp_match = re.search(r"qmp_directory=(\S+)", call)
+        assert qmp_match
+        qmp_directory = Path(qmp_match[1])
+        # Short enough for a unix socket path, and gone after the build.
+        assert len(str(qmp_directory / "hetzner.sock")) < 104
+        assert not qmp_directory.exists()
         assert "image_format=raw" in call
         assert "-only=qemu.lab" in call
     assert cache_log.read_text().splitlines() == [f"{env['HOMELAB_CI_DIR']}/packer_cache"] * len(ubuntus)

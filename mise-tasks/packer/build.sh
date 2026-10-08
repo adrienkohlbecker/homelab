@@ -50,6 +50,11 @@ mkdir -p "${base}"
 tmp=$(mktemp -d "${HOMELAB_CI_DIR}/.build-XXXXXX")
 # mktemp uses 0700 regardless of umask; restore the shared-workspace contract.
 chmod 2770 "${tmp}"
+# Packer would put each QMP socket in its output directory, past the ~104-byte
+# unix socket path limit once HOMELAB_CI_DIR sits in a worktree. A short
+# private temp dir holds them instead; nothing needs them after the build.
+qmp_dir=$(mktemp -d)
+trap 'rm -rf "${qmp_dir}"' EXIT
 
 # Build -only filter when sources are specified. Packer parallelizes
 # the matched sources internally (one VM per source, non-overlapping
@@ -170,6 +175,7 @@ packer build \
   -var "ubuntu_name=${usage_ubuntu}" \
   -var "upstream_mirrors=${usage_upstream:-false}" \
   -var "build_directory=${tmp}" \
+  -var "qmp_directory=${qmp_dir}" \
   "${only_args[@]}" \
   packer || packer_status=$?
 

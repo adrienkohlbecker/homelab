@@ -35,6 +35,11 @@ variable "build_directory" {
   description = "Staging root for per-source build artifacts."
 }
 
+variable "qmp_directory" {
+  type        = string
+  description = "Short directory for the per-source QMP sockets; a unix socket path must stay under ~104 bytes, which output_directory exceeds inside a worktree."
+}
+
 variable "image_format" {
   type        = string
   description = "Disk image format: raw or qcow2."
@@ -202,9 +207,10 @@ source "qemu" "ubuntu" {
     ["-device", "virtio-rng-pci,rng=rng0"],
   ], local.display_qemuargs)
 
-  # QMP socket lands at <output_dir>/qmp.sock and lets the build be poked
-  # out-of-band: `echo '{"execute":"qmp_capabilities"}{"execute":"system_reset"}' \
-  #   | socat - UNIX-CONNECT:<output_dir>/qmp.sock` resets the guest without
+  # The QMP socket (<qmp_directory>/<source>.sock, see the build block) lets
+  # the build be poked out-of-band:
+  # `echo '{"execute":"qmp_capabilities"}{"execute":"system_reset"}' \
+  #   | socat - UNIX-CONNECT:<qmp_directory>/lab.sock` resets the guest without
   # killing qemu, which is much faster than re-running packer when iterating.
   qmp_enable = true
 
@@ -220,12 +226,14 @@ build {
   source "qemu.ubuntu" {
     name                 = "lab"
     output_directory     = "${var.build_directory}/${source.name}"
+    qmp_socket_path      = "${var.qmp_directory}/${source.name}.sock"
     disk_additional_size = local.variants[source.name].disk_sizes
   }
 
   source "qemu.ubuntu" {
     name                 = "hetzner"
     output_directory     = "${var.build_directory}/${source.name}"
+    qmp_socket_path      = "${var.qmp_directory}/${source.name}.sock"
     disk_additional_size = local.variants[source.name].disk_sizes
   }
 
