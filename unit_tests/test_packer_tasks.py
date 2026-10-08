@@ -107,6 +107,7 @@ def _fake_hetzner_build(tmp_path: Path, packer_status: int = 0) -> tuple[dict[st
         'mkdir -p "$dir/hetzner" "$dir/lab"\n'
         'chmod 0755 "$dir/hetzner"\n'
         'echo new >"$dir/hetzner/packer-ubuntu-1"\n'
+        'chmod 0644 "$dir/hetzner/packer-ubuntu-1"\n'
         'touch "$dir/hetzner/packer-ubuntu" "$dir/lab/packer-ubuntu-1"\n'
         """printf '{"builds":[{"name":"ubuntu","custom_data":{"source":"hetzner"}}]}' >"$dir/packer-manifest.json"\n"""
         f"exit {packer_status}\n",
@@ -126,8 +127,10 @@ def test_build_publishes_only_sources_packer_built(tmp_path: Path) -> None:
     assert result.returncode == 1, result.stderr
     assert sorted(path.name for path in (published / "hetzner").iterdir()) == ["packer-ubuntu-1.raw"]
     assert (published / "hetzner" / "packer-ubuntu-1.raw").read_text() == "new\n"
-    # The other homelab_ci identity must be able to replace the tree later.
+    # The other homelab_ci identity must be able to replace the tree later,
+    # and to hardlink its disks under fs.protected_hardlinks.
     assert (published / "hetzner").stat().st_mode & 0o070 == 0o070
+    assert (published / "hetzner" / "packer-ubuntu-1.raw").stat().st_mode & 0o060 == 0o060
     assert not (published / "lab").exists()
     assert sorted(path.name for path in published.iterdir()) == ["hetzner"]
 

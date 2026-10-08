@@ -97,7 +97,8 @@ def parse_args() -> argparse.Namespace:
         help="Override the packer artifact directory the harness reads "
         "(packer-ubuntu-1..N.{raw,qcow2} + efivars.fd) instead of the variant's "
         "default <imagedir>/<ubuntu>/<machine>. Lets packer:build smoke-test a "
-        "freshly-built staging directory before publishing it.",
+        "freshly-built staging directory before publishing it. Must sit on the "
+        "imagedir's filesystem: the harness hardlinks the disks it boots.",
     )
     parser.add_argument(
         "--exit-after-ready",

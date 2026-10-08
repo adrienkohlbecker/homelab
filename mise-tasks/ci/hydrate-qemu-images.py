@@ -283,6 +283,12 @@ def verify_archive(archive: DigestReader, expected_sha256: str) -> None:
 
 
 def cache_file_fingerprint(path: Path) -> dict[str, int]:
+    """Identify a cached member without hashing it.
+
+    No ctime: every harness cell hardlinks the members it boots
+    (test/machine.py link_packer_artifacts), and each link and unlink changes
+    the link count and so the ctime of unchanged contents.
+    """
     if path.is_symlink() or not path.is_file():
         raise ValueError(f"cache member is not a regular file: {path.name}")
     info = path.stat()
@@ -291,7 +297,6 @@ def cache_file_fingerprint(path: Path) -> dict[str, int]:
         "inode": info.st_ino,
         "size": info.st_size,
         "mtime_ns": info.st_mtime_ns,
-        "ctime_ns": info.st_ctime_ns,
     }
 
 
@@ -338,7 +343,10 @@ def local_cache_complete(target: Path, args: argparse.Namespace, selection: Imag
             actual = cache_file_fingerprint(target / entry.name)
         except ValueError:
             return False
-        if fingerprints[entry.name] != actual:
+        recorded = fingerprints[entry.name]
+        # Caches hydrated before ctime left the fingerprint still record it;
+        # compare only the fields fingerprinted now.
+        if not isinstance(recorded, dict) or {key: recorded.get(key) for key in actual} != actual:
             print(f"==> cached {entry.name} changed after hydration; re-hydrating")
             return False
     return True

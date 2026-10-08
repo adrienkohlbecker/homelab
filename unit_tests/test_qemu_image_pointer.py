@@ -579,6 +579,27 @@ class TestLocalCache:
 
         assert hydrate.local_cache_complete(target, args, selection)
 
+    def test_cells_hardlinking_members_keep_the_cache(self, tmp_path: Path) -> None:
+        """Each harness cell links and later unlinks the disks it boots."""
+        target, args, selection = self._hydrated_tree(tmp_path)
+        pinned = tmp_path / "cell" / "packer-ubuntu-1.raw"
+        pinned.parent.mkdir()
+        os.link(target / "packer-ubuntu-1.raw", pinned)
+        assert hydrate.local_cache_complete(target, args, selection)
+        pinned.unlink()
+
+        assert hydrate.local_cache_complete(target, args, selection)
+
+    def test_fingerprints_recorded_with_ctime_still_match(self, tmp_path: Path) -> None:
+        target, args, selection = self._hydrated_tree(tmp_path)
+        manifest_path = target / hydrate.LOCAL_MANIFEST_NAME
+        manifest = json.loads(manifest_path.read_text())
+        for name, fingerprint in manifest[hydrate.LOCAL_FILES_KEY].items():
+            fingerprint["ctime_ns"] = (target / name).stat().st_ctime_ns
+        manifest_path.write_text(json.dumps(manifest))
+
+        assert hydrate.local_cache_complete(target, args, selection)
+
     def test_modified_member_is_rehydrated(self, tmp_path: Path) -> None:
         target, args, selection = self._hydrated_tree(tmp_path)
         disk = target / "packer-ubuntu-1.raw"

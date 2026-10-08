@@ -92,10 +92,12 @@ publish() {
   local build_dir=$1 published=$2
   local old="${published%/*}/.${published##*/}.old-$$"
 
-  # packer creates directories 0755, which narrows the shared directory's
-  # default ACL mask; restore group write so the other homelab_ci identity
-  # can replace this tree on a later publish.
-  find "${build_dir}" -type d -exec chmod g+rwx {} +
+  # packer creates directories 0755 and qemu-img disks 0644, which narrows
+  # the shared directory's default ACL mask; restore group write so the other
+  # homelab_ci identity can replace this tree on a later publish, and hardlink
+  # its disks (fs.protected_hardlinks requires write access to a file another
+  # user owns).
+  chmod -R g+rwX "${build_dir}"
   if [ -e "${published}" ]; then
     rename "${published}" "${old}"
   fi

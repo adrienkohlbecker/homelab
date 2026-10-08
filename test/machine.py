@@ -192,6 +192,8 @@ def link_packer_artifacts(published: Path, dest: Path) -> None:
     single version; the path still naming that directory afterwards proves it
     was never renamed away, so nothing in it was deleted mid-link. Otherwise
     the swap happened under us and the next attempt takes the new version.
+    Hardlinks need *published* on *dest*'s filesystem (EXDEV otherwise), and,
+    for files another user owns, group write under fs.protected_hardlinks.
     """
     for _ in range(ARTIFACT_LINK_ATTEMPTS):
         shutil.rmtree(dest, ignore_errors=True)
@@ -1262,8 +1264,10 @@ class Machine:
 def imagedir_for_host() -> Path:
     """Return the packer-image cache root, HOMELAB_CI_DIR from mise.toml.
 
-    Created on first use, but never its parent: on Linux that is the scratch
-    volume, and a missing mount must fail rather than fill the root disk.
+    Created on first use, but never its parent: on Linux that parent is the
+    scratch volume's mountpoint, so a host where the volume was never set up
+    fails here. An unmounted volume whose empty mountpoint survives is not
+    detected; the cache would then land on the root disk.
     """
     try:
         d = Path(os.environ["HOMELAB_CI_DIR"]).resolve()

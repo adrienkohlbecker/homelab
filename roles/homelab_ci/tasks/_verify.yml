@@ -9,6 +9,9 @@
     runuser -u {{ ansible_user_id }} -- sh -c "umask 077; mkdir ${probe} && touch ${probe}/artifact"
     ! runuser -u nobody -- test -r "${probe}/artifact"
     runuser -u nobody -G homelab_ci -- test -r "${probe}/artifact"
+    # The harness hardlinks each disk it boots; fs.protected_hardlinks only
+    # lets the other identity do that through the group write the ACL grants.
+    runuser -u nobody -G homelab_ci -- ln "${probe}/artifact" "${probe}/pinned"
     runuser -u nobody -G homelab_ci -- rm -r "${probe}"
   args:
     executable: /bin/bash
