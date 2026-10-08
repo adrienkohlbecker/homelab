@@ -14,6 +14,7 @@ the plugin dir to ansible directly instead.
 
 import os
 import sys
+import uuid
 from pathlib import Path
 
 SYMLINK_NAME = ".ansible-mitogen-strategy"
@@ -31,8 +32,22 @@ def ensure_mitogen_symlink(repo_root: Path | None = None) -> Path:
         raise RuntimeError(f"ansible_mitogen is installed but {target} is missing -- mitogen package layout changed?")
 
     link = repo_root / SYMLINK_NAME
-    link.unlink(missing_ok=True)
-    link.symlink_to(target)
+    current: str | None = None
+    if link.is_symlink():
+        current = os.readlink(link)
+    if current == str(target):
+        return link
+
+    # Swap a fresh link in with one rename, so concurrent repairs (parallel
+    # `mise install`s across worktrees) never see the link missing or collide
+    # creating it.
+    replacement = link.with_name(f".{link.name}.{uuid.uuid4().hex}")
+    try:
+        replacement.symlink_to(target)
+        replacement.replace(link)
+    finally:
+        # A failed replace must not leave its private candidate behind.
+        replacement.unlink(missing_ok=True)
     return link
 
 
