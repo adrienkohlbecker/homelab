@@ -52,7 +52,7 @@ class TestClassifyChangedFiles:
             ("group_vars/all/service_ports.yaml", True),
             ("group_vars/test.yml", True),
             ("test/machine.py", True),
-            ("test/testall.py", True),
+            ("test/launch.py", True),
             ("test/matrix.py", True),
             ("test/inventory.ini", True),
             ("test/homelab_guest_journal.service", True),

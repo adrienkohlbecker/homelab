@@ -1,5 +1,5 @@
 # ZFS role _verify: assert the role's converged state is live.
-# testrole.py / testall.py only (qemu); never site.yml or --tags zfs against prod.
+# testrole.py / test:all only (qemu); never site.yml or --tags zfs against prod.
 
 - name: _verify | Reboot to load the configured ZFS module options
   import_role:

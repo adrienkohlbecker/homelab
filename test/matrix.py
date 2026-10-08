@@ -1,7 +1,12 @@
+#!/usr/bin/env -S uv run
 """Test matrix generation shared by CI and local test runners.
 
+Run directly, it prints every cell of the meta/test.yml matrix as
+`machine<TAB>ubuntu<TAB>role` lines, which `mise run test:all` feeds to GNU
+parallel.
+
 Reads roles/*/meta/test.yml to produce the (machine, ubuntu, role) cell list
-that both test/testall.py and mise-tasks/ci/detect.py consume.
+that both test:all and mise-tasks/ci/detect.py consume.
 """
 
 import functools
@@ -289,3 +294,8 @@ def build_dispatch_matrix(dispatch_input: str) -> list[TestCell]:
         else:
             cells.extend(build_role_cells(token))
     return cells
+
+
+if __name__ == "__main__":
+    for cell in build_test_matrix(list_testable_roles()):
+        print("\t".join(cell))
