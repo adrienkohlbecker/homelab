@@ -1,0 +1,17 @@
+# The podman role's own Lab cells run single-disk, the layout pug and fox use:
+# stop the fixture's podman RAID5 and free its members, so the store lands on
+# the raw partition test/host_vars/lab.yml names for podman cells. Every other
+# role's Lab cell keeps converging podman on the array.
+- name: _setup | Free the podman RAID5 members for a single-disk store
+  when: zfs_root
+  shell: |
+    set -euo pipefail
+    members=$(mdadm --detail --export /dev/md/podman | awk -F= '/^MD_DEVICE_.*_DEV=/ { print $2 }')
+    mdadm --stop /dev/md/podman
+    # shellcheck disable=SC2086 # one argument per member
+    mdadm --zero-superblock $members
+    sed -i '\|^ARRAY /dev/md/podman |d' /etc/mdadm/mdadm.conf
+  args:
+    executable: /bin/bash
+    removes: /dev/md/podman
+  become: true
