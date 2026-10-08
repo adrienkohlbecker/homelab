@@ -268,10 +268,61 @@ def _relay(stream: IO[str], color: str | None, capture: list[str]) -> None:
 # The signals that interrupt a cell: Ctrl-C, a stop request (GNU parallel's
 # --termseq, a CI cancel), and the session deadline.
 INTERRUPTS = (signal.SIGINT, signal.SIGTERM, signal.SIGALRM)
-# How long an interrupted run_command waits for its stderr relay. A descendant
-# of the killed child can hold the pipe open indefinitely; the relay is a
-# daemon thread, so abandoning it costs nothing.
+# How long an interrupted run_command waits for its stderr relay. Killing the
+# command's process group closes the pipe unless something outside the group
+# still holds it; the relay is a daemon thread, so abandoning it costs nothing.
 RELAY_DRAIN_SECONDS = 5
+# How long an interrupted command gets to exit on SIGINT before its process
+# group is killed. ansible-playbook uses it to stop its worker processes,
+# which setsid() out of the group: killing the group first would also kill
+# the Mitogen mux they talk through and leave them hung.
+COMMAND_STOP_GRACE_SECONDS = 10
+
+
+# macOS answers EPERM rather than ESRCH for a process group left holding only
+# zombies, as one is between a SIGKILL and the reap; either way nothing live
+# remains to signal.
+_GROUP_GONE = (ProcessLookupError, PermissionError)
+
+
+def _group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except _GROUP_GONE:
+        return False
+    return True
+
+
+def stop_process_group(proc: subprocess.Popen, *, grace_seconds: float) -> None:
+    """SIGTERM *proc*'s process group, SIGKILL whatever outlives *grace_seconds*,
+    and reap *proc*.
+
+    *proc* must lead its own group (start_new_session=True). Judges by the
+    group rather than the leader: a leader that exits first (a killed
+    `timeout` wrapper, a shell that dies on SIGTERM) can leave members behind.
+    """
+    pgid = proc.pid
+    # Reap an exited leader, which would otherwise keep the group alive as a
+    # zombie and hide whether anything real is left in it.
+    proc.poll()
+    with contextlib.suppress(*_GROUP_GONE):  # the group already exited
+        os.killpg(pgid, signal.SIGTERM)
+    deadline = time.monotonic() + grace_seconds
+    while _group_alive(pgid) and time.monotonic() < deadline:
+        proc.poll()
+        time.sleep(0.1)
+    with contextlib.suppress(*_GROUP_GONE):  # everything exited within the grace
+        os.killpg(pgid, signal.SIGKILL)
+    proc.wait()
+
+
+def _stop_command(process: subprocess.Popen) -> None:
+    """Interrupt a run_command child, then kill whatever is left in its group."""
+    with contextlib.suppress(ProcessLookupError):  # it already exited
+        process.send_signal(signal.SIGINT)
+    with contextlib.suppress(subprocess.TimeoutExpired):  # the group kill below ends it
+        process.wait(COMMAND_STOP_GRACE_SECONDS)
+    stop_process_group(process, grace_seconds=0)
 
 
 @contextlib.contextmanager
@@ -301,8 +352,11 @@ def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | Non
     """Execute a subprocess, stream its output live and colorized.
 
     check raises CommandFailedException on a non-zero exit. env layers
-    overrides on top of os.environ. The child is killed if anything (the
-    session deadline, Ctrl-C, a failed stderr relay) interrupts the call.
+    overrides on top of os.environ. The command runs in its own process
+    group. If anything (the session deadline, Ctrl-C, a failed stderr relay)
+    interrupts the call, the command gets SIGINT and COMMAND_STOP_GRACE_SECONDS
+    to stop, then the whole group is killed, so no descendant is left holding
+    its pipes.
     """
     print_cmd_line(cmd, env=env)
 
@@ -317,9 +371,10 @@ def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | Non
         try:
             _relay(child.stderr, "red", stderr)
         except Exception as exc:
-            # Killing the child ends the main thread's stdout read too.
+            # Stopping the command's group closes stdout too, ending the main
+            # thread's read.
             relay_failures.append(exc)
-            child.kill()
+            _stop_command(child)
 
     try:
         with interrupts_held():
@@ -331,6 +386,7 @@ def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | Non
                 env={**os.environ, **env} if env is not None else None,
                 text=True,
                 errors="replace",
+                start_new_session=True,
             )
             # stderr drains on its own thread so neither pipe can fill and
             # block the child. Cross-stream order is therefore not preserved;
@@ -343,8 +399,7 @@ def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | Non
         stderr_relay.join()
     except BaseException:
         if process is not None:
-            process.kill()
-            process.wait()
+            _stop_command(process)
         if stderr_relay is not None:
             stderr_relay.join(RELAY_DRAIN_SECONDS)
         raise

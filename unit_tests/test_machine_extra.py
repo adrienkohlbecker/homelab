@@ -523,3 +523,27 @@ def test_stop_kills_a_process_group_that_ignores_sigterm(
     with pytest.raises(ProcessLookupError):
         os.killpg(m.proc.pid, 0)
     assert not m.workdir_path.exists()
+
+
+@pytest.mark.parametrize(
+    "group",
+    [
+        # The timeout wrapper died first; qemu lives on in its group.
+        "sleep 60 &",
+        # The wrapper exits on SIGTERM; a member ignoring it needs SIGKILL.
+        "(trap '' TERM; sleep 60) & wait",
+    ],
+)
+def test_stop_kills_members_that_outlive_the_group_leader(
+    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch, group: str
+) -> None:
+    monkeypatch.setattr(machine, "STOP_GRACE_SECONDS", 0.3)
+    m = machine_factory()
+    m.proc = subprocess.Popen(["sh", "-c", group], start_new_session=True)
+    time.sleep(0.2)
+
+    m.stop()
+
+    with pytest.raises((ProcessLookupError, PermissionError)):
+        os.killpg(m.proc.pid, 0)
+

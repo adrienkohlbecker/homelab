@@ -34,6 +34,7 @@ from utils import (
     print_log_tail,
     run_command,
     sleep_tick,
+    stop_process_group,
     tee_output,
 )
 
@@ -886,23 +887,17 @@ class Machine:
         session, so the group holds the `timeout` wrapper and qemu, and still
         holds qemu after the wrapper dies or before qemu writes its pidfile.
         SIGTERM lets qemu exit cleanly; SIGKILL follows after
-        STOP_GRACE_SECONDS. Interrupts are dropped for the duration, so a
-        second Ctrl-C (or a parallel --termseq) can't cut cleanup short, and
-        each cleanup step runs even if an earlier one fails.
+        STOP_GRACE_SECONDS (stop_process_group). Interrupts are dropped for the
+        duration, so a second Ctrl-C (or a parallel --termseq) can't cut
+        cleanup short, and each cleanup step runs even if an earlier one fails.
         """
         signal.alarm(0)
         with interrupts_held(redeliver=False):
-            print_line("Stopping machine...")
             try:
-                if self.proc and self.proc.poll() is None:
-                    with contextlib.suppress(ProcessLookupError):  # the group exited on its own
-                        os.killpg(self.proc.pid, signal.SIGTERM)
-                    try:
-                        self.proc.wait(STOP_GRACE_SECONDS)
-                    except subprocess.TimeoutExpired:
-                        with contextlib.suppress(ProcessLookupError):  # it exited after the grace
-                            os.killpg(self.proc.pid, signal.SIGKILL)
-                        self.proc.wait()
+                with contextlib.suppress(OSError):  # a transcript that cannot take the line must not cost the cleanup
+                    print_line("Stopping machine...")
+                if self.proc:
+                    stop_process_group(self.proc, grace_seconds=STOP_GRACE_SECONDS)
             finally:
                 try:
                     self._close_ssh_master()

@@ -153,7 +153,11 @@ class TestRunCommandInterrupted:
                 with contextlib.suppress(ProcessLookupError):  # already gone is the goal
                     os.kill(pid, signal.SIGKILL)
 
-    def test_a_failed_stderr_relay_kills_the_child_and_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    @pytest.mark.parametrize("command", ["sleep 30", "sleep 30 & exec sleep 30"])
+    def test_a_failed_stderr_relay_kills_the_command_and_raises(
+        self, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        """Including when a descendant holds the command's stdout open."""
         relay = utils._relay
 
         def broken_stderr(stream, color, capture) -> None:
@@ -164,7 +168,7 @@ class TestRunCommandInterrupted:
         monkeypatch.setattr(utils, "_relay", broken_stderr)
         start = time.monotonic()
         with pytest.raises(OSError, match="transcript disk full"):
-            utils.run_command(["sleep", "30"])
+            utils.run_command(["sh", "-c", command])
         assert time.monotonic() - start < 5
 
 
