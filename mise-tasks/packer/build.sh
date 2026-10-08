@@ -189,6 +189,12 @@ packer build \
   -var "qmp_directory=${qmp_dir}" \
   "${only_args[@]}" \
   packer || packer_status=$?
+# --on-error=ask lets the operator abort and keep the failed build VM running;
+# keep its QMP sockets reachable too.
+if [ "${packer_status}" -ne 0 ] && [ "${on_error}" = ask ]; then
+  trap - EXIT
+  echo "Kept the build VMs' QMP sockets in ${qmp_dir}; remove it once they are gone" >&2
+fi
 
 # The manifest lists only the sources that built successfully, so a source
 # that fails to build never reaches finalize while its siblings still publish.
