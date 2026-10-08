@@ -1,7 +1,9 @@
 # The podman role's own Lab cells run single-disk, the layout pug and fox use:
 # stop the fixture's podman RAID5 and free its members, so the store lands on
 # the raw partition test/host_vars/lab.yml names for podman cells. Every other
-# role's Lab cell keeps converging podman on the array.
+# role's Lab cell keeps converging podman on the array. removes: guards the
+# whole block, so a run that fails after the stop does not resume on a kept
+# fixture; boot a fresh one instead.
 - name: _setup | Free the podman RAID5 members for a single-disk store
   when: zfs_root
   shell: |

@@ -3,7 +3,7 @@
 # so sudo/PAM's name lookup during the first `become` resolves locally instead
 # of hitting DNS. Minimal is absent from data/network_topology.yml, so its only
 # resolver is qemu's user-net DNS forwarder -- a NAT-DNS path that can exceed
-# Mitogen's 10-second become-bootstrap deadline. Lab and Pug avoid this through
+# Mitogen's 10-second become-bootstrap deadline. Lab avoids this through
 # Packer's etc_hosts seeding plus topology addressing; the cloud image has
 # neither, so seed it here.
 manage_etc_hosts: true

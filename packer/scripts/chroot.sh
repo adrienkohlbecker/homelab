@@ -36,8 +36,8 @@ trap 'exit 130' INT TERM
 # Arch-derived constants: rEFInd EFI binary names + ZBM tarball arch
 # token. The build VM and the shipped image are always the same arch,
 # so detecting via `uname -m` here is equivalent to passing in from
-# packer. Fail loud on unsupported arches; adding aarch64 vs x86_64
-# also requires updating qemu.pkr.hcl's arch_table.
+# packer. Fail loud on unsupported arches; a new arch also needs its
+# entry in data/architectures.yml.
 ZBM_ARCH=$(uname -m)
 case $ZBM_ARCH in
 x86_64)
