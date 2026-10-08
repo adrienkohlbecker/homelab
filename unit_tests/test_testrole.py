@@ -62,6 +62,14 @@ class TestParseArgs:
         assert args.role == "nginx"
         assert pass_args == ["--tags", "homepage"]
 
+    @pytest.mark.parametrize("timeout", ["0", "-5"])
+    def test_rejects_a_timeout_that_would_disarm_the_deadline(
+        self, monkeypatch: pytest.MonkeyPatch, timeout: str
+    ) -> None:
+        monkeypatch.setattr("sys.argv", ["testrole.py", "nginx", "--timeout", timeout])
+        with pytest.raises(SystemExit):
+            testrole.parse_args()
+
 
 @pytest.mark.parametrize(("machine_name", "expected_memory"), [("lab", 6144), ("minimal", None)])
 def test_main_passes_role_memory_to_machine(

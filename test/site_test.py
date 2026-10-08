@@ -31,7 +31,7 @@ from machine import (
     sweep_stale_workdirs,
 )
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
-from utils import CheckFailedException, CommandFailedException, print_line
+from utils import CheckFailedException, CommandFailedException, positive_seconds, print_line
 
 # Backstop for the post-poweroff wait. With the settle gate below, the fleet is
 # healthy before SIGTERM, so a real poweroff drains in well under a minute (the
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--timeout",
-        type=int,
+        type=positive_seconds,
         default=3000,
         metavar="SECONDS",
         help="Overall timeout for boot + converge (default: %(default)s)",

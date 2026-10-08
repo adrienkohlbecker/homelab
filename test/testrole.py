@@ -23,7 +23,7 @@ from matrix import (
     RoleTestConfig,
     load_role_test_config,
 )
-from utils import IdempotenceFailedException, phase, print_line, use_compact_console
+from utils import IdempotenceFailedException, phase, positive_seconds, print_line, use_compact_console
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
@@ -51,7 +51,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
     )
     parser.add_argument(
         "--timeout",
-        type=int,
+        type=positive_seconds,
         default=30 * 60,
         metavar="SECONDS",
         help="Abort the test if it doesn't complete within this many seconds",

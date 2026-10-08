@@ -1,3 +1,4 @@
+import argparse
 import atexit
 import contextlib
 import os
@@ -76,6 +77,14 @@ def tee_output(path: Path) -> Iterator[None]:
             yield
         finally:
             _OUTPUT_LOG = previous
+
+
+def positive_seconds(value: str) -> int:
+    """argparse type for a --timeout: 0 would disarm the session deadline."""
+    seconds = int(value)
+    if seconds < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1 second, got {seconds}")
+    return seconds
 
 
 def use_compact_console(role: str, cell: str) -> None:
