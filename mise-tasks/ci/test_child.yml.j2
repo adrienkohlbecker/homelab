@@ -152,7 +152,7 @@ stages:
     # score makes the kernel pick a cell over it under memory pressure.
     - |
       rc=0
-      nice -n 10 choom -n 500 -- mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 || rc=$?
+      nice -n 10 choom -n 500 -- mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --verbose || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}
@@ -168,7 +168,7 @@ stages:
   script:
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 || rc=$?
+      mise exec -- timeout --kill-after=30s 1560 test/testrole.py "$ROLE" --machine "$VARIANT" --ubuntu "$UBUNTU" --timeout 1500 --verbose || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}

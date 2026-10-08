@@ -29,6 +29,7 @@ from utils import (
     cancel_on_signal,
     print_cmd_line,
     print_line,
+    print_log_tail,
     run_command,
     sleep_tick,
     tee_output,
@@ -797,8 +798,11 @@ class Machine:
                 print_line(f"{label} crashed", error=True)
                 rc = 1
         if rc == 0:
+            print_line(f"✓ {label} passed")
             for path in self._artifact_files:
                 path.unlink(missing_ok=True)
+        else:
+            print_log_tail(self.output_file)
         return rc
 
     async def wait(self) -> None:

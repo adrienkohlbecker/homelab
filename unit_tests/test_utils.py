@@ -139,3 +139,31 @@ class TestRunCommand:
         with pytest.raises(utils.CommandFailedException) as exc:
             asyncio.run(utils.run_command(["sh", "-c", "echo err >&2; exit 1"]))
         assert exc.value.stderr == ["err"]
+
+
+class TestCompactConsole:
+    """testrole.py's default output: tagged status lines on the terminal only."""
+
+    def test_only_status_lines_reach_the_terminal(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        utils.use_compact_console("nginx", "lab:noble")
+        log = tmp_path / "out.ansi"
+
+        with utils.tee_output(log):
+            utils.print_line("▶ converge")
+            asyncio.run(utils.run_command(["echo", "TASK [nginx : Install]"]))
+        utils._drain_stdout()
+
+        terminal = capsys.readouterr().out
+        assert "nginx lab:noble" in terminal
+        assert "▶ converge" in terminal
+        assert "TASK [nginx" not in terminal
+        assert "$ echo" not in terminal
+        assert "TASK [nginx : Install]" in log.read_text()
+
+    def test_roles_keep_their_colour(self) -> None:
+        utils.use_compact_console("nginx", "lab:noble")
+        first = utils._CONSOLE_TAG
+        utils.use_compact_console("nginx", "minimal:noble")
+        assert first is not None
+        assert utils._CONSOLE_TAG is not None
+        assert first.split("m", 1)[0] == utils._CONSOLE_TAG.split("m", 1)[0]

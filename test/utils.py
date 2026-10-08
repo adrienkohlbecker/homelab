@@ -7,7 +7,9 @@ import shlex
 import signal
 import sys
 import threading
-from collections.abc import Iterator
+import time
+import zlib
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import NamedTuple, TextIO
 
@@ -43,7 +45,18 @@ class CommandResult(NamedTuple):
 COLORS = {
     "red": "\033[0;41m{line}\033[0m",
     "cyan": "\033[0;36m{line}\033[0m",
+    "green": "\033[0;32m{line}\033[0m",
 }
+
+# Compact console mode, set by testrole.py unless --verbose: only status lines
+# (print_line) reach the terminal, each prefixed with this cell's tag, so cells
+# interleaving under GNU parallel stay readable. Subprocess output and the
+# commands themselves go to the run log alone.
+_CONSOLE_TAG: str | None = None
+# Distinct 256-colour foregrounds; a role always gets the same one.
+_TAG_COLORS = (33, 39, 70, 75, 99, 135, 166, 172, 178, 204, 37, 141)
+# How often a long phase reports it is still running in compact mode.
+PHASE_HEARTBEAT_SECONDS = 300
 
 # Optional file that mirrors every line written via _write_line / print_cmd_line.
 # Set with tee_output() so callers can keep a transcript of a run alongside the
@@ -63,6 +76,55 @@ def tee_output(path: Path) -> Iterator[None]:
             yield
         finally:
             _OUTPUT_LOG = previous
+
+
+def use_compact_console(role: str, cell: str) -> None:
+    """Show only status lines on the terminal, tagged ``role cell`` in a colour
+    derived from the role."""
+    global _CONSOLE_TAG
+    color = _TAG_COLORS[zlib.crc32(role.encode()) % len(_TAG_COLORS)]
+    _CONSOLE_TAG = f"\033[38;5;{color}m{f'{role} {cell}':<28}\033[0m"
+
+
+def _elapsed(start: float) -> str:
+    minutes, seconds = divmod(int(time.monotonic() - start), 60)
+    return f"{minutes}:{seconds:02d}"
+
+
+async def _heartbeat(name: str, start: float) -> None:
+    while True:
+        await asyncio.sleep(PHASE_HEARTBEAT_SECONDS)
+        print_line(f"  {name} still running ({_elapsed(start)})")
+
+
+@contextlib.asynccontextmanager
+async def phase(name: str) -> AsyncIterator[None]:
+    """Report a test phase's start, result, and duration as status lines."""
+    start = time.monotonic()
+    print_line(f"▶ {name}")
+    heartbeat = asyncio.create_task(_heartbeat(name, start))
+    try:
+        yield
+    except BaseException:
+        print_line(f"✗ {name} ({_elapsed(start)})", error=True)
+        raise
+    else:
+        _write_line(f"✓ {name} ({_elapsed(start)})", "green", status=True)
+    finally:
+        heartbeat.cancel()
+
+
+def print_log_tail(path: Path, lines: int = 40) -> None:
+    """In compact mode, show a failed run's transcript tail and where it lives.
+
+    Console only: the transcript already holds these lines.
+    """
+    if _CONSOLE_TAG is None:
+        return
+    with contextlib.suppress(OSError):  # an unreadable log still leaves its path below
+        for line in path.read_text(errors="replace").splitlines()[-lines:]:
+            _queue_stdout(f"{_CONSOLE_TAG} │ {line}\n")
+    _queue_stdout(f"{_CONSOLE_TAG} log: {path}\n")
 
 
 async def sleep_tick() -> None:
@@ -149,18 +211,30 @@ def _drain_stdout(timeout: float = 2.0) -> None:
     barrier.wait(timeout)
 
 
-def _emit(text: str) -> None:
-    """Queue *text* for stdout and mirror it into the active tee target, if any."""
+def _queue_stdout(text: str) -> None:
     _ensure_stdout_writer()
     _STDOUT_QUEUE.put(text)
+
+
+def _emit(text: str, *, status: bool = False) -> None:
+    """Queue *text* for stdout and mirror it into the active tee target, if any.
+
+    In compact console mode only *status* text reaches stdout, one tagged line
+    at a time; everything still lands in the tee target.
+    """
+    if _CONSOLE_TAG is None:
+        _queue_stdout(text)
+    elif status:
+        for line in text.splitlines():
+            _queue_stdout(f"{_CONSOLE_TAG} {line}\n")
     if _OUTPUT_LOG is not None:
         _OUTPUT_LOG.write(text)
         _OUTPUT_LOG.flush()
 
 
-def _write_line(line: str, color: str | None) -> None:
+def _write_line(line: str, color: str | None, *, status: bool = False) -> None:
     """Echo a line to stdout (and the active tee target, if any), optionally colorized."""
-    _emit(colorize(line, color) + "\n")
+    _emit(colorize(line, color) + "\n", status=status)
 
 
 def print_cmd_line(cmd: list[str], env: dict[str, str] | None = None) -> None:
@@ -183,7 +257,7 @@ def print_line(line: str, error: bool = False) -> None:
     mirroring print()'s behavior otherwise. Pass error=True to render the
     line with the red highlight used for subprocess stderr.
     """
-    _write_line(line, "red" if error else None)
+    _write_line(line, "red" if error else None, status=True)
 
 
 async def read_and_write_stream(stream: asyncio.StreamReader, color: str | None, capture: list[str]) -> None:

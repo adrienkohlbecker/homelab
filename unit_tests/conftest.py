@@ -9,6 +9,7 @@ from typing import Any
 
 import machine
 import pytest
+import utils
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -73,3 +74,10 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
     yield make
     for m in instances:
         m.workdir.cleanup()
+
+
+@pytest.fixture(autouse=True)
+def _verbose_console(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start every test in the verbose console mode; testrole.main() switches the
+    process-wide mode to compact."""
+    monkeypatch.setattr(utils, "_CONSOLE_TAG", None)
