@@ -274,12 +274,10 @@ def _relay(stream: IO[str], color: str | None, capture: list[str]) -> None:
         _write_line(line, color)
 
 
-# The signals that interrupt a cell: Ctrl-C, a stop request (GNU parallel's
-# --termseq, a CI cancel), and the session deadline.
-INTERRUPTS = (signal.SIGINT, signal.SIGTERM, signal.SIGALRM)
-# How long an interrupted run_command waits for its stderr relay. Killing the
-# command's process group closes the pipe unless something outside the group
-# still holds it; the relay is a daemon thread, so abandoning it costs nothing.
+# How long an interrupted run_command waits for its output relays. Killing the
+# command's process group closes the pipes unless something outside the group
+# still holds them; the relays are daemon threads, so abandoning them costs
+# nothing.
 RELAY_DRAIN_SECONDS = 5
 # How long an interrupted command gets to exit on SIGINT before its process
 # group is killed. ansible-playbook uses it to stop its worker processes,
@@ -334,98 +332,73 @@ def _stop_command(process: subprocess.Popen) -> None:
     stop_process_group(process, grace_seconds=0)
 
 
-@contextlib.contextmanager
-def interrupts_held(*, redeliver: bool = True) -> Iterator[None]:
-    """Hold INTERRUPTS for the with-block, then redeliver them (or drop them).
-
-    Closes the window between creating a resource and recording it where
-    cleanup will find it: an interrupt arriving in between would otherwise
-    leak the resource. Python-level handlers rather than a blocked signal
-    mask, because children spawned inside the block would inherit the mask but
-    get default handlers back at exec. Redelivery raises from the block's exit,
-    so open it inside the try that owns the cleanup.
-    """
-    pending: list[int] = []
-
-    def hold(signum: int, _frame: object) -> None:
-        pending.append(signum)
-
-    # The handlers swap with the signals blocked, so one arriving mid-swap
-    # waits for a complete set rather than hitting a half-installed one; the
-    # mask is back before the body runs, so children never inherit it.
-    mask = signal.pthread_sigmask(signal.SIG_BLOCK, INTERRUPTS)
-    try:
-        previous = {sig: signal.signal(sig, hold) for sig in INTERRUPTS}
-    finally:
-        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
-    try:
-        yield
-    finally:
-        signal.pthread_sigmask(signal.SIG_BLOCK, INTERRUPTS)
-        try:
-            for sig, handler in previous.items():
-                signal.signal(sig, handler)
-        finally:
-            signal.pthread_sigmask(signal.SIG_SETMASK, mask)
-        if redeliver:
-            for signum in pending:
-                signal.raise_signal(signum)
-
-
-def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | None = None) -> CommandResult:
+def run_command(
+    cmd: list[str], check: bool = True, *, env: dict[str, str] | None = None, timeout: float | None = None
+) -> CommandResult:
     """Execute a subprocess, stream its output live and colorized.
 
     check raises CommandFailedException on a non-zero exit. env layers
-    overrides on top of os.environ. The command runs in its own process
-    group. If anything (the session deadline, Ctrl-C, a failed stderr relay)
-    interrupts the call, the command gets SIGINT and COMMAND_STOP_GRACE_SECONDS
-    to stop, then the whole group is killed, so no descendant is left holding
-    its pipes.
+    overrides on top of os.environ. timeout bounds the whole command,
+    including draining its output; past it the command is stopped and
+    TimeoutError raised. The command runs in its own process group. If it is
+    interrupted (Ctrl-C, the timeout, a failed relay), it gets SIGINT and
+    COMMAND_STOP_GRACE_SECONDS to stop, then the whole group is killed, so no
+    descendant is left holding its pipes.
     """
     print_cmd_line(cmd, env=env)
+    deadline = None if timeout is None else time.monotonic() + timeout
+
+    def remaining() -> float | None:
+        return None if deadline is None else max(0.0, deadline - time.monotonic())
 
     stdout: list[str] = []
     stderr: list[str] = []
     relay_failures: list[Exception] = []
-    process: subprocess.Popen[str] | None = None
-    stderr_relay: threading.Thread | None = None
+    process = subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, **env} if env is not None else None,
+        text=True,
+        errors="replace",
+        start_new_session=True,
+    )
 
-    def drain_stderr(child: subprocess.Popen[str]) -> None:
-        assert child.stderr is not None
+    def relay(stream: IO[str] | None, color: str | None, capture: list[str]) -> None:
+        assert stream is not None
         try:
-            _relay(child.stderr, "red", stderr)
+            _relay(stream, color, capture)
         except Exception as exc:
-            # Stopping the command's group closes stdout too, ending the main
-            # thread's read.
+            # Stopping the command closes its other pipe and ends the wait.
             relay_failures.append(exc)
-            _stop_command(child)
-
-    try:
-        with interrupts_held():
-            process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env={**os.environ, **env} if env is not None else None,
-                text=True,
-                errors="replace",
-                start_new_session=True,
-            )
-            # stderr drains on its own thread so neither pipe can fill and
-            # block the child. Cross-stream order is therefore not preserved;
-            # callers (ansible-playbook, ssh) emit nearly everything on stdout.
-            stderr_relay = threading.Thread(target=drain_stderr, args=(process,), daemon=True)
-            stderr_relay.start()
-        assert process.stdout is not None
-        _relay(process.stdout, None, stdout)
-        exitcode = process.wait()
-        stderr_relay.join()
-    except BaseException:
-        if process is not None:
             _stop_command(process)
-        if stderr_relay is not None:
-            stderr_relay.join(RELAY_DRAIN_SECONDS)
+
+    # Both streams drain on threads so neither pipe can fill and block the
+    # command, and the main thread only waits, which Ctrl-C and the timeout
+    # can always interrupt. Cross-stream order is therefore not preserved;
+    # callers (ansible-playbook, ssh) emit nearly everything on stdout.
+    relays = [
+        threading.Thread(target=relay, args=(process.stdout, None, stdout), daemon=True),
+        threading.Thread(target=relay, args=(process.stderr, "red", stderr), daemon=True),
+    ]
+    try:
+        for thread in relays:
+            thread.start()
+        try:
+            exitcode = process.wait(remaining())
+        except subprocess.TimeoutExpired:
+            raise TimeoutError(f"{shlex.join(cmd)} did not finish within {timeout:.0f}s") from None
+        # A descendant can keep the pipes open after the command exits.
+        for thread in relays:
+            thread.join(remaining())
+        if any(thread.is_alive() for thread in relays):
+            raise TimeoutError(f"{shlex.join(cmd)} did not finish within {timeout:.0f}s")
+    except BaseException:
+        _stop_command(process)
+        for thread in relays:
+            if thread.ident is not None:
+                thread.join(RELAY_DRAIN_SECONDS)
         raise
     if relay_failures:
         raise relay_failures[0]

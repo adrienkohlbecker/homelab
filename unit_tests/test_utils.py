@@ -5,7 +5,6 @@ import os
 import signal
 import threading
 import time
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -103,51 +102,42 @@ class TestRunCommand:
         assert exc.value.stderr == ["err"]
 
 
-class _Deadline(BaseException):
-    pass
-
-
-@contextlib.contextmanager
-def _deadline_after(seconds: float) -> Iterator[None]:
-    """Raise _Deadline in the main thread after *seconds*, as the session's SIGALRM does."""
-
-    def expire(_signum: int, _frame: object) -> None:
-        raise _Deadline
-
-    previous = signal.signal(signal.SIGALRM, expire)
-    signal.setitimer(signal.ITIMER_REAL, seconds)
-    try:
-        yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
-
-
 def _logged_pids(log: Path) -> list[int]:
     return [int(line) for line in log.read_text().split() if line.isdigit()]
 
 
 class TestRunCommandInterrupted:
-    def test_deadline_kills_and_reaps_the_child(self, tmp_path: Path) -> None:
+    def test_timeout_stops_and_reaps_the_command(self, tmp_path: Path) -> None:
         log = tmp_path / "run.log"
         start = time.monotonic()
-        with utils.tee_output(log), pytest.raises(_Deadline), _deadline_after(0.5):
-            utils.run_command(["sh", "-c", "echo $$; exec sleep 30"])
+        with utils.tee_output(log), pytest.raises(TimeoutError, match="did not finish within"):
+            utils.run_command(["sh", "-c", "echo $$; exec sleep 30"], timeout=0.5)
 
         assert time.monotonic() - start < 5
         (pid,) = _logged_pids(log)
         with pytest.raises(ProcessLookupError):
             os.kill(pid, 0)
 
-    def test_a_descendant_holding_the_pipes_cannot_stall_the_deadline(
+    def test_ctrl_c_stops_and_reaps_the_command(self, tmp_path: Path) -> None:
+        log = tmp_path / "run.log"
+        threading.Timer(0.5, os.kill, (os.getpid(), signal.SIGINT)).start()
+        with utils.tee_output(log), pytest.raises(KeyboardInterrupt):
+            utils.run_command(["sh", "-c", "echo $$; exec sleep 30"])
+
+        (pid,) = _logged_pids(log)
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+
+    def test_a_descendant_holding_the_pipes_cannot_outlast_the_timeout(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Even once the command itself has exited."""
         monkeypatch.setattr(utils, "RELAY_DRAIN_SECONDS", 0.2)
         log = tmp_path / "run.log"
         start = time.monotonic()
         try:
-            with utils.tee_output(log), pytest.raises(_Deadline), _deadline_after(0.5):
-                utils.run_command(["sh", "-c", "sleep 30 & echo $!; exec sleep 30"])
+            with utils.tee_output(log), pytest.raises(TimeoutError):
+                utils.run_command(["sh", "-c", "sleep 30 & echo $!"], timeout=0.5)
             assert time.monotonic() - start < 5
         finally:
             for pid in _logged_pids(log):
@@ -171,78 +161,6 @@ class TestRunCommandInterrupted:
         with pytest.raises(OSError, match="transcript disk full"):
             utils.run_command(["sh", "-c", command])
         assert time.monotonic() - start < 5
-
-
-class TestInterruptsHeld:
-    def test_redelivers_on_exit(self) -> None:
-        reached_end = []
-
-        def interrupted_block() -> None:
-            with utils.interrupts_held():
-                os.kill(os.getpid(), signal.SIGINT)
-                time.sleep(0.1)
-                reached_end.append(True)
-
-        with pytest.raises(KeyboardInterrupt):
-            interrupted_block()
-        assert reached_end
-
-    def test_a_signal_during_the_handler_swap_waits_for_the_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Arriving after the first handler is swapped in, it is held like one
-        arriving inside the block, and redelivered on exit."""
-        install = signal.signal
-        swaps: list[int] = []
-
-        def interrupted_swap(sig: int, handler: object) -> object:
-            previous = install(sig, handler)  # type: ignore[arg-type]
-            swaps.append(sig)
-            if len(swaps) == 1:
-                os.kill(os.getpid(), signal.SIGINT)
-            return previous
-
-        monkeypatch.setattr(utils.signal, "signal", interrupted_swap)
-        body_ran = []
-
-        def held_block() -> None:
-            with utils.interrupts_held():
-                body_ran.append(True)
-
-        with pytest.raises(KeyboardInterrupt):
-            held_block()
-        assert body_ran
-        assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
-
-    def test_a_signal_during_the_restore_leaves_every_handler_restored(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        install = signal.signal
-        originals = {sig: signal.getsignal(sig) for sig in utils.INTERRUPTS}
-        swaps: list[int] = []
-
-        def interrupted_swap(sig: int, handler: object) -> object:
-            previous = install(sig, handler)  # type: ignore[arg-type]
-            swaps.append(sig)
-            # The first restore: SIGINT is back to its default handler.
-            if len(swaps) == len(utils.INTERRUPTS) + 1:
-                os.kill(os.getpid(), signal.SIGINT)
-            return previous
-
-        monkeypatch.setattr(utils.signal, "signal", interrupted_swap)
-
-        def held_block() -> None:
-            with utils.interrupts_held():
-                pass
-            # Unblocked at the end of the restore, the signal reaches its
-            # handler at the interpreter's next check; give it one here.
-            time.sleep(0.1)
-
-        with pytest.raises(KeyboardInterrupt):
-            held_block()
-        assert {sig: signal.getsignal(sig) for sig in utils.INTERRUPTS} == originals
-
-    def test_drops_when_asked(self) -> None:
-        with utils.interrupts_held(redeliver=False):
-            os.kill(os.getpid(), signal.SIGINT)
-            time.sleep(0.1)
-        assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
 
 
 class TestCompactConsole:

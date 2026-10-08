@@ -97,7 +97,7 @@ stages:
     UBUNTU: {{ default_ubuntu }}
   timeout: 60m
   script:
-    # GNU timeout backstops the harness's SIGALRM deadline; 60s permits VM teardown.
+    # GNU timeout backstops the harness's own deadline; 60s permits VM teardown.
     - |
       rc=0
       mise exec -- timeout --kill-after=30s 3060 test/site_test.py --ubuntu "$UBUNTU" --timeout 3000 || rc=$?
@@ -112,7 +112,7 @@ stages:
     UBUNTU: resolute
   timeout: 60m
   script:
-    # GNU timeout backstops the harness's SIGALRM deadline; 60s permits VM teardown.
+    # GNU timeout backstops the harness's own deadline; 60s permits VM teardown.
     - |
       rc=0
       mise exec -- timeout --kill-after=30s 3060 test/site_test.py --ubuntu "$UBUNTU" --timeout 3000 || rc=$?

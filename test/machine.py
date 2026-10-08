@@ -27,7 +27,6 @@ from utils import (
     CommandFailedException,
     CommandResult,
     IdempotenceFailedException,
-    interrupts_held,
     phase,
     print_cmd_line,
     print_line,
@@ -275,20 +274,12 @@ ARTIFACT_LINK_ATTEMPTS = 20
 CLOUDIMG_LOCK_TIMEOUT = 600
 
 
-class _DeadlineExpired(BaseException):
-    """The session deadline, raised from its SIGALRM handler.
-
-    Not a TimeoutError: that subclasses OSError, which the polling loops
-    (the SSH banner probe) catch and retry. session() reraises it as one.
-    """
-
-
 class Machine:
     """Start disposable QEMU guests for role-level integration tests.
 
     Deliberately synchronous: a cell is one VM driven by one sequence of
-    subprocesses, and the session deadline (session) interrupts whatever the
-    main thread is blocked on.
+    subprocesses. The session deadline is enforced by giving every blocking
+    call what is left of it (remaining), not by interrupting from outside.
     """
 
     output_file: Path
@@ -358,6 +349,8 @@ class Machine:
         self.machine_timeout = machine_timeout
         self.upstream_mirrors = upstream_mirrors
         self.proc: subprocess.Popen[bytes] | None = None
+        # Monotonic time the session must finish by; None for no limit.
+        self.deadline: float | None = None
         self._live_lock_fd = -1
         self._ansible_staged = False
         self._last_ansible_cmd: tuple[str, ...] | None = None
@@ -587,10 +580,23 @@ class Machine:
             parts += cmd
         return parts
 
+    def remaining(self) -> float | None:
+        """Seconds left before the session deadline, or None without one.
+
+        Raises a message-less TimeoutError once the deadline has passed; the
+        harness reports that as the cell timing out.
+        """
+        if self.deadline is None:
+            return None
+        left = self.deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError()
+        return left
+
     def ssh_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute an SSH command and stream output into the role log."""
 
-        return run_command(self.format_ssh_cmd(*cmd), check=check)
+        return run_command(self.format_ssh_cmd(*cmd), check=check, timeout=self.remaining())
 
     @property
     def connection_inventory_path(self) -> Path:
@@ -618,7 +624,7 @@ class Machine:
 
         self._stage_ansible_controller()
         self._last_ansible_cmd = cmd
-        return run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
+        return run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env(), timeout=self.remaining())
 
     def _stage_ansible_controller(self) -> None:
         """Populate controller inputs on demand before the first Ansible run."""
@@ -665,8 +671,7 @@ class Machine:
         # shutdown explicitly through Machine.stop(). stdin=DEVNULL keeps
         # qemu's `-serial stdio` from competing with the terminal for
         # keystrokes.
-        # Interrupts wait until self.proc is set, so stop() always sees qemu.
-        with self.boot_file.open("wb") as handle, interrupts_held():
+        with self.boot_file.open("wb") as handle:
             self.proc = subprocess.Popen(
                 cmd, stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT, start_new_session=True
             )
@@ -683,6 +688,7 @@ class Machine:
                 )
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
+            self.remaining()
             sleep_tick()
         self._read_host_ports()
 
@@ -735,6 +741,7 @@ class Machine:
         while not self._ssh_banner_ready():
             if time.monotonic() > deadline:
                 raise TimeoutError("SSH daemon did not become ready in time")
+            self.remaining()
             sleep_tick()
 
     def wait_system_running(self) -> tuple[int, str]:
@@ -839,46 +846,30 @@ class Machine:
     def session(self, timeout: int | None) -> Iterator[None]:
         """Prepare and boot the VM, run the body, and always stop the VM.
 
-        The deadline is a SIGALRM whose handler raises in the main thread,
-        interrupting whatever blocks there (a subprocess, a socket, a sleep);
-        run_command kills its child on the way out, and the session surfaces
-        a message-less TimeoutError. stop() runs whatever happened, including
-        an interrupt during prepare or boot. A kept VM stays up after the
-        body -- passed, failed, or timed out -- until Ctrl-C; only Ctrl-C
-        skips that hold.
+        *timeout* sets the deadline every blocking call is bounded by (see
+        remaining). stop() runs whatever happened, including an interrupt
+        during prepare or boot. A kept VM stays up after the body -- passed,
+        failed, or timed out -- until Ctrl-C; only Ctrl-C skips that hold.
         """
-
-        def expire(_signum: int, _frame: object) -> None:
-            raise _DeadlineExpired
-
-        previous = signal.signal(signal.SIGALRM, expire)
-        signal.alarm(timeout or 0)
+        self.deadline = time.monotonic() + timeout if timeout else None
         try:
+            with phase("prepare"):
+                self.prepare()
+                self.boot()
             try:
-                with phase("prepare"):
-                    self.prepare()
-                    self.boot()
-                try:
-                    yield
-                except BaseException as exc:
-                    signal.alarm(0)
-                    if self.keep_vm and not isinstance(exc, KeyboardInterrupt):
-                        if isinstance(exc, _DeadlineExpired):
-                            print_line(f"Timed out after {timeout}s; --keep set, dropping to SSH for debug")
-                        self.print_ssh_instructions()
-                        self.wait()
-                    raise
-                signal.alarm(0)
-                if self.keep_vm:
+                yield
+            except BaseException as exc:
+                if self.keep_vm and not isinstance(exc, KeyboardInterrupt):
+                    if isinstance(exc, TimeoutError) and self.deadline and time.monotonic() >= self.deadline:
+                        print_line(f"Timed out after {timeout}s; --keep set, dropping to SSH for debug")
                     self.print_ssh_instructions()
                     self.wait()
-            finally:
-                self.stop()
-        except _DeadlineExpired:
-            raise TimeoutError() from None
+                raise
+            if self.keep_vm:
+                self.print_ssh_instructions()
+                self.wait()
         finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, previous)
+            self.stop()
 
     def stop(self) -> None:
         """Stop qemu and free this run's temporary resources.
@@ -887,32 +878,36 @@ class Machine:
         session, so the group holds the `timeout` wrapper and qemu, and still
         holds qemu after the wrapper dies or before qemu writes its pidfile.
         SIGTERM lets qemu exit cleanly; SIGKILL follows after
-        STOP_GRACE_SECONDS (stop_process_group). Interrupts are dropped for the
-        duration, so a second Ctrl-C (or a parallel --termseq) can't cut
-        cleanup short, and each cleanup step runs even if an earlier one fails.
+        STOP_GRACE_SECONDS (stop_process_group). Ctrl-C and SIGTERM are
+        ignored for the duration, so a second one (or a parallel --termseq)
+        can't cut cleanup short, and each cleanup step runs even if an
+        earlier one fails.
         """
-        signal.alarm(0)
-        with interrupts_held(redeliver=False):
+        handlers = {sig: signal.signal(sig, signal.SIG_IGN) for sig in (signal.SIGINT, signal.SIGTERM)}
+        try:
+            with contextlib.suppress(OSError):  # a transcript that cannot take the line must not cost the cleanup
+                print_line("Stopping machine...")
+            if self.proc:
+                stop_process_group(self.proc, grace_seconds=STOP_GRACE_SECONDS)
+        finally:
             try:
-                with contextlib.suppress(OSError):  # a transcript that cannot take the line must not cost the cleanup
-                    print_line("Stopping machine...")
-                if self.proc:
-                    stop_process_group(self.proc, grace_seconds=STOP_GRACE_SECONDS)
+                self._close_ssh_master()
             finally:
+                # Release the liveness lock before rmtree -- the kernel would
+                # release it on close()/exit anyway, but doing it explicitly
+                # keeps the ordering obvious.
+                if self._live_lock_fd >= 0:
+                    with contextlib.suppress(OSError):  # already closed; nothing left to release
+                        os.close(self._live_lock_fd)
+                    self._live_lock_fd = -1
                 try:
-                    self._close_ssh_master()
+                    self.qmp_socket.unlink(missing_ok=True)
                 finally:
-                    # Release the liveness lock before rmtree -- the kernel
-                    # would release it on close()/exit anyway, but doing it
-                    # explicitly keeps the ordering obvious.
-                    if self._live_lock_fd >= 0:
-                        with contextlib.suppress(OSError):  # already closed; nothing left to release
-                            os.close(self._live_lock_fd)
-                        self._live_lock_fd = -1
                     try:
-                        self.qmp_socket.unlink(missing_ok=True)
-                    finally:
                         self.workdir.cleanup()
+                    finally:
+                        for sig, handler in handlers.items():
+                            signal.signal(sig, handler)
 
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
@@ -954,7 +949,8 @@ class Machine:
                     "-rock",
                     str(user_data),
                     "test/minimal/meta-data",
-                ]
+                ],
+                timeout=self.remaining(),
             )
             self._create_overlay(
                 str(cloud_image),
@@ -1016,7 +1012,7 @@ class Machine:
         ]
         if size:
             args.append(size)
-        run_command(args)
+        run_command(args, timeout=self.remaining())
 
     def _ensure_minimal_cloudimg(self) -> Path:
         """Download and cache the Ubuntu minimal cloud image.
@@ -1048,7 +1044,8 @@ class Machine:
                             f"cloud-image lock held >{CLOUDIMG_LOCK_TIMEOUT:.0f}s; "
                             f"concurrent cell wedged? check `lsof {lockfile}`"
                         ) from e
-                    time.sleep(0.5)
+                self.remaining()
+                time.sleep(0.5)
             # A peer may have completed the download while this process waited.
             if target.exists():
                 return target
@@ -1062,7 +1059,7 @@ class Machine:
             # cells from publishing a partial download.
             tmp = cache / f"{name}.{os.getpid()}.tmp"
             print_line(f"Downloading {url}")
-            run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
+            run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url], timeout=self.remaining())
             os.replace(tmp, target)
             return target
         finally:

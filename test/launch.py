@@ -143,8 +143,8 @@ def _run(m: Machine, *, exit_after_ready: bool) -> None:
     down. Boot, SSH, or systemd-state failure dumps the boot console and
     raises.
     """
-    # Outside the session, so the overall deadline (a TimeoutError only once
-    # the session exits) dumps the console too; the log outlives the VM.
+    # Outside the session, so the console is complete when dumped: stop() has
+    # shut the VM down, and the log outlives it.
     try:
         with m.session(EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None):
             m.ensure_booted()

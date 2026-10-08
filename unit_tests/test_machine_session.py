@@ -69,8 +69,14 @@ def test_keep_waits_after_success() -> None:
 def test_keep_waits_after_timeout_then_resurfaces_it() -> None:
     machine = FakeMachine(keep_vm=True)
 
-    with pytest.raises(TimeoutError), Machine.session(cast(Machine, machine), 1):
-        time.sleep(5)
+    def overrunning_body() -> None:
+        with Machine.session(cast(Machine, machine), 1):
+            time.sleep(1.1)
+            # The next blocking call asks how long it may take.
+            Machine.remaining(cast(Machine, machine))
+
+    with pytest.raises(TimeoutError):
+        overrunning_body()
 
     assert machine.instructions
     assert machine.waited
