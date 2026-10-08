@@ -84,8 +84,10 @@ rename() { python3 -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' "$1"
 # Swap a verified build in with two renames, deleting the previous version only
 # once it is out of the way; the harness links a version only after checking
 # its path still names it (test/machine.py link_packer_artifacts). A concurrent
-# publish of the same source makes the second rename fail and leaves the
-# published version intact.
+# publish of the same source makes the second rename fail and leaves its
+# version published; any other failure puts the previous version back. An
+# interrupt between the renames leaves it parked as .<source>.old-<pid>, which
+# packer:clean removes.
 publish() {
   local build_dir=$1 published=$2
   local old="${published%/*}/.${published##*/}.old-$$"
@@ -98,8 +100,13 @@ publish() {
     rename "${published}" "${old}"
   fi
   if ! rename "${build_dir}" "${published}"; then
-    rm -rf "${old}"
-    echo "publish of ${published} lost a race with another build; rerun packer:build" >&2
+    if [ -e "${published}" ]; then
+      rm -rf "${old}"
+      echo "publish of ${published} lost a race with another build; rerun packer:build" >&2
+    elif [ -e "${old}" ]; then
+      rename "${old}" "${published}"
+      echo "publish of ${published} failed; restored the previous version" >&2
+    fi
     return 1
   fi
   rm -rf "${old}"
@@ -164,11 +171,16 @@ packer build \
   "${only_args[@]}" \
   packer || packer_status=$?
 
-# The manifest lists only the sources that built successfully, so a failed
-# source never reaches finalize while its siblings still publish.
+# The manifest lists only the sources that built successfully, so a source
+# that fails to build never reaches finalize while its siblings still publish.
+# finalize itself fails fast: a source that fails its boot check or publish
+# stops the loop, and later sources stay unpublished in the kept tmpdir until
+# a rerun. Read the manifest before looping: a failing $(...) in the for list
+# would leave the loop empty and fall through to the cleanup below.
 manifest="${tmp}/packer-manifest.json"
 if [ -f "${manifest}" ]; then
-  for built in $(yq -r '.builds[].custom_data.source' "${manifest}"); do
+  built_sources=$(yq -r '.builds[].custom_data.source' "${manifest}")
+  for built in ${built_sources}; do
     finalize "${built}"
   done
 fi

@@ -455,8 +455,11 @@ fi
 if [ "$INSTALL_TARGET" = "qemu" ]; then
   # verify exits 0 on "Unknown key name ... ignoring", so a misplaced
   # directive passes the bake and then fails every unit the systemd_unit
-  # helper validates on the fixture. Treat any complaint as fatal here.
-  if systemd-analyze verify /etc/systemd/system/homelab_guest_journal.service 2>&1 | grep .; then
+  # helper validates on the fixture. Treat any complaint as fatal here, as
+  # well as a failing exit.
+  if ! verify_output=$(systemd-analyze verify /etc/systemd/system/homelab_guest_journal.service 2>&1) ||
+    [ -n "$verify_output" ]; then
+    echo "$verify_output" >&2
     exit 1
   fi
   systemctl enable homelab_guest_journal.service

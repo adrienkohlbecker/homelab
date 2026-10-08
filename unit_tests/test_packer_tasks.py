@@ -161,6 +161,69 @@ def test_build_publish_losing_a_race_keeps_the_winner(tmp_path: Path) -> None:
     assert (staged / "packer-ubuntu-1.raw").read_text() == "new\n"
 
 
+def test_build_publish_failure_without_a_winner_restores_the_previous_version(tmp_path: Path) -> None:
+    env, published = _fake_hetzner_build(tmp_path)
+    (published / "hetzner").mkdir(parents=True)
+    (published / "hetzner" / "packer-ubuntu-1.raw").write_text("old")
+    calls = tmp_path / "rename_calls"
+    # The second rename (build into place) fails with nothing published.
+    _executable(
+        tmp_path / "bin" / "python3",
+        "#!/bin/sh\n"
+        f'echo x >>"{calls}"\n'
+        f'if [ "$(wc -l <"{calls}")" -eq 2 ]; then exit 1; fi\n'
+        f'exec "{sys.executable}" "$@"\n',
+    )
+
+    result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode != 0
+    assert "restored the previous version" in result.stderr
+    assert sorted(path.name for path in published.iterdir()) == ["hetzner"]
+    assert (published / "hetzner" / "packer-ubuntu-1.raw").read_text() == "old"
+
+
+def test_build_unreadable_manifest_fails_and_keeps_the_staged_builds(tmp_path: Path) -> None:
+    env, published = _fake_hetzner_build(tmp_path)
+    _executable(tmp_path / "bin" / "yq", "#!/bin/sh\nexit 2\n")
+
+    result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode != 0
+    assert not published.joinpath("hetzner").exists()
+    assert list((tmp_path / "homelab_ci").glob(".build-*/hetzner"))
+
+
+@pytest.mark.parametrize("boots", [True, False])
+def test_build_publishes_lab_only_after_it_boots(tmp_path: Path, boots: bool) -> None:
+    """finalize gates a Lab publish on test/launch.py --exit-after-ready."""
+    fake_bin = tmp_path / "bin"
+    _executable(fake_bin / "uname", "#!/bin/sh\nset -eu\nprintf 'Linux\\n'\n")
+    _executable(
+        fake_bin / "packer",
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'for arg; do case "$arg" in build_directory=*) dir=${arg#build_directory=} ;; esac; done\n'
+        'mkdir -p "$dir/lab"\n'
+        'echo new >"$dir/lab/packer-ubuntu-1"\n'
+        'touch "$dir/lab/packer-ubuntu"\n'
+        """printf '{"builds":[{"name":"ubuntu","custom_data":{"source":"lab"}}]}' >"$dir/packer-manifest.json"\n""",
+    )
+    # build.sh runs test/launch.py relative to its working directory.
+    workdir = tmp_path / "repo"
+    _executable(workdir / "test" / "launch.py", f"#!/bin/sh\nexit {0 if boots else 1}\n")
+    env = _environment(tmp_path, "noble")
+    env.update(PATH=f"{fake_bin}:{env['PATH']}", usage_no_publish="false")
+    published = tmp_path / "homelab_ci" / "noble" / "lab"
+    published.mkdir(parents=True)
+    (published / "packer-ubuntu-1.raw").write_text("old")
+
+    result = subprocess.run(["bash", str(BUILD_SH)], cwd=workdir, env=env, text=True, capture_output=True)
+
+    assert (result.returncode == 0) is boots, result.stderr
+    assert (published / "packer-ubuntu-1.raw").read_text() == ("new\n" if boots else "old")
+
+
 @pytest.mark.parametrize("fixture_machine", ["lab"])
 def test_publish_qemu_builds_and_uploads_promoted_fixture(tmp_path: Path, fixture_machine: str) -> None:
     fake_bin = tmp_path / "bin"

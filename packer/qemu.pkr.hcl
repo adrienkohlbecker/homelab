@@ -195,6 +195,9 @@ source "qemu" "ubuntu" {
   # then connect a VNC client to localhost:5900.
   vnc_bind_address = "127.0.0.1"
   qemuargs = concat([
+    # The plugin's default forward binds every interface, which exposes the
+    # build VM's Vagrant-key sshd to anything that reaches the build host.
+    ["-netdev", "user,id=user.0,hostfwd=tcp:127.0.0.1:{{ .SSHHostPort }}-:22"],
     ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
     ["-device", "virtio-rng-pci,rng=rng0"],
   ], local.display_qemuargs)

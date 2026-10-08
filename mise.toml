@@ -124,7 +124,7 @@ run = ['packer init "$@" .', 'packer init "$@" aws']
 
 [tasks."packer:clean"]
 description = "Remove leftover tmpdirs from failed packer builds and test-harness runs"
-run = 'rm -rf "$HOMELAB_CI_DIR"/.build-* "$HOMELAB_CI_DIR"/tmp*'
+run = 'rm -rf "$HOMELAB_CI_DIR"/.build-* "$HOMELAB_CI_DIR"/tmp* "$HOMELAB_CI_DIR"/*/.*.old-*'
 
 [tasks.lint]
 description = "Run all linters"
