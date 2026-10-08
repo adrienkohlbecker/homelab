@@ -15,9 +15,6 @@ import pytest
 def _setup(m: machine.Machine, drives: list[str] | None = None) -> None:
     """Bypass prepare(): give the instance the attributes _boot_command reads."""
     m.drives = list(drives or [])
-    # prepare() picks vnc_display when keep_vm; bypass tests pin it so the
-    # cmdline has a deterministic value.
-    m.vnc_display = 0
 
 
 def test_default_x86_64_no_keep_no_direct_boot(
@@ -63,10 +60,13 @@ def test_default_x86_64_no_keep_no_direct_boot(
     # Serial console plumbed to stdio so kernel printk lands in the boot log.
     assert cmd[cmd.index("-serial") + 1] == "stdio"
 
-    # _setup() bypasses prepare(), so only the always-present SSH hostfwd
-    # appears until prepare() populates the controller-side WAN forwards.
-    netdev_idx = cmd.index("-netdev")
-    assert cmd[netdev_idx + 1] == (f"user,id=user.0,hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22")
+    # Every hostfwd asks qemu for a free loopback port (0).
+    netdev = cmd[cmd.index("-netdev") + 1].split(",")
+    assert netdev[:3] == ["user", "id=user.0", f"hostfwd=tcp:{machine.SSH_HOST}:0-:22"]
+    assert f"hostfwd=udp:{machine.SSH_HOST}:0-:51820" in netdev
+
+    # QMP is how the harness learns those ports.
+    assert cmd[cmd.index("-qmp") + 1] == f"unix:{m.qmp_socket},server=on,wait=off"
 
 
 def test_macos_aarch64_uses_hvf(
@@ -109,11 +109,9 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
     # added (absolute mouse for VNC). No virtio-gpu-pci.
     assert "virtio-gpu-pci" not in cmd
 
-    # VNC display + French keyboard layout. _setup() pinned vnc_display=0
-    # so the cmdline is deterministic. VNC binds the cell's loopback (not the
-    # wildcard host) so the reservation and the bind agree.
+    # VNC on the first free loopback display + French keyboard layout.
     display_idx = cmd.index("-display")
-    assert cmd[display_idx + 1] == f"vnc={machine.SSH_HOST}:0"
+    assert cmd[display_idx + 1] == f"vnc={machine.SSH_HOST}:0,to=99"
     assert cmd[cmd.index("-k") + 1] == "fr"
 
     # usb-tablet is the only -device addition for keep_vm on x86_64.

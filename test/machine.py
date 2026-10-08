@@ -9,7 +9,6 @@ import platform
 import re
 import shlex
 import shutil
-import socket
 import tempfile
 import time
 import traceback
@@ -39,31 +38,17 @@ from utils import (
 OUT_DIR = Path("test/out")
 
 SSH_KEY = "packer/vagrant.key"
-# Loopback endpoint for qemu hostfwd binds, VNC displays, SSH, and delegated
-# WAN probes on hosts without per-cell addresses (see _cell_loopback_host).
+# Loopback endpoint for qemu's hostfwds, VNC, SSH, and delegated WAN probes.
+# qemu binds each forward to a free port itself (port 0), so parallel cells on
+# one host never collide; the harness reads the chosen ports back over QMP.
 SSH_HOST = "127.0.0.1"
 PIDFILE_NAME = "pid"
-
-
-def _cell_loopback_host() -> str:
-    """Per-process loopback bind address for this cell's qemu hostfwds.
-
-    qemu opens its own hostfwd sockets, so the harness can only reserve a port,
-    close it, and rely on qemu rebinding it first (prepare()'s _reserve). Under
-    a burst of cells on one CI host that window loses to a sibling drawing the
-    same ephemeral port, and qemu dies with "Could not set up host forwarding
-    rule". A private 127.x.y.z per cell makes a collision impossible: bind
-    uniqueness is per (addr, port), and all of 127/8 is loopback on Linux.
-
-    Keyed on PID, unique among a host's live cells (one testrole.py each).
-    macOS configures only 127.0.0.1, and its runs aren't bursty.
-    """
-    if platform.system() != "Linux":
-        return SSH_HOST
-    # The low 24 bits keep live PIDs distinct in practice; pid >= 1, so the
-    # network address 127.0.0.0 never occurs.
-    pid = os.getpid() & 0xFFFFFF
-    return f"127.{(pid >> 16) & 0xFF}.{(pid >> 8) & 0xFF}.{pid & 0xFF}"
+# One line of `info usernet` per hostfwd: protocol, fd, host address and port,
+# guest address and port.
+_HOSTFWD_RE = re.compile(r"(TCP|UDP)\[HOST_FORWARD\]\s+\d+\s+\S+\s+(\d+)\s+\S+\s+(\d+)")
+# Bound on each QMP exchange; qemu answers in milliseconds once its pidfile
+# exists.
+QMP_TIMEOUT = 5
 
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
@@ -299,16 +284,13 @@ class Machine:
     # Controller-side WAN probe endpoint, so `delegate_to: localhost`
     # probes in roles/firewall's _verify can exercise rules keying on the
     # WAN interface (traffic originating inside the VM never ingresses on
-    # the WAN iface). qemu's user-net forwards pre-picked free ports on the
-    # cell's loopback (self.ssh_host), mapped to guest ports in wan_forward_ports.
+    # the WAN iface). qemu forwards them from free loopback ports, mapped to
+    # guest ports in wan_forward_ports once the VM is up.
     wan_forward_ports: dict[str, dict[str, int]]
 
     drives: list[str]
-    # VNC display number (0..99) chosen in prepare() when keep_vm is True
-    # and local GUI display is not requested;
-    # consumed by _boot_command for the `-display vnc=` argument. Bound on
-    # 5900+display so qemu won't try to walk the band itself.
-    vnc_display: int
+    # The VNC port qemu picked for a kept VM without a local display window.
+    vnc_port: int | None
 
     def __init__(
         self,
@@ -345,7 +327,9 @@ class Machine:
         self.qemu_binary = f"qemu-system-{self.arch}"
 
         self.ssh_port = 0
-        self.ssh_host = _cell_loopback_host()
+        self.ssh_host = SSH_HOST
+        self.vnc_port = None
+        self.qmp_socket = Path(f"/tmp/homelab-qmp-{os.getpid()}")
         self.ssh_user = spec.ssh_user
         self.machine = machine
         self.role = role
@@ -397,14 +381,12 @@ class Machine:
 
         One socket per cell, reused by the harness's own ssh AND by every
         ansible-playbook phase, so phases 2..N skip the SSH handshake + agent
-        round-trip + mitogen interpreter bootstrap. Keyed on the cell's unique
-        (ssh_host, ssh_port) -- the port alone can repeat across cells now that
-        each binds a private loopback address, so the host is part of the key.
-        Lives in /tmp (writable, short) rather than the per-cell workdir: workdir
-        lands on /mnt/scratch on Linux CI hosts, and a unix socket path must stay
-        under ~104 chars -- this /tmp path is short and per-cell unique.
+        round-trip + mitogen interpreter bootstrap. Keyed on the cell's SSH
+        port, which qemu holds for the VM's lifetime. Lives in /tmp (writable,
+        short) rather than the per-cell workdir: workdir lands on /mnt/scratch
+        on Linux CI hosts, and a unix socket path must stay under ~104 chars.
         """
-        return f"/tmp/homelab-cm-{self.ssh_host}-{self.ssh_port}"
+        return f"/tmp/homelab-cm-{self.ssh_port}"
 
     def _ssh_options(self) -> list[str]:
         """Return the shared `-o flag=value` pairs for harness SSH commands."""
@@ -689,9 +671,45 @@ class Machine:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
             await sleep_tick()
+        await self._read_host_ports()
+
+    async def _qmp(self, command: str, arguments: dict | None = None) -> object:
+        """Run one QMP command against this VM and return its result."""
+        reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(str(self.qmp_socket)), QMP_TIMEOUT)
+
+        async def reply() -> dict:
+            # The greeting and asynchronous events carry no "return".
+            while True:
+                message = json.loads(await asyncio.wait_for(reader.readline(), QMP_TIMEOUT))
+                if "return" in message or "error" in message:
+                    return message
+
+        try:
+            for request in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments or {}}):
+                writer.write(json.dumps(request).encode() + b"\n")
+                message = await reply()
+                if "error" in message:
+                    raise RuntimeError(f"QMP {request['execute']} failed: {message['error']}")
+            return message["return"]
+        finally:
+            writer.close()
+
+    async def _read_host_ports(self) -> None:
+        """Learn the loopback ports qemu bound for SSH, the WAN probes, and VNC."""
+        usernet = await self._qmp("human-monitor-command", {"command-line": "info usernet"})
+        forwards = {(proto.lower(), guest): int(host) for proto, host, guest in _HOSTFWD_RE.findall(str(usernet))}
+        self.ssh_port = forwards[("tcp", "22")]
+        self.wan_forward_ports = {
+            proto: {str(port): forwards[(proto, str(port))] for port in ports}
+            for proto, ports in DEFAULT_WAN_FORWARDS.items()
+        }
+        if self.keep_vm and not self.launch.display_window:
+            vnc = await self._qmp("query-vnc")
+            assert isinstance(vnc, dict)
+            self.vnc_port = int(vnc["service"])
 
     async def ensure_ssh(self) -> None:
-        """Wait for the daemon banner on the port reserved in prepare()."""
+        """Wait for the daemon banner on the port qemu forwards to the guest's sshd."""
 
         deadline = time.monotonic() + SSH_WAIT_TIMEOUT
         while not await self._ssh_banner_ready():
@@ -895,6 +913,7 @@ class Machine:
                     with contextlib.suppress(OSError):
                         os.close(self._live_lock_fd)
                     self._live_lock_fd = -1
+                self.qmp_socket.unlink(missing_ok=True)
                 self.workdir.cleanup()
 
     def print_ssh_instructions(self) -> None:
@@ -915,64 +934,10 @@ class Machine:
         if self.launch.display_window:
             print_line("Display: QEMU window")
         else:
-            # vnc_display is only set when keep_vm=True and local GUI display
-            # is disabled; print_ssh_instructions itself is also keep-only.
-            print_line(f"VNC: {self.ssh_host}:{5900 + self.vnc_display}")
-
-    def _pick_vnc_display(self) -> int:
-        """Walk VNC ports 5900..5999 and return the first free display number.
-
-        qemu's `vnc=:N` syntax binds to port 5900+N, so we test bind on the
-        actual port and hand qemu the matching display. Mirrors qemu's own
-        `to=99` walk but resolves up front so we know the chosen display
-        before launch (and can print it). Raises if all 100 are occupied.
-        """
-        for display in range(100):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind((self.ssh_host, 5900 + display))
-                    return display
-            except OSError:
-                continue
-        raise RuntimeError(f"No free VNC display in 0..99 on {self.ssh_host}")
+            print_line(f"VNC: {self.ssh_host}:{self.vnc_port}")
 
     async def prepare(self) -> None:
         """Create overlay images and seed data for the selected template."""
-
-        # Reserve every hostfwd port by binding an ephemeral socket on
-        # self.ssh_host. All reservations stay open until every port is picked,
-        # so the kernel can't hand one out twice (qemu refuses duplicate
-        # forwards); TCP and UDP are independent because qemu keys on
-        # proto+port. The close->qemu-bind window is safe because each cell
-        # binds a private loopback address (_cell_loopback_host).
-        self.wan_forward_ports = {"tcp": {}, "udp": {}}
-        reserved: list[socket.socket] = []
-
-        def _reserve(sock_type: int) -> int:
-            s = socket.socket(socket.AF_INET, sock_type)
-            s.bind((self.ssh_host, 0))
-            reserved.append(s)
-            return s.getsockname()[1]
-
-        try:
-            # SSH endpoint -- loopback hostfwd, pinned the same way as the rest.
-            self.ssh_port = _reserve(socket.SOCK_STREAM)
-            # Auxiliary forwards for controller-side probes that need to
-            # ingress on the VM's WAN iface; emitted into qemu
-            # unconditionally so the qemu cmdline doesn't have to know which
-            # role's running.
-            for proto, guest_ports in DEFAULT_WAN_FORWARDS.items():
-                sock_type = socket.SOCK_STREAM if proto == "tcp" else socket.SOCK_DGRAM
-                for guest_port in guest_ports:
-                    self.wan_forward_ports[proto][str(guest_port)] = _reserve(sock_type)
-        finally:
-            for s in reserved:
-                s.close()
-
-        if self.keep_vm and not self.launch.display_window:
-            # qemu's vnc= syntax interprets the number as a display
-            # (port = 5900+display); pick it up front so we can print it.
-            self.vnc_display = self._pick_vnc_display()
 
         if self._spec.cloud_image:
             cloud_image = await self._ensure_minimal_cloudimg()
@@ -1148,15 +1113,13 @@ class Machine:
         The hostfwds carry SSH for ansible-playbook plus wan_forward_ports for
         the firewall `_verify` probes that `delegate_to: localhost`.
         """
-        # Ports pre-picked in prepare(). qemu_user_net_args pins the VM's eth0
-        # to network.hosts[machine].physical (10.234.x test view); it is
-        # empty for minimal, which has no topology identity.
-        hostfwds = [f"hostfwd=tcp:{self.ssh_host}:{self.ssh_port}-:22"]
-        for proto in ("tcp", "udp"):
-            hostfwds.extend(
-                f"hostfwd={proto}:{self.ssh_host}:{host_port}-:{guest_port}"
-                for guest_port, host_port in self.wan_forward_ports[proto].items()
-            )
+        # Host port 0 lets qemu bind a free port itself; ensure_booted reads
+        # them back. qemu_user_net_args pins the VM's eth0 to
+        # network.hosts[machine].physical (10.234.x test view); it is empty for
+        # minimal, which has no topology identity.
+        hostfwds = [f"hostfwd=tcp:{self.ssh_host}:0-:22"]
+        for proto, guest_ports in DEFAULT_WAN_FORWARDS.items():
+            hostfwds.extend(f"hostfwd={proto}:{self.ssh_host}:0-:{guest_port}" for guest_port in guest_ports)
         netdev = f"user,id=user.0,{','.join(hostfwds)}{qemu_user_net_args(self.machine)}"
         return netdev, f"{self.guest['net_device']},netdev=user.0"
 
@@ -1183,13 +1146,8 @@ class Machine:
                 (
                     display_backend
                     if self.launch.display_window
-                    # Display number pre-picked in prepare(); bind VNC to this
-                    # cell's loopback (self.ssh_host) -- a bare `vnc=:N` binds the
-                    # wildcard host, so the reservation in _pick_vnc_display (which
-                    # probes self.ssh_host) and the actual bind would disagree, and
-                    # two parallel --keep cells reserving the same display N on
-                    # different loopbacks would still collide on the wildcard port.
-                    else f"vnc={self.ssh_host}:{self.vnc_display}"
+                    # The first free display from :0 up; read back via QMP.
+                    else f"vnc={self.ssh_host}:0,to=99"
                 ),
                 *KEEP_VM_DEVICES[self.arch],
                 "-k",
@@ -1263,6 +1221,8 @@ class Machine:
             "virtconsole,chardev=journal,bus=journal_bus.0",
             "-pidfile",
             str(self.pid_file),
+            "-qmp",
+            f"unix:{self.qmp_socket},server=on,wait=off",
         ]
 
         if self.launch.foreground:

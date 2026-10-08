@@ -91,7 +91,7 @@ def test_kept_vm_resume_command_targets_fixture(
     expected_arg: str,
 ) -> None:
     m = machine_factory(keep_vm=True, ssh_port=2222)
-    m.vnc_display = 0
+    m.vnc_port = 5900
     lines: list[str] = []
     monkeypatch.setattr(machine, "print_line", lines.append)
     monkeypatch.setattr(m, "_stage_ansible_controller", lambda: None)
@@ -124,7 +124,7 @@ def test_kept_vm_without_ansible_only_prints_ssh(
     machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     m = machine_factory(keep_vm=True)
-    m.vnc_display = 0
+    m.vnc_port = 5900
     lines: list[str] = []
     monkeypatch.setattr(machine, "print_line", lines.append)
 

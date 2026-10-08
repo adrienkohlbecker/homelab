@@ -393,50 +393,54 @@ def test_ensure_booted_reports_early_qemu_exit(
 
 
 # ---------------------------------------------------------------------------
-# _cell_loopback_host: per-cell loopback so concurrent qemu hostfwds don't
-# collide on the shared ephemeral port range.
+# _read_host_ports: qemu binds each hostfwd to a free port; the harness reads
+# the choices back over QMP.
 # ---------------------------------------------------------------------------
 
+# `info usernet` from QEMU 8.2 with one hostfwd per protocol beyond SSH.
+INFO_USERNET = """\
+Hub -1 (user.0):
+  Protocol[State]    FD  Source Address  Port   Dest. Address  Port RecvQ SendQ
+  TCP[HOST_FORWARD]  13       127.0.0.1 51234       10.0.2.15    22     0     0
+  TCP[HOST_FORWARD]  14       127.0.0.1 51235       10.0.2.15 18080     0     0
+  UDP[HOST_FORWARD]  15       127.0.0.1 51236       10.0.2.15 51820     0     0
+  TCP[ESTABLISHED]   16       10.0.2.15 40000      10.0.2.2    22     0     0
+"""
 
-class TestCellLoopbackHost:
-    def test_linux_derives_per_pid_address_in_127_8(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
-        # pid 0x010203 -> 127.1.2.3 (each octet a byte of the 24-bit pid).
-        monkeypatch.setattr(machine.os, "getpid", lambda: 0x010203)
-        assert machine._cell_loopback_host() == "127.1.2.3"
 
-    def test_linux_masks_pid_into_24_bits(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # A pid above 2^24 wraps into the low 24 bits rather than overflowing
-        # the address; the high byte stays 127.
-        monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
-        monkeypatch.setattr(machine.os, "getpid", lambda: 0xAB010203)
-        assert machine._cell_loopback_host() == "127.1.2.3"
+class TestReadHostPorts:
+    def _machine(self, factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch, **kwargs: Any):
+        m = factory(**kwargs)
+        calls: list[str] = []
 
-    def test_non_linux_keeps_single_loopback(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Only 127.0.0.1 is configured on macOS by default.
-        monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
-        assert machine._cell_loopback_host() == machine.SSH_HOST
+        async def fake_qmp(command: str, arguments: dict | None = None) -> object:
+            calls.append(command)
+            return {"service": "5901"} if command == "query-vnc" else INFO_USERNET
 
-    def test_cell_loopback_threads_through_ssh_and_ansible(
+        monkeypatch.setattr(m, "_qmp", fake_qmp)
+        monkeypatch.setattr(machine, "DEFAULT_WAN_FORWARDS", {"tcp": (18080,), "udp": (51820,)})
+        return m, calls
+
+    def test_maps_guest_ports_to_qemu_chosen_host_ports(
         self, machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The per-cell address must reach every controller-side endpoint: the
-        # SSH target, the ControlMaster socket path (host-keyed so two cells
-        # reusing a port don't share one socket), and ansible's connection vars.
-        monkeypatch.setattr(machine, "_cell_loopback_host", lambda: "127.5.6.7")
-        m = machine_factory(ssh_port=2222, ssh_user="vagrant")
-        assert m.format_ssh_cmd()[-1] == "vagrant@127.5.6.7"
-        assert m.ssh_control_path == "/tmp/homelab-cm-127.5.6.7-2222"
-        m._write_connection_inventory()
-        assert "ansible_ssh_host=127.5.6.7 " in m.connection_inventory_path.read_text()
-        assert "wan_probe_host=127.5.6.7" in m.format_ansible_cmd("site.yml")
+        m, calls = self._machine(machine_factory, monkeypatch)
+        asyncio.run(m._read_host_ports())
+        assert m.ssh_port == 51234
+        assert m.wan_forward_ports == {"tcp": {"18080": 51235}, "udp": {"51820": 51236}}
+        assert calls == ["human-monitor-command"]
 
-    def test_cell_loopback_binds_hostfwds(
+    def test_kept_headless_vm_reads_the_vnc_port(
         self, machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(machine, "_cell_loopback_host", lambda: "127.5.6.7")
-        m = machine_factory(machine="lab")
-        m.ssh_port = 2222
-        m.wan_forward_ports = {"tcp": {}, "udp": {}}
-        netdev, _ = m._netdev_args()
-        assert "hostfwd=tcp:127.5.6.7:2222-:22" in netdev
+        m, _ = self._machine(machine_factory, monkeypatch, keep_vm=True)
+        asyncio.run(m._read_host_ports())
+        assert m.vnc_port == 5901
+
+    def test_missing_forward_fails_loudly(
+        self, machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        m, _ = self._machine(machine_factory, monkeypatch)
+        monkeypatch.setattr(machine, "DEFAULT_WAN_FORWARDS", {"tcp": (9092,), "udp": ()})
+        with pytest.raises(KeyError):
+            asyncio.run(m._read_host_ports())

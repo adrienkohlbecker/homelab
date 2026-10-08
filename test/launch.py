@@ -80,8 +80,9 @@ def parse_args() -> argparse.Namespace:
         "--foreground",
         action="store_true",
         help="Inherit qemu's stdio and use -serial mon:stdio so HMP is "
-        "reachable via Ctrl-A,c (Ctrl-A,x to quit). The boot log is NOT "
-        "captured to a file, and nothing waits for SSH.",
+        "reachable via Ctrl-A,c (Ctrl-A,x to quit); its `info usernet` shows "
+        "the SSH port. The boot log is NOT captured to a file, and nothing "
+        "waits for SSH.",
     )
     parser.add_argument(
         "--display-window",
@@ -189,6 +190,7 @@ def _run_foreground(m: Machine) -> int:
     finally:
         # __aenter__ / __aexit__ aren't used here, so do the cleanup the
         # async-with would normally do.
+        m.qmp_socket.unlink(missing_ok=True)
         m.workdir.cleanup()
 
 
