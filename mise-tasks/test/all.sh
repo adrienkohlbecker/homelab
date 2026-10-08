@@ -2,7 +2,6 @@
 #MISE description="Run the full role-test matrix in parallel"
 #USAGE flag "--retry-failed" help="Rerun the cells that failed or never started in the last run (test/out.tsv)"
 #USAGE flag "--jobs <jobs>" default="5" help="Number of cells to run at once (pass after --: mise run consumes its own --jobs)"
-#USAGE arg "[testrole_args]..." var=#true help="Extra test/testrole.py arguments for every cell, e.g. --upstream-mirrors or --verbose"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
@@ -36,18 +35,9 @@ if [ "${usage_retry_failed:-false}" = true ]; then
   parallel_args+=(--resume-failed)
 fi
 
-# mise passes every task argument in "$@", this task's own flags included;
-# usage_testrole_args holds just the forwarded ones, shell-quoted. GNU parallel
-# hands the command line to a shell, so quote them once more for it.
-eval "testrole_args=(${usage_testrole_args:-})"
-forwarded=""
-if [ "${#testrole_args[@]}" -gt 0 ]; then
-  forwarded=$(printf ' %q' "${testrole_args[@]}")
-fi
-
 status=0
 test/matrix.py | parallel "${parallel_args[@]}" --colsep '\t' \
-  "test/testrole.py --machine {1} --ubuntu {2} {3}${forwarded}" || status=$?
+  test/testrole.py --machine '{1}' --ubuntu '{2}' '{3}' || status=$?
 
 # A retry appends to the joblog, so judge each cell (Seq, column 1) by its
 # latest row: Exitval is column 7 and the command column 9.

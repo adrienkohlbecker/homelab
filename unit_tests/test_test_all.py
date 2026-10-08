@@ -1,7 +1,6 @@
 """test:all drives real GNU parallel over stand-in cells."""
 
 import os
-import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,19 +28,13 @@ def repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def run(repo: Path, *args: str, failing: tuple[str, ...] = (), retry: bool = False, jobs: str = "2"):
-    """Invoke all.sh as `mise run test:all [--retry-failed] [-- args...]` does:
-    mise passes every task argument in "$@", its own flags included, and
-    the forwarded ones alone, shell-quoted, in usage_testrole_args."""
+def run(repo: Path, *, failing: tuple[str, ...] = (), retry: bool = False, jobs: str = "2"):
+    """Invoke all.sh as `mise run test:all [--retry-failed]` does: mise passes
+    the task's own flags in "$@" as well as in the usage_* variables."""
     (repo / "failing.txt").write_text("".join(f"{role}\n" for role in failing))
     (repo / "calls.txt").unlink(missing_ok=True)
-    env = {
-        **os.environ,
-        "usage_jobs": jobs,
-        "usage_retry_failed": str(retry).lower(),
-        "usage_testrole_args": shlex.join(args),
-    }
-    argv = [*(["--retry-failed"] if retry else []), *(["--", *args] if args else [])]
+    env = {**os.environ, "usage_jobs": jobs, "usage_retry_failed": str(retry).lower()}
+    argv = ["--retry-failed"] if retry else []
     result = subprocess.run(["bash", str(ALL_SH), *argv], cwd=repo, env=env, text=True, capture_output=True)
     calls = (repo / "calls.txt").read_text().splitlines() if (repo / "calls.txt").exists() else []
     return result, calls
@@ -86,14 +79,6 @@ def test_retry_sets_aside_an_old_format_joblog(repo: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert len(calls) == len(ROLES)
     assert (repo / "test" / "out.tsv.legacy").exists()
-
-
-def test_forwards_extra_arguments_to_every_cell(repo: Path) -> None:
-    result, calls = run(repo, "--upstream-mirrors", "-e", "a b")
-
-    assert result.returncode == 0, result.stderr
-    assert len(calls) == len(ROLES)
-    assert all(call.endswith(" --upstream-mirrors -e a b") for call in calls)
 
 
 @pytest.mark.parametrize("jobs", ["0", "-1", "many"])
