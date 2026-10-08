@@ -1,17 +1,17 @@
-import asyncio
 import atexit
 import contextlib
 import os
 import queue
 import shlex
 import signal
+import subprocess
 import sys
 import threading
 import time
 import zlib
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from pathlib import Path
-from typing import NamedTuple, TextIO
+from typing import IO, NamedTuple, TextIO
 
 
 class CommandFailedException(Exception):
@@ -91,18 +91,18 @@ def _elapsed(start: float) -> str:
     return f"{minutes}:{seconds:02d}"
 
 
-async def _heartbeat(name: str, start: float) -> None:
-    while True:
-        await asyncio.sleep(PHASE_HEARTBEAT_SECONDS)
-        print_line(f"  {name} still running ({_elapsed(start)})")
-
-
-@contextlib.asynccontextmanager
-async def phase(name: str) -> AsyncIterator[None]:
+@contextlib.contextmanager
+def phase(name: str) -> Iterator[None]:
     """Report a test phase's start, result, and duration as status lines."""
     start = time.monotonic()
     print_line(f"▶ {name}")
-    heartbeat = asyncio.create_task(_heartbeat(name, start))
+    done = threading.Event()
+
+    def heartbeat() -> None:
+        while not done.wait(PHASE_HEARTBEAT_SECONDS):
+            print_line(f"  {name} still running ({_elapsed(start)})")
+
+    threading.Thread(target=heartbeat, name=f"phase-{name}", daemon=True).start()
     try:
         yield
     except BaseException:
@@ -111,7 +111,7 @@ async def phase(name: str) -> AsyncIterator[None]:
     else:
         _write_line(f"✓ {name} ({_elapsed(start)})", "green", status=True)
     finally:
-        heartbeat.cancel()
+        done.set()
 
 
 def print_log_tail(path: Path, lines: int = 40) -> None:
@@ -127,24 +127,10 @@ def print_log_tail(path: Path, lines: int = 40) -> None:
     _queue_stdout(f"{_CONSOLE_TAG} log: {path}\n")
 
 
-async def sleep_tick() -> None:
+def sleep_tick() -> None:
     """Emit a single dot per second while a long-running task progresses."""
     _emit(".")
-    await asyncio.sleep(1)
-
-
-@contextlib.contextmanager
-def cancel_on_signal(task: asyncio.Task[object]) -> Iterator[None]:
-    """Cancel *task* on SIGINT/SIGTERM for the duration of the with-block."""
-    loop = asyncio.get_running_loop()
-    signals = (signal.SIGINT, signal.SIGTERM)
-    for sig in signals:
-        loop.add_signal_handler(sig, task.cancel)
-    try:
-        yield
-    finally:
-        for sig in signals:
-            loop.remove_signal_handler(sig)
+    time.sleep(1)
 
 
 def colorize(line: str, color: str | None) -> str:
@@ -153,19 +139,20 @@ def colorize(line: str, color: str | None) -> str:
     return template.format(line=line) if template else line
 
 
-# Subprocess output is relayed line-by-line from the asyncio event-loop thread
-# (read_and_write_stream). A direct sys.stdout.write+flush there makes every
-# line a blocking write(2) on the loop thread: if whoever drains our stdout (a
-# CI job-log pipe) stalls, that write blocks the entire event loop -- and a
-# blocked loop runs no timers, so run_test's asyncio.timeout deadline silently
-# stops being enforced and a stall rides the outer CI job timeout instead. Hand
-# the stdout half to a dedicated daemon thread so the loop only ever enqueues;
-# the tee-file write stays inline (local disk, the authoritative transcript) so
-# test/out/*.ansi stays complete even if stdout wedges and the daemon is killed
-# at interpreter exit.
+# Subprocess output is relayed line-by-line by the thread draining the child's
+# pipe (run_command). A direct sys.stdout.write+flush there makes every line a
+# blocking write(2): if whoever drains our stdout (a CI job-log pipe) stalls,
+# the relay stops draining, the child blocks on its full pipe, and the cell
+# hangs until its deadline. Hand the stdout half to a dedicated daemon thread
+# so the relay only ever enqueues; the tee-file write stays inline (local disk,
+# the authoritative transcript) so test/out/*.ansi stays complete even if
+# stdout wedges and the daemon is killed at interpreter exit.
 _STDOUT_QUEUE: queue.SimpleQueue[str | threading.Event] = queue.SimpleQueue()
 _STDOUT_WRITER: threading.Thread | None = None
 _STDOUT_WRITER_LOCK = threading.Lock()
+# Serializes _emit across the stderr relay and phase heartbeat threads, so
+# their lines never splice into one another in the transcript.
+_EMIT_LOCK = threading.Lock()
 
 
 def _stdout_writer_loop() -> None:
@@ -222,14 +209,15 @@ def _emit(text: str, *, status: bool = False) -> None:
     In compact console mode only *status* text reaches stdout, one tagged line
     at a time; everything still lands in the tee target.
     """
-    if _CONSOLE_TAG is None:
-        _queue_stdout(text)
-    elif status:
-        for line in text.splitlines():
-            _queue_stdout(f"{_CONSOLE_TAG} {line}\n")
-    if _OUTPUT_LOG is not None:
-        _OUTPUT_LOG.write(text)
-        _OUTPUT_LOG.flush()
+    with _EMIT_LOCK:
+        if _CONSOLE_TAG is None:
+            _queue_stdout(text)
+        elif status:
+            for line in text.splitlines():
+                _queue_stdout(f"{_CONSOLE_TAG} {line}\n")
+        if _OUTPUT_LOG is not None:
+            _OUTPUT_LOG.write(text)
+            _OUTPUT_LOG.flush()
 
 
 def _write_line(line: str, color: str | None, *, status: bool = False) -> None:
@@ -260,106 +248,73 @@ def print_line(line: str, error: bool = False) -> None:
     _write_line(line, "red" if error else None, status=True)
 
 
-async def read_and_write_stream(stream: asyncio.StreamReader, color: str | None, capture: list[str]) -> None:
+def _relay(stream: IO[str], color: str | None, capture: list[str]) -> None:
     """Relay a process stream to stdout and the log, capturing each line."""
-    while True:
-        line_bytes = await stream.readline()
-        if not line_bytes:
-            break
-
-        line = line_bytes.decode("utf-8", errors="replace").rstrip("\r\n")
+    for line in stream:
+        line = line.rstrip("\r\n")
         capture.append(line)
         _write_line(line, color)
 
 
-async def terminate_pid(pid: int, *, grace_seconds: float) -> None:
+def terminate_pid(pid: int, *, grace_seconds: float) -> None:
     """SIGTERM *pid*, escalating to SIGKILL after *grace_seconds* if needed.
 
-    The pid-based counterpart to terminate_subprocess: used when the parent
-    has only the child's PID (e.g. read out of a hypervisor pidfile), not
-    a Popen handle. Uses kill(pid, 0) to detect exit; tolerant of the
-    process having already gone.
+    For a child known only by PID (read out of qemu's pidfile), not a Popen
+    handle. Uses kill(pid, 0) to detect exit; tolerant of the process having
+    already gone.
     """
     with contextlib.suppress(ProcessLookupError):
         os.kill(pid, signal.SIGTERM)
 
-    deadline = asyncio.get_running_loop().time() + grace_seconds
-    while asyncio.get_running_loop().time() < deadline:
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
             return
-        await asyncio.sleep(0.2)
+        time.sleep(0.2)
 
     with contextlib.suppress(ProcessLookupError):
         os.kill(pid, signal.SIGKILL)
 
 
-async def terminate_subprocess(proc: asyncio.subprocess.Process, *, grace_seconds: float = 0.0) -> None:
-    """Stop *proc*: SIGINT first when *grace_seconds* > 0, then SIGKILL.
-
-    The default kills and drains immediately, for a caller whose own
-    coroutine failed and just needs the child gone. A grace lets a child
-    that runs its own teardown (testrole.py stopping its qemu) finish it.
-    """
-    if grace_seconds > 0:
-        with contextlib.suppress(ProcessLookupError):
-            proc.send_signal(signal.SIGINT)
-        # The child outlived its grace when the bounded wait times out.
-        with contextlib.suppress(TimeoutError):
-            async with asyncio.timeout(grace_seconds):
-                await proc.wait()
-            return
-    with contextlib.suppress(ProcessLookupError):
-        proc.kill()
-    await proc.wait()
-
-
-async def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | None = None) -> CommandResult:
+def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | None = None) -> CommandResult:
     """Execute a subprocess, stream its output live and colorized.
 
     check raises CommandFailedException on a non-zero exit. env layers
-    overrides on top of os.environ. The child is killed if the call is
-    cancelled or a reader fails.
+    overrides on top of os.environ. The child is killed if anything (the
+    session deadline, Ctrl-C) interrupts the call.
     """
     print_cmd_line(cmd, env=env)
 
-    subprocess_env: dict[str, str] | None = None
-    if env is not None:
-        subprocess_env = {**os.environ, **env}
-
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=subprocess_env,
+    process = subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, **env} if env is not None else None,
+        text=True,
+        errors="replace",
     )
     assert process.stdout is not None
     assert process.stderr is not None
 
     stdout: list[str] = []
     stderr: list[str] = []
+    # stderr drains on its own thread so neither pipe can fill and block the
+    # child. Cross-stream order is therefore not preserved; callers
+    # (ansible-playbook, ssh) emit nearly everything on stdout.
+    stderr_relay = threading.Thread(target=_relay, args=(process.stderr, "red", stderr), daemon=True)
+    stderr_relay.start()
     try:
-        # Read stdout/stderr concurrently while the process executes. Use a
-        # TaskGroup so a failure in either reader cancels the other and any
-        # additional errors aggregate into an ExceptionGroup instead of being
-        # silently dropped (as asyncio.gather would).
-        # Ordering: lines within stdout (and within stderr) are FIFO, but
-        # cross-stream order is NOT preserved -- the two pipes are independent
-        # kernel objects and which reader is scheduled first decides the
-        # interleave. Acceptable here because callers (ansible-playbook, ssh)
-        # emit ~all output on one stream; for source-order fidelity
-        # use stderr=asyncio.subprocess.STDOUT, which costs the per-stream
-        # color tagging.
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(read_and_write_stream(process.stdout, None, stdout))
-            tg.create_task(read_and_write_stream(process.stderr, "red", stderr))
-        exitcode = await process.wait()
+        _relay(process.stdout, None, stdout)
+        exitcode = process.wait()
     except BaseException:
-        # Any failure (cancellation, reader error, etc.) leaves the subprocess
-        # behind unless we tear it down here.
-        await terminate_subprocess(process)
+        process.kill()
+        process.wait()
         raise
+    finally:
+        stderr_relay.join()
 
     if check and exitcode != 0:
         raise CommandFailedException(cmd, exitcode, stderr)

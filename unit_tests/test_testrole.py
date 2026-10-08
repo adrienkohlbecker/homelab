@@ -1,7 +1,6 @@
 """Unit tests for test/testrole.py — idempotence regex, argparse, constants."""
 
-import asyncio
-from collections.abc import Coroutine
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -89,11 +88,11 @@ def test_main_passes_role_memory_to_machine(
         def __init__(self, **kwargs: object) -> None:
             seen.update(kwargs)
 
-        def run(self, coro: Coroutine[object, object, None], label: str) -> int:
-            asyncio.run(coro)
+        def run(self, test: Callable[[], None], label: str) -> int:
+            test()
             return 0
 
-    async def fake_run_test(*args: object, **kwargs: object) -> None:
+    def fake_run_test(*args: object, **kwargs: object) -> None:
         pass
 
     monkeypatch.setattr(testrole, "Machine", FakeMachine)

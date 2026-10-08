@@ -26,7 +26,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
 
     # GNU timeout wrapper -- the 10s kill-after gives the qemu signal handler
     # a window before SIGKILL. The wrapper outlasts machine_timeout by 60s, so
-    # the inner asyncio.timeout fires first.
+    # the session deadline fires first.
     assert cmd[0] == "timeout"
     assert cmd[1] == "--kill-after=10s"
     assert cmd[2] == "660"

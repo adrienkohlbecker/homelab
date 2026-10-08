@@ -18,9 +18,9 @@ Exit codes match testrole.py: 0 success, 1 converge failure, 124 timeout,
 """
 
 import argparse
-import asyncio
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -87,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def report_restarted_units(m: Machine, pid1_journal: list[str]) -> list[str]:
+def report_restarted_units(m: Machine, pid1_journal: list[str]) -> list[str]:
     """Print the logs of units that failed during this boot, and name them.
 
     A unit that crash-loops before succeeding still ends up `active`, so
@@ -111,26 +111,24 @@ async def report_restarted_units(m: Machine, pid1_journal: list[str]) -> list[st
         return []
     print_line(f"Units that failed or restarted this boot: {' '.join(failed)}", error=True)
     for unit in failed[:5]:
-        logs = await m.ssh_command(
-            "journalctl", "--boot", "--no-pager", "--output=short-monotonic", "-u", unit, check=False
-        )
+        logs = m.ssh_command("journalctl", "--boot", "--no-pager", "--output=short-monotonic", "-u", unit, check=False)
         body = "\n".join(logs.stdout[-30:]).rstrip() or "(unavailable)"
         print_line(f"{unit} log:\n{body}")
     return failed
 
 
-async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
-    async with m.session(timeout):
-        await m.ensure_booted()
+def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -> None:
+    with m.session(timeout):
+        m.ensure_booted()
         print_line("Booted")
 
-        await m.ensure_ssh()
+        m.ensure_ssh()
         print_line("SSH up")
 
-        await m.ensure_system_running()
+        m.ensure_system_running()
 
         print_line("Preparing test environment")
-        await m.ansible_command(str(m.workdir_path / "_environment.yml"))
+        m.ansible_command(str(m.workdir_path / "_environment.yml"))
 
         if check_mode:
             # A production check starts with the persistent services dataset
@@ -138,7 +136,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             # identity roles can safely inspect their durable key paths; a
             # fresh check may predict the dataset creation but cannot mount it.
             print_line("Preparing site check prerequisites")
-            await m.ansible_command(
+            m.ansible_command(
                 str(m.workdir_path / "site.yml"),
                 "-e",
                 "_test_role_under_test=services",
@@ -154,7 +152,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
         print_line(f"Running site.yml {label}")
         try:
             extra = ["--check"] if check_mode else []
-            await m.ansible_command(str(staged), *extra)
+            m.ansible_command(str(staged), *extra)
         except CommandFailedException:
             print_line(f"Site {label} failed")
             raise
@@ -182,7 +180,7 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             # legitimately degraded under the test harness (e.g. z2m has no
             # live adapter) and waiting longer won't change that -- the point
             # is only that nothing is still mid-bootstrap.
-            settle_rc, settle_state = await m.wait_system_running()
+            settle_rc, settle_state = m.wait_system_running()
             if settle_rc == 124:
                 raise CheckFailedException(
                     f"systemd did not finish starting within {SYSTEM_RUNNING_WAIT_TIMEOUT}s of the converge "
@@ -191,21 +189,21 @@ async def run_site_test(m: Machine, *, timeout: int, check_mode: bool = False) -
             if settle_state == "running":
                 print_line(f"Fleet settled: {settle_state}")
             else:
-                print_line(f"Fleet settled as {settle_state!r}; failed units:\n{await m.failed_units()}")
+                print_line(f"Fleet settled as {settle_state!r}; failed units:\n{m.failed_units()}")
             # PID 1's journal drives the restart audit, so a failed query must
             # raise rather than read as "nothing failed".
-            journal = await m.ssh_command("journalctl", "--boot", "--no-pager", "--output=short-monotonic", "_PID=1")
-            restarted = await report_restarted_units(m, journal.stdout)
+            journal = m.ssh_command("journalctl", "--boot", "--no-pager", "--output=short-monotonic", "_PID=1")
+            restarted = report_restarted_units(m, journal.stdout)
 
-            await m.ssh_command(*POWEROFF_COMMAND, check=False)
+            m.ssh_command(*POWEROFF_COMMAND, check=False)
             # Bound the shutdown wait separately from the converge
             # budget: a wedged stop job must surface as a failure,
             # not eat the remaining --timeout. collect_failure_
             # artifacts is best-effort (SSH is usually gone by now);
             # the serial console is captured regardless.
             try:
-                await asyncio.wait_for(m.wait(), timeout=POWEROFF_TIMEOUT)
-            except TimeoutError:
+                m.wait(POWEROFF_TIMEOUT)
+            except subprocess.TimeoutExpired:
                 raise CheckFailedException(
                     f"poweroff did not complete within {POWEROFF_TIMEOUT}s after a passed converge "
                     "(a stop job wedged on its TimeoutStopSec -- see the serial console for which units)"
@@ -244,7 +242,7 @@ def main() -> int:
         quiet_ansible=True,
     )
 
-    return m.run(run_site_test(m, timeout=args.timeout, check_mode=args.check), "site_test")
+    return m.run(lambda: run_site_test(m, timeout=args.timeout, check_mode=args.check), "site_test")
 
 
 if __name__ == "__main__":

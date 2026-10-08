@@ -1,7 +1,5 @@
 """Unit tests for test/utils.py — tee_output, print, and process helpers."""
 
-import asyncio
-import signal
 from pathlib import Path
 
 import pytest
@@ -75,69 +73,27 @@ class TestCommandFailedException:
 
 
 # ---------------------------------------------------------------------------
-# terminate_subprocess
-# ---------------------------------------------------------------------------
-
-
-class TestTerminateSubprocess:
-    def test_immediate_kill(self) -> None:
-        async def _run() -> None:
-            proc = await asyncio.create_subprocess_exec(
-                "sleep",
-                "60",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await utils.terminate_subprocess(proc)
-            assert proc.returncode is not None
-
-        asyncio.run(_run())
-
-    def test_grace_period_with_sigint(self) -> None:
-        async def _run() -> None:
-            proc = await asyncio.create_subprocess_exec(
-                "sleep",
-                "60",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await utils.terminate_subprocess(proc, grace_seconds=1.0)
-            assert proc.returncode == -signal.SIGINT
-
-        asyncio.run(_run())
-
-    def test_grace_escalates_to_sigkill(self) -> None:
-        async def _run() -> None:
-            proc = await asyncio.create_subprocess_exec("sh", "-c", "trap '' INT; sleep 60")
-            await asyncio.sleep(0.2)
-            await utils.terminate_subprocess(proc, grace_seconds=0.5)
-            assert proc.returncode == -signal.SIGKILL
-
-        asyncio.run(_run())
-
-
-# ---------------------------------------------------------------------------
 # run_command
 # ---------------------------------------------------------------------------
 
 
 class TestRunCommand:
     def test_success(self) -> None:
-        result = asyncio.run(utils.run_command(["echo", "hello"]))
+        result = utils.run_command(["echo", "hello"])
         assert result.exitcode == 0
         assert any("hello" in line for line in result.stdout)
 
     def test_failure_raises(self) -> None:
         with pytest.raises(utils.CommandFailedException):
-            asyncio.run(utils.run_command(["false"]))
+            utils.run_command(["false"])
 
     def test_failure_no_check(self) -> None:
-        result = asyncio.run(utils.run_command(["false"], check=False))
+        result = utils.run_command(["false"], check=False)
         assert result.exitcode != 0
 
     def test_failure_carries_stderr(self) -> None:
         with pytest.raises(utils.CommandFailedException) as exc:
-            asyncio.run(utils.run_command(["sh", "-c", "echo err >&2; exit 1"]))
+            utils.run_command(["sh", "-c", "echo err >&2; exit 1"])
         assert exc.value.stderr == ["err"]
 
 
@@ -150,7 +106,7 @@ class TestCompactConsole:
 
         with utils.tee_output(log):
             utils.print_line("▶ converge")
-            asyncio.run(utils.run_command(["echo", "TASK [nginx : Install]"]))
+            utils.run_command(["echo", "TASK [nginx : Install]"])
         utils._drain_stdout()
 
         terminal = capsys.readouterr().out

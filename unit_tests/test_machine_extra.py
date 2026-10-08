@@ -1,9 +1,9 @@
 """Unit tests for machine.py functions not covered by existing test_*.py files."""
 
-import asyncio
 import fcntl
 import os
 import shutil
+import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -146,7 +146,7 @@ class TestLinkPackerArtifacts:
 
     @pytest.fixture(autouse=True)
     def _no_tick_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        async def no_sleep() -> None:
+        def no_sleep() -> None:
             pass
 
         monkeypatch.setattr(machine, "sleep_tick", no_sleep)
@@ -157,7 +157,7 @@ class TestLinkPackerArtifacts:
         (published / "notes.txt").touch()
         dest = tmp_path / "base"
 
-        asyncio.run(machine.link_packer_artifacts(published, dest))
+        machine.link_packer_artifacts(published, dest)
 
         assert sorted(p.name for p in dest.iterdir()) == ["efivars.fd", "packer-ubuntu-1.raw", "packer-ubuntu-2.raw"]
         assert (dest / "packer-ubuntu-1.raw").stat().st_ino == (published / "packer-ubuntu-1.raw").stat().st_ino
@@ -186,14 +186,14 @@ class TestLinkPackerArtifacts:
 
         monkeypatch.setattr(machine.os, "link", link_with_swap)
 
-        asyncio.run(machine.link_packer_artifacts(published, dest))
+        machine.link_packer_artifacts(published, dest)
 
         assert {p.read_text() for p in dest.iterdir()} == {"v2"}
         assert len(list(dest.iterdir())) == 3
 
     def test_gives_up_when_nothing_is_published(self, tmp_path: Path) -> None:
         with pytest.raises(RuntimeError, match="kept changing"):
-            asyncio.run(machine.link_packer_artifacts(tmp_path / "lab", tmp_path / "base"))
+            machine.link_packer_artifacts(tmp_path / "lab", tmp_path / "base")
 
 
 class TestDiscoverPackerDisks:
@@ -266,10 +266,10 @@ class TestMachineArtifactOwnership:
         for artifact in artifacts:
             artifact.write_text("current")
 
-        async def passing() -> None:
+        def passing() -> None:
             pass
 
-        assert instance.run(passing(), "lab.testrole") == 0
+        assert instance.run(passing, "lab.testrole") == 0
         assert all(not artifact.exists() for artifact in artifacts)
 
     @pytest.mark.parametrize(
@@ -288,10 +288,10 @@ class TestMachineArtifactOwnership:
         instance = machine_factory()
         instance.journal_file.write_text("evidence")
 
-        async def failing() -> None:
+        def failing() -> None:
             raise exc
 
-        assert instance.run(failing(), "lab.testrole") == rc
+        assert instance.run(failing, "lab.testrole") == rc
         assert instance.journal_file.exists()
         assert instance.output_file.exists()
 
@@ -304,7 +304,7 @@ class TestSystemReadiness:
     ) -> None:
         instance = machine_factory()
 
-        async def ssh_command(*args: str, check: bool = True) -> SimpleNamespace:
+        def ssh_command(*args: str, check: bool = True) -> SimpleNamespace:
             assert args == (
                 "timeout",
                 str(machine.SYSTEM_RUNNING_WAIT_TIMEOUT),
@@ -316,7 +316,7 @@ class TestSystemReadiness:
             return SimpleNamespace(exitcode=0, stdout=["running"])
 
         monkeypatch.setattr(instance, "ssh_command", ssh_command)
-        asyncio.run(instance.ensure_system_running())
+        instance.ensure_system_running()
 
     def test_reports_failed_units(
         self,
@@ -331,13 +331,13 @@ class TestSystemReadiness:
             )
         )
 
-        async def ssh_command(*args: str, check: bool = True) -> SimpleNamespace:
+        def ssh_command(*args: str, check: bool = True) -> SimpleNamespace:
             assert check is False
             return next(responses)
 
         monkeypatch.setattr(instance, "ssh_command", ssh_command)
         with pytest.raises(RuntimeError, match=r"(?s)degraded.*broken\.service"):
-            asyncio.run(instance.ensure_system_running())
+            instance.ensure_system_running()
 
 
 class TestAnsibleControllerStaging:
@@ -364,7 +364,7 @@ class TestAnsibleControllerStaging:
             nonlocal staged_calls
             staged_calls += 1
 
-        async def run_command(*args: object, **kwargs: object) -> SimpleNamespace:
+        def run_command(*args: object, **kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(exitcode=0, stdout=[])
 
         monkeypatch.setattr(machine.Machine, "_write_connection_inventory", write_connection_inventory)
@@ -373,8 +373,8 @@ class TestAnsibleControllerStaging:
         m = machine_factory()
         assert not (m.workdir_path / "roles").exists()
 
-        asyncio.run(m.ansible_command(str(m.workdir_path / "site.yml")))
-        asyncio.run(m.ansible_command(str(m.workdir_path / "_environment.yml")))
+        m.ansible_command(str(m.workdir_path / "site.yml"))
+        m.ansible_command(str(m.workdir_path / "_environment.yml"))
 
         assert staged_calls == 1
         assert (m.workdir_path / "roles").is_dir()
@@ -386,10 +386,10 @@ def test_ensure_booted_reports_early_qemu_exit(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     m = machine_factory(machine="lab", role="test")
-    m.proc = cast(asyncio.subprocess.Process, SimpleNamespace(returncode=1))
+    m.proc = cast(subprocess.Popen, SimpleNamespace(poll=lambda: 1))
 
     with pytest.raises(RuntimeError, match=r"qemu wrapper exited with 1.*lab\.noble\.test\.boot\.ansi"):
-        asyncio.run(m.ensure_booted())
+        m.ensure_booted()
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +413,7 @@ class TestReadHostPorts:
         m = factory(**kwargs)
         calls: list[str] = []
 
-        async def fake_qmp(command: str, arguments: dict | None = None) -> object:
+        def fake_qmp(command: str, arguments: dict | None = None) -> object:
             calls.append(command)
             return {"service": "5901"} if command == "query-vnc" else INFO_USERNET
 
@@ -425,7 +425,7 @@ class TestReadHostPorts:
         self, machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         m, calls = self._machine(machine_factory, monkeypatch)
-        asyncio.run(m._read_host_ports())
+        m._read_host_ports()
         assert m.ssh_port == 51234
         assert m.wan_forward_ports == {"tcp": {"18080": 51235}, "udp": {"51820": 51236}}
         assert calls == ["human-monitor-command"]
@@ -434,7 +434,7 @@ class TestReadHostPorts:
         self, machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         m, _ = self._machine(machine_factory, monkeypatch, keep_vm=True)
-        asyncio.run(m._read_host_ports())
+        m._read_host_ports()
         assert m.vnc_port == 5901
 
     def test_missing_forward_fails_loudly(
@@ -443,4 +443,4 @@ class TestReadHostPorts:
         m, _ = self._machine(machine_factory, monkeypatch)
         monkeypatch.setattr(machine, "DEFAULT_WAN_FORWARDS", {"tcp": (9092,), "udp": ()})
         with pytest.raises(KeyError):
-            asyncio.run(m._read_host_ports())
+            m._read_host_ports()

@@ -1,10 +1,8 @@
 """Tests for the shared machine lifecycle."""
 
-import asyncio
-import contextlib
+import time
 from typing import cast
 
-import machine as machine_module
 import pytest
 from machine import Machine
 
@@ -17,58 +15,51 @@ class FakeMachine:
         self.waited = False
         self.instructions = False
 
-    async def __aenter__(self) -> FakeMachine:
+    def __enter__(self) -> FakeMachine:
         self.entered = True
         return self
 
-    async def __aexit__(self, *args: object) -> None:
+    def __exit__(self, *args: object) -> None:
         self.exited = True
 
     def print_ssh_instructions(self) -> None:
         self.instructions = True
 
-    async def wait(self) -> None:
+    def wait(self, timeout: float | None = None) -> None:
         self.waited = True
 
 
 def test_session_enters_and_exits_machine(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(machine_module, "cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = FakeMachine()
 
-    async def run() -> None:
-        async with Machine.session(cast(Machine, machine), 10):
+    def run() -> None:
+        with Machine.session(cast(Machine, machine), 10):
             assert machine.entered
 
-    asyncio.run(run())
+    run()
 
     assert machine.exited
     assert not machine.waited
 
 
 def test_keep_waits_after_success(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(machine_module, "cancel_on_signal", lambda _task: contextlib.nullcontext())
     machine = FakeMachine(keep_vm=True)
 
-    async def run() -> None:
-        async with Machine.session(cast(Machine, machine), 10):
+    def run() -> None:
+        with Machine.session(cast(Machine, machine), 10):
             pass
 
-    asyncio.run(run())
+    run()
 
     assert machine.instructions
     assert machine.waited
 
 
-def test_keep_waits_after_timeout_then_resurfaces_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(machine_module, "cancel_on_signal", lambda _task: contextlib.nullcontext())
+def test_keep_waits_after_timeout_then_resurfaces_it() -> None:
     machine = FakeMachine(keep_vm=True)
 
-    async def run() -> None:
-        async with Machine.session(cast(Machine, machine), 0):
-            await asyncio.sleep(0)
-
-    with pytest.raises(TimeoutError):
-        asyncio.run(run())
+    with pytest.raises(TimeoutError), Machine.session(cast(Machine, machine), 1):
+        time.sleep(5)
 
     assert machine.instructions
     assert machine.waited

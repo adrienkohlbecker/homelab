@@ -13,7 +13,6 @@ EFI image such as ZFSBootMenu's against the variant's disks:
 """
 
 import argparse
-import asyncio
 import contextlib
 import signal
 import subprocess
@@ -75,7 +74,7 @@ def parse_args() -> argparse.Namespace:
         "ZFSBootMenu need 1 under stock HVF QEMU: a kexec'd kernel cannot bring its "
         "secondary CPUs online there (fixed by `mise run qemu:install_hvf_patched`).",
     )
-    # Operator-only interactive mode; automated callers use the default async path.
+    # Operator-only interactive mode; automated callers use the default harness path.
     parser.add_argument(
         "--foreground",
         action="store_true",
@@ -135,7 +134,7 @@ def _dump_boot_console(m: Machine, lines: int = 200) -> None:
     print_line("--- end boot console ---")
 
 
-async def _run_async(m: Machine, *, exit_after_ready: bool) -> None:
+def _run(m: Machine, *, exit_after_ready: bool) -> None:
     """Boot and wait for SSH under the harness session.
 
     A kept VM stays up afterwards until Ctrl-C (the session prints the SSH
@@ -143,29 +142,22 @@ async def _run_async(m: Machine, *, exit_after_ready: bool) -> None:
     down. Boot, SSH, or systemd-state failure dumps the boot console and
     raises.
     """
-    async with m.session(EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None):
+    with m.session(EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None):
         try:
-            await m.ensure_booted()
+            m.ensure_booted()
             print_line("Booted")
-            await m.ensure_ssh()
+            m.ensure_ssh()
             print_line("SSH up")
             if exit_after_ready:
-                await m.ensure_system_running()
+                m.ensure_system_running()
         except RuntimeError, TimeoutError:
             _dump_boot_console(m)
             raise
 
 
 def _run_foreground(m: Machine) -> int:
-    """Sync qemu spawn -- no asyncio for the long-running wait.
-
-    asyncio's subprocess machinery installs its own SIGCHLD/fd plumbing in
-    the event loop, which can interact poorly with qemu's mon:stdio raw-
-    terminal handling. In foreground mode we want qemu to behave exactly
-    as if a shell exec'd it: inherited stdio, controlling tty intact, no
-    intermediary readers competing for fd 0. So we run prepare() in a
-    short-lived event loop, then drop out of asyncio entirely and use
-    subprocess.Popen() to execute qemu and wait for it.
+    """Run qemu as if a shell exec'd it: inherited stdio, controlling tty
+    intact, no intermediary readers competing for fd 0.
 
     Skips ensure_booted/ensure_ssh -- those are useful when the harness is
     driving an unattended boot, but in foreground the user *is* the
@@ -173,7 +165,7 @@ def _run_foreground(m: Machine) -> int:
     just clutter the qemu serial console.
     """
     try:
-        asyncio.run(m.prepare())
+        m.prepare()
         cmd = m._boot_command()
         print_cmd_line(cmd)
         proc = subprocess.Popen(cmd)
@@ -188,8 +180,7 @@ def _run_foreground(m: Machine) -> int:
             proc.wait()
             return 130
     finally:
-        # __aenter__ / __aexit__ aren't used here, so do the cleanup the
-        # async-with would normally do.
+        # No session here, so do the cleanup stop() would.
         m.qmp_socket.unlink(missing_ok=True)
         m.workdir.cleanup()
 
@@ -217,7 +208,7 @@ def main() -> int:
     if args.foreground:
         return _run_foreground(m)
 
-    return m.run(_run_async(m, exit_after_ready=args.exit_after_ready), "launch")
+    return m.run(lambda: _run(m, exit_after_ready=args.exit_after_ready), "launch")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,7 @@
 """Focused tests for the standalone QEMU launcher."""
 
-import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import Iterator
 from typing import cast
 
 import launch
@@ -14,18 +13,18 @@ class LaunchMachine:
         self.session_timeout: int | None = 0
         self.system_running_checked = False
 
-    @contextlib.asynccontextmanager
-    async def session(self, timeout: int | None) -> AsyncIterator[None]:
+    @contextlib.contextmanager
+    def session(self, timeout: int | None) -> Iterator[None]:
         self.session_timeout = timeout
         yield
 
-    async def ensure_booted(self) -> None:
+    def ensure_booted(self) -> None:
         return None
 
-    async def ensure_ssh(self) -> None:
+    def ensure_ssh(self) -> None:
         return None
 
-    async def ensure_system_running(self) -> None:
+    def ensure_system_running(self) -> None:
         self.system_running_checked = True
 
 
@@ -33,7 +32,7 @@ class LaunchMachine:
 def test_only_exit_after_ready_checks_systemd_under_a_deadline(exit_after_ready: bool) -> None:
     machine = LaunchMachine()
 
-    asyncio.run(launch._run_async(cast(launch.Machine, machine), exit_after_ready=exit_after_ready))
+    launch._run(cast(launch.Machine, machine), exit_after_ready=exit_after_ready)
 
     assert machine.system_running_checked is exit_after_ready
     assert machine.session_timeout == (launch.EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None)

@@ -1,6 +1,5 @@
 """Exact-output tests for Machine.format_{ssh,ansible}_cmd."""
 
-import asyncio
 import shlex
 from collections.abc import Callable
 from pathlib import Path
@@ -96,12 +95,12 @@ def test_kept_vm_resume_command_targets_fixture(
     monkeypatch.setattr(machine, "print_line", lines.append)
     monkeypatch.setattr(m, "_stage_ansible_controller", lambda: None)
 
-    async def fake_run_command(*args: object, **kwargs: object) -> None:
+    def fake_run_command(*args: object, **kwargs: object) -> None:
         return None
 
     monkeypatch.setattr(machine, "run_command", fake_run_command)
     playbook = str(m.workdir_path / playbook_name)
-    asyncio.run(m.ansible_command(playbook, *phase_args))
+    m.ansible_command(playbook, *phase_args)
 
     m.print_ssh_instructions()
 

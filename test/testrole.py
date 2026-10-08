@@ -98,9 +98,9 @@ def _count_changed_tasks(stdout: list[str]) -> int:
     return sum(int(m.group(1)) for line in stdout if (m := _RECAP_CHANGED_RE.search(_ANSI_CSI_RE.sub("", line))))
 
 
-async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
+def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Re-run the role and fail if any task reports changed."""
-    result = await m.ansible_command(site_yml, *pass_args)
+    result = m.ansible_command(site_yml, *pass_args)
     changed = _count_changed_tasks(result.stdout)
     if changed > 0:
         raise IdempotenceFailedException(
@@ -108,7 +108,7 @@ async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -
         )
 
 
-async def run_test(
+def run_test(
     m: Machine,
     pass_args: list[str],
     *,
@@ -117,20 +117,20 @@ async def run_test(
 ) -> None:
     """Provision a machine, run the role under test, and stream output."""
 
-    async with m.session(timeout):
-        async with phase("boot"):
-            await m.ensure_booted()
-            await m.ensure_ssh()
+    with m.session(timeout):
+        with phase("boot"):
+            m.ensure_booted()
+            m.ensure_ssh()
             # SSH opens before the vanilla cloud image finishes cloud-init, so
             # settle it before touching packages or /etc/hosts.
             if m.machine == "minimal":
-                await m.ensure_cloud_init()
+                m.ensure_cloud_init()
 
         if not base_prerequisites:
             print_line(f"Skipping base prerequisites: {m.role!r} declares base_prerequisites: false")
 
-        async with phase("environment"):
-            await m.ansible_command(
+        with phase("environment"):
+            m.ansible_command(
                 str(m.workdir_path / "_environment.yml"),
                 "-e",
                 f"test_base_prerequisites={str(base_prerequisites).lower()}",
@@ -138,28 +138,28 @@ async def run_test(
             if m.machine == "minimal" and m.role != "cleanup":
                 # Avoid validating the cloud image's newer snapd unit against
                 # the older systemd shipped by the fixture.
-                await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
+                m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
         site_yml = str(m.workdir_path / "site.yml")
 
         # Invoke the setup entrypoint only when the role ships it.
         if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
-            async with phase("_setup"):
-                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
+            with phase("_setup"):
+                m.ansible_command(site_yml, "-e", "_role_tasks_from=_setup")
 
-        async with phase("check"):
-            await m.ansible_command(site_yml, "--check", *pass_args)
+        with phase("check"):
+            m.ansible_command(site_yml, "--check", *pass_args)
 
-        async with phase("converge"):
-            await m.ansible_command(site_yml, *pass_args)
+        with phase("converge"):
+            m.ansible_command(site_yml, *pass_args)
 
-        async with phase("idempotence"):
-            await _verify_idempotence(site_yml, m, pass_args)
+        with phase("idempotence"):
+            _verify_idempotence(site_yml, m, pass_args)
 
         # Post-role assertions, if the role declares any.
         if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
-            async with phase("_verify"):
-                await m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
+            with phase("_verify"):
+                m.ansible_command(site_yml, "-e", "_role_tasks_from=_verify")
 
 
 def main() -> int:
@@ -193,7 +193,7 @@ def main() -> int:
     )
 
     return m.run(
-        run_test(m, pass_args, base_prerequisites=role_config.base_prerequisites, timeout=parsed_args.timeout),
+        lambda: run_test(m, pass_args, base_prerequisites=role_config.base_prerequisites, timeout=parsed_args.timeout),
         f"{parsed_args.role}.{parsed_args.machine}",
     )
 

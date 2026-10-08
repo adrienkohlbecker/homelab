@@ -1,4 +1,3 @@
-import asyncio
 import contextlib
 import errno
 import fcntl
@@ -9,10 +8,13 @@ import platform
 import re
 import shlex
 import shutil
+import signal
+import socket
+import subprocess
 import tempfile
 import time
 import traceback
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple, Self
@@ -25,7 +27,6 @@ from utils import (
     CommandFailedException,
     CommandResult,
     IdempotenceFailedException,
-    cancel_on_signal,
     print_cmd_line,
     print_line,
     print_log_tail,
@@ -179,7 +180,7 @@ def _minimal_user_data() -> str:
     return "#cloud-config\n" + yaml.safe_dump(user_data, sort_keys=False)
 
 
-async def link_packer_artifacts(published: Path, dest: Path) -> None:
+def link_packer_artifacts(published: Path, dest: Path) -> None:
     """Hardlink one complete version of *published*'s artifacts into *dest*.
 
     packer:build and the CI hydrate both publish by renaming the current
@@ -196,7 +197,7 @@ async def link_packer_artifacts(published: Path, dest: Path) -> None:
             dir_fd = os.open(published, os.O_RDONLY | os.O_DIRECTORY)
         except FileNotFoundError:
             # Between a publish's two renames, the path briefly names nothing.
-            await sleep_tick()
+            sleep_tick()
             continue
         try:
             for name in os.listdir(dir_fd):
@@ -211,7 +212,7 @@ async def link_packer_artifacts(published: Path, dest: Path) -> None:
             pass
         finally:
             os.close(dir_fd)
-        await sleep_tick()
+        sleep_tick()
     raise RuntimeError(f"{published} kept changing; could not link one version in {ARTIFACT_LINK_ATTEMPTS} attempts")
 
 
@@ -268,8 +269,21 @@ ARTIFACT_LINK_ATTEMPTS = 20
 CLOUDIMG_LOCK_TIMEOUT = 600
 
 
+class _DeadlineExpired(BaseException):
+    """The session deadline, raised from its SIGALRM handler.
+
+    Not a TimeoutError: that subclasses OSError, which the polling loops
+    (the SSH banner probe) catch and retry. session() reraises it as one.
+    """
+
+
 class Machine:
-    """Start disposable QEMU guests for role-level integration tests."""
+    """Start disposable QEMU guests for role-level integration tests.
+
+    Deliberately synchronous: a cell is one VM driven by one sequence of
+    subprocesses, and the session deadline (session) interrupts whatever the
+    main thread is blocked on.
+    """
 
     output_file: Path
     journal_file: Path
@@ -337,7 +351,7 @@ class Machine:
         self.ubuntu_name = ubuntu_name
         self.machine_timeout = machine_timeout
         self.upstream_mirrors = upstream_mirrors
-        self.proc: asyncio.subprocess.Process | None = None
+        self.proc: subprocess.Popen[bytes] | None = None
         self._live_lock_fd = -1
         self._ansible_staged = False
         self._last_ansible_cmd: tuple[str, ...] | None = None
@@ -567,10 +581,10 @@ class Machine:
             parts += cmd
         return parts
 
-    async def ssh_command(self, *cmd: str, check: bool = True) -> CommandResult:
+    def ssh_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute an SSH command and stream output into the role log."""
 
-        return await run_command(self.format_ssh_cmd(*cmd), check=check)
+        return run_command(self.format_ssh_cmd(*cmd), check=check)
 
     @property
     def connection_inventory_path(self) -> Path:
@@ -593,12 +607,12 @@ class Machine:
             f" ansible_ssh_user={self.ssh_user} ansible_ssh_private_key_file={SSH_KEY}\n"
         )
 
-    async def ansible_command(self, *cmd: str, check: bool = True) -> CommandResult:
+    def ansible_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
         self._stage_ansible_controller()
         self._last_ansible_cmd = cmd
-        return await run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
+        return run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
 
     def _stage_ansible_controller(self) -> None:
         """Populate controller inputs on demand before the first Ansible run."""
@@ -630,7 +644,7 @@ class Machine:
             playbook.copy_into(self.workdir_path)
         self._ansible_staged = True
 
-    async def boot(self) -> None:
+    def boot(self) -> None:
         """Launch qemu under a timeout wrapper."""
 
         cmd = self._boot_command()
@@ -638,65 +652,51 @@ class Machine:
 
         # Redirect both streams into a per-machine boot log so the chatty
         # systemd init / qemu console doesn't drown out the test transcript.
-        # The kernel writes straight to disk, so no pipe buffer to drain.
-        # stderr=STDOUT merges FD 2 onto FD 1 in the kernel before any write
-        # happens, so the on-disk order is exactly the syscall order across
-        # both streams -- the price is that we can no longer tell which line
-        # came from stderr (no per-stream coloring).
+        # The kernel writes straight to disk, so no pipe buffer to drain, and
+        # stderr=STDOUT keeps the on-disk order exactly the syscall order.
         # start_new_session=True puts the child in its own process group so
         # terminal SIGINT only hits the python parent; we drive child
-        # shutdown explicitly through Machine.stop().
+        # shutdown explicitly through Machine.stop(). stdin=DEVNULL keeps
+        # qemu's `-serial stdio` from competing with the terminal for
+        # keystrokes.
         with self.boot_file.open("wb") as handle:
-            self.proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=handle,
-                stderr=asyncio.subprocess.STDOUT,
-                start_new_session=True,
+            self.proc = subprocess.Popen(
+                cmd, stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT, start_new_session=True
             )
-        # Parent's handle can close once the child holds its own dup'd FD.
-        # stdin=DEVNULL keeps qemu's `-serial stdio` from competing with the
-        # parent terminal for keystrokes.
 
-    async def ensure_booted(self) -> None:
+    def ensure_booted(self) -> None:
         """Block until qemu writes its pidfile or the launch fails."""
 
         deadline = time.monotonic() + IDFILE_TIMEOUT
         id_path = self.pid_file
         while not id_path.exists():
-            if self.proc and self.proc.returncode is not None:
+            if self.proc and (returncode := self.proc.poll()) is not None:
                 raise RuntimeError(
-                    f"Launching machine failed (qemu wrapper exited with {self.proc.returncode}); see {self.boot_file}"
+                    f"Launching machine failed (qemu wrapper exited with {returncode}); see {self.boot_file}"
                 )
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
-            await sleep_tick()
-        await self._read_host_ports()
+            sleep_tick()
+        self._read_host_ports()
 
-    async def _qmp(self, command: str, arguments: dict | None = None) -> object:
+    def _qmp(self, command: str, arguments: dict | None = None) -> object:
         """Run one QMP command against this VM and return its result."""
-        reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(str(self.qmp_socket)), QMP_TIMEOUT)
-
-        async def reply() -> dict:
-            # The greeting and asynchronous events carry no "return".
-            while True:
-                message = json.loads(await asyncio.wait_for(reader.readline(), QMP_TIMEOUT))
-                if "return" in message or "error" in message:
-                    return message
-
-        try:
+        with socket.socket(socket.AF_UNIX) as sock:
+            sock.settimeout(QMP_TIMEOUT)
+            sock.connect(str(self.qmp_socket))
+            replies = sock.makefile("rb")
             for request in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments or {}}):
-                writer.write(json.dumps(request).encode() + b"\n")
-                message = await reply()
+                sock.sendall(json.dumps(request).encode() + b"\n")
+                # The greeting and asynchronous events carry no "return".
+                while not ({"return", "error"} & (message := json.loads(replies.readline())).keys()):
+                    pass
                 if "error" in message:
                     raise RuntimeError(f"QMP {request['execute']} failed: {message['error']}")
             return message["return"]
-        finally:
-            writer.close()
 
-    async def _read_host_ports(self) -> None:
+    def _read_host_ports(self) -> None:
         """Learn the loopback ports qemu bound for SSH, the WAN probes, and VNC."""
-        usernet = await self._qmp("human-monitor-command", {"command-line": "info usernet"})
+        usernet = self._qmp("human-monitor-command", {"command-line": "info usernet"})
         forwards = {(proto.lower(), guest): int(host) for proto, host, guest in _HOSTFWD_RE.findall(str(usernet))}
         self.ssh_port = forwards[("tcp", "22")]
         self.wan_forward_ports = {
@@ -704,43 +704,43 @@ class Machine:
             for proto, ports in DEFAULT_WAN_FORWARDS.items()
         }
         if self.keep_vm and not self.launch.display_window:
-            vnc = await self._qmp("query-vnc")
+            vnc = self._qmp("query-vnc")
             assert isinstance(vnc, dict)
             self.vnc_port = int(vnc["service"])
 
-    async def ensure_ssh(self) -> None:
+    def ensure_ssh(self) -> None:
         """Wait for the daemon banner on the port qemu forwards to the guest's sshd."""
 
         deadline = time.monotonic() + SSH_WAIT_TIMEOUT
-        while not await self._ssh_banner_ready():
+        while not self._ssh_banner_ready():
             if time.monotonic() > deadline:
                 raise TimeoutError("SSH daemon did not become ready in time")
-            await sleep_tick()
+            sleep_tick()
 
-    async def wait_system_running(self) -> tuple[int, str]:
+    def wait_system_running(self) -> tuple[int, str]:
         """Wait, bounded, for systemd to stop starting units; return (rc, state).
 
         rc is 124 when the bound expired with units still activating.
         """
-        result = await self.ssh_command(
+        result = self.ssh_command(
             "timeout", str(SYSTEM_RUNNING_WAIT_TIMEOUT), "systemctl", "is-system-running", "--wait", check=False
         )
         return result.exitcode, "\n".join(result.stdout).strip()
 
-    async def failed_units(self) -> str:
+    def failed_units(self) -> str:
         """The guest's failed units, one per line, or "(none)"."""
-        failed = await self.ssh_command("systemctl", "--failed", "--no-legend", check=False)
+        failed = self.ssh_command("systemctl", "--failed", "--no-legend", check=False)
         return "\n".join(failed.stdout).rstrip() or "(none)"
 
-    async def ensure_system_running(self) -> None:
+    def ensure_system_running(self) -> None:
         """Require systemd to finish booting in a healthy running state."""
-        rc, state = await self.wait_system_running()
+        rc, state = self.wait_system_running()
         if rc == 0 and state == "running":
             print_line(f"System fully booted: {state}")
             return
-        raise RuntimeError(f"System reached state {state!r} (rc={rc}); failed units:\n{await self.failed_units()}")
+        raise RuntimeError(f"System reached state {state!r} (rc={rc}); failed units:\n{self.failed_units()}")
 
-    async def ensure_cloud_init(self) -> None:
+    def ensure_cloud_init(self) -> None:
         """Block until cloud-init's config and final stages finish.
 
         SSH opens during cloud-init's network stage. Waiting here prevents the
@@ -748,47 +748,34 @@ class Machine:
         A degraded-but-complete run may return non-zero, so the result is not a
         gate.
         """
-        await self.ssh_command("sudo", "cloud-init", "status", "--wait", check=False)
+        self.ssh_command("sudo", "cloud-init", "status", "--wait", check=False)
 
-    async def _ssh_banner_ready(self) -> bool:
+    def _ssh_banner_ready(self) -> bool:
         """Probe the SSH port once. Return True iff a non-empty banner arrives."""
 
+        # qemu's hostfwd accepts before sshd listens, then sends nothing or
+        # drops the connection, so only a banner proves sshd is up. OSError
+        # covers the refused, reset, and timed-out cases alike.
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self.ssh_host, self.ssh_port),
-                timeout=2,
-            )
-        except OSError, TimeoutError:
-            # sshd not yet accepting connections; caller will retry.
+            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=2) as sock:
+                return bool(sock.recv(1024).strip())
+        except OSError:
             return False
 
-        try:
-            banner_bytes = await asyncio.wait_for(reader.read(1024), timeout=2)
-            return bool(banner_bytes.decode().strip())
-        except OSError, TimeoutError:
-            # Connected but no banner in time; treat as not-ready.
-            return False
-        finally:
-            writer.close()
-            # A half-open connection through qemu's hostfwd (accepted while
-            # sshd is still starting) can stall the close indefinitely, which
-            # would starve the SSH_WAIT_TIMEOUT deadline check. The transport
-            # dies with the VM anyway, so cap the best-effort close; OSError
-            # covers a peer that already dropped it.
-            with contextlib.suppress(OSError, TimeoutError):
-                await asyncio.wait_for(writer.wait_closed(), timeout=2)
-
-    def run(self, coro: Coroutine[object, object, None], label: str) -> int:
-        """Run an entry point's *coro* with output mirrored to the run log.
+    def run(self, test: Callable[[], None], label: str) -> int:
+        """Run an entry point's *test* with output mirrored to the run log.
 
         Returns the harness exit code: 0 passed, 1 failed, 124 timed out, 125
         not idempotent, 130 interrupted. A pass deletes the per-run logs;
         anything else keeps them for the post-mortem.
         """
         rc = 0
+        # SIGTERM (GNU parallel's --termseq, a CI cancel) stops the cell the
+        # way Ctrl-C does, through stop().
+        signal.signal(signal.SIGTERM, signal.default_int_handler)
         with tee_output(self.output_file):
             try:
-                asyncio.run(coro)
+                test()
             except IdempotenceFailedException as exc:
                 print_line(str(exc), error=True)
                 print_line(f"{label} not idempotent", error=True)
@@ -806,11 +793,11 @@ class Machine:
                 deadline = f" after {self.machine_timeout}s" if self.machine_timeout else ""
                 print_line(f"{label} timed out{deadline}", error=True)
                 rc = 124  # GNU `timeout`'s exit code for "command timed out"
-            except asyncio.CancelledError:
+            except KeyboardInterrupt:
                 print_line("\nInterrupted, shutting down...")
                 rc = 130
             except Exception:
-                # asyncio.run would otherwise traceback straight to stderr,
+                # The traceback would otherwise go straight to stderr,
                 # bypassing tee_output, so the run log would miss it.
                 print_line(traceback.format_exc().rstrip(), error=True)
                 print_line(f"{label} crashed", error=True)
@@ -823,52 +810,60 @@ class Machine:
             print_log_tail(self.output_file)
         return rc
 
-    async def wait(self) -> None:
+    def wait(self, timeout: float | None = None) -> None:
+        """Wait for qemu to exit; subprocess.TimeoutExpired past *timeout*."""
         if self.proc:
-            await self.proc.wait()
+            self.proc.wait(timeout)
 
-    @contextlib.asynccontextmanager
-    async def session(self, timeout: int | None) -> AsyncIterator[None]:
-        """Run under the harness timeout, signal, and keep-VM policy."""
-        task = asyncio.current_task()
-        assert task is not None
-        timer_absorbed = False
+    @contextlib.contextmanager
+    def session(self, timeout: int | None) -> Iterator[None]:
+        """Run under the harness timeout, signal, and keep-VM policy.
 
-        with cancel_on_signal(task):
-            async with asyncio.timeout(timeout) as timeout_cm:
-                async with self:
-                    try:
-                        try:
-                            yield
-                        except asyncio.CancelledError:
-                            if self.keep_vm and timeout_cm.expired() and task.cancelling():
-                                task.uncancel()
-                                timer_absorbed = True
-                                print_line(f"Timed out after {timeout}s; --keep set, dropping to SSH for debug")
-                            else:
-                                raise
-                    finally:
-                        if self.keep_vm and not task.cancelling():
-                            with contextlib.suppress(RuntimeError):
-                                # A fired deadline cannot be rescheduled, but it is
-                                # already spent and no longer bounds the debug wait.
-                                timeout_cm.reschedule(None)
-                            self.print_ssh_instructions()
-                            await self.wait()
+        The deadline is a SIGALRM whose handler raises in the main thread,
+        interrupting whatever blocks there (a subprocess, a socket, a sleep);
+        run_command kills its child on the way out, and the session surfaces
+        a message-less TimeoutError. A kept VM stays up after the body --
+        passed, failed, or timed out -- until Ctrl-C; only Ctrl-C skips that
+        hold.
+        """
 
-        if timer_absorbed:
-            raise TimeoutError()
+        def expire(_signum: int, _frame: object) -> None:
+            raise _DeadlineExpired
 
-    async def __aenter__(self) -> Self:
-        await self.prepare()
-        await self.boot()
+        previous = signal.signal(signal.SIGALRM, expire)
+        signal.alarm(timeout or 0)
+        try:
+            with self:
+                try:
+                    yield
+                except BaseException as exc:
+                    signal.alarm(0)
+                    if self.keep_vm and not isinstance(exc, KeyboardInterrupt):
+                        if isinstance(exc, _DeadlineExpired):
+                            print_line(f"Timed out after {timeout}s; --keep set, dropping to SSH for debug")
+                        self.print_ssh_instructions()
+                        self.wait()
+                    raise
+                signal.alarm(0)
+                if self.keep_vm:
+                    self.print_ssh_instructions()
+                    self.wait()
+        except _DeadlineExpired:
+            raise TimeoutError() from None
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous)
+
+    def __enter__(self) -> Self:
+        self.prepare()
+        self.boot()
         return self
 
-    async def __aexit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
+    def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         print_line("Stopping machine...")
-        await self.stop()
+        self.stop()
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         """Kill qemu via its pidfile, then drain the timeout wrapper and free temp resources.
 
         Signaling self.proc (the `timeout` wrapper) normally forwards SIGINT
@@ -878,43 +873,38 @@ class Machine:
         cleanup works regardless of the wrapper's fate.
 
         With qemu dead, the wrapper (`timeout`) should notice and exit on its
-        own immediately -- we just wait for it. SIGKILL
-        after 5s in case something pathological keeps it alive (zombie
-        subprocess, hung pipe).
+        own immediately -- we just wait for it. SIGKILL after 5s in case
+        something pathological keeps it alive (zombie subprocess, hung pipe).
+        A second Ctrl-C (or a parallel --termseq) mid-cleanup is ignored, so
+        it can't leave qemu running.
         """
-        pid_path = self.pid_file
         pid: int | None = None
-        if pid_path.exists():
-            with contextlib.suppress(ValueError):
-                pid = int(pid_path.read_text().strip())
+        with contextlib.suppress(FileNotFoundError, ValueError):
+            pid = int(self.pid_file.read_text().strip())
 
+        handlers = {sig: signal.signal(sig, signal.SIG_IGN) for sig in (signal.SIGINT, signal.SIGTERM)}
         try:
             if pid is not None:
-                # Shield against nested cancellation; without it a second
-                # SIGINT mid-cleanup would leave qemu running. terminate_pid
-                # SIGTERMs, polls for up to grace_seconds, then SIGKILLs.
-                await asyncio.shield(terminate_pid(pid, grace_seconds=5))
+                terminate_pid(pid, grace_seconds=5)
+            self._close_ssh_master()
+            if self.proc:
+                try:
+                    self.proc.wait(5)
+                except subprocess.TimeoutExpired:
+                    self.proc.kill()
+                    self.proc.wait()
         finally:
-            await self._close_ssh_master()
-            try:
-                if self.proc and self.proc.returncode is None:
-                    try:
-                        async with asyncio.timeout(5):
-                            await self.proc.wait()
-                    except TimeoutError:
-                        with contextlib.suppress(ProcessLookupError):
-                            self.proc.kill()
-                        await self.proc.wait()
-            finally:
-                # Release the liveness lock before rmtree -- the kernel would
-                # release it on close()/exit anyway, but doing it explicitly
-                # keeps the ordering obvious.
-                if self._live_lock_fd >= 0:
-                    with contextlib.suppress(OSError):
-                        os.close(self._live_lock_fd)
-                    self._live_lock_fd = -1
-                self.qmp_socket.unlink(missing_ok=True)
-                self.workdir.cleanup()
+            # Release the liveness lock before rmtree -- the kernel would
+            # release it on close()/exit anyway, but doing it explicitly keeps
+            # the ordering obvious.
+            if self._live_lock_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.close(self._live_lock_fd)
+                self._live_lock_fd = -1
+            self.qmp_socket.unlink(missing_ok=True)
+            self.workdir.cleanup()
+            for sig, handler in handlers.items():
+                signal.signal(sig, handler)
 
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
@@ -936,16 +926,16 @@ class Machine:
         else:
             print_line(f"VNC: {self.ssh_host}:{self.vnc_port}")
 
-    async def prepare(self) -> None:
+    def prepare(self) -> None:
         """Create overlay images and seed data for the selected template."""
 
         if self._spec.cloud_image:
-            cloud_image = await self._ensure_minimal_cloudimg()
+            cloud_image = self._ensure_minimal_cloudimg()
             seed_img = self.workdir_path / "seed.img"
             disk_img = self.workdir_path / "disk.img"
             user_data = self.workdir_path / "user-data"
             user_data.write_text(_minimal_user_data())
-            await run_command(
+            run_command(
                 [
                     "xorrisofs",
                     "-output",
@@ -958,7 +948,7 @@ class Machine:
                     "test/minimal/meta-data",
                 ]
             )
-            await self._create_overlay(
+            self._create_overlay(
                 str(cloud_image),
                 str(disk_img),
                 size="20G",
@@ -981,20 +971,20 @@ class Machine:
             else:
                 published = self.imagedir / self.ubuntu_name / self.machine
             image_dir = self.workdir_path / "base"
-            await link_packer_artifacts(published, image_dir)
+            link_packer_artifacts(published, image_dir)
             os_src_paths, artifact_format = discover_packer_disks(image_dir)
 
             os_disk_paths: list[str] = []
             for idx, src in enumerate(os_src_paths, start=1):
                 dest = self.workdir_path / f"packer-ubuntu-{idx}"
-                await self._create_overlay(str(src), str(dest), backing_fmt=artifact_format)
+                self._create_overlay(str(src), str(dest), backing_fmt=artifact_format)
                 os_disk_paths.append(str(dest))
 
             self.drives = [self._virtio_drive(path) for path in os_disk_paths]
             shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
             self.drives += self._uefi_drives()
 
-    async def _create_overlay(self, src: str, dest: str, *, backing_fmt: str, size: str | None = None) -> None:
+    def _create_overlay(self, src: str, dest: str, *, backing_fmt: str, size: str | None = None) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize.
 
         lazy_refcounts defers refcount-table updates so cluster writes don't
@@ -1018,9 +1008,9 @@ class Machine:
         ]
         if size:
             args.append(size)
-        await run_command(args)
+        run_command(args)
 
-    async def _ensure_minimal_cloudimg(self) -> Path:
+    def _ensure_minimal_cloudimg(self) -> Path:
         """Download and cache the Ubuntu minimal cloud image.
 
         Local runs use the Nexus proxy by default; AWS cells and
@@ -1033,7 +1023,7 @@ class Machine:
         if target.exists():
             return target
 
-        # Several cells share this cache; wait without blocking the event loop.
+        # Several cells share this cache; poll so the wait stays bounded.
         lockfile = cache / f"{name}.lock"
         fd = os.open(str(lockfile), os.O_RDWR | os.O_CREAT, 0o644)
         try:
@@ -1050,7 +1040,7 @@ class Machine:
                             f"cloud-image lock held >{CLOUDIMG_LOCK_TIMEOUT:.0f}s; "
                             f"concurrent cell wedged? check `lsof {lockfile}`"
                         ) from e
-                    await asyncio.sleep(0.5)
+                    time.sleep(0.5)
             # A peer may have completed the download while this process waited.
             if target.exists():
                 return target
@@ -1064,7 +1054,7 @@ class Machine:
             # cells from publishing a partial download.
             tmp = cache / f"{name}.{os.getpid()}.tmp"
             print_line(f"Downloading {url}")
-            await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
+            run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
             os.replace(tmp, target)
             return target
         finally:
@@ -1232,7 +1222,7 @@ class Machine:
             cmd[cmd.index("-serial") + 1] = "mon:stdio"
         return cmd
 
-    async def _close_ssh_master(self) -> None:
+    def _close_ssh_master(self) -> None:
         """Tear down the cell's ssh ControlMaster so no socket leaks across runs.
 
         `ssh -O exit` signals the master to close cleanly and unlink its
@@ -1251,15 +1241,11 @@ class Machine:
             str(self.ssh_port),
             f"{self.ssh_user}@{self.ssh_host}",
         ]
-        with contextlib.suppress(OSError, TimeoutError):
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
+        # Best-effort: ssh may be missing, or a wedged master may not answer.
+        with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+            subprocess.run(
+                cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5
             )
-            async with asyncio.timeout(5):
-                await proc.wait()
 
 
 def imagedir_for_host() -> Path:
