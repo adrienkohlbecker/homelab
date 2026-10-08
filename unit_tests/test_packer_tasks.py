@@ -192,6 +192,54 @@ def test_build_publish_failure_without_a_winner_restores_the_previous_version(tm
     assert (published / "hetzner" / "packer-ubuntu-1.raw").read_text() == "old"
 
 
+def test_build_publish_after_an_interrupted_one_falls_back_to_the_parked_version(tmp_path: Path) -> None:
+    """An interrupt between the renames left the last good version parked."""
+    env, published = _fake_hetzner_build(tmp_path)
+    parked = published / ".hetzner.old-4242"
+    parked.mkdir(parents=True)
+    (parked / "packer-ubuntu-1.raw").write_text("old")
+    calls = tmp_path / "rename_calls"
+    # Restore the parked version, park it again, then fail to swap the build in.
+    _executable(
+        tmp_path / "bin" / "python3",
+        "#!/bin/sh\n"
+        f'echo x >>"{calls}"\n'
+        f'if [ "$(wc -l <"{calls}")" -eq 3 ]; then exit 1; fi\n'
+        f'exec "{sys.executable}" "$@"\n',
+    )
+
+    result = subprocess.run(["bash", str(BUILD_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode != 0
+    assert "restored the previous version" in result.stderr
+    assert sorted(path.name for path in published.iterdir()) == ["hetzner"]
+    assert (published / "hetzner" / "packer-ubuntu-1.raw").read_text() == "old"
+
+
+def test_packer_clean_restores_parked_versions_with_nothing_published(tmp_path: Path) -> None:
+    root = tmp_path / "homelab_ci"
+    stale = root / "noble" / ".lab.old-1"
+    last_good = root / "noble" / ".hetzner.old-2"
+    for parked in (stale, last_good):
+        parked.mkdir(parents=True)
+        (parked / "efivars.fd").write_text(parked.name)
+    (root / "noble" / "lab").mkdir()
+    (root / ".build-abc").mkdir()
+    (root / "tmp123").mkdir()
+
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "mise-tasks" / "packer" / "clean.sh")],
+        env={**os.environ, "HOMELAB_CI_DIR": str(root)},
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert sorted(path.name for path in root.iterdir()) == ["noble"]
+    assert sorted(path.name for path in (root / "noble").iterdir()) == ["hetzner", "lab"]
+    assert (root / "noble" / "hetzner" / "efivars.fd").read_text() == ".hetzner.old-2"
+
+
 def test_build_unreadable_manifest_fails_and_keeps_the_staged_builds(tmp_path: Path) -> None:
     env, published = _fake_hetzner_build(tmp_path)
     _executable(tmp_path / "bin" / "yq", "#!/bin/sh\nexit 2\n")

@@ -91,8 +91,9 @@ rename() { python3 -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' "$1"
 # its path still names it (test/machine.py link_packer_artifacts). A concurrent
 # publish of the same source makes the second rename fail and leaves its
 # version published; any other failure puts the previous version back. An
-# interrupt between the renames leaves it parked as .<source>.old-<pid>, which
-# packer:clean removes.
+# interrupt between the renames leaves it parked as .<source>.old-<pid> with
+# nothing published; the next publish of that source, or packer:clean, puts it
+# back.
 publish() {
   local build_dir=$1 published=$2
   local old="${published%/*}/.${published##*/}.old-$$"
@@ -103,6 +104,16 @@ publish() {
   # its disks (fs.protected_hardlinks requires write access to a file another
   # user owns).
   chmod -R g+rwX "${build_dir}"
+  # Restore a version an interrupted publish left parked, so a failure below
+  # still has one to put back.
+  if [ ! -e "${published}" ]; then
+    for parked in "${published%/*}/.${published##*/}".old-*; do
+      if [ -e "${parked}" ] && rename "${parked}" "${published}"; then
+        echo "restored ${published} from an interrupted publish" >&2
+        break
+      fi
+    done
+  fi
   if [ -e "${published}" ]; then
     rename "${published}" "${old}"
   fi
