@@ -8,19 +8,24 @@ from machine import Machine
 
 
 class FakeMachine:
-    def __init__(self, *, keep_vm: bool = False) -> None:
+    def __init__(self, *, keep_vm: bool = False, boot_error: BaseException | None = None) -> None:
         self.keep_vm = keep_vm
-        self.entered = False
-        self.exited = False
+        self.boot_error = boot_error
+        self.booted = False
+        self.stopped = False
         self.waited = False
         self.instructions = False
 
-    def __enter__(self) -> FakeMachine:
-        self.entered = True
-        return self
+    def prepare(self) -> None:
+        pass
 
-    def __exit__(self, *args: object) -> None:
-        self.exited = True
+    def boot(self) -> None:
+        if self.boot_error:
+            raise self.boot_error
+        self.booted = True
+
+    def stop(self) -> None:
+        self.stopped = True
 
     def print_ssh_instructions(self) -> None:
         self.instructions = True
@@ -29,27 +34,31 @@ class FakeMachine:
         self.waited = True
 
 
-def test_session_enters_and_exits_machine(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_session_boots_and_stops_machine() -> None:
     machine = FakeMachine()
 
-    def run() -> None:
-        with Machine.session(cast(Machine, machine), 10):
-            assert machine.entered
+    with Machine.session(cast(Machine, machine), 10):
+        assert machine.booted
 
-    run()
-
-    assert machine.exited
+    assert machine.stopped
     assert not machine.waited
 
 
-def test_keep_waits_after_success(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("error", [KeyboardInterrupt(), RuntimeError("qemu-img failed")])
+def test_session_stops_machine_when_boot_is_interrupted(error: BaseException) -> None:
+    machine = FakeMachine(boot_error=error)
+
+    with pytest.raises(type(error)), Machine.session(cast(Machine, machine), 10):
+        pytest.fail("the body must not run")
+
+    assert machine.stopped
+
+
+def test_keep_waits_after_success() -> None:
     machine = FakeMachine(keep_vm=True)
 
-    def run() -> None:
-        with Machine.session(cast(Machine, machine), 10):
-            pass
-
-    run()
+    with Machine.session(cast(Machine, machine), 10):
+        pass
 
     assert machine.instructions
     assert machine.waited
@@ -63,4 +72,14 @@ def test_keep_waits_after_timeout_then_resurfaces_it() -> None:
 
     assert machine.instructions
     assert machine.waited
-    assert machine.exited
+    assert machine.stopped
+
+
+def test_ctrl_c_skips_the_keep_hold() -> None:
+    machine = FakeMachine(keep_vm=True)
+
+    with pytest.raises(KeyboardInterrupt), Machine.session(cast(Machine, machine), 10):
+        raise KeyboardInterrupt
+
+    assert not machine.waited
+    assert machine.stopped

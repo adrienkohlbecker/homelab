@@ -25,10 +25,13 @@ class SiteTestMachine:
         self.ssh_calls: list[tuple[str, ...]] = []
         self.system_running_calls = 0
 
-    def __enter__(self) -> SiteTestMachine:
-        return self
+    def prepare(self) -> None:
+        return None
 
-    def __exit__(self, *args: object) -> None:
+    def boot(self) -> None:
+        return None
+
+    def stop(self) -> None:
         return None
 
     def session(self, timeout: int):

@@ -256,26 +256,36 @@ def _relay(stream: IO[str], color: str | None, capture: list[str]) -> None:
         _write_line(line, color)
 
 
-def terminate_pid(pid: int, *, grace_seconds: float) -> None:
-    """SIGTERM *pid*, escalating to SIGKILL after *grace_seconds* if needed.
+# The signals that interrupt a cell: Ctrl-C, a stop request (GNU parallel's
+# --termseq, a CI cancel), and the session deadline.
+INTERRUPTS = (signal.SIGINT, signal.SIGTERM, signal.SIGALRM)
+# How long an interrupted run_command waits for its stderr relay. A descendant
+# of the killed child can hold the pipe open indefinitely; the relay is a
+# daemon thread, so abandoning it costs nothing.
+RELAY_DRAIN_SECONDS = 5
 
-    For a child known only by PID (read out of qemu's pidfile), not a Popen
-    handle. Uses kill(pid, 0) to detect exit; tolerant of the process having
-    already gone.
+
+@contextlib.contextmanager
+def interrupts_held(*, redeliver: bool = True) -> Iterator[None]:
+    """Hold INTERRUPTS for the with-block, then redeliver them (or drop them).
+
+    Closes the window between creating a resource and recording it where
+    cleanup will find it: an interrupt arriving in between would otherwise
+    leak the resource. Python-level handlers rather than a blocked signal
+    mask, because children spawned inside the block would inherit the mask but
+    get default handlers back at exec. Redelivery raises from the block's exit,
+    so open it inside the try that owns the cleanup.
     """
-    with contextlib.suppress(ProcessLookupError):
-        os.kill(pid, signal.SIGTERM)
-
-    deadline = time.monotonic() + grace_seconds
-    while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return
-        time.sleep(0.2)
-
-    with contextlib.suppress(ProcessLookupError):
-        os.kill(pid, signal.SIGKILL)
+    pending: list[int] = []
+    previous = {sig: signal.signal(sig, lambda signum, _frame: pending.append(signum)) for sig in INTERRUPTS}
+    try:
+        yield
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        if redeliver:
+            for signum in pending:
+                signal.raise_signal(signum)
 
 
 def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | None = None) -> CommandResult:
@@ -283,38 +293,54 @@ def run_command(cmd: list[str], check: bool = True, *, env: dict[str, str] | Non
 
     check raises CommandFailedException on a non-zero exit. env layers
     overrides on top of os.environ. The child is killed if anything (the
-    session deadline, Ctrl-C) interrupts the call.
+    session deadline, Ctrl-C, a failed stderr relay) interrupts the call.
     """
     print_cmd_line(cmd, env=env)
 
-    process = subprocess.Popen(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env={**os.environ, **env} if env is not None else None,
-        text=True,
-        errors="replace",
-    )
-    assert process.stdout is not None
-    assert process.stderr is not None
-
     stdout: list[str] = []
     stderr: list[str] = []
-    # stderr drains on its own thread so neither pipe can fill and block the
-    # child. Cross-stream order is therefore not preserved; callers
-    # (ansible-playbook, ssh) emit nearly everything on stdout.
-    stderr_relay = threading.Thread(target=_relay, args=(process.stderr, "red", stderr), daemon=True)
-    stderr_relay.start()
+    relay_failures: list[Exception] = []
+    process: subprocess.Popen[str] | None = None
+    stderr_relay: threading.Thread | None = None
+
+    def drain_stderr(child: subprocess.Popen[str]) -> None:
+        assert child.stderr is not None
+        try:
+            _relay(child.stderr, "red", stderr)
+        except Exception as exc:
+            # Killing the child ends the main thread's stdout read too.
+            relay_failures.append(exc)
+            child.kill()
+
     try:
+        with interrupts_held():
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={**os.environ, **env} if env is not None else None,
+                text=True,
+                errors="replace",
+            )
+            # stderr drains on its own thread so neither pipe can fill and
+            # block the child. Cross-stream order is therefore not preserved;
+            # callers (ansible-playbook, ssh) emit nearly everything on stdout.
+            stderr_relay = threading.Thread(target=drain_stderr, args=(process,), daemon=True)
+            stderr_relay.start()
+        assert process.stdout is not None
         _relay(process.stdout, None, stdout)
         exitcode = process.wait()
-    except BaseException:
-        process.kill()
-        process.wait()
-        raise
-    finally:
         stderr_relay.join()
+    except BaseException:
+        if process is not None:
+            process.kill()
+            process.wait()
+        if stderr_relay is not None:
+            stderr_relay.join(RELAY_DRAIN_SECONDS)
+        raise
+    if relay_failures:
+        raise relay_failures[0]
 
     if check and exitcode != 0:
         raise CommandFailedException(cmd, exitcode, stderr)

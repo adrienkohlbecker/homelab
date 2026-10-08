@@ -142,17 +142,19 @@ def _run(m: Machine, *, exit_after_ready: bool) -> None:
     down. Boot, SSH, or systemd-state failure dumps the boot console and
     raises.
     """
-    with m.session(EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None):
-        try:
+    # Outside the session, so the overall deadline (a TimeoutError only once
+    # the session exits) dumps the console too; the log outlives the VM.
+    try:
+        with m.session(EXIT_AFTER_READY_TIMEOUT if exit_after_ready else None):
             m.ensure_booted()
             print_line("Booted")
             m.ensure_ssh()
             print_line("SSH up")
             if exit_after_ready:
                 m.ensure_system_running()
-        except RuntimeError, TimeoutError:
-            _dump_boot_console(m)
-            raise
+    except RuntimeError, TimeoutError:
+        _dump_boot_console(m)
+        raise
 
 
 def _run_foreground(m: Machine) -> int:
@@ -180,9 +182,7 @@ def _run_foreground(m: Machine) -> int:
             proc.wait()
             return 130
     finally:
-        # No session here, so do the cleanup stop() would.
-        m.qmp_socket.unlink(missing_ok=True)
-        m.workdir.cleanup()
+        m.stop()
 
 
 def main() -> int:

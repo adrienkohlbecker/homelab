@@ -1,9 +1,14 @@
 """Unit tests for machine.py functions not covered by existing test_*.py files."""
 
 import fcntl
+import json
 import os
 import shutil
+import signal
+import socket
 import subprocess
+import tempfile
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -444,3 +449,77 @@ class TestReadHostPorts:
         monkeypatch.setattr(machine, "DEFAULT_WAN_FORWARDS", {"tcp": (9092,), "udp": ()})
         with pytest.raises(KeyError):
             m._read_host_ports()
+
+
+class TestQmpTransport:
+    """_qmp against a fake monitor speaking the QMP wire protocol."""
+
+    @staticmethod
+    def _serve(path: Path, replies: list[dict], *, delay: float) -> threading.Thread:
+        """Bind *path* after *delay* (as qemu opens its monitor after the
+        pidfile) and answer one connection: greeting, capabilities, an
+        asynchronous event, then *replies* to the command."""
+
+        def run() -> None:
+            time.sleep(delay)
+            with socket.socket(socket.AF_UNIX) as server:
+                server.bind(str(path))
+                server.listen(1)
+                conn, _ = server.accept()
+                with conn, conn.makefile("rwb") as stream:
+
+                    def send(message: dict) -> None:
+                        stream.write(json.dumps(message).encode() + b"\n")
+                        stream.flush()
+
+                    send({"QMP": {"version": {}, "capabilities": []}})
+                    stream.readline()
+                    send({"return": {}})
+                    stream.readline()
+                    send({"event": "NIC_RX_FILTER_CHANGED", "data": {}})
+                    for reply in replies:
+                        send(reply)
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        return thread
+
+    @pytest.fixture
+    def m(self, machine_factory: Callable[..., machine.Machine]) -> machine.Machine:
+        m = machine_factory()
+        # A unix socket path must stay under ~104 bytes; pytest's tmp_path can exceed it.
+        m.qmp_socket = Path(tempfile.mkdtemp(dir="/tmp")) / "qmp"
+        return m
+
+    def test_waits_for_a_late_monitor_and_skips_events(self, m: machine.Machine) -> None:
+        server = self._serve(m.qmp_socket, [{"return": {"service": "5901"}}], delay=0.5)
+        assert m._qmp("query-vnc") == {"service": "5901"}
+        server.join(5)
+
+    def test_a_qmp_error_raises(self, m: machine.Machine) -> None:
+        self._serve(m.qmp_socket, [{"error": {"class": "GenericError", "desc": "no VNC"}}], delay=0)
+        with pytest.raises(RuntimeError, match="no VNC"):
+            m._qmp("query-vnc")
+
+    def test_a_monitor_that_never_opens_times_out(self, m: machine.Machine, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(machine, "QMP_TIMEOUT", 0.3)
+        with pytest.raises(FileNotFoundError):
+            m._qmp("query-vnc")
+
+
+def test_stop_kills_a_process_group_that_ignores_sigterm(
+    machine_factory: Callable[..., machine.Machine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The group holds the timeout wrapper and qemu, so killing it reaches qemu
+    even before its pidfile exists."""
+    monkeypatch.setattr(machine, "STOP_GRACE_SECONDS", 0.3)
+    m = machine_factory()
+    m.proc = subprocess.Popen(["sh", "-c", "trap '' TERM; sleep 60 & wait"], start_new_session=True)
+    time.sleep(0.2)
+
+    m.stop()
+
+    assert m.proc.returncode == -signal.SIGKILL
+    with pytest.raises(ProcessLookupError):
+        os.killpg(m.proc.pid, 0)
+    assert not m.workdir_path.exists()

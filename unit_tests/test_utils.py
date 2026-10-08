@@ -1,5 +1,10 @@
 """Unit tests for test/utils.py — tee_output, print, and process helpers."""
 
+import contextlib
+import os
+import signal
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -95,6 +100,93 @@ class TestRunCommand:
         with pytest.raises(utils.CommandFailedException) as exc:
             utils.run_command(["sh", "-c", "echo err >&2; exit 1"])
         assert exc.value.stderr == ["err"]
+
+
+class _Deadline(BaseException):
+    pass
+
+
+@contextlib.contextmanager
+def _deadline_after(seconds: float) -> Iterator[None]:
+    """Raise _Deadline in the main thread after *seconds*, as the session's SIGALRM does."""
+
+    def expire(_signum: int, _frame: object) -> None:
+        raise _Deadline
+
+    previous = signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _logged_pids(log: Path) -> list[int]:
+    return [int(line) for line in log.read_text().split() if line.isdigit()]
+
+
+class TestRunCommandInterrupted:
+    def test_deadline_kills_and_reaps_the_child(self, tmp_path: Path) -> None:
+        log = tmp_path / "run.log"
+        start = time.monotonic()
+        with utils.tee_output(log), pytest.raises(_Deadline), _deadline_after(0.5):
+            utils.run_command(["sh", "-c", "echo $$; exec sleep 30"])
+
+        assert time.monotonic() - start < 5
+        (pid,) = _logged_pids(log)
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+
+    def test_a_descendant_holding_the_pipes_cannot_stall_the_deadline(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(utils, "RELAY_DRAIN_SECONDS", 0.2)
+        log = tmp_path / "run.log"
+        start = time.monotonic()
+        try:
+            with utils.tee_output(log), pytest.raises(_Deadline), _deadline_after(0.5):
+                utils.run_command(["sh", "-c", "sleep 30 & echo $!; exec sleep 30"])
+            assert time.monotonic() - start < 5
+        finally:
+            for pid in _logged_pids(log):
+                with contextlib.suppress(ProcessLookupError):  # already gone is the goal
+                    os.kill(pid, signal.SIGKILL)
+
+    def test_a_failed_stderr_relay_kills_the_child_and_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        relay = utils._relay
+
+        def broken_stderr(stream, color, capture) -> None:
+            if color == "red":
+                raise OSError("transcript disk full")
+            relay(stream, color, capture)
+
+        monkeypatch.setattr(utils, "_relay", broken_stderr)
+        start = time.monotonic()
+        with pytest.raises(OSError, match="transcript disk full"):
+            utils.run_command(["sleep", "30"])
+        assert time.monotonic() - start < 5
+
+
+class TestInterruptsHeld:
+    def test_redelivers_on_exit(self) -> None:
+        reached_end = []
+
+        def interrupted_block() -> None:
+            with utils.interrupts_held():
+                os.kill(os.getpid(), signal.SIGINT)
+                time.sleep(0.1)
+                reached_end.append(True)
+
+        with pytest.raises(KeyboardInterrupt):
+            interrupted_block()
+        assert reached_end
+
+    def test_drops_when_asked(self) -> None:
+        with utils.interrupts_held(redeliver=False):
+            os.kill(os.getpid(), signal.SIGINT)
+            time.sleep(0.1)
+        assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
 
 
 class TestCompactConsole:

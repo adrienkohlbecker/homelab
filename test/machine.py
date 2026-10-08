@@ -17,7 +17,7 @@ import traceback
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple, Self
+from typing import NamedTuple
 
 import ansible_mitogen
 import yaml
@@ -27,13 +27,14 @@ from utils import (
     CommandFailedException,
     CommandResult,
     IdempotenceFailedException,
+    interrupts_held,
+    phase,
     print_cmd_line,
     print_line,
     print_log_tail,
     run_command,
     sleep_tick,
     tee_output,
-    terminate_pid,
 )
 
 OUT_DIR = Path("test/out")
@@ -47,9 +48,11 @@ PIDFILE_NAME = "pid"
 # One line of `info usernet` per hostfwd: protocol, fd, host address and port,
 # guest address and port.
 _HOSTFWD_RE = re.compile(r"(TCP|UDP)\[HOST_FORWARD\]\s+\d+\s+\S+\s+(\d+)\s+\S+\s+(\d+)")
-# Bound on each QMP exchange; qemu answers in milliseconds once its pidfile
-# exists.
+# Bound on reaching qemu's QMP socket and on each reply. qemu writes its
+# pidfile before it opens the monitor, so the first connects can be refused.
 QMP_TIMEOUT = 5
+# How long stop() lets qemu shut down on SIGTERM before SIGKILL.
+STOP_GRACE_SECONDS = 5
 
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
@@ -659,7 +662,8 @@ class Machine:
         # shutdown explicitly through Machine.stop(). stdin=DEVNULL keeps
         # qemu's `-serial stdio` from competing with the terminal for
         # keystrokes.
-        with self.boot_file.open("wb") as handle:
+        # Interrupts wait until self.proc is set, so stop() always sees qemu.
+        with self.boot_file.open("wb") as handle, interrupts_held():
             self.proc = subprocess.Popen(
                 cmd, stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT, start_new_session=True
             )
@@ -679,11 +683,24 @@ class Machine:
             sleep_tick()
         self._read_host_ports()
 
+    def _qmp_connect(self) -> socket.socket:
+        """Connect to qemu's QMP socket, retrying until the monitor is up."""
+        deadline = time.monotonic() + QMP_TIMEOUT
+        while True:
+            sock = socket.socket(socket.AF_UNIX)
+            sock.settimeout(QMP_TIMEOUT)
+            try:
+                sock.connect(str(self.qmp_socket))
+                return sock
+            except FileNotFoundError, ConnectionRefusedError:
+                sock.close()
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.1)
+
     def _qmp(self, command: str, arguments: dict | None = None) -> object:
         """Run one QMP command against this VM and return its result."""
-        with socket.socket(socket.AF_UNIX) as sock:
-            sock.settimeout(QMP_TIMEOUT)
-            sock.connect(str(self.qmp_socket))
+        with self._qmp_connect() as sock:
             replies = sock.makefile("rb")
             for request in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments or {}}):
                 sock.sendall(json.dumps(request).encode() + b"\n")
@@ -817,14 +834,15 @@ class Machine:
 
     @contextlib.contextmanager
     def session(self, timeout: int | None) -> Iterator[None]:
-        """Run under the harness timeout, signal, and keep-VM policy.
+        """Prepare and boot the VM, run the body, and always stop the VM.
 
         The deadline is a SIGALRM whose handler raises in the main thread,
         interrupting whatever blocks there (a subprocess, a socket, a sleep);
         run_command kills its child on the way out, and the session surfaces
-        a message-less TimeoutError. A kept VM stays up after the body --
-        passed, failed, or timed out -- until Ctrl-C; only Ctrl-C skips that
-        hold.
+        a message-less TimeoutError. stop() runs whatever happened, including
+        an interrupt during prepare or boot. A kept VM stays up after the
+        body -- passed, failed, or timed out -- until Ctrl-C; only Ctrl-C
+        skips that hold.
         """
 
         def expire(_signum: int, _frame: object) -> None:
@@ -833,7 +851,10 @@ class Machine:
         previous = signal.signal(signal.SIGALRM, expire)
         signal.alarm(timeout or 0)
         try:
-            with self:
+            try:
+                with phase("prepare"):
+                    self.prepare()
+                    self.boot()
                 try:
                     yield
                 except BaseException as exc:
@@ -848,63 +869,53 @@ class Machine:
                 if self.keep_vm:
                     self.print_ssh_instructions()
                     self.wait()
+            finally:
+                self.stop()
         except _DeadlineExpired:
             raise TimeoutError() from None
         finally:
             signal.alarm(0)
             signal.signal(signal.SIGALRM, previous)
 
-    def __enter__(self) -> Self:
-        self.prepare()
-        self.boot()
-        return self
-
-    def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
-        print_line("Stopping machine...")
-        self.stop()
-
     def stop(self) -> None:
-        """Kill qemu via its pidfile, then drain the timeout wrapper and free temp resources.
+        """Stop qemu and free this run's temporary resources.
 
-        Signaling self.proc (the `timeout` wrapper) normally forwards SIGINT
-        to qemu, but if the wrapper is SIGKILL'd or testrole.py dies before
-        stop() runs, qemu reparents to init with no recovery path -- SIGKILL
-        can't be caught and forwarded. Kill qemu directly via its pidfile so
-        cleanup works regardless of the wrapper's fate.
-
-        With qemu dead, the wrapper (`timeout`) should notice and exit on its
-        own immediately -- we just wait for it. SIGKILL after 5s in case
-        something pathological keeps it alive (zombie subprocess, hung pipe).
-        A second Ctrl-C (or a parallel --termseq) mid-cleanup is ignored, so
-        it can't leave qemu running.
+        Signals qemu's whole process group: boot() starts it in its own
+        session, so the group holds the `timeout` wrapper and qemu, and still
+        holds qemu after the wrapper dies or before qemu writes its pidfile.
+        SIGTERM lets qemu exit cleanly; SIGKILL follows after
+        STOP_GRACE_SECONDS. Interrupts are dropped for the duration, so a
+        second Ctrl-C (or a parallel --termseq) can't cut cleanup short, and
+        each cleanup step runs even if an earlier one fails.
         """
-        pid: int | None = None
-        with contextlib.suppress(FileNotFoundError, ValueError):
-            pid = int(self.pid_file.read_text().strip())
-
-        handlers = {sig: signal.signal(sig, signal.SIG_IGN) for sig in (signal.SIGINT, signal.SIGTERM)}
-        try:
-            if pid is not None:
-                terminate_pid(pid, grace_seconds=5)
-            self._close_ssh_master()
-            if self.proc:
+        signal.alarm(0)
+        with interrupts_held(redeliver=False):
+            print_line("Stopping machine...")
+            try:
+                if self.proc and self.proc.poll() is None:
+                    with contextlib.suppress(ProcessLookupError):  # the group exited on its own
+                        os.killpg(self.proc.pid, signal.SIGTERM)
+                    try:
+                        self.proc.wait(STOP_GRACE_SECONDS)
+                    except subprocess.TimeoutExpired:
+                        with contextlib.suppress(ProcessLookupError):  # it exited after the grace
+                            os.killpg(self.proc.pid, signal.SIGKILL)
+                        self.proc.wait()
+            finally:
                 try:
-                    self.proc.wait(5)
-                except subprocess.TimeoutExpired:
-                    self.proc.kill()
-                    self.proc.wait()
-        finally:
-            # Release the liveness lock before rmtree -- the kernel would
-            # release it on close()/exit anyway, but doing it explicitly keeps
-            # the ordering obvious.
-            if self._live_lock_fd >= 0:
-                with contextlib.suppress(OSError):
-                    os.close(self._live_lock_fd)
-                self._live_lock_fd = -1
-            self.qmp_socket.unlink(missing_ok=True)
-            self.workdir.cleanup()
-            for sig, handler in handlers.items():
-                signal.signal(sig, handler)
+                    self._close_ssh_master()
+                finally:
+                    # Release the liveness lock before rmtree -- the kernel
+                    # would release it on close()/exit anyway, but doing it
+                    # explicitly keeps the ordering obvious.
+                    if self._live_lock_fd >= 0:
+                        with contextlib.suppress(OSError):  # already closed; nothing left to release
+                            os.close(self._live_lock_fd)
+                        self._live_lock_fd = -1
+                    try:
+                        self.qmp_socket.unlink(missing_ok=True)
+                    finally:
+                        self.workdir.cleanup()
 
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
