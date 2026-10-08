@@ -97,7 +97,7 @@ class TestClassifyChangedFiles:
             ("group_vars/physical_pug.yml", set()),
             ("group_vars/physical_fox.yml", set()),
             ("group_vars/storage_lab.yml", set()),
-            ("group_vars/storage_pug.yml", {"pug"}),
+            ("group_vars/storage_pug.yml", set()),
         ],
     )
     def test_machine_universe_paths(self, path: str, expected: set[str]) -> None:
@@ -135,12 +135,12 @@ class TestClassifyChangedFiles:
                 "packer/scripts/chroot.sh",
                 "roles/zfs/tasks/main.yml",
                 "group_vars/storage_lab.yml",
-                "group_vars/storage_pug.yml",
+                "test/minimal/user-data",
             ]
         )
         assert result.direct_roles == ["zfs"]
         assert result.full_universe_paths == ["mise.toml", "pyproject.toml", "group_vars/storage_lab.yml"]
-        assert result.machine_universe == {"pug"}
+        assert result.machine_universe == {"minimal"}
 
 
 # ---------------------------------------------------------------------------

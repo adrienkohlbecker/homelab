@@ -87,24 +87,9 @@ locals {
   # remaining devices to EXTRA_POOLS in order. Supported layouts are "" and
   # mirror; EXTRA_POOLS accepts apoc, dozer, and tank_mouse. Empty optional
   # fields disable their feature. The source name selects qemu versus Hetzner
-  # installation. Keep pug and lab explicit here to document the physical hosts
-  # in the rack.
+  # installation. Keep lab explicit here to document the physical host in the
+  # rack; hetzner is the single-disk build.
   variants = {
-    # pug: single-disk rpool + a dedicated podman partition + apoc mirror.
-    # The small fixture partition proves the prod backend without carrying the
-    # full service-image footprint.
-    pug = {
-      disk_sizes = ["40G", "1G", "1G"]
-      env = {
-        DISKS       = "/dev/vdb"
-        EXTRA_DISKS = "/dev/vdc /dev/vdd"
-        LAYOUT      = ""
-        SWAP_SIZE   = "8G"
-        PODMAN_SIZE = "4G"
-        META_SIZE   = ""
-        EXTRA_POOLS = "apoc"
-      }
-    }
     # lab: mdadm EFI/swap/podman, 3-disk mirror rpool, dozer mirror, tank raidz2
     # + special mirror, and mouse mirror. The podman RAID5 needs room for the
     # full-site container fleet; the dozer mirror needs transcode scratch space.
@@ -228,12 +213,6 @@ source "qemu" "ubuntu" {
 }
 
 build {
-
-  source "qemu.ubuntu" {
-    name                 = "pug"
-    output_directory     = "${var.build_directory}/${source.name}"
-    disk_additional_size = local.variants[source.name].disk_sizes
-  }
 
   source "qemu.ubuntu" {
     name                 = "lab"

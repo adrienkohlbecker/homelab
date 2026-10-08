@@ -161,7 +161,7 @@ def test_build_publish_losing_a_race_keeps_the_winner(tmp_path: Path) -> None:
     assert (staged / "packer-ubuntu-1.raw").read_text() == "new\n"
 
 
-@pytest.mark.parametrize("fixture_machine", ["lab", "pug"])
+@pytest.mark.parametrize("fixture_machine", ["lab"])
 def test_publish_qemu_builds_and_uploads_promoted_fixture(tmp_path: Path, fixture_machine: str) -> None:
     fake_bin = tmp_path / "bin"
     log = tmp_path / "mise.log"
@@ -773,7 +773,7 @@ def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
         [sys.executable, str(script), "--help"], cwd=tmp_path, capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
-    assert "{lab,pug}" in result.stdout
+    assert "{lab}" in result.stdout
 
 
 def test_qemu_host_prehydrate_runs_on_the_toolchain_python_and_is_bounded() -> None:

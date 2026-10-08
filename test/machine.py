@@ -115,7 +115,7 @@ def _load_test_topology() -> dict:
     """Load data/network_topology.yml with the 10.123 → 10.234 gsub
     applied. The test harness always uses the test view regardless of
     which machine is selected — `test/inventory.ini` puts every
-    machine (minimal/lab/pug) in the [test] group, so ansible
+    machine (minimal/lab) in the [test] group, so ansible
     consistently resolves `network.*` through group_vars/test.yml's
     gsub'd view. Mirror that here so the qemu user-net subnet matches.
     """
@@ -172,10 +172,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # lab: matches the lab prod host. mdadm-EFI + mdadm-swap +
         # 3-disk mirror rpool + dozer + tank + mouse, all baked in.
         # Default integration fixture and promoted CI image.
-    ),
-    "pug": QemuMachineSpec(
-        ssh_user="vagrant",
-        # Pug-specific single-disk rpool + apoc mirror fixture.
     ),
 }
 

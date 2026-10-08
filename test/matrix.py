@@ -20,10 +20,8 @@ UBUNTU_RELEASES: dict[str, str] = {
 }
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
 # The qemu fixtures machine.py can boot.
-MACHINES = ("minimal", "lab", "pug")
+MACHINES = ("minimal", "lab")
 DEFAULT_MACHINES = ("lab",)
-# ARM Lab uses a published Packer image; Minimal downloads Ubuntu's cloud image.
-ARM_CAPABLE_MACHINES = frozenset({"lab", "minimal"})
 
 _ROLE_META_KEYS = {"arm", "base_prerequisites", "machines", "skip", "ubuntu"}
 
@@ -184,8 +182,6 @@ def _load_role_test_config(meta_path: Path) -> RoleTestConfig:
             codename = codename or DEFAULT_UBUNTU
             if name not in machines:
                 errors.append(f"arm machine {name!r} not in machines {machines}")
-            elif name not in ARM_CAPABLE_MACHINES:
-                errors.append(f"arm machine {name!r} has no ARM image")
             elif codename not in UBUNTU_RELEASES:
                 errors.append(f"arm entry {entry!r}: ubuntu {codename!r} not in {sorted(UBUNTU_RELEASES)}")
             elif (name, codename) in skip:

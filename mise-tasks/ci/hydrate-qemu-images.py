@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # fmt: off
 #MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
-#USAGE arg "<machine>" help="Promoted qemu image bundle: lab or pug"
-#USAGE complete "machine" run="printf 'lab\npug\n'"
+#USAGE arg "<machine>" help="Promoted qemu image bundle: lab"
+#USAGE complete "machine" run="printf 'lab\n'"
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); defaults to this host and selects the image store"

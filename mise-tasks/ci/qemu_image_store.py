@@ -13,7 +13,7 @@ BUNDLE_NAME = "disks.tar.zst"
 MANIFEST_NAME = "manifest.json"
 MANIFEST_VERSION = 2
 POINTER_NAME = "promoted.json"
-VALID_MACHINES = {"lab", "pug"}
+VALID_MACHINES = {"lab"}
 # Each architecture keeps its pointers and builds under its own prefix.
 ARCHITECTURE_PREFIXES = {"x86_64": "x86", "aarch64": "aarch64"}
 VALID_ARCHITECTURES = set(ARCHITECTURE_PREFIXES)

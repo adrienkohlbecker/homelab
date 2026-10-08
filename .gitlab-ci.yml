@@ -243,12 +243,6 @@ qemu_host_ami:
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
 
-"qemu_image:pug":
-  extends: .qemu_image
-  resource_group: qemu_image_pug_$UBUNTU
-  script:
-    - mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --promote
-
 # Build native aarch64 fixtures on the Frankfurt ARM pool. Every mutable path is
 # job-local on the ephemeral instance-store-backed checkout. This reduces
 # accidental cross-job state reuse; the shared runner is not a security boundary.

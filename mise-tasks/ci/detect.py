@@ -70,7 +70,6 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
 MACHINE_UNIVERSE_PATTERNS: list[tuple[str, str]] = [
     (r"test/host_vars/minimal\.yml", "minimal"),
     (r"test/minimal/.+", "minimal"),
-    (r"group_vars/storage_pug\.yml", "pug"),
 ]
 _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, machine in MACHINE_UNIVERSE_PATTERNS]
 

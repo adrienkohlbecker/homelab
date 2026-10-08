@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import matrix
 import yaml
 from conftest import load_repo_module
 
@@ -39,11 +38,6 @@ def test_lab_qemu_image_is_published_for_supported_releases() -> None:
         "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote'],
     }
     assert PIPELINE[".qemu_image"]["extends"] == ".protected_manual_job"
-    assert PIPELINE["qemu_image:pug"] == {
-        "extends": ".qemu_image",
-        "resource_group": "qemu_image_pug_$UBUNTU",
-        "script": ['mise run packer:publish-qemu pug --ubuntu "$UBUNTU" --promote'],
-    }
     assert {
         name.removeprefix("qemu_image:")
         for name in PIPELINE
@@ -100,7 +94,7 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
         name.removeprefix("qemu_image:").removesuffix(":arm")
         for name in PIPELINE
         if name.startswith("qemu_image:") and name.endswith(":arm")
-    } == matrix.ARM_CAPABLE_MACHINES - {"minimal"}
+    } == IMAGE_STORE.VALID_MACHINES
 
 
 def test_bake_role_uses_shared_qemu_image_bucket() -> None:
