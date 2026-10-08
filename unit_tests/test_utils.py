@@ -208,6 +208,40 @@ class TestCompactConsole:
         assert "$ echo" not in terminal
         assert "TASK [nginx : Install]" in log.read_text()
 
+    def test_a_failed_phase_shows_its_failure_and_where_the_log_is(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        utils.use_compact_console("nginx", "lab:noble")
+        log = tmp_path / "out.ansi"
+
+        with utils.tee_output(log), pytest.raises(utils.CommandFailedException), utils.phase("converge"):
+            utils.run_command(["sh", "-c", "echo 'fatal: [lab]: FAILED!'; exit 2"])
+        utils.print_log_tail(log)
+        utils._drain_stdout()
+
+        terminal = capsys.readouterr().out
+        assert "✗ converge" in terminal
+        assert "│ fatal: [lab]: FAILED!" in terminal
+        assert f"log: {log}" in terminal
+        assert "fatal: [lab]: FAILED!" in log.read_text()
+
+    def test_a_long_phase_reports_progress_until_it_ends(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(utils, "PHASE_HEARTBEAT_SECONDS", 0.1)
+        utils.use_compact_console("nginx", "lab:noble")
+
+        with utils.phase("converge"):
+            time.sleep(0.35)
+        time.sleep(0.3)
+        utils._drain_stdout()
+
+        lines = capsys.readouterr().out.splitlines()
+        heartbeats = [line for line in lines if "converge still running" in line]
+        assert len(heartbeats) >= 2
+        # No heartbeat after the phase's result line.
+        assert lines.index(heartbeats[-1]) < next(i for i, line in enumerate(lines) if "✓ converge" in line)
+
     def test_roles_keep_their_colour(self) -> None:
         utils.use_compact_console("nginx", "lab:noble")
         first = utils._CONSOLE_TAG
