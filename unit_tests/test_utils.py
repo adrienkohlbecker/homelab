@@ -186,6 +186,57 @@ class TestInterruptsHeld:
             interrupted_block()
         assert reached_end
 
+    def test_a_signal_during_the_handler_swap_waits_for_the_block(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Arriving after the first handler is swapped in, it is held like one
+        arriving inside the block, and redelivered on exit."""
+        install = signal.signal
+        swaps: list[int] = []
+
+        def interrupted_swap(sig: int, handler: object) -> object:
+            previous = install(sig, handler)  # type: ignore[arg-type]
+            swaps.append(sig)
+            if len(swaps) == 1:
+                os.kill(os.getpid(), signal.SIGINT)
+            return previous
+
+        monkeypatch.setattr(utils.signal, "signal", interrupted_swap)
+        body_ran = []
+
+        def held_block() -> None:
+            with utils.interrupts_held():
+                body_ran.append(True)
+
+        with pytest.raises(KeyboardInterrupt):
+            held_block()
+        assert body_ran
+        assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
+
+    def test_a_signal_during_the_restore_leaves_every_handler_restored(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        install = signal.signal
+        originals = {sig: signal.getsignal(sig) for sig in utils.INTERRUPTS}
+        swaps: list[int] = []
+
+        def interrupted_swap(sig: int, handler: object) -> object:
+            previous = install(sig, handler)  # type: ignore[arg-type]
+            swaps.append(sig)
+            # The first restore: SIGINT is back to its default handler.
+            if len(swaps) == len(utils.INTERRUPTS) + 1:
+                os.kill(os.getpid(), signal.SIGINT)
+            return previous
+
+        monkeypatch.setattr(utils.signal, "signal", interrupted_swap)
+
+        def held_block() -> None:
+            with utils.interrupts_held():
+                pass
+            # Unblocked at the end of the restore, the signal reaches its
+            # handler at the interpreter's next check; give it one here.
+            time.sleep(0.1)
+
+        with pytest.raises(KeyboardInterrupt):
+            held_block()
+        assert {sig: signal.getsignal(sig) for sig in utils.INTERRUPTS} == originals
+
     def test_drops_when_asked(self) -> None:
         with utils.interrupts_held(redeliver=False):
             os.kill(os.getpid(), signal.SIGINT)

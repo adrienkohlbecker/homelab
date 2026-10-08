@@ -337,12 +337,27 @@ def interrupts_held(*, redeliver: bool = True) -> Iterator[None]:
     so open it inside the try that owns the cleanup.
     """
     pending: list[int] = []
-    previous = {sig: signal.signal(sig, lambda signum, _frame: pending.append(signum)) for sig in INTERRUPTS}
+
+    def hold(signum: int, _frame: object) -> None:
+        pending.append(signum)
+
+    # The handlers swap with the signals blocked, so one arriving mid-swap
+    # waits for a complete set rather than hitting a half-installed one; the
+    # mask is back before the body runs, so children never inherit it.
+    mask = signal.pthread_sigmask(signal.SIG_BLOCK, INTERRUPTS)
+    try:
+        previous = {sig: signal.signal(sig, hold) for sig in INTERRUPTS}
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
     try:
         yield
     finally:
-        for sig, handler in previous.items():
-            signal.signal(sig, handler)
+        signal.pthread_sigmask(signal.SIG_BLOCK, INTERRUPTS)
+        try:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, mask)
         if redeliver:
             for signum in pending:
                 signal.raise_signal(signum)
