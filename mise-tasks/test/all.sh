@@ -70,24 +70,21 @@ if [ "${status}" -ne 0 ]; then
     FNR > 1 { exitval[$1] = $7; command[$1] = $9; if ($1 > last) last = $1 }
     END { for (seq = 1; seq <= last; seq++) if (seq in exitval && exitval[seq] != 0) print cell[seq] "\t" exitval[seq] "\t" command[seq] }
   ' "${cells}" "${joblog}")
-  if [ -n "${failed}" ]; then
-    # What each failed cell showed when it failed, which --latest-line has
-    # since reduced to its verdict. A cell killed before reporting has none.
-    while IFS=$'\t' read -r cell _ _; do
-      failure="test/out/${cell}.failure.ansi"
-      if [ -f "${failure}" ]; then
-        echo
-        echo "${cell} (log: test/out/${cell}.output.ansi)"
-        sed 's/^/│ /' "${failure}"
-      fi
-    done <<<"${failed}"
-  fi
+  # Reprint what each failed cell showed when it failed, which --latest-line
+  # has since reduced to its verdict; a cell killed before reporting has none.
+  summary=""
+  while IFS=$'\t' read -r cell exitval command; do
+    [ -n "${cell}" ] || continue
+    failure="test/out/${cell}.failure.ansi"
+    if [ -f "${failure}" ]; then
+      echo
+      echo "${cell} (log: test/out/${cell}.output.ansi)"
+      sed 's/^/│ /' "${failure}"
+    fi
+    summary+="  ${command}  (exit ${exitval})"$'\n'
+  done <<<"${failed}"
   echo
   echo "Failed cells (rerun with: mise run test:all --retry-failed; it also starts cells an interrupt skipped):"
-  if [ -n "${failed}" ]; then
-    while IFS=$'\t' read -r _ exitval command; do
-      echo "  ${command}  (exit ${exitval})"
-    done <<<"${failed}"
-  fi
+  printf '%s' "${summary}"
 fi
 exit "${status}"

@@ -21,7 +21,9 @@ def repo(tmp_path: Path) -> Path:
     matrix = "".join(f"lab\tnoble\t{role}\n" for role in ROLES)
     (tmp_path / "test" / "matrix.py").write_text(f"#!/bin/sh\nprintf '{matrix.encode('unicode_escape').decode()}'\n")
     (tmp_path / "test" / "testrole.py").write_text(
-        '#!/bin/sh\necho "$*" >>calls.txt\nrole=$5\ngrep -qx "$role" failing.txt 2>/dev/null && exit 1\nexit 0\n'
+        '#!/bin/sh\necho "$*" >>calls.txt\nrole=$5\n'
+        'grep -qx "$role" failing.txt 2>/dev/null || exit 0\n'
+        'mkdir -p test/out\necho "evidence of $role" >"test/out/$2.$4.$role.failure.ansi"\nexit 1\n'
     )
     for script in ("matrix.py", "testrole.py"):
         (tmp_path / "test" / script).chmod(0o755)
@@ -55,6 +57,14 @@ def test_retry_reruns_failures_and_reports_only_current_ones(repo: Path) -> None
     assert sorted(call.split()[4] for call in calls) == ["bravo", "charlie"]
     assert not any("--retry-failed" in call for call in calls)
     assert failed_roles(result.stdout) == ["charlie"]
+
+
+def test_reprints_each_failed_cells_evidence(repo: Path) -> None:
+    result, _ = run(repo, failing=("bravo",))
+
+    assert result.returncode != 0
+    assert "lab.noble.bravo (log: test/out/lab.noble.bravo.output.ansi)\n│ evidence of bravo\n" in result.stdout
+    assert "alpha" not in result.stdout
 
 
 def test_retry_starts_cells_an_interrupt_skipped(repo: Path) -> None:
