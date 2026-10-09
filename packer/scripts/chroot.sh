@@ -311,11 +311,16 @@ rm /boot/refind_linux.conf
 mkdir -p /boot/efi/EFI/BOOT
 cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
 
-# Menu countdown. 3 matches the role template (a converge overwrites this
-# file with that value).
+# Menu countdown, matching the role's refind_timeout (a converge overwrites
+# this file with that value): 3 on hosts, -1 (boot the default unless a key
+# is held) on qemu fixtures, where nobody watches the menu.
+REFIND_TIMEOUT=3
+if [ "$INSTALL_TARGET" = "qemu" ]; then
+  REFIND_TIMEOUT=-1
+fi
 
 cat <<EOF >/boot/efi/EFI/refind/refind.conf
-timeout 3
+timeout $REFIND_TIMEOUT
 default_selection "Ubuntu (ZBM)"
 dont_scan_dirs EFI:/EFI/ZBM
 

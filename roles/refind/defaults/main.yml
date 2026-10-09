@@ -1,2 +1,5 @@
 ---
 refind_zbm_artifact: "{{ zfsbootmenu_release[ansible_architecture] }}"
+# Menu countdown in seconds; -1 boots the default entry at once unless a key is
+# held when rEFInd starts. packer/scripts/chroot.sh bakes the same values.
+refind_timeout: 3
