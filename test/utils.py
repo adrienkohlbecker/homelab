@@ -135,19 +135,15 @@ def phase(name: str) -> Iterator[None]:
                     _write_line(f"▶ {name} ({_elapsed(start)})", None, status=True, hold=token, replace=token)
 
     threading.Thread(target=heartbeat, name=f"phase-{name}", daemon=True).start()
+    passed = False
     try:
         yield
-    except BaseException:
-        with reporting:
-            done.set()
-        _write_line(f"✗ {name} ({_elapsed(start)})", "red", status=True, replace=token)
-        raise
-    else:
-        with reporting:
-            done.set()
-        _write_line(f"✓ {name} ({_elapsed(start)})", "green", status=True, replace=token)
+        passed = True
     finally:
-        done.set()
+        with reporting:
+            done.set()
+        mark, color = ("✓", "green") if passed else ("✗", "red")
+        _write_line(f"{mark} {name} ({_elapsed(start)})", color, status=True, replace=token)
 
 
 ANSI_CSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
