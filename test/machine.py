@@ -27,6 +27,7 @@ from utils import (
     CommandFailedException,
     CommandResult,
     IdempotenceFailedException,
+    colorize,
     failed_task,
     log_line,
     phase,
@@ -857,7 +858,7 @@ class Machine:
                 report_failure(excerpt, self.output_file, self.failure_file)
                 print_line(f"✗ {subject}{verdict}", error=True)
         if rc == 0:
-            print_line(f"✓ {subject}passed")
+            print_line(colorize(f"✓ {subject}passed", "green"))
             for path in self._artifact_files:
                 path.unlink(missing_ok=True)
         return rc

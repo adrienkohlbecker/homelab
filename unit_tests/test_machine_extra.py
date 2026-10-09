@@ -291,7 +291,7 @@ class TestMachineArtifactOwnership:
         assert instance.run(lambda: None, label) == 0
         utils._drain_stdout()
 
-        assert capsys.readouterr().out.splitlines()[-1] == verdict
+        assert capsys.readouterr().out.splitlines()[-1] == utils.colorize(verdict, "green")
 
     @pytest.mark.parametrize(
         ("exc", "rc"),
