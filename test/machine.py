@@ -794,15 +794,18 @@ class Machine:
         except OSError:
             return False
 
-    def run(self, test: Callable[[], None], label: str) -> int:
+    def run(self, test: Callable[[], None], label: str | None) -> int:
         """Run an entry point's *test* with output mirrored to the run log.
 
         Returns the harness exit code: 0 passed, 1 failed, 124 timed out, 125
         not idempotent, 130 interrupted. A pass deletes the per-run logs;
         anything else keeps them for the post-mortem. A failed Ansible task
         is shown on its own, otherwise the transcript's tail; the verdict
-        comes last, so it is the line `test:all` leaves on screen.
+        comes last, so it is the line `test:all` leaves on screen. The
+        verdict names *label* unless it is None, for a console whose tag
+        already names the cell.
         """
+        subject = f"{label} " if label else ""
         rc = 0
         verdict = ""
         excerpt: list[str] = []
@@ -852,9 +855,9 @@ class Machine:
                 rc = 1
             if rc != 0:
                 report_failure(excerpt, self.output_file, self.failure_file)
-                print_line(f"{label} {verdict}", error=True)
+                print_line(f"✗ {subject}{verdict}", error=True)
         if rc == 0:
-            print_line(f"✓ {label} passed")
+            print_line(f"✓ {subject}passed")
             for path in self._artifact_files:
                 path.unlink(missing_ok=True)
         return rc

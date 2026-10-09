@@ -200,7 +200,8 @@ def main() -> int:
 
     return m.run(
         lambda: run_test(m, pass_args, base_prerequisites=role_config.base_prerequisites, timeout=parsed_args.timeout),
-        f"{parsed_args.role}.{parsed_args.machine}",
+        # The compact console's tag already names the cell.
+        f"{parsed_args.role}.{parsed_args.machine}" if parsed_args.verbose else None,
     )
 
 

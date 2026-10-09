@@ -278,6 +278,21 @@ class TestMachineArtifactOwnership:
         assert instance.run(passing, "lab.testrole") == 0
         assert all(not artifact.exists() for artifact in artifacts)
 
+    @pytest.mark.parametrize(("label", "verdict"), [(None, "✓ passed"), ("site_test", "✓ site_test passed")])
+    def test_the_passed_verdict_names_only_a_given_label(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        capsys: pytest.CaptureFixture[str],
+        label: str | None,
+        verdict: str,
+    ) -> None:
+        instance = machine_factory()
+
+        assert instance.run(lambda: None, label) == 0
+        utils._drain_stdout()
+
+        assert capsys.readouterr().out.splitlines()[-1] == verdict
+
     @pytest.mark.parametrize(
         ("exc", "rc"),
         [
@@ -322,7 +337,7 @@ class TestMachineArtifactOwnership:
         def failing() -> None:
             raise exc
 
-        assert instance.run(failing, "lab.testrole") == 1
+        assert instance.run(failing, None) == 1
         utils._drain_stdout()
 
         lines = capsys.readouterr().out.splitlines()
@@ -332,7 +347,7 @@ class TestMachineArtifactOwnership:
         assert "Earlier" not in terminal
         assert "PLAY RECAP" not in terminal
         assert "[WARNING]: noise" not in terminal
-        assert "lab.testrole failed at TASK [testrole : Validate]" in lines[-1]
+        assert lines[-1].endswith("✗ failed at TASK [testrole : Validate]\x1b[0m")
         assert "[WARNING]: noise" in instance.output_file.read_text()
         assert instance.failure_file.read_text() == "\n".join(stdout[2:5]) + "\n"
 
