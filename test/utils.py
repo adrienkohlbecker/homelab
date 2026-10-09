@@ -414,6 +414,49 @@ def _stop_command(process: subprocess.Popen) -> None:
     stop_process_group(process, grace_seconds=0)
 
 
+# Ctrl-C, and a stop request (GNU parallel's --termseq, a CI cancel).
+INTERRUPTS = (signal.SIGINT, signal.SIGTERM)
+# The interrupts interrupts_held is holding back; None while it holds none.
+_HELD_INTERRUPTS: list[int] | None = None
+
+
+def _interrupt(signum: int, _frame: object) -> None:
+    if _HELD_INTERRUPTS is None:
+        raise KeyboardInterrupt
+    _HELD_INTERRUPTS.append(signum)
+
+
+def handle_interrupts() -> None:
+    """Make INTERRUPTS raise KeyboardInterrupt, except while interrupts_held
+    holds them back."""
+    for sig in INTERRUPTS:
+        signal.signal(sig, _interrupt)
+
+
+@contextlib.contextmanager
+def interrupts_held(*, redeliver: bool = True) -> Iterator[None]:
+    """Hold INTERRUPTS back for the with-block, then raise KeyboardInterrupt
+    on its exit if any arrived, or drop them.
+
+    Redelivering closes the window between spawning a child and recording it
+    where cleanup finds it, so open the block inside the try that owns that
+    cleanup; dropping keeps a second interrupt from cutting cleanup short.
+    The installed handler reads a flag rather than being swapped out, since
+    a signal can land halfway through a swap. Without handle_interrupts()
+    nothing is held.
+    """
+    global _HELD_INTERRUPTS
+    outer = _HELD_INTERRUPTS
+    held = _HELD_INTERRUPTS = [] if outer is None else outer
+    try:
+        yield
+    finally:
+        _HELD_INTERRUPTS = outer
+    # A nested block leaves the decision to the outermost one.
+    if redeliver and held and outer is None:
+        raise KeyboardInterrupt
+
+
 def run_command(
     cmd: list[str], check: bool = True, *, env: dict[str, str] | None = None, timeout: float | None = None
 ) -> CommandResult:
@@ -436,18 +479,10 @@ def run_command(
     stdout: list[str] = []
     stderr: list[str] = []
     relay_failures: list[Exception] = []
-    process = subprocess.Popen(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env={**os.environ, **env} if env is not None else None,
-        text=True,
-        errors="replace",
-        start_new_session=True,
-    )
+    process: subprocess.Popen[str] | None = None
+    relays: list[threading.Thread] = []
 
-    def relay(stream: IO[str] | None, color: str | None, capture: list[str]) -> None:
+    def relay(process: subprocess.Popen[str], stream: IO[str] | None, color: str | None, capture: list[str]) -> None:
         assert stream is not None
         try:
             _relay(stream, color, capture)
@@ -456,15 +491,29 @@ def run_command(
             relay_failures.append(exc)
             _stop_command(process)
 
-    # Both streams drain on threads so neither pipe can fill and block the
-    # command, and the main thread only waits, which Ctrl-C and the timeout
-    # can always interrupt. Cross-stream order is therefore not preserved;
-    # callers (ansible-playbook, ssh) emit nearly everything on stdout.
-    relays = [
-        threading.Thread(target=relay, args=(process.stdout, None, stdout), daemon=True),
-        threading.Thread(target=relay, args=(process.stderr, "red", stderr), daemon=True),
-    ]
     try:
+        # Interrupts wait until process is set, so the cleanup below always
+        # sees the command.
+        with interrupts_held():
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={**os.environ, **env} if env is not None else None,
+                text=True,
+                errors="replace",
+                start_new_session=True,
+            )
+        # Both streams drain on threads so neither pipe can fill and block the
+        # command, and the main thread only waits, which Ctrl-C and the
+        # timeout can always interrupt. Cross-stream order is therefore not
+        # preserved; callers (ansible-playbook, ssh) emit nearly everything on
+        # stdout.
+        relays = [
+            threading.Thread(target=relay, args=(process, process.stdout, None, stdout), daemon=True),
+            threading.Thread(target=relay, args=(process, process.stderr, "red", stderr), daemon=True),
+        ]
         for thread in relays:
             thread.start()
         try:
@@ -477,7 +526,8 @@ def run_command(
         if any(thread.is_alive() for thread in relays):
             raise TimeoutError(f"{shlex.join(cmd)} did not finish within {timeout:.0f}s")
     except BaseException:
-        _stop_command(process)
+        if process is not None:
+            _stop_command(process)
         for thread in relays:
             if thread.ident is not None:
                 thread.join(RELAY_DRAIN_SECONDS)

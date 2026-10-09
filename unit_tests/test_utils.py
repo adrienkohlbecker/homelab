@@ -3,8 +3,10 @@
 import contextlib
 import os
 import signal
+import subprocess
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -90,6 +92,35 @@ class TestRunCommand:
         assert exc.value.stderr == ["err"]
 
 
+@pytest.fixture
+def interrupts() -> Iterator[None]:
+    """The harness's interrupt handlers, as Machine.run installs them."""
+    previous = {sig: signal.getsignal(sig) for sig in utils.INTERRUPTS}
+    utils.handle_interrupts()
+    yield
+    for sig, handler in previous.items():
+        signal.signal(sig, handler)
+
+
+@pytest.mark.usefixtures("interrupts")
+class TestInterruptsHeld:
+    def test_an_interrupt_waits_for_the_block_to_finish(self) -> None:
+        finished: list[bool] = []
+
+        def hold_through_a_sigterm() -> None:
+            with utils.interrupts_held():
+                signal.raise_signal(signal.SIGTERM)
+                finished.append(True)
+
+        with pytest.raises(KeyboardInterrupt):
+            hold_through_a_sigterm()
+        assert finished
+
+    def test_a_dropped_interrupt_does_not_raise(self) -> None:
+        with utils.interrupts_held(redeliver=False), utils.interrupts_held():
+            signal.raise_signal(signal.SIGINT)
+
+
 def _logged_pids(log: Path) -> list[int]:
     return [int(line) for line in log.read_text().split() if line.isdigit()]
 
@@ -115,6 +146,26 @@ class TestRunCommandInterrupted:
         (pid,) = _logged_pids(log)
         with pytest.raises(ProcessLookupError):
             os.kill(pid, 0)
+
+    @pytest.mark.usefixtures("interrupts")
+    def test_ctrl_c_right_after_the_spawn_still_reaps_the_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        popen = subprocess.Popen
+        spawned: list[subprocess.Popen] = []
+
+        def interrupted_popen(*args, **kwargs) -> subprocess.Popen:
+            spawned.append(popen(*args, **kwargs))
+            signal.raise_signal(signal.SIGINT)
+            return spawned[-1]
+
+        monkeypatch.setattr(subprocess, "Popen", interrupted_popen)
+        try:
+            with pytest.raises(KeyboardInterrupt):
+                utils.run_command(["sleep", "30"])
+            assert spawned[0].returncode is not None
+        finally:
+            for proc in spawned:
+                proc.kill()
+                proc.wait()
 
     def test_a_descendant_holding_the_pipes_cannot_outlast_the_timeout(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

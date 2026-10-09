@@ -29,6 +29,8 @@ from utils import (
     IdempotenceFailedException,
     colorize,
     failed_tasks,
+    handle_interrupts,
+    interrupts_held,
     log_line,
     phase,
     print_cmd_line,
@@ -687,7 +689,8 @@ class Machine:
         # shutdown explicitly through Machine.stop(). stdin=DEVNULL keeps
         # qemu's `-serial stdio` from competing with the terminal for
         # keystrokes.
-        with self.boot_file.open("wb") as handle:
+        # Interrupts wait until self.proc is set, so stop() always sees qemu.
+        with self.boot_file.open("wb") as handle, interrupts_held():
             self.proc = subprocess.Popen(
                 cmd, stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT, start_new_session=True
             )
@@ -825,7 +828,7 @@ class Machine:
         excerpt: list[str] = []
         # SIGTERM (GNU parallel's --termseq, a CI cancel) stops the cell the
         # way Ctrl-C does, through stop().
-        signal.signal(signal.SIGTERM, signal.default_int_handler)
+        handle_interrupts()
         with tee_output(self.output_file):
             try:
                 test()
