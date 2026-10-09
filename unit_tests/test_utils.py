@@ -389,3 +389,25 @@ class TestFailedTask:
         header = "\x1b[0;31mTASK [web : Probe] [CHECK MODE] ******************************\x1b[0m"
 
         assert utils.task_title(header) == "TASK [web : Probe] [CHECK MODE]"
+
+
+# ---------------------------------------------------------------------------
+# sleep_tick
+# ---------------------------------------------------------------------------
+
+
+class TestSleepTick:
+    def test_sub_second_polls_emit_one_dot_per_second(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        clock = [100.0]
+        dots: list[str] = []
+        monkeypatch.setattr(utils, "_LAST_TICK", 0.0)
+        monkeypatch.setattr(utils.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(utils.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+        monkeypatch.setattr(utils, "_emit", dots.append)
+
+        for _ in range(25):
+            utils.sleep_tick(0.1)
+
+        # 2.5s of polling: dots at t=0, ~1 and ~2.
+        assert dots == ["."] * 3
+        assert clock[0] == pytest.approx(102.5)

@@ -204,10 +204,20 @@ def report_failure(excerpt: Sequence[str], log: Path, failure_file: Path, lines:
         _console("".join(f"{_CONSOLE_TAG} │ {line}\n" for line in excerpt) + f"{_CONSOLE_TAG} log: {log}\n")
 
 
-def sleep_tick() -> None:
-    """Emit a single dot per second while a long-running task progresses."""
-    _emit(".")
-    time.sleep(1)
+_LAST_TICK = 0.0
+
+
+def sleep_tick(seconds: float = 1.0) -> None:
+    """Sleep *seconds*, emitting at most one progress dot per second.
+
+    Sub-second polls keep the transcript's once-a-second heartbeat.
+    """
+    global _LAST_TICK
+    now = time.monotonic()
+    if now - _LAST_TICK >= 1:
+        _emit(".")
+        _LAST_TICK = now
+    time.sleep(seconds)
 
 
 def colorize(line: str, color: str | None) -> str:

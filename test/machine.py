@@ -64,12 +64,19 @@ GUEST_JOURNAL_UNIT_PATH = Path(__file__).parent / "homelab_guest_journal.service
 # Guest machine, NIC, cloud-image token, and UEFI pairs per architecture,
 # shared with the Packer fixture build and the CI image stores.
 ARCHITECTURES = yaml.safe_load((Path(__file__).parent.parent / "data" / "architectures.yml").read_text())
-# Extra -device flags for interactive (VNC) mode. q35 brings std VGA / PS/2 /
-# ICH9 USB, so x86_64 only needs usb-tablet for an absolute mouse; aarch64 virt
-# has no default graphics or input.
+# -device flags every guest gets. aarch64 virt has no default graphics, and
+# without a framebuffer Ubuntu's initramfs init-top/framebuffer script falls
+# back to `sleep 1` + vesafb on every boot. q35's std VGA already covers x86_64.
+GUEST_DEVICES = {
+    "x86_64": (),
+    "aarch64": ("-device", "virtio-gpu-pci"),
+}
+# Extra -device flags for interactive (VNC) mode. q35 brings PS/2 / ICH9 USB,
+# so x86_64 only needs usb-tablet for an absolute mouse; aarch64 virt has no
+# default input.
 KEEP_VM_DEVICES = {
     "x86_64": ("-device", "usb-tablet"),
-    "aarch64": ("-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"),
+    "aarch64": ("-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"),
 }
 
 
@@ -262,6 +269,12 @@ class LaunchOptions:
 
 
 SSH_WAIT_TIMEOUT = 120
+# Boot-wait polling. The guest reaches sshd a few seconds in, so a 1s poll
+# would add up to a second per boot. Each banner probe is a fresh connection
+# with a short timeout: one opened before the guest's network is up waits on
+# slirp's SYN retransmit backoff, not on sshd.
+BOOT_POLL_INTERVAL = 0.1
+SSH_PROBE_TIMEOUT = 0.3
 
 # Bound on `systemctl is-system-running --wait`, which otherwise waits for as
 # long as any unit is still activating and leaves only the overall session
@@ -695,7 +708,7 @@ class Machine:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
             self.remaining()
-            sleep_tick()
+            sleep_tick(BOOT_POLL_INTERVAL)
         self._read_host_ports()
 
     def _qmp_connect(self) -> socket.socket:
@@ -748,7 +761,7 @@ class Machine:
             if time.monotonic() > deadline:
                 raise TimeoutError("SSH daemon did not become ready in time")
             self.remaining()
-            sleep_tick()
+            sleep_tick(BOOT_POLL_INTERVAL)
 
     def wait_system_running(self) -> tuple[int, str]:
         """Wait, bounded, for systemd to stop starting units; return (rc, state).
@@ -790,7 +803,7 @@ class Machine:
         # drops the connection, so only a banner proves sshd is up. OSError
         # covers the refused, reset, and timed-out cases alike.
         try:
-            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=2) as sock:
+            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=SSH_PROBE_TIMEOUT) as sock:
                 return bool(sock.recv(1024).strip())
         except OSError:
             return False
@@ -1148,9 +1161,10 @@ class Machine:
         """Assemble the qemu command line for the prepared disks.
 
         Arch- and OS-aware: data/architectures.yml supplies the machine type
-        and NIC, KEEP_VM_DEVICES the keep-VM device set; this method
-        only chooses accel based on platform.system(). Display hardware
-        (virtio-gpu-pci + qemu-xhci) works identically on both arches.
+        and NIC, GUEST_DEVICES and KEEP_VM_DEVICES the always-on and keep-VM
+        device sets; this method only chooses accel based on
+        platform.system(). Display hardware (virtio-gpu-pci + qemu-xhci) works
+        identically on both arches.
         """
         accel = "hvf" if platform.system() == "Darwin" else "kvm"
 
@@ -1158,9 +1172,8 @@ class Machine:
             # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
             # (machine flag usb=on, applied below); usb-tablet then attaches
             # to the built-in EHCI/UHCI for absolute-coordinate mouse.
-            # aarch64 virt has no default graphics or input devices, so it
-            # needs the full virtio-gpu + xhci + usb-kbd set; both come from
-            # KEEP_VM_DEVICES.
+            # aarch64 virt has no default input devices, so it needs the
+            # xhci + usb-kbd set from KEEP_VM_DEVICES.
             display_backend = "cocoa" if platform.system() == "Darwin" else "gtk"
             display_args = [
                 "-display",
@@ -1210,6 +1223,13 @@ class Machine:
             # usb-tablet isn't attached. virt machine ignores the flag and
             # uses qemu-xhci added above instead.
             f"type={self.guest['machine_type']},accel={accel},usb=on",
+            # splash-time is the edk2 front-page timeout (fw_cfg
+            # etc/boot-menu-wait); without it ArmVirtQemu waits its 5s
+            # PcdPlatformBootTimeOut before every boot. OVMF reads the same
+            # key.
+            "-boot",
+            "menu=on,splash-time=0",
+            *GUEST_DEVICES[self.arch],
             "-smp",
             f"{self._spec.vcpus},sockets=1,cores={self._spec.vcpus}",
             "-name",

@@ -50,6 +50,9 @@ def test_default_x86_64_no_keep_no_direct_boot(
     display_idx = cmd.index("-display")
     assert cmd[display_idx + 1] == "none"
 
+    # No firmware front-page countdown before the boot entry runs.
+    assert cmd[cmd.index("-boot") + 1] == "menu=on,splash-time=0"
+
     # No direct -kernel boot in this configuration.
     assert "-kernel" not in cmd
     assert "-append" not in cmd
@@ -78,6 +81,11 @@ def test_macos_aarch64_uses_hvf(
 
     assert cmd[3] == "qemu-system-aarch64"
     assert cmd[cmd.index("-machine") + 1] == "type=virt,accel=hvf,usb=on"
+
+    # virt has no default graphics; headless cells still get a framebuffer.
+    devices = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-device"]
+    assert "virtio-gpu-pci" in devices
+    assert "usb-kbd" not in devices
 
 
 def test_linux_aarch64_uses_kvm(
