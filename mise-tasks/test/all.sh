@@ -36,17 +36,12 @@ fi
 full_run=true
 if [ "${usage_retry_failed:-false}" = true ]; then
   # --resume-failed reruns failed cells and starts the ones an interrupt kept
-  # from starting. The test:all that predates GNU parallel wrote its own
-  # columns to the joblog; archive that, and refuse anything else unknown.
+  # from starting. Refuse a joblog GNU parallel did not write.
   header=""
   if [ -s "${joblog}" ]; then
     header=$(head -n 1 "${joblog}")
   fi
-  if [ "${header}" = $'Role\tUbuntu\tMachine\tRuntime\tExitval\tStarted' ]; then
-    archive="${joblog}.legacy.$(date +%Y%m%d%H%M%S).$$"
-    mv "${joblog}" "${archive}"
-    echo "Archived an old-format ${joblog} as ${archive}; running every cell" >&2
-  elif [ -n "${header}" ] && [[ "${header}" != Seq$'\t'* ]]; then
+  if [ -n "${header}" ] && [[ "${header}" != Seq$'\t'* ]]; then
     echo "${joblog} is not a GNU parallel joblog; delete it to run every cell" >&2
     exit 1
   elif [ -s "${joblog}" ] && [ -f "${cells}" ]; then

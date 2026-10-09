@@ -93,21 +93,6 @@ def test_retry_without_a_previous_run_runs_every_cell(repo: Path) -> None:
     assert len(calls) == len(ROLES)
 
 
-def test_retry_archives_an_old_format_joblog_without_clobbering(repo: Path) -> None:
-    earlier = repo / "test" / "out.tsv.legacy.earlier"
-    earlier.write_text("kept\n")
-    joblog = repo / "test" / "out.tsv"
-    joblog.write_text("Role\tUbuntu\tMachine\tRuntime\tExitval\tStarted\nalpha\tnoble\tlab\t1\t1\t0\n")
-
-    result, calls = run(repo, retry=True)
-
-    assert result.returncode == 0, result.stderr
-    assert len(calls) == len(ROLES)
-    assert earlier.read_text() == "kept\n"
-    (archive,) = (path for path in (repo / "test").glob("out.tsv.legacy.*") if path != earlier)
-    assert archive.read_text().startswith("Role\t")
-
-
 def test_retry_refuses_an_unknown_joblog(repo: Path) -> None:
     (repo / "test" / "out.tsv").write_text("something else\n")
 
