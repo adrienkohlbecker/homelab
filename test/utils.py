@@ -61,6 +61,9 @@ _CONSOLE_TAG: str | None = None
 _TAG_COLORS = (33, 39, 70, 75, 99, 135, 166, 172, 178, 204, 37, 141)
 # How often a long phase reports it is still running in compact mode.
 PHASE_HEARTBEAT_SECONDS = 300
+# Whether the compact console is a terminal, the only place cursor movement
+# means anything: GNU parallel and CI job logs read a pipe.
+_REWRITABLE = False
 # The token of the phase whose header is the terminal's last line, so its
 # heartbeat and result may overwrite it rather than append (see _emit).
 _HELD_LINE: object | None = None
@@ -98,7 +101,8 @@ def positive_seconds(value: str) -> int:
 def use_compact_console(role: str, cell: str) -> None:
     """Show only status lines on the terminal, tagged ``role cell`` in a colour
     derived from the role."""
-    global _CONSOLE_TAG
+    global _CONSOLE_TAG, _REWRITABLE
+    _REWRITABLE = sys.stdout.isatty()
     color = _TAG_COLORS[zlib.crc32(role.encode()) % len(_TAG_COLORS)]
     _CONSOLE_TAG = f"\033[38;5;{color}m{f'{role} {cell}':<28}\033[0m"
 
@@ -274,16 +278,6 @@ def _drain_stdout(timeout: float = 2.0) -> None:
     barrier.wait(timeout)
 
 
-def _console_rewritable() -> bool:
-    """Whether stdout is a terminal, the only place cursor movement means
-    anything: GNU parallel and CI job logs read a pipe."""
-    try:
-        return sys.stdout.isatty()
-    except ValueError:
-        # stdout was closed during shutdown; nothing will be rewritten.
-        return False
-
-
 def _console(text: str) -> None:
     """Queue console-only *text*; it ends any held line's claim to rewriting."""
     global _HELD_LINE
@@ -313,7 +307,7 @@ def _emit(text: str, *, status: bool = False, hold: object | None = None, replac
         if console:
             if replace is not None and replace is _HELD_LINE:
                 console = _REWRITE_PREVIOUS_LINE + console
-            _HELD_LINE = hold if _console_rewritable() else None
+            _HELD_LINE = hold if _REWRITABLE else None
             _STDOUT_QUEUE.put(console)
         if _OUTPUT_LOG is not None:
             _OUTPUT_LOG.write(text)

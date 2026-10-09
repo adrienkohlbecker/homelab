@@ -256,8 +256,8 @@ class TestCompactConsole:
     def test_on_a_terminal_the_result_overwrites_the_header(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        monkeypatch.setattr(utils, "_console_rewritable", lambda: True)
         utils.use_compact_console("nginx", "lab:noble")
+        monkeypatch.setattr(utils, "_REWRITABLE", True)
         log = tmp_path / "out.ansi"
 
         with utils.tee_output(log), utils.phase("converge"):
@@ -274,8 +274,8 @@ class TestCompactConsole:
     def test_a_line_in_between_keeps_the_header(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        monkeypatch.setattr(utils, "_console_rewritable", lambda: True)
         utils.use_compact_console("nginx", "lab:noble")
+        monkeypatch.setattr(utils, "_REWRITABLE", True)
 
         with utils.phase("converge"):
             utils.print_line("Skipping base prerequisites")
@@ -301,9 +301,9 @@ class TestCompactConsole:
     def test_on_a_terminal_the_heartbeat_overwrites_the_header(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        monkeypatch.setattr(utils, "_console_rewritable", lambda: True)
         monkeypatch.setattr(utils, "PHASE_HEARTBEAT_SECONDS", 0.01)
         utils.use_compact_console("nginx", "lab:noble")
+        monkeypatch.setattr(utils, "_REWRITABLE", True)
 
         with utils.phase("converge"):
             time.sleep(0.1)

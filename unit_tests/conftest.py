@@ -82,3 +82,4 @@ def _verbose_console(monkeypatch: pytest.MonkeyPatch) -> None:
     process-wide mode to compact."""
     monkeypatch.setattr(utils, "_CONSOLE_TAG", None)
     monkeypatch.setattr(utils, "_HELD_LINE", None)
+    monkeypatch.setattr(utils, "_REWRITABLE", False)
