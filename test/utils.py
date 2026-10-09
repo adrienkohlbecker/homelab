@@ -80,14 +80,12 @@ _OUTPUT_LOG: TextIO | None = None
 def tee_output(path: Path) -> Iterator[None]:
     """Mirror every _write_line / print_cmd_line call into *path* for the duration of the with-block."""
     global _OUTPUT_LOG
-    path.parent.mkdir(parents=True, exist_ok=True)
-    previous = _OUTPUT_LOG
     with path.open("w") as handle:
         _OUTPUT_LOG = handle
         try:
             yield
         finally:
-            _OUTPUT_LOG = previous
+            _OUTPUT_LOG = None
 
 
 def positive_seconds(value: str) -> int:

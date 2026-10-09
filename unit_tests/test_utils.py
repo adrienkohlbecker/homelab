@@ -22,18 +22,6 @@ class TestTeeOutput:
             utils._emit("hello\n")
         assert "hello" in log_path.read_text()
 
-    def test_restores_previous_state(self, tmp_path: Path) -> None:
-        assert utils._OUTPUT_LOG is None
-        with utils.tee_output(tmp_path / "a.log"):
-            assert utils._OUTPUT_LOG is not None
-        assert utils._OUTPUT_LOG is None
-
-    def test_creates_parent_dirs(self, tmp_path: Path) -> None:
-        log_path = tmp_path / "sub" / "dir" / "test.log"
-        with utils.tee_output(log_path):
-            utils._emit("x")
-        assert log_path.exists()
-
 
 # ---------------------------------------------------------------------------
 # print_cmd_line
