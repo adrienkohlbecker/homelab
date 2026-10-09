@@ -61,27 +61,27 @@ parallel "${parallel_args[@]}" --colsep '\t' --arg-file "${cells}" \
   test/testrole.py --machine '{1}' --ubuntu '{2}' '{3}' || status=$?
 
 # A retry appends to the joblog, so judge each cell (Seq, column 1) by its
-# latest row: Exitval is column 7 and the command column 9. Seq is also the
-# cell's line in the cells file, whose machine, ubuntu, and role columns name
-# its test/out files.
+# latest row, whose Exitval is column 7. Seq is also the cell's line in the
+# cells file, which names its machine, ubuntu, and role.
 if [ "${status}" -ne 0 ]; then
   failed=$(awk -F '\t' '
-    FNR == NR { cell[FNR] = $1 "." $2 "." $3; next }
-    FNR > 1 { exitval[$1] = $7; command[$1] = $9; if ($1 > last) last = $1 }
-    END { for (seq = 1; seq <= last; seq++) if (seq in exitval && exitval[seq] != 0) print cell[seq] "\t" exitval[seq] "\t" command[seq] }
+    FNR == NR { cell[FNR] = $0; next }
+    FNR > 1 { exitval[$1] = $7; if ($1 > last) last = $1 }
+    END { for (seq = 1; seq <= last; seq++) if (seq in exitval && exitval[seq] != 0) print cell[seq] "\t" exitval[seq] }
   ' "${cells}" "${joblog}")
   # Reprint what each failed cell showed when it failed, which --latest-line
   # has since reduced to its verdict; a cell killed before reporting has none.
   summary=""
-  while IFS=$'\t' read -r cell exitval command; do
-    [ -n "${cell}" ] || continue
+  while IFS=$'\t' read -r machine ubuntu role exitval; do
+    [ -n "${role}" ] || continue
+    cell="${machine}.${ubuntu}.${role}"
     failure="test/out/${cell}.failure.ansi"
     if [ -f "${failure}" ]; then
       echo
       echo "${cell} (log: test/out/${cell}.output.ansi)"
       sed 's/^/│ /' "${failure}"
     fi
-    summary+="  ${command}  (exit ${exitval})"$'\n'
+    summary+="  mise run test:role -- ${role} --machine ${machine} --ubuntu ${ubuntu}  (exit ${exitval})"$'\n'
   done <<<"${failed}"
   echo
   echo "Failed cells (rerun with: mise run test:all --retry-failed; it also starts cells an interrupt skipped):"

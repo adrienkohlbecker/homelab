@@ -43,7 +43,7 @@ def run(repo: Path, *, failing: tuple[str, ...] = (), retry: bool = False, jobs:
 
 
 def failed_roles(stdout: str) -> list[str]:
-    return [line.split()[5] for line in stdout.splitlines() if line.startswith("  test/testrole.py")]
+    return [line.split()[4] for line in stdout.splitlines() if line.startswith("  mise run test:role -- ")]
 
 
 def test_retry_reruns_failures_and_reports_only_current_ones(repo: Path) -> None:
@@ -65,6 +65,12 @@ def test_reprints_each_failed_cells_evidence(repo: Path) -> None:
     assert result.returncode != 0
     assert "lab.noble.bravo (log: test/out/lab.noble.bravo.output.ansi)\n│ evidence of bravo\n" in result.stdout
     assert "alpha" not in result.stdout
+
+
+def test_lists_failed_cells_as_mise_invocations(repo: Path) -> None:
+    result, _ = run(repo, failing=("bravo",))
+
+    assert "  mise run test:role -- bravo --machine lab --ubuntu noble  (exit 1)\n" in result.stdout
 
 
 def test_retry_starts_cells_an_interrupt_skipped(repo: Path) -> None:
