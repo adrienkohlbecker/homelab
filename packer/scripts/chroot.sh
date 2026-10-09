@@ -328,7 +328,7 @@ dont_scan_dirs EFI:/EFI/ZBM
 # hand.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "$ZBM_CMDLINE $COMMANDLINE zbm.skip"
+    options "$ZBM_CMDLINE $COMMANDLINE zbm.prefer=rpool!! zbm.skip"
     submenuentry "Show ZFSBootMenu" {
       options "$ZBM_CMDLINE $COMMANDLINE zbm.show"
     }

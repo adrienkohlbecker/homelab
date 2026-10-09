@@ -715,7 +715,7 @@ default_selection "Ubuntu (ZBM)"
 {% set _zbm_launch_cmdline = [_zbm_cmdline, _console_cmdline] | map('trim') | reject('equalto', '') | join(' ') %}
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "{{ _zbm_launch_cmdline }} zbm.skip"
+    options "{{ _zbm_launch_cmdline }} zbm.prefer=rpool!! zbm.skip"
     icon /EFI/refind/themes/refind-theme-regular/icons/128-48/os_ubuntu.png
     submenuentry "Show ZFSBootMenu" {
       options "{{ _zbm_launch_cmdline }} zbm.show"
