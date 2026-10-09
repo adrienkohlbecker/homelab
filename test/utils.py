@@ -1,8 +1,10 @@
 import argparse
 import atexit
 import contextlib
+import itertools
 import os
 import queue
+import re
 import shlex
 import signal
 import subprocess
@@ -10,7 +12,7 @@ import sys
 import threading
 import time
 import zlib
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import IO, NamedTuple, TextIO
 
@@ -18,10 +20,11 @@ from typing import IO, NamedTuple, TextIO
 class CommandFailedException(Exception):
     """Raised when a subprocess exits with a non-zero status."""
 
-    def __init__(self, cmd: list[str], exitcode: int, stderr: list[str]) -> None:
+    def __init__(self, cmd: list[str], exitcode: int, stderr: list[str], stdout: Sequence[str] = ()) -> None:
         self.cmd = cmd
         self.exitcode = exitcode
         self.stderr = stderr
+        self.stdout = list(stdout)
         tail = "\n".join(stderr[-20:])
         suffix = f"\n--- stderr tail ---\n{tail}" if tail else ""
         super().__init__(f"Command failed with exit code {exitcode}: {shlex.join(cmd)}{suffix}")
@@ -144,17 +147,62 @@ def phase(name: str) -> Iterator[None]:
         done.set()
 
 
-def print_log_tail(path: Path, lines: int = 40) -> None:
-    """In compact mode, show a failed run's transcript tail and where it lives.
+ANSI_CSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_TASK_HEADER_RE = re.compile(r"(TASK|RUNNING HANDLER) \[")
+_TASK_RESULT_RE = re.compile(r"(ok|changed|skipping|included|failed|fatal): ")
+_TASK_FAILURE_RE = re.compile(r"(failed|fatal): \[")
 
-    Console only: the transcript already holds these lines.
+
+def failed_task(stdout: Sequence[str]) -> list[str]:
+    """Return the block of ansible-playbook output for the last task that
+    failed, or an empty list when no task did.
+
+    The block runs from the task's header through its last failure result,
+    leaving out its passing and skipped loop items. A failure that `...ignoring`
+    follows does not count; an earlier one that a rescue caught loses to the
+    last. Matching ignores colour, but the lines come back as printed.
     """
-    if _CONSOLE_TAG is None:
-        return
-    with contextlib.suppress(OSError):  # an unreadable log still leaves its path below
-        for line in path.read_text(errors="replace").splitlines()[-lines:]:
-            _queue_stdout(f"{_CONSOLE_TAG} │ {line}\n")
-    _queue_stdout(f"{_CONSOLE_TAG} log: {path}\n")
+    plain = [ANSI_CSI_RE.sub("", line) for line in stdout]
+    # Ansible indents a YAML result's body under its unindented first line, so
+    # each unindented line starts a segment that runs to the next one.
+    starts = [i for i, line in enumerate(plain) if line and not line[0].isspace()]
+    segments = list(itertools.pairwise([*starts, len(plain)]))
+    task: list[int] = []
+    failed: list[int] = []
+    for n, (start, end) in enumerate(segments):
+        head = plain[start]
+        ignored = n + 1 < len(segments) and plain[segments[n + 1][0]].startswith("...ignoring")
+        if _TASK_HEADER_RE.match(head):
+            task = list(range(start, end))
+        elif _TASK_FAILURE_RE.match(head) and not ignored:
+            task.extend(range(start, end))
+            failed = list(task)
+        elif not (_TASK_RESULT_RE.match(head) or head.startswith("...ignoring")):
+            task.extend(range(start, end))
+    while failed and not plain[failed[-1]].strip():
+        failed.pop()
+    return [stdout[i] for i in failed]
+
+
+def task_title(header: str) -> str:
+    """A TASK header line without its colour and trailing row of stars."""
+    return re.sub(r" \*+$", "", ANSI_CSI_RE.sub("", header).rstrip())
+
+
+def report_failure(excerpt: Sequence[str], log: Path, failure_file: Path, lines: int = 40) -> None:
+    """Show a failed run's evidence and where its transcript lives, and keep
+    the evidence in *failure_file* for test:all's closing summary.
+
+    The evidence is *excerpt* when there is one, else the transcript's last
+    *lines* lines. Only compact mode prints it, since verbose mode streamed it
+    already, and only to the console, since the transcript holds it too.
+    """
+    if not excerpt:
+        with contextlib.suppress(OSError):  # an unreadable log still leaves its path below
+            excerpt = log.read_text(errors="replace").splitlines()[-lines:]
+    failure_file.write_text("".join(f"{line}\n" for line in excerpt))
+    if _CONSOLE_TAG is not None:
+        _console("".join(f"{_CONSOLE_TAG} │ {line}\n" for line in excerpt) + f"{_CONSOLE_TAG} log: {log}\n")
 
 
 def sleep_tick() -> None:
@@ -243,6 +291,14 @@ def _console_rewritable() -> bool:
         return False
 
 
+def _console(text: str) -> None:
+    """Queue console-only *text*; it ends any held line's claim to rewriting."""
+    global _HELD_LINE
+    with _EMIT_LOCK:
+        _HELD_LINE = None
+        _queue_stdout(text)
+
+
 def _emit(text: str, *, status: bool = False, hold: object | None = None, replace: object | None = None) -> None:
     """Queue *text* for stdout and mirror it into the active tee target, if any.
 
@@ -301,6 +357,11 @@ def print_line(line: str, error: bool = False, *, color: str | None = None) -> N
     as *color*.
     """
     _write_line(line, "red" if error else color, status=True)
+
+
+def log_line(line: str, error: bool = False) -> None:
+    """Write a line to the transcript; the console shows it only in verbose mode."""
+    _write_line(line, "red" if error else None)
 
 
 def _relay(stream: IO[str], color: str | None, capture: list[str]) -> None:
@@ -441,5 +502,5 @@ def run_command(
         raise relay_failures[0]
 
     if check and exitcode != 0:
-        raise CommandFailedException(cmd, exitcode, stderr)
+        raise CommandFailedException(cmd, exitcode, stderr, stdout)
     return CommandResult(exitcode=exitcode, stdout=stdout)

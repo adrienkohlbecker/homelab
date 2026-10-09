@@ -18,6 +18,7 @@ from typing import Any, cast
 import machine
 import matrix
 import pytest
+import utils
 
 # ---------------------------------------------------------------------------
 # qemu_user_net_args
@@ -261,7 +262,7 @@ class TestMachineArtifactOwnership:
     ) -> None:
         out = tmp_path / "out"
         out.mkdir()
-        artifacts = [out / f"lab.noble.testrole.{suffix}.ansi" for suffix in ("output", "journal", "boot")]
+        artifacts = [out / f"lab.noble.testrole.{suffix}.ansi" for suffix in ("output", "journal", "boot", "failure")]
         for artifact in artifacts:
             artifact.write_text("stale")
 
@@ -299,6 +300,41 @@ class TestMachineArtifactOwnership:
         assert instance.run(failing, "lab.testrole") == rc
         assert instance.journal_file.exists()
         assert instance.output_file.exists()
+        assert instance.failure_file.exists()
+
+    def test_run_shows_the_failed_task_and_ends_on_the_verdict(
+        self,
+        machine_factory: Callable[..., machine.Machine],
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        instance = machine_factory()
+        utils.use_compact_console("testrole", "lab:noble")
+        stdout = [
+            "TASK [testrole : Earlier] ******************************************************",
+            "ok: [lab]",
+            "TASK [testrole : Validate] *****************************************************",
+            "fatal: [lab]: FAILED! => ",
+            "    msg: bad config",
+            "PLAY RECAP *********************************************************************",
+        ]
+        exc = machine.CommandFailedException(["ansible-playbook", "site.yml"], 2, ["[WARNING]: noise"], stdout)
+
+        def failing() -> None:
+            raise exc
+
+        assert instance.run(failing, "lab.testrole") == 1
+        utils._drain_stdout()
+
+        lines = capsys.readouterr().out.splitlines()
+        terminal = "\n".join(lines)
+        assert "│ fatal: [lab]: FAILED! => " in terminal
+        assert "│     msg: bad config" in terminal
+        assert "Earlier" not in terminal
+        assert "PLAY RECAP" not in terminal
+        assert "[WARNING]: noise" not in terminal
+        assert "lab.testrole failed at TASK [testrole : Validate]" in lines[-1]
+        assert "[WARNING]: noise" in instance.output_file.read_text()
+        assert instance.failure_file.read_text() == "\n".join(stdout[2:5]) + "\n"
 
 
 class TestSystemReadiness:

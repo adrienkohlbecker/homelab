@@ -182,22 +182,38 @@ class TestCompactConsole:
         assert "$ echo" not in terminal
         assert "TASK [nginx : Install]" in log.read_text()
 
-    def test_a_failed_phase_shows_its_failure_and_where_the_log_is(
+    def test_a_failure_without_a_task_shows_the_transcript_tail(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         utils.use_compact_console("nginx", "lab:noble")
         log = tmp_path / "out.ansi"
+        failure_file = tmp_path / "failure.ansi"
 
         with utils.tee_output(log), pytest.raises(utils.CommandFailedException), utils.phase("converge"):
-            utils.run_command(["sh", "-c", "echo 'fatal: [lab]: FAILED!'; exit 2"])
-        utils.print_log_tail(log)
+            utils.run_command(["sh", "-c", "echo 'ERROR! the playbook could not be found'; exit 2"])
+        utils.report_failure([], log, failure_file)
         utils._drain_stdout()
 
         terminal = capsys.readouterr().out
         assert "✗ converge" in terminal
-        assert "│ fatal: [lab]: FAILED!" in terminal
+        assert "│ ERROR! the playbook could not be found" in terminal
         assert f"log: {log}" in terminal
-        assert "fatal: [lab]: FAILED!" in log.read_text()
+        assert "ERROR! the playbook could not be found" in failure_file.read_text()
+
+    def test_a_failed_task_is_shown_on_its_own(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        utils.use_compact_console("nginx", "lab:noble")
+        log = tmp_path / "out.ansi"
+        log.write_text("TASK [nginx : Earlier]\nok: [lab]\n")
+        failure_file = tmp_path / "failure.ansi"
+
+        utils.report_failure(["TASK [nginx : Validate]", "fatal: [lab]: FAILED! =>"], log, failure_file)
+        utils._drain_stdout()
+
+        terminal = capsys.readouterr().out
+        assert "│ TASK [nginx : Validate]" in terminal
+        assert "│ fatal: [lab]: FAILED! =>" in terminal
+        assert "Earlier" not in terminal
+        assert failure_file.read_text() == "TASK [nginx : Validate]\nfatal: [lab]: FAILED! =>\n"
 
     def test_a_running_phase_is_grey_and_a_completed_one_plain(self, capsys: pytest.CaptureFixture[str]) -> None:
         utils.use_compact_console("nginx", "lab:noble")
@@ -309,3 +325,68 @@ class TestCompactConsole:
         assert first is not None
         assert utils._CONSOLE_TAG is not None
         assert first.split("m", 1)[0] == utils._CONSOLE_TAG.split("m", 1)[0]
+
+
+class TestFailedTask:
+    """failed_task: the block of ansible-playbook output for the task that failed."""
+
+    def test_keeps_the_failed_item_and_drops_what_follows(self) -> None:
+        stdout = [
+            "TASK [web : Root listing serves] ***********************************************",
+            "ok: [lab] => ",
+            "    status: 200",
+            "",
+            "\x1b[0;31mTASK [web : Per-tree listing renders] *******************************\x1b[0m",
+            "Friday 09 October 2026  10:19:04 +0200 (0:00:00.039)       0:00:01.134 ********",
+            "ok: [lab] (item=docs) => ",
+            "    status: 200",
+            "\x1b[0;31mfailed: [lab] (item=home) => \x1b[0m",
+            "    content: |-",
+            "        <html>",
+            "",
+            "        </html>",
+            "    msg: 'Status code was 403 and not [200]'",
+            "skipping: [lab] => (item=data)  => ",
+            "    skip_reason: Conditional result was False",
+            "",
+            "PLAY RECAP *********************************************************************",
+            "lab                        : ok=5    changed=0    unreachable=0    failed=1",
+        ]
+
+        assert utils.failed_task(stdout) == [
+            stdout[4],
+            stdout[5],
+            *stdout[8:14],
+        ]
+
+    def test_an_ignored_failure_does_not_count(self) -> None:
+        stdout = [
+            "TASK [web : Probe] *************************************************************",
+            "fatal: [lab]: FAILED! => ",
+            "    msg: optional",
+            "...ignoring",
+            "TASK [web : Next] **************************************************************",
+            "ok: [lab]",
+        ]
+
+        assert utils.failed_task(stdout) == []
+
+    def test_the_last_failure_wins_over_a_rescued_one(self) -> None:
+        stdout = [
+            "TASK [web : Try] ***************************************************************",
+            "fatal: [lab]: FAILED! => ",
+            "    msg: rescued",
+            "TASK [web : Rescue] ************************************************************",
+            "ok: [lab]",
+            "TASK [web : Later] *************************************************************",
+            "fatal: [lab]: FAILED! => ",
+            "    msg: real",
+            "",
+        ]
+
+        assert utils.failed_task(stdout) == stdout[5:8]
+
+    def test_task_title_drops_colour_and_stars(self) -> None:
+        header = "\x1b[0;31mTASK [web : Probe] [CHECK MODE] ******************************\x1b[0m"
+
+        assert utils.task_title(header) == "TASK [web : Probe] [CHECK MODE]"

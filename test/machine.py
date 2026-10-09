@@ -27,13 +27,16 @@ from utils import (
     CommandFailedException,
     CommandResult,
     IdempotenceFailedException,
+    failed_task,
+    log_line,
     phase,
     print_cmd_line,
     print_line,
-    print_log_tail,
+    report_failure,
     run_command,
     sleep_tick,
     stop_process_group,
+    task_title,
     tee_output,
 )
 
@@ -362,7 +365,9 @@ class Machine:
         self.output_file = output_dir / f"{prefix}.output.ansi"
         self.journal_file = output_dir / f"{prefix}.journal.ansi"
         self.boot_file = output_dir / f"{prefix}.boot.ansi"
-        self._artifact_files = (self.output_file, self.journal_file, self.boot_file)
+        # What report_failure showed for a failed run; test:all reprints it.
+        self.failure_file = output_dir / f"{prefix}.failure.ansi"
+        self._artifact_files = (self.output_file, self.journal_file, self.boot_file, self.failure_file)
         for stale in self._artifact_files:
             stale.unlink(missing_ok=True)
         # The workdir lands alongside the packer artifacts, on the same
@@ -794,9 +799,13 @@ class Machine:
 
         Returns the harness exit code: 0 passed, 1 failed, 124 timed out, 125
         not idempotent, 130 interrupted. A pass deletes the per-run logs;
-        anything else keeps them for the post-mortem.
+        anything else keeps them for the post-mortem. A failed Ansible task
+        is shown on its own, otherwise the transcript's tail; the verdict
+        comes last, so it is the line `test:all` leaves on screen.
         """
         rc = 0
+        verdict = ""
+        excerpt: list[str] = []
         # SIGTERM (GNU parallel's --termseq, a CI cancel) stops the cell the
         # way Ctrl-C does, through stop().
         signal.signal(signal.SIGTERM, signal.default_int_handler)
@@ -805,11 +814,22 @@ class Machine:
                 test()
             except IdempotenceFailedException as exc:
                 print_line(str(exc), error=True)
-                print_line(f"{label} not idempotent", error=True)
+                verdict = "not idempotent"
                 rc = 125
-            except (CommandFailedException, CheckFailedException) as exc:
+            except CommandFailedException as exc:
+                excerpt = failed_task(exc.stdout)
+                if excerpt:
+                    # The task says what failed; the command line and its
+                    # stderr tail would only bury it.
+                    log_line(str(exc), error=True)
+                    verdict = f"failed at {task_title(excerpt[0])}"
+                else:
+                    print_line(str(exc), error=True)
+                    verdict = "failed"
+                rc = 1
+            except CheckFailedException as exc:
                 print_line(str(exc), error=True)
-                print_line(f"{label} failed", error=True)
+                verdict = "failed"
                 rc = 1
             except TimeoutError as exc:
                 # The session deadline raises a message-less TimeoutError; the
@@ -818,23 +838,25 @@ class Machine:
                 if str(exc):
                     print_line(str(exc), error=True)
                 deadline = f" after {self.machine_timeout}s" if self.machine_timeout else ""
-                print_line(f"{label} timed out{deadline}", error=True)
+                verdict = f"timed out{deadline}"
                 rc = 124  # GNU `timeout`'s exit code for "command timed out"
             except KeyboardInterrupt:
                 print_line("\nInterrupted, shutting down...")
+                verdict = "interrupted"
                 rc = 130
             except Exception:
                 # The traceback would otherwise go straight to stderr,
                 # bypassing tee_output, so the run log would miss it.
                 print_line(traceback.format_exc().rstrip(), error=True)
-                print_line(f"{label} crashed", error=True)
+                verdict = "crashed"
                 rc = 1
+            if rc != 0:
+                report_failure(excerpt, self.output_file, self.failure_file)
+                print_line(f"{label} {verdict}", error=True)
         if rc == 0:
             print_line(f"✓ {label} passed", color="green")
             for path in self._artifact_files:
                 path.unlink(missing_ok=True)
-        else:
-            print_log_tail(self.output_file)
         return rc
 
     def wait(self, timeout: float | None = None) -> None:

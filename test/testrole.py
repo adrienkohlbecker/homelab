@@ -23,7 +23,14 @@ from matrix import (
     RoleTestConfig,
     load_role_test_config,
 )
-from utils import IdempotenceFailedException, phase, positive_seconds, print_line, use_compact_console
+from utils import (
+    ANSI_CSI_RE,
+    IdempotenceFailedException,
+    phase,
+    positive_seconds,
+    print_line,
+    use_compact_console,
+)
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
@@ -89,13 +96,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str], RoleTestConfig]:
 
 # Strip color sequences before matching because their trailing letters can
 # prevent the word boundary before `changed=N` from matching.
-_ANSI_CSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
 
 
 def _count_changed_tasks(stdout: list[str]) -> int:
     """Sum `changed=N` across every PLAY RECAP host line in the output."""
-    return sum(int(m.group(1)) for line in stdout if (m := _RECAP_CHANGED_RE.search(_ANSI_CSI_RE.sub("", line))))
+    return sum(int(m.group(1)) for line in stdout if (m := _RECAP_CHANGED_RE.search(ANSI_CSI_RE.sub("", line))))
 
 
 def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
