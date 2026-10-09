@@ -45,10 +45,9 @@ listen_address = "127.0.0.1:{{ service_ports.gitlab_runner }}"
     instance_ready_command = "/usr/local/bin/homelab_ci_ready"
     instance_acquire_timeout = "{{ pool.acquire_timeout }}"
 
-    {# Credentials come from the [default] profile under the unit's HOME. #}
+    {# Credentials and region come from the [default] profile under the unit's HOME. #}
     [runners.autoscaler.plugin_config]
       name = "{{ pool.asg_name }}"
-      region = "eu-central-1"
       scale_in_termination = true
 
     [runners.autoscaler.connector_config]
