@@ -221,7 +221,7 @@ class TestCompactConsole:
 
         def noting_heartbeats(line: str, color: str | None, **kwargs: bool) -> None:
             write_line(line, color, **kwargs)
-            if "still running" in line:
+            if line.startswith("▶ converge ("):
                 beat.set()
 
         monkeypatch.setattr(utils, "_write_line", noting_heartbeats)
@@ -235,8 +235,72 @@ class TestCompactConsole:
 
         lines = capsys.readouterr().out.splitlines()
         result = next(i for i, line in enumerate(lines) if "✓ converge" in line)
-        assert any("still running" in line for line in lines[:result])
-        assert not any("still running" in line for line in lines[result:])
+        assert any("▶ converge (" in line for line in lines[:result])
+        assert not any("▶ converge (" in line for line in lines[result:])
+
+    def test_on_a_terminal_the_result_overwrites_the_header(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(utils, "_console_rewritable", lambda: True)
+        utils.use_compact_console("nginx", "lab:noble")
+        log = tmp_path / "out.ansi"
+
+        with utils.tee_output(log), utils.phase("converge"):
+            pass
+        utils._drain_stdout()
+
+        # Split on newlines alone: the rewrite itself carries a carriage return.
+        header, result = capsys.readouterr().out.rstrip("\n").split("\n")
+        assert "▶ converge" in header
+        assert result.startswith(utils._REWRITE_PREVIOUS_LINE)
+        assert "✓ converge" in result
+        assert utils._REWRITE_PREVIOUS_LINE not in log.read_text()
+
+    def test_a_line_in_between_keeps_the_header(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(utils, "_console_rewritable", lambda: True)
+        utils.use_compact_console("nginx", "lab:noble")
+
+        with utils.phase("converge"):
+            utils.print_line("Skipping base prerequisites")
+        utils._drain_stdout()
+
+        terminal = capsys.readouterr().out
+        assert "▶ converge" in terminal
+        assert "✓ converge" in terminal
+        assert utils._REWRITE_PREVIOUS_LINE not in terminal
+
+    def test_a_pipe_gets_appended_lines(self, capsys: pytest.CaptureFixture[str]) -> None:
+        utils.use_compact_console("nginx", "lab:noble")
+
+        with pytest.raises(RuntimeError), utils.phase("converge"):
+            raise RuntimeError("boom")
+        utils._drain_stdout()
+
+        lines = capsys.readouterr().out.splitlines()
+        assert "▶ converge" in lines[0]
+        assert "✗ converge" in lines[1]
+        assert utils._REWRITE_PREVIOUS_LINE not in "".join(lines)
+
+    def test_on_a_terminal_the_heartbeat_overwrites_the_header(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(utils, "_console_rewritable", lambda: True)
+        monkeypatch.setattr(utils, "PHASE_HEARTBEAT_SECONDS", 0.01)
+        utils.use_compact_console("nginx", "lab:noble")
+
+        with utils.phase("converge"):
+            time.sleep(0.1)
+        utils._drain_stdout()
+
+        # Every line after the header, heartbeats and result alike, rewrote
+        # the one before it.
+        header, *rest = capsys.readouterr().out.rstrip("\n").split("\n")
+        assert "▶ converge" in header
+        assert len(rest) > 1
+        assert all(line.startswith(utils._REWRITE_PREVIOUS_LINE) for line in rest)
+        assert "✓ converge" in rest[-1]
 
     def test_roles_keep_their_colour(self) -> None:
         utils.use_compact_console("nginx", "lab:noble")

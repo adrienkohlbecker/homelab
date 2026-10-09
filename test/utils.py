@@ -59,6 +59,11 @@ _CONSOLE_TAG: str | None = None
 _TAG_COLORS = (33, 39, 70, 75, 99, 135, 166, 172, 178, 204, 37, 141)
 # How often a long phase reports it is still running in compact mode.
 PHASE_HEARTBEAT_SECONDS = 300
+# The token of the phase whose header is the terminal's last line, so its
+# heartbeat and result may overwrite it rather than append (see _emit).
+_HELD_LINE: object | None = None
+# Cursor up one line, back to its first column, and clear it.
+_REWRITE_PREVIOUS_LINE = "\033[1A\r\033[2K"
 
 # Optional file that mirrors every line written via _write_line / print_cmd_line.
 # Set with tee_output() so callers can keep a transcript of a run alongside the
@@ -103,9 +108,15 @@ def _elapsed(start: float) -> str:
 
 @contextlib.contextmanager
 def phase(name: str) -> Iterator[None]:
-    """Report a test phase's start, result, and duration as status lines."""
+    """Report a test phase's start, result, and duration as status lines.
+
+    On a terminal, the heartbeat and the result overwrite the header line as
+    long as nothing else has reached the console since; elsewhere each is a
+    line of its own.
+    """
     start = time.monotonic()
-    _write_line(f"▶ {name}", "grey", status=True)
+    token = object()
+    _write_line(f"▶ {name}", "grey", status=True, hold=token)
     done = threading.Event()
     # Marking the phase done and printing a heartbeat are ordered, so no
     # heartbeat that already woke up can land after the result line.
@@ -115,7 +126,7 @@ def phase(name: str) -> Iterator[None]:
         while not done.wait(PHASE_HEARTBEAT_SECONDS):
             with reporting:
                 if not done.is_set():
-                    _write_line(f"  {name} still running ({_elapsed(start)})", "grey", status=True)
+                    _write_line(f"▶ {name} ({_elapsed(start)})", "grey", status=True, hold=token, replace=token)
 
     threading.Thread(target=heartbeat, name=f"phase-{name}", daemon=True).start()
     try:
@@ -123,12 +134,12 @@ def phase(name: str) -> Iterator[None]:
     except BaseException:
         with reporting:
             done.set()
-        print_line(f"✗ {name} ({_elapsed(start)})", error=True)
+        _write_line(f"✗ {name} ({_elapsed(start)})", "red", status=True, replace=token)
         raise
     else:
         with reporting:
             done.set()
-        print_line(f"✓ {name} ({_elapsed(start)})")
+        _write_line(f"✓ {name} ({_elapsed(start)})", None, status=True, replace=token)
     finally:
         done.set()
 
@@ -222,26 +233,50 @@ def _queue_stdout(text: str) -> None:
     _STDOUT_QUEUE.put(text)
 
 
-def _emit(text: str, *, status: bool = False) -> None:
+def _console_rewritable() -> bool:
+    """Whether stdout is a terminal, the only place cursor movement means
+    anything: GNU parallel and CI job logs read a pipe."""
+    try:
+        return sys.stdout.isatty()
+    except ValueError:
+        # stdout was closed during shutdown; nothing will be rewritten.
+        return False
+
+
+def _emit(text: str, *, status: bool = False, hold: object | None = None, replace: object | None = None) -> None:
     """Queue *text* for stdout and mirror it into the active tee target, if any.
 
     In compact console mode only *status* text reaches stdout, one tagged line
-    at a time; everything still lands in the tee target.
+    at a time; everything still lands in the tee target. On a terminal, *hold*
+    marks the console line as rewritable under that token, and *replace*
+    overwrites the held line when its token matches, which holds only while no
+    other console output has followed it. The tee target always gets plain
+    appended lines.
     """
+    global _HELD_LINE
     with _EMIT_LOCK:
         if _CONSOLE_TAG is None:
-            _queue_stdout(text)
+            console = text
         elif status:
-            for line in text.splitlines():
-                _queue_stdout(f"{_CONSOLE_TAG} {line}\n")
+            console = "".join(f"{_CONSOLE_TAG} {line}\n" for line in text.splitlines())
+        else:
+            console = ""
+        if console:
+            if replace is not None and replace is _HELD_LINE:
+                console = _REWRITE_PREVIOUS_LINE + console
+            _HELD_LINE = hold if _console_rewritable() else None
+            _queue_stdout(console)
         if _OUTPUT_LOG is not None:
             _OUTPUT_LOG.write(text)
             _OUTPUT_LOG.flush()
 
 
-def _write_line(line: str, color: str | None, *, status: bool = False) -> None:
-    """Echo a line to stdout (and the active tee target, if any), optionally colorized."""
-    _emit(colorize(line, color) + "\n", status=status)
+def _write_line(
+    line: str, color: str | None, *, status: bool = False, hold: object | None = None, replace: object | None = None
+) -> None:
+    """Echo a line to stdout (and the active tee target, if any), optionally
+    colorized; *hold* and *replace* as for _emit."""
+    _emit(colorize(line, color) + "\n", status=status, hold=hold, replace=replace)
 
 
 def print_cmd_line(cmd: list[str], env: dict[str, str] | None = None) -> None:
