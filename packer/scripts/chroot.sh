@@ -158,7 +158,9 @@ apt-get install --yes curl dosfstools "$zfs_initramfs_package" zfsutils-linux
 COMMANDLINE="console=tty0"
 
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  COMMANDLINE="$COMMANDLINE $SERIAL_CMDLINE mitigations=off"
+  # Twin of _console_serial's qemu_test branch (group_vars/all/main.yml): the
+  # harness's serial console never answers systemd's terminal queries.
+  COMMANDLINE="$COMMANDLINE systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80 $SERIAL_CMDLINE mitigations=off"
   mkdir -p /etc/zfsbootmenu
   echo "mitigations=off" >/etc/zfsbootmenu/mitigations
 elif [ "$INSTALL_TARGET" = "hetzner" ]; then

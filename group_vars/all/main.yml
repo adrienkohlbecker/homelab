@@ -13,8 +13,12 @@ boot_esp_mode: "0700"
 # the boot). The last console= receives /dev/console (systemd status, ZBM's UI),
 # so tests end on the serial console for the harness to read, while real hosts
 # end on tty0 to keep the VGA/VNC console alive through ZBM and shutdown.
+# The harness's serial console is a log file that never answers, so tests also
+# give systemd (258+) its terminal type and size; otherwise systemd queries
+# /dev/console and waits out each query's timeout, twice per systemd instance.
 _console_serial: >-
   {% if qemu_test %}
+  systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80
   {{ (ansible_architecture == 'aarch64')
      | ternary('earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200',
                'earlycon=uart8250,io,0x3f8 console=ttyS0,115200') }}

@@ -26,8 +26,8 @@
         ansible_architecture: aarch64
       assert:
         that:
-          - _console_serial | trim == 'earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200'
-          - _console_cmdline == 'console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200'
+          - _console_serial | trim == 'systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200'
+          - _console_cmdline == 'console=tty0 systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200'
 
     - name: Verify x86 QEMU console rendering
       vars:
@@ -35,8 +35,8 @@
         ansible_architecture: x86_64
       assert:
         that:
-          - _console_serial | trim == 'earlycon=uart8250,io,0x3f8 console=ttyS0,115200'
-          - _console_cmdline == 'console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200'
+          - _console_serial | trim == 'systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80 earlycon=uart8250,io,0x3f8 console=ttyS0,115200'
+          - _console_cmdline == 'console=tty0 systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80 earlycon=uart8250,io,0x3f8 console=ttyS0,115200'
 
     - name: Verify x86 Nexus mirror rendering
       vars:
