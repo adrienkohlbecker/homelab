@@ -373,19 +373,13 @@ create_extra_pools() {
     esac
   done
 
-  # zpool.cache records the device paths a pool was imported from, and the
-  # build VM carries its own root disk ahead of the target disks: /dev/vdX
-  # here is one letter further along than in a machine booted from the
-  # image alone. The cached import then fails on every first boot and falls
-  # back to a full device scan. Re-import by partition UUID, which survives
-  # the renumbering. A bare-metal install keeps its own paths -- they are
-  # already the paths that host boots with.
-  if [ "$INSTALL_TARGET" != bare_metal ]; then
-    for pool in $(zpool list -H -o name | grep -vx rpool); do
-      zpool_export_retry "$pool"
-      zpool import -d /dev/disk/by-partuuid -N "$pool"
-    done
-  fi
+  # zpool create recorded the kernel device paths it was given; re-import
+  # from POOL_DEVICE_DIR (set beside rpool's import) so zpool.cache records
+  # stable names.
+  for pool in $(zpool list -H -o name | grep -vx rpool); do
+    zpool_export_retry "$pool"
+    zpool import -d "$POOL_DEVICE_DIR" -N "$pool"
+  done
 
   mkdir -p /mnt/etc/zfs
   cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
@@ -542,10 +536,24 @@ zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
-# Export, then re-import with a temporary mountpoint of /mnt.
+# Pools are re-imported from stable device names, which zpool.cache records
+# for later imports. Physical disks carry serials, so by-id names them across
+# port and controller changes. Virtual disks have none, and the build VM's own
+# root disk shifts /dev/vdX one letter against a machine booted from the image
+# alone, so VMs use the partition UUID.
+if [ "$INSTALL_TARGET" = bare_metal ]; then
+  POOL_DEVICE_DIR=/dev/disk/by-id
+else
+  POOL_DEVICE_DIR=/dev/disk/by-partuuid
+fi
+
+# Export, then re-import with a temporary mountpoint of /mnt. An altroot
+# import implies cachefile=none, so name the cache explicitly: the shipped
+# zpool.cache (copied in create_extra_pools) then lists rpool alongside the
+# data pools.
 
 zpool_export_retry rpool
-zpool import -N -R /mnt rpool
+zpool import -N -R /mnt -o cachefile=/etc/zfs/zpool.cache -d "$POOL_DEVICE_DIR" rpool
 zfs mount "rpool/ROOT/$UBUNTU_NAME"
 
 # Wait for udev to wire the new device nodes before arch-chroot runs.
