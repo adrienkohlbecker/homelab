@@ -50,7 +50,6 @@ COLORS = {
     "red": "\033[0;41m{line}\033[0m",
     "cyan": "\033[0;36m{line}\033[0m",
     "green": "\033[0;32m{line}\033[0m",
-    "grey": "\033[0;90m{line}\033[0m",
 }
 
 # Compact console mode, set by testrole.py unless --verbose: only status lines
@@ -119,7 +118,7 @@ def phase(name: str) -> Iterator[None]:
     """
     start = time.monotonic()
     token = object()
-    _write_line(f"▶ {name}", "grey", status=True, hold=token)
+    _write_line(f"▶ {name}", None, status=True, hold=token)
     done = threading.Event()
     # Marking the phase done and printing a heartbeat are ordered, so no
     # heartbeat that already woke up can land after the result line.
@@ -129,7 +128,7 @@ def phase(name: str) -> Iterator[None]:
         while not done.wait(PHASE_HEARTBEAT_SECONDS):
             with reporting:
                 if not done.is_set():
-                    _write_line(f"▶ {name} ({_elapsed(start)})", "grey", status=True, hold=token, replace=token)
+                    _write_line(f"▶ {name} ({_elapsed(start)})", None, status=True, hold=token, replace=token)
 
     threading.Thread(target=heartbeat, name=f"phase-{name}", daemon=True).start()
     try:
@@ -142,7 +141,7 @@ def phase(name: str) -> Iterator[None]:
     else:
         with reporting:
             done.set()
-        _write_line(f"✓ {name} ({_elapsed(start)})", None, status=True, replace=token)
+        _write_line(f"✓ {name} ({_elapsed(start)})", "green", status=True, replace=token)
     finally:
         done.set()
 
@@ -348,15 +347,14 @@ def print_cmd_line(cmd: list[str], env: dict[str, str] | None = None) -> None:
         _write_line(f"$ {shlex.join(cmd)}", "cyan")
 
 
-def print_line(line: str, error: bool = False, *, color: str | None = None) -> None:
+def print_line(line: str, error: bool = False) -> None:
     """Log a free-form message through the same path as subprocess output.
 
     Routes through _write_line so the active tee_output target captures it,
     mirroring print()'s behavior otherwise. Pass error=True to render the
-    line with the red highlight used for subprocess stderr, or a COLORS key
-    as *color*.
+    line with the red highlight used for subprocess stderr.
     """
-    _write_line(line, "red" if error else color, status=True)
+    _write_line(line, "red" if error else None, status=True)
 
 
 def log_line(line: str, error: bool = False) -> None:

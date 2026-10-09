@@ -854,7 +854,7 @@ class Machine:
                 report_failure(excerpt, self.output_file, self.failure_file)
                 print_line(f"{label} {verdict}", error=True)
         if rc == 0:
-            print_line(f"✓ {label} passed", color="green")
+            print_line(f"✓ {label} passed")
             for path in self._artifact_files:
                 path.unlink(missing_ok=True)
         return rc

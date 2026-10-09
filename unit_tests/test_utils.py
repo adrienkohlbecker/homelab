@@ -215,7 +215,7 @@ class TestCompactConsole:
         assert "Earlier" not in terminal
         assert failure_file.read_text() == "TASK [nginx : Validate]\nfatal: [lab]: FAILED! =>\n"
 
-    def test_a_running_phase_is_grey_and_a_completed_one_plain(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_a_running_phase_is_plain_and_a_completed_one_green(self, capsys: pytest.CaptureFixture[str]) -> None:
         utils.use_compact_console("nginx", "lab:noble")
 
         with utils.phase("converge"):
@@ -223,9 +223,8 @@ class TestCompactConsole:
         utils._drain_stdout()
 
         terminal = capsys.readouterr().out
-        assert utils.colorize("▶ converge", "grey") in terminal
-        assert "✓ converge (0:00)\n" in terminal
-        assert utils.colorize("✓ converge (0:00)", "green") not in terminal
+        assert " ▶ converge\n" in terminal
+        assert utils.colorize("✓ converge (0:00)", "green") in terminal
 
     def test_no_heartbeat_follows_the_result_line(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
