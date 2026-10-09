@@ -70,15 +70,14 @@ _HELD_LINE: object | None = None
 # Cursor up one line, back to its first column, and clear it.
 _REWRITE_PREVIOUS_LINE = "\033[1A\r\033[2K"
 
-# Optional file that mirrors every line written via _write_line / print_cmd_line.
-# Set with tee_output() so callers can keep a transcript of a run alongside the
-# systemd journal in test/out/.
+# The run's transcript, set by tee_output(): everything _emit writes, whatever
+# the console shows.
 _OUTPUT_LOG: TextIO | None = None
 
 
 @contextlib.contextmanager
 def tee_output(path: Path) -> Iterator[None]:
-    """Mirror every _write_line / print_cmd_line call into *path* for the duration of the with-block."""
+    """Write everything _emit sends into *path* for the duration of the with-block."""
     global _OUTPUT_LOG
     with path.open("w") as handle:
         _OUTPUT_LOG = handle
@@ -281,13 +280,13 @@ def _console(text: str) -> None:
 
 
 def _emit(text: str, *, status: bool = False, hold: object | None = None, replace: object | None = None) -> None:
-    """Queue *text* for stdout and mirror it into the active tee target, if any.
+    """Queue *text* for stdout and write it to the transcript, if any.
 
     In compact console mode only *status* text reaches stdout, one tagged line
-    at a time; everything still lands in the tee target. On a terminal, *hold*
+    at a time; everything still lands in the transcript. On a terminal, *hold*
     marks the console line as rewritable under that token, and *replace*
     overwrites the held line when its token matches, which holds only while no
-    other console output has followed it. The tee target always gets plain
+    other console output has followed it. The transcript always gets plain
     appended lines.
     """
     global _HELD_LINE
@@ -311,8 +310,8 @@ def _emit(text: str, *, status: bool = False, hold: object | None = None, replac
 def _write_line(
     line: str, color: str | None, *, status: bool = False, hold: object | None = None, replace: object | None = None
 ) -> None:
-    """Echo a line to stdout (and the active tee target, if any), optionally
-    colorized; *hold* and *replace* as for _emit."""
+    """Emit a line, optionally colorized; *status*, *hold*, and *replace* as
+    for _emit."""
     _emit(colorize(line, color) + "\n", status=status, hold=hold, replace=replace)
 
 
@@ -330,11 +329,9 @@ def print_cmd_line(cmd: list[str], env: dict[str, str] | None = None) -> None:
 
 
 def print_line(line: str, error: bool = False) -> None:
-    """Log a free-form message through the same path as subprocess output.
-
-    Routes through _write_line so the active tee_output target captures it,
-    mirroring print()'s behavior otherwise. Pass error=True to render the
-    line with the red highlight used for subprocess stderr.
+    """Write a status line: the console shows it in every mode, and the
+    transcript keeps it. Pass error=True for the red highlight used for
+    subprocess stderr.
     """
     _write_line(line, "red" if error else None, status=True)
 
@@ -345,7 +342,8 @@ def log_line(line: str, error: bool = False) -> None:
 
 
 def _relay(stream: IO[str], color: str | None, capture: list[str]) -> None:
-    """Relay a process stream to stdout and the log, capturing each line."""
+    """Relay a process stream to the transcript, and to the console in
+    verbose mode, capturing each line."""
     for line in stream:
         line = line.rstrip("\r\n")
         capture.append(line)
