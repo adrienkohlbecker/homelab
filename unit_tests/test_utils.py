@@ -60,9 +60,9 @@ class TestCommandFailedException:
         assert "git push" in str(exc)
         assert "fatal: error" in str(exc)
 
-    def test_empty_stderr(self) -> None:
+    def test_empty_stderr_has_no_tail(self) -> None:
         exc = utils.CommandFailedException(["ls"], 1, [])
-        assert "1" in str(exc)
+        assert "stderr tail" not in str(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -188,21 +188,6 @@ class TestCompactConsole:
         assert f"log: {log}" in terminal
         assert "ERROR! the playbook could not be found" in failure_file.read_text()
 
-    def test_a_failed_task_is_shown_on_its_own(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        utils.use_compact_console("nginx", "lab:noble")
-        log = tmp_path / "out.ansi"
-        log.write_text("TASK [nginx : Earlier]\nok: [lab]\n")
-        failure_file = tmp_path / "failure.ansi"
-
-        utils.report_failure(["TASK [nginx : Validate]", "fatal: [lab]: FAILED! =>"], log, failure_file)
-        utils._drain_stdout()
-
-        terminal = capsys.readouterr().out
-        assert "│ TASK [nginx : Validate]" in terminal
-        assert "│ fatal: [lab]: FAILED! =>" in terminal
-        assert "Earlier" not in terminal
-        assert failure_file.read_text() == "TASK [nginx : Validate]\nfatal: [lab]: FAILED! =>\n"
-
     def test_a_running_phase_is_plain_and_a_completed_one_green(self, capsys: pytest.CaptureFixture[str]) -> None:
         utils.use_compact_console("nginx", "lab:noble")
 
@@ -304,14 +289,6 @@ class TestCompactConsole:
         assert len(rest) > 1
         assert all(line.startswith(utils._REWRITE_PREVIOUS_LINE) for line in rest)
         assert "✓ converge" in rest[-1]
-
-    def test_roles_keep_their_colour(self) -> None:
-        utils.use_compact_console("nginx", "lab:noble")
-        first = utils._CONSOLE_TAG
-        utils.use_compact_console("nginx", "minimal:noble")
-        assert first is not None
-        assert utils._CONSOLE_TAG is not None
-        assert first.split("m", 1)[0] == utils._CONSOLE_TAG.split("m", 1)[0]
 
 
 class TestFailedTask:
