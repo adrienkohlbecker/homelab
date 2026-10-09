@@ -270,11 +270,8 @@ class LaunchOptions:
 
 SSH_WAIT_TIMEOUT = 120
 # Boot-wait polling. The guest reaches sshd a few seconds in, so a 1s poll
-# would add up to a second per boot. Each banner probe is a fresh connection
-# with a short timeout: one opened before the guest's network is up waits on
-# slirp's SYN retransmit backoff, not on sshd.
+# would add up to a second per boot.
 BOOT_POLL_INTERVAL = 0.1
-SSH_PROBE_TIMEOUT = 0.3
 
 # Bound on `systemctl is-system-running --wait`, which otherwise waits for as
 # long as any unit is still activating and leaves only the overall session
@@ -801,9 +798,12 @@ class Machine:
 
         # qemu's hostfwd accepts before sshd listens, then sends nothing or
         # drops the connection, so only a banner proves sshd is up. OSError
-        # covers the refused, reset, and timed-out cases alike.
+        # covers the refused, reset, and timed-out cases alike. The timeout
+        # stays short: a probe opened before the guest's network is up waits
+        # on slirp's SYN retransmit backoff, not on sshd, so a fresh probe
+        # sees sshd sooner.
         try:
-            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=SSH_PROBE_TIMEOUT) as sock:
+            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=0.3) as sock:
                 return bool(sock.recv(1024).strip())
         except OSError:
             return False
