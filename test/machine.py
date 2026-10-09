@@ -830,7 +830,7 @@ class Machine:
                 print_line(f"{label} crashed", error=True)
                 rc = 1
         if rc == 0:
-            print_line(f"✓ {label} passed")
+            print_line(f"✓ {label} passed", color="green")
             for path in self._artifact_files:
                 path.unlink(missing_ok=True)
         else:

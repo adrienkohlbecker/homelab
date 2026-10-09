@@ -199,20 +199,32 @@ class TestCompactConsole:
         assert f"log: {log}" in terminal
         assert "fatal: [lab]: FAILED!" in log.read_text()
 
+    def test_a_running_phase_is_grey_and_a_completed_one_plain(self, capsys: pytest.CaptureFixture[str]) -> None:
+        utils.use_compact_console("nginx", "lab:noble")
+
+        with utils.phase("converge"):
+            pass
+        utils._drain_stdout()
+
+        terminal = capsys.readouterr().out
+        assert utils.colorize("▶ converge", "grey") in terminal
+        assert "✓ converge (0:00)\n" in terminal
+        assert utils.colorize("✓ converge (0:00)", "green") not in terminal
+
     def test_no_heartbeat_follows_the_result_line(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         monkeypatch.setattr(utils, "PHASE_HEARTBEAT_SECONDS", 0.01)
         utils.use_compact_console("nginx", "lab:noble")
         beat = threading.Event()
-        print_line = utils.print_line
+        write_line = utils._write_line
 
-        def noting_heartbeats(line: str, error: bool = False) -> None:
-            print_line(line, error)
+        def noting_heartbeats(line: str, color: str | None, **kwargs: bool) -> None:
+            write_line(line, color, **kwargs)
             if "still running" in line:
                 beat.set()
 
-        monkeypatch.setattr(utils, "print_line", noting_heartbeats)
+        monkeypatch.setattr(utils, "_write_line", noting_heartbeats)
 
         with utils.phase("converge"):
             assert beat.wait(5)
