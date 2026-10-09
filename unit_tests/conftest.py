@@ -76,6 +76,20 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
         m.workdir.cleanup()
 
 
+@pytest.hookimpl(wrapper=True, trylast=True)
+def pytest_runtest_call() -> Iterator[None]:
+    """Flush the stdout writer before the test's call phase ends.
+
+    pytest suspends capture between phases, so a line the writer thread
+    still had queued would otherwise reach the terminal. trylast makes this
+    the innermost wrapper, inside the capture plugin's.
+    """
+    try:
+        return (yield)
+    finally:
+        utils._drain_stdout()
+
+
 @pytest.fixture(autouse=True)
 def _verbose_console(monkeypatch: pytest.MonkeyPatch) -> None:
     """Start every test in the verbose console mode; testrole.main() switches the
