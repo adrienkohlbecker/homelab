@@ -114,34 +114,6 @@
             validate: python3 -m json.tool "%s"
           diff: false
 
-    # Prove public resolution end-to-end; retry boundedly for a cold DoT handshake.
-    - name: Verify public resolution over the enforced resolver
-      command: resolvectl query --cache=no wikipedia.org
-      register: test_public_resolve
-      changed_when: false
-      retries: 5
-      delay: 3
-      until: test_public_resolve.rc == 0
-
-    # show-server-state keeps one JSON schema from systemd 255 through 259.
-    # Global DNS= servers are type "system"; a TLS verified level proves the
-    # query above negotiated DoT rather than only configuring it.
-    - name: Verify DNS-over-TLS carried the query to the configured resolver
-      become: true
-      vars:
-        _test_system_servers: >-
-          {{ test_resolved_servers.stdout | from_json
-             | selectattr('Type', '==', 'system') | list }}
-      command: resolvectl show-server-state --json=short
-      register: test_resolved_servers
-      changed_when: false
-      failed_when: >-
-        test_resolved_servers.rc != 0 or
-        (_test_system_servers | map(attribute='Server') | sort)
-        != (test_dot_servers | sort) or
-        (_test_system_servers | map(attribute='VerifiedFeatureLevel')
-         | select('match', 'TLS') | list | length) == 0
-
     - name: Configure shared base-role prerequisites
       when: test_base_prerequisites | default(false) | bool
       block:

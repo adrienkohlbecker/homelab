@@ -175,3 +175,33 @@
     packer_verify_grub_status.stdout_lines
     | select('search', '\\sinstalled$')
     | list | length > 0
+
+## Verify things from test/playbooks/_environment.yml
+
+# Prove public resolution end-to-end; retry boundedly for a cold DoT handshake.
+- name: Verify public resolution over the enforced resolver
+  command: resolvectl query --cache=no wikipedia.org
+  register: packer_public_resolve
+  changed_when: false
+  retries: 5
+  delay: 3
+  until: packer_public_resolve.rc == 0
+
+# show-server-state keeps one JSON schema from systemd 255 through 259.
+# Global DNS= servers are type "system"; a TLS verified level proves the
+# query above negotiated DoT rather than only configuring it.
+- name: Verify DNS-over-TLS carried the query to the configured resolver
+  become: true
+  vars:
+    _test_system_servers: >-
+      {{ packer_resolved_servers.stdout | from_json
+          | selectattr('Type', '==', 'system') | list }}
+  command: resolvectl show-server-state --json=short
+  register: packer_resolved_servers
+  changed_when: false
+  failed_when: >-
+    packer_resolved_servers.rc != 0 or
+    (_test_system_servers | map(attribute='Server') | sort)
+    != (test_dot_servers | sort) or
+    (_test_system_servers | map(attribute='VerifiedFeatureLevel')
+      | select('match', 'TLS') | list | length) == 0
