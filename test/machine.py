@@ -727,13 +727,16 @@ class Machine:
 
     def _qmp(self, command: str, arguments: dict | None = None) -> object:
         """Run one QMP command against this VM and return its result."""
+        deadline = time.monotonic() + QMP_TIMEOUT
         with self._qmp_connect() as sock:
             replies = sock.makefile("rb")
             for request in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments or {}}):
                 sock.sendall(json.dumps(request).encode() + b"\n")
-                # The greeting and asynchronous events carry no "return".
+                # The greeting and asynchronous events carry no "return". The
+                # socket timeout bounds each read, not a steady run of events.
                 while not ({"return", "error"} & (message := json.loads(replies.readline())).keys()):
-                    pass
+                    if time.monotonic() > deadline:
+                        raise TimeoutError(f"QMP {request['execute']} got no reply within {QMP_TIMEOUT}s")
                 if "error" in message:
                     raise RuntimeError(f"QMP {request['execute']} failed: {message['error']}")
             return message["return"]
@@ -880,18 +883,28 @@ class Machine:
         return rc
 
     def wait(self, timeout: float | None = None) -> None:
-        """Wait for qemu to exit; subprocess.TimeoutExpired past *timeout*."""
-        if self.proc:
+        """Wait for qemu to exit; subprocess.TimeoutExpired past *timeout*,
+        or the session's TimeoutError if its deadline comes first."""
+        if not self.proc:
+            return
+        left = self.remaining()
+        if left is None or (timeout is not None and timeout <= left):
             self.proc.wait(timeout)
+            return
+        try:
+            self.proc.wait(left)
+        except subprocess.TimeoutExpired:
+            raise TimeoutError() from None
 
     @contextlib.contextmanager
     def session(self, timeout: int | None) -> Iterator[None]:
         """Prepare and boot the VM, run the body, and always stop the VM.
 
         *timeout* sets the deadline every blocking call is bounded by (see
-        remaining). stop() runs whatever happened, including an interrupt
-        during prepare or boot. A kept VM stays up after the body -- passed,
-        failed, or timed out -- until Ctrl-C; only Ctrl-C skips that hold.
+        remaining), and a body that finishes past it still times out. stop()
+        runs whatever happened, including an interrupt during prepare or
+        boot. A kept VM stays up after the body -- passed, failed, or timed
+        out -- until Ctrl-C, with no deadline; only Ctrl-C skips that hold.
         """
         self.deadline = time.monotonic() + timeout if timeout else None
         try:
@@ -900,14 +913,17 @@ class Machine:
                 self.boot()
             try:
                 yield
+                self.remaining()
             except BaseException as exc:
                 if self.keep_vm and not isinstance(exc, KeyboardInterrupt):
                     if isinstance(exc, TimeoutError) and self.deadline and time.monotonic() >= self.deadline:
                         print_line(f"Timed out after {timeout}s; --keep set, dropping to SSH for debug")
+                    self.deadline = None
                     self.print_ssh_instructions()
                     self.wait()
                 raise
             if self.keep_vm:
+                self.deadline = None
                 self.print_ssh_instructions()
                 self.wait()
         finally:

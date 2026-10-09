@@ -1,5 +1,6 @@
 """Unit tests for machine.py functions not covered by existing test_*.py files."""
 
+import contextlib
 import fcntl
 import json
 import os
@@ -10,7 +11,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -506,10 +507,10 @@ class TestQmpTransport:
     """_qmp against a fake monitor speaking the QMP wire protocol."""
 
     @staticmethod
-    def _serve(path: Path, replies: list[dict], *, delay: float) -> threading.Thread:
+    def _serve(path: Path, replies: list[dict], *, delay: float, events: int = 1) -> threading.Thread:
         """Bind *path* after *delay* (as qemu opens its monitor after the
-        pidfile) and answer one connection: greeting, capabilities, an
-        asynchronous event, then *replies* to the command."""
+        pidfile) and answer one connection: greeting, capabilities, *events*
+        asynchronous events 50ms apart, then *replies* to the command."""
 
         def run() -> None:
             time.sleep(delay)
@@ -517,7 +518,8 @@ class TestQmpTransport:
                 server.bind(str(path))
                 server.listen(1)
                 conn, _ = server.accept()
-                with conn, conn.makefile("rwb") as stream:
+                # The client hangs up early when it gives up on the events.
+                with contextlib.suppress(BrokenPipeError), conn, conn.makefile("rwb") as stream:
 
                     def send(message: dict) -> None:
                         stream.write(json.dumps(message).encode() + b"\n")
@@ -527,7 +529,9 @@ class TestQmpTransport:
                     stream.readline()
                     send({"return": {}})
                     stream.readline()
-                    send({"event": "NIC_RX_FILTER_CHANGED", "data": {}})
+                    for _ in range(events):
+                        send({"event": "NIC_RX_FILTER_CHANGED", "data": {}})
+                        time.sleep(0.05)
                     for reply in replies:
                         send(reply)
 
@@ -552,10 +556,38 @@ class TestQmpTransport:
         with pytest.raises(RuntimeError, match="no VNC"):
             m._qmp("query-vnc")
 
+    def test_a_stream_of_events_cannot_hold_the_reply_open(
+        self, m: machine.Machine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(machine, "QMP_TIMEOUT", 0.3)
+        self._serve(m.qmp_socket, [], delay=0, events=100)
+        with pytest.raises(TimeoutError, match="no reply"):
+            m._qmp("query-vnc")
+
     def test_a_monitor_that_never_opens_times_out(self, m: machine.Machine, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(machine, "QMP_TIMEOUT", 0.3)
         with pytest.raises(FileNotFoundError):
             m._qmp("query-vnc")
+
+
+class TestWait:
+    @pytest.fixture
+    def m(self, machine_factory: Callable[..., machine.Machine]) -> Iterator[machine.Machine]:
+        m = machine_factory()
+        m.proc = subprocess.Popen(["sleep", "30"])
+        yield m
+        m.proc.kill()
+        m.proc.wait()
+
+    def test_the_session_deadline_caps_the_wait(self, m: machine.Machine) -> None:
+        m.deadline = time.monotonic() + 0.3
+        with pytest.raises(TimeoutError):
+            m.wait(120)
+
+    def test_a_shorter_timeout_still_raises_timeout_expired(self, m: machine.Machine) -> None:
+        m.deadline = time.monotonic() + 120
+        with pytest.raises(subprocess.TimeoutExpired):
+            m.wait(0.3)
 
 
 def test_stop_kills_a_process_group_that_ignores_sigterm(

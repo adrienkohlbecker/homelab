@@ -24,6 +24,9 @@ class SiteTestMachine:
         self.ansible_calls: list[tuple[str, ...]] = []
         self.ssh_calls: list[tuple[str, ...]] = []
         self.system_running_calls = 0
+        self.deadline: float | None = None
+
+    remaining = Machine.remaining
 
     def prepare(self) -> None:
         return None

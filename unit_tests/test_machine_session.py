@@ -17,6 +17,9 @@ class FakeMachine:
         self.stopped = False
         self.waited = False
         self.instructions = False
+        self.deadline: float | None = None
+
+    remaining = Machine.remaining
 
     def prepare(self) -> None:
         pass
@@ -33,6 +36,8 @@ class FakeMachine:
         self.instructions = True
 
     def wait(self, timeout: float | None = None) -> None:
+        # As Machine.wait does, so a hold still under the deadline fails.
+        self.remaining()
         self.waited = True
 
 
@@ -73,13 +78,22 @@ def test_keep_waits_after_timeout_then_resurfaces_it() -> None:
         with Machine.session(cast(Machine, machine), 1):
             time.sleep(1.1)
             # The next blocking call asks how long it may take.
-            Machine.remaining(cast(Machine, machine))
+            machine.remaining()
 
     with pytest.raises(TimeoutError):
         overrunning_body()
 
     assert machine.instructions
     assert machine.waited
+    assert machine.stopped
+
+
+def test_a_body_that_finishes_past_the_deadline_times_out() -> None:
+    machine = FakeMachine()
+
+    with pytest.raises(TimeoutError), Machine.session(cast(Machine, machine), 1):
+        time.sleep(1.1)
+
     assert machine.stopped
 
 
