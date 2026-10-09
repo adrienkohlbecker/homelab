@@ -91,6 +91,13 @@ def pytest_runtest_call() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _no_time_machine_exclusion(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep imagedir_for_host() from shelling out to macOS's xattr and tmutil;
+    test_preflight covers the real helper."""
+    monkeypatch.setattr(machine, "_exclude_from_time_machine", lambda d: None)
+
+
+@pytest.fixture(autouse=True)
 def _verbose_console(monkeypatch: pytest.MonkeyPatch) -> None:
     """Start every test in the verbose console mode; testrole.main() switches the
     process-wide mode to compact."""

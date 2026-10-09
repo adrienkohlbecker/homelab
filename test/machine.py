@@ -1328,7 +1328,24 @@ def imagedir_for_host() -> Path:
         d.mkdir(exist_ok=True)
     except FileNotFoundError:
         raise RuntimeError(f"Imagedir parent {d.parent} does not exist; mount the qemu image volume") from None
+    if platform.system() == "Darwin":
+        _exclude_from_time_machine(d)
     return d
+
+
+_TIME_MACHINE_EXCLUDE_XATTR = "com.apple.metadata:com_apple_backup_excludeItem"
+
+
+def _exclude_from_time_machine(d: Path) -> None:
+    """Keep *d*, tens of GiB of rebuildable fixtures, out of Time Machine.
+
+    tmutil's sticky exclusion is an xattr on the directory itself, so a
+    publish swapping the per-release trees beneath it leaves it in place.
+    tmutil takes ~11s even when there is nothing to do, so it only runs
+    when the xattr is missing.
+    """
+    if subprocess.run(["xattr", "-p", _TIME_MACHINE_EXCLUDE_XATTR, str(d)], capture_output=True).returncode != 0:
+        subprocess.run(["tmutil", "addexclusion", str(d)], check=True, capture_output=True, timeout=60)
 
 
 def sweep_stale_workdirs(imagedir: Path) -> None:
