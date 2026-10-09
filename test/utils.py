@@ -45,12 +45,8 @@ class CommandResult(NamedTuple):
     stdout: list[str]
 
 
-# Templates expand `{line}` between an ANSI prefix and reset.
-COLORS = {
-    "red": "\033[0;41m{line}\033[0m",
-    "cyan": "\033[0;36m{line}\033[0m",
-    "green": "\033[0;32m{line}\033[0m",
-}
+# SGR parameters for colorize().
+COLORS = {"red": "0;41", "cyan": "0;36", "green": "0;32"}
 
 # Compact console mode, set by testrole.py unless --verbose: only status lines
 # (print_line) reach the terminal, each prefixed with this cell's tag, so cells
@@ -218,9 +214,9 @@ def sleep_tick(seconds: float = 1.0) -> None:
 
 
 def colorize(line: str, color: str | None) -> str:
-    """Return the line wrapped in ANSI codes when *color* is a known key."""
-    template = COLORS.get(color) if color else None
-    return template.format(line=line) if template else line
+    """Return *line* wrapped in the ANSI codes for the COLORS key *color*, or
+    as is when *color* is None."""
+    return f"\033[{COLORS[color]}m{line}\033[0m" if color else line
 
 
 # Subprocess output is relayed line-by-line by the thread draining the child's
