@@ -32,6 +32,10 @@ def test_default_x86_64_no_keep_no_direct_boot(
     assert cmd[2] == "660"
     assert cmd[3] == "qemu-system-x86_64"
 
+    # No implicit devices; the display comes back with a VGA BIOS for SeaBIOS.
+    assert cmd[4] == "-nodefaults"
+    assert "virtio-vga" in [cmd[i + 1] for i, a in enumerate(cmd) if a == "-device"]
+
     # Drives expand to repeated --drive args.
     assert cmd.count("--drive") == 2
     drive_idx = [i for i, a in enumerate(cmd) if a == "--drive"]
@@ -82,7 +86,7 @@ def test_macos_aarch64_uses_hvf(
     assert cmd[3] == "qemu-system-aarch64"
     assert cmd[cmd.index("-machine") + 1] == "type=virt,accel=hvf,usb=on"
 
-    # virt has no default graphics; headless cells still get a framebuffer.
+    # virt has no legacy VGA; headless cells get no keep-VM input devices.
     devices = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-device"]
     assert "virtio-gpu-pci" in devices
     assert "usb-kbd" not in devices
@@ -113,10 +117,8 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
     # A kept VM runs unwrapped, until the operator stops it.
     assert cmd[0] == "qemu-system-x86_64"
 
-    # x86_64 q35 has VGA / PS/2 / ICH9 USB by default; only usb-tablet is
-    # added (absolute mouse for VNC). No virtio-gpu-pci.
-    assert "virtio-gpu-pci" not in cmd
-
+    # x86_64 q35 has PS/2 / ICH9 USB by default; only usb-tablet is added
+    # (absolute mouse for VNC).
     # VNC on the first free loopback display + French keyboard layout.
     display_idx = cmd.index("-display")
     assert cmd[display_idx + 1] == f"vnc={machine.SSH_HOST}:0,to=99"

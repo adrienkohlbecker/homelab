@@ -14,6 +14,8 @@ x86_64:
   guest:
     machine_type: q35
     net_device: virtio-net
+    # virtio-gpu with a VGA BIOS, so SeaBIOS and GRUB draw on it too.
+    display_device: virtio-vga
     cloud_image_suffix: amd64
     # Ubuntu 24.04 dropped the legacy non-4M names.
     uefi_firmware:
@@ -29,6 +31,8 @@ aarch64:
     # Ubuntu's ARM qemu package omits the optional virtio EFI ROM. The guest
     # firmware discovers PCI devices directly, so no ROM is needed.
     net_device: virtio-net,romfile=
+    # virt has no legacy VGA; edk2's virtio-gpu driver draws the early display.
+    display_device: virtio-gpu-pci
     cloud_image_suffix: arm64
     # AAVMF_CODE.fd is only a deprecated compatibility link to this image, and
     # QEMU_EFI.fd is a 2 MiB build that cannot pair with the 64 MiB VARS store.

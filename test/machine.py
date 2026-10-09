@@ -65,13 +65,6 @@ GUEST_JOURNAL_UNIT_PATH = Path(__file__).parent / "homelab_guest_journal.service
 # Guest machine, NIC, cloud-image token, and UEFI pairs per architecture,
 # shared with the Packer fixture build and the CI image stores.
 ARCHITECTURES = yaml.safe_load((Path(__file__).parent.parent / "data" / "architectures.yml").read_text())
-# -device flags every guest gets. aarch64 virt has no default graphics, and
-# without a framebuffer Ubuntu's initramfs init-top/framebuffer script falls
-# back to `sleep 1` + vesafb on every boot. q35's std VGA already covers x86_64.
-GUEST_DEVICES = {
-    "x86_64": (),
-    "aarch64": ("-device", "virtio-gpu-pci"),
-}
 # Extra -device flags for interactive (VNC) mode. q35 brings PS/2 / ICH9 USB,
 # so x86_64 only needs usb-tablet for an absolute mouse; aarch64 virt has no
 # default input.
@@ -1175,16 +1168,14 @@ class Machine:
     def _boot_command(self) -> list[str]:
         """Assemble the qemu command line for the prepared disks.
 
-        Arch- and OS-aware: data/architectures.yml supplies the machine type
-        and NIC, GUEST_DEVICES and KEEP_VM_DEVICES the always-on and keep-VM
-        device sets; this method only chooses accel based on
-        platform.system(). Display hardware (virtio-gpu-pci + qemu-xhci) works
-        identically on both arches.
+        Arch- and OS-aware: data/architectures.yml supplies the machine type,
+        NIC and display, KEEP_VM_DEVICES the keep-VM device set; this method
+        only chooses accel based on platform.system().
         """
         accel = "hvf" if platform.system() == "Darwin" else "kvm"
 
         if self.keep_vm:
-            # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
+            # q35 has a PS/2 keyboard by default but USB is opt-in
             # (machine flag usb=on, applied below); usb-tablet then attaches
             # to the built-in EHCI/UHCI for absolute-coordinate mouse.
             # aarch64 virt has no default input devices, so it needs the
@@ -1224,6 +1215,9 @@ class Machine:
         cmd = [
             *wrapper,
             self.qemu_binary,
+            # No implicit devices: every boot otherwise probes q35's empty
+            # CD-ROM, in ZFSBootMenu's kernel, Ubuntu's, and udev.
+            "-nodefaults",
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
             "-netdev",
@@ -1244,7 +1238,11 @@ class Machine:
             # key.
             "-boot",
             "menu=on,splash-time=0",
-            *GUEST_DEVICES[self.arch],
+            # -nodefaults leaves no display. Without a framebuffer Ubuntu's
+            # initramfs init-top/framebuffer script falls back to `sleep 1` +
+            # vesafb on every boot.
+            "-device",
+            self.guest["display_device"],
             "-smp",
             f"{self._spec.vcpus},sockets=1,cores={self._spec.vcpus}",
             "-name",
