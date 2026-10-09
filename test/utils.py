@@ -235,8 +235,6 @@ def colorize(line: str, color: str | None) -> str:
 # the authoritative transcript) so test/out/*.ansi stays complete even if
 # stdout wedges and the daemon is killed at interpreter exit.
 _STDOUT_QUEUE: queue.SimpleQueue[str | threading.Event] = queue.SimpleQueue()
-_STDOUT_WRITER: threading.Thread | None = None
-_STDOUT_WRITER_LOCK = threading.Lock()
 # Serializes _emit across the stderr relay and phase heartbeat threads, so
 # their lines never splice into one another in the transcript.
 _EMIT_LOCK = threading.Lock()
@@ -259,14 +257,7 @@ def _stdout_writer_loop() -> None:
             pass
 
 
-def _ensure_stdout_writer() -> None:
-    global _STDOUT_WRITER
-    if _STDOUT_WRITER is not None:
-        return
-    with _STDOUT_WRITER_LOCK:
-        if _STDOUT_WRITER is None:
-            _STDOUT_WRITER = threading.Thread(target=_stdout_writer_loop, name="harness-stdout-writer", daemon=True)
-            _STDOUT_WRITER.start()
+threading.Thread(target=_stdout_writer_loop, name="harness-stdout-writer", daemon=True).start()
 
 
 @atexit.register
@@ -278,16 +269,9 @@ def _drain_stdout(timeout: float = 2.0) -> None:
     keeps its tail output. A stuck stdout just times out here and the daemon
     dies with the interpreter.
     """
-    if _STDOUT_WRITER is None:
-        return
     barrier = threading.Event()
     _STDOUT_QUEUE.put(barrier)
     barrier.wait(timeout)
-
-
-def _queue_stdout(text: str) -> None:
-    _ensure_stdout_writer()
-    _STDOUT_QUEUE.put(text)
 
 
 def _console_rewritable() -> bool:
@@ -305,7 +289,7 @@ def _console(text: str) -> None:
     global _HELD_LINE
     with _EMIT_LOCK:
         _HELD_LINE = None
-        _queue_stdout(text)
+        _STDOUT_QUEUE.put(text)
 
 
 def _emit(text: str, *, status: bool = False, hold: object | None = None, replace: object | None = None) -> None:
@@ -330,7 +314,7 @@ def _emit(text: str, *, status: bool = False, hold: object | None = None, replac
             if replace is not None and replace is _HELD_LINE:
                 console = _REWRITE_PREVIOUS_LINE + console
             _HELD_LINE = hold if _console_rewritable() else None
-            _queue_stdout(console)
+            _STDOUT_QUEUE.put(console)
         if _OUTPUT_LOG is not None:
             _OUTPUT_LOG.write(text)
             _OUTPUT_LOG.flush()
