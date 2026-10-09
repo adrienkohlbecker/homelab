@@ -19,14 +19,20 @@ joblog=test/out.tsv
 # input by sequence number, so a retry must replay exactly this list: a
 # regenerated matrix with a role added or removed would shift every number.
 cells=test/out.cells.tsv
-# Each testrole.py prints tagged, role-coloured status lines, so whole lines
+# Each testrole.py prints tagged, role-coloured status lines. On a terminal,
+# --latest-line gives each running cell one line showing its newest status
+# and leaves a finished cell's verdict behind; elsewhere whole lines
 # interleave readably. On Ctrl-C, SIGINT gives each cell 30s to stop its VM.
 parallel_args=(
   --jobs "${usage_jobs}"
-  --line-buffer
   --joblog "${joblog}"
   --termseq 'INT,30000,TERM,5000,KILL,25'
 )
+if [ -t 1 ]; then
+  parallel_args+=(--latest-line)
+else
+  parallel_args+=(--line-buffer)
+fi
 full_run=true
 if [ "${usage_retry_failed:-false}" = true ]; then
   # --resume-failed reruns failed cells and starts the ones an interrupt kept
@@ -60,13 +66,33 @@ parallel "${parallel_args[@]}" --colsep '\t' --arg-file "${cells}" \
   test/testrole.py --machine '{1}' --ubuntu '{2}' '{3}' || status=$?
 
 # A retry appends to the joblog, so judge each cell (Seq, column 1) by its
-# latest row: Exitval is column 7 and the command column 9.
+# latest row: Exitval is column 7 and the command column 9. Seq is also the
+# cell's line in the cells file, whose machine, ubuntu, and role columns name
+# its test/out files.
 if [ "${status}" -ne 0 ]; then
+  failed=$(awk -F '\t' '
+    FNR == NR { cell[FNR] = $1 "." $2 "." $3; next }
+    FNR > 1 { exitval[$1] = $7; command[$1] = $9; if ($1 > last) last = $1 }
+    END { for (seq = 1; seq <= last; seq++) if (seq in exitval && exitval[seq] != 0) print cell[seq] "\t" exitval[seq] "\t" command[seq] }
+  ' "${cells}" "${joblog}")
+  if [ -n "${failed}" ]; then
+    # What each failed cell showed when it failed, which --latest-line has
+    # since reduced to its verdict. A cell killed before reporting has none.
+    while IFS=$'\t' read -r cell _ _; do
+      failure="test/out/${cell}.failure.ansi"
+      if [ -f "${failure}" ]; then
+        echo
+        echo "${cell} (log: test/out/${cell}.output.ansi)"
+        sed 's/^/│ /' "${failure}"
+      fi
+    done <<<"${failed}"
+  fi
   echo
   echo "Failed cells (rerun with: mise run test:all --retry-failed; it also starts cells an interrupt skipped):"
-  awk -F '\t' '
-    NR > 1 { exitval[$1] = $7; command[$1] = $9; if ($1 > last) last = $1 }
-    END { for (seq = 1; seq <= last; seq++) if (seq in exitval && exitval[seq] != 0) print "  " command[seq] "  (exit " exitval[seq] ")" }
-  ' "${joblog}"
+  if [ -n "${failed}" ]; then
+    while IFS=$'\t' read -r _ exitval command; do
+      echo "  ${command}  (exit ${exitval})"
+    done <<<"${failed}"
+  fi
 fi
 exit "${status}"
