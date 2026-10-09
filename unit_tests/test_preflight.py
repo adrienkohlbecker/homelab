@@ -44,7 +44,6 @@ def test_qemu_imagedir_uses_configured_root(tmp_path: Path, monkeypatch: pytest.
     assert configured.is_dir()
 
 
-
 # Captured at import, before conftest's autouse fixture stubs it out.
 EXCLUDE_FROM_TIME_MACHINE = machine._exclude_from_time_machine
 
