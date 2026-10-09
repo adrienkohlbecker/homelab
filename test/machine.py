@@ -8,7 +8,6 @@ import platform
 import re
 import shlex
 import shutil
-import signal
 import socket
 import subprocess
 import tempfile
@@ -922,35 +921,31 @@ class Machine:
         holds qemu after the wrapper dies or before qemu writes its pidfile.
         SIGTERM lets qemu exit cleanly; SIGKILL follows after
         STOP_GRACE_SECONDS (stop_process_group). Ctrl-C and SIGTERM are
-        ignored for the duration, so a second one (or a parallel --termseq)
+        dropped for the duration, so a second one (or a parallel --termseq)
         can't cut cleanup short, and each cleanup step runs even if an
         earlier one fails.
         """
-        handlers = {sig: signal.signal(sig, signal.SIG_IGN) for sig in (signal.SIGINT, signal.SIGTERM)}
-        try:
-            with contextlib.suppress(OSError):  # a transcript that cannot take the line must not cost the cleanup
-                print_line("Stopping machine...")
-            if self.proc:
-                stop_process_group(self.proc, grace_seconds=STOP_GRACE_SECONDS)
-        finally:
+        with interrupts_held(redeliver=False):
             try:
-                self._close_ssh_master()
+                with contextlib.suppress(OSError):  # a transcript that cannot take the line must not cost the cleanup
+                    print_line("Stopping machine...")
+                if self.proc:
+                    stop_process_group(self.proc, grace_seconds=STOP_GRACE_SECONDS)
             finally:
-                # Release the liveness lock before rmtree -- the kernel would
-                # release it on close()/exit anyway, but doing it explicitly
-                # keeps the ordering obvious.
-                if self._live_lock_fd >= 0:
-                    with contextlib.suppress(OSError):  # already closed; nothing left to release
-                        os.close(self._live_lock_fd)
-                    self._live_lock_fd = -1
                 try:
-                    self.qmp_socket.unlink(missing_ok=True)
+                    self._close_ssh_master()
                 finally:
+                    # Release the liveness lock before rmtree -- the kernel
+                    # would release it on close()/exit anyway, but doing it
+                    # explicitly keeps the ordering obvious.
+                    if self._live_lock_fd >= 0:
+                        with contextlib.suppress(OSError):  # already closed; nothing left to release
+                            os.close(self._live_lock_fd)
+                        self._live_lock_fd = -1
                     try:
-                        self.workdir.cleanup()
+                        self.qmp_socket.unlink(missing_ok=True)
                     finally:
-                        for sig, handler in handlers.items():
-                            signal.signal(sig, handler)
+                        self.workdir.cleanup()
 
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())

@@ -468,7 +468,8 @@ def run_command(
     TimeoutError raised. The command runs in its own process group. If it is
     interrupted (Ctrl-C, the timeout, a failed relay), it gets SIGINT and
     COMMAND_STOP_GRACE_SECONDS to stop, then the whole group is killed, so no
-    descendant is left holding its pipes.
+    descendant is left holding its pipes; a second interrupt cannot cut that
+    short.
     """
     print_cmd_line(cmd, env=env)
     deadline = None if timeout is None else time.monotonic() + timeout
@@ -526,11 +527,12 @@ def run_command(
         if any(thread.is_alive() for thread in relays):
             raise TimeoutError(f"{shlex.join(cmd)} did not finish within {timeout:.0f}s")
     except BaseException:
-        if process is not None:
-            _stop_command(process)
-        for thread in relays:
-            if thread.ident is not None:
-                thread.join(RELAY_DRAIN_SECONDS)
+        with interrupts_held(redeliver=False):
+            if process is not None:
+                _stop_command(process)
+            for thread in relays:
+                if thread.ident is not None:
+                    thread.join(RELAY_DRAIN_SECONDS)
         raise
     if relay_failures:
         raise relay_failures[0]

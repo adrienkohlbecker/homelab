@@ -167,6 +167,22 @@ class TestRunCommandInterrupted:
                 proc.kill()
                 proc.wait()
 
+    @pytest.mark.usefixtures("interrupts")
+    def test_a_second_ctrl_c_cannot_cut_the_cleanup_short(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The command ignores SIGINT, so only the group kill ends it."""
+        monkeypatch.setattr(utils, "COMMAND_STOP_GRACE_SECONDS", 2)
+        log = tmp_path / "run.log"
+        for delay in (0.5, 1.0):
+            threading.Timer(delay, os.kill, (os.getpid(), signal.SIGINT)).start()
+        with utils.tee_output(log), pytest.raises(KeyboardInterrupt):
+            utils.run_command(["sh", "-c", "trap '' INT; echo $$; exec sleep 30"])
+
+        (pid,) = _logged_pids(log)
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+
     def test_a_descendant_holding_the_pipes_cannot_outlast_the_timeout(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
