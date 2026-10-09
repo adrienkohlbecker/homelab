@@ -145,35 +145,45 @@ _TASK_RESULT_RE = re.compile(r"(ok|changed|skipping|included|failed|fatal): ")
 _TASK_FAILURE_RE = re.compile(r"(failed|fatal): \[")
 
 
-def failed_task(stdout: Sequence[str]) -> list[str]:
-    """Return the block of ansible-playbook output for the last task that
-    failed, or an empty list when no task did.
+def failed_tasks(stdout: Sequence[str]) -> list[list[str]]:
+    """Return the block of ansible-playbook output for each task that failed,
+    in order, or an empty list when none did.
 
-    The block runs from the task's header through its last failure result,
-    leaving out its passing and skipped loop items. A failure that `...ignoring`
-    follows does not count; an earlier one that a rescue caught loses to the
-    last. Matching ignores colour, but the lines come back as printed.
+    A block runs from the task's header through its last failure result,
+    leaving out its passing and skipped loop items. Every failure counts,
+    rescued ones too, except a task's that `...ignoring` follows. Matching
+    ignores colour, but the lines come back as printed.
     """
     plain = [ANSI_CSI_RE.sub("", line) for line in stdout]
     # Ansible indents a YAML result's body under its unindented first line, so
     # each unindented line starts a segment that runs to the next one.
     starts = [i for i, line in enumerate(plain) if line and not line[0].isspace()]
-    segments = list(itertools.pairwise([*starts, len(plain)]))
+    blocks: list[list[int]] = []
     task: list[int] = []
-    failed: list[int] = []
-    for n, (start, end) in enumerate(segments):
+    # How much of the task's block runs through its last failure; 0 for none.
+    failed = 0
+
+    def close_task() -> None:
+        block = task[:failed]
+        while block and not plain[block[-1]].strip():
+            block.pop()
+        if block:
+            blocks.append(block)
+
+    for start, end in itertools.pairwise([*starts, len(plain)]):
         head = plain[start]
-        ignored = n + 1 < len(segments) and plain[segments[n + 1][0]].startswith("...ignoring")
         if _TASK_HEADER_RE.match(head):
-            task = list(range(start, end))
-        elif _TASK_FAILURE_RE.match(head) and not ignored:
+            close_task()
+            task, failed = list(range(start, end)), 0
+        elif _TASK_FAILURE_RE.match(head):
             task.extend(range(start, end))
-            failed = list(task)
-        elif not (_TASK_RESULT_RE.match(head) or head.startswith("...ignoring")):
+            failed = len(task)
+        elif head.startswith("...ignoring"):
+            failed = 0
+        elif not _TASK_RESULT_RE.match(head):
             task.extend(range(start, end))
-    while failed and not plain[failed[-1]].strip():
-        failed.pop()
-    return [stdout[i] for i in failed]
+    close_task()
+    return [[stdout[i] for i in block] for block in blocks]
 
 
 def task_title(header: str) -> str:

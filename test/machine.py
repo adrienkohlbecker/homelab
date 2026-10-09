@@ -28,7 +28,7 @@ from utils import (
     CommandResult,
     IdempotenceFailedException,
     colorize,
-    failed_task,
+    failed_tasks,
     log_line,
     phase,
     print_cmd_line,
@@ -813,8 +813,8 @@ class Machine:
 
         Returns the harness exit code: 0 passed, 1 failed, 124 timed out, 125
         not idempotent, 130 interrupted. A pass deletes the per-run logs;
-        anything else keeps them for the post-mortem. A failed Ansible task
-        is shown on its own, otherwise the transcript's tail; the verdict
+        anything else keeps them for the post-mortem. Failed Ansible tasks
+        are shown on their own, otherwise the transcript's tail; the verdict
         comes last, so it is the line `test:all` leaves on screen. The
         verdict names *label* unless it is None, for a console whose tag
         already names the cell.
@@ -834,12 +834,13 @@ class Machine:
                 verdict = "not idempotent"
                 rc = 125
             except CommandFailedException as exc:
-                excerpt = failed_task(exc.stdout)
-                if excerpt:
-                    # The task says what failed; the command line and its
-                    # stderr tail would only bury it.
+                failed = failed_tasks(exc.stdout)
+                excerpt = [line for block in failed for line in block]
+                if failed:
+                    # The tasks say what failed; the command line and its
+                    # stderr tail would only bury them.
                     log_line(str(exc), error=True)
-                    verdict = f"failed at {task_title(excerpt[0])}"
+                    verdict = f"failed at {task_title(failed[-1][0])}"
                 else:
                     print_line(str(exc), error=True)
                     verdict = "failed"

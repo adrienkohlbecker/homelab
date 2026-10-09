@@ -292,7 +292,7 @@ class TestCompactConsole:
 
 
 class TestFailedTask:
-    """failed_task: the block of ansible-playbook output for the task that failed."""
+    """failed_tasks: the block of ansible-playbook output for each task that failed."""
 
     def test_keeps_the_failed_item_and_drops_what_follows(self) -> None:
         stdout = [
@@ -317,11 +317,7 @@ class TestFailedTask:
             "lab                        : ok=5    changed=0    unreachable=0    failed=1",
         ]
 
-        assert utils.failed_task(stdout) == [
-            stdout[4],
-            stdout[5],
-            *stdout[8:14],
-        ]
+        assert utils.failed_tasks(stdout) == [[stdout[4], stdout[5], *stdout[8:14]]]
 
     def test_an_ignored_failure_does_not_count(self) -> None:
         stdout = [
@@ -333,9 +329,23 @@ class TestFailedTask:
             "ok: [lab]",
         ]
 
-        assert utils.failed_task(stdout) == []
+        assert utils.failed_tasks(stdout) == []
 
-    def test_the_last_failure_wins_over_a_rescued_one(self) -> None:
+    def test_an_ignored_loop_drops_all_its_failed_items(self) -> None:
+        stdout = [
+            "TASK [web : Probe] *************************************************************",
+            "failed: [lab] (item=a) => ",
+            "    msg: optional",
+            "failed: [lab] (item=b) => ",
+            "    msg: optional",
+            "...ignoring",
+            "TASK [web : Next] **************************************************************",
+            "ok: [lab]",
+        ]
+
+        assert utils.failed_tasks(stdout) == []
+
+    def test_a_rescued_failure_is_kept_beside_the_last(self) -> None:
         stdout = [
             "TASK [web : Try] ***************************************************************",
             "fatal: [lab]: FAILED! => ",
@@ -348,7 +358,7 @@ class TestFailedTask:
             "",
         ]
 
-        assert utils.failed_task(stdout) == stdout[5:8]
+        assert utils.failed_tasks(stdout) == [stdout[0:3], stdout[5:8]]
 
     def test_task_title_drops_colour_and_stars(self) -> None:
         header = "\x1b[0;31mTASK [web : Probe] [CHECK MODE] ******************************\x1b[0m"
