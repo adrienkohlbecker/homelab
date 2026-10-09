@@ -506,6 +506,15 @@ apt_update
 # lists/ repopulated just above stay intact.
 apt-get clean
 
+# Regenerate the caches the ConditionNeedsUpdate= units rebuild, then stamp
+# them current. Without /etc/.updated and /var/.updated, ldconfig.service et
+# al. run on the critical path of the first boot -- on a qemu fixture, every
+# boot, since each cell starts from this image.
+ldconfig
+systemd-hwdb update
+journalctl --update-catalog
+/usr/lib/systemd/systemd-update-done
+
 # Blank machine-id so systemd regenerates a unique one on first boot —
 # otherwise every host from this snapshot shares one (journald, systemd
 # instance ids, DHCP DUID). Re-point dbus's copy at it when present.
