@@ -26,8 +26,8 @@ fi
 
 # Linux: keep packer's ISO cache off the root FS; falls through to
 # packer's default (./packer_cache in cwd) on Mac. Linux builders keep raw
-# disks because ZFS already provides CoW and zstd compression; APFS has no
-# filesystem-level compression, so Mac ships zstd-compressed qcow2.
+# disks because ZFS already provides CoW; Mac ships qcow2. Neither compresses
+# the disks: the guest's ZFS pools already compress their blocks.
 case "$(uname -s)" in
 Linux)
   export PACKER_CACHE_DIR="${HOMELAB_CI_DIR}/packer_cache"
@@ -132,8 +132,8 @@ publish() {
 
 # Turn one built source into a published fixture: drop the cloud-image OS disk
 # (packer-ubuntu; provision.sh installs onto packer-ubuntu-1..N), give the
-# rest their format suffix, prove a qemu fixture boots, compress on Mac, and
-# atomically swap it in.
+# rest their format suffix, prove a qemu fixture boots, and atomically swap it
+# in.
 finalize() {
   local source=$1
   local build_dir="${tmp}/${source}" disk
@@ -158,14 +158,6 @@ finalize() {
       --exit-after-ready \
       --image-dir "${build_dir}" \
       ${vcpus_args[@]+"${vcpus_args[@]}"}
-  fi
-
-  if [ "${image_format}" = qcow2 ]; then
-    for disk in "${build_dir}"/packer-ubuntu-*.qcow2; do
-      echo "==> compressing ${disk##*/}"
-      qemu-img convert -W -c -O qcow2 -o compression_type=zstd "${disk}" "${disk}.tmp"
-      mv "${disk}.tmp" "${disk}"
-    done
   fi
 
   if [ "${usage_no_publish:-false}" = true ]; then
