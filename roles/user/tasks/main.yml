@@ -69,6 +69,18 @@
   tags:
     - user
 
+# adduser's 0750 default, held on hosts installed before it. A service that
+# serves a tree from the home (filebrowser) grants itself a named ACL rather
+# than opening it to every local account.
+- name: Keep the operator home private
+  file:
+    path: "{{ ansible_user_dir }}"
+    state: directory
+    mode: "0750"
+  become: true
+  tags:
+    - user
+
 # The operator connects from Ghostty (TERM=xterm-ghostty); a host that
 # doesn't ship that terminfo entry leaves zsh's zle without capability
 # lookups, which manifests as doubled keystrokes and runaway line redraw

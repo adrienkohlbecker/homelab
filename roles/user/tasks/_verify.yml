@@ -18,6 +18,14 @@
   become: true
   become_user: "{{ ansible_user_id }}"
 
+- name: _verify | Other local accounts cannot list the operator home
+  command:
+    argv: [ runuser, --user, nobody, --, ls, "{{ ansible_user_dir }}" ]
+  register: _user_home_listing
+  changed_when: false
+  failed_when: _user_home_listing.rc == 0 or 'Permission denied' not in _user_home_listing.stderr
+  become: true
+
 - name: _verify | Ghostty terminfo resolves
   command: infocmp xterm-ghostty
   changed_when: false
