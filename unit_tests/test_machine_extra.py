@@ -507,9 +507,12 @@ class TestQmpTransport:
     """_qmp against a fake monitor speaking the QMP wire protocol."""
 
     @staticmethod
-    def _serve(path: Path, replies: list[dict], *, delay: float, events: int = 1) -> threading.Thread:
+    def _serve(
+        path: Path, replies: list[dict], *, delay: float, events: int = 1, greeting_delay: float = 0
+    ) -> threading.Thread:
         """Bind *path* after *delay* (as qemu opens its monitor after the
-        pidfile) and answer one connection: greeting, capabilities, *events*
+        pidfile) and answer one connection: greeting after *greeting_delay*
+        (as qemu greets after machine init), capabilities, *events*
         asynchronous events 50ms apart, then *replies* to the command."""
 
         def run() -> None:
@@ -525,6 +528,7 @@ class TestQmpTransport:
                         stream.write(json.dumps(message).encode() + b"\n")
                         stream.flush()
 
+                    time.sleep(greeting_delay)
                     send({"QMP": {"version": {}, "capabilities": []}})
                     stream.readline()
                     send({"return": {}})
@@ -562,6 +566,14 @@ class TestQmpTransport:
         monkeypatch.setattr(machine, "QMP_TIMEOUT", 0.3)
         self._serve(m.qmp_socket, [], delay=0, events=100)
         with pytest.raises(TimeoutError, match="no reply"):
+            m._qmp("query-vnc")
+
+    def test_a_silent_monitor_names_the_command_it_timed_out_on(
+        self, m: machine.Machine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(machine, "QMP_TIMEOUT", 0.3)
+        self._serve(m.qmp_socket, [], delay=0, greeting_delay=1)
+        with pytest.raises(TimeoutError, match="QMP qmp_capabilities got no reply"):
             m._qmp("query-vnc")
 
     def test_a_monitor_that_never_opens_times_out(self, m: machine.Machine, monkeypatch: pytest.MonkeyPatch) -> None:

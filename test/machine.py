@@ -54,8 +54,10 @@ PIDFILE_NAME = "pid"
 # guest address and port.
 _HOSTFWD_RE = re.compile(r"(TCP|UDP)\[HOST_FORWARD\]\s+\d+\s+\S+\s+(\d+)\s+\S+\s+(\d+)")
 # Bound on reaching qemu's QMP socket and on each reply. qemu writes its
-# pidfile before it opens the monitor, so the first connects can be refused.
-QMP_TIMEOUT = 5
+# pidfile before it opens the monitor, so the first connects can be refused,
+# and greets only once machine init finishes, which a CI host booting a dozen
+# cells at once stretches well past a few seconds.
+QMP_TIMEOUT = 60
 # How long stop() lets qemu shut down on SIGTERM before SIGKILL.
 STOP_GRACE_SECONDS = 5
 
@@ -727,9 +729,14 @@ class Machine:
                 sock.sendall(json.dumps(request).encode() + b"\n")
                 # The greeting and asynchronous events carry no "return". The
                 # socket timeout bounds each read, not a steady run of events.
-                while not ({"return", "error"} & (message := json.loads(replies.readline())).keys()):
-                    if time.monotonic() > deadline:
-                        raise TimeoutError(f"QMP {request['execute']} got no reply within {QMP_TIMEOUT}s")
+                # It raises a bare "timed out" that run() would report as the
+                # session deadline, so both cases name the QMP command.
+                try:
+                    while not ({"return", "error"} & (message := json.loads(replies.readline())).keys()):
+                        if time.monotonic() > deadline:
+                            raise TimeoutError
+                except TimeoutError:
+                    raise TimeoutError(f"QMP {request['execute']} got no reply within {QMP_TIMEOUT}s") from None
                 if "error" in message:
                     raise RuntimeError(f"QMP {request['execute']} failed: {message['error']}")
             return message["return"]
