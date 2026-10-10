@@ -7,3 +7,12 @@
       authelia_mode: authed
       subdomains:
         - filebrowser
+
+# The user role holds the operator home at 0750 on every host; fixture images
+# built before that default may still carry 0755, which would hide the ACL.
+- name: _setup | Keep the operator home private
+  file:
+    path: "{{ ansible_user_dir }}"
+    state: directory
+    mode: "0750"
+  become: true

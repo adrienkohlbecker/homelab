@@ -27,6 +27,31 @@
   tags:
     - filebrowser
 
+- name: Install the ACL tools
+  apt:
+    name: acl
+    state: present
+    cache_valid_time: 3600
+  register: filebrowser_acl_package
+  become: true
+  tags:
+    - filebrowser
+
+# The operator home stays 0750, so nginx needs a named entry to list it.
+# Nothing below it is opened up: subdirectories keep their own modes.
+- name: Let nginx list the operator home
+  ansible.posix.acl:
+    path: "{{ ansible_user_dir }}"
+    entity: www-data
+    etype: user
+    permissions: rx
+    state: present
+  become: true
+  # setfacl may only be predicted present in check mode.
+  when: not (ansible_check_mode and filebrowser_acl_package.changed)
+  tags:
+    - filebrowser
+
 - name: Create filebrowser theme directory
   file:
     path: /var/www/filebrowser
