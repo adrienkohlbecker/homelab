@@ -796,12 +796,17 @@ class Machine:
 
         # qemu's hostfwd accepts before sshd listens, then sends nothing or
         # drops the connection, so only a banner proves sshd is up. OSError
-        # covers the refused, reset, and timed-out cases alike. The timeout
-        # stays short: a probe opened before the guest's network is up waits
-        # on slirp's SYN retransmit backoff, not on sshd, so a fresh probe
-        # sees sshd sooner.
+        # covers the refused, reset, and timed-out cases alike. Once the
+        # guest's network is up a refused probe fails fast, so polling stays
+        # tight. Before that, slirp keeps retrying an abandoned probe's SYN
+        # (first after ~3s, on 0.5s ticks) and delivers it once sshd listens,
+        # as a connection that never authenticates. sshd >= 9.8 penalises
+        # those (1s each, decaying in real time, active past 15s), so a burst
+        # of short abandoned probes locks the harness out. Holding each probe
+        # through slirp's first retry caps abandonment well under one per
+        # second.
         try:
-            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=0.3) as sock:
+            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=3.5) as sock:
                 return bool(sock.recv(1024).strip())
         except OSError:
             return False
