@@ -42,10 +42,12 @@
   become: true
 
 # Without kernel.panic the guest would sit in the panic forever and the wait
-# for a new boot would time out.
+# for a new boot would time out. sync first: a fast cell panics within ext4's
+# 30s writeback of the host keys cloud-init generated at first boot, and the
+# next boot's sshd then finds them empty and never comes back.
 - name: _verify | Deliberate panic reboots the host on its own
   reboot:
-    reboot_command: '/usr/bin/sudo -n /bin/sh -c "echo c > /proc/sysrq-trigger"'
+    reboot_command: '/usr/bin/sudo -n /bin/sh -c "sync; echo c > /proc/sysrq-trigger"'
     reboot_timeout: 240
 
 # The kernel writes the tail of its log to EFI variables; systemd-pstore moves
