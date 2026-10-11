@@ -25,16 +25,18 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  # Poll until BackendState settles out of 'Starting': a mid-restart converge
-  # would otherwise see rc=0 + valid JSON but tailscale_running=false, which
-  # triggers full re-registration (mint + tailscale login) and creates a
-  # duplicate headscale node entry.
-  retries: 5
+  # Poll until BackendState settles out of 'Starting', or 'NoState' while a
+  # registered node is still reaching its control plane: a converge would
+  # otherwise see rc=0 + valid JSON but tailscale_running=false, which triggers
+  # full re-registration (mint + tailscale login) and can create a duplicate
+  # headscale node entry. An unregistered node leaves NoState for NeedsLogin
+  # at once, so the wait costs nothing there.
+  retries: 30
   delay: 2
   until: >-
     tailscale_status.rc != 0
     or not (tailscale_status.stdout | default('') | trim).startswith('{')
-    or ((tailscale_status.stdout | from_json).BackendState | default('')) != 'Starting'
+    or ((tailscale_status.stdout | from_json).BackendState | default('')) not in ['Starting', 'NoState']
   become: true
   tags:
     - tailscale

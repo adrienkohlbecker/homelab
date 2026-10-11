@@ -1,5 +1,10 @@
 #jinja2: lstrip_blocks: True
 [Unit]
+# On the control-plane host, log in only once the local headscale is healthy
+# (its unit activates on the container health check); otherwise tailscaled's
+# first login hangs against an absent server and the node idles in NoState.
+# Hosts without headscale ignore the ordering.
+After=headscale.service
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
