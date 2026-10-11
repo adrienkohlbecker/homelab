@@ -3,7 +3,7 @@
 #
 #   qemu_host_smoke.sh kernel
 #   qemu_host_smoke.sh toolchain
-#   qemu_host_smoke.sh firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>
+#   qemu_host_smoke.sh firmware <qemu-binary> <machine> <cpu> <code.fd> <vars-template.fd>
 #
 # Promotion points every new CI host at the image, so the bake proves what cells
 # depend on: the host came back on the fleet's GA kernel, the runner binary
@@ -47,10 +47,10 @@ toolchain() {
 }
 
 firmware() {
-  local qemu=$1 machine=$2 code=$3 vars_template=$4 workdir pid
+  local qemu=$1 machine=$2 cpu=$3 code=$4 vars_template=$5 workdir pid
   workdir=$(mktemp -d)
   cp "$vars_template" "$workdir/vars.fd"
-  "$qemu" -machine "$machine" -cpu max -accel tcg -m 512 -nographic -monitor none -net none \
+  "$qemu" -machine "$machine" -cpu "$cpu" -accel tcg -m 512 -nographic -monitor none -net none \
     -serial "file:$workdir/serial.log" \
     -drive "if=pflash,format=raw,readonly=on,file=$code" \
     -drive "if=pflash,format=raw,file=$workdir/vars.fd" >/dev/null 2>&1 &
@@ -84,7 +84,7 @@ firmware)
   firmware "$@"
   ;;
 *)
-  echo "usage: $0 kernel | toolchain | firmware <qemu-binary> <machine> <code.fd> <vars-template.fd>" >&2
+  echo "usage: $0 kernel | toolchain | firmware <qemu-binary> <machine> <cpu> <code.fd> <vars-template.fd>" >&2
   exit 2
   ;;
 esac

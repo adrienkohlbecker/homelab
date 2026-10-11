@@ -9,6 +9,7 @@ set -euxo pipefail
 : "${QEMU_PACKAGES:?qemu_packages is required}"
 : "${QEMU_SYSTEM_BINARY:?qemu_system_binary is required}"
 : "${QEMU_MACHINE_TYPE:?qemu_machine_type is required}"
+: "${QEMU_SMOKE_CPU:?qemu_smoke_cpu is required}"
 : "${QEMU_FIRMWARE_CODE:?qemu_firmware_code is required}"
 : "${QEMU_FIRMWARE_VARS:?qemu_firmware_vars is required}"
 : "${PREHYDRATE_UBUNTU:?prehydrate_ubuntu is required}"
@@ -141,7 +142,7 @@ sudo systemctl enable "homelab-ci-prehydrate@${PREHYDRATE_UBUNTU}.service"
 
 bash /tmp/qemu_host_smoke.sh kernel
 bash /tmp/qemu_host_smoke.sh toolchain
-bash /tmp/qemu_host_smoke.sh firmware "$QEMU_SYSTEM_BINARY" "$QEMU_MACHINE_TYPE" "$QEMU_FIRMWARE_CODE" "$QEMU_FIRMWARE_VARS"
+bash /tmp/qemu_host_smoke.sh firmware "$QEMU_SYSTEM_BINARY" "$QEMU_MACHINE_TYPE" "$QEMU_SMOKE_CPU" "$QEMU_FIRMWARE_CODE" "$QEMU_FIRMWARE_VARS"
 
 sudo apt-get clean
 sudo rm -rf \

@@ -67,6 +67,7 @@ locals {
       qemu_system_binary = "qemu-system-x86_64"
       runner_artifact    = local.versions.gitlab_runner_archive.x86_64
       cloudwatch_agent   = local.versions.cloudwatch_agent_deb.x86_64
+      smoke_cpu          = "max"
     }
     aarch64 = {
       ami_architecture   = "arm64"
@@ -75,6 +76,10 @@ locals {
       qemu_system_binary = "qemu-system-aarch64"
       runner_artifact    = local.versions.gitlab_runner_archive.aarch64
       cloudwatch_agent   = local.versions.cloudwatch_agent_deb.aarch64
+      # Resolute's AAVMF (edk2 2025.11) hangs after its banner under TCG's
+      # -cpu max; a named core reaches the boot manager in seconds. Cells
+      # boot with -cpu host under KVM, so only this smoke test is affected.
+      smoke_cpu = "neoverse-n1"
     }
   }
   architecture_config = local.architecture_table[var.architecture]
@@ -182,6 +187,7 @@ build {
       "QEMU_PACKAGES"           = local.architecture_config.qemu_packages
       "QEMU_SYSTEM_BINARY"      = local.architecture_config.qemu_system_binary
       "QEMU_MACHINE_TYPE"       = local.guest_architecture.machine_type
+      "QEMU_SMOKE_CPU"          = local.architecture_config.smoke_cpu
       "QEMU_FIRMWARE_CODE"      = local.guest_architecture.uefi_firmware.linux.code
       "QEMU_FIRMWARE_VARS"      = local.guest_architecture.uefi_firmware.linux.vars
       "GITLAB_RUNNER_URL"       = local.architecture_config.runner_artifact.url
