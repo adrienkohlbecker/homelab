@@ -221,8 +221,35 @@
   environment:
     XDG_RUNTIME_DIR: /run/user/{{ ansible_user_uid }}
   block:
-    - name: _verify | Pull a tiny image through the Nexus mirror
-      command: podman pull {{ podman_probe_image }}
+    - name: _verify | Read the registries the rootless user sees
+      command: podman info --format json
+      register: _podman_rootless_info
+      changed_when: false
+
+    # A mirror failure falls back to docker.io silently, so a bare pull would
+    # pass even when the rootless user cannot authenticate to the mirror. The
+    # debug log names every source podman tries ("Trying to access") and every
+    # one it gives up on ("Accessing ... failed"); require the mirror to be
+    # tried and never abandoned. Hosts without a docker.io mirror just pull.
+    - name: _verify | Pull a tiny image through the configured mirror
+      vars:
+        _mirror: >-
+          {{ ((((_podman_rootless_info.stdout | from_json).registries.get('docker.io')
+                 or {}).get('Mirrors') or [])
+              | map(attribute='Location') | list + [''])
+             | first }}
+        _mirror_lines: >-
+          {{ _podman_rootless_pull.stderr_lines
+             | select('search', (_mirror ~ '/') | regex_escape) | list }}
+        _via_mirror: >-
+          {{ _mirror == '' or
+             (_mirror_lines | select('search', 'Trying to access ') | list | length > 0
+              and _mirror_lines | select('search', 'Accessing .* failed') | list | length == 0) }}
+      command: podman --log-level=debug pull {{ podman_probe_image }}
+      register: _podman_rootless_pull
+      until: _podman_rootless_pull.rc == 0 and _via_mirror | bool
+      retries: 3
+      delay: 5
       changed_when: false
 
     # Default network -> podman invokes the configured rootless connector.
