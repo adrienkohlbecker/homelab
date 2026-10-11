@@ -19,7 +19,7 @@ variables:
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
   # data/ubuntu_releases.yml's ci_host, which GitLab cannot read when it
   # expands image:. unit_tests/test_gitlab_ci.py keeps the two equal.
-  CI_HOST_UBUNTU: noble
+  CI_HOST_UBUNTU: resolute
 
 # GitLab expands tags before job rules:variables, so select the runner tag at
 # workflow scope. Target alone is authoritative across web, push-option, and API
@@ -33,11 +33,12 @@ workflow:
       variables:
         DETECT_RUNNER_TAG: aws-shell-qemu
 
-# Hosted jobs use the manually published CI image. Bootstrap is normally a
-# no-op, but installs toolchain drift and makes a stale image visible in logs.
-# CI auto-trusts mise.toml; unused op:// values remain literal without op run.
+# Hosted jobs use the manually published CI image for CI_HOST_UBUNTU, the
+# release the runner hosts run. Bootstrap is normally a no-op, but installs
+# toolchain drift and makes a stale image visible in logs. CI auto-trusts
+# mise.toml; unused op:// values remain literal without op run.
 .hosted:
-  image: $CI_REGISTRY_IMAGE/ci:latest
+  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU
   before_script:
     - mise run ci:bootstrap
 
@@ -352,7 +353,7 @@ zbm_build:
 
 zbm_build_arm:
   extends: zbm_build
-  image: $CI_REGISTRY_IMAGE/ci:latest-arm64
+  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-arm64
   tags:
     - saas-linux-small-arm64
   resource_group: zbm_build_arm
