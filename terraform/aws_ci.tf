@@ -7,8 +7,9 @@
 # scheduler role, and the account budget. Changing an instance type or Spot
 # policy happens here, never in test/.
 #
-# First-apply bootstrap (AMI parameter seeding, GitLab cutover):
-# notes/archive/ci_aws_test_cells.md, "Bootstrap".
+# First-apply bootstrap (GitLab cutover): notes/archive/ci_aws_test_cells.md,
+# "Bootstrap". The launch templates resolve the qemu-host AMI pointers, which
+# only a qemu_host_ami bake creates.
 
 locals {
   ci_architectures  = yamldecode(file("${path.module}/../data/architectures.yml"))
@@ -1179,52 +1180,26 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
   }
 }
 
-# ─── SSM parameter: nested-qemu host AMI ─────────────────────────────────────
-# The nested-qemu host AMI promotion path needs a real parameter before the ASG
-# launch template can reference it. Terraform owns the parameter shell, seeding
-# it with Canonical's current noble AMI; packer owns the promoted AMI value
-# after the first successful host bake.
+# ─── SSM parameters: nested-qemu host AMI ────────────────────────────────────
+# qemu-host-ami.sh creates and promotes /homelab-ci/ami/qemu-host/[aarch64/]<release>
+# with put-parameter --overwrite, so each release's pointer exists once its
+# first bake promotes. Terraform only reads them, through the launch templates'
+# resolve:ssm: image ids; the removed blocks drop its old noble parameter
+# shells from state without deleting the live pointers.
 
-data "aws_ssm_parameter" "canonical_ubuntu" {
-  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
-}
-
-resource "aws_ssm_parameter" "ci_qemu_host_ami" {
-  name      = local.ci_qemu_host_ami_parameter
-  type      = "String"
-  data_type = "aws:ec2:image"
-  value     = data.aws_ssm_parameter.canonical_ubuntu.value
-
-  tags = {
-    role    = "ci-ami"
-    machine = "qemu_host"
-    ubuntu  = local.ci_host_release
-  }
+removed {
+  from = aws_ssm_parameter.ci_qemu_host_ami
 
   lifecycle {
-    ignore_changes = [value]
+    destroy = false
   }
 }
 
-data "aws_ssm_parameter" "canonical_ubuntu_arm" {
-  name = "/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id"
-}
-
-resource "aws_ssm_parameter" "ci_qemu_arm_host_ami" {
-  name      = local.ci_qemu_arm_host_ami_parameter
-  type      = "String"
-  data_type = "aws:ec2:image"
-  value     = data.aws_ssm_parameter.canonical_ubuntu_arm.value
-
-  tags = {
-    architecture = "aarch64"
-    role         = "ci-ami"
-    machine      = "qemu_host"
-    ubuntu       = local.ci_host_release
-  }
+removed {
+  from = aws_ssm_parameter.ci_qemu_arm_host_ami
 
   lifecycle {
-    ignore_changes = [value]
+    destroy = false
   }
 }
 
