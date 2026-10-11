@@ -498,7 +498,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
         sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
         sync_clone_with_origin(rebase)
     if resolve_ref(f"refs/tags/{SYNCED_TAG}") is None:
-        sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
+        sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:sync pull` once to establish the baseline.")
     # Per-file state model:
     #   tag_bytes  -- content at last_synced_to_host, or None if new to sync
     #   head_bytes -- content in the clone working tree, which is what gets
@@ -530,7 +530,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     if diverged:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
-        msg.append("\nrun `mise run ha:pull` to capture host-side edits, then retry push.")
+        msg.append("\nrun `mise run ha:sync pull` to capture host-side edits, then retry push.")
         if sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
             msg.append(
                 f"pull needs a clean working tree: commit the local edits in {CLONE} first; "
