@@ -29,6 +29,24 @@
           src: override_wait_online.conf.j2
           for: systemd-networkd-wait-online.service
 
+    # The drop-in needs the unit it extends; a host flagged cloud_init_managed
+    # without cloud-init installed has nothing to order.
+    - name: Find cloud-init's local stage
+      when: cloud_init_managed
+      stat:
+        path: /usr/lib/systemd/system/cloud-init-local.service
+      register: netplan_cloud_init_local
+
+    - name: Order cloud-init's local stage after Netplan's renames
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: override_cloud_init_local.conf.j2
+          for: cloud-init-local.service
+          condition: "{{ cloud_init_managed and netplan_cloud_init_local.stat.exists }}"
+
     - name: Pull systemd-networkd-wait-online into network-online.target
       systemd:
         name: systemd-networkd-wait-online.service

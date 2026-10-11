@@ -1,0 +1,7 @@
+[Unit]
+# Netplan writes its .link files from netplan-configure.service, whose udevadm
+# trigger renames NICs to their set-name. Unordered against it, cloud-init's
+# local stage can pick a kernel name renamed underneath it: on Hetzner its
+# ephemeral DHCP then waits out its timeout, fails the stage, and leaves dhcpcd
+# behind. Releases without the service ignore the ordering.
+After=netplan-configure.service
