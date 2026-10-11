@@ -24,7 +24,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
     _setup(m, drives=["file=disk1.qcow2,if=virtio", "file=disk2.qcow2,if=virtio"])
     cmd = m._boot_command()
 
-    # GNU timeout wrapper -- the 10s kill-after gives the qemu signal handler
+    # timeout wrapper -- the 10s kill-after gives the qemu signal handler
     # a window before SIGKILL. The wrapper outlasts machine_timeout by 60s, so
     # the session deadline fires first.
     assert cmd[0] == "timeout"

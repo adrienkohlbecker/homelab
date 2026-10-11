@@ -1217,10 +1217,10 @@ class Machine:
 
         netdev_arg, net_device_arg = self._netdev_args()
 
-        # Last-resort GNU timeout around qemu, outlasting machine_timeout (the
+        # Last-resort timeout wrapper around qemu, outlasting machine_timeout (the
         # Python deadline) by 60s so the entry point's own rc=124 and
         # Machine.stop()'s graceful->SIGKILL escalation come first. A kept VM
-        # runs until the operator stops it, and runs unwrapped: GNU timeout
+        # runs until the operator stops it, and runs unwrapped: timeout
         # detaches its child from the controlling tty, which would leave
         # --foreground's mon:stdio unusable.
         wrapper = [] if self.keep_vm else ["timeout", "--kill-after=10s", str(self.machine_timeout + 60)]
