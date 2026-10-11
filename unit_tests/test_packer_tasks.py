@@ -610,6 +610,7 @@ def test_qemu_host_smoke_fails_when_qemu_exits_before_the_boot_manager(tmp_path:
             "firmware",
             str(fake_qemu),
             "virt",
+            "neoverse-n1",
             str(tmp_path / "code.fd"),
             str(variables),
         ],
