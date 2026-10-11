@@ -311,7 +311,7 @@ fox_image:
   # The release fox runs. Override it to bake the next release's snapshot
   # ahead of a rebuild; both steps label and prune by it.
   variables:
-    FOX_UBUNTU: noble
+    FOX_UBUNTU: resolute
   script:
     - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
     - mise run ci:bootstrap
