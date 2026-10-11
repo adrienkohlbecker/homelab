@@ -87,32 +87,49 @@
               location = "{{ location }}"
               {% endfor %}
 
-        - name: Ensure root containers auth dir exists
+        # The ECR mirror rejects anonymous pulls, so every podman identity that
+        # pulls needs a credential: root for rootful pulls, the login user for
+        # rootless ones. Podman reads ~/.config/containers/auth.json after the
+        # tmpfs ${XDG_RUNTIME_DIR} copy, so this one survives reboots and logouts.
+        - name: Write ECR auth for podman pulls
           when: test_in_aws
-          file:
-            path: /root/.config/containers
-            state: directory
-            mode: "0700"
-            owner: root
-            group: root
+          vars:
+            _test_podman_auth_users:
+              - { owner: root, group: root, home: /root }
+              - owner: "{{ ansible_user_id }}"
+                group: "{{ ansible_user_gid }}"
+                home: "{{ ansible_user_dir }}"
+          block:
+            - name: Ensure podman auth dirs exist
+              file:
+                path: "{{ item.home }}/.config/containers"
+                state: directory
+                mode: "0700"
+                owner: "{{ item.owner }}"
+                group: "{{ item.group }}"
+              loop: "{{ _test_podman_auth_users }}"
+              loop_control:
+                label: "{{ item.owner }}"
 
-        - name: Write ECR auth for root podman pulls
-          when: test_in_aws
-          copy:
-            dest: /root/.config/containers/auth.json
-            mode: "0600"
-            owner: root
-            group: root
-            content: |
-              {
-                "auths": {
-                  "{{ test_ecr_registry }}": {
-                    "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_aws_region ~ ' ecr get-login-password')) | b64encode }}"
+            - name: Write ECR auth for each podman user
+              copy:
+                dest: "{{ item.home }}/.config/containers/auth.json"
+                mode: "0600"
+                owner: "{{ item.owner }}"
+                group: "{{ item.group }}"
+                content: |
+                  {
+                    "auths": {
+                      "{{ test_ecr_registry }}": {
+                        "auth": "{{ ('AWS:' ~ lookup('pipe', 'aws --region ' ~ test_aws_region ~ ' ecr get-login-password')) | b64encode }}"
+                      }
+                    }
                   }
-                }
-              }
-            validate: python3 -m json.tool "%s"
-          diff: false
+                validate: python3 -m json.tool "%s"
+              loop: "{{ _test_podman_auth_users }}"
+              loop_control:
+                label: "{{ item.owner }}"
+              diff: false
 
     - name: Configure shared base-role prerequisites
       when: test_base_prerequisites | default(false) | bool
