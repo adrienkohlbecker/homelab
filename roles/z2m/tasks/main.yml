@@ -69,18 +69,6 @@
   tags:
     - z2m
 
-# Per-device tilt-null override for covers. See patch_cover_tilt.py for
-# why the global `device_options.homeassistant.cover` block in
-# configuration.yaml is not enough.
-- name: Patch cover devices to suppress phantom tilt_* in HA discovery
-  ansible.builtin.script:
-    cmd: patch_cover_tilt.py /mnt/services/z2m/devices.yaml
-  register: z2m_cover_patch
-  changed_when: "'CHANGED' in z2m_cover_patch.stdout"
-  become: true
-  tags:
-    - z2m
-
 - name: Configure z2m secrets
   template:
     src: secret.yaml.j2
@@ -113,7 +101,7 @@
   vars:
     systemd_unit_args:
       src: z2m.service.j2
-      restart: "{{ z2m_conf.changed or z2m_secret.changed or z2m_cover_patch.changed }}"
+      restart: "{{ z2m_conf.changed or z2m_secret.changed }}"
       # QEMU has no coordinator, so z2m waits for the serial adapter and never
       # becomes healthy. Left enabled, it would hold every fixture boot for its
       # full start timeout, then restart-loop.

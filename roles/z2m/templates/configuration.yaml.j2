@@ -5,11 +5,13 @@ version: 5
 homeassistant:
   enabled: true
 
-# Tilt-null cover override is applied per-device in devices.yaml by
-# roles/z2m/files/patch_cover_tilt.py, not here: z2m's merge of
-# `device_options` into a device's options is shallow, so any device that
-# already has its own `homeassistant: {...}` block (e.g. a renamed cover)
-# shadows the global one and the override never reaches HA discovery.
+# The Schneider S520567 shutters are roller shutters with no slats; `no_tilt`
+# drops their tilt expose, so HA discovery publishes a position-only cover.
+# Only that converter reads the option. Set it here, not through the
+# frontend: a frontend change also fires the converter's options hook, which
+# rewrites the wall switch's tilt timing and button behaviour on the device.
+device_options:
+  no_tilt: true
 
 # Enable the frontend. The listener is published only on 127.0.0.1 (see the
 # --publish in z2m.service.j2) and fronted by nginx with `auth: true`
