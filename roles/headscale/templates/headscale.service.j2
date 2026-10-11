@@ -52,9 +52,9 @@ ExecStart=/usr/bin/podman run \
     --publish 127.0.0.1:{{ service_ports.headscale }}:8080/tcp \
     {# Unauthenticated metrics stay on loopback for Netdata. #}
     --publish 127.0.0.1:{{ service_ports.headscale_metrics }}:9090/tcp \
-    {# Netavark maps both host families to the dual-stack STUN socket. #}
-    --publish 0.0.0.0:{{ service_ports.headscale_stun }}:3478/udp \
-    --publish '[::]:{{ service_ports.headscale_stun }}:3478/udp' \
+    {# One unaddressed publish maps both host families to the dual-stack STUN #}
+    {# socket; a 0.0.0.0 + [::] pair leaves stale DNAT rules on netavark 1.16. #}
+    --publish {{ service_ports.headscale_stun }}:3478/udp \
     --secret=headscale_oidc_secret,type=mount,target=oidc_client_secret \
     {# The native CLI round-trips through gRPC; the image has no HTTP client. #}
     --health-cmd         {{ ["headscale", "users", "list"] | json_argv }} \

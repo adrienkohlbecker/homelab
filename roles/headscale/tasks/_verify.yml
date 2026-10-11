@@ -34,16 +34,61 @@
   failed_when: "'test-harness' not in _headscale_user_list.stdout"
   become: true
 
-# Podman's view is independent of netavark's firewall driver and proves both
-# host families are mapped to the container's STUN listener.
-- name: _verify | Headscale publishes DERP STUN on IPv4 and IPv6
-  command: podman port headscale {{ service_ports.headscale_stun }}/udp
-  register: _headscale_stun_ports
+# The single STUN publish must still cover IPv6. The fixture has no routable
+# IPv6 address to probe from, so read the DNAT netavark derives; IPv4 gets a
+# real STUN round trip below. Noble's netavark 1.4 derives no IPv6 DNAT from
+# the publish, and fox, the only headscale host, runs Resolute.
+- name: _verify | Netavark forwards DERP STUN over IPv6
+  when: ansible_distribution_release != 'noble'
+  command: nft list ruleset
+  register: _headscale_nft
   changed_when: false
   failed_when: >-
-    ('0.0.0.0:' ~ service_ports.headscale_stun) not in _headscale_stun_ports.stdout
-    or (':::' ~ service_ports.headscale_stun) not in _headscale_stun_ports.stdout
+    _headscale_nft.stdout is not search('udp dport ' ~ service_ports.headscale_stun ~ ' .*dnat (ip6 )?to [[]')
   become: true
+
+# A restart is where stale port forwards surface: netavark 1.16 left a
+# 0.0.0.0 + [::] publish pair's DNAT rules ahead of the next container's, so
+# both published ports pointed at the stopped container's address.
+- name: _verify | Restart headscale
+  systemd:
+    name: headscale.service
+    state: restarted
+  become: true
+
+- name: _verify | /health answers through the published port after a restart
+  uri:
+    url: http://127.0.0.1:{{ service_ports.headscale }}/health
+    status_code: 200
+  register: _headscale_restart_health
+  retries: 15
+  delay: 2
+  until: _headscale_restart_health.status | default(0) == 200
+
+# Tailscale's STUN server answers only binding requests that carry its
+# SOFTWARE=tailnode attribute and a FINGERPRINT, as tailscaled sends them.
+- name: _verify | DERP STUN answers through the published port after a restart
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import os, socket, struct, sys, zlib
+        txid = os.urandom(12)
+        software = struct.pack("!HH", 0x8022, 8) + b"tailnode"
+        head = struct.pack("!HHI", 0x0001, len(software) + 8, 0x2112A442) + txid
+        fingerprint = zlib.crc32(head + software) ^ 0x5354554E
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        s.sendto(head + software + struct.pack("!HHI", 0x8028, 4, fingerprint), ("127.0.0.1", int(sys.argv[1])))
+        reply = s.recv(2048)
+        assert reply[:2] == b"\x01\x01" and reply[8:20] == txid, reply[:20]
+      - "{{ service_ports.headscale_stun }}"
+  register: _headscale_restart_stun
+  changed_when: false
+  retries: 5
+  delay: 2
+  until: _headscale_restart_stun.rc == 0
 
 - name: _verify | Exercise headscale fluent-bit record contracts
   import_role:
