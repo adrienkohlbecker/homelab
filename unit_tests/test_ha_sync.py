@@ -123,7 +123,8 @@ def test_push_retries_reload_after_upload_failure(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
     monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old" if ref != "HEAD" else "new")
     monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
+    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
+    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
     monkeypatch.setattr(sync, "host_file", lambda rel: host_bytes[0])
     monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
     monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
@@ -164,7 +165,8 @@ def test_push_reloads_custom_templates_before_their_consumers(monkeypatch: pytes
     monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
     monkeypatch.setattr(sync, "resolve_ref", lambda ref: ref)
     monkeypatch.setattr(sync, "enumerate_files", lambda: files)
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
+    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
+    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
     monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
     monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
     monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
@@ -190,7 +192,8 @@ def test_push_skips_reload_when_ha_rejects_the_config(monkeypatch: pytest.Monkey
     monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
     monkeypatch.setattr(sync, "resolve_ref", lambda ref: ref)
     monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
+    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
+    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
     monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
     monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
     monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
@@ -221,7 +224,8 @@ def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
     monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old")
     monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old" if ref == sync.SYNCED_TAG else b"new")
+    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
+    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
     monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
     monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
     monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
@@ -329,6 +333,28 @@ def test_push_publishes_hand_made_commits_before_tagging(synced_clone, monkeypat
     head = _git(clone, "rev-parse", "HEAD")
     assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
     assert _git(clone, "ls-remote", "origin", f"refs/tags/{sync.SYNCED_TAG}").split()[0] == head
+
+
+def test_push_refuses_a_diverged_host_before_publishing_local_edits(synced_clone) -> None:
+    sync, clone, host = synced_clone
+    head = _git(clone, "rev-parse", "HEAD")
+    (clone / "scripts.yaml").write_text("local: edit\n")
+    host["automations.yaml"] = b"- id: gui\n"
+
+    with pytest.raises(SystemExit, match="host diverged") as refusal:
+        sync.do_push()
+
+    assert _git(clone, "rev-parse", "HEAD") == head
+    assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
+    assert "commit the local edits" in str(refusal.value)
+
+    # The advertised recovery: commit locally, then pull.
+    _git(clone, "commit", "--quiet", "-am", "local edit")
+    sync.do_pull()
+    capture = _git(clone, "rev-parse", "origin/main")
+    assert _git(clone, "show", f"{capture}:automations.yaml") == "- id: gui"
+    assert _git(clone, "rev-parse", "HEAD~1") == capture
 
 
 def test_pull_refuses_while_origin_awaits_push(synced_clone) -> None:

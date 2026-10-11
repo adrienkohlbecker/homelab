@@ -250,8 +250,9 @@ def blob_at(ref: str, filename: str) -> bytes | None:
 def worktree_file(filename: str) -> bytes | None:
     """File content from the clone working tree, or None if absent.
 
-    Used by `push --dry-run`, which doesn't auto-commit, so the comparison point
-    is the working tree (uncommitted edits included) rather than the HEAD blob.
+    push compares against the working tree (uncommitted edits included) rather
+    than the HEAD blob: it decides whether to refuse before auto-committing, and
+    `--dry-run` never commits at all.
     """
     try:
         return (CLONE / filename).read_bytes()
@@ -486,19 +487,22 @@ def do_pull(rebase: bool = False) -> None:
 
 
 def do_push(dry_run: bool = False, rebase: bool = False) -> None:
+    """Upload clone edits to lab, reload HA, then advance the synced tag.
+
+    Every refusal happens before local edits are committed or anything reaches
+    origin: a commit published ahead of the tag makes `pull` refuse too, which
+    would leave neither command able to reconcile a diverged host.
+    """
     assert_clone_present()
     if not dry_run:
         sh(["git", "fetch", "--tags", "--force"], cwd=CLONE)
         sync_clone_with_origin(rebase)
-        # Auto-commit any working-tree edits so `ha:sync push` works straight
-        # from a direct file edit in the clone without a manual git commit.
-        if commit_and_push("push: local edits"):
-            print("push: committed local edits")
     if resolve_ref(f"refs/tags/{SYNCED_TAG}") is None:
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
     # Per-file state model:
     #   tag_bytes  -- content at last_synced_to_host, or None if new to sync
-    #   head_bytes -- content at clone HEAD (always exists by definition)
+    #   head_bytes -- content in the clone working tree, which is what gets
+    #                 uploaded and, after commit_and_push, what HEAD holds
     #   host_bytes -- content on lab, or None if not deployed yet
     # diverged   = host content differs from both tag and HEAD
     # changed    = host content differs from HEAD (missing-on-host counts)
@@ -507,9 +511,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     changed: dict[SyncFile, bytes | None] = {}
     pending: list[SyncFile] = []
     for file in enumerate_files():
-        # dry-run compares the working tree (uncommitted edits included); a real
-        # push has already folded those into HEAD via commit_and_push.
-        head_bytes = worktree_file(file.rel) if dry_run else blob_at("HEAD", file.rel)
+        head_bytes = worktree_file(file.rel)
         tag_bytes = blob_at(SYNCED_TAG, file.rel)
         host_bytes = host_file(file.rel)
         # Push-only files (pull=False) are repo-authoritative: the host copy is
@@ -529,7 +531,16 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
         msg.append("\nrun `mise run ha:pull` to capture host-side edits, then retry push.")
+        if sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
+            msg.append(
+                f"pull needs a clean working tree: commit the local edits in {CLONE} first; "
+                "pull replays them on top of the captured host edits."
+            )
         sys.exit("\n".join(msg))
+    # Auto-commit any working-tree edits so `ha:sync push` works straight from
+    # a direct file edit in the clone without a manual git commit.
+    if not dry_run and commit_and_push("push: local edits"):
+        print("push: committed local edits")
     if not changed and not pending:
         if not dry_run and resolve_ref(f"refs/tags/{SYNCED_TAG}") != resolve_ref("HEAD"):
             advance_synced_tag()
