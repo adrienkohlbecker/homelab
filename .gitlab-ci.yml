@@ -17,6 +17,9 @@ variables:
   AWS_REGION: eu-central-1
   # Ansible ignores cwd config under world-writable /builds unless pinned.
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
+  # data/ubuntu_releases.yml's ci_host, which GitLab cannot read when it
+  # expands image:. unit_tests/test_gitlab_ci.py keeps the two equal.
+  CI_HOST_UBUNTU: noble
 
 # GitLab expands tags before job rules:variables, so select the runner tag at
 # workflow scope. Target alone is authoritative across web, push-option, and API
@@ -131,11 +134,14 @@ unit_tests:
     - mise run test
     - mise run test:fluentbit-lua
 
-# Manually publish Dockerfile as ci:<sha>; only master also moves :latest.
-# Hosted dind cannot reach Nexus, so the build uses upstream apt. An optional
-# no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit secret. The image is
-# built natively per architecture; CI_IMAGE_TAG_SUFFIX keeps the arm64 tags
-# (ci:<sha>-arm64, ci:latest-arm64) apart from the amd64 ones.
+# Manually publish Dockerfile per release as ci:<sha>-<release>; only master
+# also moves ci:latest-<release>. The build defaults to CI_HOST_UBUNTU, and
+# CI_IMAGE_UBUNTU builds another release ahead of switching ci_host, as
+# QEMU_HOST_UBUNTU does for the runner-host AMI. Hosted dind cannot reach
+# Nexus, so the build uses upstream apt. An optional no-scope MISE_GITHUB_TOKEN
+# is mounted only as a BuildKit secret. The image is built natively per
+# architecture; CI_IMAGE_TAG_SUFFIX keeps the arm64 tags
+# (ci:<sha>-<release>-arm64, ci:latest-<release>-arm64) apart.
 .ci_image:
   stage: prepare
   extends: .manual_job
@@ -147,21 +153,23 @@ unit_tests:
     DOCKER_TLS_CERTDIR: "/certs"
     CI_IMAGE_TAG_SUFFIX: ""
   script:
+    - release="${CI_IMAGE_UBUNTU:-$CI_HOST_UBUNTU}"
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    # A missing cache is expected on the first build.
-    - docker pull "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX" || true
+    # A missing cache is expected on a release's first build.
+    - docker pull "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX" || true
     - |
       docker build ${MISE_GITHUB_TOKEN:+--secret id=mise_github_token,env=MISE_GITHUB_TOKEN} \
+        --build-arg UBUNTU_RELEASE="$release" \
         --build-arg USE_NEXUS_MIRRORS=0 \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
-        --cache-from "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX" \
-        --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA$CI_IMAGE_TAG_SUFFIX" .
-    - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA$CI_IMAGE_TAG_SUFFIX"
+        --cache-from "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX" \
+        --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release$CI_IMAGE_TAG_SUFFIX" .
+    - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release$CI_IMAGE_TAG_SUFFIX"
     # Branch dispatches must not retarget what other pipelines pin.
     - |
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA$CI_IMAGE_TAG_SUFFIX" "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX"
-        docker push "$CI_REGISTRY_IMAGE/ci:latest$CI_IMAGE_TAG_SUFFIX"
+        docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release$CI_IMAGE_TAG_SUFFIX" "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX"
+        docker push "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX"
       fi
 
 ci_image:

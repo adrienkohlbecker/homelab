@@ -63,6 +63,22 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     ]
 
 
+def test_ci_host_variable_matches_the_catalog() -> None:
+    catalog = yaml.safe_load((ROOT / "data/ubuntu_releases.yml").read_text())
+
+    assert PIPELINE["variables"]["CI_HOST_UBUNTU"] == catalog["ci_host"]
+
+
+def test_ci_image_builds_and_tags_one_release() -> None:
+    script = PIPELINE[".ci_image"]["script"]
+    build = next(line for line in script if line.startswith("docker build"))
+
+    assert script[0] == 'release="${CI_IMAGE_UBUNTU:-$CI_HOST_UBUNTU}"'
+    assert '--build-arg UBUNTU_RELEASE="$release"' in build
+    assert '--tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release$CI_IMAGE_TAG_SUFFIX"' in build
+    assert "FROM ubuntu:${UBUNTU_RELEASE}\n" in (ROOT / "Dockerfile").read_text()
+
+
 def test_fox_image_builds_and_labels_one_release() -> None:
     job = PIPELINE["fox_image"]
 

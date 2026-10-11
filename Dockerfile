@@ -1,8 +1,9 @@
-# Hosted GitLab CI image, manually published as $CI_REGISTRY_IMAGE/ci:latest.
+# Hosted GitLab CI image, manually published as $CI_REGISTRY_IMAGE/ci:latest-<release>.
 # Copied manifests invalidate their dependency layers when the toolchain moves.
-# Later steps read the release codename from /etc/os-release, so this tag is
-# the only release pin.
-FROM ubuntu:26.04
+# The ci_image jobs pass the release they publish (CI_HOST_UBUNTU unless
+# overridden); later steps read the codename from /etc/os-release.
+ARG UBUNTU_RELEASE
+FROM ubuntu:${UBUNTU_RELEASE}
 ENV DEBIAN_FRONTEND=noninteractive
 
 # CI builds use Nexus by default; external builds set USE_NEXUS_MIRRORS=0 and
