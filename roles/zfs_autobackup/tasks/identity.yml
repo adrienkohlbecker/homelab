@@ -26,11 +26,13 @@
   tags:
     - zfs_autobackup
 
+# Check mode generates nothing, and on a freshly imaged host the zfs role's
+# check helper is only predicted, so the probe cannot run yet.
 - name: identity | Require the persistent services dataset
   when: zfs_root
   assert:
     that:
-      - zfs_autobackup_identity_services_mount.rc == 0
+      - zfs_autobackup_identity_services_mount.rc == 0 or ansible_check_mode
     fail_msg: >-
       The backup SSH identity requires rpool/services mounted at /mnt/services;
       refusing to generate an identity that would not survive a rebuild.
