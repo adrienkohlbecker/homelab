@@ -54,10 +54,11 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
         {"QEMU_HOST_ARCHITECTURE": "x86_64"},
         {"QEMU_HOST_ARCHITECTURE": "aarch64"},
     ]
-    assert job["resource_group"] == "ami-qemu-host-$QEMU_HOST_ARCHITECTURE-noble"
+    assert job["resource_group"] == "ami-qemu-host-$QEMU_HOST_ARCHITECTURE"
     assert job["script"][-2:] == [
         'source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"',
-        'mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" --promote',
+        'mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" '
+        '${QEMU_HOST_UBUNTU:+--ubuntu "$QEMU_HOST_UBUNTU"} --promote',
     ]
 
 

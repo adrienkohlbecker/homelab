@@ -11,8 +11,10 @@
 # notes/archive/ci_aws_test_cells.md, "Bootstrap".
 
 locals {
-  ci_architectures = yamldecode(file("${path.module}/../data/architectures.yml"))
-  ci_aws_region    = "eu-central-1"
+  ci_architectures  = yamldecode(file("${path.module}/../data/architectures.yml"))
+  ci_ubuntu_catalog = yamldecode(file("${path.module}/../data/ubuntu_releases.yml"))
+  ci_host_release   = local.ci_ubuntu_catalog.ci_host
+  ci_aws_region     = "eu-central-1"
   # GitLab project whose OIDC tokens may assume the CI roles. The sub claim
   # is the only identity binding (IAM has no condition key for GitLab's
   # immutable project_id), so this namespace must never be released — a
@@ -28,8 +30,14 @@ locals {
   ]))
   # Must match the namespace in packer/aws/files/cloudwatch_agent.json.
   ci_host_metrics_namespace      = "homelab-ci"
-  ci_qemu_host_ami_parameter     = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", "noble")
-  ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", "noble")
+  ci_qemu_host_ami_parameter     = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
+  ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
+  # A bake promotes any catalog release's pointer, so the next release's AMI
+  # exists before ci_host moves the launch templates onto it.
+  ci_qemu_host_ami_parameter_arns = [
+    for pair in setproduct(keys(local.ci_ubuntu_catalog.releases), keys(local.ci_architectures)) :
+    "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${replace(local.ci_architectures[pair[1]].ci.ami_parameter, "{ubuntu}", pair[0])}"
+  ]
   ci_qemu_pools = {
     role = {
       # Instance-type-agnostic name: aws_autoscaling_group.name and
@@ -877,10 +885,7 @@ resource "aws_iam_role_policy" "ci_bake" {
           "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
           "ssm:DescribeParameters", "ssm:AddTagsToResource",
         ]
-        Resource = [
-          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${local.ci_qemu_host_ami_parameter}",
-          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${local.ci_qemu_arm_host_ami_parameter}",
-        ]
+        Resource = local.ci_qemu_host_ami_parameter_arns
       },
       {
         Sid    = "PublishQemuImages"
@@ -1193,7 +1198,7 @@ resource "aws_ssm_parameter" "ci_qemu_host_ami" {
   tags = {
     role    = "ci-ami"
     machine = "qemu_host"
-    ubuntu  = "noble"
+    ubuntu  = local.ci_host_release
   }
 
   lifecycle {
@@ -1215,7 +1220,7 @@ resource "aws_ssm_parameter" "ci_qemu_arm_host_ami" {
     architecture = "aarch64"
     role         = "ci-ami"
     machine      = "qemu_host"
-    ubuntu       = "noble"
+    ubuntu       = local.ci_host_release
   }
 
   lifecycle {

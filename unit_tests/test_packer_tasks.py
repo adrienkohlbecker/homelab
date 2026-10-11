@@ -660,7 +660,7 @@ def test_qemu_host_scratch_swap_rejects_malformed_memory(tmp_path: Path, memtota
 
 
 def _run_qemu_host_bake(
-    tmp_path: Path, *, promote: bool, resolved_ami: str = "ami-1234abcd"
+    tmp_path: Path, *, promote: bool, resolved_ami: str = "ami-1234abcd", ubuntu: str | None = "noble"
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
     """Run an ARM qemu-host bake against fake packer/aws/sleep binaries.
 
@@ -701,6 +701,9 @@ def _run_qemu_host_bake(
     _executable(fake_bin / "sleep", '#!/bin/sh\nprintf "%s\\n" "$*" >>"$SLEEP_TEST_LOG"\n')
     env = dict(os.environ)
     env.pop("CI", None)
+    env.pop("usage_ubuntu", None)
+    if ubuntu is not None:
+        env["usage_ubuntu"] = ubuntu
     env.update(
         AWS_TEST_LOG=str(aws_log),
         PATH=f"{fake_bin}:{env['PATH']}",
@@ -709,7 +712,6 @@ def _run_qemu_host_bake(
         SLEEP_TEST_LOG=str(sleep_log),
         usage_architecture="aarch64",
         usage_promote="true" if promote else "false",
-        usage_ubuntu="noble",
     )
 
     result = subprocess.run(
@@ -737,6 +739,15 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
     describe = next(line for line in aws_log.read_text().splitlines() if "ec2 describe-images" in line)
     assert "--region eu-central-1" in describe
     assert "Name=tag:architecture,Values=aarch64" in describe
+
+
+def test_qemu_host_bake_defaults_to_the_catalog_ci_host_release(tmp_path: Path) -> None:
+    ci_host = yaml.safe_load(UBUNTU_CATALOG.read_text())["ci_host"]
+    result, packer_log, _aws_log, _sleep_log = _run_qemu_host_bake(tmp_path, promote=False, ubuntu=None)
+
+    assert result.returncode == 0, result.stderr
+    assert f"ubuntu_name={ci_host}" in packer_log.read_text()
+    assert f"/homelab-ci/ami/qemu-host/aarch64/{ci_host}" in result.stdout
 
 
 def test_qemu_host_promotion_waits_for_ssm_to_resolve_the_new_version(tmp_path: Path) -> None:

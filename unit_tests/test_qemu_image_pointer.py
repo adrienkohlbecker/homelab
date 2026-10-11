@@ -63,8 +63,9 @@ class TestImageStore:
         terraform = (Path(__file__).resolve().parent.parent / "terraform" / "aws_ci.tf").read_text()
         bucket, region = upload.image_store("x86_64")
 
-        assert f'ci_qemu_image_bucket_name = "{bucket}"' in terraform
-        assert f'ci_aws_region    = "{region}"' in terraform
+        # tofu fmt realigns the "=" column whenever a neighbouring local changes.
+        assert re.search(rf'ci_qemu_image_bucket_name\s+= "{bucket}"', terraform)
+        assert re.search(rf'ci_aws_region\s+= "{region}"', terraform)
 
     def test_unknown_architecture_is_rejected(self) -> None:
         with pytest.raises(KeyError):
