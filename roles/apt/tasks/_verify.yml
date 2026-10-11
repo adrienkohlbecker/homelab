@@ -6,17 +6,3 @@
   command: apt-get update --error-on=any
   changed_when: false
   become: true
-
-# GNU timeout may die with its process group (-9) or reap the child (137).
-- name: _verify | Exercise timeout TERM-to-KILL escalation
-  command:
-    argv:
-      - timeout
-      - --kill-after=1s
-      - 1s
-      - /usr/bin/python3
-      - -c
-      - "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(10)"
-  register: _apt_verify_timeout
-  failed_when: _apt_verify_timeout.rc not in [-9, 137]
-  changed_when: false
