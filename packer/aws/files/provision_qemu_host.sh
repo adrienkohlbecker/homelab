@@ -25,6 +25,23 @@ read -r -a qemu_packages <<<"$QEMU_PACKAGES"
 
 sudo install -dm 755 /etc/apt/keyrings
 sudo apt-get update -qq
+
+# Resolute defaults to Rust coreutils, whose timeout contract differs from the
+# GNU one the job wrapper and the harness's QEMU watchdog rely on; the apt role
+# makes the same selection on the fleet. --allow-remove-essential is a blanket
+# waiver, so refuse a plan that removes more than the uutils provider.
+# shellcheck source=/dev/null
+. /etc/os-release
+coreutils_from_gnu=$(dpkg-query -W -f '${db:Status-Status}' coreutils-from-gnu 2>/dev/null || true)
+if [ "$VERSION_CODENAME" != noble ] && [ "$coreutils_from_gnu" != installed ]; then
+  coreutils_removals=$(sudo apt-get --simulate --allow-remove-essential install coreutils-from-gnu coreutils-from-uutils- |
+    awk '/^Remv / { print $2 }')
+  if [ "$coreutils_removals" != coreutils-from-uutils ]; then
+    echo "provision_qemu_host: selecting GNU coreutils plans removals: ${coreutils_removals:-none}" >&2
+    exit 1
+  fi
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
+fi
 (
   # mdadm's postinst starts its monitoring timers. Keep the image build quiet;
   # systemd will activate the enabled timers normally when an instance boots.
