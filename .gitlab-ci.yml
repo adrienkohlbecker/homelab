@@ -299,13 +299,17 @@ fox_image:
   resource_group: fox_image
   interruptible: false
   timeout: 90m
+  # The release fox runs. Override it to bake the next release's snapshot
+  # ahead of a rebuild; both steps label and prune by it.
+  variables:
+    FOX_UBUNTU: noble
   script:
     - test -n "${HCLOUD_TOKEN:-}" || { echo "HCLOUD_TOKEN CI/CD variable is not set" >&2; exit 1; }
     - mise run ci:bootstrap
     - mise run packer:init
-    # fox stays noble; the shipped image uses upstream mirrors despite the build.
-    - mise run packer:build hetzner --ubuntu noble
-    - mise run packer:hetzner
+    # The shipped image uses upstream mirrors despite the build.
+    - mise run packer:build hetzner --ubuntu "$FOX_UBUNTU"
+    - mise run packer:hetzner --ubuntu "$FOX_UBUNTU"
 
 # Manually rebuild ZFSBootMenu after a version or overlay change, verify the
 # artifacts, then pin the tarball. zbm:ci-build owns dind setup, cache, assertions,

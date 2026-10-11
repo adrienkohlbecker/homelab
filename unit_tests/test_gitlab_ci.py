@@ -5,6 +5,7 @@ from conftest import load_repo_module
 
 ROOT = Path(__file__).parents[1]
 PIPELINE = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
+UBUNTU_RELEASES = yaml.safe_load((ROOT / "data/ubuntu_releases.yml").read_text())["releases"]
 IMAGE_STORE = load_repo_module("mise-tasks/ci/qemu_image_store.py")
 
 
@@ -59,6 +60,18 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
         'source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"',
         'mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" '
         '${QEMU_HOST_UBUNTU:+--ubuntu "$QEMU_HOST_UBUNTU"} --promote',
+    ]
+
+
+def test_fox_image_builds_and_labels_one_release() -> None:
+    job = PIPELINE["fox_image"]
+
+    # packer:hetzner labels and prunes snapshots by its own --ubuntu, so an
+    # omitted flag would publish another release's build under its default.
+    assert job["variables"]["FOX_UBUNTU"] in UBUNTU_RELEASES
+    assert job["script"][-2:] == [
+        'mise run packer:build hetzner --ubuntu "$FOX_UBUNTU"',
+        'mise run packer:hetzner --ubuntu "$FOX_UBUNTU"',
     ]
 
 
