@@ -46,8 +46,10 @@ zfs_backup_local_ok=$((failed == 0))
 # Unaffected by the gate above: each onsite leg pulls a *peer* host's own
 # snapshots (--no-snapshot --ssh-source), not the ones taken locally this run,
 # so a local-snapshot failure here doesn't make these copies inconsistent.
+# Wait up to 30 minutes for each source's own run to snapshot; see
+# zfs_backup_onsite.
 {% for src in zfs_autobackup_sources %}
-run_step zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
+run_step zfs_backup_onsite --wait-for-source 1800 "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
 
 # Offsite sync is paused while bunk is unavailable.

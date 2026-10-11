@@ -145,6 +145,26 @@
         pause: 2
       become: true
 
+    # The nightly runs above found a fresh source snapshot at once (the source is
+    # this host, snapshotted just before). With nothing new, the bounded wait
+    # must run out, warn, and still pull.
+    - name: _verify | An onsite pull waits out a source with nothing new
+      command:
+        argv:
+          - /usr/local/bin/zfs_backup_onsite
+          - --wait-for-source
+          - "5"
+          - "{{ external_ips[zfs_autobackup_sources[0].host] }}"
+          - "{{ zfs_autobackup_sources[0].dest_dataset }}"
+      register: zfs_autobackup_verify_wait
+      changed_when: true
+      failed_when: >-
+        zfs_autobackup_verify_wait.rc != 0
+        or 'has no snapshot newer than' not in zfs_autobackup_verify_wait.stderr
+        or ((zfs_autobackup_verify_wait.end | to_datetime('%Y-%m-%d %H:%M:%S.%f'))
+            - (zfs_autobackup_verify_wait.start | to_datetime('%Y-%m-%d %H:%M:%S.%f'))).total_seconds() < 5
+      become: true
+
     - name: _verify | Read the newest bak snapshot of every pull source
       shell: |
         set -euo pipefail
