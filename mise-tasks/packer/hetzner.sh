@@ -107,6 +107,26 @@ rescue_create() {
   }
 }
 
+# First boot must finish cloud-init cleanly and grow rpool into the partition
+# growpart widened (the image's runcmd; cloud-init's resizefs cannot). The
+# image's default user is root, keyed with this run's temporary key; the
+# snapshot presents a new host key, so skip the rescue known_hosts.
+rescue_verify_first_boot() {
+  local out pool part
+  out=$(ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=10 "root@$RESCUE_IP" \
+    'cloud-init status --wait --long >&2 && echo "$(zpool list -Hp -o size rpool) $(lsblk -bno SIZE /dev/disk/by-partlabel/rpool)"') || {
+    echo "first boot: cloud-init did not finish cleanly" >&2
+    return 1
+  }
+  read -r pool part <<<"$out"
+  if ((pool * 100 < part * 95)); then
+    echo "first boot: rpool is $pool bytes on a $part-byte partition; it did not grow" >&2
+    return 1
+  fi
+  echo "==> first boot verified: cloud-init done, rpool $pool bytes on $part"
+}
+
 # Rebuild the temporary server from the new snapshot and require a live sshd.
 rescue_verify_boot() { # IMGID
   local imgid="$1" waited=0
@@ -118,13 +138,14 @@ rescue_verify_boot() { # IMGID
   while [ "$waited" -lt 300 ]; do
     rescue_sshd_up "$RESCUE_IP" && {
       echo "==> boot verified: $RESCUE_IP reached a live sshd from the snapshot"
-      return 0
+      rescue_verify_first_boot && return 0
+      break
     }
     sleep 5
     waited=$((waited + 5))
   done
 
-  echo "snapshot $imgid did not boot to a working sshd at $RESCUE_IP" >&2
+  echo "snapshot $imgid failed boot verification at $RESCUE_IP" >&2
   rescue_collect_diagnostics
   echo "    deleting the bad snapshot so terraform never selects it" >&2
   hcloud image delete "$imgid" >/dev/null 2>&1 || true
