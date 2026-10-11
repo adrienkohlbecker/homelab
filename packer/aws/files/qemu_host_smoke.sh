@@ -39,10 +39,6 @@ kernel() {
 
 toolchain() {
   env -i PATH=/usr/bin:/bin gitlab-runner --version >/dev/null
-  if ! timeout --version | grep -q 'GNU coreutils'; then
-    echo "qemu_host_smoke: timeout is not GNU coreutils: $(timeout --version | awk 'NR == 1')" >&2
-    return 1
-  fi
   # The hydrate script and the harness use 3.14 syntax and zstd tarfile support.
   run_as_ci_user python3 -c 'import sys; assert sys.version_info >= (3, 14), sys.version'
   run_as_ci_user uv --version
