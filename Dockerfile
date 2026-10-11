@@ -1,6 +1,8 @@
 # Hosted GitLab CI image, manually published as $CI_REGISTRY_IMAGE/ci:latest.
 # Copied manifests invalidate their dependency layers when the toolchain moves.
-FROM ubuntu:24.04
+# Later steps read the release codename from /etc/os-release, so this tag is
+# the only release pin.
+FROM ubuntu:26.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # CI builds use Nexus by default; external builds set USE_NEXUS_MIRRORS=0 and
@@ -13,6 +15,7 @@ ARG USE_NEXUS_MIRRORS=1
 # Replacing the stock sources makes mirror failure explicit rather than falling
 # back upstream.
 RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
+      . /etc/os-release; \
       arch=$(dpkg --print-architecture); \
       if [ "$arch" = "amd64" ]; then \
         archive_url="http://nexus.lab.fahm.fr/repository/ubuntu-archive"; \
@@ -21,8 +24,8 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
         archive_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
         security_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
       fi; \
-      printf 'Types: deb\nURIs: %s\nSuites: noble noble-updates noble-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nTypes: deb\nURIs: %s\nSuites: noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' \
-        "$archive_url" "$security_url" \
+      printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates %s-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nTypes: deb\nURIs: %s\nSuites: %s-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' \
+        "$archive_url" "$VERSION_CODENAME" "$VERSION_CODENAME" "$VERSION_CODENAME" "$security_url" "$VERSION_CODENAME" \
         > /etc/apt/sources.list.d/ubuntu.sources; \
     fi
 
@@ -42,7 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # VIRTUAL_ENV, leaving uv's explicit environment selection authoritative.
 ENV MISE_DATA_DIR=/opt/mise \
     PATH="/opt/venv/bin:/opt/mise/shims:/usr/local/bin:/usr/bin:/bin"
-RUN install -dm 755 /etc/apt/keyrings && \
+RUN . /etc/os-release && \
+    install -dm 755 /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
       | gpg --dearmor -o /etc/apt/keyrings/docker-archive-keyring.gpg && \
     curl -fsSL https://mise.jdx.dev/gpg-key.pub \
@@ -52,7 +56,7 @@ RUN install -dm 755 /etc/apt/keyrings && \
     else \
       docker_repo="https://download.docker.com/linux/ubuntu"; \
     fi && \
-    echo "deb [signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] ${docker_repo} noble stable" \
+    echo "deb [signed-by=/etc/apt/keyrings/docker-archive-keyring.gpg] ${docker_repo} ${VERSION_CODENAME} stable" \
       > /etc/apt/sources.list.d/docker.list && \
     echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" \
       > /etc/apt/sources.list.d/mise.list && \
