@@ -182,7 +182,10 @@ def main() -> int:
     parser.add_argument("--sender-name", required=True)
     parser.add_argument("--username", required=True)
     parser.add_argument("--recipient", action="append", required=True)
-    parser.add_argument("--timeout", type=int, default=5)
+    # HA's own DEFAULT_TIMEOUT. The legacy notify.<name> action checks the
+    # connection once at startup and never retries, so a tighter value drops
+    # the action whenever the relay greets slowly during a restart.
+    parser.add_argument("--timeout", type=int, default=60)
     parser.add_argument(
         "--check",
         action="store_true",
