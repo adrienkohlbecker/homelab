@@ -105,8 +105,11 @@ experimental = true
 # - A pre-push hook gating every push on the full lint, whoever runs it. It
 #   lives in the common git dir so linked worktrees share it, and a
 #   core.hooksPath shim that chains to repo hooks finds it there too.
-# Each step is idempotent.
+# Each step is idempotent. Outside a checkout, as in the CI image build that
+# installs from bare manifests and runs its own uv sync, there is nothing to
+# bootstrap.
 postinstall = '''
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 uv sync --locked --quiet
 uv run --quiet python test/setup_mitogen.py
 hook=$(git rev-parse --path-format=absolute --git-common-dir)/hooks/pre-push
