@@ -148,6 +148,16 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
     )
 
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", x86)
+    resolute = image(
+        "ami-x86-resolute",
+        tags={**x86_tags, "Name": "homelab-ci-qemu-host-resolute", "ubuntu": "resolute"},
+        snapshot_id="snap-x86-resolute",
+    )
+    assert audit_aws.is_supported_qemu_host_image("eu-central-1", resolute)
+    # The Name must match the release tag, or retention would group across releases.
+    assert not audit_aws.is_supported_qemu_host_image(
+        "eu-central-1", image("ami-x86-mismatch", tags={**x86_tags, "ubuntu": "resolute"}, snapshot_id="snap-mismatch")
+    )
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", x86)
@@ -164,7 +174,7 @@ def test_ami_recognition_follows_the_shared_architecture_table():
     for architecture, ec2_architecture in (("x86_64", "x86_64"), ("aarch64", "arm64")):
         ci = architecture_table[architecture]["ci"]
         assert contract["amis"][ec2_architecture] == {
-            "name": f"{ci['ami_name_prefix']}-noble",
+            "name_prefix": ci["ami_name_prefix"],
             "parameter": ci["ami_parameter"],
         }
 

@@ -37,11 +37,11 @@ CI_REGIONS: dict[str, dict[str, Any]] = {
     "eu-central-1": {
         "amis": {
             "x86_64": {
-                "name": "homelab-ci-qemu-host-noble",
+                "name_prefix": "homelab-ci-qemu-host",
                 "parameter": "/homelab-ci/ami/qemu-host/{ubuntu}",
             },
             "arm64": {
-                "name": "homelab-ci-qemu-host-aarch64-noble",
+                "name_prefix": "homelab-ci-qemu-host-aarch64",
                 "parameter": "/homelab-ci/ami/qemu-host/aarch64/{ubuntu}",
             },
         },
@@ -96,12 +96,13 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     if contract is None:
         return False
     tags = image_tags(image)
-    if any(
-        tags.get(key) != value for key, value in {"role": "ci-ami", "machine": "qemu_host", "ubuntu": "noble"}.items()
-    ):
+    # Any release's bake is supported; its own promotion pointer protects it.
+    if any(tags.get(key) != value for key, value in {"role": "ci-ami", "machine": "qemu_host"}.items()):
+        return False
+    if "ubuntu" not in tags:
         return False
     return any(
-        tags.get("Name") == ami["name"]
+        tags.get("Name") == f"{ami['name_prefix']}-{tags['ubuntu']}"
         and image.get("Architecture") == arch
         and (
             tags.get("architecture") == ("aarch64" if arch == "arm64" else arch)
