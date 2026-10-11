@@ -52,8 +52,8 @@
   file:
     dest: /mnt/services/headscale/data
     state: directory
-    owner: headscale
-    group: headscale
+    owner: "{{ headscale_user.uid }}"
+    group: "{{ headscale_user.gid }}"
     mode: "0750"
   become: true
   tags:
@@ -64,8 +64,8 @@
   copy:
     src: acl.hujson
     dest: /mnt/services/headscale/acl.hujson
-    owner: headscale
-    group: headscale
+    owner: "{{ headscale_user.uid }}"
+    group: "{{ headscale_user.gid }}"
     mode: "0640"
     backup: true
   become: true
@@ -98,8 +98,8 @@
   template:
     src: config.yaml.j2
     dest: /mnt/services/headscale/config.yaml
-    owner: headscale
-    group: headscale
+    owner: "{{ headscale_user.uid }}"
+    group: "{{ headscale_user.gid }}"
     mode: "0640"
     backup: true
     # The native configtest below handles Headscale semantics.
