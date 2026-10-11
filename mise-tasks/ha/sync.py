@@ -99,8 +99,8 @@ SYNC_SPEC = [
     ("sensors.yaml", "homeassistant.restart", Direction.BOTH),
     # The legacy `plant:` integration has no hot reload service.
     ("plants.yaml", "homeassistant.restart", Direction.BOTH),
-    # climate_template is a legacy `climate:` platform — no hot reload, restart.
-    ("climate.yaml", "homeassistant.restart", Direction.BOTH),
+    # Template climate entities, loaded under `template climate:`.
+    ("climate.yaml", "template.reload", Direction.BOTH),
     # HA returns a clear API warning if this reload service is unavailable.
     ("custom_templates/*", "homeassistant.reload_custom_templates", Direction.BOTH),
     # Reload automations so blueprint consumers re-read changed sources.
