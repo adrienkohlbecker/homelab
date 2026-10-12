@@ -333,14 +333,15 @@ if [ "$INSTALL_TARGET" != bare_metal ]; then
   apt-get install --yes qemu-guest-agent
 fi
 
-# Disable ssh password authentication. The vagrant account is
-# key-only (no password set, see below); other users on the image
-# don't exist. Drop a snippet under sshd_config.d so the override
-# wins even if /etc/ssh/sshd_config is later edited.
+# Disable ssh password authentication. The login user created below is
+# key-only (no password set); no other user can log in. Drop a snippet under
+# sshd_config.d so the override wins even if /etc/ssh/sshd_config is later
+# edited.
 echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-hardening.conf
 
-# User setup. The qemu fixtures bake a key-only `vagrant` sudoer so the test
-# harness can SSH back in. The hetzner image must NOT bake a login user (the
+# User setup. Every target but Hetzner gets a key-only USERNAME sudoer: the
+# qemu fixtures' `vagrant`, so the test harness can SSH back in, or the
+# operator on bare metal. The hetzner image must NOT bake a login user (the
 # snapshot would ship a known key on the one internet-facing host); instead it
 # installs cloud-init so terraform's user_data creates `ak` + injects the SSH
 # key on first boot, exactly as the stock hcloud image does.

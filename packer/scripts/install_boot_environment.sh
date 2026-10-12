@@ -5,7 +5,9 @@
 #
 # Nothing outside the new dataset is written: partitions, md arrays, the ESP,
 # swap, the Podman store, and every other dataset and pool stay as they are, and
-# the running root remains the rollback. The new root takes the running host's
+# the running root remains the rollback. The one exception is the running
+# root's own package set: debootstrap is installed from its apt configuration
+# if missing. The new root takes the running host's
 # identity and storage wiring (hostid, machine-id, SSH host keys, fstab,
 # mdadm.conf, netplan, zpool.cache) and is otherwise a fresh chroot.sh
 # install, which the first converge on it completes. Until then zfs-mount
