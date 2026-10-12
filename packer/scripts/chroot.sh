@@ -175,93 +175,103 @@ elif [ "$INSTALL_TARGET" = "hetzner" ]; then
   COMMANDLINE="$SERIAL_CMDLINE $COMMANDLINE"
 fi
 
-# Every boot environment inherits this property, so a new one leaves the
-# running host's converged value alone. That also keeps the new release's zfs
-# userland away from the running kernel's module.
-if [ -z "$BOOT_ENVIRONMENT" ]; then
+# Fresh install: set the ZBM kernel command line every boot environment
+# inherits, assemble the per-disk ESP, swap, and Podman partitions into md
+# arrays on a mirror, then create the ESP and swap filesystems and list them in
+# fstab.
+create_storage() {
+  local efi_device swap_device
+  local mdadm_create_opts=()
+
   zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "rpool/ROOT"
-fi
 
-# Create efi & swap
-
-if [ -n "$BOOT_ENVIRONMENT" ]; then
-  # The copied mdadm.conf lists the running host's arrays; the image built
-  # below needs mdadm to assemble them at boot.
-  if grep -q '^ARRAY' /etc/mdadm/mdadm.conf 2>/dev/null; then
+  if [ "$LAYOUT" = "" ]; then
+    efi_device="$PARTITIONS_EFI"
+    swap_device="$PARTITIONS_SWAP"
+  else
     apt-get install --yes mdadm
-  fi
-elif [ "$LAYOUT" = "" ]; then
-  EFI_DEVICE="$PARTITIONS_EFI"
-  SWAP_DEVICE="$PARTITIONS_SWAP"
-else
-  apt-get install --yes mdadm
 
-  # arch-chroot mounts /sys read-only inside the chroot. mdadm 4.5 (resolute)
-  # writes N to /sys/module/md_mod/parameters/legacy_async_del_gendisk at
-  # startup to opt out of the deprecated async del_gendisk path; on a ro /sys
-  # the open fails with "init md module parameters fail" and mdadm aborts.
-  # Debian #1125390 / md-raid-utilities/mdadm#228 — upstream fix in 4.5-3
-  # reorders the modprobe before the write but doesn't help us since the
-  # mount is still ro. Remount rw for the duration of the chroot.
-  mount -o remount,rw /sys
+    # arch-chroot mounts /sys read-only inside the chroot. mdadm 4.5 (resolute)
+    # writes N to /sys/module/md_mod/parameters/legacy_async_del_gendisk at
+    # startup to opt out of the deprecated async del_gendisk path; on a ro /sys
+    # the open fails with "init md module parameters fail" and mdadm aborts.
+    # Debian #1125390 / md-raid-utilities/mdadm#228 — upstream fix in 4.5-3
+    # reorders the modprobe before the write but doesn't help us since the
+    # mount is still ro. Remount rw for the duration of the chroot.
+    mount -o remount,rw /sys
 
-  # Image builds write to fresh qcow2s that read back as zeros, and all-zero
-  # members are already consistent: RAID1 halves match and RAID5 parity of
-  # zeros is zero. Skip the initial resync rather than wait on it before
-  # sealing. Bare metal keeps it -- its disks hold arbitrary old data.
-  MDADM_CREATE_OPTS=()
-  if [ "$INSTALL_TARGET" != bare_metal ]; then
-    MDADM_CREATE_OPTS+=(--assume-clean)
-  fi
+    # Image builds write to fresh qcow2s that read back as zeros, and all-zero
+    # members are already consistent: RAID1 halves match and RAID5 parity of
+    # zeros is zero. Skip the initial resync rather than wait on it before
+    # sealing. Bare metal keeps it -- its disks hold arbitrary old data.
+    if [ "$INSTALL_TARGET" != bare_metal ]; then
+      mdadm_create_opts+=(--assume-clean)
+    fi
 
-  # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
-  # Some firmware may still reject a member; per-disk NVRAM entries below retain
-  # alternate boot paths. Validate this layout on each new bare-metal platform.
-  # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
-  mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
-  udevadm settle --timeout=10
-  mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
-  EFI_DEVICE=/dev/md/efi
-
-  # Disk-backed RAID1 swap avoids the memory-pressure deadlock risk of a ZFS
-  # zvol. mdadm.conf makes it available to the initramfs and swapon at boot.
-  # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
-  mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
-  udevadm settle --timeout=10
-  mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
-  SWAP_DEVICE=/dev/md/swap
-
-  # The reconstructible Podman store uses RAID5 without a write-intent bitmap:
-  # accept a full replacement resync in exchange for lower write amplification.
-  # Record the array for boot-time assembly; the Podman role formats and mounts
-  # /dev/md/podman.
-  if [ -n "$PARTITIONS_PODMAN" ]; then
-    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
-    mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
+    # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
+    # Some firmware may still reject a member; per-disk NVRAM entries below retain
+    # alternate boot paths. Validate this layout on each new bare-metal platform.
+    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
+    mdadm --create "${mdadm_create_opts[@]}" /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
     udevadm settle --timeout=10
-    mdadm --detail --brief /dev/md/podman >>/etc/mdadm/mdadm.conf
+    mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
+    efi_device=/dev/md/efi
+
+    # Disk-backed RAID1 swap avoids the memory-pressure deadlock risk of a ZFS
+    # zvol. mdadm.conf makes it available to the initramfs and swapon at boot.
+    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
+    mdadm --create "${mdadm_create_opts[@]}" /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
+    udevadm settle --timeout=10
+    mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
+    swap_device=/dev/md/swap
+
+    # The reconstructible Podman store uses RAID5 without a write-intent bitmap:
+    # accept a full replacement resync in exchange for lower write amplification.
+    # Record the array for boot-time assembly; the Podman role formats and mounts
+    # /dev/md/podman.
+    if [ -n "$PARTITIONS_PODMAN" ]; then
+      # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
+      mdadm --create "${mdadm_create_opts[@]}" /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
+      udevadm settle --timeout=10
+      mdadm --detail --brief /dev/md/podman >>/etc/mdadm/mdadm.conf
+    fi
   fi
-fi
 
-# Create filesystems and their fstab entries. A boot environment shares the
-# running host's, which its copied fstab already lists.
-
-if [ -z "$BOOT_ENVIRONMENT" ]; then
-  mkdosfs -F 32 -s 1 -n EFI "$EFI_DEVICE"
-  mkswap -f "$SWAP_DEVICE"
+  mkdosfs -F 32 -s 1 -n EFI "$efi_device"
+  mkswap -f "$swap_device"
 
   # UUIDs exist only after the filesystems above have been created; blkid
   # reads the signatures back through the same page cache they were written
   # with, so no settle is needed.
   if [ "$LAYOUT" = "" ]; then
-    EFI_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$EFI_DEVICE")"
-    SWAP_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$SWAP_DEVICE")"
+    efi_device="/dev/disk/by-uuid/$(blkid -s UUID -o value "$efi_device")"
+    swap_device="/dev/disk/by-uuid/$(blkid -s UUID -o value "$swap_device")"
   fi
 
   # Keep the ESP mount policy in sync with boot_esp_mount_opts in
   # group_vars/all/main.yml.
-  echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
-  echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
+  echo "$efi_device /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
+  echo "$swap_device none swap discard 0 0" >>/etc/fstab
+}
+
+# Boot environment: the running host owns the disks, the ESP, and the
+# rpool/ROOT command line every root inherits, and its fstab and mdadm.conf
+# were copied in. Leaving the shared property alone also keeps this release's
+# zfs userland away from the running kernel's module. Install only what this
+# root needs to use the host's storage: mdadm to assemble the copied arrays at
+# boot, and efibootmgr, which a fresh install gets with rEFInd, to manage the
+# firmware entries before the first converge.
+adopt_host_storage() {
+  if grep -q '^ARRAY' /etc/mdadm/mdadm.conf 2>/dev/null; then
+    apt-get install --yes mdadm
+  fi
+  apt-get install --yes efibootmgr
+}
+
+if [ -n "$BOOT_ENVIRONMENT" ]; then
+  adopt_host_storage
+else
+  create_storage
 fi
 
 # Install the boot role image policy before the single final build.
@@ -275,10 +285,11 @@ dpkg-divert --local --rename --remove "$initramfs_command"
 
 mkdir -p /boot/efi
 
-# Install ZBM and rEFInd onto the ESP and register them with the firmware. A
-# boot environment shares the running host's ESP, whose ZBM already lists
-# every root under rpool/ROOT; the refind role's first converge reconciles it.
-if [ -z "$BOOT_ENVIRONMENT" ]; then
+# Fresh install: put ZBM and rEFInd on the ESP and register rEFInd with the
+# firmware. A boot environment shares the running host's ESP, whose ZBM already
+# lists every root under rpool/ROOT; the refind role's first converge
+# reconciles it.
+install_boot_loader() {
   mount /boot/efi
 
   # Install ZFSBootMenu
@@ -398,10 +409,10 @@ EOF
       idx=$((idx + 1))
     done
   fi
-else
-  # The refind package pulls efibootmgr in on a fresh install; keep the
-  # firmware entries manageable from this root before its first converge.
-  apt-get install --yes efibootmgr
+}
+
+if [ -z "$BOOT_ENVIRONMENT" ]; then
+  install_boot_loader
 fi
 
 # Enable tmp mount. Noble ships tmp.mount as a disabled template under
