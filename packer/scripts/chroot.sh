@@ -16,15 +16,17 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# provision.sh prepends its shared helpers (apt_update, write_sources_list) to
-# this script on the way into the chroot.
-#
+# run_chroot_script (install_lib.sh) staged this script beside its library and
+# the installer's files, in CHROOT_FILES.
+# shellcheck source=packer/scripts/install_lib.sh
+. "$CHROOT_FILES/install_lib.sh"
+
 # Env consumed by this script:
 # - From packer's shell-provisioner env block (qemu.pkr.hcl):
 #   UBUNTU_NAME, SSH_KEY_PUB, ZBM_VERSION, and optionally
 #   REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs
 #   the distribution's).
-# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_ROLE_FILES, INSTALL_TARGET,
+# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_FILES, INSTALL_TARGET,
 #   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME, and
 #   the UBUNTU_MIRROR* build and upstream URLs.
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
@@ -96,10 +98,10 @@ ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime
 # Install the same console policy the console role owns. These files are static,
 # so the chroot can consume them directly without a template renderer.
 install -m 0644 \
-  "${CHROOT_ROLE_FILES}/console-setup" \
+  "${CHROOT_FILES}/console-setup" \
   /etc/default/console-setup
 install -m 0644 \
-  "${CHROOT_ROLE_FILES}/keyboard" \
+  "${CHROOT_FILES}/keyboard" \
   /etc/default/keyboard
 
 # Update the repository cache
@@ -131,7 +133,7 @@ noble)
   initramfs_generator=initramfs-tools
   initramfs_command=/usr/sbin/update-initramfs
   zfs_initramfs_package=zfs-initramfs
-  initramfs_policy_source="${CHROOT_ROLE_FILES}/modules_most"
+  initramfs_policy_source="${CHROOT_FILES}/modules_most"
   initramfs_policy_target=/etc/initramfs-tools/conf.d/modules-most
   # -c because the diverted package hooks have not created any images yet.
   initramfs_build=(update-initramfs -c -k all)
@@ -140,7 +142,7 @@ noble)
   initramfs_generator=dracut
   initramfs_command=/usr/bin/dracut
   zfs_initramfs_package=zfs-dracut
-  initramfs_policy_source="${CHROOT_ROLE_FILES}/dracut_host.conf"
+  initramfs_policy_source="${CHROOT_FILES}/dracut_host.conf"
   initramfs_policy_target=/etc/dracut.conf.d/90_host.conf
   # The installer chroot cannot detect the booted target hardware. The first
   # image is generic; later on-host builds use the host-only policy.
@@ -447,8 +449,7 @@ echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-hardening.conf
 # installs cloud-init so terraform's user_data creates `ak` + injects the SSH
 # key on first boot, exactly as the stock hcloud image does.
 if [ "$INSTALL_TARGET" = "hetzner" ]; then
-  bash /var/tmp/hetzner/install.sh
-  rm -rf /var/tmp/hetzner
+  bash "${CHROOT_FILES}/hetzner/install.sh"
 
 elif [ -z "$BOOT_ENVIRONMENT" ]; then
 
@@ -499,10 +500,11 @@ if [ "$INSTALL_TARGET" != "hetzner" ]; then
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
 
-# Mirror the journal onto the virtio console the harness always attaches;
-# provision.sh staged the unit (test/homelab_guest_journal.service, shared with
-# the minimal fixture's cloud-init seed) on qemu targets.
+# Mirror the journal onto the virtio console the harness always attaches. The
+# unit (test/homelab_guest_journal.service) is shared with the minimal
+# fixture's cloud-init seed.
 if [ "$INSTALL_TARGET" = "qemu" ]; then
+  install -m 0644 "${CHROOT_FILES}/homelab_guest_journal.service" /etc/systemd/system/
   # verify exits 0 on "Unknown key name ... ignoring", so a misplaced
   # directive passes the bake and then fails every unit the systemd_unit
   # helper validates on the fixture. Treat any complaint as fatal here, as

@@ -513,10 +513,11 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     playbook_role_files = re.findall(r"^\s+- (roles/\S+)$", BOOT_ENVIRONMENT_PLAYBOOK.read_text(), re.MULTILINE)
     assert sorted(Path(path).name for path in playbook_role_files) == sorted(staged)
 
-    # Every role file the chroot install reads must be staged by provision.sh.
-    consumed = set(re.findall(r"\$\{CHROOT_ROLE_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
+    # Every staged file the chroot install reads must be one run_chroot_script
+    # stages: a role file, its library, or a target's extras.
+    consumed = set(re.findall(r"\$\{CHROOT_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
     assert consumed, "chroot.sh no longer names any role file"
-    assert consumed <= set(staged)
+    assert consumed <= {*staged, "homelab_guest_journal.service", "hetzner"}
 
 
 @pytest.mark.parametrize(("architecture", "installs_key"), [("x86_64", False), ("aarch64", True)])

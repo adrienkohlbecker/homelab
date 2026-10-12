@@ -489,14 +489,6 @@ if [ "$INSTALL_TARGET" != bare_metal ]; then
   echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 fi
 
-# Stage the Hetzner image setup (cloud-init drop-ins and install script) so
-# chroot.sh can run it inside the target root. Under /var/tmp, not /tmp:
-# arch-chroot shadows the chroot's /tmp with a private tmpfs, hiding files
-# pre-staged there. Skipped on the qemu fixtures and the bare-metal path.
-if [ "$INSTALL_TARGET" = "hetzner" ]; then
-  cp -a "$SCRIPTS_DIR/hetzner" /mnt/var/tmp/hetzner
-fi
-
 # Env propagation: packer's UBUNTU_*/ZBM_*/REFIND_*/SSH_KEY_PUB (exported via
 # the shell provisioner env block) and the PARTITIONS_*/DISKS strings above
 # flow through to chroot.sh; chroot.sh consumes DISKS via unquoted

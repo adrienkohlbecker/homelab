@@ -32,7 +32,7 @@ apt_update() {
 
 # Write deb822 apt sources for release $1 from archive mirror $2 and security
 # mirror $3, matching both the stock layout and what roles/apt converges to.
-# Shared with chroot.sh, which receives it through `declare -f`.
+# chroot.sh sources this library too.
 write_sources_list() {
   # Twin of the sources roles/apt/tasks/configure.yml writes, byte for byte
   # apart from the mirror URLs, so a first converge changes only the mirror.
@@ -128,11 +128,11 @@ debootstrap_release() {
   }
 }
 
-# Run chroot.sh inside root $1, with the role-owned bootstrap files staged
-# where it expects them and the shared helpers above prepended.
-#
-# Role files go under /var/tmp, not /tmp: arch-chroot shadows the chroot's
-# /tmp with a private tmpfs, hiding files pre-staged there.
+# Run chroot.sh inside root $1. Everything it reads from the installer -- this
+# library, the role-owned bootstrap files, and the target's extras -- is staged
+# first in one directory inside the root, passed to it as CHROOT_FILES, and
+# removed afterwards. Under /var/tmp, not /tmp: arch-chroot shadows the
+# chroot's /tmp with a private tmpfs, hiding files pre-staged there.
 #
 # arch-chroot (arch-install-scripts) bind-mounts proc/sys/dev/devpts/run/
 # efivarfs and /etc/resolv.conf for the chroot's lifetime, so apt can resolve
@@ -147,24 +147,20 @@ debootstrap_release() {
 # space-delimited strings (bash refuses to export arrays).
 run_chroot_script() {
   local root=$1 role_file
-  export CHROOT_ROLE_FILES=/var/tmp/homelab-role-files
+  local dir=/var/tmp/homelab_install
 
-  rm -rf -- "${root:?}$CHROOT_ROLE_FILES"
-  mkdir -p "$root$CHROOT_ROLE_FILES"
+  rm -rf -- "${root:?}$dir"
+  mkdir -p "$root$dir"
+  cp "$SCRIPTS_DIR/install_lib.sh" "$SCRIPTS_DIR/chroot.sh" "$root$dir/"
   for role_file in "${ROLE_FILES[@]}"; do
-    cp "$ROLE_FILES_DIR/$role_file" "$root$CHROOT_ROLE_FILES/"
+    cp "$ROLE_FILES_DIR/$role_file" "$root$dir/"
   done
+  case $INSTALL_TARGET in
+  qemu) cp "$SCRIPTS_DIR/homelab_guest_journal.service" "$root$dir/" ;;
+  hetzner) cp -a "$SCRIPTS_DIR/hetzner" "$root$dir/" ;;
+  esac
 
-  # The qemu fixtures mirror their journal onto the harness console; chroot.sh
-  # verifies and enables the unit.
-  if [ "$INSTALL_TARGET" = qemu ]; then
-    install -m 0644 "$SCRIPTS_DIR/homelab_guest_journal.service" "$root/etc/systemd/system/"
-  fi
+  CHROOT_FILES=$dir unshare --mount --propagation private arch-chroot "$root" bash "$dir/chroot.sh"
 
-  {
-    declare -f apt_update write_sources_list
-    cat "$SCRIPTS_DIR/chroot.sh"
-  } | unshare --mount --propagation private arch-chroot "$root" bash
-
-  rm -rf -- "${root:?}$CHROOT_ROLE_FILES"
+  rm -rf -- "${root:?}$dir"
 }
