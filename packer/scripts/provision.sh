@@ -4,9 +4,10 @@
 # lab-class hosts.
 #
 # Bare-metal callers MUST also:
-#  - pre-flight $DISKS. Every entry is wiped unconditionally (sgdisk --zap-all
-#    + wipefs + blkdiscard + zpool labelclear); a wrong device path destroys
-#    data in seconds.
+#  - pre-flight $DISKS and $EXTRA_DISKS. Every entry is wiped unconditionally
+#    (sgdisk --zap-all + wipefs + blkdiscard + zpool labelclear); a wrong
+#    device path destroys data in seconds. Pools imported in the live
+#    environment make the script refuse to start.
 #  - rotate /home/vagrant/.ssh/authorized_keys (which currently holds
 #    the publicly-known vagrant insecure pubkey) and remove
 #    /etc/sudoers.d/vagrant before the host gets a routable IP. The
@@ -277,31 +278,15 @@ pop_extra_disks() {
   done
 }
 
-# Keep the apoc and dozer builders separate: each documents the storage
-# layout of a physical rack host, including its intentional autotrim policy.
-create_extra_apoc() {
-  pop_extra_disks 2 apoc
-  local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
-  if zpool list -H apoc >/dev/null 2>&1; then return; fi
-  wipe_disks "${extra_pool_disks[@]}"
-  udevadm settle
-  zpool create -f -o autotrim=off "${EXTRA_ZPOOL_OPTS[@]}" apoc mirror "${extra_pool_disks[@]}"
-}
-
 create_extra_dozer() {
   pop_extra_disks 2 dozer
-  local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
-  if zpool list -H dozer >/dev/null 2>&1; then return; fi
-  wipe_disks "${extra_pool_disks[@]}"
-  udevadm settle
-  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "${extra_pool_disks[@]}"
+  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "${POPPED_EXTRA_DISKS[@]}"
 }
 
 create_extra_tank_mouse() {
   pop_extra_disks 4 tank_mouse
-  local extra_pool_disks=("${POPPED_EXTRA_DISKS[@]}")
   local tm1=${POPPED_EXTRA_DISKS[0]} tm2=${POPPED_EXTRA_DISKS[1]} tank3=${POPPED_EXTRA_DISKS[2]} tank4=${POPPED_EXTRA_DISKS[3]}
-  wipe_disks "${extra_pool_disks[@]}"
+  local special_args=()
   for tm in "$tm1" "$tm2"; do
     sgdisk -n1:0:+1014M -t1:BF01 "$tm"
     sgdisk -n2:0:-8M -t2:BF01 "$tm"
@@ -309,54 +294,35 @@ create_extra_tank_mouse() {
     sgdisk -p "$tm"
   done
   udevadm settle
-  if ! zpool list -H tank >/dev/null 2>&1; then
-    # tank's special vdev lives on the fast NVMe rpool-mirror disks (their p6
-    # meta partitions, $PARTITIONS_META), not on tank's own slow raidz2 HDDs --
-    # so tank metadata + small-block datasets (special_small_blocks, set per
-    # dataset by the zfs role) land on NVMe. A mirror across all the meta
-    # partitions tolerates the same disk loss as the raidz2 (losing the special
-    # vdev loses the pool). Empty on single-disk hosts (no meta partition), so
-    # tank then has no special vdev. See notes/archive/special-vdev-sizing.md.
-    local special_args=()
-    if [ -n "$PARTITIONS_META" ]; then
-      # shellcheck disable=SC2206  # word-split PARTITIONS_META into vdev members
-      special_args=(special mirror $PARTITIONS_META)
-    fi
-    zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" \
-      tank raidz2 "$(partdev "$tm1" 1)" "$(partdev "$tm2" 1)" "$tank3" "$tank4" \
-      "${special_args[@]}"
+
+  # tank's special vdev lives on the fast NVMe rpool-mirror disks (their p6
+  # meta partitions, $PARTITIONS_META), not on tank's own slow raidz2 HDDs --
+  # so tank metadata + small-block datasets (special_small_blocks, set per
+  # dataset by the zfs role) land on NVMe. A mirror across all the meta
+  # partitions tolerates the same disk loss as the raidz2 (losing the special
+  # vdev loses the pool). Empty on single-disk hosts (no meta partition), so
+  # tank then has no special vdev. See notes/archive/special-vdev-sizing.md.
+  if [ -n "$PARTITIONS_META" ]; then
+    # shellcheck disable=SC2206  # word-split PARTITIONS_META into vdev members
+    special_args=(special mirror $PARTITIONS_META)
   fi
-  if ! zpool list -H mouse >/dev/null 2>&1; then
-    zpool create -f -o autotrim=off "${EXTRA_ZPOOL_OPTS[@]}" \
-      mouse mirror "$(partdev "$tm1" 2)" "$(partdev "$tm2" 2)"
-  fi
+  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" \
+    tank raidz2 "$(partdev "$tm1" 1)" "$(partdev "$tm2" 1)" "$tank3" "$tank4" \
+    "${special_args[@]}"
+  zpool create -f -o autotrim=off "${EXTRA_ZPOOL_OPTS[@]}" \
+    mouse mirror "$(partdev "$tm1" 2)" "$(partdev "$tm2" 2)"
 }
 
 create_extra_pools() {
-  if [ -z "$EXTRA_POOLS" ]; then
-    return 0
-  fi
-
+  local pool
   read -r -a EXTRA_DISK_QUEUE <<<"$EXTRA_DISKS"
   for pool in $EXTRA_POOLS; do
     case "$pool" in
-    apoc) create_extra_apoc ;;
     dozer) create_extra_dozer ;;
     tank_mouse) create_extra_tank_mouse ;;
     *) fail "unknown EXTRA_POOLS entry '$pool'" ;;
     esac
   done
-
-  # zpool create recorded the kernel device paths it was given; re-import
-  # from POOL_DEVICE_DIR (set beside rpool's import) so zpool.cache records
-  # stable names.
-  for pool in $(zpool list -H -o name | grep -vx rpool); do
-    zpool_export_retry "$pool"
-    zpool import -d "$POOL_DEVICE_DIR" -N "$pool"
-  done
-
-  mkdir -p /mnt/etc/zfs
-  cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 }
 
 # Per-disk partition paths, computed once as space-delimited strings.
@@ -435,10 +401,16 @@ printf 'AUTO -all\n' >/etc/mdadm/mdadm.conf
 
 zgenhostid -f
 
+# Every pool is created fresh on wiped disks, so one already imported in the
+# live environment is a mistake: its disks are either listed here and about to
+# be wiped, or another pool would collide with its name.
+imported_pools=$(zpool list -H -o name)
+[ -z "$imported_pools" ] ||
+  fail "export the pools imported in the live environment first: $imported_pools"
+
 # Stale md members on the target disks would let udev's `mdadm --incremental`
 # re-assemble an array mid-partitioning and hold a member busy. Tear those
-# arrays down once before partitioning; later wipe_disks calls prepare
-# extra-pool disks after the new EFI, swap, and Podman arrays already exist.
+# arrays down before wiping.
 #
 # Scoped to the disks this run owns, never `--stop --scan` / an unqualified
 # lsblk: on the bare-metal path the machine may carry arrays on disks the
@@ -457,9 +429,10 @@ if ((${#md_members[@]})); then
 fi
 
 # Defensive wipe -- a no-op against fresh Packer qcow2s, but necessary on
-# ordinary bare metal. DISKS is intentionally split into device arguments.
+# ordinary bare metal. The disk lists are intentionally split into device
+# arguments.
 # shellcheck disable=SC2086
-wipe_disks $DISKS
+wipe_disks $DISKS $EXTRA_DISKS
 for disk in $DISKS; do
   partition_disk "$disk"
 done
@@ -506,6 +479,8 @@ zfs set org.zfsbootmenu:commandline="$(boot_commandline)" rpool/ROOT
 
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
+create_extra_pools
+
 # Pools are re-imported from stable device names, which zpool.cache records
 # for later imports. Physical disks carry serials, so by-id names them across
 # port and controller changes. Virtual disks have none, and the build VM's own
@@ -517,13 +492,19 @@ else
   POOL_DEVICE_DIR=/dev/disk/by-partuuid
 fi
 
-# Export, then re-import with a temporary mountpoint of /mnt. An altroot
+# zpool create recorded the kernel device paths it was given; export every
+# pool and re-import it from POOL_DEVICE_DIR so zpool.cache records stable
+# names. rpool comes back with a temporary mountpoint of /mnt. An altroot
 # import implies cachefile=none, so name the cache explicitly: the shipped
-# zpool.cache (copied in create_extra_pools) then lists rpool alongside the
-# data pools.
-
-zpool_export_retry rpool
+# zpool.cache then lists rpool alongside the data pools.
+extra_pools=$(zpool list -H -o name | grep -vx rpool || true)
+for pool in $extra_pools rpool; do
+  zpool_export_retry "$pool"
+done
 zpool import -N -R /mnt -o cachefile=/etc/zfs/zpool.cache -d "$POOL_DEVICE_DIR" rpool
+for pool in $extra_pools; do
+  zpool import -N -d "$POOL_DEVICE_DIR" "$pool"
+done
 zfs mount "rpool/ROOT/$UBUNTU_NAME"
 
 # Wait for udev to wire the new device nodes before arch-chroot runs.
@@ -577,9 +558,11 @@ run_chroot_script /mnt
 # ids, DHCP DUID).
 : >/mnt/etc/machine-id
 
-# Create any non-rpool pools while /mnt is still rpool's root so the current
-# zpool.cache can be copied into the shipped install.
-create_extra_pools
+# Ship the pool cache so the image imports its data pools. Copied after the
+# chroot, so the image's first initramfs, built in there, embeds none: Noble's
+# initramfs-tools would carry the data pools' entries into early boot.
+mkdir -p /mnt/etc/zfs
+cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
@@ -588,7 +571,6 @@ sync
 # Export every pool (zpool_export_retry handles the "pool is busy"
 # udev/systemd race; see its comment). Extra pools go first; rpool last
 # because the zfs unmount above has already quiesced its root dataset.
-for pool in $(zpool list -H -o name | grep -vx rpool); do
+for pool in $extra_pools rpool; do
   zpool_export_retry "$pool"
 done
-zpool_export_retry rpool

@@ -90,7 +90,7 @@ locals {
   # in device order; env is the variant's part of provision.sh's environment.
   # The space-delimited DISKS prefix becomes rpool and EXTRA_DISKS supplies the
   # remaining devices to EXTRA_POOLS in order. Supported layouts are "" and
-  # mirror; EXTRA_POOLS accepts apoc, dozer, and tank_mouse. Empty optional
+  # mirror; EXTRA_POOLS accepts dozer and tank_mouse. Empty optional
   # fields disable their feature. The source name selects qemu versus Hetzner
   # installation. Keep lab explicit here to document the physical host in the
   # rack; hetzner is the single-disk build.
