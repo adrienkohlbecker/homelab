@@ -21,23 +21,23 @@ trap 'exit 130' INT TERM
 # shellcheck source=packer/scripts/install_lib.sh
 . "$CHROOT_FILES/install_lib.sh"
 
-# Env consumed by this script:
-# - From packer's shell-provisioner env block (qemu.pkr.hcl):
-#   UBUNTU_NAME, SSH_KEY_PUB, ZBM_VERSION, and optionally
-#   REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs
-#   the distribution's).
-# - Inherited from provision.sh: DISKS, LAYOUT, CHROOT_FILES, INSTALL_TARGET,
-#   PARTITIONS_EFI, PARTITIONS_SWAP, PARTITIONS_PODMAN, HOSTNAME, USERNAME, and
-#   the UBUNTU_MIRROR* build and upstream URLs.
-#   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
-#   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
-#   when PODMAN_SIZE is (raid5 /dev/md/podman on a mirror).
-# - BOOT_ENVIRONMENT=1 from install_boot_environment.sh, which installs this
-#   root beside a running one and has already copied in that host's fstab,
-#   mdadm.conf, netplan, hostid, and machine-id. The disks, the ESP, and the
-#   shared rpool/ROOT properties belong to the running host, so every step
-#   that would write them is skipped, and DISKS, LAYOUT, PARTITIONS_*, and
-#   ZBM_VERSION are not read.
+# The environment this script reads, exported by the installer that runs it:
+# - Every install: UBUNTU_NAME, INSTALL_TARGET, HOSTNAME, USERNAME,
+#   SSH_KEY_PUB, CHROOT_FILES, and the UBUNTU_MIRROR* build and upstream URLs.
+# - A fresh install (provision.sh): DISKS, LAYOUT, PARTITIONS_EFI,
+#   PARTITIONS_SWAP, PARTITIONS_PODMAN, and, from packer's env block or a
+#   bare-metal caller, ZBM_VERSION and optionally REFIND_DEB_URL/
+#   REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs the
+#   distribution's). PARTITIONS_EFI/SWAP are always set; on a mirror they are
+#   mdadm'd into /dev/md/efi (raid1) and /dev/md/swap (raid1).
+#   PARTITIONS_PODMAN is set when PODMAN_SIZE is (raid5 /dev/md/podman on a
+#   mirror).
+# - A boot environment (install_boot_environment.sh): BOOT_ENVIRONMENT=1. The
+#   installer adds this root beside a running one and has already copied in
+#   that host's fstab, mdadm.conf, netplan, hostid, and machine-id. The disks,
+#   the ESP, and the shared rpool/ROOT properties belong to the running host,
+#   so every step that would write them is skipped, and none of the fresh
+#   install's variables are read.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -391,7 +391,7 @@ EOF
   # so the system survives losing any single disk — firmware only follows
   # paths it knows about, and an entry is per-disk regardless of whether
   # the ESP content is mirrored. Single-disk variants get a single bare
-  # "rEFInd" entry (unchanged).
+  # "rEFInd" entry.
   #
   # -p 2 is the ESP: provision.sh's layout is 1=bios(EF02), 2=efi(EF00),
   # 3=swap, 4=podman, 5=rpool, 6=meta. Keep these efibootmgr -p values in sync

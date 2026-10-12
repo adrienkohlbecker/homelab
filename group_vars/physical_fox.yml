@@ -42,7 +42,7 @@ ubuntu_mirror_security: https://mirror.hetzner.com/ubuntu/security/
 
 zfs_arc_min: 0
 zfs_arc_max: 536870912
-# rpool carries autoexpand=on (chroot.sh sets it so the 20G image grows into
+# rpool carries autoexpand=on (chroot.sh sets it so the 60G image grows into
 # cpx22's larger disk on first boot) + autotrim=on; both are set live, the zfs
 # role asserts them.
 zfs_pool_properties:

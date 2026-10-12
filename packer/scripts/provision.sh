@@ -396,8 +396,7 @@ for disk in $DISKS; do
 done
 
 # Wait for udev to expose every new partition node (/dev/vdbN, ...)
-# before zpool create reads them. Replaces a per-iteration `sync; sleep 2`
-# pair that was timing-based cargo for the same goal.
+# before zpool create reads them.
 udevadm settle
 
 # Create the zpool. $LAYOUT is "" (single) or "mirror"; $PARTITIONS_RPOOL
@@ -427,10 +426,6 @@ zpool create -f \
 
 zfs create -o canmount=off -o mountpoint=none rpool/ROOT
 zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
-
-# Swap is a raw partition on every host now (p3; raid1 across the per-disk
-# partitions on a mirror -- chroot.sh), not an rpool zvol. A real partition is
-# deadlock-free, unlike paging out to a zvol under memory pressure.
 
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
@@ -467,10 +462,6 @@ debootstrap_release "$UBUNTU_NAME" /mnt
 
 cp /etc/hostid /mnt/etc
 
-# Env propagation: packer's UBUNTU_*/ZBM_*/REFIND_*/SSH_KEY_PUB (exported via
-# the shell provisioner env block) and the PARTITIONS_*/DISKS strings above
-# flow through to chroot.sh; chroot.sh consumes DISKS via unquoted
-# `for d in $DISKS` word-splitting.
 run_chroot_script /mnt
 
 # Create any non-rpool pools while /mnt is still rpool's root so the current
