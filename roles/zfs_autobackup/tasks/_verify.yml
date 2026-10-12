@@ -165,6 +165,46 @@
             - (zfs_autobackup_verify_wait.start | to_datetime('%Y-%m-%d %H:%M:%S.%f'))).total_seconds() < 5
       become: true
 
+    # An out-of-band snapshot of one dataset (a zfs_dataset retirement) must not
+    # release the wait for the others, which still match their replicas.
+    - name: _verify | Snapshot one source dataset out of band
+      shell: |
+        set -euo pipefail
+        zfs snapshot "rpool/zfs_autobackup_offsite_test@bak-$(date +%Y%m%d%H%M%S)"
+      args:
+        executable: /bin/bash
+      changed_when: true
+      become: true
+
+    - name: _verify | An onsite pull waits out the datasets an out-of-band snapshot skipped
+      command:
+        argv:
+          - /usr/local/bin/zfs_backup_onsite
+          - --wait-for-source
+          - "5"
+          - "{{ external_ips[zfs_autobackup_sources[0].host] }}"
+          - "{{ zfs_autobackup_sources[0].dest_dataset }}"
+      register: zfs_autobackup_verify_partial_wait
+      changed_when: true
+      failed_when: >-
+        zfs_autobackup_verify_partial_wait.rc != 0
+        or ((zfs_autobackup_verify_partial_wait.end | to_datetime('%Y-%m-%d %H:%M:%S.%f'))
+            - (zfs_autobackup_verify_partial_wait.start | to_datetime('%Y-%m-%d %H:%M:%S.%f'))).total_seconds() < 5
+      become: true
+
+    - name: _verify | The wait named the stale datasets, not the fresh one
+      vars:
+        warning: >-
+          {{ zfs_autobackup_verify_partial_wait.stderr_lines
+             | select('search', '^Warning: .* has no snapshot newer than its replica')
+             | first | default('') }}
+      assert:
+        that:
+          - "' rpool/services' in warning"
+          - "' rpool/zfs_autobackup_restore_source_test' in warning"
+          - "'rpool/zfs_autobackup_offsite_test' not in warning"
+        fail_msg: "{{ zfs_autobackup_verify_partial_wait.stderr_lines }}"
+
     - name: _verify | Read the newest bak snapshot of every pull source
       shell: |
         set -euo pipefail
