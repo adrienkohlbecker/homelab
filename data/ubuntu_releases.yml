@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=ubuntu_releases.schema.json
 default: resolute
 releases:
   noble:

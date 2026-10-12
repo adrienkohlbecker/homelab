@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fahm.fr/schemas/architectures.json",
+  "title": "Per-architecture facts",
+  "description": "Schema for data/architectures.yml, consumed by the qemu harness (test/machine.py), the Packer fixture and AWS host builds, the CI image tasks, and Terraform.",
+  "type": "object",
+  "minProperties": 1,
+  "propertyNames": { "enum": ["x86_64", "aarch64"] },
+  "additionalProperties": { "$ref": "#/$defs/architecture" },
+
+  "$defs": {
+    "absolute_path": {
+      "type": "string",
+      "pattern": "^/"
+    },
+
+    "firmware_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "vars"],
+      "properties": {
+        "code": { "$ref": "#/$defs/absolute_path" },
+        "vars": { "$ref": "#/$defs/absolute_path" }
+      }
+    },
+
+    "guest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["machine_type", "net_device", "display_device", "cloud_image_suffix", "uefi_firmware"],
+      "properties": {
+        "machine_type": { "type": "string", "minLength": 1 },
+        "net_device": { "type": "string", "minLength": 1 },
+        "display_device": { "type": "string", "minLength": 1 },
+        "cloud_image_suffix": { "type": "string", "pattern": "^[a-z0-9]+$" },
+        "uefi_firmware": {
+          "type": "object",
+          "description": "Lowercase `uname -s` host OS to the UEFI CODE/VARS pair loaded on it. A missing host OS is an unsupported builder.",
+          "minProperties": 1,
+          "propertyNames": { "enum": ["linux", "darwin"] },
+          "additionalProperties": { "$ref": "#/$defs/firmware_pair" }
+        }
+      }
+    },
+
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ami_name_prefix", "ami_parameter"],
+      "properties": {
+        "ami_name_prefix": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "ami_parameter": {
+          "type": "string",
+          "pattern": "^/.*\\{ubuntu\\}",
+          "description": "SSM parameter name template; `{ubuntu}` is replaced by the Ubuntu codename."
+        }
+      }
+    },
+
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["guest", "ci"],
+      "properties": {
+        "guest": { "$ref": "#/$defs/guest" },
+        "ci": { "$ref": "#/$defs/ci" }
+      }
+    }
+  }
+}

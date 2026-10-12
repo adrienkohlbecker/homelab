@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fahm.fr/schemas/ubuntu_releases.json",
+  "title": "Ubuntu release catalog",
+  "description": "Schema for data/ubuntu_releases.yml, consumed by the qemu harness matrix (test/matrix.py), the Packer fixture and AWS host builds, and Terraform. `default` must name a key of `releases`; JSON Schema cannot express that, so consumers fail on lookup instead.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["default", "releases"],
+  "properties": {
+    "default": { "$ref": "#/$defs/codename" },
+    "releases": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/codename" },
+      "additionalProperties": { "$ref": "#/$defs/release" }
+    }
+  },
+
+  "$defs": {
+    "codename": {
+      "type": "string",
+      "pattern": "^[a-z]+$"
+    },
+
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "image_release"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]{2}\\.(04|10)$",
+          "description": "Ubuntu version number, quoted so YAML keeps it a string."
+        },
+        "image_release": {
+          "type": "string",
+          "pattern": "^[0-9]{8}(\\.[0-9]+)?$",
+          "description": "cloud-images.ubuntu.com serial: releases/<codename>/release-<image_release>/."
+        }
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=architectures.schema.json
 # Per-architecture facts shared by the qemu harness (test/machine.py), the qemu
 # fixture build (packer/qemu.pkr.hcl), the CI image tasks, the AWS audit, and
 # Terraform. Keys are uname-style architecture names.
