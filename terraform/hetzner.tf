@@ -236,7 +236,11 @@ resource "hcloud_server" "fox" {
       - path: /etc/ssh/sshd_config.d/10-disable-root.conf
         content: |
           PermitRootLogin no
+    # user-data's runcmd replaces vendor-data's outright (cloud-init merges
+    # each source with its own directives, so a merge_how here cannot append),
+    # so carry Hetzner's Volume udev replay alongside our own command.
     runcmd:
+      - [udevadm, trigger, -c, add, -s, block, -p, ID_VENDOR=HC, --verbose, -p, ID_MODEL=Volume]
       - [systemctl, restart, ssh]
   EOT
 }
