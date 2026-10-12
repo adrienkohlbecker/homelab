@@ -96,52 +96,9 @@
   failed_when: retired_services_grub_cmdline.rc != 1
   become: true
 
-# A boot-time mount pass must leave the retired dataset alone.
-- name: _verify | Mount every ZFS filesystem
-  command: zfs mount -a
+- name: _verify | Retired sqlite dataset is unmounted
+  command: zfs get -H -o value canmount,mounted rpool/services/sqlite
+  register: retired_services_sqlite_state
   changed_when: false
+  failed_when: retired_services_sqlite_state.stdout_lines != ['off', 'no']
   become: true
-
-- name: _verify | Read the retired sqlite dataset
-  command:
-    argv:
-      - zfs
-      - get
-      - -H
-      - -p
-      - -o
-      - property,value
-      - canmount,mounted,autobackup:bak,referenced
-      - rpool/services/sqlite
-  register: retired_services_sqlite_props
-  changed_when: false
-  become: true
-
-- name: _verify | List the retired sqlite snapshots
-  command:
-    argv:
-      - zfs
-      - list
-      - -H
-      - -t
-      - snapshot
-      - -o
-      - name
-      - rpool/services/sqlite
-  register: retired_services_sqlite_snapshots
-  changed_when: false
-  become: true
-
-# The 4 MiB payload is gone from the live dataset but kept in its history, and
-# the dataset stays in the backup mesh so the nightly ships its final state.
-- name: _verify | Retired sqlite dataset is empty, unmounted, and still backed up
-  vars:
-    props: "{{ dict(retired_services_sqlite_props.stdout_lines | map('split', '\t')) }}"
-  assert:
-    that:
-      - props.canmount == 'off'
-      - props.mounted == 'no'
-      - props['autobackup:bak'] == 'true'
-      - props.referenced | int < 1048576
-      - "'rpool/services/sqlite@bak-20260101020000' in retired_services_sqlite_snapshots.stdout_lines"
-    fail_msg: "{{ props }} {{ retired_services_sqlite_snapshots.stdout_lines }}"

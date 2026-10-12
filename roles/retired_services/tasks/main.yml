@@ -147,105 +147,17 @@
     - console
 
 # Drop once pug and fox have converged. Only Home Assistant's host uses the
-# recorder dataset (roles/services). Elsewhere it is retired, not destroyed:
-# emptied and left unmounted, keeping its snapshots. autobackup:bak stays true,
-# so the next nightly local leg takes the final (empty) @bak- snapshot on
-# schedule and the onsite pull and offsite leg carry it. An out-of-band
-# snapshot here would satisfy the onsite pull's newest-snapshot wait early and
-# ship the previous night's state for every other dataset of that host.
-# Retention then thins the history like any other dataset's; flip the tag to
-# false (source and replicas) to freeze it once offsite holds the final state.
+# recorder dataset (roles/services); elsewhere it is retired, keeping its
+# snapshots and backups.
 - name: Retire the unused sqlite dataset
-  when:
-    - zfs_root
-    - not (services_sqlite_enabled | bool)
+  when: not (services_sqlite_enabled | bool)
+  import_role:
+    name: zfs_dataset
+    tasks_from: remove
+  vars:
+    zfs_dataset_args:
+      dataset: rpool/services/sqlite
+      mountpoint: /mnt/services/sqlite
   tags:
     - retired_services
     - services
-  block:
-    - name: Retire the sqlite dataset mount unit
-      import_role:
-        name: systemd_unit
-        tasks_from: remove
-      vars:
-        systemd_unit_args:
-          dest: zfs_mount_mnt_services_sqlite.service
-
-    - name: Read the sqlite dataset mount state
-      command:
-        argv:
-          - zfs
-          - get
-          - -H
-          - -o
-          - value
-          - canmount,mounted
-          - rpool/services/sqlite
-      register: retired_services_sqlite_state
-      changed_when: false
-      check_mode: false
-      failed_when: >-
-        retired_services_sqlite_state.rc != 0
-        and 'dataset does not exist' not in retired_services_sqlite_state.stderr
-      become: true
-
-    - name: Empty and stop mounting the sqlite dataset
-      when: retired_services_sqlite_state.stdout_lines == ['on', 'yes']
-      block:
-        # Guard the delete: it must only ever see the dataset, never the parent
-        # directory underneath an unmounted mountpoint.
-        - name: Assert the sqlite dataset is what is mounted
-          command:
-            argv:
-              - /usr/local/bin/zfs_check_mount
-              - rpool/services/sqlite
-              - /mnt/services/sqlite
-          changed_when: false
-          become: true
-
-        - name: Empty the sqlite dataset
-          command:
-            argv:
-              - find
-              - /mnt/services/sqlite
-              - -xdev
-              - -mindepth
-              - 1
-              - -delete
-          changed_when: true
-          become: true
-
-        - name: Stop mounting the sqlite dataset
-          community.general.zfs:
-            name: rpool/services/sqlite
-            state: present
-            extra_zfs_properties:
-              canmount: 'off'
-          become: true
-
-    - name: Unmount the sqlite dataset
-      when:
-        - retired_services_sqlite_state.rc == 0
-        - retired_services_sqlite_state.stdout_lines[1] == 'yes'
-      command:
-        argv:
-          - zfs
-          - unmount
-          - rpool/services/sqlite
-      register: retired_services_sqlite_unmount
-      changed_when: true
-      # canmount=off unmounts on its own; an already-unmounted dataset is fine.
-      failed_when: >-
-        retired_services_sqlite_unmount.rc != 0
-        and 'not currently mounted' not in retired_services_sqlite_unmount.stderr
-      become: true
-
-    # rmdir refuses a non-empty directory, so anything written underneath the
-    # unmounted mountpoint fails loudly instead of vanishing.
-    - name: Remove the sqlite mountpoint directory
-      command:
-        argv:
-          - rmdir
-          - /mnt/services/sqlite
-        removes: /mnt/services/sqlite
-      become: true
