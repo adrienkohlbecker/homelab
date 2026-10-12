@@ -1,0 +1,158 @@
+# Driven by test/boot_environment_test.py on a Lab fixture, in two phases
+# around a converge of the boot roles on the new root:
+#   install   install boot_environment_to beside boot_environment_from and
+#             switch to it
+#   rollback  reboot the converged new root, then switch back to the old one
+# Every pool carries a canary dataset across the switches, and the shared
+# storage must read back unchanged from the new root until its converge.
+- name: Install and switch boot environments
+  hosts: all
+  become: true
+  vars:
+    _be_repo: "{{ ansible_config_file | dirname }}"
+    # On a shared dataset, so every root reads the staged scripts and the
+    # fingerprint from before the install.
+    _be_dir: /mnt/boot_environment_test
+    _be_old_root: "rpool/ROOT/{{ boot_environment_from }}"
+    _be_new_root: "rpool/ROOT/{{ boot_environment_to }}"
+  tasks:
+    - name: Install the new root
+      when: _boot_environment_phase == 'install'
+      block:
+        - name: Create the shared test dataset
+          command: zfs create -o mountpoint={{ _be_dir }} rpool/boot_environment_test
+          args:
+            creates: "{{ _be_dir }}"
+
+        - name: Stage the installer and its inputs
+          copy:
+            src: "{{ _be_repo }}/{{ item }}"
+            dest: "{{ _be_dir }}/"
+            mode: preserve
+          loop:
+            - packer/scripts/install_boot_environment.sh
+            - packer/scripts/install_lib.sh
+            - packer/scripts/chroot.sh
+            - roles/boot/files/modules_most
+            - roles/boot/files/dracut_host.conf
+            - roles/console/files/console-setup
+            - roles/console/files/keyboard
+            - test/homelab_guest_journal.service
+            - test/boot_environment_fingerprint.sh
+
+        - name: List the pools
+          command: zpool list -H -o name
+          register: _be_pools
+          changed_when: false
+
+        - name: Create a canary dataset on every pool
+          command: >-
+            zfs create -o mountpoint=/mnt/be_canary_{{ item }} {{ item }}/be_canary
+          args:
+            creates: "/mnt/be_canary_{{ item }}"
+          loop: "{{ _be_pools.stdout_lines }}"
+
+        - name: Write each canary
+          copy:
+            dest: "/mnt/be_canary_{{ item }}/canary"
+            content: "{{ item }}\n"
+            mode: "0644"
+          loop: "{{ _be_pools.stdout_lines }}"
+
+        - name: Record the pools every root must import
+          copy:
+            dest: "{{ _be_dir }}/pools"
+            content: "{{ _be_pools.stdout }}\n"
+            mode: "0644"
+
+        - name: Fingerprint the shared storage before the install
+          command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }}
+          register: _be_before
+          changed_when: false
+
+        - name: Keep the fingerprint for the checks after each boot
+          copy:
+            dest: "{{ _be_dir }}/fingerprint.before"
+            content: "{{ _be_before.stdout }}\n"
+            mode: "0644"
+
+        # Under become, ansible_user_id names root.
+        - name: Read the login user
+          command: id -un
+          become: false
+          register: _be_user
+          changed_when: false
+
+        - name: Read the login user's authorized key
+          slurp:
+            src: "/home/{{ _be_user.stdout }}/.ssh/authorized_keys"
+          register: _be_authorized_keys
+
+        - name: Install the boot environment
+          command: bash {{ _be_dir }}/install_boot_environment.sh
+          environment:
+            UBUNTU_NAME: "{{ boot_environment_to }}"
+            TARGET_USERNAME: "{{ _be_user.stdout }}"
+            SSH_KEY_PUB: "{{ _be_authorized_keys.content | b64decode | trim }}"
+            INSTALL_TARGET: qemu
+            NEXUS_URL: "{{ nexus_url }}"
+          changed_when: true
+
+        - name: Fingerprint the shared storage after the install
+          command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }}
+          register: _be_after_install
+          changed_when: false
+
+        - name: The install left the shared storage unchanged
+          assert:
+            that: _be_after_install.stdout == _be_before.stdout
+            fail_msg: |-
+              before:
+              {{ _be_before.stdout }}
+              after:
+              {{ _be_after_install.stdout }}
+
+        - name: Read the new root's mount properties
+          command: zfs get -H -o value canmount,mountpoint {{ _be_new_root }}
+          register: _be_new_root_props
+          changed_when: false
+
+        - name: The new root mounts only when booted
+          assert:
+            that: _be_new_root_props.stdout_lines == ['noauto', '/']
+
+        - name: Boot the new root
+          command: zpool set bootfs={{ _be_new_root }} rpool
+          changed_when: true
+
+    - name: Reboot into the new root
+      import_role:
+        name: reboot
+        tasks_from: reboot
+
+    - name: Check the new root
+      include_tasks: "{{ _be_repo }}/test/playbooks/tasks/_boot_environment_check.yml"
+      vars:
+        _be_expected_release: "{{ boot_environment_to }}"
+        _be_expected_root: "{{ _be_new_root }}"
+        # The boot roles' converge rewrites the ESP and the shared commandline.
+        _be_compare_fingerprint: "{{ _boot_environment_phase == 'install' }}"
+
+    - name: Roll back to the old root
+      when: _boot_environment_phase == 'rollback'
+      block:
+        - name: Boot the old root
+          command: zpool set bootfs={{ _be_old_root }} rpool
+          changed_when: true
+
+        - name: Reboot into the old root
+          import_role:
+            name: reboot
+            tasks_from: reboot
+
+        - name: Check the old root
+          include_tasks: "{{ _be_repo }}/test/playbooks/tasks/_boot_environment_check.yml"
+          vars:
+            _be_expected_release: "{{ boot_environment_from }}"
+            _be_expected_root: "{{ _be_old_root }}"
+            _be_compare_fingerprint: false
