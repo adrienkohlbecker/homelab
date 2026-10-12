@@ -3,14 +3,12 @@
 # disk layout) and install_boot_environment.sh (a new root beside a running
 # one). Sourced, never executed.
 
-# The installer scripts sit together wherever they were copied: packer uploads
-# them to /home/vagrant, and a host install stages them in one directory. The
-# role-owned bootstrap files sit beside them unless ROLE_FILES_DIR says
-# otherwise.
+# The installer scripts and the role-owned bootstrap files sit together
+# wherever they were copied: packer uploads them to /home/vagrant, and a host
+# install stages them in one directory.
 SCRIPTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
 
-# Role-owned bootstrap files chroot.sh consumes, staged from ROLE_FILES_DIR.
+# Role-owned bootstrap files chroot.sh consumes, staged beside the scripts.
 ROLE_FILES=(console-setup keyboard modules_most dracut_host.conf)
 
 fail() {
@@ -145,7 +143,7 @@ boot_commandline() {
 check_role_files() {
   local role_file
   for role_file in "${ROLE_FILES[@]}"; do
-    [ -f "$ROLE_FILES_DIR/$role_file" ] || fail "required role file not found: $ROLE_FILES_DIR/$role_file"
+    [ -f "$SCRIPTS_DIR/$role_file" ] || fail "required role file not found: $SCRIPTS_DIR/$role_file"
   done
 }
 
@@ -193,7 +191,7 @@ run_chroot_script() {
   mkdir -p "$root$dir"
   cp "$SCRIPTS_DIR/install_lib.sh" "$SCRIPTS_DIR/chroot.sh" "$root$dir/"
   for role_file in "${ROLE_FILES[@]}"; do
-    cp "$ROLE_FILES_DIR/$role_file" "$root$dir/"
+    cp "$SCRIPTS_DIR/$role_file" "$root$dir/"
   done
   case $INSTALL_TARGET in
   qemu) cp "$SCRIPTS_DIR/homelab_guest_journal.service" "$root$dir/" ;;

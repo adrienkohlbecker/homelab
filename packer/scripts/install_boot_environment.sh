@@ -24,8 +24,6 @@
 #   CARRY_PATHS      optional space-separated absolute paths copied as-is from
 #                    the running root, for host state that lives outside a
 #                    dataset of its own
-#   ROLE_FILES_DIR   the role-owned bootstrap files (default: this script's
-#                    directory)
 set -euxo pipefail
 
 # shellcheck source=packer/scripts/install_lib.sh
