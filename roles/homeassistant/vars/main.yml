@@ -1,3 +1,10 @@
+# Recorder DB directory, seen in the container as /config/db. Where the host
+# carves the 4K-recordsize sqlite dataset (roles/services/vars/main.yml), the
+# unit bind-mounts it there; elsewhere it is a plain subdirectory of /config.
+homeassistant_db_dir: >-
+  {{ '/mnt/services/sqlite/homeassistant' if services_sqlite_enabled | bool
+     else '/mnt/services/homeassistant/db' }}
+
 # Podman networks the HA container joins. Both the unit and core.network
 # templates read the explicit interface names from this list; netavark does not
 # guarantee that interface numbering follows --network flag order.
