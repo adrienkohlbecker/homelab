@@ -113,7 +113,7 @@
           - unmount
           - "{{ zfs_dataset_args.dataset }}"
       register: _zfs_dataset_remove_unmount
-      changed_when: true
+      changed_when: _zfs_dataset_remove_unmount.rc == 0
       # canmount=off unmounts on its own; an already-unmounted dataset is fine.
       failed_when: >-
         _zfs_dataset_remove_unmount.rc != 0
