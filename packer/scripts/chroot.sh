@@ -21,23 +21,18 @@ trap 'exit 130' INT TERM
 # shellcheck source=packer/scripts/install_lib.sh
 . "$CHROOT_FILES/install_lib.sh"
 
-# The environment this script reads, exported by the installer that runs it:
+# Installs and configures the root it runs in. The installer that runs it has
+# already set up the storage and written the root's storage and identity
+# wiring: fstab, mdadm.conf on a mirror, netplan (cloud-init's job on Hetzner),
+# and hostid. The environment it reads, exported by that installer:
 # - Every install: UBUNTU_NAME, INSTALL_TARGET, HOSTNAME, USERNAME,
 #   SSH_KEY_PUB, CHROOT_FILES, and the UBUNTU_MIRROR* build and upstream URLs.
-# - A fresh install (provision.sh): DISKS, LAYOUT, PARTITIONS_EFI,
-#   PARTITIONS_SWAP, PARTITIONS_PODMAN, and, from packer's env block or a
-#   bare-metal caller, ZBM_VERSION and optionally REFIND_DEB_URL/
-#   REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs the
-#   distribution's). PARTITIONS_EFI/SWAP are always set; on a mirror they are
-#   mdadm'd into /dev/md/efi (raid1) and /dev/md/swap (raid1).
-#   PARTITIONS_PODMAN is set when PODMAN_SIZE is (raid5 /dev/md/podman on a
-#   mirror).
+# - A fresh install (provision.sh), for the boot loader: DISKS, ZBM_VERSION,
+#   and optionally REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package;
+#   empty installs the distribution's).
 # - A boot environment (install_boot_environment.sh): BOOT_ENVIRONMENT=1. The
-#   installer adds this root beside a running one and has already copied in
-#   that host's fstab, mdadm.conf, netplan, hostid, and machine-id. The disks,
-#   the ESP, and the shared rpool/ROOT properties belong to the running host,
-#   so every step that would write them is skipped, and none of the fresh
-#   install's variables are read.
+#   root sits beside a running one whose ESP and firmware entries it shares, so
+#   the boot loader step is skipped.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -51,12 +46,10 @@ case $ZBM_ARCH in
 x86_64)
   REFIND_NAME=refind_x64.efi
   REFIND_FALLBACK_NAME=BOOTX64.EFI
-  SERIAL_CMDLINE="earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
   ;;
 aarch64)
   REFIND_NAME=refind_aa64.efi
   REFIND_FALLBACK_NAME=BOOTAA64.EFI
-  SERIAL_CMDLINE="earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200"
   ;;
 *)
   echo >&2 "Unsupported arch: $ZBM_ARCH"
@@ -65,8 +58,6 @@ aarch64)
 esac
 
 BOOT_ENVIRONMENT="${BOOT_ENVIRONMENT:-}"
-# Zero in a boot environment, which reads no disk list.
-DISKS_COUNT=$(wc -w <<<"${DISKS:-}")
 
 # Set a hostname
 
@@ -159,122 +150,22 @@ apt-get install --yes "$initramfs_generator" linux-generic
 
 apt-get install --yes curl dosfstools "$zfs_initramfs_package" zfsutils-linux
 
-# Keep VGA output on every target. QEMU adds the architecture-specific serial
-# console consumed by verify-boot and disables mitigations only in disposable
-# nested-KVM cells. The fragment preserves that tuning when the boot role
-# rebuilds the command line during a test. Hetzner exposes a serial console,
-# listed before tty0 so the VGA console keeps /dev/console; bare-metal lab and
-# pug have no UART. The boot role owns the final prod command line.
-COMMANDLINE="console=tty0"
-
+# QEMU fixtures disable mitigations in disposable nested-KVM cells; this
+# fragment preserves that when the boot role rebuilds the command line during a
+# test.
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  # Twin of _console_serial's qemu_test branch (group_vars/all/main.yml): the
-  # harness's serial console never answers systemd's terminal queries.
-  COMMANDLINE="$COMMANDLINE systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80 $SERIAL_CMDLINE mitigations=off"
   mkdir -p /etc/zfsbootmenu
   echo "mitigations=off" >/etc/zfsbootmenu/mitigations
-elif [ "$INSTALL_TARGET" = "hetzner" ]; then
-  COMMANDLINE="$SERIAL_CMDLINE $COMMANDLINE"
 fi
 
-# Fresh install: set the ZBM kernel command line every boot environment
-# inherits, assemble the per-disk ESP, swap, and Podman partitions into md
-# arrays on a mirror, then create the ESP and swap filesystems and list them in
-# fstab.
-create_storage() {
-  local efi_device swap_device
-  local mdadm_create_opts=()
-
-  zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "rpool/ROOT"
-
-  if [ "$LAYOUT" = "" ]; then
-    efi_device="$PARTITIONS_EFI"
-    swap_device="$PARTITIONS_SWAP"
-  else
-    apt-get install --yes mdadm
-
-    # arch-chroot mounts /sys read-only inside the chroot. mdadm 4.5 (resolute)
-    # writes N to /sys/module/md_mod/parameters/legacy_async_del_gendisk at
-    # startup to opt out of the deprecated async del_gendisk path; on a ro /sys
-    # the open fails with "init md module parameters fail" and mdadm aborts.
-    # Debian #1125390 / md-raid-utilities/mdadm#228 — upstream fix in 4.5-3
-    # reorders the modprobe before the write but doesn't help us since the
-    # mount is still ro. Remount rw for the duration of the chroot.
-    mount -o remount,rw /sys
-
-    # Image builds write to fresh qcow2s that read back as zeros, and all-zero
-    # members are already consistent: RAID1 halves match and RAID5 parity of
-    # zeros is zero. Skip the initial resync rather than wait on it before
-    # sealing. Bare metal keeps it -- its disks hold arbitrary old data.
-    if [ "$INSTALL_TARGET" != bare_metal ]; then
-      mdadm_create_opts+=(--assume-clean)
-    fi
-
-    # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
-    # Some firmware may still reject a member; per-disk NVRAM entries below retain
-    # alternate boot paths. Validate this layout on each new bare-metal platform.
-    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
-    mdadm --create "${mdadm_create_opts[@]}" /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
-    udevadm settle --timeout=10
-    mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
-    efi_device=/dev/md/efi
-
-    # Disk-backed RAID1 swap avoids the memory-pressure deadlock risk of a ZFS
-    # zvol. mdadm.conf makes it available to the initramfs and swapon at boot.
-    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
-    mdadm --create "${mdadm_create_opts[@]}" /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
-    udevadm settle --timeout=10
-    mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
-    swap_device=/dev/md/swap
-
-    # The reconstructible Podman store uses RAID5 without a write-intent bitmap:
-    # accept a full replacement resync in exchange for lower write amplification.
-    # Record the array for boot-time assembly; the Podman role formats and mounts
-    # /dev/md/podman.
-    if [ -n "$PARTITIONS_PODMAN" ]; then
-      # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
-      mdadm --create "${mdadm_create_opts[@]}" /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_PODMAN
-      udevadm settle --timeout=10
-      mdadm --detail --brief /dev/md/podman >>/etc/mdadm/mdadm.conf
-    fi
-  fi
-
-  mkdosfs -F 32 -s 1 -n EFI "$efi_device"
-  mkswap -f "$swap_device"
-
-  # UUIDs exist only after the filesystems above have been created; blkid
-  # reads the signatures back through the same page cache they were written
-  # with, so no settle is needed.
-  if [ "$LAYOUT" = "" ]; then
-    efi_device="/dev/disk/by-uuid/$(blkid -s UUID -o value "$efi_device")"
-    swap_device="/dev/disk/by-uuid/$(blkid -s UUID -o value "$swap_device")"
-  fi
-
-  # Keep the ESP mount policy in sync with boot_esp_mount_opts in
-  # group_vars/all/main.yml.
-  echo "$efi_device /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
-  echo "$swap_device none swap discard 0 0" >>/etc/fstab
-}
-
-# Boot environment: the running host owns the disks, the ESP, and the
-# rpool/ROOT command line every root inherits, and its fstab and mdadm.conf
-# were copied in. Leaving the shared property alone also keeps this release's
-# zfs userland away from the running kernel's module. Install only what this
-# root needs to use the host's storage: mdadm to assemble the copied arrays at
-# boot, and efibootmgr, which a fresh install gets with rEFInd, to manage the
-# firmware entries before the first converge.
-adopt_host_storage() {
-  if grep -q '^ARRAY' /etc/mdadm/mdadm.conf 2>/dev/null; then
-    apt-get install --yes mdadm
-  fi
-  apt-get install --yes efibootmgr
-}
-
-if [ -n "$BOOT_ENVIRONMENT" ]; then
-  adopt_host_storage
-else
-  create_storage
+# The installer wrote this root's fstab and, on a mirror, its mdadm.conf.
+# mdadm assembles the listed arrays at boot, so it goes into the image built
+# below. efibootmgr manages the firmware entries: rEFInd depends on it on a
+# fresh install, and a boot environment needs it before its first converge.
+if grep -q '^ARRAY' /etc/mdadm/mdadm.conf 2>/dev/null; then
+  apt-get install --yes mdadm
 fi
+apt-get install --yes efibootmgr
 
 # Install the boot role image policy before the single final build.
 install -Dm 0644 "$initramfs_policy_source" "$initramfs_policy_target"
@@ -292,6 +183,10 @@ mkdir -p /boot/efi
 # lists every root under rpool/ROOT; the refind role's first converge
 # reconciles it.
 install_boot_loader() {
+  local disks_count
+  disks_count=$(wc -w <<<"$DISKS")
+  COMMANDLINE=$(boot_commandline)
+
   mount /boot/efi
 
   # Install ZFSBootMenu
@@ -397,7 +292,7 @@ EOF
   # 3=swap, 4=podman, 5=rpool, 6=meta. Keep these efibootmgr -p values in sync
   # with that order -- a stale -p (e.g. 1, the BIOS-boot partition) registers a
   # boot entry the firmware can't load.
-  if [ "$DISKS_COUNT" -eq 1 ]; then
+  if [ "$disks_count" -eq 1 ]; then
     efibootmgr -c -d "$DISKS" -p 2 \
       -L "rEFInd" \
       -l "\\EFI\\refind\\${REFIND_NAME}"

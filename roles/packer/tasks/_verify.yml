@@ -57,9 +57,10 @@
 
 # --- mdadm-EFI multi-disk variants (lab variant) ---
 #
-# chroot.sh's LAYOUT=mirror builds the efi, swap and podman md arrays and
-# per-disk "rEFInd (disk N)" NVRAM entries; single-disk variants have no
-# /dev/md/efi, and the universal rEFInd assertion above covers them.
+# On LAYOUT=mirror, provision.sh builds the efi, swap and podman md arrays
+# and chroot.sh the per-disk "rEFInd (disk N)" NVRAM entries; single-disk
+# variants have no /dev/md/efi, and the universal rEFInd assertion above
+# covers them.
 
 - name: _verify | Stat /dev/md/efi (mdadm-EFI mirror detection)
   stat:

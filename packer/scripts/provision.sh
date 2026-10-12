@@ -150,11 +150,12 @@ partition_disk() {
 
   # Swap partition (p3), sized by SWAP_SIZE, on every host. Single-disk hosts
   # mkswap it directly; mirror hosts mdadm the per-disk p3s into a raid1
-  # (chroot.sh). A real partition is deadlock-free, unlike swap on a zvol.
+  # (create_storage). A real partition is deadlock-free, unlike swap on a zvol.
   sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk" # Swap (8200 = Linux Swap)
 
   # Dedicated podman store partition (p4). Single-disk hosts carry a plain
-  # ext4 here; mirror hosts mdadm the per-disk p4s into a raid5 (chroot.sh).
+  # ext4 here; mirror hosts mdadm the per-disk p4s into a raid5
+  # (create_storage).
   # 8300 = Linux filesystem.
   if [ -n "$PODMAN_SIZE" ]; then
     sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
@@ -170,6 +171,81 @@ partition_disk() {
 
   sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk" # rpool (BF00 = Solaris root), carved last so it grows to end
   sgdisk -p "$disk"
+}
+
+# Assemble the per-disk ESP, swap, and Podman partitions into md arrays on a
+# mirror, create the ESP and swap filesystems, and record them in the new
+# root's fstab and mdadm.conf.
+create_storage() {
+  local efi_device swap_device disks_count
+  local mdadm_create_opts=() arrays=()
+  disks_count=$(wc -w <<<"$DISKS")
+
+  if [ "$LAYOUT" = "" ]; then
+    efi_device="$PARTITIONS_EFI"
+    swap_device="$PARTITIONS_SWAP"
+  else
+    # Image builds write to fresh qcow2s that read back as zeros, and all-zero
+    # members are already consistent: RAID1 halves match and RAID5 parity of
+    # zeros is zero. Skip the initial resync rather than wait on it before
+    # sealing. Bare metal keeps it -- its disks hold arbitrary old data.
+    if [ "$INSTALL_TARGET" != bare_metal ]; then
+      mdadm_create_opts+=(--assume-clean)
+    fi
+
+    # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
+    # Some firmware may still reject a member; per-disk NVRAM entries below retain
+    # alternate boot paths. Validate this layout on each new bare-metal platform.
+    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
+    mdadm --create "${mdadm_create_opts[@]}" /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$disks_count" $PARTITIONS_EFI
+    udevadm settle --timeout=10
+    efi_device=/dev/md/efi
+
+    # Disk-backed RAID1 swap avoids the memory-pressure deadlock risk of a ZFS
+    # zvol. mdadm.conf makes it available to the initramfs and swapon at boot.
+    # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
+    mdadm --create "${mdadm_create_opts[@]}" /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$disks_count" $PARTITIONS_SWAP
+    udevadm settle --timeout=10
+    swap_device=/dev/md/swap
+
+    # The reconstructible Podman store uses RAID5 without a write-intent bitmap:
+    # accept a full replacement resync in exchange for lower write amplification.
+    # Record the array for boot-time assembly; the Podman role formats and mounts
+    # /dev/md/podman.
+    if [ -n "$PARTITIONS_PODMAN" ]; then
+      # shellcheck disable=SC2086  # word-splitting on PARTITIONS_PODMAN is the point
+      mdadm --create "${mdadm_create_opts[@]}" /dev/md/podman --force --name=podman --metadata=1.2 --level=raid5 --bitmap=none --raid-devices="$disks_count" $PARTITIONS_PODMAN
+      udevadm settle --timeout=10
+    fi
+
+    # The Debian package's default policy (mdmonitor needs MAILADDR) plus the
+    # arrays. No role manages this file, and the image's initramfs embeds it.
+    arrays=(/dev/md/efi /dev/md/swap)
+    if [ -n "$PARTITIONS_PODMAN" ]; then
+      arrays+=(/dev/md/podman)
+    fi
+    mkdir -p /mnt/etc/mdadm
+    {
+      printf 'HOMEHOST <system>\nMAILADDR root\n'
+      mdadm --detail --brief "${arrays[@]}"
+    } >/mnt/etc/mdadm/mdadm.conf
+  fi
+
+  mkdosfs -F 32 -s 1 -n EFI "$efi_device"
+  mkswap -f "$swap_device"
+
+  # UUIDs exist only after the filesystems above have been created; blkid
+  # reads the signatures back through the same page cache they were written
+  # with, so no settle is needed.
+  if [ "$LAYOUT" = "" ]; then
+    efi_device="/dev/disk/by-uuid/$(blkid -s UUID -o value "$efi_device")"
+    swap_device="/dev/disk/by-uuid/$(blkid -s UUID -o value "$swap_device")"
+  fi
+
+  # Keep the ESP mount policy in sync with boot_esp_mount_opts in
+  # group_vars/all/main.yml.
+  echo "$efi_device /boot/efi vfat defaults,umask=0077 0 0" >>/mnt/etc/fstab
+  echo "$swap_device none swap discard 0 0" >>/mnt/etc/fstab
 }
 
 EXTRA_ZPOOL_OPTS=(
@@ -283,8 +359,7 @@ create_extra_pools() {
   cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 }
 
-# Per-disk partition paths, computed once and exported as space-delimited
-# strings so chroot.sh consumes them directly without re-running partdev.
+# Per-disk partition paths, computed once as space-delimited strings.
 # One unified layout for every host (notes/unified_disk_layout.md):
 #   1 = BIOS boot (EF02)
 #   2 = EFI (EF00)
@@ -303,7 +378,7 @@ create_extra_pools() {
 #
 # swap and podman are raw partitions on every host: single-disk gets a bare
 # partition, mirror an mdadm array across the per-disk partitions (swap raid1,
-# podman raid5 -- chroot.sh). The meta partition becomes tank's special vdev
+# podman raid5 -- create_storage). The meta partition becomes tank's special vdev
 # (create_extra_tank_mouse). Swap is the disk-backed *overflow* behind zram,
 # which the swap role runs as the primary high-priority device
 # (notes/swap_strategy.md); a real partition is deadlock-free, unlike swap on a
@@ -324,7 +399,6 @@ for d in $DISKS; do
   fi
   PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 5)"
 done
-export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_PODMAN PARTITIONS_META PARTITIONS_RPOOL
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -349,14 +423,14 @@ apt_update
   printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
   chmod 0755 /usr/sbin/policy-rc.d
   trap 'rm -f /usr/sbin/policy-rc.d' EXIT
-  apt-get install --yes arch-install-scripts debootstrap gdisk mdadm zfsutils-linux
+  apt-get install --yes arch-install-scripts debootstrap dosfstools gdisk mdadm zfsutils-linux
 )
 
 # Stop udev's `mdadm --incremental` from re-assembling an array off a stale
 # superblock while the tables below are rewritten. Declarative, so it cannot
 # leak the way a stop-exec-queue trap can if the script exits mid-partition.
-# Live build environment only -- the shipped image's mdadm.conf is written
-# independently by chroot.sh.
+# Live build environment only -- create_storage writes the shipped image's
+# mdadm.conf separately.
 printf 'AUTO -all\n' >/etc/mdadm/mdadm.conf
 
 zgenhostid -f
@@ -427,6 +501,9 @@ zpool create -f \
 zfs create -o canmount=off -o mountpoint=none rpool/ROOT
 zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 
+# Every boot environment under rpool/ROOT inherits the command line.
+zfs set org.zfsbootmenu:commandline="$(boot_commandline)" rpool/ROOT
+
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
 # Pools are re-imported from stable device names, which zpool.cache records
@@ -461,6 +538,8 @@ debootstrap_release "$UBUNTU_NAME" /mnt
 # there (empty), not the build host's DNS settings.
 
 cp /etc/hostid /mnt/etc
+
+create_storage
 
 # Configure networking. Match by name glob so the same image works under any
 # qemu device topology (packer's vs. testrole's direct-kernel boot give the NIC
