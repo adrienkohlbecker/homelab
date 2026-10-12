@@ -11,11 +11,9 @@
 # any other dataset's until the operator sets autobackup:bak=false on the
 # source and its replicas (freezing it) and destroys them by hand.
 #
-# The final snapshot is taken out of band. The onsite pull waits for the
-# source's newest @bak- across all its datasets (zfs_backup_onsite), so until
-# it is pulled, that snapshot satisfies the next nightly wait before the
-# host's own run and the pull ships the previous night's state for the host's
-# other datasets.
+# The final snapshot is taken out of band; the onsite pull's nightly wait
+# compares each dataset with its own replica (zfs_backup_onsite), so it does
+# not release the wait for the host's other datasets.
 #
 # On a non-ZFS host the mountpoint is a plain directory and is deleted.
 #
