@@ -63,6 +63,8 @@ aarch64)
 esac
 
 BOOT_ENVIRONMENT="${BOOT_ENVIRONMENT:-}"
+# Zero in a boot environment, which reads no disk list.
+DISKS_COUNT=$(wc -w <<<"${DISKS:-}")
 
 # Set a hostname
 
@@ -215,8 +217,6 @@ else
   # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
   # Some firmware may still reject a member; per-disk NVRAM entries below retain
   # alternate boot paths. Validate this layout on each new bare-metal platform.
-  DISKS_COUNT=$(wc -w <<<"$DISKS")
-
   # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
   mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
   udevadm settle --timeout=10
