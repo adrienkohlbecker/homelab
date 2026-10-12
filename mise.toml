@@ -141,7 +141,7 @@ depends = [
   "lint:lua",
   "lint:podman-service-templates",
   "lint:shell-strict",
-  "lint:topology",
+  "lint:data",
   "lint:markdown",
   "lint:md-links",
   "lint:notes",
@@ -216,12 +216,16 @@ run = [
   "lint/git_ls_existing.sh '*.lua' | xargs -0 selene --config lint/selene.toml",
 ]
 
-[tasks."lint:topology"]
-description = "Validate data/network_topology.yml against its JSON Schema"
+[tasks."lint:data"]
+description = "Validate data/*.yml against their JSON Schemas"
 # check-jsonschema is a project dep (not `uvx`-fetched) so `uv sync`
 # installs it from the warm /opt/uv-cache; uvx would re-resolve and
 # download it from the index on every CI run.
-run = "check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml"
+run = [
+  "check-jsonschema --schemafile data/architectures.schema.json data/architectures.yml",
+  "check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml",
+  "check-jsonschema --schemafile data/ubuntu_releases.schema.json data/ubuntu_releases.yml",
+]
 
 [tasks."lint:markdown"]
 description = "Lint tracked Markdown files"
