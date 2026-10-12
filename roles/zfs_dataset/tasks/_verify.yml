@@ -71,3 +71,102 @@
   register: _zfs_dataset_verify_fallback
   changed_when: true
   failed_when: _zfs_dataset_verify_fallback.stdout != 'fallback works'
+
+# Retire the probe holding live data and a nightly-style snapshot: the data
+# leaves the live dataset but stays in its history, and the dataset stays in
+# the backup mesh, unmounted. Non-ZFS hosts keep their plain directory.
+- name: _verify | Tag the probe for backups
+  when: zfs_root
+  command: zfs set autobackup:bak=true {{ zfs_tank_filesystem }}/_verify_probe
+  changed_when: true
+  become: true
+
+- name: _verify | Write a payload into the probe
+  when: zfs_root
+  command:
+    argv:
+      - dd
+      - if=/dev/urandom
+      - of=/mnt/_verify_probe/payload.bin
+      - bs=1M
+      - count=4
+    creates: /mnt/_verify_probe/payload.bin
+  become: true
+
+- name: _verify | Snapshot the probe like a nightly run
+  when: zfs_root
+  command: zfs snapshot {{ zfs_tank_filesystem }}/_verify_probe@bak-20260101020000
+  changed_when: true
+  become: true
+
+- name: _verify | Retire the probe through the production helper
+  vars:
+    zfs_dataset_args:
+      dataset: '{{ zfs_tank_filesystem }}/_verify_probe'
+      mountpoint: /mnt/_verify_probe
+  import_tasks: remove.yml
+
+# A second retirement must find nothing left to do.
+- name: _verify | Retire the probe again
+  vars:
+    zfs_dataset_args:
+      dataset: '{{ zfs_tank_filesystem }}/_verify_probe'
+      mountpoint: /mnt/_verify_probe
+  import_tasks: remove.yml
+
+# A boot-time mount pass must leave the retired dataset alone.
+- name: _verify | Mount every ZFS filesystem
+  when: zfs_root
+  command: zfs mount -a
+  changed_when: false
+  become: true
+
+- name: _verify | Read the retired probe
+  when: zfs_root
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - property,value
+      - canmount,mounted,autobackup:bak,referenced
+      - '{{ zfs_tank_filesystem }}/_verify_probe'
+  register: _zfs_dataset_verify_retired
+  changed_when: false
+  become: true
+
+- name: _verify | List the retired probe snapshots
+  when: zfs_root
+  command: zfs list -H -t snapshot -o name {{ zfs_tank_filesystem }}/_verify_probe
+  register: _zfs_dataset_verify_retired_snapshots
+  changed_when: false
+  become: true
+
+- name: _verify | Stat the retired probe mountpoint and mount unit
+  stat:
+    path: '{{ item }}'
+  loop:
+    - /mnt/_verify_probe
+    - /etc/systemd/system/{{ '/mnt/_verify_probe' | zfs_mount_unit }}
+  register: _zfs_dataset_verify_retired_paths
+
+- name: _verify | Retired probe is empty, unmounted, and still backed up
+  when: zfs_root
+  vars:
+    props: "{{ dict(_zfs_dataset_verify_retired.stdout_lines | map('split', '\t')) }}"
+  assert:
+    that:
+      - props.canmount == 'off'
+      - props.mounted == 'no'
+      - props['autobackup:bak'] == 'true'
+      - props.referenced | int < 1048576
+      - (zfs_tank_filesystem ~ '/_verify_probe@bak-20260101020000') in _zfs_dataset_verify_retired_snapshots.stdout_lines
+      - _zfs_dataset_verify_retired_paths.results | selectattr('stat.exists') | list | length == 0
+    fail_msg: "{{ props }} {{ _zfs_dataset_verify_retired_snapshots.stdout_lines }}"
+
+- name: _verify | Plain-directory fallback keeps its data
+  when: not zfs_root
+  assert:
+    that: _zfs_dataset_verify_retired_paths.results[0].stat.exists

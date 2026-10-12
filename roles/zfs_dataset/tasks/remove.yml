@@ -1,0 +1,120 @@
+# Retire a dataset `dataset` created. Inputs: a single dict `zfs_dataset_args`
+# with keys:
+#   dataset     full dataset path (e.g. rpool/services/sqlite)
+#   mountpoint  its mountpoint (e.g. /mnt/services/sqlite)
+#
+# Retiring is not destroying: the live dataset is emptied and left unmounted
+# (canmount=off), its mount unit and mountpoint directory are removed, and
+# every snapshot is kept. autobackup:bak is left alone, so a tagged dataset's
+# next nightly local leg takes its final (empty) @bak- snapshot on schedule and
+# the onsite and offsite legs carry it. Taking that snapshot here instead would
+# satisfy the onsite pull's newest-snapshot wait early and ship the previous
+# night's state for the host's other datasets. The history then thins like any
+# other dataset's until the operator sets autobackup:bak=false on the source
+# and its replicas (freezing it) and destroys them by hand.
+#
+# On a non-ZFS host the mountpoint is a plain directory with no snapshots
+# behind it, so its data is preserved and nothing is done.
+#
+# Publishes nothing and takes no `condition`; gate a conditional retirement
+# with `when:` on the import.
+- name: remove | Assert required dataset inputs
+  assert:
+    that:
+      - zfs_dataset_args.dataset is defined
+      - zfs_dataset_args.mountpoint is defined
+    quiet: true
+
+- name: remove | Retire the dataset
+  when: zfs_root
+  block:
+    - name: remove | Retire the dataset mount unit
+      import_role:
+        name: systemd_unit
+        tasks_from: remove
+      vars:
+        systemd_unit_args:
+          dest: "{{ zfs_dataset_args.mountpoint | zfs_mount_unit }}"
+
+    - name: remove | Read the dataset mount state
+      command:
+        argv:
+          - zfs
+          - get
+          - -H
+          - -o
+          - value
+          - canmount,mounted
+          - "{{ zfs_dataset_args.dataset }}"
+      register: _zfs_dataset_remove_state
+      changed_when: false
+      check_mode: false
+      failed_when: >-
+        _zfs_dataset_remove_state.rc != 0
+        and 'dataset does not exist' not in _zfs_dataset_remove_state.stderr
+      become: true
+
+    - name: remove | Empty the dataset and stop mounting it
+      when:
+        - _zfs_dataset_remove_state.rc == 0
+        - _zfs_dataset_remove_state.stdout_lines[0] != 'off'
+      block:
+        # Guard the delete: it must only ever see the dataset, never the parent
+        # directory underneath an unmounted mountpoint. A not-yet-retired
+        # dataset that is not mounted fails here rather than being left
+        # unmountable with its contents still live.
+        - name: remove | Assert the dataset is what is mounted
+          command:
+            argv:
+              - /usr/local/bin/zfs_check_mount
+              - "{{ zfs_dataset_args.dataset }}"
+              - "{{ zfs_dataset_args.mountpoint }}"
+          changed_when: false
+          become: true
+
+        - name: remove | Empty the dataset
+          command:
+            argv:
+              - find
+              - "{{ zfs_dataset_args.mountpoint }}"
+              - -xdev
+              - -mindepth
+              - 1
+              - -delete
+          changed_when: true
+          become: true
+
+        - name: remove | Stop mounting the dataset
+          community.general.zfs:
+            name: "{{ zfs_dataset_args.dataset }}"
+            state: present
+            extra_zfs_properties:
+              canmount: 'off'
+          become: true
+
+    - name: remove | Unmount the dataset
+      when:
+        - _zfs_dataset_remove_state.rc == 0
+        - _zfs_dataset_remove_state.stdout_lines[1] == 'yes'
+      command:
+        argv:
+          - zfs
+          - unmount
+          - "{{ zfs_dataset_args.dataset }}"
+      register: _zfs_dataset_remove_unmount
+      changed_when: true
+      # canmount=off unmounts on its own; an already-unmounted dataset is fine.
+      failed_when: >-
+        _zfs_dataset_remove_unmount.rc != 0
+        and 'not currently mounted' not in _zfs_dataset_remove_unmount.stderr
+      become: true
+
+    # rmdir refuses a non-empty directory, so anything written underneath the
+    # unmounted mountpoint fails loudly instead of vanishing.
+    - name: remove | Remove the mountpoint directory
+      command:
+        argv:
+          - rmdir
+          - "{{ zfs_dataset_args.mountpoint }}"
+        removes: "{{ zfs_dataset_args.mountpoint }}"
+      become: true
