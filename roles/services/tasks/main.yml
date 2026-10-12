@@ -1,4 +1,5 @@
 - name: Configure services datasets
+  when: services_dataset.enabled | default(true) | bool
   include_role:
     name: zfs_dataset
     tasks_from: dataset

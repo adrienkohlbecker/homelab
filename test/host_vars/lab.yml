@@ -10,6 +10,10 @@ nginx_static_proxies_enabled: true
 # Mirror Lab, which prunes the operator's rootless podman store nightly.
 podman_operator_prune_enabled: true
 
+# Mirror Lab, which carves Home Assistant's recorder dataset. The
+# retired_services cell turns it off to exercise the teardown on other hosts.
+services_sqlite_enabled: "{{ _test_role_under_test | default('') != 'retired_services' }}"
+
 # The podman role's own cells run single-disk on one raw partition, which its
 # _setup frees from the fixture's podman RAID5; every other cell keeps the array
 # group_vars/storage_lab.yml names.

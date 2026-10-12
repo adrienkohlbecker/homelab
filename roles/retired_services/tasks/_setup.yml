@@ -1,4 +1,34 @@
 ---
+# The sqlite child roles/services carved on every ZFS host, with a snapshot like
+# the ones zfs-autobackup leaves behind. The cell turns services_sqlite_enabled
+# off, so the services role creates only the parent. It runs first: the
+# parent cannot mount over the wolweb state directory created below.
+- name: _setup | Create the services parent dataset
+  import_role:
+    name: services
+    tasks_from: main
+
+- name: _setup | Create the retired sqlite dataset
+  import_role:
+    name: zfs_dataset
+    tasks_from: dataset
+  vars:
+    zfs_dataset_args:
+      dataset: rpool/services/sqlite
+      mountpoint: /mnt/services/sqlite
+      owner: root
+      group: root
+      mode: '0755'
+
+- name: _setup | Snapshot the retired sqlite dataset
+  command:
+    argv:
+      - zfs
+      - snapshot
+      - rpool/services/sqlite@bak-retired
+  changed_when: true
+  become: true
+
 # Recreate what the retired wolweb role left on lab and pug: its unit, nginx
 # vhost, fluent-bit extension, image, rendered state, and account.
 - name: _setup | Install nginx

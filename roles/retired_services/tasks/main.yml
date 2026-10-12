@@ -145,3 +145,37 @@
   tags:
     - retired_services
     - console
+
+# Drop once pug and fox have converged. Only Home Assistant's host keeps the
+# recorder dataset (roles/services); elsewhere it holds nothing but snapshots.
+- name: Retire the unused sqlite dataset
+  when:
+    - zfs_root
+    - not (services_sqlite_enabled | default(false) | bool)
+  tags:
+    - retired_services
+    - services
+  block:
+    - name: Retire the sqlite dataset mount unit
+      import_role:
+        name: systemd_unit
+        tasks_from: remove
+      vars:
+        systemd_unit_args:
+          dest: zfs_mount_mnt_services_sqlite.service
+
+    - name: Destroy the sqlite dataset and its snapshots
+      community.general.zfs:
+        name: rpool/services/sqlite
+        state: absent
+      become: true
+
+    # rmdir refuses a non-empty directory, so stray files fail loudly instead
+    # of vanishing.
+    - name: Remove the sqlite mountpoint directory
+      command:
+        argv:
+          - rmdir
+          - /mnt/services/sqlite
+        removes: /mnt/services/sqlite
+      become: true

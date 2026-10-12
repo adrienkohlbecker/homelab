@@ -1,0 +1,3 @@
+# Carve the rpool/services/sqlite child for Home Assistant's recorder. Only
+# hosts that run homeassistant need it.
+services_sqlite_enabled: false

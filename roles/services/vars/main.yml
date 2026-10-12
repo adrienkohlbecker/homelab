@@ -2,9 +2,10 @@
 # zfs_dataset helper and _verify.yml consume this list, so one entry updates
 # convergence and verification.
 #
-# The sqlite child carves recordsize=4K for Home Assistant's write-heavy
-# recorder. It matches SQLite's page_size=4096 exactly, so each modified page
-# contributes 4K to the snapshot diff instead of 128K at the parent's default.
+# The sqlite child, carved only where services_sqlite_enabled, sets
+# recordsize=4K for Home Assistant's write-heavy recorder. It matches SQLite's
+# page_size=4096 exactly, so each modified page contributes 4K to the snapshot
+# diff instead of 128K at the parent's default.
 # Compression is sacrificed because a 4K record cannot compress below the 4K
 # ashift=12 sector floor, but snapshot growth is the binding constraint.
 # atime=off prevents reads from dirtying the recorder dataset. primarycache and
@@ -15,6 +16,7 @@
 #
 # autobackup:bak=true tags both datasets for zfs-autobackup; the picker filters
 # with `-s local` (see _verify.yml's header for why source matters).
+# Entries without `enabled` are always carved.
 # Order is load-bearing: ZFS requires parent datasets to exist before children.
 services_datasets:
   - dataset: rpool/services
@@ -23,6 +25,7 @@ services_datasets:
       'autobackup:bak': 'true'
   - dataset: rpool/services/sqlite
     mountpoint: /mnt/services/sqlite
+    enabled: "{{ services_sqlite_enabled }}"
     extra_properties:
       'autobackup:bak': 'true'
       recordsize: '4096'

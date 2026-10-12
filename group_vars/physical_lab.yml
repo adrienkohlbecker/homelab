@@ -16,6 +16,9 @@ swap_zram_size: 8G
 
 podman_operator_prune_enabled: true
 
+# Home Assistant's recorder dataset (roles/services).
+services_sqlite_enabled: true
+
 # Host-native CI fallback runner. It deliberately uses its own token variable so
 # lab cannot accidentally clone fox's project runner token and inherit the wrong
 # server-side tags.

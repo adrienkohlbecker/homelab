@@ -2,7 +2,9 @@
 # 4K recordsize must not be inherited from a conflicting parent value.
 
 - name: _verify | Expected properties set locally
-  when: zfs_root
+  when:
+    - zfs_root
+    - item.enabled | default(true) | bool
   vars:
     services_expected_properties: >-
       {{ {'mountpoint': item.mountpoint} | combine(item.extra_properties) }}
@@ -29,7 +31,9 @@
   become: true
 
 - name: _verify | Dataset mount contract passes
-  when: zfs_root
+  when:
+    - zfs_root
+    - item.enabled | default(true) | bool
   command:
     argv:
       - /usr/local/bin/zfs_check_mount
@@ -42,7 +46,9 @@
   become: true
 
 - name: _verify | Mount status units are active
-  when: zfs_root
+  when:
+    - zfs_root
+    - item.enabled | default(true) | bool
   command:
     argv:
       - systemctl

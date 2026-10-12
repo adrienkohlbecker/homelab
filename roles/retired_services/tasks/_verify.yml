@@ -6,6 +6,7 @@
     - wolweb.service
     - mac_iot.service
     - console_noblank.service
+    - zfs_mount_mnt_services_sqlite.service
   register: retired_services_units
   failed_when: retired_services_units.status.LoadState != 'not-found'
   become: true
@@ -28,6 +29,7 @@
     - /etc/fluent-bit/services/wolweb.yaml
     - /mnt/services/wolweb
     - /etc/sysctl.d/30-macvlan.conf
+    - /mnt/services/sqlite
   register: retired_services_leftovers
   become: true
 
@@ -92,4 +94,19 @@
   register: retired_services_grub_cmdline
   changed_when: false
   failed_when: retired_services_grub_cmdline.rc != 1
+  become: true
+
+- name: _verify | Retired sqlite dataset is gone
+  command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -t
+      - all
+      - -r
+      - rpool/services/sqlite
+  register: retired_services_sqlite_dataset
+  changed_when: false
+  failed_when: retired_services_sqlite_dataset.rc == 0
   become: true
