@@ -477,27 +477,11 @@ debootstrap_release "$UBUNTU_NAME" /mnt
 
 cp /etc/hostid /mnt/etc
 
-# Build-time dpkg I/O mode: dpkg fsyncs every unpacked file by default, which
-# dominates the chroot install's wall-clock on network-backed disks (EBS on the
-# AWS bake) and still costs plenty locally. A disposable build that crashes
-# mid-install is re-baked, never booted, so per-file durability buys nothing --
-# and the image is quiesced by the zpool export below regardless. Skipped on a
-# bare-metal install: an interrupted provision is costlier to redo, the
-# local-SSD speed win is small, and fsync durability is worth keeping. Removed
-# before the image is sealed.
-if [ "$INSTALL_TARGET" != bare_metal ]; then
-  echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
-fi
-
 # Env propagation: packer's UBUNTU_*/ZBM_*/REFIND_*/SSH_KEY_PUB (exported via
 # the shell provisioner env block) and the PARTITIONS_*/DISKS strings above
 # flow through to chroot.sh; chroot.sh consumes DISKS via unquoted
 # `for d in $DISKS` word-splitting.
 run_chroot_script /mnt
-
-if [ "$INSTALL_TARGET" != bare_metal ]; then
-  rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
-fi
 
 # Create any non-rpool pools while /mnt is still rpool's root so the current
 # zpool.cache can be copied into the shipped install.

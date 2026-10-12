@@ -160,7 +160,18 @@ run_chroot_script() {
   hetzner) cp -a "$SCRIPTS_DIR/hetzner" "$root$dir/" ;;
   esac
 
+  # dpkg fsyncs every unpacked file by default, which dominates the install's
+  # wall-clock on network-backed disks (EBS on the AWS bake) and still costs
+  # plenty locally. A disposable image or fixture that crashes mid-install is
+  # rebuilt, never booted, so per-file durability buys nothing there. A real
+  # host keeps it: an interrupted install is costlier to redo, and the
+  # local-SSD speed win is small.
+  if [ "$INSTALL_TARGET" != bare_metal ]; then
+    echo force-unsafe-io >"$root/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io"
+  fi
+
   CHROOT_FILES=$dir unshare --mount --propagation private arch-chroot "$root" bash "$dir/chroot.sh"
 
+  rm -f "$root/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io"
   rm -rf -- "${root:?}$dir"
 }

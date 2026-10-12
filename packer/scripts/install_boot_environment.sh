@@ -117,17 +117,7 @@ if [ -f /etc/mdadm/mdadm.conf ]; then
   cp -a /etc/mdadm/mdadm.conf "$root/etc/mdadm/"
 fi
 
-# Build-time dpkg I/O mode, as in provision.sh: a disposable fixture skips
-# per-file fsyncs, while a real host keeps them.
-if [ "$INSTALL_TARGET" != bare_metal ]; then
-  echo force-unsafe-io >"$root/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io"
-fi
-
 run_chroot_script "$root"
-
-if [ "$INSTALL_TARGET" != bare_metal ]; then
-  rm "$root/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io"
-fi
 
 # chroot.sh creates the login user with the first free ids, which on a
 # provisioned host are the existing user's. Anything else would leave the
