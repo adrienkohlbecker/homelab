@@ -408,7 +408,7 @@
       - homeassistant_smtp_password | default('') | length > 0
     fail_msg: >-
       homeassistant_smtp_from/user/password must be set (host_vars/group_vars) --
-      they configure HA notify.email SMTP config entry.
+      they configure the HA SMTP notify config entry.
   tags:
     - homeassistant
 
