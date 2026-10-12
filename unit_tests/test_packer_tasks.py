@@ -26,8 +26,8 @@ QEMU_HOST_KERNEL_SH = REPO_ROOT / "packer" / "aws" / "files" / "install_ga_kerne
 QEMU_HOST_SCRATCH_SH = REPO_ROOT / "packer" / "aws" / "files" / "homelab_ci_prepare_scratch.sh"
 QEMU_HOST_SMOKE_SH = REPO_ROOT / "packer" / "aws" / "files" / "qemu_host_smoke.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
-QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
 QEMU_CHROOT_SH = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
+INSTALL_LIB_SH = REPO_ROOT / "packer" / "scripts" / "install_lib.sh"
 UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
 UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
@@ -500,7 +500,7 @@ def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(
 
 def test_qemu_build_uploads_only_required_role_files() -> None:
     template = QEMU_TEMPLATE.read_text()
-    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", QEMU_PROVISION_SH.read_text(), re.MULTILINE)
+    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", INSTALL_LIB_SH.read_text(), re.MULTILINE)
     assert role_files is not None
 
     staged = role_files.group(1).split()

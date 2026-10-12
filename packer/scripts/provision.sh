@@ -41,78 +41,11 @@ set -euxo pipefail
 # callers can point both variables at their staged bundle.
 SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
 ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
-ROLE_FILES=(console-setup keyboard modules_most dracut_host.conf)
-
-fail() {
-  echo "provision.sh: $*" >&2
-  exit 1
-}
-
-# apt-get update exits 0 even when one component's Packages index fails to
-# download (Nexus restart, dropped packet), leaving a partial cache that makes a
-# later install fail with a baffling "Unable to locate package". --error-on=any
-# turns a failed fetch into a non-zero exit. apt retries each file itself; the
-# loop absorbs a mirror outage that outlasts those retries. Shared with
-# chroot.sh like write_sources_list.
-apt_update() {
-  local attempt
-  for attempt in 1 2 3 4 5; do
-    if apt-get update --error-on=any; then
-      return 0
-    fi
-    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
-    sleep "$((attempt * 5))"
-  done
-  echo "apt-get update failed after 5 attempts" >&2
-  return 1
-}
-
-# Write deb822 apt sources for release $1 from archive mirror $2 and security
-# mirror $3, matching both the stock layout and what roles/apt converges to.
-# Shared with chroot.sh, which receives it through `declare -f`.
-write_sources_list() {
-  # Twin of the sources roles/apt/tasks/configure.yml writes, byte for byte
-  # apart from the mirror URLs, so a first converge changes only the mirror.
-  local deb_arch
-  deb_arch=$(dpkg --print-architecture)
-
-  truncate -s0 /etc/apt/sources.list
-  mkdir -p /etc/apt/sources.list.d
-
-  cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
-Architectures: $deb_arch
-Components: main universe restricted multiverse
-Languages: none
-X-Repolib-Name: ubuntu
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-Suites: $1 $1-updates $1-backports
-Types: deb
-URIs: $2
-EOF
-
-  cat <<EOF >/etc/apt/sources.list.d/ubuntu-security.sources
-Architectures: $deb_arch
-Components: main universe restricted multiverse
-Languages: none
-X-Repolib-Name: ubuntu-security
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-Suites: $1-security
-Types: deb
-URIs: $3
-EOF
-
-  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
-  # orphans the cached indices. The frozen base suite's InRelease is
-  # byte-identical whichever mirror serves it (Nexus just proxies upstream),
-  # so the next apt-get update records a content "Hit", skips the
-  # re-download, then can't open the list file that was never written under
-  # the new URL ("can not open …InRelease"). A cloud image's primed indices
-  # trip the same way. Drop the cache so each rewrite re-fetches cleanly.
-  find /var/lib/apt/lists -type f -delete
-}
+# shellcheck source=packer/scripts/install_lib.sh
+. "$SCRIPTS_DIR/install_lib.sh"
 
 preflight() {
-  local disk role_file
+  local disk
   local -A seen_disks=()
 
   # Optional layout features may be empty but must be set explicitly.
@@ -137,9 +70,7 @@ preflight() {
     seen_disks[$disk]=1
   done
 
-  for role_file in "${ROLE_FILES[@]}"; do
-    [ -f "$ROLE_FILES_DIR/$role_file" ] || fail "required role file not found: $ROLE_FILES_DIR/$role_file"
-  done
+  check_role_files
 }
 
 # Packer selects qemu or hetzner; direct callers get the bare-metal path.
@@ -147,30 +78,7 @@ export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
 
 preflight
 
-# Ubuntu mirrors for this architecture. The install pulls through Nexus when
-# NEXUS_URL names its host (empty or unset means upstream, as with group_vars'
-# nexus_url); the installed system always ships the upstream pair.
-case $(uname -m) in
-x86_64)
-  UBUNTU_MIRROR_UPSTREAM=http://archive.ubuntu.com/ubuntu
-  UBUNTU_MIRROR_SECURITY_UPSTREAM=http://security.ubuntu.com/ubuntu
-  nexus_repositories=(ubuntu-archive ubuntu-security)
-  ;;
-aarch64)
-  UBUNTU_MIRROR_UPSTREAM=http://ports.ubuntu.com/ubuntu-ports
-  UBUNTU_MIRROR_SECURITY_UPSTREAM=$UBUNTU_MIRROR_UPSTREAM
-  nexus_repositories=(ubuntu-ports ubuntu-ports)
-  ;;
-*) fail "unsupported architecture $(uname -m)" ;;
-esac
-if [ -n "${NEXUS_URL:-}" ]; then
-  UBUNTU_MIRROR=http://$NEXUS_URL/repository/${nexus_repositories[0]}
-  UBUNTU_MIRROR_SECURITY=http://$NEXUS_URL/repository/${nexus_repositories[1]}
-else
-  UBUNTU_MIRROR=$UBUNTU_MIRROR_UPSTREAM
-  UBUNTU_MIRROR_SECURITY=$UBUNTU_MIRROR_SECURITY_UPSTREAM
-fi
-export UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM
+export_ubuntu_mirrors
 
 # Placeholder hostname for the shipped image — the deploy step
 # (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
@@ -559,15 +467,7 @@ zfs mount "rpool/ROOT/$UBUNTU_NAME"
 # Wait for udev to wire the new device nodes before arch-chroot runs.
 udevadm settle
 
-# Install Ubuntu. If a fetch fails, --verbose surfaces each retrieve/validate
-# step live and the handler dumps debootstrap's own log -- which otherwise dies
-# with the build VM -- so the next occurrence stays diagnosable.
-debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" || {
-  rc=$?
-  echo "=== debootstrap failed (exit $rc); /mnt/debootstrap/debootstrap.log tail ===" >&2
-  tail -n 300 /mnt/debootstrap/debootstrap.log >&2 || echo "(no debootstrap.log present)" >&2
-  exit "$rc"
-}
+debootstrap_release "$UBUNTU_NAME" /mnt
 
 # Copy files into the new install. /etc/hostid must match the one ZFS
 # saw at pool creation; arch-chroot bind-mounts /etc/resolv.conf so apt
@@ -589,20 +489,6 @@ if [ "$INSTALL_TARGET" != bare_metal ]; then
   echo force-unsafe-io >/mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
 fi
 
-# Stage the role-owned bootstrap files inside the target root so chroot.sh
-# consumes the same bytes as Ansible without installing Ansible there.
-CHROOT_ROLE_FILES=/var/tmp/homelab-role-files
-cleanup_chroot_role_files() {
-  rm -rf -- "/mnt${CHROOT_ROLE_FILES:?}"
-}
-trap cleanup_chroot_role_files EXIT
-cleanup_chroot_role_files
-mkdir -p "/mnt$CHROOT_ROLE_FILES"
-for role_file in "${ROLE_FILES[@]}"; do
-  cp "$ROLE_FILES_DIR/$role_file" "/mnt$CHROOT_ROLE_FILES/"
-done
-export CHROOT_ROLE_FILES
-
 # Stage the Hetzner image setup (cloud-init drop-ins and install script) so
 # chroot.sh can run it inside the target root. Under /var/tmp, not /tmp:
 # arch-chroot shadows the chroot's /tmp with a private tmpfs, hiding files
@@ -611,38 +497,11 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
   cp -a "$SCRIPTS_DIR/hetzner" /mnt/var/tmp/hetzner
 fi
 
-# The qemu fixtures mirror their journal onto the harness console; chroot.sh
-# verifies and enables the unit.
-if [ "$INSTALL_TARGET" = qemu ]; then
-  install -m 0644 "$SCRIPTS_DIR/homelab_guest_journal.service" /mnt/etc/systemd/system/
-fi
-
-# Chroot into the new OS via arch-chroot (arch-install-scripts). It
-# bind-mounts proc/sys/dev/devpts/run/efivarfs and /etc/resolv.conf
-# under /mnt for the chroot's lifetime, so apt can resolve hostnames
-# during the install without leaving the build host's DNS pinned in
-# the shipped image.
-#
-# arch-chroot mounts directly into the host namespace, not a private
-# one, so any mount the chroot script adds (notably /boot/efi from
-# chroot.sh) leaks into the host and would block the later zfs
-# unmount /mnt. Wrap in `unshare --mount --propagation private` so
-# everything mounted between here and exit lives in a throw-away
-# namespace that's destroyed when unshare returns.
-#
-# Env propagation: arch-chroot inherits the calling shell's env, so
-# packer's UBUNTU_*/ZBM_*/REFIND_NAME/SSH_KEY_PUB (already exported via
-# the shell provisioner env block) flow straight through. CHROOT_ROLE_FILES is
-# exported above. DISKS rides as a space-delimited string (not a bash array,
-# which bash refuses to put in env); chroot.sh consumes it the same way via
-# unquoted `for d in $DISKS` word-splitting.
-{
-  declare -f apt_update write_sources_list
-  cat "$SCRIPTS_DIR/chroot.sh"
-} | unshare --mount --propagation private arch-chroot /mnt bash
-
-cleanup_chroot_role_files
-trap - EXIT
+# Env propagation: packer's UBUNTU_*/ZBM_*/REFIND_*/SSH_KEY_PUB (exported via
+# the shell provisioner env block) and the PARTITIONS_*/DISKS strings above
+# flow through to chroot.sh; chroot.sh consumes DISKS via unquoted
+# `for d in $DISKS` word-splitting.
+run_chroot_script /mnt
 
 if [ "$INSTALL_TARGET" != bare_metal ]; then
   rm /mnt/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io
