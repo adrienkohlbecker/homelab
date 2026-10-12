@@ -16,6 +16,7 @@ fi
 DESTPATH=${DATASET//\//_}
 
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
+CANMOUNT=$(zfs get canmount -H -o value "$DATASET")
 
 # Validate the mount first, ahead of every skip path below (no-snapshot and the
 # change-gate): a broken mount is a fault the offsite run must surface
@@ -23,7 +24,11 @@ MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
 # exits 1 for monitoring), and skipping ahead of it would let a degraded
 # /mnt/services or /mnt/data be silently reported as an up-to-date skip. The
 # check is sub-second, so paying it on skip nights costs nothing.
-zfs_check_mount "$DATASET" "$MOUNTPOINT"
+# canmount=off marks a dataset retired by the zfs_dataset remove helper: it is
+# never mounted, and its snapshots alone carry its state.
+if [ "$CANMOUNT" != off ]; then
+  zfs_check_mount "$DATASET" "$MOUNTPOINT"
+fi
 
 # awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
 # creation (ascending), so the last @bak- line is the newest. A bare
@@ -54,6 +59,17 @@ if [ -f "$MARKER_FILE" ] && [ -z "$(find "$MARKER_FILE" -mmin +43200 -print)" ];
     echo "No change on $DATASET since @$marker_snapshot (written=0), skipping offsite sync"
     exit 0
   fi
+fi
+
+# A retired dataset has no live mount to reach .zfs/snapshot through, so mount
+# the snapshot itself read-only for the transfer.
+if [ "$CANMOUNT" = off ]; then
+  SNAPSHOT_DIR=$(mktemp -d)
+  trap 'rmdir "$SNAPSHOT_DIR"' EXIT
+  mount -t zfs -o ro "$DATASET@$LAST_SNAPSHOT" "$SNAPSHOT_DIR"
+  trap 'umount "$SNAPSHOT_DIR" && rmdir "$SNAPSHOT_DIR"' EXIT
+else
+  SNAPSHOT_DIR="${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT"
 fi
 
 # rsync's running progress is helpful when an operator runs this by hand but is
@@ -113,7 +129,7 @@ rsync_cmd=(rsync
   --exclude /var/crash
   --exclude "*@*:*:*~"
   --exclude ".config/homelab/vault-pass-*"
-  "${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH")
+  "$SNAPSHOT_DIR/" "ak@$OFFSITE_IP:$DESTPATH")
 printf '$%s\n' "$(printf ' %q' "${rsync_cmd[@]}")"
 "${rsync_cmd[@]}"
 
