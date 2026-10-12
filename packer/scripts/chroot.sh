@@ -30,6 +30,12 @@ trap 'exit 130' INT TERM
 #   PARTITIONS_EFI/SWAP are always set; on a mirror they are mdadm'd into
 #   /dev/md/efi (raid1) and /dev/md/swap (raid1). PARTITIONS_PODMAN is set
 #   when PODMAN_SIZE is (raid5 /dev/md/podman on a mirror).
+# - BOOT_ENVIRONMENT=1 from install_boot_environment.sh, which installs this
+#   root beside a running one and has already copied in that host's fstab,
+#   mdadm.conf, netplan, hostid, and machine-id. The disks, the ESP, and the
+#   shared rpool/ROOT properties belong to the running host, so every step
+#   that would write them is skipped, and DISKS, LAYOUT, PARTITIONS_*, and
+#   ZBM_VERSION are not read.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -56,7 +62,7 @@ aarch64)
   ;;
 esac
 
-DISKS_COUNT=$(wc -w <<<"$DISKS")
+BOOT_ENVIRONMENT="${BOOT_ENVIRONMENT:-}"
 
 # Set a hostname
 
@@ -167,11 +173,22 @@ elif [ "$INSTALL_TARGET" = "hetzner" ]; then
   COMMANDLINE="$SERIAL_CMDLINE $COMMANDLINE"
 fi
 
-zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "rpool/ROOT"
+# Every boot environment inherits this property, so a new one leaves the
+# running host's converged value alone. That also keeps the new release's zfs
+# userland away from the running kernel's module.
+if [ -z "$BOOT_ENVIRONMENT" ]; then
+  zfs set org.zfsbootmenu:commandline="$COMMANDLINE" "rpool/ROOT"
+fi
 
 # Create efi & swap
 
-if [ "$LAYOUT" = "" ]; then
+if [ -n "$BOOT_ENVIRONMENT" ]; then
+  # The copied mdadm.conf lists the running host's arrays; the image built
+  # below needs mdadm to assemble them at boot.
+  if grep -q '^ARRAY' /etc/mdadm/mdadm.conf 2>/dev/null; then
+    apt-get install --yes mdadm
+  fi
+elif [ "$LAYOUT" = "" ]; then
   EFI_DEVICE="$PARTITIONS_EFI"
   SWAP_DEVICE="$PARTITIONS_SWAP"
 else
@@ -198,6 +215,8 @@ else
   # Metadata 1.0 and no bitmap keep each RAID1 member recognizable as an ESP.
   # Some firmware may still reject a member; per-disk NVRAM entries below retain
   # alternate boot paths. Validate this layout on each new bare-metal platform.
+  DISKS_COUNT=$(wc -w <<<"$DISKS")
+
   # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
   mdadm --create "${MDADM_CREATE_OPTS[@]}" /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
   udevadm settle --timeout=10
@@ -224,25 +243,26 @@ else
   fi
 fi
 
-# Create filesystems
+# Create filesystems and their fstab entries. A boot environment shares the
+# running host's, which its copied fstab already lists.
 
-mkdosfs -F 32 -s 1 -n EFI "$EFI_DEVICE"
-mkswap -f "$SWAP_DEVICE"
+if [ -z "$BOOT_ENVIRONMENT" ]; then
+  mkdosfs -F 32 -s 1 -n EFI "$EFI_DEVICE"
+  mkswap -f "$SWAP_DEVICE"
 
-# UUIDs exist only after the filesystems above have been created; blkid
-# reads the signatures back through the same page cache they were written
-# with, so no settle is needed.
-if [ "$LAYOUT" = "" ]; then
-  EFI_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$EFI_DEVICE")"
-  SWAP_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$SWAP_DEVICE")"
+  # UUIDs exist only after the filesystems above have been created; blkid
+  # reads the signatures back through the same page cache they were written
+  # with, so no settle is needed.
+  if [ "$LAYOUT" = "" ]; then
+    EFI_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$EFI_DEVICE")"
+    SWAP_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$SWAP_DEVICE")"
+  fi
+
+  # Keep the ESP mount policy in sync with boot_esp_mount_opts in
+  # group_vars/all/main.yml.
+  echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
+  echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 fi
-
-# Update fstab
-
-# Keep the ESP mount policy in sync with boot_esp_mount_opts in
-# group_vars/all/main.yml.
-echo "$EFI_DEVICE /boot/efi vfat defaults,umask=0077 0 0" >>/etc/fstab
-echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
 # Install the boot role image policy before the single final build.
 install -Dm 0644 "$initramfs_policy_source" "$initramfs_policy_target"
@@ -253,75 +273,78 @@ rm "$initramfs_command"
 dpkg-divert --local --rename --remove "$initramfs_command"
 "${initramfs_build[@]}"
 
-# Mount EFI filesystem
-
 mkdir -p /boot/efi
-mount /boot/efi
 
-# Install ZFSBootMenu
-#
-# ZBM is built + published out-of-band by `mise run zbm:build && zbm:upload`.
-# qemu.pkr.hcl reads the architecture-specific release from
-# group_vars/all/versions.yml and passes it here as $ZBM_VERSION.
-#
-# Only the unified ZBM EFI image (/EFI/ZBM/VMLINUZ.EFI) and its cmdline are
-# installed; older tarballs also carry an unused components-mode kernel +
-# initrd. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on
-# aarch64 ($REFIND_NAME, derived from `uname -m` above).
-#
-# The registry path is project 83079143 = akohlbecker/homelab (numeric id
-# keeps the path free of an encoded slash); the project is public, so the
-# pull is anonymous.
-ZBM_URL="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-$ZBM_VERSION.tar.gz"
+# Install ZBM and rEFInd onto the ESP and register them with the firmware. A
+# boot environment shares the running host's ESP, whose ZBM already lists
+# every root under rpool/ROOT; the refind role's first converge reconciles it.
+if [ -z "$BOOT_ENVIRONMENT" ]; then
+  mount /boot/efi
 
-tmp=$(mktemp -d)
+  # Install ZFSBootMenu
+  #
+  # ZBM is built + published out-of-band by `mise run zbm:build && zbm:upload`.
+  # qemu.pkr.hcl reads the architecture-specific release from
+  # group_vars/all/versions.yml and passes it here as $ZBM_VERSION.
+  #
+  # Only the unified ZBM EFI image (/EFI/ZBM/VMLINUZ.EFI) and its cmdline are
+  # installed; older tarballs also carry an unused components-mode kernel +
+  # initrd. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on
+  # aarch64 ($REFIND_NAME, derived from `uname -m` above).
+  #
+  # The registry path is project 83079143 = akohlbecker/homelab (numeric id
+  # keeps the path free of an encoded slash); the project is public, so the
+  # pull is anonymous.
+  ZBM_URL="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-$ZBM_VERSION.tar.gz"
 
-curl -fL --retry 3 --retry-connrefused -o "$tmp/zbm.tar.gz" "$ZBM_URL"
-EXPECTED_SUM="$(curl -fsSL --retry 3 --retry-connrefused "$ZBM_URL.sha256sum" | awk '{print $1}')"
-echo "$EXPECTED_SUM  $tmp/zbm.tar.gz" | sha256sum -c -
-tar -xzf "$tmp/zbm.tar.gz" -C "$tmp" --no-same-owner
+  tmp=$(mktemp -d)
 
-mkdir -p /boot/efi/EFI/ZBM
-mv "$tmp"/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
-mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
+  curl -fL --retry 3 --retry-connrefused -o "$tmp/zbm.tar.gz" "$ZBM_URL"
+  EXPECTED_SUM="$(curl -fsSL --retry 3 --retry-connrefused "$ZBM_URL.sha256sum" | awk '{print $1}')"
+  echo "$EXPECTED_SUM  $tmp/zbm.tar.gz" | sha256sum -c -
+  tar -xzf "$tmp/zbm.tar.gz" -C "$tmp" --no-same-owner
 
-ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM/cmdline)
+  mkdir -p /boot/efi/EFI/ZBM
+  mv "$tmp"/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
+  mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
 
-# Configure rEFInd
+  ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM/cmdline)
 
-# Run refind-install once, explicitly, below. Left at its default, the
-# package postinst runs it on this install and again on every upgrade.
-echo "refind refind/install_to_esp boolean false" | debconf-set-selections
+  # Configure rEFInd
 
-# Noble's rEFInd 0.13.2 wedges the second boot under edk2-stable202408; the
-# packer template passes the pinned newer package only for releases that need it.
-if [ -n "${REFIND_DEB_URL:-}" ]; then
-  curl -fL --retry 3 --retry-connrefused -o /tmp/refind.deb "$REFIND_DEB_URL"
-  echo "$REFIND_DEB_SHA256  /tmp/refind.deb" | sha256sum -c -
-  apt-get install --yes /tmp/refind.deb
-  rm /tmp/refind.deb
-else
-  apt-get install --yes refind
-fi
-refind-install
-rm /boot/refind_linux.conf
+  # Run refind-install once, explicitly, below. Left at its default, the
+  # package postinst runs it on this install and again on every upgrade.
+  echo "refind refind/install_to_esp boolean false" | debconf-set-selections
 
-# Drop a copy at the firmware fallback path (\EFI\BOOT\BOOT<arch>.EFI)
-# so a host whose NVRAM has been wiped (CMOS clear, BIOS update,
-# "Restore Defaults") still boots from the ESP. refind-install does
-# not write here by default on Debian/Ubuntu.
-mkdir -p /boot/efi/EFI/BOOT
-cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
+  # Noble's rEFInd 0.13.2 wedges the second boot under edk2-stable202408; the
+  # packer template passes the pinned newer package only for releases that need it.
+  if [ -n "${REFIND_DEB_URL:-}" ]; then
+    curl -fL --retry 3 --retry-connrefused -o /tmp/refind.deb "$REFIND_DEB_URL"
+    echo "$REFIND_DEB_SHA256  /tmp/refind.deb" | sha256sum -c -
+    apt-get install --yes /tmp/refind.deb
+    rm /tmp/refind.deb
+  else
+    apt-get install --yes refind
+  fi
+  refind-install
+  rm /boot/refind_linux.conf
 
-# Menu countdown, matching the role's refind_timeout (a converge overwrites
-# this file with that value): 3 on hosts, -1 (boot the default unless a key
-# is held) on qemu fixtures, where nobody watches the menu.
-REFIND_TIMEOUT=3
-if [ "$INSTALL_TARGET" = "qemu" ]; then
-  REFIND_TIMEOUT=-1
-fi
+  # Drop a copy at the firmware fallback path (\EFI\BOOT\BOOT<arch>.EFI)
+  # so a host whose NVRAM has been wiped (CMOS clear, BIOS update,
+  # "Restore Defaults") still boots from the ESP. refind-install does
+  # not write here by default on Debian/Ubuntu.
+  mkdir -p /boot/efi/EFI/BOOT
+  cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
 
-cat <<EOF >/boot/efi/EFI/refind/refind.conf
+  # Menu countdown, matching the role's refind_timeout (a converge overwrites
+  # this file with that value): 3 on hosts, -1 (boot the default unless a key
+  # is held) on qemu fixtures, where nobody watches the menu.
+  REFIND_TIMEOUT=3
+  if [ "$INSTALL_TARGET" = "qemu" ]; then
+    REFIND_TIMEOUT=-1
+  fi
+
+  cat <<EOF >/boot/efi/EFI/refind/refind.conf
 timeout $REFIND_TIMEOUT
 default_selection "Ubuntu (ZBM)"
 dont_scan_dirs EFI:/EFI/ZBM
@@ -337,43 +360,48 @@ menuentry "Ubuntu (ZBM)" {
 }
 EOF
 
-# Mirror the config next to the fallback binary. rEFInd only reads
-# refind.conf from its own directory, so the fallback copy at \EFI\BOOT
-# otherwise runs config-less: 20s default countdown, then the first
-# auto-scanned loader (the ZBM image) with empty load options — no zbm.skip
-# (ZBM's own menu wait) and no serial console args (silent boot). That is
-# the normal boot path on EC2 cells, whose UEFI NVRAM starts empty (boot
-# entries do not ride an AMI); measured at ~26s of pure countdown per boot.
-# qemu fixtures boot via the baked NVRAM entry (the harness reuses
-# efivars.fd) and never read this copy.
-cp /boot/efi/EFI/refind/refind.conf /boot/efi/EFI/BOOT/refind.conf
+  # Mirror the config next to the fallback binary. rEFInd only reads
+  # refind.conf from its own directory, so the fallback copy at \EFI\BOOT
+  # otherwise runs config-less: 20s default countdown, then the first
+  # auto-scanned loader (the ZBM image) with empty load options — no zbm.skip
+  # (ZBM's own menu wait) and no serial console args (silent boot). That is
+  # the normal boot path on EC2 cells, whose UEFI NVRAM starts empty (boot
+  # entries do not ride an AMI); measured at ~26s of pure countdown per boot.
+  # qemu fixtures boot via the baked NVRAM entry (the harness reuses
+  # efivars.fd) and never read this copy.
+  cp /boot/efi/EFI/refind/refind.conf /boot/efi/EFI/BOOT/refind.conf
 
-# Configure EFI boot entries. rEFInd is the firmware entry for the image; the
-# kernel command line lives in refind.conf `options`.
+  # Configure EFI boot entries. rEFInd is the firmware entry for the image; the
+  # kernel command line lives in refind.conf `options`.
 
-# On the multi-disk mdadm-EFI mirror, register one boot entry per disk
-# so the system survives losing any single disk — firmware only follows
-# paths it knows about, and an entry is per-disk regardless of whether
-# the ESP content is mirrored. Single-disk variants get a single bare
-# "rEFInd" entry (unchanged).
-#
-# -p 2 is the ESP: provision.sh's layout is 1=bios(EF02), 2=efi(EF00),
-# 3=swap, 4=podman, 5=rpool, 6=meta. Keep these efibootmgr -p values in sync
-# with that order -- a stale -p (e.g. 1, the BIOS-boot partition) registers a
-# boot entry the firmware can't load.
-if [ "$DISKS_COUNT" -eq 1 ]; then
-  efibootmgr -c -d "$DISKS" -p 2 \
-    -L "rEFInd" \
-    -l "\\EFI\\refind\\${REFIND_NAME}"
-else
-  idx=0
-  # shellcheck disable=SC2086  # word-splitting on DISKS is the point
-  for disk in $DISKS; do
-    efibootmgr -c -d "$disk" -p 2 \
-      -L "rEFInd (disk ${idx})" \
+  # On the multi-disk mdadm-EFI mirror, register one boot entry per disk
+  # so the system survives losing any single disk — firmware only follows
+  # paths it knows about, and an entry is per-disk regardless of whether
+  # the ESP content is mirrored. Single-disk variants get a single bare
+  # "rEFInd" entry (unchanged).
+  #
+  # -p 2 is the ESP: provision.sh's layout is 1=bios(EF02), 2=efi(EF00),
+  # 3=swap, 4=podman, 5=rpool, 6=meta. Keep these efibootmgr -p values in sync
+  # with that order -- a stale -p (e.g. 1, the BIOS-boot partition) registers a
+  # boot entry the firmware can't load.
+  if [ "$DISKS_COUNT" -eq 1 ]; then
+    efibootmgr -c -d "$DISKS" -p 2 \
+      -L "rEFInd" \
       -l "\\EFI\\refind\\${REFIND_NAME}"
-    idx=$((idx + 1))
-  done
+  else
+    idx=0
+    # shellcheck disable=SC2086  # word-splitting on DISKS is the point
+    for disk in $DISKS; do
+      efibootmgr -c -d "$disk" -p 2 \
+        -L "rEFInd (disk ${idx})" \
+        -l "\\EFI\\refind\\${REFIND_NAME}"
+      idx=$((idx + 1))
+    done
+  fi
+else
+  # The refind package pulls efibootmgr in on a fresh install; keep the
+  # firmware entries manageable from this root before its first converge.
+  apt-get install --yes efibootmgr
 fi
 
 # Enable tmp mount. Noble ships tmp.mount as a disabled template under
@@ -411,7 +439,7 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
   bash /var/tmp/hetzner/install.sh
   rm -rf /var/tmp/hetzner
 
-else
+elif [ -z "$BOOT_ENVIRONMENT" ]; then
 
   # Configure networking. Match by name glob so the same image works
   # under any qemu device topology (packer's vs. testrole's direct-kernel
@@ -438,7 +466,11 @@ network:
       dhcp4: true
       dhcp-identifier: mac
 EOF
+fi
 
+# A boot environment keeps the running host's copied netplan but needs its
+# login user, created like an image's.
+if [ "$INSTALL_TARGET" != "hetzner" ]; then
   # Configure vagrant user
 
   adduser --disabled-password --gecos "" "$USERNAME"
@@ -510,8 +542,11 @@ apt-get clean
 
 # Blank machine-id so systemd regenerates a unique one on first boot —
 # otherwise every host from this snapshot shares one (journald, systemd
-# instance ids, DHCP DUID). Re-point dbus's copy at it when present.
-: >/etc/machine-id
+# instance ids, DHCP DUID). A boot environment keeps its host's copied one.
+# Re-point dbus's copy at it when present.
+if [ -z "$BOOT_ENVIRONMENT" ]; then
+  : >/etc/machine-id
+fi
 if [ -e /var/lib/dbus/machine-id ]; then
   ln -sf /etc/machine-id /var/lib/dbus/machine-id
 fi
