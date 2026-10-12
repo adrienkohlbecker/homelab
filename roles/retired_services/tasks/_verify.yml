@@ -101,7 +101,7 @@
   command: zfs get -H -o value canmount,mounted {{ item }}
   loop:
     - rpool/services/sqlite
-    - rpool/old_jammy
+    - rpool/ROOT/jammy
   register: retired_services_dataset_state
   changed_when: false
   failed_when: retired_services_dataset_state.stdout_lines != ['off', 'no']

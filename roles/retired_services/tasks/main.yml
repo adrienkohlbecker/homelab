@@ -170,7 +170,7 @@
     tasks_from: remove
   vars:
     zfs_dataset_args:
-      dataset: rpool/old_jammy
+      dataset: rpool/ROOT/jammy
       mountpoint: /mnt/old_jammy
   tags:
     - retired_services

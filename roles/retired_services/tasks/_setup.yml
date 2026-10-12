@@ -23,7 +23,7 @@
 # untagged, and still mounted through the ZFS mount generator.
 - name: _setup | Create the old jammy root dataset
   community.general.zfs:
-    name: rpool/old_jammy
+    name: rpool/ROOT/jammy
     state: present
     extra_zfs_properties:
       mountpoint: /mnt/old_jammy
