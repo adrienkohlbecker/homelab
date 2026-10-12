@@ -73,8 +73,9 @@
   failed_when: _zfs_dataset_verify_fallback.stdout != 'fallback works'
 
 # Retire the probe holding live data and a nightly-style snapshot: the data
-# leaves the live dataset but stays in its history, and the dataset stays in
-# the backup mesh, unmounted. Non-ZFS hosts keep their plain directory.
+# leaves the live dataset but stays in its history, a final empty @bak-
+# snapshot joins it, and the dataset stays in the backup mesh, unmounted.
+# Non-ZFS hosts lose their plain directory.
 - name: _verify | Tag the probe for backups
   when: zfs_root
   command: zfs set autobackup:bak=true {{ zfs_tank_filesystem }}/_verify_probe
@@ -139,7 +140,7 @@
 
 - name: _verify | List the retired probe snapshots
   when: zfs_root
-  command: zfs list -H -t snapshot -o name {{ zfs_tank_filesystem }}/_verify_probe
+  command: zfs list -H -p -t snapshot -s createtxg -o name,referenced {{ zfs_tank_filesystem }}/_verify_probe
   register: _zfs_dataset_verify_retired_snapshots
   changed_when: false
   become: true
@@ -156,17 +157,22 @@
   when: zfs_root
   vars:
     props: "{{ dict(_zfs_dataset_verify_retired.stdout_lines | map('split', '\t')) }}"
+    snapshots: "{{ dict(_zfs_dataset_verify_retired_snapshots.stdout_lines | map('split', '\t')) }}"
+    final: "{{ snapshots.keys() | list | last }}"
   assert:
     that:
       - props.canmount == 'off'
       - props.mounted == 'no'
       - props['autobackup:bak'] == 'true'
       - props.referenced | int < 1048576
-      - (zfs_tank_filesystem ~ '/_verify_probe@bak-20260101020000') in _zfs_dataset_verify_retired_snapshots.stdout_lines
+      - (zfs_tank_filesystem ~ '/_verify_probe@bak-20260101020000') in snapshots
+      - snapshots.keys() | select('search', '@bak-') | list | length == 2
+      - final is match('.*@bak-[0-9]{14}$')
+      - snapshots[final] | int < 1048576
       - _zfs_dataset_verify_retired_paths.results | selectattr('stat.exists') | list | length == 0
-    fail_msg: "{{ props }} {{ _zfs_dataset_verify_retired_snapshots.stdout_lines }}"
+    fail_msg: "{{ props }} {{ snapshots }}"
 
-- name: _verify | Plain-directory fallback keeps its data
+- name: _verify | Plain-directory fallback is deleted
   when: not zfs_root
   assert:
-    that: _zfs_dataset_verify_retired_paths.results[0].stat.exists
+    that: not _zfs_dataset_verify_retired_paths.results[0].stat.exists

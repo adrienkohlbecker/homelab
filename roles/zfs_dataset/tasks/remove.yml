@@ -3,18 +3,21 @@
 #   dataset     full dataset path (e.g. rpool/services/sqlite)
 #   mountpoint  its mountpoint (e.g. /mnt/services/sqlite)
 #
-# Retiring is not destroying: the live dataset is emptied and left unmounted
-# (canmount=off), its mount unit and mountpoint directory are removed, and
-# every snapshot is kept. autobackup:bak is left alone, so a tagged dataset's
-# next nightly local leg takes its final (empty) @bak- snapshot on schedule and
-# the onsite and offsite legs carry it. Taking that snapshot here instead would
-# satisfy the onsite pull's newest-snapshot wait early and ship the previous
-# night's state for the host's other datasets. The history then thins like any
-# other dataset's until the operator sets autobackup:bak=false on the source
-# and its replicas (freezing it) and destroys them by hand.
+# Retiring is not destroying: the live dataset is emptied, a final @bak-
+# snapshot in zfs-autobackup's naming records that empty state, and the dataset
+# is left unmounted (canmount=off) with its mount unit and mountpoint directory
+# removed. Every snapshot is kept and autobackup:bak is left alone, so the
+# onsite and offsite legs carry the final state. The history then thins like
+# any other dataset's until the operator sets autobackup:bak=false on the
+# source and its replicas (freezing it) and destroys them by hand.
 #
-# On a non-ZFS host the mountpoint is a plain directory with no snapshots
-# behind it, so its data is preserved and nothing is done.
+# The final snapshot is taken out of band. The onsite pull waits for the
+# source's newest @bak- across all its datasets (zfs_backup_onsite), so until
+# it is pulled, that snapshot satisfies the next nightly wait before the
+# host's own run and the pull ships the previous night's state for the host's
+# other datasets.
+#
+# On a non-ZFS host the mountpoint is a plain directory and is deleted.
 #
 # Publishes nothing and takes no `condition`; gate a conditional retirement
 # with `when:` on the import.
@@ -84,6 +87,16 @@
           changed_when: true
           become: true
 
+        # Host-local time, as zfs-autobackup names its own snapshots.
+        - name: remove | Take the final snapshot
+          shell: |
+            set -euo pipefail
+            zfs snapshot "{{ zfs_dataset_args.dataset }}@bak-$(date +%Y%m%d%H%M%S)"
+          args:
+            executable: /bin/bash
+          changed_when: true
+          become: true
+
         - name: remove | Stop mounting the dataset
           community.general.zfs:
             name: "{{ zfs_dataset_args.dataset }}"
@@ -118,3 +131,10 @@
           - "{{ zfs_dataset_args.mountpoint }}"
         removes: "{{ zfs_dataset_args.mountpoint }}"
       become: true
+
+- name: remove | Delete the plain mountpoint directory
+  when: not zfs_root
+  file:
+    path: "{{ zfs_dataset_args.mountpoint }}"
+    state: absent
+  become: true
