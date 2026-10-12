@@ -102,6 +102,16 @@ export_ubuntu_mirrors() {
   export UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM
 }
 
+# Check the identity chroot.sh gives the new root: HOSTNAME, the login user
+# USERNAME, and that user's SSH_KEY_PUB. The Hetzner image creates no login
+# user; cloud-init does on first boot.
+check_identity() {
+  [[ $HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || fail "invalid TARGET_HOSTNAME '$HOSTNAME'"
+  [[ $USERNAME =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || fail "invalid TARGET_USERNAME '$USERNAME'"
+  [[ $INSTALL_TARGET == hetzner || ${SSH_KEY_PUB-} =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]] ||
+    fail "SSH_KEY_PUB must contain a supported public key"
+}
+
 check_role_files() {
   local role_file
   for role_file in "${ROLE_FILES[@]}"; do

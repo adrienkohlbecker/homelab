@@ -52,10 +52,7 @@ preflight() {
   [ "$UBUNTU_NAME" != "$running_release" ] || fail "$UBUNTU_NAME is the running release"
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal or qemu (got '$INSTALL_TARGET')"
-  [[ $USERNAME =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || fail "invalid TARGET_USERNAME '$USERNAME'"
-  [[ $HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || fail "invalid TARGET_HOSTNAME '$HOSTNAME'"
-  [[ ${SSH_KEY_PUB-} =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]] ||
-    fail "SSH_KEY_PUB must contain a supported public key"
+  check_identity
 
   [[ $running_root == rpool/ROOT/* ]] || fail "the running root is $running_root, not a boot environment under rpool/ROOT"
   ! zfs list -H "$dataset" >/dev/null 2>&1 ||

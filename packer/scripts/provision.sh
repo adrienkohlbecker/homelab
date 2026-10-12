@@ -57,12 +57,7 @@ preflight() {
     fail "INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')"
   [ "${TARGET_HOSTNAME+set}" = "${TARGET_USERNAME+set}" ] ||
     fail "TARGET_HOSTNAME and TARGET_USERNAME must be set together"
-  [[ ! -v TARGET_HOSTNAME || $TARGET_HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] ||
-    fail "invalid TARGET_HOSTNAME '$TARGET_HOSTNAME'"
-  [[ ! -v TARGET_USERNAME || $TARGET_USERNAME =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] ||
-    fail "invalid TARGET_USERNAME '$TARGET_USERNAME'"
-  [[ $INSTALL_TARGET == hetzner || ${SSH_KEY_PUB-} =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]] ||
-    fail "SSH_KEY_PUB must contain a supported public key"
+  check_identity
 
   for disk in $DISKS $EXTRA_DISKS; do
     [[ $disk == /dev/* ]] || fail "disk path must start with /dev/ (got '$disk')"
@@ -76,10 +71,6 @@ preflight() {
 # Packer selects qemu or hetzner; direct callers get the bare-metal path.
 export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
 
-preflight
-
-export_ubuntu_mirrors
-
 # Placeholder hostname for the shipped image — the deploy step
 # (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
 # it before first boot. USERNAME is the vagrant user chroot.sh creates
@@ -90,6 +81,10 @@ export_ubuntu_mirrors
 # vagrant user is ever created.
 export HOSTNAME="${TARGET_HOSTNAME:-ubuntu}"
 export USERNAME="${TARGET_USERNAME:-vagrant}"
+
+preflight
+
+export_ubuntu_mirrors
 
 # Map (disk, partition number) to the kernel/udev partition device.
 # vd*/sd*/hd* tack the digit on directly; nvme/mmcblk/loop/md need a
