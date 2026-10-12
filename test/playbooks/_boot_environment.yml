@@ -3,8 +3,9 @@
 #   install   install boot_environment_to beside boot_environment_from and
 #             switch to it
 #   rollback  reboot the converged new root, then switch back to the old one
-# Every pool carries a canary dataset across the switches, and the shared
-# storage must read back unchanged from the new root until its converge.
+# Every pool carries a canary dataset across the switches, a file rides
+# CARRY_PATHS, and the shared storage and host identity must read back
+# unchanged from the new root until its converge.
 - name: Install and switch boot environments
   hosts: all
   become: true
@@ -16,6 +17,13 @@
     _be_old_root: "rpool/ROOT/{{ boot_environment_from }}"
     _be_new_root: "rpool/ROOT/{{ boot_environment_to }}"
   tasks:
+    # Under become, ansible_user_id names root.
+    - name: Read the login user
+      command: id -un
+      become: false
+      register: _be_user
+      changed_when: false
+
     - name: Install the new root
       when: _boot_environment_phase == 'install'
       block:
@@ -65,8 +73,14 @@
             content: "{{ _be_pools.stdout }}\n"
             mode: "0644"
 
+        - name: Write a file for the install to carry into the new root
+          copy:
+            dest: /etc/boot_environment_carried
+            content: "carried\n"
+            mode: "0644"
+
         - name: Fingerprint the shared storage before the install
-          command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }}
+          command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }} {{ _be_user.stdout }}
           register: _be_before
           changed_when: false
 
@@ -76,17 +90,18 @@
             content: "{{ _be_before.stdout }}\n"
             mode: "0644"
 
-        # Under become, ansible_user_id names root.
-        - name: Read the login user
-          command: id -un
-          become: false
-          register: _be_user
-          changed_when: false
-
         - name: Read the login user's authorized key
           slurp:
             src: "/home/{{ _be_user.stdout }}/.ssh/authorized_keys"
           register: _be_authorized_keys
+
+        # Package scripts in the new root regenerate runtime state; the
+        # running host's must stay untouched.
+        - name: Mark the running host's runtime state before the install
+          file:
+            path: /run/boot_environment_canary
+            state: touch
+            mode: "0644"
 
         - name: Install the boot environment
           command: bash {{ _be_dir }}/install_boot_environment.sh
@@ -96,10 +111,39 @@
             SSH_KEY_PUB: "{{ _be_authorized_keys.content | b64decode | trim }}"
             INSTALL_TARGET: qemu
             NEXUS_URL: "{{ nexus_url }}"
+            CARRY_PATHS: /etc/boot_environment_carried
           changed_when: true
 
+        - name: List runtime state and install mounts the install left behind
+          shell: |
+            set -euo pipefail
+            for dir in /run/systemd/network /run/udev/rules.d /run/netplan; do
+              if [ -d "$dir" ]; then
+                find "$dir" -newer /run/boot_environment_canary
+              fi
+            done
+            compgen -G "/run/boot_environment.*" || true
+          args:
+            executable: /bin/bash
+          register: _be_runtime_writes
+          changed_when: false
+
+        - name: The install left the running host's runtime state alone
+          assert:
+            that: _be_runtime_writes.stdout == ''
+            fail_msg: "{{ _be_runtime_writes.stdout }}"
+
+        - name: Read the pool's boot environment after the install
+          command: zpool get -H -o value bootfs rpool
+          register: _be_bootfs_after_install
+          changed_when: false
+
+        - name: The install left the old root as the one to boot
+          assert:
+            that: _be_bootfs_after_install.stdout == _be_old_root
+
         - name: Fingerprint the shared storage after the install
-          command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }}
+          command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }} {{ _be_user.stdout }}
           register: _be_after_install
           changed_when: false
 

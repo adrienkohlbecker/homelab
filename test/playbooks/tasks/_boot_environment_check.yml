@@ -73,8 +73,17 @@
   assert:
     that: _be_canaries.results | map(attribute='stdout') | list == _be_imported_pools.stdout_lines
 
+- name: Read the carried file
+  slurp:
+    src: /etc/boot_environment_carried
+  register: _be_carried
+
+- name: The carried file is in the running root
+  assert:
+    that: _be_carried.content | b64decode == 'carried\n'
+
 - name: Fingerprint the shared storage
-  command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }}
+  command: bash {{ _be_dir }}/boot_environment_fingerprint.sh {{ _be_new_root }} {{ _be_user.stdout }}
   register: _be_fingerprint
   changed_when: false
 

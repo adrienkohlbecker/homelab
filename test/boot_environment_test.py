@@ -3,13 +3,21 @@
 Release migration by boot environment on the Lab integration fixture.
 
 Boots a Lab fixture of the old release, installs the new release beside it with
-packer/scripts/install_boot_environment.sh, and switches to it. The install
-must leave the shared storage (partitions, md arrays, ESP, firmware entries,
-pools, datasets, swap) byte-for-byte unchanged, and the new root must boot
-with every pool and dataset in place. The boot and refind roles then converge
-on the new root, which rewrites the shared ESP and kernel command line, and
-the test reboots into it once more before rolling back to the old root.
-test/playbooks/_boot_environment.yml holds the assertions.
+packer/scripts/install_boot_environment.sh, and switches to it. The old root
+first converges the zfs role, as on a production host. The install must leave
+the listed shared state unchanged -- partition tables, md array members, ESP
+files, firmware boot entries, pool layouts, datasets, swap, the shared kernel
+command line, and the running host's runtime state under /run -- and carry the
+host identity over: hostid, machine-id, SSH host keys, the login user's ids,
+and a CARRY_PATHS file. The new root must boot with every pool and dataset in
+place. The boot and refind roles then converge on the new root, which rewrites
+the shared ESP and kernel command line, and the test reboots into it once more
+before rolling back to the old root. test/playbooks/_boot_environment.yml
+holds the assertions.
+
+Not covered: the bare_metal install target (the fixture installs as qemu, to
+keep the harness's journal mirror), a single-disk host such as pug, x86_64
+unless run on an x86_64 host, and a failure partway through the install.
 
 Exit codes match testrole.py: 0 success, 1 failure, 124 timeout,
 130 interrupted.
@@ -74,8 +82,12 @@ def run_boot_environment_test(m: Machine, *, timeout: int, to_release: str) -> N
         m.ensure_ssh()
         m.ensure_system_running()
 
+        # The zfs role sets up what a production root carries: the mount
+        # generator's cache and the pool properties.
         with phase("_environment"):
-            m.ansible_command(environment)
+            m.ansible_command(environment, "-e", "test_base_prerequisites=true")
+        with phase(f"converge zfs ({m.ubuntu_name})"):
+            m.ansible_command(str(m.workdir_path / "site.yml"), "-e", "_test_role_under_test=zfs")
         with phase("install"):
             m.ansible_command(playbook, *releases, "-e", "_boot_environment_phase=install")
 
