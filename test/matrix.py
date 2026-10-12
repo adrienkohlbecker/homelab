@@ -213,7 +213,7 @@ def _load_role_test_config(meta_path: Path) -> RoleTestConfig:
 def build_role_cells(role: str) -> list[TestCell]:
     """Expand a single role into its test cells.
 
-    - One base cell per machine in machines: (machine, noble, role)
+    - One base cell per machine in machines: (machine, DEFAULT_UBUNTU, role)
     - Release cell per (machine, ubuntu) cross-product for each ubuntu
       in meta/test.yml: (machine, codename, role).
 

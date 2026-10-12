@@ -1,5 +1,5 @@
-# The default Noble cell covers a fresh chrony 4.5 install; Resolute covers
-# chrony 4.8, whose packaged NTS pools in sources.d the source-set check must
-# keep out.
+# The default Resolute cell covers chrony 4.8, whose packaged NTS pools in
+# sources.d the source-set check must keep out; Noble covers a fresh chrony 4.5
+# install.
 ubuntu:
-  - resolute
+  - noble

@@ -1,4 +1,4 @@
-default: noble
+default: resolute
 # Release of the AWS nested-qemu runner hosts: the qemu-host AMI bake and the
 # SSM pointer Terraform's launch templates resolve. Bake and promote the new
 # release before switching this, or new CI hosts cannot launch.

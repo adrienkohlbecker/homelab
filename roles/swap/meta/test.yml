@@ -1,12 +1,12 @@
 # Lab exercises mdadm RAID1 partition swap on a full image that already
-# carries zram. Minimal exercises zram-only installation: Noble pulls zram
-# from linux-modules-extra, Resolute ships it in the base module package.
+# carries zram. Minimal exercises zram-only installation: Resolute ships zram in
+# the base module package, Noble pulls it from linux-modules-extra.
 machines:
   lab:
   minimal:
 ubuntu:
-  - resolute
+  - noble
 skip:
-  "lab:resolute": >-
-    Minimal covers Resolute's zram path; Lab's partition swap is
+  "lab:noble": >-
+    Minimal covers Noble's zram path; Lab's partition swap is
     release-independent.

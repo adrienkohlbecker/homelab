@@ -1,6 +1,6 @@
-# Release-divergent install paths: Noble keeps the iptables compatibility
-# package and the fchmodat2 seccomp profile; Resolute uses netavark's native
-# nftables driver and the stock profile.
+# Release-divergent install paths: Resolute uses netavark's native nftables
+# driver and the stock seccomp profile; Noble keeps the iptables compatibility
+# package and the fchmodat2 profile.
 #
 # Lab cells run single-disk: _setup frees a member of the fixture's podman
 # RAID5 so the store lands on one raw partition, as on pug and fox. Every other
@@ -10,7 +10,7 @@ machines:
   lab:
   minimal:
 ubuntu:
-  - resolute
+  - noble
 skip:
-  "minimal:resolute": >-
-    Lab covers the Resolute install path; Minimal Noble covers root storage.
+  "minimal:noble": >-
+    Lab covers the Noble install path; Minimal Resolute covers root storage.

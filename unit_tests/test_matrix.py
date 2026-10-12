@@ -96,11 +96,11 @@ class TestRoleMeta:
 
     def test_arm_cells_read_declared_subset(self) -> None:
         _make_role("svc", {"machines": {"lab": None, "minimal": None}, "arm": ["lab", "minimal"]})
-        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "noble"), ("minimal", "noble"))
+        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "resolute"), ("minimal", "resolute"))
 
     def test_arm_cells_accept_a_release_suffix(self) -> None:
-        _make_role("svc", {"arm": ["lab", "lab:resolute"]})
-        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "noble"), ("lab", "resolute"))
+        _make_role("svc", {"arm": ["lab", "lab:noble"]})
+        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "resolute"), ("lab", "noble"))
 
     @pytest.mark.parametrize(
         ("arm", "error"),
@@ -110,7 +110,7 @@ class TestRoleMeta:
             ([1], "arm entries must be strings"),
             (["minimal"], "not in machines"),
             (["lab", "lab"], "duplicate arm machine"),
-            (["lab", "lab:noble"], "duplicate arm machine"),
+            (["lab", "lab:resolute"], "duplicate arm machine"),
             (["bogus"], "not in machines"),
         ],
     )
@@ -125,7 +125,7 @@ class TestRoleMeta:
             matrix.load_role_test_config("svc")
 
     def test_release_must_keep_a_cell_after_skips(self) -> None:
-        _make_role("svc", {"ubuntu": ["resolute"], "skip": {"lab:resolute": "covered elsewhere"}})
+        _make_role("svc", {"ubuntu": ["noble"], "skip": {"lab:noble": "covered elsewhere"}})
         with pytest.raises(matrix.RoleTestConfigError, match="expands to no test cell"):
             matrix.load_role_test_config("svc")
 
@@ -147,13 +147,13 @@ class TestBuildRoleCells:
         assert cells == [matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "svc")]
 
     def test_multi_machine_plus_release(self) -> None:
-        _make_role("podman", {"machines": {"lab": None, "minimal": None}, "ubuntu": ["resolute"]})
+        _make_role("podman", {"machines": {"lab": None, "minimal": None}, "ubuntu": ["noble"]})
         cells = matrix.build_role_cells("podman")
         expected = [
             matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "podman"),
             matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "podman"),
-            matrix.TestCell("lab", "resolute", "podman"),
-            matrix.TestCell("minimal", "resolute", "podman"),
+            matrix.TestCell("lab", "noble", "podman"),
+            matrix.TestCell("minimal", "noble", "podman"),
         ]
         assert cells == expected
 
@@ -171,15 +171,15 @@ class TestBuildTestMatrix:
 
     def test_sorted_by_all_fields(self) -> None:
         _make_role("beta")
-        _make_role("alpha", {"ubuntu": ["resolute"]})
+        _make_role("alpha", {"ubuntu": ["noble"]})
         cells = matrix.build_test_matrix(["beta", "alpha"])
         assert cells == sorted(cells)
 
     def test_extra_cells_merged(self) -> None:
         _make_role("alpha")
-        extra = [matrix.TestCell("lab", "resolute", "alpha")]
+        extra = [matrix.TestCell("lab", "noble", "alpha")]
         cells = matrix.build_test_matrix(["alpha"], extra_cells=extra)
-        assert matrix.TestCell("lab", "resolute", "alpha") in cells
+        assert matrix.TestCell("lab", "noble", "alpha") in cells
         assert matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha") in cells
 
     def test_empty_roles_with_extra(self) -> None:
@@ -194,10 +194,10 @@ class TestBuildTestMatrix:
 
 class TestSkip:
     def test_config_normalizes_machine_and_release_skips(self) -> None:
-        _make_role("svc", {"skip": {"minimal": "why", "minimal:resolute": "why"}})
+        _make_role("svc", {"skip": {"minimal": "why", "minimal:noble": "why"}})
         assert matrix.load_role_test_config("svc").skip == {
             ("minimal", matrix.DEFAULT_UBUNTU),
-            ("minimal", "resolute"),
+            ("minimal", "noble"),
         }
 
     def test_config_skip_empty_when_absent(self) -> None:
@@ -207,13 +207,13 @@ class TestSkip:
     def test_build_role_cells_drops_skipped_release_cell_only(self) -> None:
         _make_role(
             "svc",
-            {"machines": {"lab": None, "minimal": None}, "ubuntu": ["resolute"], "skip": {"lab:resolute": "flaky"}},
+            {"machines": {"lab": None, "minimal": None}, "ubuntu": ["noble"], "skip": {"lab:noble": "flaky"}},
         )
         cells = matrix.build_role_cells("svc")
         assert cells == [
             matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "svc"),
             matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "svc"),
-            matrix.TestCell("minimal", "resolute", "svc"),
+            matrix.TestCell("minimal", "noble", "svc"),
         ]
 
     def test_bare_machine_skip_drops_only_that_machines_base_cell(self) -> None:
@@ -224,7 +224,7 @@ class TestSkip:
     def test_explicit_default_release_skip_is_rejected(self) -> None:
         _make_role(
             "svc",
-            {"machines": {"lab": None, "minimal": None}, "skip": {"minimal:noble": "flaky"}},
+            {"machines": {"lab": None, "minimal": None}, "skip": {"minimal:resolute": "flaky"}},
         )
         with pytest.raises(matrix.RoleTestConfigError, match="cancels the base cell"):
             matrix.load_role_test_config("svc")
@@ -237,8 +237,8 @@ class TestSkip:
     def test_build_test_matrix_drops_skipped_propagated_extra(self) -> None:
         # A consumer's release cell pushed in via CI fan-out must still drop
         # if that consumer skips it.
-        _make_role("svc", {"machines": {"lab": None}, "skip": {"lab:resolute": "flaky"}})
-        extra = [matrix.TestCell("lab", "resolute", "svc")]
+        _make_role("svc", {"machines": {"lab": None}, "skip": {"lab:noble": "flaky"}})
+        extra = [matrix.TestCell("lab", "noble", "svc")]
         cells = matrix.build_test_matrix(["svc"], extra_cells=extra)
         assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "svc")]
 
@@ -253,7 +253,7 @@ class TestCiSpecs:
         assert matrix.cell_to_ci_spec(matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha")) == "alpha:lab"
 
     def test_cell_to_ci_spec_non_default_ubuntu(self) -> None:
-        assert matrix.cell_to_ci_spec(matrix.TestCell("pug", "resolute", "netdata")) == "netdata:pug:resolute"
+        assert matrix.cell_to_ci_spec(matrix.TestCell("pug", "noble", "netdata")) == "netdata:pug:noble"
 
     def test_cells_to_ci_specs_sorted_deduped(self) -> None:
         cells = [
@@ -267,7 +267,7 @@ class TestCiSpecs:
         assert matrix.ci_spec_to_cell("alpha:lab") == matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha")
 
     def test_ci_spec_to_cell_three_parts(self) -> None:
-        assert matrix.ci_spec_to_cell("netdata:pug:resolute") == matrix.TestCell("pug", "resolute", "netdata")
+        assert matrix.ci_spec_to_cell("netdata:pug:noble") == matrix.TestCell("pug", "noble", "netdata")
 
     def test_ci_spec_to_cell_invalid(self) -> None:
         with pytest.raises(ValueError, match="Invalid CI spec"):
@@ -287,15 +287,15 @@ class TestDispatchMatrix:
     def test_bare_role_expands(self) -> None:
         _make_role(
             "alpha",
-            {"machines": {"lab": None, "minimal": None}, "ubuntu": ["resolute"]},
+            {"machines": {"lab": None, "minimal": None}, "ubuntu": ["noble"]},
         )
         cells = matrix.build_dispatch_matrix("alpha")
         assert matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha") in cells
         assert matrix.TestCell("minimal", matrix.DEFAULT_UBUNTU, "alpha") in cells
-        assert matrix.TestCell("lab", "resolute", "alpha") in cells
+        assert matrix.TestCell("lab", "noble", "alpha") in cells
 
     def test_exact_spec_no_escalation(self) -> None:
-        _make_role("alpha", {"machines": {"lab": None, "minimal": None}, "ubuntu": ["resolute"]})
+        _make_role("alpha", {"machines": {"lab": None, "minimal": None}, "ubuntu": ["noble"]})
         cells = matrix.build_dispatch_matrix("alpha:lab")
         assert cells == [matrix.TestCell("lab", matrix.DEFAULT_UBUNTU, "alpha")]
 

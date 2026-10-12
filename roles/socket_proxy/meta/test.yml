@@ -1,4 +1,4 @@
-# Resolute: Podman 5 serves the Docker-compatible API, and its package no
-# longer enables podman.socket itself.
+# Noble: Podman 4 serves the Docker-compatible API, and its package still
+# enables podman.socket itself.
 ubuntu:
-  - resolute
+  - noble

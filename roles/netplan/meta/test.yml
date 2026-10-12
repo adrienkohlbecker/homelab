@@ -1,11 +1,11 @@
-# Resolute exercises Netplan 1.2 transaction rollback and DNS recovery after
-# SSH returns.
+# Noble exercises Netplan 1.1 transaction rollback and DNS recovery after SSH
+# returns.
 machines:
   lab:
   minimal:
 ubuntu:
-  - resolute
+  - noble
 skip:
-  "minimal:resolute": >-
-    Lab covers Resolute rollback and DNS recovery; Minimal covers removal of
-    a stock cloud image's netplan origin on Noble.
+  "minimal:noble": >-
+    Lab covers Noble rollback and DNS recovery; Minimal covers removal of a
+    stock cloud image's netplan origin on Resolute.

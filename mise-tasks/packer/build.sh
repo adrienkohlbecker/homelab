@@ -3,7 +3,7 @@
 #MISE interactive=true
 #USAGE arg "[sources]..." help="Source names from qemu.pkr.hcl to build; empty = all"
 #USAGE complete "sources" run="printf 'lab\nhetzner\n'"
-#USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to build multiple releases" default="noble"
+#USAGE flag "--ubuntu... <ubuntu>" help="Ubuntu release codename; repeat to build multiple releases" default="resolute"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 #USAGE flag "--no-publish" help="Build and verify-boot without replacing the published test fixtures. Useful for safe local Packer validation."

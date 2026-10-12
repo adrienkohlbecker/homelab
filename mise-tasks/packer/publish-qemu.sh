@@ -2,7 +2,7 @@
 #MISE description="Build a qemu fixture image and publish it to the CI image bucket"
 #USAGE arg "<machine>" help="Qemu fixture machine to publish: lab"
 #USAGE complete "machine" run="printf 'lab\n'"
-#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="resolute"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default, and selects the image store"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build"

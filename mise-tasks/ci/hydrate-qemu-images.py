@@ -3,7 +3,7 @@
 #MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
 #USAGE arg "<machine>" help="Promoted qemu image bundle: lab"
 #USAGE complete "machine" run="printf 'lab\n'"
-#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="resolute"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); defaults to this host and selects the image store"
 #USAGE flag "--build-id <build_id>" help="Hydrate an immutable build directly instead of reading promoted.json"

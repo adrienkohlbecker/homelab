@@ -1,4 +1,4 @@
-# Resolute: systemd 259 journal records pass through the parsers and Lua
+# Noble: systemd 255 journal records pass through the parsers and Lua
 # shapers.
 ubuntu:
-  - resolute
+  - noble

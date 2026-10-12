@@ -167,7 +167,7 @@ class TestPropagateReleaseCells:
     def test_basic_propagation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._stub_configs(
             monkeypatch,
-            {"apt_source": ["noble", "resolute"]},
+            {"apt_source": ["resolute", "noble"]},
             {"nginx": ["lab"], "podman": ["lab"]},
         )
         result = detect.propagate_release_cells(
@@ -197,7 +197,7 @@ class TestPropagateReleaseCells:
         arguments = {
             "direct_roles": ["apt_source"],
             "consumers": {"apt_source": ["nginx"]},
-            "releases": {"apt_source": ["noble"]},
+            "releases": {"apt_source": ["resolute"]},
             "universe": {"nginx"},
         }
         arguments.update(overrides)
@@ -206,27 +206,27 @@ class TestPropagateReleaseCells:
         assert detect.propagate_release_cells(**arguments) == []
 
     def test_default_machine_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._stub_configs(monkeypatch, {"apt_source": ["noble"]}, {})
+        self._stub_configs(monkeypatch, {"apt_source": ["resolute"]}, {})
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["newrole"]},
             universe={"newrole"},
         )
-        assert result == [detect.TestCell("lab", "noble", "newrole")]
+        assert result == [detect.TestCell("lab", "resolute", "newrole")]
 
     def test_deduplicates_across_helpers(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._stub_configs(monkeypatch, {"helper_a": ["noble"], "helper_b": ["noble"]}, {"consumer": ["lab"]})
+        self._stub_configs(monkeypatch, {"helper_a": ["resolute"], "helper_b": ["resolute"]}, {"consumer": ["lab"]})
         result = detect.propagate_release_cells(
             direct_roles=["helper_a", "helper_b"],
             consumers={"helper_a": ["consumer"], "helper_b": ["consumer"]},
             universe={"consumer"},
         )
-        assert result == [detect.TestCell("lab", "noble", "consumer")]
+        assert result == [detect.TestCell("lab", "resolute", "consumer")]
 
     def test_multiple_roles_multiple_releases(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._stub_configs(
             monkeypatch,
-            {"apt_source": ["noble", "resolute"], "podman": ["noble"]},
+            {"apt_source": ["resolute", "noble"], "podman": ["resolute"]},
             {"nginx": ["lab"], "redis": ["lab"]},
         )
         result = detect.propagate_release_cells(
@@ -242,15 +242,15 @@ class TestPropagateReleaseCells:
         ]
 
     def test_multi_machine_propagation(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._stub_configs(monkeypatch, {"apt_source": ["noble"]}, {"cleanup": ["lab", "minimal"]})
+        self._stub_configs(monkeypatch, {"apt_source": ["resolute"]}, {"cleanup": ["lab", "minimal"]})
         result = detect.propagate_release_cells(
             direct_roles=["apt_source"],
             consumers={"apt_source": ["cleanup"]},
             universe={"cleanup"},
         )
         assert result == [
-            detect.TestCell("lab", "noble", "cleanup"),
-            detect.TestCell("minimal", "noble", "cleanup"),
+            detect.TestCell("lab", "resolute", "cleanup"),
+            detect.TestCell("minimal", "resolute", "cleanup"),
         ]
 
 
@@ -928,7 +928,7 @@ _IMPORT_TREE = {
     "podman/tasks/prune.yml": "- debug:\n",
     "podman/tasks/_setup.yml": "- debug:\n",
     "podman/tasks/_verify.yml": "- import_tasks: main.yml\n",
-    "podman/meta/test.yml": "ubuntu:\n  - resolute\n",
+    "podman/meta/test.yml": "ubuntu:\n  - noble\n",
     "podman/templates/podman.conf.j2": "",
     "redis/tasks/main.yml": (
         "- import_role:\n    name: podman\n    tasks_from: install\n"
@@ -1099,7 +1099,7 @@ class TestChangeMatrixFanOut:
     def test_entry_point_change_runs_its_callers(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cells = self._cells(monkeypatch, ["roles/podman/tasks/image.yml"])
         assert {role for role, _ in cells} == {"podman", "redis"}
-        assert ("redis", "resolute") in cells
+        assert ("redis", "noble") in cells
 
     def test_imported_underscore_file_runs_its_importer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cells = self._cells(monkeypatch, ["roles/nginx/tasks/_setup_snakeoil.yml"])
@@ -1108,7 +1108,7 @@ class TestChangeMatrixFanOut:
     def test_template_change_fans_out_to_every_consumer(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cells = self._cells(monkeypatch, ["roles/podman/templates/podman.conf.j2"])
         assert {role for role, _ in cells} == {"podman", "redis", "kuma"}
-        assert {("redis", "resolute"), ("kuma", "resolute")} <= cells
+        assert {("redis", "noble"), ("kuma", "noble")} <= cells
 
     def test_base_prerequisite_change_runs_every_prerequisite_cell(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cells = self._cells(monkeypatch, ["roles/hostname/tasks/configure.yml"])
@@ -1193,7 +1193,7 @@ class TestGitlabChangeMatrix:
 
 class TestRenderChildPipeline:
     def test_one_job_per_spec(self) -> None:
-        doc = _render_child_doc(["nginx:lab", "podman:lab:resolute"], site_test=False)
+        doc = _render_child_doc(["nginx:lab", "podman:lab:noble"], site_test=False)
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
         assert doc["stages"] == ["test1", "test2"]
@@ -1207,12 +1207,12 @@ class TestRenderChildPipeline:
         assert "HOMELAB_TEST_AWS_REGION" not in doc[".arm_cell"]["variables"]
         # No spot retry on the qemu targets.
         assert "retry" not in doc[".cell"]
-        # nginx:lab defaults to Noble; podman:lab:resolute is explicit.
-        assert doc["nginx:lab"]["variables"] == {"ROLE": "nginx", "VARIANT": "lab", "UBUNTU": "noble"}
-        assert doc["podman:lab:resolute"]["variables"] == {
+        # nginx:lab defaults to Noble; podman:lab:noble is explicit.
+        assert doc["nginx:lab"]["variables"] == {"ROLE": "nginx", "VARIANT": "lab", "UBUNTU": "resolute"}
+        assert doc["podman:lab:noble"]["variables"] == {
             "ROLE": "podman",
             "VARIANT": "lab",
-            "UBUNTU": "resolute",
+            "UBUNTU": "noble",
         }
         assert doc["nginx:lab"]["extends"] == ".cell"
         assert "_site_test:lab" not in doc
@@ -1236,10 +1236,10 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
         assert "_site_test:lab" in doc
         assert doc["_site_test:lab"]["timeout"] == "60m"
-        assert "_site_test:lab:resolute" in doc
-        assert doc["_site_test:lab:resolute"]["timeout"] == "60m"
-        resolute_script = "\n".join(doc["_site_test:lab:resolute"]["script"])
-        assert 'site_test.py --ubuntu "$UBUNTU" --timeout 3000' in resolute_script
+        assert "_site_test:lab:noble" in doc
+        assert doc["_site_test:lab:noble"]["timeout"] == "60m"
+        noble_script = "\n".join(doc["_site_test:lab:noble"]["script"])
+        assert 'site_test.py --ubuntu "$UBUNTU" --timeout 3000' in noble_script
         assert "_site_check:lab" in doc
         assert doc["_site_check:lab"]["timeout"] == "35m"
         script = "\n".join(doc["_site_check:lab"]["script"])
@@ -1253,7 +1253,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
         cell_script = "\n".join(doc["nginx:lab"]["script"])
         assert "nice -n 10 choom -n 500 -- mise exec --" in cell_script
-        for job in ("_site_test:lab", "_site_test:lab:resolute", "_site_check:lab"):
+        for job in ("_site_test:lab", "_site_test:lab:noble", "_site_check:lab"):
             script = "\n".join(doc[job]["script"])
             assert "nice" not in script
             assert "choom" not in script
@@ -1264,14 +1264,14 @@ class TestRenderChildPipeline:
         # build ids stage-by-stage) gives it the lowest id and a runner claims
         # it first. needs:[] (from .cell) keeps it parallel, so the leading
         # stage never gates the cells.
-        doc = _render_child_doc(["nginx:lab", "podman:lab:noble"], site_test=True)
+        doc = _render_child_doc(["nginx:lab", "podman:lab:resolute"], site_test=True)
         assert doc["stages"] == ["site", "test1", "test2"]
         assert doc["_site_test:lab"]["stage"] == "site"
-        assert doc["_site_test:lab:resolute"]["stage"] == "site"
+        assert doc["_site_test:lab:noble"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
         for job in ("_site_test:lab", "_site_check:lab"):
             assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
-        assert doc["_site_test:lab:resolute"]["variables"] == {"VARIANT": "lab", "UBUNTU": "resolute"}
+        assert doc["_site_test:lab:noble"]["variables"] == {"VARIANT": "lab", "UBUNTU": "noble"}
         assert doc[".cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
@@ -1279,7 +1279,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc([], site_test=True)
         assert doc["stages"] == ["site"]
         assert doc["_site_test:lab"]["stage"] == "site"
-        assert doc["_site_test:lab:resolute"]["stage"] == "site"
+        assert doc["_site_test:lab:noble"]["stage"] == "site"
         assert doc["_site_check:lab"]["stage"] == "site"
         assert "no_cells" not in doc
 
@@ -1287,7 +1287,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc([], site_test=False)
         assert "no_cells" in doc
         assert "_site_test:lab" not in doc
-        assert "_site_test:lab:resolute" not in doc
+        assert "_site_test:lab:noble" not in doc
         assert "_site_check:lab" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
         jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
@@ -1309,7 +1309,7 @@ class TestRenderChildPipeline:
 
     def test_arm_metadata_preserves_change_selection_and_gates(self) -> None:
         doc = _render_child_doc(
-            ["apt:lab:resolute", "boot:minimal", "fan2go:lab", "nginx:lab"],
+            ["apt:lab:noble", "boot:minimal", "fan2go:lab", "nginx:lab"],
             site_test=False,
         )
 
@@ -1339,12 +1339,12 @@ class TestRenderChildPipeline:
         monkeypatch.chdir(tmp_path)
         meta_dir = tmp_path / "roles" / "release_probe" / "meta"
         meta_dir.mkdir(parents=True)
-        (meta_dir / "test.yml").write_text("arm:\n  - lab\n  - lab:resolute\n")
+        (meta_dir / "test.yml").write_text("arm:\n  - lab\n  - lab:noble\n")
 
         doc = _render_child_doc(["release_probe:lab"], site_test=False)
 
-        assert doc["release_probe:lab:aarch64"]["variables"]["UBUNTU"] == "noble"
-        assert doc["release_probe:lab:resolute:aarch64"]["variables"]["UBUNTU"] == "resolute"
+        assert doc["release_probe:lab:aarch64"]["variables"]["UBUNTU"] == "resolute"
+        assert doc["release_probe:lab:noble:aarch64"]["variables"]["UBUNTU"] == "noble"
 
     def test_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
@@ -1424,8 +1424,8 @@ class TestRenderChildPipeline:
         assert "retry" not in doc[".cell"]
         assert doc["_site_test:lab"]["extends"] == ".cell"
         assert "tags" not in doc["_site_test:lab"]
-        assert doc["_site_test:lab:resolute"]["extends"] == ".cell"
-        assert "tags" not in doc["_site_test:lab:resolute"]
+        assert doc["_site_test:lab:noble"]["extends"] == ".cell"
+        assert "tags" not in doc["_site_test:lab:noble"]
         assert doc["_site_check:lab"]["extends"] == ".cell"
         assert "tags" not in doc["_site_check:lab"]
 
@@ -1445,7 +1445,7 @@ class TestRenderChildPipeline:
         assert '"$VARIANT" --ubuntu "$UBUNTU"; fi' in joined
         assert "--upstream-mirrors" not in "\n".join(doc["nginx:lab"]["script"])
         assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab"]["script"])
-        assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab:resolute"]["script"])
+        assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab:noble"]["script"])
 
 
 class TestEmitGitlab:

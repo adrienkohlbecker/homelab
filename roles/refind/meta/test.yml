@@ -1,5 +1,6 @@
-# The resolute ARM cell asserts the warm reboot chain (firmware -> rEFInd ->
-# ZBM kexec) on the release whose PE-wrapped kernel ZBM has to unwrap.
+# The default ARM cell asserts the warm reboot chain (firmware -> rEFInd ->
+# ZBM kexec) on Resolute, whose PE-wrapped kernel ZBM has to unwrap; the Noble
+# cell keeps the plain-kernel chain covered.
 arm:
   - lab
-  - lab:resolute
+  - lab:noble

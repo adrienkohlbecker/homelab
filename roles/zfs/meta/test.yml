@@ -4,4 +4,4 @@ machines:
   lab:
   minimal:
 ubuntu:
-  - resolute
+  - noble

@@ -1,5 +1,5 @@
-# The templates carry no release branch; the default Noble cell covers the
-# prod release. Resolute's logind enforces root-held shutdown block locks,
-# which _verify_shutdown_inhibitor drives SHUTDOWNCMD through.
+# The templates carry no release branch. The default Resolute cell drives
+# SHUTDOWNCMD through a root-held shutdown block lock, which its logind
+# enforces (_verify_shutdown_inhibitor); Noble's logind ignores same-uid locks.
 ubuntu:
-  - resolute
+  - noble

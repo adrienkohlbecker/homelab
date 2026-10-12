@@ -104,12 +104,12 @@ stages:
       echo "harness exit code: $rc"
       exit $rc
 
-"_site_test:lab:resolute":
+"_site_test:lab:noble":
   extends: .cell
   stage: site
   variables:
     VARIANT: lab
-    UBUNTU: resolute
+    UBUNTU: noble
   timeout: 60m
   script:
     # timeout backstops the harness's own deadline; 60s permits VM teardown.

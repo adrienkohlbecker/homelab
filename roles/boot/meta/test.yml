@@ -4,4 +4,4 @@ machines:
 arm:
   - lab
 ubuntu:
-  - resolute
+  - noble
