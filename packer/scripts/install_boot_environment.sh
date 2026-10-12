@@ -77,7 +77,7 @@ missing_tools=()
 command -v debootstrap >/dev/null || missing_tools+=(debootstrap)
 command -v arch-chroot >/dev/null || missing_tools+=(arch-install-scripts)
 if ((${#missing_tools[@]})); then
-  apt-get update
+  apt_update
   apt-get install --yes "${missing_tools[@]}"
 fi
 
