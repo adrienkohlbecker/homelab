@@ -449,7 +449,34 @@ echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-hardening.conf
 # installs cloud-init so terraform's user_data creates `ak` + injects the SSH
 # key on first boot, exactly as the stock hcloud image does.
 if [ "$INSTALL_TARGET" = "hetzner" ]; then
-  bash "${CHROOT_FILES}/hetzner/install.sh"
+  # cloud-guest-utils ships the growpart binary cloud-init's growpart module
+  # runs.
+  apt-get install --yes cloud-init cloud-guest-utils
+
+  # The Hetzner cloud-init drop-in the stock hcloud image ships, captured
+  # verbatim under packer/hetzner/ (Noble and Resolute ship the same file). Its
+  # mirror.hetzner.com package_mirrors and module set make this debootstrapped
+  # cloud-init behave like the stock image's: apt_configure points the sources
+  # at the Hetzner mirror on first boot. Its default_user is root, but
+  # terraform's user-data `users:` block replaces that list with `ak`, the sole
+  # login user, with root locked.
+  install -m 0644 "${CHROOT_FILES}/hetzner/90-hetznercloud.cfg" /etc/cloud/cloud.cfg.d/
+
+  # Sorted last, so it wins: pins the Hetzner datasource, so this cloud-init
+  # finds the metadata and user-data without probing the full list, and points
+  # growpart at rpool's partition.
+  install -m 0644 "${CHROOT_FILES}/hetzner/99-hetzner.cfg" /etc/cloud/cloud.cfg.d/
+
+  # The image ships at 60G but deploys onto cpx22's ~76G, leaving rpool's
+  # partition (p5, last on disk) short with the GPT backup header mid-disk. The
+  # preceding 40G Podman partition stays fixed while p5 takes the added
+  # capacity: cloud-init's growpart module grows p5 on every boot (growpart
+  # relocates the backup header), and zfs_expand_rpool.service then grows the
+  # pool into it.
+  zpool set autoexpand=on rpool
+  install -m 0755 "${CHROOT_FILES}/hetzner/zfs_expand_rpool.sh" /usr/local/sbin/zfs_expand_rpool
+  install -m 0644 "${CHROOT_FILES}/hetzner/zfs_expand_rpool.service" /etc/systemd/system/
+  systemctl enable zfs_expand_rpool.service
 
 elif [ -z "$BOOT_ENVIRONMENT" ]; then
 
@@ -465,9 +492,9 @@ elif [ -z "$BOOT_ENVIRONMENT" ]; then
   # LACP setups need bare-metal callers to overwrite this file with an
   # explicit netplan before first boot.
   #
-  # Skipped on hetzner: cloud-init (configured by packer/hetzner/install.sh)
-  # datasource) owns networking there, exactly as the stock hcloud image does —
-  # a competing static netplan here would fight cloud-init's generated one.
+  # Skipped on hetzner: cloud-init's datasource owns networking there, exactly
+  # as on the stock hcloud image, and a competing static netplan would fight
+  # cloud-init's generated one.
   cat <<EOF >/etc/netplan/01-netcfg.yaml
 network:
   version: 2
