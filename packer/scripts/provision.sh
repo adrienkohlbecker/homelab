@@ -40,25 +40,58 @@ set -euxo pipefail
 # shellcheck source=packer/scripts/install_lib.sh
 . "$(dirname -- "${BASH_SOURCE[0]}")/install_lib.sh"
 
+# Validate every input before anything is written, so a bad layout fails
+# before a disk is wiped rather than halfway through.
 preflight() {
-  local disk
+  local disk device pool extra_disks_needed=0
+  local -a disks extra_disks
   local -A seen_disks=()
 
   # Optional layout features may be empty but must be set explicitly.
   : "${EXTRA_DISKS?}" "${LAYOUT?}" "${PODMAN_SIZE?}" "${META_SIZE?}" "${EXTRA_POOLS?}"
   : "${DISKS:?}" "${SWAP_SIZE:?}" "${UBUNTU_NAME:?}" "${ZBM_VERSION:?}"
 
-  [[ $LAYOUT =~ ^(mirror)?$ ]] || fail "LAYOUT must be empty or mirror (got '$LAYOUT')"
+  # The setup below rewrites the running system's hostid and mdadm policy
+  # before touching a disk, which an installed host must never see.
+  [ "$(findmnt -no FSTYPE /)" != zfs ] ||
+    fail "the running root is on ZFS; provision.sh runs from a live environment or a build VM, never an installed host"
+
+  read -r -a disks <<<"$DISKS"
+  read -r -a extra_disks <<<"$EXTRA_DISKS"
+  case $LAYOUT in
+  "") ((${#disks[@]} == 1)) || fail "a single-disk LAYOUT takes one disk in DISKS (got ${#disks[@]})" ;;
+  mirror) ((${#disks[@]} >= 2)) || fail "LAYOUT=mirror takes at least two disks in DISKS (got ${#disks[@]})" ;;
+  *) fail "LAYOUT must be empty or mirror (got '$LAYOUT')" ;;
+  esac
+  for pool in $EXTRA_POOLS; do
+    case $pool in
+    dozer) extra_disks_needed=$((extra_disks_needed + 2)) ;;
+    tank_mouse) extra_disks_needed=$((extra_disks_needed + 4)) ;;
+    *) fail "unknown EXTRA_POOLS entry '$pool'" ;;
+    esac
+  done
+  ((${#extra_disks[@]} == extra_disks_needed)) ||
+    fail "EXTRA_POOLS '$EXTRA_POOLS' takes $extra_disks_needed disks in EXTRA_DISKS (got ${#extra_disks[@]})"
+
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu|hetzner)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')"
   [ "${TARGET_HOSTNAME+set}" = "${TARGET_USERNAME+set}" ] ||
     fail "TARGET_HOSTNAME and TARGET_USERNAME must be set together"
   check_identity
 
-  for disk in $DISKS $EXTRA_DISKS; do
+  # Compare resolved devices, so a /dev/disk/by-id alias of a listed disk is a
+  # duplicate too. A disk in use -- a mounted filesystem, active swap, or an
+  # LVM or dm-crypt device on it -- is never a target.
+  for disk in "${disks[@]}" "${extra_disks[@]}"; do
     [[ $disk == /dev/* ]] || fail "disk path must start with /dev/ (got '$disk')"
-    [[ ! -v seen_disks[$disk] ]] || fail "disk '$disk' is listed more than once"
-    seen_disks[$disk]=1
+    device=$(readlink -f -- "$disk")
+    [ -b "$device" ] && [ "$(lsblk -dno TYPE "$device")" = disk ] || fail "$disk is not a whole disk"
+    [[ ! -v seen_disks[$device] ]] || fail "disk '$disk' is listed more than once"
+    seen_disks[$device]=1
+    [ -z "$(lsblk -nro MOUNTPOINT "$device" | tr -d '\n')" ] || fail "$disk has a mounted filesystem or active swap"
+    if lsblk -nro TYPE "$device" | awk '$1 == "lvm" || $1 == "crypt" { found = 1 } END { exit !found }'; then
+      fail "$disk backs an LVM or dm-crypt device"
+    fi
   done
 
   check_install_files
@@ -392,6 +425,14 @@ apt_update
   apt-get install --yes debootstrap dosfstools gdisk mdadm zfsutils-linux
 )
 
+# Every pool is created fresh on wiped disks, so one already imported in the
+# live environment is a mistake: its disks are either listed here and about to
+# be wiped, or another pool would collide with its name. Checked once the tools
+# above can list pools, before the environment's storage policy changes.
+imported_pools=$(zpool list -H -o name)
+[ -z "$imported_pools" ] ||
+  fail "export the pools imported in the live environment first: $imported_pools"
+
 # Stop udev's `mdadm --incremental` from re-assembling an array off a stale
 # superblock while the tables below are rewritten. Declarative, so it cannot
 # leak the way a stop-exec-queue trap can if the script exits mid-partition.
@@ -400,13 +441,6 @@ apt_update
 printf 'AUTO -all\n' >/etc/mdadm/mdadm.conf
 
 zgenhostid -f
-
-# Every pool is created fresh on wiped disks, so one already imported in the
-# live environment is a mistake: its disks are either listed here and about to
-# be wiped, or another pool would collide with its name.
-imported_pools=$(zpool list -H -o name)
-[ -z "$imported_pools" ] ||
-  fail "export the pools imported in the live environment first: $imported_pools"
 
 # Stale md members on the target disks would let udev's `mdadm --incremental`
 # re-assemble an array mid-partitioning and hold a member busy. Tear those
