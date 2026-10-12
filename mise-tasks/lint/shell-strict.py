@@ -11,6 +11,7 @@ from pathlib import Path
 ALLOWLIST_PATTERNS = (
     "mise-tasks/worktree/lib.sh",
     "mise-tasks/zbm/lib.sh",
+    "packer/scripts/install_lib.sh",
     "zbm/dracut-modules/89zbm-power-commands/module-setup.sh",
     "roles/netdata/files/*.chart.sh",
     "roles/hdparm/files/*.chart.sh",
