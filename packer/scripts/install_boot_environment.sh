@@ -21,9 +21,10 @@
 #   TARGET_HOSTNAME  defaults to the running hostname
 #   INSTALL_TARGET   bare_metal (default) or qemu (the harness fixtures)
 #   NEXUS_URL        optional apt proxy host, as for provision.sh
-#   CARRY_PATHS      optional space-separated absolute paths copied as-is from
-#                    the running root, for host state that lives outside a
-#                    dataset of its own
+#   CARRY_PATHS      optional space-separated paths copied as-is from the
+#                    running root, for host state that lives outside a dataset
+#                    of its own; each must be canonical (absolute, no symlink,
+#                    `.` or `..` component) and on the root filesystem itself
 set -euxo pipefail
 
 # shellcheck source=packer/scripts/install_lib.sh
@@ -37,6 +38,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 running_root=$(findmnt -no SOURCE /)
 dataset="rpool/ROOT/${UBUNTU_NAME:-}"
+# Split on whitespace without globbing.
+read -r -a carry_paths <<<"${CARRY_PATHS:-}"
 
 preflight() {
   local path running_release
@@ -57,9 +60,16 @@ preflight() {
   [ -s /etc/hostid ] || fail "/etc/hostid is missing; the pools would not import in the new root"
   [ -f /etc/zfs/zpool.cache ] || fail "/etc/zfs/zpool.cache is missing"
 
-  for path in ${CARRY_PATHS:-}; do
-    [[ $path == /* ]] || fail "CARRY_PATHS entries must be absolute (got '$path')"
+  # cp --parents rebuilds each path under the new root as written, so a `..`
+  # or a symlinked component would land outside it. Paths on another
+  # filesystem (/run, /proc, a dataset under /mnt) are runtime or shared
+  # state, never root state to copy.
+  for path in "${carry_paths[@]}"; do
     [ -e "$path" ] || fail "CARRY_PATHS entry $path does not exist"
+    [ "$(realpath -e -- "$path")" = "$path" ] && [ "$path" != / ] ||
+      fail "CARRY_PATHS entry $path is not a canonical path below /"
+    [ "$(stat -c %d -- "$path")" = "$(stat -c %d /)" ] ||
+      fail "CARRY_PATHS entry $path is not on the root filesystem"
   done
 
   check_role_files
@@ -120,8 +130,8 @@ if host_ids=$(getent passwd "$USERNAME" | cut -d: -f3,4); then
     fail "$USERNAME is $new_ids in $dataset but $host_ids on the running host"
 fi
 
-for path in ${CARRY_PATHS:-}; do
-  cp -a --parents "$path" "$root"
+for path in "${carry_paths[@]}"; do
+  cp -a --one-file-system --parents -- "$path" "$root"
 done
 
 # zed rewrote the running host's ZFS mount cache when the dataset above was
