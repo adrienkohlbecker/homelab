@@ -7,8 +7,10 @@
 # swap, the Podman store, and every other dataset and pool stay as they are, and
 # the running root remains the rollback. The new root takes the running host's
 # identity and storage wiring (hostid, machine-id, SSH host keys, fstab,
-# mdadm.conf, netplan, zpool.cache, ZFS mount cache) and is otherwise a fresh
-# chroot.sh install, which the first converge on it completes.
+# mdadm.conf, netplan, zpool.cache) and is otherwise a fresh chroot.sh
+# install, which the first converge on it completes. Until then zfs-mount
+# mounts the shared datasets; the zfs role sets up the mount generator's cache
+# on that converge.
 #
 # The switch is left to the operator, printed at the end:
 #   zpool set bootfs=rpool/ROOT/$UBUNTU_NAME rpool && systemctl reboot
@@ -113,12 +115,11 @@ mount -t zfs "$dataset" "$root"
 debootstrap_release "$UBUNTU_NAME" "$root"
 
 # Carry the running host's identity and storage wiring into the new root before
-# chroot.sh installs the packages that read it: zfs-dracut embeds hostid,
-# mdadm.conf, and the pool cache in the image; openssh-server keeps existing
-# host keys; mdadm keeps an existing mdadm.conf.
-mkdir -p "$root"/etc/{zfs,ssh,netplan,mdadm}
+# chroot.sh installs the packages that read it: the initramfs embeds hostid and
+# mdadm.conf, openssh-server keeps existing host keys, and mdadm keeps an
+# existing mdadm.conf.
+mkdir -p "$root"/etc/{ssh,netplan,mdadm}
 cp -a /etc/hostid /etc/machine-id /etc/fstab "$root/etc/"
-cp -a /etc/zfs/zpool.cache "$root/etc/zfs/"
 cp -a /etc/ssh/ssh_host_*key /etc/ssh/ssh_host_*key.pub "$root/etc/ssh/"
 cp -a /etc/netplan/. "$root/etc/netplan/"
 if [ -f /etc/mdadm/mdadm.conf ]; then
@@ -140,12 +141,10 @@ for path in "${carry_paths[@]}"; do
   cp -a --one-file-system --parents -- "$path" "$root"
 done
 
-# zed rewrote the running host's ZFS mount cache when the dataset above was
-# created, so copy it last. zfs-mount-generator reads it at boot to mount the
-# shared datasets before the services that use them.
-if [ -d /etc/zfs/zfs-list.cache ]; then
-  cp -a /etc/zfs/zfs-list.cache "$root/etc/zfs/"
-fi
+# The pool cache imports the data pools at boot. Copied after the chroot, as
+# provision.sh does, so the first initramfs embeds none.
+mkdir -p "$root/etc/zfs"
+cp -a /etc/zfs/zpool.cache "$root/etc/zfs/"
 
 # Commit point: the root becomes bootable. Unmounted first, since a
 # mountpoint change remounts a mounted dataset at its new mountpoint.
