@@ -24,14 +24,12 @@
 #   CARRY_PATHS      optional space-separated absolute paths copied as-is from
 #                    the running root, for host state that lives outside a
 #                    dataset of its own
-#   SCRIPTS_DIR      directory holding this script's siblings (default: its own)
-#   ROLE_FILES_DIR   the role-owned bootstrap files (default: SCRIPTS_DIR)
+#   ROLE_FILES_DIR   the role-owned bootstrap files (default: this script's
+#                    directory)
 set -euxo pipefail
 
-SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)}"
-ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
 # shellcheck source=packer/scripts/install_lib.sh
-. "$SCRIPTS_DIR/install_lib.sh"
+. "$(dirname -- "${BASH_SOURCE[0]}")/install_lib.sh"
 
 export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
 export HOSTNAME="${TARGET_HOSTNAME:-$(hostname)}"

@@ -3,6 +3,13 @@
 # disk layout) and install_boot_environment.sh (a new root beside a running
 # one). Sourced, never executed.
 
+# The installer scripts sit together wherever they were copied: packer uploads
+# them to /home/vagrant, and a host install stages them in one directory. The
+# role-owned bootstrap files sit beside them unless ROLE_FILES_DIR says
+# otherwise.
+SCRIPTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
+
 # Role-owned bootstrap files chroot.sh consumes, staged from ROLE_FILES_DIR.
 ROLE_FILES=(console-setup keyboard modules_most dracut_host.conf)
 

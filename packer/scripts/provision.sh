@@ -36,13 +36,8 @@ set -euxo pipefail
 # passes the exported install vars through to chroot.sh. The ZBM_* vars used
 # downstream are documented at the top of chroot.sh.
 
-# Directories holding chroot.sh, optional installer extensions, and the
-# role-owned bootstrap files. Packer uploads them to /home/vagrant; bare-metal
-# callers can point both variables at their staged bundle.
-SCRIPTS_DIR="${SCRIPTS_DIR:-/home/vagrant}"
-ROLE_FILES_DIR="${ROLE_FILES_DIR:-$SCRIPTS_DIR}"
 # shellcheck source=packer/scripts/install_lib.sh
-. "$SCRIPTS_DIR/install_lib.sh"
+. "$(dirname -- "${BASH_SOURCE[0]}")/install_lib.sh"
 
 preflight() {
   local disk
