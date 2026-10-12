@@ -389,7 +389,7 @@ apt_update
   printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
   chmod 0755 /usr/sbin/policy-rc.d
   trap 'rm -f /usr/sbin/policy-rc.d' EXIT
-  apt-get install --yes arch-install-scripts debootstrap dosfstools gdisk mdadm zfsutils-linux
+  apt-get install --yes debootstrap dosfstools gdisk mdadm zfsutils-linux
 )
 
 # Stop udev's `mdadm --incremental` from re-assembling an array off a stale
@@ -507,16 +507,12 @@ for pool in $extra_pools; do
 done
 zfs mount "rpool/ROOT/$UBUNTU_NAME"
 
-# Wait for udev to wire the new device nodes before arch-chroot runs.
+# Wait for udev to wire the new device nodes before the install uses them.
 udevadm settle
 
 debootstrap_release "$UBUNTU_NAME" /mnt
 
-# Copy files into the new install. /etc/hostid must match the one ZFS
-# saw at pool creation; arch-chroot bind-mounts /etc/resolv.conf so apt
-# inside the chroot can resolve hostnames, and the bind goes away when
-# arch-chroot exits — the shipped image keeps whatever debootstrap put
-# there (empty), not the build host's DNS settings.
+# /etc/hostid must match the one ZFS saw at pool creation.
 
 cp /etc/hostid /mnt/etc
 

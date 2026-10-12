@@ -73,7 +73,6 @@ export_ubuntu_mirrors
 # which this script leaves alone.
 missing_tools=()
 command -v debootstrap >/dev/null || missing_tools+=(debootstrap)
-command -v arch-chroot >/dev/null || missing_tools+=(arch-install-scripts)
 if ((${#missing_tools[@]})); then
   apt_update
   apt-get install --yes "${missing_tools[@]}"

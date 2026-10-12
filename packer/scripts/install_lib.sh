@@ -166,23 +166,49 @@ debootstrap_release() {
   }
 }
 
+# Mount the API filesystems chroot.sh needs inside root $1. Called in the
+# private mount namespace run_chroot_script opens, so every mount here, and any
+# chroot.sh adds (notably /boot/efi), disappears with it.
+#
+# Nothing is shared writably with the caller beyond /dev: /run and /tmp are
+# private tmpfs, so a package script that regenerates runtime state (Netplan's
+# generator, tmpfiles, udev rules) writes into the chroot's copy, never the
+# running host's. /sys is read-only. efivarfs comes in only for a fresh
+# install, whose boot loader step registers firmware entries; a boot
+# environment never touches them. The caller's resolv.conf is bound read-only
+# where the root's own resolv.conf points, so apt resolves names without the
+# caller's DNS settings landing in the image.
+mount_chroot_filesystems() {
+  local root=$1 resolv
+  mount -t proc -o nosuid,noexec,nodev proc "$root/proc"
+  mount -t sysfs -o nosuid,noexec,nodev,ro sysfs "$root/sys"
+  if [ -z "${BOOT_ENVIRONMENT:-}" ] && [ -d "$root/sys/firmware/efi/efivars" ]; then
+    mount -t efivarfs -o nosuid,noexec,nodev efivarfs "$root/sys/firmware/efi/efivars"
+  fi
+  mount -t devtmpfs -o mode=0755,nosuid udev "$root/dev"
+  mount -t devpts -o mode=0620,gid=5,nosuid,noexec devpts "$root/dev/pts"
+  mount -t tmpfs -o mode=1777,nosuid,nodev shm "$root/dev/shm"
+  mount -t tmpfs -o mode=0755,nosuid,nodev run "$root/run"
+  mount -t tmpfs -o mode=1777,nosuid,nodev tmp "$root/tmp"
+
+  resolv=$(chroot "$root" readlink -m /etc/resolv.conf)
+  if [ ! -f "$root$resolv" ]; then
+    install -Dm 0644 /dev/null "$root$resolv"
+  fi
+  mount --bind /etc/resolv.conf "$root$resolv"
+  mount -o remount,bind,ro "$root$resolv"
+}
+
 # Run chroot.sh inside root $1. Everything it reads from the installer -- this
 # library, the role-owned bootstrap files, and the target's extras -- is staged
 # first in one directory inside the root, passed to it as CHROOT_FILES, and
-# removed afterwards. Under /var/tmp, not /tmp: arch-chroot shadows the
-# chroot's /tmp with a private tmpfs, hiding files pre-staged there.
+# removed afterwards. Under /var/tmp: the chroot's /tmp is a private tmpfs.
 #
-# arch-chroot (arch-install-scripts) bind-mounts proc/sys/dev/devpts/run/
-# efivarfs and /etc/resolv.conf for the chroot's lifetime, so apt can resolve
-# hostnames without leaving the caller's DNS pinned in the target. It mounts
-# into the caller's namespace, though, so any mount the chroot script adds
-# (notably /boot/efi) would leak into the host and block a later unmount of the
-# root. `unshare --mount --propagation private` confines everything mounted
-# from here on to a throw-away namespace destroyed when unshare returns.
-#
-# arch-chroot inherits the calling shell's environment, so the exported
-# install variables flow straight through. List-shaped ones ride as
-# space-delimited strings (bash refuses to export arrays).
+# `unshare --mount --propagation private` opens a throw-away mount namespace
+# for the chroot's filesystems (mount_chroot_filesystems), destroyed when
+# chroot.sh exits. The exported install variables flow straight through;
+# list-shaped ones ride as space-delimited strings (bash refuses to export
+# arrays).
 run_chroot_script() {
   local root=$1 role_file
   local dir=/var/tmp/homelab_install
@@ -208,7 +234,10 @@ run_chroot_script() {
     echo force-unsafe-io >"$root/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io"
   fi
 
-  CHROOT_FILES=$dir unshare --mount --propagation private arch-chroot "$root" bash "$dir/chroot.sh"
+  # shellcheck disable=SC2016  # expanded by the inner shell
+  CHROOT_FILES=$dir unshare --mount --propagation private bash -euo pipefail -c \
+    "$(declare -f mount_chroot_filesystems)"'; mount_chroot_filesystems "$1"; exec chroot "$1" bash "$2" </dev/null' \
+    _ "$root" "$dir/chroot.sh"
 
   rm -f "$root/etc/dpkg/dpkg.cfg.d/90-build-unsafe-io"
   rm -rf -- "${root:?}$dir"
