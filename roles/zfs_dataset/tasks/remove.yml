@@ -63,13 +63,21 @@
         # Guard the delete: it must only ever see the dataset, never the parent
         # directory underneath an unmounted mountpoint. A not-yet-retired
         # dataset that is not mounted fails here rather than being left
-        # unmountable with its contents still live.
+        # unmountable with its contents still live. Only the mount table is
+        # checked: zfs_check_mount's live-service contract (readonly=off) does
+        # not hold for a dataset already frozen by hand, and a read-only one
+        # with contents left fails the delete below instead.
         - name: remove | Assert the dataset is what is mounted
           command:
             argv:
-              - /usr/local/bin/zfs_check_mount
+              - findmnt
+              - --source
               - "{{ zfs_dataset_args.dataset }}"
+              - --mountpoint
               - "{{ zfs_dataset_args.mountpoint }}"
+              - --types
+              - zfs
+              - --noheadings
           changed_when: false
           become: true
 
