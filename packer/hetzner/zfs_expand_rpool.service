@@ -1,0 +1,16 @@
+[Unit]
+Description=Grow rpool into its partition
+Documentation=file:///etc/cloud/cloud.cfg.d/99-hetzner.cfg
+# cloud-init's growpart widens rpool's partition in its network stage, but its
+# resizefs cannot resolve the pool's by-partuuid vdev, and an image runcmd is
+# replaced by Hetzner's vendor-data and terraform's user-data runcmd lists.
+# Expanding on every boot also follows a later server rescale; it is a no-op
+# once the pool fills the partition.
+After=cloud-init-network.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zfs_expand_rpool
+
+[Install]
+WantedBy=multi-user.target

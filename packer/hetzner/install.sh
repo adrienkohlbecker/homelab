@@ -32,6 +32,8 @@ install -m 0644 "$hetzner_dir/99-hetzner.cfg" /etc/cloud/cloud.cfg.d/99-hetzner.
 # (p5, last on disk) short with the GPT backup header mid-disk. The preceding
 # 40G Podman partition stays fixed while p5 consumes the added capacity.
 # cloud-init's growpart module grows p5 (growpart relocates the backup header)
-# on every boot, and its resizefs module follows with `zpool online -e`.
-# autoexpand covers any later disk resize.
+# on every boot, and zfs_expand_rpool.service then grows the pool into it.
 zpool set autoexpand=on rpool
+install -m 0755 "$hetzner_dir/zfs_expand_rpool.sh" /usr/local/sbin/zfs_expand_rpool
+install -m 0644 "$hetzner_dir/zfs_expand_rpool.service" /etc/systemd/system/zfs_expand_rpool.service
+systemctl enable zfs_expand_rpool.service
