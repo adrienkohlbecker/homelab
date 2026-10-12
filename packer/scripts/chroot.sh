@@ -420,17 +420,22 @@ if [ "$INSTALL_TARGET" = "qemu" ]; then
   systemctl mask serial-getty@hvc0.service
 fi
 
-# Prevent background apt work from taking the dpkg lock in QEMU cells. The
-# unattended_upgrades role unmasks its timers; the boot role owns the multipath
+# Keep background apt work from taking the dpkg lock in QEMU cells, and in a
+# boot environment until the converge that follows its switch. The
+# unattended_upgrades role unmasks its units; the boot role owns the multipath
 # masks. Only mask installed units so the image carries no dangling symlinks.
-if [ "$INSTALL_TARGET" = "qemu" ]; then
-  for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service \
-    multipathd.service multipathd.socket; do
-    if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
-      systemctl mask "$unit"
-    fi
-  done
+masked_units=()
+if [ "$INSTALL_TARGET" = "qemu" ] || [ -n "$BOOT_ENVIRONMENT" ]; then
+  masked_units+=(apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service)
 fi
+if [ "$INSTALL_TARGET" = "qemu" ]; then
+  masked_units+=(multipathd.service multipathd.socket)
+fi
+for unit in "${masked_units[@]}"; do
+  if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
+    systemctl mask "$unit"
+  fi
+done
 
 # Reset apt sources to upstream so the shipped image isn't pinned to a
 # Nexus-internal URL. Build-time installs above used $UBUNTU_MIRROR
