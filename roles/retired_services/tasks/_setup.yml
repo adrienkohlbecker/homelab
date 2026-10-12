@@ -1,8 +1,8 @@
 ---
-# The sqlite child roles/services carved on every ZFS host, with a snapshot like
-# the ones zfs-autobackup leaves behind. The cell turns services_sqlite_enabled
-# off, so the services role creates only the parent. It runs first: the
-# parent cannot mount over the wolweb state directory created below.
+# The sqlite child roles/services carved on every ZFS host, holding a file and
+# a nightly-style snapshot the retirement must keep. The cell turns
+# services_sqlite_enabled off, so the services role creates only the parent. It
+# runs first: the parent cannot mount over the wolweb state directory below.
 - name: _setup | Create the services parent dataset
   import_role:
     name: services
@@ -19,13 +19,26 @@
       owner: root
       group: root
       mode: '0755'
+      extra_properties:
+        'autobackup:bak': 'true'
+
+- name: _setup | Write a payload into the retired sqlite dataset
+  command:
+    argv:
+      - dd
+      - if=/dev/urandom
+      - of=/mnt/services/sqlite/payload.bin
+      - bs=1M
+      - count=4
+    creates: /mnt/services/sqlite/payload.bin
+  become: true
 
 - name: _setup | Snapshot the retired sqlite dataset
   command:
     argv:
       - zfs
       - snapshot
-      - rpool/services/sqlite@bak-retired
+      - rpool/services/sqlite@bak-20260101020000
   changed_when: true
   become: true
 
