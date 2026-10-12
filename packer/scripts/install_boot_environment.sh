@@ -18,7 +18,8 @@
 #
 # Environment:
 #   UBUNTU_NAME      release to install; must differ from the running one
-#   TARGET_USERNAME  login user to create (an existing host user keeps its ids)
+#   TARGET_USERNAME  login user to create; an existing host user keeps its
+#                    ids, with a primary group of its own name
 #   SSH_KEY_PUB      that user's authorized key
 #   TARGET_HOSTNAME  defaults to the running hostname
 #   INSTALL_TARGET   bare_metal (default) or qemu (the harness fixtures)
@@ -44,16 +45,25 @@ dataset="rpool/ROOT/${UBUNTU_NAME:-}"
 read -r -a carry_paths <<<"${CARRY_PATHS:-}"
 
 preflight() {
-  local available path running_release
+  local available host_user path running_release
   # shellcheck source=/dev/null  # the running host's release file
   running_release=$(. /etc/os-release && echo "$VERSION_CODENAME")
 
   [ "$(id -u)" = 0 ] || fail "run as root"
-  [ -n "${UBUNTU_NAME:-}" ] || fail "UBUNTU_NAME is required"
-  [ "$UBUNTU_NAME" != "$running_release" ] || fail "$UBUNTU_NAME is the running release"
+  [ "${UBUNTU_NAME:-}" != "$running_release" ] || fail "$UBUNTU_NAME is the running release"
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal or qemu (got '$INSTALL_TARGET')"
   check_identity
+
+  # An existing user keeps its ids in the new root: they own its files on the
+  # shared datasets. chroot.sh creates the user with them.
+  if host_user=$(getent passwd "$USERNAME"); then
+    USER_UID=$(cut -d: -f3 <<<"$host_user")
+    USER_GID=$(cut -d: -f4 <<<"$host_user")
+    [ "$(getent group "$USER_GID" | cut -d: -f1)" = "$USERNAME" ] ||
+      fail "$USERNAME's primary group is not $USERNAME; chroot.sh creates the user with its own group"
+    export USER_UID USER_GID
+  fi
 
   [[ $running_root == rpool/ROOT/* ]] || fail "the running root is $running_root, not a boot environment under rpool/ROOT"
   ! zfs list -H "$dataset" >/dev/null 2>&1 ||
@@ -79,8 +89,7 @@ preflight() {
       fail "CARRY_PATHS entry $path is not on the root filesystem"
   done
 
-  check_role_files
-  [ -f "$SCRIPTS_DIR/chroot.sh" ] || fail "chroot.sh not found in $SCRIPTS_DIR"
+  check_install_files
 }
 
 preflight
@@ -128,9 +137,7 @@ fi
 
 run_chroot_script "$root"
 
-# chroot.sh creates the login user with the first free ids, which on a
-# provisioned host are the existing user's. Anything else would leave the
-# shared datasets' files owned by a different user in each root.
+# The login user's ids, as created from USER_UID and USER_GID.
 if host_ids=$(getent passwd "$USERNAME" | cut -d: -f3,4); then
   new_ids=$(awk -F: -v user="$USERNAME" '$1 == user { print $3 ":" $4 }' "$root/etc/passwd")
   [ "$new_ids" = "$host_ids" ] ||

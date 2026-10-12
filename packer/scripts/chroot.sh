@@ -30,9 +30,10 @@ trap 'exit 130' INT TERM
 # - A fresh install (provision.sh), for the boot loader: DISKS, ZBM_VERSION,
 #   and optionally REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package;
 #   empty installs the distribution's).
-# - A boot environment (install_boot_environment.sh): BOOT_ENVIRONMENT=1. The
-#   root sits beside a running one whose ESP and firmware entries it shares, so
-#   the boot loader step is skipped.
+# - A boot environment (install_boot_environment.sh): BOOT_ENVIRONMENT=1, and
+#   USER_UID/USER_GID when the login user exists on the running host. The root
+#   sits beside a running one whose ESP and firmware entries it shares, so the
+#   boot loader step is skipped.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -374,9 +375,14 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
   systemctl enable zfs_expand_rpool.service
 
 else
-  # Configure vagrant user
-
-  adduser --disabled-password --gecos "" "$USERNAME"
+  # The login user: vagrant on the qemu fixtures, the operator on bare metal.
+  # A boot environment passes the running host's ids for an existing user.
+  if [ -n "${USER_UID:-}" ]; then
+    addgroup --gid "${USER_GID:?}" "$USERNAME"
+    adduser --disabled-password --gecos "" --uid "$USER_UID" --gid "$USER_GID" "$USERNAME"
+  else
+    adduser --disabled-password --gecos "" "$USERNAME"
+  fi
 
   mkdir "/home/$USERNAME/.ssh"
   echo "$SSH_KEY_PUB" >"/home/$USERNAME/.ssh/authorized_keys"

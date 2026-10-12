@@ -107,14 +107,25 @@ export_ubuntu_mirrors() {
   export UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM
 }
 
-# Check the identity chroot.sh gives the new root: HOSTNAME, the login user
-# USERNAME, and that user's SSH_KEY_PUB. The Hetzner image creates no login
-# user; cloud-init does on first boot.
+# Check what chroot.sh gives the new root: the UBUNTU_NAME release, HOSTNAME,
+# the login user USERNAME, and that user's SSH_KEY_PUB, one public key per line.
+# The login user has no password and sshd refuses passwords, so every key must
+# parse. The Hetzner image creates no login user; cloud-init does on first
+# boot.
 check_identity() {
+  local key
+  [[ ${UBUNTU_NAME:-} =~ ^[a-z]+$ ]] || fail "UBUNTU_NAME must be a release codename (got '${UBUNTU_NAME:-}')"
   [[ $HOSTNAME =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || fail "invalid TARGET_HOSTNAME '$HOSTNAME'"
   [[ $USERNAME =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || fail "invalid TARGET_USERNAME '$USERNAME'"
-  [[ $INSTALL_TARGET == hetzner || ${SSH_KEY_PUB-} =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))[[:space:]] ]] ||
-    fail "SSH_KEY_PUB must contain a supported public key"
+  if [ "$INSTALL_TARGET" = hetzner ]; then
+    return 0
+  fi
+  [ -n "${SSH_KEY_PUB:-}" ] || fail "SSH_KEY_PUB is required"
+  while IFS= read -r key; do
+    if [ -n "$key" ]; then
+      ssh-keygen -l -f /dev/stdin <<<"$key" >/dev/null || fail "SSH_KEY_PUB holds an unusable key: $key"
+    fi
+  done <<<"$SSH_KEY_PUB"
 }
 
 # Print the kernel command line ZBM boots a fresh install's roots with: the
@@ -140,11 +151,17 @@ boot_commandline() {
   esac
 }
 
-check_role_files() {
-  local role_file
-  for role_file in "${ROLE_FILES[@]}"; do
-    [ -f "$SCRIPTS_DIR/$role_file" ] || fail "required role file not found: $SCRIPTS_DIR/$role_file"
+# Check that every file run_chroot_script stages is here before anything is
+# written.
+check_install_files() {
+  local file
+  for file in chroot.sh "${ROLE_FILES[@]}"; do
+    [ -f "$SCRIPTS_DIR/$file" ] || fail "required install file not found: $SCRIPTS_DIR/$file"
   done
+  case $INSTALL_TARGET in
+  qemu) [ -f "$SCRIPTS_DIR/homelab_guest_journal.service" ] || fail "homelab_guest_journal.service not found in $SCRIPTS_DIR" ;;
+  hetzner) [ -d "$SCRIPTS_DIR/hetzner" ] || fail "hetzner/ not found in $SCRIPTS_DIR" ;;
+  esac
 }
 
 # debootstrap release $1 into root $2 from $UBUNTU_MIRROR. If a fetch fails,

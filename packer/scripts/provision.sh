@@ -61,7 +61,7 @@ preflight() {
     seen_disks[$disk]=1
   done
 
-  check_role_files
+  check_install_files
 }
 
 # Packer selects qemu or hetzner; direct callers get the bare-metal path.
