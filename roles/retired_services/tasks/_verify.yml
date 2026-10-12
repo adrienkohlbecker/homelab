@@ -30,6 +30,7 @@
     - /mnt/services/wolweb
     - /etc/sysctl.d/30-macvlan.conf
     - /mnt/services/sqlite
+    - /mnt/old_jammy
   register: retired_services_leftovers
   become: true
 
@@ -96,9 +97,12 @@
   failed_when: retired_services_grub_cmdline.rc != 1
   become: true
 
-- name: _verify | Retired sqlite dataset is unmounted
-  command: zfs get -H -o value canmount,mounted rpool/services/sqlite
-  register: retired_services_sqlite_state
+- name: _verify | Retired datasets are unmounted
+  command: zfs get -H -o value canmount,mounted {{ item }}
+  loop:
+    - rpool/services/sqlite
+    - rpool/old_jammy
+  register: retired_services_dataset_state
   changed_when: false
-  failed_when: retired_services_sqlite_state.stdout_lines != ['off', 'no']
+  failed_when: retired_services_dataset_state.stdout_lines != ['off', 'no']
   become: true

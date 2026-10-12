@@ -19,6 +19,17 @@
       group: root
       mode: '0755'
 
+# Lab's old jammy root as the hand retirement left it: empty, read-only,
+# untagged, and still mounted through the ZFS mount generator.
+- name: _setup | Create the old jammy root dataset
+  community.general.zfs:
+    name: rpool/old_jammy
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/old_jammy
+      readonly: 'on'
+  become: true
+
 # Recreate what the retired wolweb role left on lab and pug: its unit, nginx
 # vhost, fluent-bit extension, image, rendered state, and account.
 - name: _setup | Install nginx

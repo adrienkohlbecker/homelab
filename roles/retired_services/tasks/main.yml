@@ -161,3 +161,16 @@
   tags:
     - retired_services
     - services
+
+# Drop once lab has converged. Jammy's pre-upgrade root on lab, already
+# emptied and given its final snapshot by hand; hosts without it skip.
+- name: Retire the old jammy root dataset
+  import_role:
+    name: zfs_dataset
+    tasks_from: remove
+  vars:
+    zfs_dataset_args:
+      dataset: rpool/old_jammy
+      mountpoint: /mnt/old_jammy
+  tags:
+    - retired_services
