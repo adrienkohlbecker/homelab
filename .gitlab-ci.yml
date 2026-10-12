@@ -17,8 +17,10 @@ variables:
   AWS_REGION: eu-central-1
   # Ansible ignores cwd config under world-writable /builds unless pinned.
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
-  # data/ubuntu_releases.yml's ci_host, which GitLab cannot read when it
-  # expands image:. unit_tests/test_gitlab_ci.py keeps the two equal.
+  # Release of the CI runner hosts and hosted job images; the qemu-host AMI
+  # bake and Terraform's launch templates read it from here. Bake and promote
+  # the new release's AMIs and images before switching it, or new CI hosts
+  # cannot launch.
   CI_HOST_UBUNTU: resolute
 
 # GitLab expands tags before job rules:variables, so select the runner tag at

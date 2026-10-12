@@ -63,12 +63,6 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     ]
 
 
-def test_ci_host_variable_matches_the_catalog() -> None:
-    catalog = yaml.safe_load((ROOT / "data/ubuntu_releases.yml").read_text())
-
-    assert PIPELINE["variables"]["CI_HOST_UBUNTU"] == catalog["ci_host"]
-
-
 def test_ci_image_builds_and_tags_one_release() -> None:
     script = PIPELINE[".ci_image"]["script"]
     build = next(line for line in script if line.startswith("docker build"))

@@ -14,7 +14,7 @@
 locals {
   ci_architectures  = yamldecode(file("${path.module}/../data/architectures.yml"))
   ci_ubuntu_catalog = yamldecode(file("${path.module}/../data/ubuntu_releases.yml"))
-  ci_host_release   = local.ci_ubuntu_catalog.ci_host
+  ci_host_release   = yamldecode(file("${path.module}/../.gitlab-ci.yml")).variables.CI_HOST_UBUNTU
   ci_aws_region     = "eu-central-1"
   # GitLab project whose OIDC tokens may assume the CI roles. The sub claim
   # is the only identity binding (IAM has no condition key for GitLab's

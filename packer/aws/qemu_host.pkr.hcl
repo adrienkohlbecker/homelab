@@ -21,7 +21,7 @@ packer {
 variable "ubuntu_name" {
   type        = string
   default     = null
-  description = "Ubuntu release name; defaults to the catalog's ci_host release."
+  description = "Ubuntu release name; defaults to .gitlab-ci.yml's CI_HOST_UBUNTU."
 }
 
 variable "architecture" {
@@ -50,7 +50,7 @@ variable "qemu_host_manifest_path" {
 locals {
   versions       = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
   ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))
-  ubuntu_name    = coalesce(var.ubuntu_name, local.ubuntu_catalog.ci_host)
+  ubuntu_name    = coalesce(var.ubuntu_name, yamldecode(file("${path.cwd}/.gitlab-ci.yml")).variables.CI_HOST_UBUNTU)
   ubuntu_version = local.ubuntu_catalog.releases[local.ubuntu_name].version
   # AMI naming is shared with qemu-host-ami.sh, the audit, and
   # Terraform's launch templates.

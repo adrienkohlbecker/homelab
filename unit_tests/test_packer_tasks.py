@@ -742,8 +742,8 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
     assert "Name=tag:architecture,Values=aarch64" in describe
 
 
-def test_qemu_host_bake_defaults_to_the_catalog_ci_host_release(tmp_path: Path) -> None:
-    ci_host = yaml.safe_load(UBUNTU_CATALOG.read_text())["ci_host"]
+def test_qemu_host_bake_defaults_to_the_ci_host_release(tmp_path: Path) -> None:
+    ci_host = yaml.safe_load((REPO_ROOT / ".gitlab-ci.yml").read_text())["variables"]["CI_HOST_UBUNTU"]
     result, packer_log, _aws_log, _sleep_log = _run_qemu_host_bake(tmp_path, promote=False, ubuntu=None)
 
     assert result.returncode == 0, result.stderr

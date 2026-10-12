@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Bake the AWS nested-qemu runner-host AMI and optionally promote it"
 #MISE interactive=true
-#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename (default: the catalog's ci_host release)"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename (default: .gitlab-ci.yml's CI_HOST_UBUNTU)"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Target architecture (x86_64 or aarch64); selects the region from data/architectures.yml" default="x86_64"
 #USAGE flag "--promote" help="After a successful bake, update the architecture-specific qemu-host AMI pointer"
@@ -14,7 +14,7 @@ machine=qemu_host
 architecture="${usage_architecture:-x86_64}"
 build_id="${CI_PIPELINE_ID:-local}"
 repo_root=$(git rev-parse --show-toplevel)
-ubuntu="${usage_ubuntu:-$(yq -r .ci_host "${repo_root}/data/ubuntu_releases.yml")}"
+ubuntu="${usage_ubuntu:-$(yq -r .variables.CI_HOST_UBUNTU "${repo_root}/.gitlab-ci.yml")}"
 
 architectures="${repo_root}/data/architectures.yml"
 if ! ARCH="$architecture" yq -e '.[strenv(ARCH)].ci' "$architectures" >/dev/null 2>&1; then
