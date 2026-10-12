@@ -478,38 +478,7 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
   install -m 0644 "${CHROOT_FILES}/hetzner/zfs_expand_rpool.service" /etc/systemd/system/
   systemctl enable zfs_expand_rpool.service
 
-elif [ -z "$BOOT_ENVIRONMENT" ]; then
-
-  # Configure networking. Match by name glob so the same image works
-  # under any qemu device topology (packer's vs. testrole's direct-kernel
-  # boot give the NIC different kernel names — ens3/ens4/etc.) and on
-  # baremetal (eno1/enp0s31f6/...). All Predictable Network Interface
-  # Names start with "en"; only old-style "eth*" is excluded, which
-  # requires net.ifnames=0 on modern Ubuntu and so is essentially extinct.
-  #
-  # Multi-NIC hosts: this stanza claims every "en*" interface as
-  # "primary", so each onboard NIC will DHCP independently. Bonded /
-  # LACP setups need bare-metal callers to overwrite this file with an
-  # explicit netplan before first boot.
-  #
-  # Skipped on hetzner: cloud-init's datasource owns networking there, exactly
-  # as on the stock hcloud image, and a competing static netplan would fight
-  # cloud-init's generated one.
-  cat <<EOF >/etc/netplan/01-netcfg.yaml
-network:
-  version: 2
-  ethernets:
-    primary:
-      match:
-        name: "en*"
-      dhcp4: true
-      dhcp-identifier: mac
-EOF
-fi
-
-# A boot environment keeps the running host's copied netplan but needs its
-# login user, created like an image's.
-if [ "$INSTALL_TARGET" != "hetzner" ]; then
+else
   # Configure vagrant user
 
   adduser --disabled-password --gecos "" "$USERNAME"
@@ -580,13 +549,8 @@ apt_update
 # lists/ repopulated just above stay intact.
 apt-get clean
 
-# Blank machine-id so systemd regenerates a unique one on first boot —
-# otherwise every host from this snapshot shares one (journald, systemd
-# instance ids, DHCP DUID). A boot environment keeps its host's copied one.
-# Re-point dbus's copy at it when present.
-if [ -z "$BOOT_ENVIRONMENT" ]; then
-  : >/etc/machine-id
-fi
+# dbus keeps its own copy of the machine-id; point it at systemd's, which
+# provision.sh blanks for a fresh image and a boot environment carries over.
 if [ -e /var/lib/dbus/machine-id ]; then
   ln -sf /etc/machine-id /var/lib/dbus/machine-id
 fi

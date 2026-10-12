@@ -462,7 +462,41 @@ debootstrap_release "$UBUNTU_NAME" /mnt
 
 cp /etc/hostid /mnt/etc
 
+# Configure networking. Match by name glob so the same image works under any
+# qemu device topology (packer's vs. testrole's direct-kernel boot give the NIC
+# different kernel names — ens3/ens4/etc.) and on bare metal
+# (eno1/enp0s31f6/...). All Predictable Network Interface Names start with
+# "en"; only old-style "eth*" is excluded, which requires net.ifnames=0 on
+# modern Ubuntu and so is essentially extinct.
+#
+# Multi-NIC hosts: this stanza claims every "en*" interface as "primary", so
+# each onboard NIC will DHCP independently. Bonded / LACP setups need
+# bare-metal callers to overwrite this file with an explicit netplan before
+# first boot.
+#
+# Skipped on hetzner: cloud-init's datasource owns networking there, exactly
+# as on the stock hcloud image, and a competing static netplan would fight
+# cloud-init's generated one.
+if [ "$INSTALL_TARGET" != hetzner ]; then
+  mkdir -p /mnt/etc/netplan
+  cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
+network:
+  version: 2
+  ethernets:
+    primary:
+      match:
+        name: "en*"
+      dhcp4: true
+      dhcp-identifier: mac
+EOF
+fi
+
 run_chroot_script /mnt
+
+# Blank machine-id so systemd regenerates a unique one on first boot —
+# otherwise every host from this image shares one (journald, systemd instance
+# ids, DHCP DUID).
+: >/mnt/etc/machine-id
 
 # Create any non-rpool pools while /mnt is still rpool's root so the current
 # zpool.cache can be copied into the shipped install.
