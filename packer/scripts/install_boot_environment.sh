@@ -42,7 +42,7 @@ dataset="rpool/ROOT/${UBUNTU_NAME:-}"
 read -r -a carry_paths <<<"${CARRY_PATHS:-}"
 
 preflight() {
-  local path running_release
+  local available path running_release
   # shellcheck source=/dev/null  # the running host's release file
   running_release=$(. /etc/os-release && echo "$VERSION_CODENAME")
 
@@ -55,8 +55,13 @@ preflight() {
 
   [[ $running_root == rpool/ROOT/* ]] || fail "the running root is $running_root, not a boot environment under rpool/ROOT"
   ! zfs list -H "$dataset" >/dev/null 2>&1 ||
-    fail "$dataset already exists; destroy it (zfs destroy -r $dataset) to reinstall"
+    fail "$dataset already exists; destroy it (zfs destroy -r $dataset) to reinstall, as after a failed install"
   [ "$(zpool status -x)" = "all pools are healthy" ] || fail "a pool is unhealthy; see zpool status -x"
+  # The new root lands on rpool beside the running one and the service
+  # datasets, which must not run out of space under it.
+  available=$(zfs get -Hp -o value available rpool)
+  ((available >= 20 * 1024 ** 3)) ||
+    fail "rpool has $((available / 1024 ** 3)) GiB available; the install needs 20"
   [ -s /etc/hostid ] || fail "/etc/hostid is missing; the pools would not import in the new root"
   [ -f /etc/zfs/zpool.cache ] || fail "/etc/zfs/zpool.cache is missing"
 
@@ -89,9 +94,10 @@ if ((${#missing_tools[@]})); then
 fi
 
 # Mounted under /run, never /mnt: the running host mounts its service datasets
-# there. mount.zfs's zfsutil option mounts the dataset despite its
-# mountpoint=/; canmount=noauto keeps the running host from ever mounting it
-# on its own.
+# there. The dataset stays at mountpoint=legacy until the install completes:
+# ZFSBootMenu offers only roots mounted at /, so a failed install never shows
+# up as bootable. canmount=noauto keeps the running host from ever mounting
+# it on its own.
 root=$(mktemp -d /run/boot_environment.XXXXXX)
 unmount_root() {
   if mountpoint -q "$root"; then
@@ -101,8 +107,8 @@ unmount_root() {
 }
 trap unmount_root EXIT
 
-zfs create -o canmount=noauto -o mountpoint=/ "$dataset"
-mount -t zfs -o zfsutil "$dataset" "$root"
+zfs create -o canmount=noauto -o mountpoint=legacy "$dataset"
+mount -t zfs "$dataset" "$root"
 
 debootstrap_release "$UBUNTU_NAME" "$root"
 
@@ -140,6 +146,11 @@ done
 if [ -d /etc/zfs/zfs-list.cache ]; then
   cp -a /etc/zfs/zfs-list.cache "$root/etc/zfs/"
 fi
+
+# Commit point: the root becomes bootable. Unmounted first, since a
+# mountpoint change remounts a mounted dataset at its new mountpoint.
+umount "$root"
+zfs set mountpoint=/ "$dataset"
 
 set +x
 cat <<EOF
