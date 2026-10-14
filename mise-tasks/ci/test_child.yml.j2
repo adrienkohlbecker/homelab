@@ -135,6 +135,25 @@ stages:
       echo "harness exit code: $rc"
       exit $rc
 {% endif %}
+{% if keep_pools_test %}
+
+# A live-ISO rebuild with KEEP_POOLS=1: a Noble Lab fixture rebuilt as the
+# default release from a Minimal stand-in, then switched to and rolled back.
+"_keep_pools_test:lab":
+  extends: .x86_cell
+  stage: rebuild
+  variables:
+    VARIANT: lab
+    UBUNTU: noble
+  timeout: 45m
+  script:
+    # timeout backstops the harness's own deadline; 60s permits VM teardown.
+    - |
+      rc=0
+      mise exec -- timeout --kill-after=30s 2460 test/keep_pools_test.py --from "$UBUNTU" --to {{ default_ubuntu }} --timeout 2400 || rc=$?
+      echo "harness exit code: $rc"
+      exit $rc
+{% endif %}
 {% for group in cell_groups %}
 {% for cell in group.cells %}
 
@@ -172,7 +191,7 @@ stages:
       echo "harness exit code: $rc"
       exit $rc
 {% endfor %}
-{% if not cells and not arm_cells and not site_test %}
+{% if not cells and not arm_cells and not site_test and not keep_pools_test %}
 
 no_cells:
   stage: test1

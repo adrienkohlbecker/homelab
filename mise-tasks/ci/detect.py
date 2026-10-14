@@ -75,6 +75,16 @@ _MACHINE_UNIVERSE_COMPILED = [(re.compile(r"^" + pat + r"$"), machine) for pat, 
 
 
 FULL_UNIVERSE_RE = re.compile(r"^(" + "|".join(FULL_UNIVERSE_PATTERNS) + r")$")
+
+# The installer and the role files it stages run the keep-pools rebuild job
+# (test/keep_pools_test.py), as does every full-universe change, the harness's
+# own files among them.
+KEEP_POOLS_PATTERNS: list[str] = [
+    r"packer/scripts/.+",
+    r"roles/boot/files/(modules_most|dracut_host\.conf)",
+    r"roles/console/files/(console-setup|keyboard)",
+]
+KEEP_POOLS_RE = re.compile(r"^(" + "|".join(KEEP_POOLS_PATTERNS) + r")$")
 ROLE_PATH_RE = re.compile(r"^roles/([^/]+)/(.+)$")
 
 
@@ -641,13 +651,14 @@ def _arm_specs(specs: list[str], target: str) -> list[str]:
 def render_child_pipeline(
     specs: list[str],
     site_test: bool,
+    keep_pools_test: bool = False,
     target: str = "aws_qemu",
 ) -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
 
     One x86 job per cell spec (``role:variant[:ubuntu]``), the ARM subset
-    declared in role metadata, an optional site-converge job, and a no-op
-    placeholder when no runtime job is selected. X86 cells are split evenly
+    declared in role metadata, optional site-converge and keep-pools rebuild
+    jobs, and a no-op placeholder when no runtime job is selected. X86 cells are split evenly
     across two display stages but run as one DAG (``needs: []``).
 
     """
@@ -674,7 +685,7 @@ def render_child_pipeline(
     # Stage order gives the critical-path site job the lowest build id; needs:[]
     # keeps every stage parallel. Empty pipelines still need one stage.
     cell_stages = [g["stage"] for g in cell_groups]
-    stages = (["site"] if site_test else []) + cell_stages
+    stages = (["site"] if site_test else []) + (["rebuild"] if keep_pools_test else []) + cell_stages
     if arm_cells:
         stages.append("arm")
     if not stages:
@@ -685,6 +696,7 @@ def render_child_pipeline(
         cell_groups=cell_groups,
         stages=stages,
         site_test=site_test,
+        keep_pools_test=keep_pools_test,
         target=target,
         cell_runner_tag=target_config["cell_runner_tag"],
         in_aws=target_config["in_aws"],
@@ -699,6 +711,7 @@ def render_child_pipeline(
 def _emit_gitlab(
     specs: list[str],
     site_test: bool,
+    keep_pools_test: bool,
     child_path: str,
     runtimes: dict[str, float],
     log,
@@ -715,7 +728,7 @@ def _emit_gitlab(
     """
     specs = sort_specs_by_runtime(specs, runtimes)
 
-    Path(child_path).write_text(render_child_pipeline(specs, site_test, target=target))
+    Path(child_path).write_text(render_child_pipeline(specs, site_test, keep_pools_test, target=target))
 
     log(f"target={target} runner={TARGETS[target]['cell_runner_tag']}")
     log(f"matrix={json.dumps(specs)}")
@@ -723,23 +736,25 @@ def _emit_gitlab(
         unmeasured = [s for s in specs if s not in runtimes]
         log(f"cell order: longest-first by median recent runtime ({len(unmeasured)} unmeasured cell(s) first)")
     log(f"site_test={'true' if site_test else 'false'}")
-    log(f"-> {len(specs)} cell job(s){' + site converge' if site_test else ''}")
+    log(f"keep_pools_test={'true' if keep_pools_test else 'false'}")
+    extras = (" + site converge" if site_test else "") + (" + keep-pools rebuild" if keep_pools_test else "")
+    log(f"-> {len(specs)} cell job(s){extras}")
     log(f"-> wrote {child_path}")
     return 0
 
 
-def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
+def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool, bool]:
     """GitLab change-detection: resolve a diff base and compute the cell matrix.
 
     ``green`` is the pre-resolved newest green pipeline ancestor (or None); its
-    ``sha`` is the preferred diff base. Returns ``(specs, site_test)``. A
-    full-universe trigger (a cross-cutting path changed, or no usable diff base)
-    returns the whole universe with site_test enabled.
+    ``sha`` is the preferred diff base. Returns ``(specs, site_test,
+    keep_pools_test)``. A full-universe trigger (a cross-cutting path changed,
+    or no usable diff base) returns the whole universe with both jobs enabled.
     """
 
     def full_universe(reason):
         log(f"{reason} -> testing the FULL universe")
-        return _full_universe_specs(), True
+        return _full_universe_specs(), True, True
 
     # Explicit override, then the newest green ancestor, otherwise full universe.
     ci_base_ref = os.environ.get("CI_BASE_REF", "")
@@ -764,6 +779,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     log(f"comparing {base[:12]}..{head_short}: {len(changed)} file(s) changed")
 
     classification = classify_changed_files(changed)
+    keep_pools_test = any(KEEP_POOLS_RE.match(path) for path in changed)
 
     if classification.full_universe_paths:
         log("full-universe paths changed:")
@@ -808,7 +824,7 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool]:
     else:
         log("no role-relevant changes; matrix will be empty")
 
-    return cells_to_ci_specs(build_test_matrix(roles_sorted, release_cells)), "site.yml" in changed
+    return cells_to_ci_specs(build_test_matrix(roles_sorted, release_cells)), "site.yml" in changed, keep_pools_test
 
 
 def _cmd_gitlab(args: list[str]) -> int:
@@ -855,6 +871,7 @@ def _cmd_gitlab(args: list[str]) -> int:
         return _emit_gitlab(
             _full_universe_specs(),
             True,
+            True,
             opts.child_path,
             runtimes,
             log,
@@ -872,6 +889,7 @@ def _cmd_gitlab(args: list[str]) -> int:
             return _emit_gitlab(
                 _full_universe_specs(),
                 True,
+                True,
                 opts.child_path,
                 runtimes,
                 log,
@@ -888,6 +906,7 @@ def _cmd_gitlab(args: list[str]) -> int:
         return _emit_gitlab(
             cells_to_ci_specs(cells),
             site_test,
+            False,
             opts.child_path,
             runtimes,
             log,
@@ -895,10 +914,11 @@ def _cmd_gitlab(args: list[str]) -> int:
         )
 
     log(f"mode: change detection (source={event or 'local'})")
-    specs, site_test = _gitlab_change_matrix(green, log)
+    specs, site_test, keep_pools_test = _gitlab_change_matrix(green, log)
     return _emit_gitlab(
         specs,
         site_test,
+        keep_pools_test,
         opts.child_path,
         runtimes,
         log,

@@ -1088,8 +1088,9 @@ class TestChangeMatrixFanOut:
     @staticmethod
     def _cells(monkeypatch: pytest.MonkeyPatch, changed: list[str]) -> set[tuple[str, str]]:
         monkeypatch.setattr(detect, "git_diff_files", lambda base: changed)
-        specs, site_test = detect._gitlab_change_matrix(None, lambda _: None)
+        specs, site_test, keep_pools_test = detect._gitlab_change_matrix(None, lambda _: None)
         assert site_test is False
+        assert keep_pools_test is False
         return {(cell.role, cell.ubuntu) for cell in map(detect.ci_spec_to_cell, specs)}
 
     def test_verify_only_change_runs_only_the_helper(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1137,9 +1138,10 @@ def _render_child_doc(
     specs: list[str],
     site_test: bool,
     target: str = "aws_qemu",
+    keep_pools_test: bool = False,
 ) -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
-    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, target=target))
+    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, keep_pools_test, target=target))
 
 
 class TestGitlabChangeMatrix:
@@ -1161,7 +1163,7 @@ class TestGitlabChangeMatrix:
         monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["full"])
         monkeypatch.setattr(detect, "git_diff_files", lambda base: pytest.fail("red tip must not be used"))
         logs = []
-        assert detect._gitlab_change_matrix(None, logs.append) == (["full"], True)
+        assert detect._gitlab_change_matrix(None, logs.append) == (["full"], True, True)
         assert any("no green base" in line for line in logs)
 
     def test_explicit_base_still_wins_on_default_branch(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1170,7 +1172,7 @@ class TestGitlabChangeMatrix:
         monkeypatch.setenv("CI_DEFAULT_BRANCH", "master")
         monkeypatch.setenv("CI_COMMIT_BEFORE_SHA", "red_previous_tip")
         seen = self._empty_diff(monkeypatch)
-        assert detect._gitlab_change_matrix(None, lambda _: None) == ([], False)
+        assert detect._gitlab_change_matrix(None, lambda _: None) == ([], False, False)
         assert seen == ["explicit"]
 
     @pytest.mark.parametrize("path", ["test/host_vars/lab.yml", "group_vars/storage_lab.yml"])
@@ -1179,7 +1181,7 @@ class TestGitlabChangeMatrix:
         monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
         monkeypatch.setattr(detect, "git_diff_files", lambda base: [path])
         monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["full"])
-        assert detect._gitlab_change_matrix(None, lambda _: None) == (["full"], True)
+        assert detect._gitlab_change_matrix(None, lambda _: None) == (["full"], True, True)
 
     def test_site_playbook_change_triggers_only_site_jobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CI_BASE_REF", "explicit")
@@ -1188,7 +1190,29 @@ class TestGitlabChangeMatrix:
         monkeypatch.setattr(detect, "list_testable_roles", list)
         monkeypatch.setattr(detect, "build_role_imports", lambda: detect.RoleImports({}, {}))
 
-        assert detect._gitlab_change_matrix(None, lambda _: None) == ([], True)
+        assert detect._gitlab_change_matrix(None, lambda _: None) == ([], True, False)
+
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            ("packer/scripts/provision.sh", True),
+            ("packer/scripts/chroot.sh", True),
+            ("roles/boot/files/dracut_host.conf", True),
+            ("roles/console/files/keyboard", True),
+            ("packer/qemu.pkr.hcl", False),
+            ("roles/boot/files/other.conf", False),
+        ],
+    )
+    def test_installer_inputs_trigger_the_keep_pools_job(
+        self, monkeypatch: pytest.MonkeyPatch, path: str, expected: bool
+    ) -> None:
+        monkeypatch.setenv("CI_BASE_REF", "explicit")
+        monkeypatch.setattr(detect, "git_rev_parse", lambda ref: ref)
+        monkeypatch.setattr(detect, "git_diff_files", lambda base: [path])
+        monkeypatch.setattr(detect, "list_testable_roles", list)
+        monkeypatch.setattr(detect, "build_role_imports", lambda: detect.RoleImports({}, {}))
+
+        assert detect._gitlab_change_matrix(None, lambda _: None) == ([], False, expected)
 
 
 class TestRenderChildPipeline:
@@ -1273,6 +1297,18 @@ class TestRenderChildPipeline:
             assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
         assert doc["_site_test:lab:noble"]["variables"] == {"VARIANT": "lab", "UBUNTU": "noble"}
         assert doc[".x86_cell"]["needs"] == []
+
+    def test_keep_pools_job_rebuilds_a_noble_lab(self) -> None:
+        doc = _render_child_doc([], site_test=False, keep_pools_test=True)
+        job = doc["_keep_pools_test:lab"]
+        assert doc["stages"] == ["rebuild"]
+        assert job["stage"] == "rebuild"
+        assert job["extends"] == ".x86_cell"
+        # The cell scaffold hydrates VARIANT for UBUNTU: the old root's release.
+        assert job["variables"] == {"VARIANT": "lab", "UBUNTU": "noble"}
+        script = "\n".join(job["script"])
+        assert f'keep_pools_test.py --from "$UBUNTU" --to {detect.DEFAULT_UBUNTU} --timeout 2400' in script
+        assert "no_cells" not in doc
 
     def test_site_test_only_stage(self) -> None:
         # site_test with no cells still seeds a single leading `site` stage.
@@ -1452,7 +1488,7 @@ class TestEmitGitlab:
     @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
     def test_writes_child_with_cells(self, tmp_path: Path, target: str) -> None:
         child = tmp_path / "child.yml"
-        rc = detect._emit_gitlab(["zfs:lab", "zfs:pug"], False, str(child), {}, lambda *_: None, target=target)
+        rc = detect._emit_gitlab(["zfs:lab", "zfs:pug"], False, False, str(child), {}, lambda *_: None, target=target)
         assert rc == 0
         loaded = detect.yaml.safe_load(child.read_text())
         assert "zfs:lab" in loaded
@@ -1464,7 +1500,7 @@ class TestEmitGitlab:
         # the rest longest-first. The child YAML preserves that job order.
         child = tmp_path / "child.yml"
         runtimes = {"a:lab": 100.0, "b:lab": 300.0}
-        detect._emit_gitlab(["a:lab", "b:lab", "c:lab"], False, str(child), runtimes, lambda *_: None)
+        detect._emit_gitlab(["a:lab", "b:lab", "c:lab"], False, False, str(child), runtimes, lambda *_: None)
         text = child.read_text()
         order = [text.index(f'"{name}":') for name in ("c:lab", "b:lab", "a:lab")]
         assert order == sorted(order)
