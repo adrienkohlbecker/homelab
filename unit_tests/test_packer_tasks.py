@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
 HETZNER_SH = REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh"
 QEMU_HOST_AMI_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami.sh"
+QEMU_HOST_AMI_CLEANUP_SH = REPO_ROOT / "mise-tasks" / "packer" / "qemu-host-ami-cleanup.sh"
 PUBLISH_QEMU_SH = REPO_ROOT / "mise-tasks" / "packer" / "publish-qemu.sh"
 QEMU_HOST_TEMPLATE = REPO_ROOT / "packer" / "aws" / "qemu_host.pkr.hcl"
 QEMU_HOST_PROVISION_SH = REPO_ROOT / "packer" / "aws" / "files" / "provision_qemu_host.sh"
@@ -975,3 +976,47 @@ def test_minimal_fixture_mirrors_journal_with_the_same_unit_as_packer_fixtures()
     # --now: a getty that already started would otherwise keep writing its
     # banner into the write-only journal artifact.
     assert ["systemctl", "mask", "--now", "serial-getty@hvc0.service"] in user_data["runcmd"]
+
+
+def test_qemu_host_cleanup_reaps_the_jobs_build_instance_and_packer_temporaries(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    aws_log = tmp_path / "aws.log"
+    _executable(
+        fake_bin / "aws",
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n'
+        'case "$*" in\n'
+        '*"ec2 describe-instances"*) printf "i-0abc\\tpacker_key\\tsg-packer,sg-shared\\n" ;;\n'
+        '*"--group-ids sg-packer"*) printf "packer_6acf\\n" ;;\n'
+        '*"--group-ids sg-shared"*) printf "homelab-ci-qemu-host\\n" ;;\n'
+        '*"scheduler delete-schedule"*) exit 254 ;;\n'
+        "esac\n",
+    )
+    env = dict(os.environ, AWS_TEST_LOG=str(aws_log), CI_JOB_ID="42", PATH=f"{fake_bin}:{os.environ['PATH']}")
+
+    result = subprocess.run(["bash", str(QEMU_HOST_AMI_CLEANUP_SH)], env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    calls = aws_log.read_text().splitlines()
+    assert "Name=tag:job_id,Values=42" in calls[0]
+    order = [
+        "ec2 terminate-instances --region eu-central-1 --instance-ids i-0abc",
+        "scheduler delete-schedule --region eu-central-1 --name ci-bake-i-0abc",
+        "ec2 wait instance-terminated --region eu-central-1 --instance-ids i-0abc",
+        "ec2 delete-key-pair --region eu-central-1 --key-name packer_key",
+        "ec2 delete-security-group --region eu-central-1 --group-id sg-packer",
+    ]
+    assert [call for call in calls if any(call.startswith(step) for step in order)] == order
+    assert not any("sg-shared" in call and "delete-security-group" in call for call in calls)
+
+
+def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    aws_log = tmp_path / "aws.log"
+    _executable(fake_bin / "aws", '#!/bin/sh\nprintf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n')
+    env = dict(os.environ, AWS_TEST_LOG=str(aws_log), CI_JOB_ID="42", PATH=f"{fake_bin}:{os.environ['PATH']}")
+
+    result = subprocess.run(["bash", str(QEMU_HOST_AMI_CLEANUP_SH)], env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    assert [call.split()[1] for call in aws_log.read_text().splitlines()] == ["describe-instances"]

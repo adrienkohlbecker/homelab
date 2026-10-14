@@ -209,23 +209,13 @@ qemu_host_ami:
   script:
     - mise run packer:init
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"
-    # The bake defaults to data/ubuntu_releases.yml's ci_host. QEMU_HOST_UBUNTU
-    # bakes and promotes another release's pointer ahead of switching ci_host.
+    # The bake defaults to CI_HOST_UBUNTU. QEMU_HOST_UBUNTU bakes and promotes
+    # another release's pointer ahead of switching it.
     - mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" ${QEMU_HOST_UBUNTU:+--ubuntu "$QEMU_HOST_UBUNTU"} --promote
-  # A cancel or timeout kills Packer before its own cleanup, so terminate this
-  # job's build instance here; a finished bake has already terminated it.
+  # A cancel or timeout kills Packer before its own cleanup.
   after_script:
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-cleanup-$CI_JOB_ID" --region "$AWS_REGION"
-    - |
-      ids=$(mise exec -- aws ec2 describe-instances --region "$AWS_REGION" \
-        --filters "Name=tag:job_id,Values=$CI_JOB_ID" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
-        --query 'Reservations[].Instances[].InstanceId' --output text)
-      for id in $ids; do
-        echo "terminating leftover build instance $id"
-        mise exec -- aws ec2 terminate-instances --region "$AWS_REGION" --instance-ids "$id"
-        # Its backstop schedule, if armed, has nothing left to do.
-        mise exec -- aws scheduler delete-schedule --region "$AWS_REGION" --name "ci-bake-$id" || true
-      done
+    - mise run packer:qemu-host-ami-cleanup
 
 # Build protected QEMU fixtures on lab's KVM runner, retain them locally for lab,
 # and promote versioned bundles plus promoted.json pointers to S3 for AWS cells.
