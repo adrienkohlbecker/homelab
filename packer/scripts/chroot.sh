@@ -10,7 +10,10 @@ set -euxo pipefail
 # upstream URLs, and, for the boot loader, DISKS, COMMANDLINE (the kernel
 # command line for rEFInd's options), ZBM_VERSION, and optionally
 # REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs the
-# distribution's).
+# distribution's). A rebuild (KEEP_POOLS=1) shares the old root's ESP and
+# firmware entries, which the boot and refind roles rewrite on its first
+# converge, so it skips the boot loader and takes none of its inputs; it passes
+# USER_UID/USER_GID when the login user exists in the old root.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -341,7 +344,9 @@ EOF
   fi
 }
 
-install_boot_loader
+if [ "$KEEP_POOLS" != 1 ]; then
+  install_boot_loader
+fi
 
 # Enable tmp mount. Noble ships tmp.mount as a disabled template under
 # /usr/share/systemd/; enable it by path, which links it. Resolute ships
@@ -407,7 +412,14 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
 
 else
   # The login user: vagrant on the qemu fixtures, the operator on bare metal.
-  adduser --disabled-password --gecos "" "$USERNAME"
+  # A rebuild keeps the old root's ids, which own the user's files on the kept
+  # datasets.
+  if [ -n "${USER_UID:-}" ]; then
+    addgroup --gid "${USER_GID:?}" "$USERNAME"
+    adduser --disabled-password --gecos "" --uid "$USER_UID" --gid "$USER_GID" "$USERNAME"
+  else
+    adduser --disabled-password --gecos "" "$USERNAME"
+  fi
 
   mkdir "/home/$USERNAME/.ssh"
   echo "$SSH_KEY_PUB" >"/home/$USERNAME/.ssh/authorized_keys"

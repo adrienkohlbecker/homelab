@@ -1,9 +1,17 @@
 #!/bin/bash
-# Bootstrap a ZFS-on-root install onto $DISKS. Used by packer's qemu
-# build and as the bare-metal copy-paste path for provisioning new
-# lab-class hosts.
+# Bootstrap a ZFS-on-root install. Used by packer's qemu build and, from a live
+# Ubuntu environment, as the bare-metal copy-paste path for lab-class hosts.
+# Two modes:
+#  - fresh (default): wipe and partition $DISKS and $EXTRA_DISKS, create every
+#    pool, and install rpool/ROOT/$UBUNTU_NAME as the root to boot.
+#  - KEEP_POOLS=1: rebuild a host on the disks it has. Nothing is wiped,
+#    partitioned, or created but the new root, rpool/ROOT/$UBUNTU_NAME, which
+#    lands beside the old one (OLD_ROOT, default rpool's bootfs) and takes its
+#    identity and storage wiring. The ESP and firmware entries stay as they are
+#    until the boot and refind roles converge on the new root. bootfs stays on
+#    the old root, the rollback; the script prints the switch.
 #
-# Bare-metal callers MUST also:
+# Bare-metal fresh installs MUST also:
 #  - pre-flight $DISKS and $EXTRA_DISKS. Every entry is wiped unconditionally
 #    (sgdisk --zap-all + wipefs + blkdiscard + zpool labelclear); a wrong
 #    device path destroys data in seconds. Pools imported in the live
@@ -112,37 +120,20 @@ EOF
 }
 
 # Validate every input before anything is written, so a bad layout fails
-# before a disk is wiped rather than halfway through.
+# before a disk is wiped rather than halfway through. Keep-pools mode checks the
+# pools themselves once the tools that read them are installed
+# (check_kept_pools).
 preflight() {
-  local disk device pool key file extra_disks_needed=0
+  local disk device pool key file var extra_disks_needed=0
   local -a disks extra_disks
   local -A seen_disks=()
 
-  # Optional layout features may be empty but must be set explicitly.
-  : "${EXTRA_DISKS?}" "${LAYOUT?}" "${PODMAN_SIZE?}" "${META_SIZE?}" "${EXTRA_POOLS?}"
-  : "${DISKS:?}" "${SWAP_SIZE:?}" "${UBUNTU_NAME:?}" "${ZBM_VERSION:?}"
+  : "${UBUNTU_NAME:?}"
 
   # The setup below rewrites the running system's hostid and mdadm policy
   # before touching a disk, which an installed host must never see.
   [ "$(findmnt -no FSTYPE /)" != zfs ] ||
     fail "the running root is on ZFS; provision.sh runs from a live environment or a build VM, never an installed host"
-
-  read -r -a disks <<<"$DISKS"
-  read -r -a extra_disks <<<"$EXTRA_DISKS"
-  case $LAYOUT in
-  "") ((${#disks[@]} == 1)) || fail "a single-disk LAYOUT takes one disk in DISKS (got ${#disks[@]})" ;;
-  mirror) ((${#disks[@]} >= 2)) || fail "LAYOUT=mirror takes at least two disks in DISKS (got ${#disks[@]})" ;;
-  *) fail "LAYOUT must be empty or mirror (got '$LAYOUT')" ;;
-  esac
-  for pool in $EXTRA_POOLS; do
-    case $pool in
-    dozer) extra_disks_needed=$((extra_disks_needed + 2)) ;;
-    tank_mouse) extra_disks_needed=$((extra_disks_needed + 4)) ;;
-    *) fail "unknown EXTRA_POOLS entry '$pool'" ;;
-    esac
-  done
-  ((${#extra_disks[@]} == extra_disks_needed)) ||
-    fail "EXTRA_POOLS '$EXTRA_POOLS' takes $extra_disks_needed disks in EXTRA_DISKS (got ${#extra_disks[@]})"
 
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu|hetzner)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')"
@@ -165,6 +156,50 @@ preflight() {
     done <<<"$SSH_KEY_PUB"
   fi
 
+  for file in chroot.sh "${ROLE_FILES[@]}"; do
+    [ -f "$SCRIPTS_DIR/$file" ] || fail "required install file not found: $SCRIPTS_DIR/$file"
+  done
+  case $INSTALL_TARGET in
+  qemu) [ -f "$SCRIPTS_DIR/homelab_guest_journal.service" ] || fail "homelab_guest_journal.service not found in $SCRIPTS_DIR" ;;
+  hetzner) [ -d "$SCRIPTS_DIR/hetzner" ] || fail "hetzner/ not found in $SCRIPTS_DIR" ;;
+  esac
+
+  if [ "$KEEP_POOLS" = 1 ]; then
+    # A rebuild keeps every disk as it is; a layout input would only suggest
+    # otherwise.
+    for var in DISKS EXTRA_DISKS LAYOUT SWAP_SIZE PODMAN_SIZE META_SIZE EXTRA_POOLS; do
+      [ -z "${!var+set}" ] || fail "KEEP_POOLS=1 keeps the disks and pools as they are; unset $var"
+    done
+    [ "$INSTALL_TARGET" != hetzner ] || fail "KEEP_POOLS=1 rebuilds a bare_metal host or a qemu fixture, not a hetzner image"
+    # The rebuilt root is a real host: its name and login user are not the
+    # image placeholders.
+    [ -n "${TARGET_HOSTNAME:-}" ] || fail "KEEP_POOLS=1 requires TARGET_HOSTNAME and TARGET_USERNAME"
+    [ -z "${OLD_ROOT:-}" ] || [[ $OLD_ROOT =~ ^rpool/ROOT/[^/]+$ ]] ||
+      fail "OLD_ROOT must name a root under rpool/ROOT (got '$OLD_ROOT')"
+    return 0
+  fi
+
+  # Optional layout features may be empty but must be set explicitly.
+  : "${EXTRA_DISKS?}" "${LAYOUT?}" "${PODMAN_SIZE?}" "${META_SIZE?}" "${EXTRA_POOLS?}"
+  : "${DISKS:?}" "${SWAP_SIZE:?}" "${ZBM_VERSION:?}"
+
+  read -r -a disks <<<"$DISKS"
+  read -r -a extra_disks <<<"$EXTRA_DISKS"
+  case $LAYOUT in
+  "") ((${#disks[@]} == 1)) || fail "a single-disk LAYOUT takes one disk in DISKS (got ${#disks[@]})" ;;
+  mirror) ((${#disks[@]} >= 2)) || fail "LAYOUT=mirror takes at least two disks in DISKS (got ${#disks[@]})" ;;
+  *) fail "LAYOUT must be empty or mirror (got '$LAYOUT')" ;;
+  esac
+  for pool in $EXTRA_POOLS; do
+    case $pool in
+    dozer) extra_disks_needed=$((extra_disks_needed + 2)) ;;
+    tank_mouse) extra_disks_needed=$((extra_disks_needed + 4)) ;;
+    *) fail "unknown EXTRA_POOLS entry '$pool'" ;;
+    esac
+  done
+  ((${#extra_disks[@]} == extra_disks_needed)) ||
+    fail "EXTRA_POOLS '$EXTRA_POOLS' takes $extra_disks_needed disks in EXTRA_DISKS (got ${#extra_disks[@]})"
+
   # Compare resolved devices, so a /dev/disk/by-id alias of a listed disk is a
   # duplicate too. A disk in use -- a mounted filesystem, active swap, or an
   # LVM or dm-crypt device on it -- is never a target.
@@ -179,18 +214,14 @@ preflight() {
       fail "$disk backs an LVM or dm-crypt device"
     fi
   done
-
-  for file in chroot.sh "${ROLE_FILES[@]}"; do
-    [ -f "$SCRIPTS_DIR/$file" ] || fail "required install file not found: $SCRIPTS_DIR/$file"
-  done
-  case $INSTALL_TARGET in
-  qemu) [ -f "$SCRIPTS_DIR/homelab_guest_journal.service" ] || fail "homelab_guest_journal.service not found in $SCRIPTS_DIR" ;;
-  hetzner) [ -d "$SCRIPTS_DIR/hetzner" ] || fail "hetzner/ not found in $SCRIPTS_DIR" ;;
-  esac
 }
 
 # Packer selects qemu or hetzner; direct callers get the bare-metal path.
 export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
+
+# Never inferred from what the disks hold: a fresh install wipes them.
+export KEEP_POOLS="${KEEP_POOLS:-}"
+[[ $KEEP_POOLS =~ ^1?$ ]] || fail "KEEP_POOLS must be empty or 1 (got '$KEEP_POOLS')"
 
 # Placeholder hostname for the shipped image — the deploy step
 # (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
@@ -487,6 +518,155 @@ create_extra_pools() {
   done
 }
 
+# Fresh mode: wipe and partition the disks and create every pool on them,
+# leaving the pools exported and extra_pools naming the data pools.
+create_pools() {
+  zgenhostid -f
+
+  # Stale md members on the target disks would let udev's `mdadm --incremental`
+  # re-assemble an array mid-partitioning and hold a member busy. Tear those
+  # arrays down before wiping.
+  #
+  # Scoped to the disks this run owns, never `--stop --scan` / an unqualified
+  # lsblk: on the bare-metal path the machine may carry arrays on disks the
+  # caller deliberately left out of DISKS/EXTRA_DISKS, and zeroing their
+  # superblocks is not recoverable.
+  # shellcheck disable=SC2086  # word-splitting on the disk lists is the point
+  mapfile -t md_members < <(lsblk --raw --noheadings --paths --output NAME,FSTYPE $DISKS $EXTRA_DISKS | awk '$2 == "linux_raid_member" { print $1 }')
+  if ((${#md_members[@]})); then
+    # Stop the arrays those members back before clearing them -- mdadm refuses
+    # to zero a superblock while its array is still assembled.
+    mapfile -t md_holders < <(lsblk --raw --noheadings --paths --output NAME,TYPE "${md_members[@]}" | awk '$2 ~ /^raid/ { print $1 }' | sort -u)
+    for md_holder in "${md_holders[@]}"; do
+      mdadm --stop "$md_holder" || true
+    done
+    mdadm --zero-superblock "${md_members[@]}"
+  fi
+
+  # Defensive wipe -- a no-op against fresh Packer qcow2s, but necessary on
+  # ordinary bare metal. The disk lists are intentionally split into device
+  # arguments.
+  # shellcheck disable=SC2086
+  wipe_disks $DISKS $EXTRA_DISKS
+  for disk in $DISKS; do
+    partition_disk "$disk"
+  done
+  # Publish each completed table through util-linux rather than relying on
+  # partprobe being present in the live environment.
+  for disk in $DISKS; do
+    partx --update "$disk"
+  done
+
+  # Wait for udev to expose every new partition node (/dev/vdbN, ...)
+  # before zpool create reads them.
+  udevadm settle
+
+  # Create the zpool. $LAYOUT is "" (single) or "mirror"; $PARTITIONS_RPOOL
+  # is the space-separated rpool partitions — both intentionally unquoted
+  # so the shell word-splits them into the zpool args.
+
+  # shellcheck disable=SC2086
+  zpool create -f \
+    -o ashift=12 \
+    -o autotrim=on \
+    -o compatibility=openzfs-2.1-linux \
+    -O casesensitivity=sensitive \
+    -O normalization=formD \
+    -O utf8only=on \
+    -O acltype=posix \
+    -O atime=on \
+    -O canmount=off \
+    -O compression=zstd \
+    -O dnodesize=auto \
+    -O overlay=off \
+    -O relatime=on \
+    -O xattr=sa \
+    -m none \
+    rpool $LAYOUT $PARTITIONS_RPOOL
+
+  # Every root under rpool/ROOT inherits the command line.
+  zfs create -o canmount=off -o mountpoint=none rpool/ROOT
+  zfs set org.zfsbootmenu:commandline="$COMMANDLINE" rpool/ROOT
+
+  create_extra_pools
+
+  # zpool create recorded the kernel device paths it was given; export every
+  # pool for the import from POOL_DEVICE_DIR below.
+  extra_pools=$(zpool list -H -o name | grep -vx rpool || true)
+  for pool in $extra_pools rpool; do
+    zpool_export_retry "$pool"
+  done
+}
+
+# Keep-pools mode: check the pools and the old root before anything on the
+# disks changes, and stage the old root's identity in kept_identity. Every pool
+# is imported read-only, which writes nothing to the disks, and with -f: the
+# old root last imported them under a hostid the live environment lacks. Leaves
+# the pools exported, extra_pools naming the data pools, and the old root's
+# /etc/hostid as the live environment's, for the read-write import that
+# follows to record in the pool labels.
+check_kept_pools() {
+  local available user_ids
+  old_root_dir=$(mktemp -d)
+  # A failed check leaves the disks as they were found.
+  trap 'umount "$old_root_dir" 2>/dev/null || true; zpool export -a' EXIT
+
+  zpool import -a -N -f -o readonly=on -R /mnt -d "$POOL_DEVICE_DIR"
+  zpool list -H rpool >/dev/null || fail "no rpool found in $POOL_DEVICE_DIR"
+  extra_pools=$(zpool list -H -o name | grep -vx rpool || true)
+  [ "$(zpool status -x)" = "all pools are healthy" ] || fail "a pool is unhealthy; see zpool status -x"
+
+  OLD_ROOT=${OLD_ROOT:-$(zpool get -H -o value bootfs rpool)}
+  if ! [[ $OLD_ROOT =~ ^rpool/ROOT/[^/]+$ ]] || ! zfs list -H "$OLD_ROOT" >/dev/null; then
+    fail "the old root '$OLD_ROOT' is not a root under rpool/ROOT"
+  fi
+  [ "$OLD_ROOT" != "rpool/ROOT/$UBUNTU_NAME" ] ||
+    fail "$OLD_ROOT is the old root; a rebuild installs another release beside it"
+  if zfs list -H "rpool/ROOT/$UBUNTU_NAME" >/dev/null 2>&1; then
+    fail "rpool/ROOT/$UBUNTU_NAME already exists; destroy it (zfs destroy -r rpool/ROOT/$UBUNTU_NAME) to reinstall, as after a failed install"
+  fi
+  # The new root lands on rpool beside the old one and the service datasets,
+  # which must not run out of space under it.
+  available=$(zfs get -Hp -o value available rpool)
+  ((available >= 20 * 1024 ** 3)) ||
+    fail "rpool has $((available / 1024 ** 3)) GiB available; the install needs 20"
+
+  # zfsutil: the old root's mountpoint is /, not legacy.
+  mount -t zfs -o ro,zfsutil "$OLD_ROOT" "$old_root_dir"
+  for file in hostid machine-id fstab; do
+    [ -s "$old_root_dir/etc/$file" ] || fail "$OLD_ROOT has no /etc/$file"
+  done
+  compgen -G "$old_root_dir/etc/ssh/ssh_host_*_key" >/dev/null || fail "$OLD_ROOT has no SSH host keys"
+
+  # An existing login user keeps its ids: it owns files on the kept datasets.
+  # chroot.sh creates the user with them.
+  if user_ids=$(awk -F: -v user="$USERNAME" '$1 == user { print $3, $4; found = 1 } END { exit !found }' "$old_root_dir/etc/passwd"); then
+    read -r USER_UID USER_GID <<<"$user_ids"
+    [ "$(awk -F: -v gid="$USER_GID" '$3 == gid { print $1 }' "$old_root_dir/etc/group")" = "$USERNAME" ] ||
+      fail "$USERNAME's primary group in $OLD_ROOT is not $USERNAME; chroot.sh creates the user with its own group"
+    export USER_UID USER_GID
+  fi
+
+  # The identity and storage wiring the new root takes over. The fresh path
+  # generates these instead: zgenhostid, a blank machine-id, the netplan
+  # stanza, and create_storage's fstab and mdadm.conf.
+  kept_identity=$(mktemp -d)
+  mkdir -p "$kept_identity"/etc/{ssh,mdadm}
+  cp -a "$old_root_dir"/etc/{hostid,machine-id,fstab} "$kept_identity/etc/"
+  cp -a "$old_root_dir"/etc/ssh/ssh_host_* "$kept_identity/etc/ssh/"
+  if [ -d "$old_root_dir/etc/netplan" ]; then
+    cp -a "$old_root_dir/etc/netplan" "$kept_identity/etc/"
+  fi
+  if [ -f "$old_root_dir/etc/mdadm/mdadm.conf" ]; then
+    cp -a "$old_root_dir/etc/mdadm/mdadm.conf" "$kept_identity/etc/mdadm/"
+  fi
+
+  umount "$old_root_dir"
+  zpool export -a
+  trap - EXIT
+  cp "$kept_identity/etc/hostid" /etc/hostid
+}
+
 # Per-disk partition paths, computed once as space-delimited strings.
 # One unified layout for every host (notes/unified_disk_layout.md):
 #   1 = BIOS boot (EF02)
@@ -516,7 +696,7 @@ PARTITIONS_SWAP=""
 PARTITIONS_PODMAN=""
 PARTITIONS_META=""
 PARTITIONS_RPOOL=""
-for d in $DISKS; do
+for d in ${DISKS:-}; do
   PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
   PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
   if [ -n "$PODMAN_SIZE" ]; then
@@ -554,95 +734,13 @@ apt_update
   apt-get install --yes arch-install-scripts debootstrap dosfstools gdisk mdadm zfsutils-linux
 )
 
-# Every pool is created fresh on wiped disks, so one already imported in the
-# live environment is a mistake: its disks are either listed here and about to
-# be wiped, or another pool would collide with its name. Checked once the tools
-# above can list pools, before the environment's storage policy changes.
+# A pool already imported in the live environment is a mistake: a fresh
+# install would wipe its disks or collide with its name, and a rebuild imports
+# every pool itself, under the old root's hostid. Checked once the tools above
+# can list pools, before the environment's storage policy changes.
 imported_pools=$(zpool list -H -o name)
 [ -z "$imported_pools" ] ||
   fail "export the pools imported in the live environment first: $imported_pools"
-
-# Stop udev's `mdadm --incremental` from re-assembling an array off a stale
-# superblock while the tables below are rewritten. Declarative, so it cannot
-# leak the way a stop-exec-queue trap can if the script exits mid-partition.
-# Live build environment only -- create_storage writes the shipped image's
-# mdadm.conf separately.
-printf 'AUTO -all\n' >/etc/mdadm/mdadm.conf
-
-zgenhostid -f
-
-# Stale md members on the target disks would let udev's `mdadm --incremental`
-# re-assemble an array mid-partitioning and hold a member busy. Tear those
-# arrays down before wiping.
-#
-# Scoped to the disks this run owns, never `--stop --scan` / an unqualified
-# lsblk: on the bare-metal path the machine may carry arrays on disks the
-# caller deliberately left out of DISKS/EXTRA_DISKS, and zeroing their
-# superblocks is not recoverable.
-# shellcheck disable=SC2086  # word-splitting on the disk lists is the point
-mapfile -t md_members < <(lsblk --raw --noheadings --paths --output NAME,FSTYPE $DISKS $EXTRA_DISKS | awk '$2 == "linux_raid_member" { print $1 }')
-if ((${#md_members[@]})); then
-  # Stop the arrays those members back before clearing them -- mdadm refuses
-  # to zero a superblock while its array is still assembled.
-  mapfile -t md_holders < <(lsblk --raw --noheadings --paths --output NAME,TYPE "${md_members[@]}" | awk '$2 ~ /^raid/ { print $1 }' | sort -u)
-  for md_holder in "${md_holders[@]}"; do
-    mdadm --stop "$md_holder" || true
-  done
-  mdadm --zero-superblock "${md_members[@]}"
-fi
-
-# Defensive wipe -- a no-op against fresh Packer qcow2s, but necessary on
-# ordinary bare metal. The disk lists are intentionally split into device
-# arguments.
-# shellcheck disable=SC2086
-wipe_disks $DISKS $EXTRA_DISKS
-for disk in $DISKS; do
-  partition_disk "$disk"
-done
-# Publish each completed table through util-linux rather than relying on
-# partprobe being present in the live environment.
-for disk in $DISKS; do
-  partx --update "$disk"
-done
-
-# Wait for udev to expose every new partition node (/dev/vdbN, ...)
-# before zpool create reads them.
-udevadm settle
-
-# Create the zpool. $LAYOUT is "" (single) or "mirror"; $PARTITIONS_RPOOL
-# is the space-separated rpool partitions — both intentionally unquoted
-# so the shell word-splits them into the zpool args.
-
-# shellcheck disable=SC2086
-zpool create -f \
-  -o ashift=12 \
-  -o autotrim=on \
-  -o compatibility=openzfs-2.1-linux \
-  -O casesensitivity=sensitive \
-  -O normalization=formD \
-  -O utf8only=on \
-  -O acltype=posix \
-  -O atime=on \
-  -O canmount=off \
-  -O compression=zstd \
-  -O dnodesize=auto \
-  -O overlay=off \
-  -O relatime=on \
-  -O xattr=sa \
-  -m none \
-  rpool $LAYOUT $PARTITIONS_RPOOL
-
-# Create initial file systems
-
-zfs create -o canmount=off -o mountpoint=none rpool/ROOT
-zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
-
-# Every boot environment under rpool/ROOT inherits the command line.
-zfs set org.zfsbootmenu:commandline="$COMMANDLINE" rpool/ROOT
-
-zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
-
-create_extra_pools
 
 # Pools are re-imported from stable device names, which zpool.cache records
 # for later imports. Physical disks carry serials, so by-id names them across
@@ -655,20 +753,45 @@ else
   POOL_DEVICE_DIR=/dev/disk/by-partuuid
 fi
 
-# zpool create recorded the kernel device paths it was given; export every
-# pool and re-import it from POOL_DEVICE_DIR so zpool.cache records stable
-# names. rpool comes back with a temporary mountpoint of /mnt. An altroot
-# import implies cachefile=none, so name the cache explicitly: the shipped
-# zpool.cache then lists rpool alongside the data pools.
-extra_pools=$(zpool list -H -o name | grep -vx rpool || true)
-for pool in $extra_pools rpool; do
-  zpool_export_retry "$pool"
-done
-zpool import -N -R /mnt -o cachefile=/etc/zfs/zpool.cache -d "$POOL_DEVICE_DIR" rpool
+# Stop udev's `mdadm --incremental` from assembling arrays off the target
+# disks: off a stale superblock while a fresh install rewrites the tables, or
+# off the kept arrays a rebuild leaves to the new root. Declarative, so it
+# cannot leak the way a stop-exec-queue trap can if the script exits
+# mid-partition. Live environment only -- the new root gets its own mdadm.conf.
+printf 'AUTO -all\n' >/etc/mdadm/mdadm.conf
+
+if [ "$KEEP_POOLS" = 1 ]; then
+  check_kept_pools
+else
+  create_pools
+fi
+
+# Import every pool from POOL_DEVICE_DIR so zpool.cache records stable names.
+# rpool comes back with a temporary mountpoint of /mnt. An altroot import
+# implies cachefile=none, so name the cache explicitly: the shipped zpool.cache
+# then lists rpool alongside the data pools.
+#
+# A rebuild forces the import: the old root last imported the pools under the
+# hostid ZFSBootMenu boots every root with (spl.spl_hostid on its command
+# line), not its own /etc/hostid.
+import_force=()
+if [ "$KEEP_POOLS" = 1 ]; then
+  import_force=(-f)
+fi
+zpool import "${import_force[@]}" -N -R /mnt -o cachefile=/etc/zfs/zpool.cache -d "$POOL_DEVICE_DIR" rpool
 for pool in $extra_pools; do
-  zpool import -N -d "$POOL_DEVICE_DIR" "$pool"
+  zpool import "${import_force[@]}" -N -d "$POOL_DEVICE_DIR" "$pool"
 done
-zfs mount "rpool/ROOT/$UBUNTU_NAME"
+
+# The new root stays at mountpoint=legacy until the install completes: ZBM
+# offers only roots mounted at /, so a failed install never shows up as
+# bootable. canmount=noauto keeps any other root from mounting it. A rebuild
+# leaves bootfs on the old root.
+zfs create -o canmount=noauto -o mountpoint=legacy "rpool/ROOT/$UBUNTU_NAME"
+if [ "$KEEP_POOLS" != 1 ]; then
+  zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
+fi
+mount -t zfs "rpool/ROOT/$UBUNTU_NAME" /mnt
 
 # Wait for udev to wire the new device nodes before the install uses them.
 udevadm settle
@@ -688,11 +811,17 @@ debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" "${debootstrap_script
   exit "$rc"
 }
 
-# /etc/hostid must match the one ZFS saw at pool creation.
-
-cp /etc/hostid /mnt/etc
-
-create_storage
+if [ "$KEEP_POOLS" = 1 ]; then
+  # The old root's identity and storage wiring, in place before chroot.sh
+  # installs the packages that read it: the initramfs embeds hostid and
+  # mdadm.conf, openssh-server keeps existing host keys, mdadm an existing
+  # mdadm.conf, and systemd an existing machine-id.
+  cp -a "$kept_identity/etc" /mnt/
+else
+  # /etc/hostid must match the one ZFS saw at pool creation.
+  cp /etc/hostid /mnt/etc
+  create_storage
+fi
 
 # Configure networking. Match by name glob so the same image works under any
 # qemu device topology (packer's vs. testrole's direct-kernel boot give the NIC
@@ -708,8 +837,8 @@ create_storage
 #
 # Skipped on hetzner: cloud-init's datasource owns networking there, exactly
 # as on the stock hcloud image, and a competing static netplan would fight
-# cloud-init's generated one.
-if [ "$INSTALL_TARGET" != hetzner ]; then
+# cloud-init's generated one. A rebuild keeps the old root's netplan.
+if [ "$INSTALL_TARGET" != hetzner ] && [ "$KEEP_POOLS" != 1 ]; then
   mkdir -p /mnt/etc/netplan
   cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
 network:
@@ -751,9 +880,9 @@ fi
 # arch-chroot bind-mounts the API filesystems and /etc/resolv.conf for the
 # chroot's lifetime, so apt resolves names without the build host's DNS landing
 # in the image. It mounts into the caller's namespace, though, and a mount
-# chroot.sh adds itself (/boot/efi) would outlive it and block the zfs unmount
-# below; the private mount namespace takes every one of them down on exit. The
-# exported install variables flow straight through.
+# chroot.sh adds itself (/boot/efi) would outlive it and block the unmount of
+# /mnt below; the private mount namespace takes every one of them down on exit.
+# The exported install variables flow straight through.
 CHROOT_FILES=$chroot_files unshare --mount --propagation private \
   arch-chroot /mnt bash "$chroot_files/chroot.sh" </dev/null
 
@@ -762,8 +891,10 @@ rm -rf -- "/mnt${chroot_files:?}"
 
 # Blank machine-id so systemd regenerates a unique one on first boot —
 # otherwise every host from this image shares one (journald, systemd instance
-# ids, DHCP DUID).
-: >/mnt/etc/machine-id
+# ids, DHCP DUID). A rebuild keeps the old root's.
+if [ "$KEEP_POOLS" != 1 ]; then
+  : >/mnt/etc/machine-id
+fi
 
 # Ship the pool cache so the image imports its data pools. Copied after the
 # chroot, so the image's first initramfs, built in there, embeds none: Noble's
@@ -771,13 +902,29 @@ rm -rf -- "/mnt${chroot_files:?}"
 mkdir -p /mnt/etc/zfs
 cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 
-# Only the rpool root dataset itself remains mounted in the host namespace.
-zfs unmount "rpool/ROOT/$UBUNTU_NAME"
+# Commit point: the root becomes bootable. Unmounted first, since a mountpoint
+# change remounts a mounted dataset at its new mountpoint.
+umount /mnt
+zfs set mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 sync
 
 # Export every pool (zpool_export_retry handles the "pool is busy"
 # udev/systemd race; see its comment). Extra pools go first; rpool last
-# because the zfs unmount above has already quiesced its root dataset.
+# because the umount above has already quiesced its root dataset.
 for pool in $extra_pools rpool; do
   zpool_export_retry "$pool"
 done
+
+if [ "$KEEP_POOLS" = 1 ]; then
+  set +x
+  cat <<EOF
+
+rpool/ROOT/$UBUNTU_NAME is installed beside $OLD_ROOT, which stays the root to
+boot. To boot the new root, from this live environment:
+  zpool import -N rpool && zpool set bootfs=rpool/ROOT/$UBUNTU_NAME rpool && zpool export rpool
+or from $OLD_ROOT:
+  zpool set bootfs=rpool/ROOT/$UBUNTU_NAME rpool && systemctl reboot
+To roll back afterwards:
+  zpool set bootfs=$OLD_ROOT rpool && systemctl reboot
+EOF
+fi
