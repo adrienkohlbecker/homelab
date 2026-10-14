@@ -121,7 +121,7 @@ def test_retry_budget_counts_total_attempts():
 
 def test_supported_qemu_images_are_region_and_architecture_specific():
     x86_tags = {
-        "Name": "homelab-ci-qemu-host-noble",
+        "Name": "homelab-ci-qemu-host-x86-noble",
         "architecture": "x86_64",
         "machine": "qemu_host",
         "role": "ci-ami",
@@ -136,7 +136,7 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
     arm = image(
         "ami-arm",
         tags={
-            "Name": "homelab-ci-qemu-host-aarch64-noble",
+            "Name": "homelab-ci-qemu-host-arm-noble",
             "architecture": "aarch64",
             "machine": "qemu_host",
             "role": "ci-ami",
@@ -149,7 +149,7 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", x86)
     resolute = image(
         "ami-x86-resolute",
-        tags={**x86_tags, "Name": "homelab-ci-qemu-host-resolute", "ubuntu": "resolute"},
+        tags={**x86_tags, "Name": "homelab-ci-qemu-host-x86-resolute", "ubuntu": "resolute"},
         snapshot_id="snap-x86-resolute",
     )
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", resolute)

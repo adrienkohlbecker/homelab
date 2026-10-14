@@ -1191,7 +1191,7 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
 }
 
 # ─── SSM parameters: nested-qemu host AMI ────────────────────────────────────
-# qemu-host-ami.sh creates and promotes /homelab-ci/ami/qemu-host/[aarch64/]<release>
+# qemu-host-ami.sh creates and promotes /homelab-ci/ami/qemu-host/{x86,arm}/<release>
 # with put-parameter --overwrite, so each release's pointer exists once its
 # first bake promotes. Terraform only reads them, through the launch templates'
 # resolve:ssm: image ids; the removed blocks drop its old noble parameter

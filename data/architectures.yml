@@ -24,8 +24,8 @@ x86_64:
         code: /usr/share/OVMF/OVMF_CODE_4M.fd
         vars: /usr/share/OVMF/OVMF_VARS_4M.fd
   ci:
-    ami_name_prefix: homelab-ci-qemu-host
-    ami_parameter: /homelab-ci/ami/qemu-host/{ubuntu}
+    ami_name_prefix: homelab-ci-qemu-host-x86
+    ami_parameter: /homelab-ci/ami/qemu-host/x86/{ubuntu}
 aarch64:
   guest:
     machine_type: virt
@@ -45,5 +45,5 @@ aarch64:
         code: /opt/homebrew/share/qemu/edk2-aarch64-code.fd
         vars: /opt/homebrew/share/qemu/edk2-arm-vars.fd
   ci:
-    ami_name_prefix: homelab-ci-qemu-host-aarch64
-    ami_parameter: /homelab-ci/ami/qemu-host/aarch64/{ubuntu}
+    ami_name_prefix: homelab-ci-qemu-host-arm
+    ami_parameter: /homelab-ci/ami/qemu-host/arm/{ubuntu}

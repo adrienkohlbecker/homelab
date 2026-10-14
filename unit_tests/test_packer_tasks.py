@@ -700,7 +700,7 @@ def _run_qemu_host_bake(
         'printf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n'
         'case "$*" in\n'
         '*"ssm put-parameter"*) printf "7\\n" ;;\n'
-        '*"--name /homelab-ci/ami/qemu-host/aarch64/noble:7 "*) printf "%s\\n" "$RESOLVED_AMI" ;;\n'
+        '*"--name /homelab-ci/ami/qemu-host/arm/noble:7 "*) printf "%s\\n" "$RESOLVED_AMI" ;;\n'
         '*"ssm get-parameter"*) printf "ami-promoted\\n" ;;\n'
         '*"ec2 describe-images"*) printf "[]\\n" ;;\n'
         "esac\n",
@@ -739,7 +739,7 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
     assert "aws_region=" not in call
     assert "architecture=aarch64" in call
     assert "Candidate AMI: ami-1234abcd" in result.stdout
-    assert "/homelab-ci/ami/qemu-host/aarch64/noble" in result.stdout
+    assert "/homelab-ci/ami/qemu-host/arm/noble" in result.stdout
     # Candidate bakes prune too; retention protects the promoted AMI and keeps
     # the newest builds, so unpromoted candidates cannot accumulate.
     assert "Prune: nothing to remove" in result.stdout
@@ -754,14 +754,14 @@ def test_qemu_host_bake_defaults_to_the_ci_host_release(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert f"ubuntu_name={ci_host}" in packer_log.read_text()
-    assert f"/homelab-ci/ami/qemu-host/aarch64/{ci_host}" in result.stdout
+    assert f"/homelab-ci/ami/qemu-host/arm/{ci_host}" in result.stdout
 
 
 def test_qemu_host_promotion_waits_for_ssm_to_resolve_the_new_version(tmp_path: Path) -> None:
     result, _packer_log, _aws_log, sleep_log = _run_qemu_host_bake(tmp_path, promote=True)
 
     assert result.returncode == 0, result.stderr
-    assert "Promoted /homelab-ci/ami/qemu-host/aarch64/noble -> ami-1234abcd (version 7)" in result.stdout
+    assert "Promoted /homelab-ci/ami/qemu-host/arm/noble -> ami-1234abcd (version 7)" in result.stdout
     # The rollback command must restore the same validated data type.
     assert "--data-type aws:ec2:image --value ami-promoted --overwrite" in result.stdout
     assert not sleep_log.exists()
