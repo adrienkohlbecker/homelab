@@ -1068,16 +1068,6 @@ resource "aws_launch_template" "ci_qemu" {
   }
 }
 
-moved {
-  from = aws_launch_template.ci_qemu_x86_host
-  to   = aws_launch_template.ci_qemu["x86"]
-}
-
-moved {
-  from = aws_launch_template.ci_qemu_arm_host
-  to   = aws_launch_template.ci_qemu["arm"]
-}
-
 resource "aws_autoscaling_group" "ci_qemu" {
   for_each = local.ci_qemu_pools
 
