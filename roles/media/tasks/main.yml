@@ -11,11 +11,13 @@
   tags:
     - media
 
+# The import's zfs-tagged mount tasks also run under --tags zfs, which skips
+# the group task that registers media_group.
 - name: Configure media dataset
   import_role:
     name: zfs_dataset
     tasks_from: dataset
-  when: not (ansible_check_mode and media_group.changed)
+  when: not (ansible_check_mode and media_group.changed | default(false))
   vars:
     zfs_dataset_args:
       dataset: '{{ zfs_tank_filesystem }}/media'
