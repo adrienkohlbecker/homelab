@@ -31,6 +31,21 @@
     name: reboot
     tasks_from: reboot
 
+# Dracut returns to an unpacked copy of its image at shutdown, whose hooks
+# export the pools; dracut-shutdown.service unpacks it as the reboot above
+# stopped the host.
+- name: _verify | The shutdown before this boot unpacked the Dracut image
+  when:
+    - not qemu_test_minimal
+    - initramfs_use_dracut
+  command: journalctl -b -1 -u dracut-shutdown.service -o cat
+  register: _boot_verify_dracut_shutdown
+  changed_when: false
+  failed_when: >-
+    'Stopped dracut-shutdown.service' not in _boot_verify_dracut_shutdown.stdout
+    or 'Failed' in _boot_verify_dracut_shutdown.stdout
+  become: true
+
 # No grub package was installed during converge.
 - name: _verify | Dpkg install status for grub*
   when: not grub_bootloader

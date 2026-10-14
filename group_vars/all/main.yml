@@ -40,9 +40,11 @@ grub_bootloader: false
 initramfs_use_dracut: "{{ ansible_distribution_release not in ['jammy', 'noble'] }}"
 # Pair ZFS support with the generator so root-on-ZFS hosts never build an image
 # without their root driver. Hosts whose root is not on ZFS import their pools
-# after switch-root and need no image support.
+# after switch-root and need no image support. dracut-core accepts 3cpio for
+# its cpio dependency, but dracut-initramfs-restore runs cpio itself: without
+# it the shutdown image never unpacks, so pools are not exported at shutdown.
 initramfs_packages: >-
-  {{ (['dracut'] + (['zfs-dracut'] if zfs_root else []))
+  {{ (['dracut', 'cpio'] + (['zfs-dracut'] if zfs_root else []))
      if initramfs_use_dracut
      else (['initramfs-tools'] + (['zfs-initramfs'] if zfs_root else [])) }}
 initramfs_rebuild_command: >-
