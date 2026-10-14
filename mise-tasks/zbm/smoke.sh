@@ -75,14 +75,7 @@ base_cmdline=$(cat "${workdir}/cmdline")
 # The image's own cmdline names no console; point the kernel at this arch's
 # QEMU UART, which launch.py --foreground captures as the serial log asserted
 # on below.
-case "$arch" in
-x86_64) serial_console="console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200" ;;
-aarch64) serial_console="console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200" ;;
-*)
-  echo "no serial console for $arch" >&2
-  exit 1
-  ;;
-esac
+serial_console=$(ARCH=$arch yq -e '.qemu_serial_console[strenv(ARCH)]' group_vars/all/console.yml)
 
 # Boot the unified EFI image rEFInd actually loads in production, not the
 # components-mode kernel+initrd pair -- it embeds its own initrd/cmdline PE

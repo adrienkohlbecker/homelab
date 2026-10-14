@@ -130,23 +130,15 @@ check_identity() {
 
 # Print the kernel command line ZBM boots a fresh install's roots with: the
 # org.zfsbootmenu:commandline property on rpool/ROOT and the rEFInd menu's
-# options. Every target keeps VGA output. QEMU fixtures add the
-# architecture-specific serial console verify-boot reads and disable
-# mitigations in disposable nested-KVM cells; Hetzner lists its serial console
-# before tty0, so the VGA console keeps /dev/console. Bare-metal lab and pug
-# have no UART. The boot role owns the final prod command line.
+# options. Every target keeps VGA output. QEMU fixtures add SERIAL_CONSOLE, the
+# serial console verify-boot reads, and disable mitigations in disposable
+# nested-KVM cells; Hetzner lists its SERIAL_CONSOLE before tty0, so the VGA
+# console keeps /dev/console. Bare-metal lab and pug have no UART. The boot
+# role owns the final prod command line.
 boot_commandline() {
-  local serial
-  case $(uname -m) in
-  x86_64) serial="earlycon=uart8250,io,0x3f8 console=ttyS0,115200" ;;
-  aarch64) serial="earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200" ;;
-  *) fail "unsupported architecture $(uname -m)" ;;
-  esac
   case $INSTALL_TARGET in
-  # Twin of _console_serial's qemu_test branch (group_vars/all/main.yml): the
-  # harness's serial console never answers systemd's terminal queries.
-  qemu) echo "console=tty0 systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80 $serial mitigations=off" ;;
-  hetzner) echo "$serial console=tty0" ;;
+  qemu) echo "console=tty0 $SERIAL_CONSOLE mitigations=off" ;;
+  hetzner) echo "$SERIAL_CONSOLE console=tty0" ;;
   *) echo "console=tty0" ;;
   esac
 }

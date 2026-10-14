@@ -31,11 +31,11 @@
 set -euxo pipefail
 
 # DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, PODMAN_SIZE, META_SIZE, EXTRA_POOLS,
-# INSTALL_TARGET, UBUNTU_NAME, and the optional NEXUS_URL come from packer's
-# shell-provisioner env block. Bare-metal callers export them by hand.
-# This script consumes the disk/pool vars, derives the UBUNTU_MIRROR* URLs, and
-# passes the exported install vars through to chroot.sh. The ZBM_* vars used
-# downstream are documented at the top of chroot.sh.
+# INSTALL_TARGET, SERIAL_CONSOLE, UBUNTU_NAME, and the optional NEXUS_URL come
+# from packer's shell-provisioner env block. Bare-metal callers export them by
+# hand. This script consumes the disk/pool vars, derives the UBUNTU_MIRROR*
+# URLs, and passes the exported install vars through to chroot.sh. The ZBM_*
+# vars used downstream are documented at the top of chroot.sh.
 
 # shellcheck source=packer/scripts/install_lib.sh
 . "$(dirname -- "${BASH_SOURCE[0]}")/install_lib.sh"
@@ -75,6 +75,8 @@ preflight() {
 
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu|hetzner)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')"
+  [ "$INSTALL_TARGET" = bare_metal ] || [ -n "${SERIAL_CONSOLE:-}" ] ||
+    fail "INSTALL_TARGET=$INSTALL_TARGET requires SERIAL_CONSOLE"
   [ "${TARGET_HOSTNAME+set}" = "${TARGET_USERNAME+set}" ] ||
     fail "TARGET_HOSTNAME and TARGET_USERNAME must be set together"
   check_identity

@@ -74,7 +74,7 @@ swap_zram_algorithm: lz4
 swap_swappiness: 150
 
 # Hetzner VPS has a standard 8250 UART at 0x3f8 (Hetzner serial console).
-boot_serial_console: "earlycon=uart8250,io,0x3f8 console=ttyS0,115200"
+boot_serial_console: "{{ qemu_serial_console.x86_64 }}"
 
 # Firewall: fox relies on the Hetzner Cloud firewall (terraform) rather than
 # the home `firewall` role (whose nftables template is built around the home

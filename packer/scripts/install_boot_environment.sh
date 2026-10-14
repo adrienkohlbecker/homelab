@@ -25,6 +25,7 @@
 #   SSH_KEY_PUB      that user's authorized key
 #   TARGET_HOSTNAME  defaults to the running hostname
 #   INSTALL_TARGET   bare_metal (default) or qemu (the harness fixtures)
+#   SERIAL_CONSOLE   the kernel's serial console arguments; required for qemu
 #   NEXUS_URL        optional apt proxy host, as for provision.sh
 #   CARRY_PATHS      optional space-separated paths copied as-is from the
 #                    running root, for host state that lives outside a dataset
@@ -55,6 +56,8 @@ preflight() {
   [ "${UBUNTU_NAME:-}" != "$running_release" ] || fail "$UBUNTU_NAME is the running release"
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal or qemu (got '$INSTALL_TARGET')"
+  [ "$INSTALL_TARGET" = bare_metal ] || [ -n "${SERIAL_CONSOLE:-}" ] ||
+    fail "INSTALL_TARGET=$INSTALL_TARGET requires SERIAL_CONSOLE"
   check_identity
 
   # An existing user keeps its ids in the new root: they own its files on the

@@ -110,6 +110,7 @@
             TARGET_USERNAME: "{{ _be_user.stdout }}"
             SSH_KEY_PUB: "{{ _be_authorized_keys.content | b64decode | trim }}"
             INSTALL_TARGET: qemu
+            SERIAL_CONSOLE: "{{ _console_serial | trim }}"
             NEXUS_URL: "{{ nexus_url }}"
             CARRY_PATHS: /etc/boot_environment_carried
           changed_when: true

@@ -26,7 +26,8 @@ trap 'exit 130' INT TERM
 # wiring: fstab, mdadm.conf on a mirror, netplan (cloud-init's job on Hetzner),
 # and hostid. The environment it reads, exported by that installer:
 # - Every install: UBUNTU_NAME, INSTALL_TARGET, HOSTNAME, USERNAME,
-#   SSH_KEY_PUB, CHROOT_FILES, and the UBUNTU_MIRROR* build and upstream URLs.
+#   SSH_KEY_PUB, CHROOT_FILES, and the UBUNTU_MIRROR* build and upstream URLs;
+#   on a qemu or hetzner target, SERIAL_CONSOLE.
 # - A fresh install (provision.sh), for the boot loader: DISKS, ZBM_VERSION,
 #   and optionally REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package;
 #   empty installs the distribution's).

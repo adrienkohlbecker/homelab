@@ -1,0 +1,14 @@
+# Kernel console fragments for QEMU/KVM machines. Plain data, no Jinja:
+# packer/qemu.pkr.hcl reads this file too, for the console the image installer
+# bakes into a fresh root's command line.
+
+# Each guest architecture's QEMU UART: the virt machine's PL011, and the 8250
+# at 0x3f8 on q35 and Hetzner's KVM.
+qemu_serial_console:
+  x86_64: earlycon=uart8250,io,0x3f8 console=ttyS0,115200
+  aarch64: earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200
+
+# The harness's serial console is a log file that never answers, so fixtures
+# also give systemd (258+) its terminal type and size; otherwise systemd queries
+# /dev/console and waits out each query's timeout, twice per systemd instance.
+qemu_test_console_tty: systemd.tty.term.console=vt220 systemd.tty.rows.console=24 systemd.tty.columns.console=80
