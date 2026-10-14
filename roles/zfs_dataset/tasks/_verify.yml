@@ -72,10 +72,11 @@
   changed_when: true
   failed_when: _zfs_dataset_verify_fallback.stdout != 'fallback works'
 
-# Retire the probe holding live data and a nightly-style snapshot: the data
-# leaves the live dataset but stays in its history, a final empty @bak-
-# snapshot joins it, and the dataset stays in the backup mesh, unmounted.
-# Non-ZFS hosts lose their plain directory.
+# Retire the probe holding a nightly-style snapshot and data written after it:
+# the data leaves the live dataset but stays in its history, including what
+# the nightly snapshot missed, a final empty @bak- snapshot joins it, and the
+# dataset stays in the backup mesh, unmounted. Non-ZFS hosts lose their plain
+# directory.
 - name: _verify | Tag the probe for backups
   when: zfs_root
   command: zfs set autobackup:bak=true {{ zfs_tank_filesystem }}/_verify_probe
@@ -98,6 +99,18 @@
   when: zfs_root
   command: zfs snapshot {{ zfs_tank_filesystem }}/_verify_probe@bak-20260101020000
   changed_when: true
+  become: true
+
+- name: _verify | Write into the probe after its nightly snapshot
+  when: zfs_root
+  command:
+    argv:
+      - dd
+      - if=/dev/urandom
+      - of=/mnt/_verify_probe/late.bin
+      - bs=1M
+      - count=4
+    creates: /mnt/_verify_probe/late.bin
   become: true
 
 - name: _verify | Retire the probe through the production helper
@@ -158,6 +171,8 @@
   vars:
     props: "{{ dict(_zfs_dataset_verify_retired.stdout_lines | map('split', '\t')) }}"
     snapshots: "{{ dict(_zfs_dataset_verify_retired_snapshots.stdout_lines | map('split', '\t')) }}"
+    nightly: "{{ zfs_tank_filesystem ~ '/_verify_probe@bak-20260101020000' }}"
+    kept: "{{ snapshots.keys() | list | select('search', '@bak-') | reject('equalto', nightly) | first }}"
     final: "{{ snapshots.keys() | list | last }}"
   assert:
     that:
@@ -165,9 +180,11 @@
       - props.mounted == 'no'
       - props['autobackup:bak'] == 'true'
       - props.referenced | int < 1048576
-      - (zfs_tank_filesystem ~ '/_verify_probe@bak-20260101020000') in snapshots
-      - snapshots.keys() | select('search', '@bak-') | list | length == 2
+      - nightly in snapshots
+      - snapshots.keys() | select('search', '@bak-') | list | length == 3
+      - snapshots[kept] | int >= 8388608
       - final is match('.*@bak-[0-9]{14}$')
+      - final != kept
       - snapshots[final] | int < 1048576
       - _zfs_dataset_verify_retired_paths.results | selectattr('stat.exists') | list | length == 0
     fail_msg: "{{ props }} {{ snapshots }}"

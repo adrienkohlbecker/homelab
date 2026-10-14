@@ -3,15 +3,16 @@
 #   dataset     full dataset path (e.g. rpool/services/sqlite)
 #   mountpoint  its mountpoint (e.g. /mnt/services/sqlite)
 #
-# Retiring is not destroying: the live dataset is emptied, a final @bak-
-# snapshot in zfs-autobackup's naming records that empty state, and the dataset
-# is left unmounted (canmount=off) with its mount unit and mountpoint directory
-# removed. Every snapshot is kept and autobackup:bak is left alone, so the
-# onsite and offsite legs carry the final state. The history then thins like
-# any other dataset's until the operator sets autobackup:bak=false on the
-# source and its replicas (freezing it) and destroys them by hand.
+# Retiring is not destroying: a @bak- snapshot in zfs-autobackup's naming
+# keeps the contents as they stand, the live dataset is emptied, a final @bak-
+# snapshot records that empty state, and the dataset is left unmounted
+# (canmount=off) with its mount unit and mountpoint directory removed. Every
+# snapshot is kept and autobackup:bak is left alone, so the onsite and offsite
+# legs carry the final state. The history then thins like any other dataset's
+# until the operator sets autobackup:bak=false on the source and its replicas
+# (freezing it) and destroys them by hand.
 #
-# The final snapshot is taken out of band; the onsite pull's nightly wait
+# Both snapshots are taken out of band; the onsite pull's nightly wait
 # compares each dataset with its own replica (zfs_backup_onsite), so it does
 # not release the wait for the host's other datasets.
 #
@@ -81,6 +82,20 @@
           changed_when: false
           become: true
 
+        # Keeps what changed since the last nightly @bak-. Host-local time, as
+        # zfs-autobackup names its own snapshots.
+        - name: remove | Snapshot the dataset before emptying it
+          shell: |
+            set -euo pipefail
+            stamp=$(date +%Y%m%d%H%M%S)
+            zfs snapshot "{{ zfs_dataset_args.dataset }}@bak-$stamp"
+            echo "$stamp"
+          args:
+            executable: /bin/bash
+          register: _zfs_dataset_remove_kept
+          changed_when: true
+          become: true
+
         - name: remove | Empty the dataset
           command:
             argv:
@@ -93,10 +108,14 @@
           changed_when: true
           become: true
 
-        # Host-local time, as zfs-autobackup names its own snapshots.
+        # Snapshot names have one-second resolution, so wait out the second
+        # the snapshot above took.
         - name: remove | Take the final snapshot
           shell: |
             set -euo pipefail
+            while [ "$(date +%Y%m%d%H%M%S)" = "{{ _zfs_dataset_remove_kept.stdout }}" ]; do
+              sleep 0.1
+            done
             zfs snapshot "{{ zfs_dataset_args.dataset }}@bak-$(date +%Y%m%d%H%M%S)"
           args:
             executable: /bin/bash
