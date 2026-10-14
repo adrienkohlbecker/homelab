@@ -28,7 +28,7 @@ QEMU_HOST_SCRATCH_SH = REPO_ROOT / "packer" / "aws" / "files" / "homelab_ci_prep
 QEMU_HOST_SMOKE_SH = REPO_ROOT / "packer" / "aws" / "files" / "qemu_host_smoke.sh"
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_CHROOT_SH = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
-INSTALL_LIB_SH = REPO_ROOT / "packer" / "scripts" / "install_lib.sh"
+QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
 UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
 UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
@@ -501,7 +501,7 @@ def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(
 
 def test_qemu_build_uploads_only_required_role_files() -> None:
     template = QEMU_TEMPLATE.read_text()
-    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", INSTALL_LIB_SH.read_text(), re.MULTILINE)
+    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", QEMU_PROVISION_SH.read_text(), re.MULTILINE)
     assert role_files is not None
 
     staged = role_files.group(1).split()
@@ -509,11 +509,24 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     assert sorted(Path(path).name for path in uploaded_role_files) == sorted(staged)
     assert "homelab-source.tar" not in template
 
-    # Every staged file the chroot install reads must be one run_chroot_script
-    # stages: a role file, its library, or a target's extras.
+    # Every staged file the chroot install reads must be one provision.sh
+    # stages: a role file or a target's extras.
     consumed = set(re.findall(r"\$\{CHROOT_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
     assert consumed, "chroot.sh no longer names any role file"
     assert consumed <= {*staged, "homelab_guest_journal.service", "hetzner"}
+
+
+@pytest.mark.parametrize("function", ["apt_update", "write_sources_list"])
+def test_chroot_apt_helpers_twin_provision(function: str) -> None:
+    """chroot.sh keeps copies of provision.sh's apt helpers rather than sharing
+    a sourced library; the copies must not drift apart."""
+
+    def body(path: Path) -> list[str]:
+        match = re.search(rf"^{function}\(\) \{{\n(.*?)^\}}$", path.read_text(), re.MULTILINE | re.DOTALL)
+        assert match is not None, f"{function} not found in {path.name}"
+        return [line for line in match.group(1).splitlines() if not line.lstrip().startswith("#")]
+
+    assert body(QEMU_CHROOT_SH) == body(QEMU_PROVISION_SH)
 
 
 @pytest.mark.parametrize(("architecture", "installs_key"), [("x86_64", False), ("aarch64", True)])

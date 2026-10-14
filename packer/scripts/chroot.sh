@@ -1,6 +1,19 @@
 #!/bin/bash
 set -euxo pipefail
 
+# Installs and configures the root it runs in. provision.sh, which runs it, has
+# already set up the storage and written the root's storage and identity
+# wiring: fstab, mdadm.conf on a mirror, netplan (cloud-init's job on Hetzner),
+# and hostid. The environment it reads, exported by provision.sh: UBUNTU_NAME,
+# INSTALL_TARGET, HOSTNAME, USERNAME, SSH_KEY_PUB, CHROOT_FILES (the directory
+# holding this script and the files it installs), the UBUNTU_MIRROR* build and
+# upstream URLs, and, for the boot loader, DISKS, COMMANDLINE (the kernel
+# command line for rEFInd's options), ZBM_VERSION, and optionally
+# REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs the
+# distribution's).
+# All list-shaped vars are space-delimited strings (bash arrays don't
+# survive `export`); use them unquoted to word-split.
+
 # Package postinsts must not start services inside the incomplete target root.
 # The script explicitly enables the units the shipped image needs after their
 # configuration is in place; remove the temporary policy when the build exits.
@@ -16,22 +29,52 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# run_chroot_script (install_lib.sh) staged this script beside its library and
-# the installer's files, in CHROOT_FILES.
-# shellcheck source=packer/scripts/install_lib.sh
-. "$CHROOT_FILES/install_lib.sh"
+# Twin of provision.sh's apt_update; see the comment there.
+apt_update() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if apt-get update --error-on=any; then
+      return 0
+    fi
+    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
+    sleep "$((attempt * 5))"
+  done
+  echo "apt-get update failed after 5 attempts" >&2
+  return 1
+}
 
-# Installs and configures the root it runs in. provision.sh, which runs it, has
-# already set up the storage and written the root's storage and identity
-# wiring: fstab, mdadm.conf on a mirror, netplan (cloud-init's job on Hetzner),
-# and hostid. The environment it reads, exported by provision.sh: UBUNTU_NAME,
-# INSTALL_TARGET, HOSTNAME, USERNAME, SSH_KEY_PUB, CHROOT_FILES, the
-# UBUNTU_MIRROR* build and upstream URLs, and, for the boot loader, DISKS,
-# ZBM_VERSION, and optionally REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd
-# package; empty installs the distribution's); on a qemu or hetzner target,
-# SERIAL_CONSOLE.
-# All list-shaped vars are space-delimited strings (bash arrays don't
-# survive `export`); use them unquoted to word-split.
+# Twin of provision.sh's write_sources_list; see the comments there.
+write_sources_list() {
+  local deb_arch
+  deb_arch=$(dpkg --print-architecture)
+
+  truncate -s0 /etc/apt/sources.list
+  mkdir -p /etc/apt/sources.list.d
+
+  cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
+Architectures: $deb_arch
+Components: main universe restricted multiverse
+Languages: none
+X-Repolib-Name: ubuntu
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Suites: $1 $1-updates $1-backports
+Types: deb
+URIs: $2
+EOF
+
+  cat <<EOF >/etc/apt/sources.list.d/ubuntu-security.sources
+Architectures: $deb_arch
+Components: main universe restricted multiverse
+Languages: none
+X-Repolib-Name: ubuntu-security
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+Suites: $1-security
+Types: deb
+URIs: $3
+EOF
+
+  find /var/lib/apt/lists -type f -delete
+}
 
 # Arch-derived constants: rEFInd EFI binary names + ZBM tarball arch
 # token. The build VM and the shipped image are always the same arch,
@@ -176,7 +219,6 @@ mkdir -p /boot/efi
 install_boot_loader() {
   local disks_count
   disks_count=$(wc -w <<<"$DISKS")
-  COMMANDLINE=$(boot_commandline)
 
   mount /boot/efi
 

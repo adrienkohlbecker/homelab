@@ -121,7 +121,7 @@ def _dump_boot_console(m: Machine, lines: int = 200) -> None:
     stalled (failed mount, emergency shell, a hung unit) right in the run
     output, so a verify-boot failure is diagnosable without re-running with
     --keep. Relies on the image booting with a serial console=, set on the ZBM
-    cmdline (boot_commandline in packer/scripts/install_lib.sh).
+    cmdline (COMMANDLINE in packer/scripts/provision.sh).
     """
     try:
         captured = m.boot_file.read_text(errors="replace").splitlines()
