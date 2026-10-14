@@ -979,8 +979,8 @@ resource "aws_key_pair" "ci_operator" {
 # ─── Launch template: nested-qemu host pool ──────────────────────────────────
 # GitLab Runner/fleeting owns desired capacity, and the host runs shell jobs
 # that launch qemu/KVM locally. The AMI is resolved through SSM
-# (ci_qemu_x86_host_ami_parameter), so a host bake promotion never touches
-# terraform.
+# (ci_qemu_x86_host_ami_parameter), a pointer qemu-host-ami.sh creates and
+# promotes, so a host bake promotion never touches terraform.
 resource "aws_launch_template" "ci_qemu_x86_host" {
   name                   = local.ci_qemu_pools.x86.name
   description            = "homelab CI nested-qemu host"
@@ -1045,21 +1045,6 @@ resource "aws_launch_template" "ci_qemu_x86_host" {
     role         = "ci"
     pool         = local.ci_qemu_pools.x86.name
   }
-}
-
-moved {
-  from = aws_autoscaling_group.ci_qemu_arm
-  to   = aws_autoscaling_group.ci_qemu["arm"]
-}
-
-moved {
-  from = aws_autoscaling_group.ci_qemu["role"]
-  to   = aws_autoscaling_group.ci_qemu["x86"]
-}
-
-moved {
-  from = aws_launch_template.ci_qemu_host
-  to   = aws_launch_template.ci_qemu_x86_host
 }
 
 resource "aws_autoscaling_group" "ci_qemu" {
@@ -1189,29 +1174,6 @@ resource "aws_launch_template" "ci_qemu_arm_host" {
     architecture = "aarch64"
     role         = "ci"
     pool         = local.ci_qemu_pools.arm.name
-  }
-}
-
-# ─── SSM parameters: nested-qemu host AMI ────────────────────────────────────
-# qemu-host-ami.sh creates and promotes /homelab-ci/ami/qemu-host/{x86,arm}/<release>
-# with put-parameter --overwrite, so each release's pointer exists once its
-# first bake promotes. Terraform only reads them, through the launch templates'
-# resolve:ssm: image ids; the removed blocks drop its old noble parameter
-# shells from state without deleting the live pointers.
-
-removed {
-  from = aws_ssm_parameter.ci_qemu_host_ami
-
-  lifecycle {
-    destroy = false
-  }
-}
-
-removed {
-  from = aws_ssm_parameter.ci_qemu_arm_host_ami
-
-  lifecycle {
-    destroy = false
   }
 }
 
