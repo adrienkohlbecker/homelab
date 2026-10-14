@@ -86,6 +86,39 @@
   tags:
     - zfs
 
+# ZFSBootMenu boots every root with its hostid on the command line
+# (spl.spl_hostid), and each import stamps that hostid on the pool labels. Our
+# ZBM build carries none, so it is upstream's default 0x00bab10c; provision.sh
+# creates the pools under it. The root's own /etc/hostid, which its boot image
+# embeds, applies only when a root boots without ZBM's command line. Keeping
+# it the same lets that boot, or a recovery import, take the pools unforced.
+- name: Set the ZFSBootMenu hostid  # noqa: require-validate
+  when: zfs_root
+  copy:
+    src: hostid
+    dest: /etc/hostid
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  register: zfs_hostid
+  become: true
+  tags:
+    - zfs
+
+# The running kernel keeps ZBM's hostid from its command line, so only the
+# boot image needs the new file.
+- name: Rebuild boot images with the hostid
+  import_role:
+    name: boot
+    tasks_from: initramfs_rebuild
+  vars:
+    boot_initramfs_args:
+      changed: '{{ zfs_hostid.changed }}'
+      reboot: false
+  tags:
+    - zfs
+
 # zfs_cull is intentionally unscheduled operator tooling; zfs_scrub is the
 # timer entry point configured below.
 - name: Copy ZFS scripts
