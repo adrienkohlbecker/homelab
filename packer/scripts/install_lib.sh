@@ -1,7 +1,6 @@
 # shellcheck shell=bash
-# Helpers shared by the installers that run chroot.sh: provision.sh (a fresh
-# disk layout) and install_boot_environment.sh (a new root beside a running
-# one). Sourced, never executed.
+# Helpers shared by provision.sh and the chroot.sh it runs. Sourced, never
+# executed.
 
 # The installer scripts and the role-owned bootstrap files sit together
 # wherever they were copied: packer uploads them to /home/vagrant, and a host
@@ -182,16 +181,15 @@ debootstrap_release() {
 # Nothing is shared writably with the caller beyond /dev: /run and /tmp are
 # private tmpfs, so a package script that regenerates runtime state (Netplan's
 # generator, tmpfiles, udev rules) writes into the chroot's copy, never the
-# running host's. /sys is read-only. efivarfs comes in only for a fresh
-# install, whose boot loader step registers firmware entries; a boot
-# environment never touches them. The caller's resolv.conf is bound read-only
+# running host's. /sys is read-only. efivarfs comes in for the boot loader
+# step, which registers firmware entries. The caller's resolv.conf is bound read-only
 # where the root's own resolv.conf points, so apt resolves names without the
 # caller's DNS settings landing in the image.
 mount_chroot_filesystems() {
   local root=$1 resolv
   mount -t proc -o nosuid,noexec,nodev proc "$root/proc"
   mount -t sysfs -o nosuid,noexec,nodev,ro sysfs "$root/sys"
-  if [ -z "${BOOT_ENVIRONMENT:-}" ] && [ -d "$root/sys/firmware/efi/efivars" ]; then
+  if [ -d "$root/sys/firmware/efi/efivars" ]; then
     mount -t efivarfs -o nosuid,noexec,nodev efivarfs "$root/sys/firmware/efi/efivars"
   fi
   mount -t devtmpfs -o mode=0755,nosuid udev "$root/dev"

@@ -21,20 +21,15 @@ trap 'exit 130' INT TERM
 # shellcheck source=packer/scripts/install_lib.sh
 . "$CHROOT_FILES/install_lib.sh"
 
-# Installs and configures the root it runs in. The installer that runs it has
+# Installs and configures the root it runs in. provision.sh, which runs it, has
 # already set up the storage and written the root's storage and identity
 # wiring: fstab, mdadm.conf on a mirror, netplan (cloud-init's job on Hetzner),
-# and hostid. The environment it reads, exported by that installer:
-# - Every install: UBUNTU_NAME, INSTALL_TARGET, HOSTNAME, USERNAME,
-#   SSH_KEY_PUB, CHROOT_FILES, and the UBUNTU_MIRROR* build and upstream URLs;
-#   on a qemu or hetzner target, SERIAL_CONSOLE.
-# - A fresh install (provision.sh), for the boot loader: DISKS, ZBM_VERSION,
-#   and optionally REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package;
-#   empty installs the distribution's).
-# - A boot environment (install_boot_environment.sh): BOOT_ENVIRONMENT=1, and
-#   USER_UID/USER_GID when the login user exists on the running host. The root
-#   sits beside a running one whose ESP and firmware entries it shares, so the
-#   boot loader step is skipped.
+# and hostid. The environment it reads, exported by provision.sh: UBUNTU_NAME,
+# INSTALL_TARGET, HOSTNAME, USERNAME, SSH_KEY_PUB, CHROOT_FILES, the
+# UBUNTU_MIRROR* build and upstream URLs, and, for the boot loader, DISKS,
+# ZBM_VERSION, and optionally REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd
+# package; empty installs the distribution's); on a qemu or hetzner target,
+# SERIAL_CONSOLE.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -58,8 +53,6 @@ aarch64)
   exit 1
   ;;
 esac
-
-BOOT_ENVIRONMENT="${BOOT_ENVIRONMENT:-}"
 
 # Set a hostname
 
@@ -162,8 +155,7 @@ fi
 
 # The installer wrote this root's fstab and, on a mirror, its mdadm.conf.
 # mdadm assembles the listed arrays at boot, so it goes into the image built
-# below. efibootmgr manages the firmware entries: rEFInd depends on it on a
-# fresh install, and a boot environment needs it before its first converge.
+# below. efibootmgr manages the firmware entries rEFInd is registered with.
 if grep -q '^ARRAY' /etc/mdadm/mdadm.conf 2>/dev/null; then
   apt-get install --yes mdadm
 fi
@@ -180,10 +172,7 @@ dpkg-divert --local --rename --remove "$initramfs_command"
 
 mkdir -p /boot/efi
 
-# Fresh install: put ZBM and rEFInd on the ESP and register rEFInd with the
-# firmware. A boot environment shares the running host's ESP, whose ZBM already
-# lists every root under rpool/ROOT; the refind role's first converge
-# reconciles it.
+# Put ZBM and rEFInd on the ESP and register rEFInd with the firmware.
 install_boot_loader() {
   local disks_count
   disks_count=$(wc -w <<<"$DISKS")
@@ -310,9 +299,7 @@ EOF
   fi
 }
 
-if [ -z "$BOOT_ENVIRONMENT" ]; then
-  install_boot_loader
-fi
+install_boot_loader
 
 # Enable tmp mount. Noble ships tmp.mount as a disabled template under
 # /usr/share/systemd/; enable it by path, which links it. Resolute ships
@@ -378,13 +365,7 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
 
 else
   # The login user: vagrant on the qemu fixtures, the operator on bare metal.
-  # A boot environment passes the running host's ids for an existing user.
-  if [ -n "${USER_UID:-}" ]; then
-    addgroup --gid "${USER_GID:?}" "$USERNAME"
-    adduser --disabled-password --gecos "" --uid "$USER_UID" --gid "$USER_GID" "$USERNAME"
-  else
-    adduser --disabled-password --gecos "" "$USERNAME"
-  fi
+  adduser --disabled-password --gecos "" "$USERNAME"
 
   mkdir "/home/$USERNAME/.ssh"
   echo "$SSH_KEY_PUB" >"/home/$USERNAME/.ssh/authorized_keys"
@@ -422,22 +403,17 @@ if [ "$INSTALL_TARGET" = "qemu" ]; then
   systemctl mask serial-getty@hvc0.service
 fi
 
-# Keep background apt work from taking the dpkg lock in QEMU cells, and in a
-# boot environment until the converge that follows its switch. The
+# Keep background apt work from taking the dpkg lock in QEMU cells. The
 # unattended_upgrades role unmasks its units; the boot role owns the multipath
 # masks. Only mask installed units so the image carries no dangling symlinks.
-masked_units=()
-if [ "$INSTALL_TARGET" = "qemu" ] || [ -n "$BOOT_ENVIRONMENT" ]; then
-  masked_units+=(apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service)
-fi
 if [ "$INSTALL_TARGET" = "qemu" ]; then
-  masked_units+=(multipathd.service multipathd.socket)
+  for unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service \
+    multipathd.service multipathd.socket; do
+    if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
+      systemctl mask "$unit"
+    fi
+  done
 fi
-for unit in "${masked_units[@]}"; do
-  if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
-    systemctl mask "$unit"
-  fi
-done
 
 # Reset apt sources to upstream so the shipped image isn't pinned to a
 # Nexus-internal URL. Build-time installs above used $UBUNTU_MIRROR
@@ -458,7 +434,7 @@ apt_update
 apt-get clean
 
 # dbus keeps its own copy of the machine-id; point it at systemd's, which
-# provision.sh blanks for a fresh image and a boot environment carries over.
+# provision.sh blanks for a fresh image.
 if [ -e /var/lib/dbus/machine-id ]; then
   ln -sf /etc/machine-id /var/lib/dbus/machine-id
 fi
