@@ -1,4 +1,4 @@
-# Hosted GitLab CI image, manually published as $CI_REGISTRY_IMAGE/ci:latest-<release>.
+# Hosted GitLab CI image, manually published as $CI_REGISTRY_IMAGE/ci:latest-<release>-<arch>.
 # Copied manifests invalidate their dependency layers when the toolchain moves.
 # The ci_image jobs pass the release they publish (CI_HOST_UBUNTU unless
 # overridden); later steps read the codename from /etc/os-release.

@@ -40,7 +40,7 @@ workflow:
 # toolchain drift and makes a stale image visible in logs. CI auto-trusts
 # mise.toml; unused op:// values remain literal without op run.
 .hosted:
-  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU
+  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-x86
   before_script:
     - mise run ci:bootstrap
 
@@ -137,14 +137,14 @@ unit_tests:
     - mise run test
     - mise run test:fluentbit-lua
 
-# Manually publish Dockerfile per release as ci:<sha>-<release>; only master
-# also moves ci:latest-<release>. The build defaults to CI_HOST_UBUNTU, and
-# CI_IMAGE_UBUNTU builds another release ahead of switching ci_host, as
-# QEMU_HOST_UBUNTU does for the runner-host AMI. Hosted dind cannot reach
-# Nexus, so the build uses upstream apt. An optional no-scope MISE_GITHUB_TOKEN
-# is mounted only as a BuildKit secret. The image is built natively per
-# architecture; CI_IMAGE_TAG_SUFFIX keeps the arm64 tags
-# (ci:<sha>-<release>-arm64, ci:latest-<release>-arm64) apart.
+# Manually publish Dockerfile per release and architecture as
+# ci:<sha>-<release>-<arch>; only master also moves ci:latest-<release>-<arch>.
+# The build defaults to CI_HOST_UBUNTU, and CI_IMAGE_UBUNTU builds another
+# release ahead of switching ci_host, as QEMU_HOST_UBUNTU does for the
+# runner-host AMI. Hosted dind cannot reach Nexus, so the build uses upstream
+# apt. An optional no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit
+# secret. The image is built natively per architecture, and
+# CI_IMAGE_TAG_SUFFIX names it (-x86 or -arm).
 .ci_image:
   stage: prepare
   extends: .manual_job
@@ -154,7 +154,7 @@ unit_tests:
   timeout: 45m
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
-    CI_IMAGE_TAG_SUFFIX: ""
+    CI_IMAGE_TAG_SUFFIX: "-x86"
   script:
     - release="${CI_IMAGE_UBUNTU:-$CI_HOST_UBUNTU}"
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
@@ -193,7 +193,7 @@ ci_image_arm:
   resource_group: ci_image_arm
   interruptible: false
   variables:
-    CI_IMAGE_TAG_SUFFIX: "-arm64"
+    CI_IMAGE_TAG_SUFFIX: "-arm"
 
 # Bake the AWS nested-qemu runner host AMIs, not guest fixtures. Each
 # architecture uses the same protected manual bake-and-promote path.
@@ -358,7 +358,7 @@ zbm_build_x86:
 
 zbm_build_arm:
   extends: .zbm_build
-  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-arm64
+  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-arm
   tags:
     - saas-linux-small-arm64
   resource_group: zbm_build_arm
