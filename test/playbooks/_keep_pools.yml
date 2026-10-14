@@ -1,0 +1,219 @@
+# Driven by test/keep_pools_test.py: a Lab fixture of keep_pools_from is
+# rebuilt as keep_pools_to by provision.sh KEEP_POOLS=1, run from a Minimal
+# cloud image standing in for the live ISO with the Lab disks attached.
+# Phases:
+#   prepare   on the old root: a canary dataset on every pool, and a
+#             fingerprint of the shared storage and host identity
+#   install   in the live stand-in: the rebuild, then a rerun that must fail
+#             closed
+#   switch    on the Lab disks alone: the old root still boots and the shared
+#             storage is unchanged; switch to the new root and check it
+#   rollback  reboot the converged new root, then switch back to the old one
+# keep_pools_user and keep_pools_hostname name the Lab fixture's login user
+# and host.
+- name: Rebuild a host and keep its pools
+  hosts: all
+  become: true
+  vars:
+    _kp_repo: "{{ ansible_config_file | dirname }}"
+    # On a shared dataset, so every root reads the fingerprint from before
+    # the install.
+    _kp_dir: /mnt/keep_pools_test
+    _kp_old_root: "rpool/ROOT/{{ keep_pools_from }}"
+    _kp_new_root: "rpool/ROOT/{{ keep_pools_to }}"
+    # Staged in the live environment, which mounts none of the pools.
+    _kp_installer: /var/tmp/keep_pools_installer
+  tasks:
+    - name: Prepare the old root
+      when: _keep_pools_phase == 'prepare'
+      block:
+        - name: Create the shared test dataset
+          command: zfs create -o mountpoint={{ _kp_dir }} rpool/keep_pools_test
+          args:
+            creates: "{{ _kp_dir }}"
+
+        - name: Stage the fingerprint script
+          copy:
+            src: "{{ _kp_repo }}/test/keep_pools_fingerprint.sh"
+            dest: "{{ _kp_dir }}/"
+            mode: preserve
+
+        - name: List the pools
+          command: zpool list -H -o name
+          register: _kp_pools
+          changed_when: false
+
+        - name: Create a canary dataset on every pool
+          command: >-
+            zfs create -o mountpoint=/mnt/kp_canary_{{ item }} {{ item }}/kp_canary
+          args:
+            creates: "/mnt/kp_canary_{{ item }}"
+          loop: "{{ _kp_pools.stdout_lines }}"
+
+        - name: Write each canary
+          copy:
+            dest: "/mnt/kp_canary_{{ item }}/canary"
+            content: "{{ item }}\n"
+            mode: "0644"
+          loop: "{{ _kp_pools.stdout_lines }}"
+
+        - name: Record the pools every root must import
+          copy:
+            dest: "{{ _kp_dir }}/pools"
+            content: "{{ _kp_pools.stdout }}\n"
+            mode: "0644"
+
+        - name: Fingerprint the shared storage before the install
+          command: bash {{ _kp_dir }}/keep_pools_fingerprint.sh {{ _kp_new_root }} {{ keep_pools_user }}
+          register: _kp_before
+          changed_when: false
+
+        - name: Keep the fingerprint for the checks after each boot
+          copy:
+            dest: "{{ _kp_dir }}/fingerprint.before"
+            content: "{{ _kp_before.stdout }}\n"
+            mode: "0644"
+
+    - name: Rebuild from the live environment
+      when: _keep_pools_phase == 'install'
+      block:
+        - name: Create the installer directory
+          file:
+            path: "{{ _kp_installer }}"
+            state: directory
+            mode: "0755"
+
+        - name: Stage the installer and its inputs
+          copy:
+            src: "{{ _kp_repo }}/{{ item }}"
+            dest: "{{ _kp_installer }}/"
+            mode: preserve
+          loop:
+            - packer/scripts/provision.sh
+            - packer/scripts/chroot.sh
+            - roles/boot/files/modules_most
+            - roles/boot/files/dracut_host.conf
+            - roles/console/files/console-setup
+            - roles/console/files/keyboard
+            - test/homelab_guest_journal.service
+
+        # Under become, ansible_user_id names root.
+        - name: Read the live environment's login user
+          command: id -un
+          become: false
+          register: _kp_live_user
+          changed_when: false
+
+        # The live stand-in authorizes the same key as the Lab fixture.
+        - name: Read the authorized key
+          slurp:
+            src: "/home/{{ _kp_live_user.stdout }}/.ssh/authorized_keys"
+          register: _kp_authorized_keys
+
+        - name: Rebuild the host
+          command: bash {{ _kp_installer }}/provision.sh
+          environment: &kp_install_environment
+            KEEP_POOLS: "1"
+            UBUNTU_NAME: "{{ keep_pools_to }}"
+            TARGET_HOSTNAME: "{{ keep_pools_hostname }}"
+            TARGET_USERNAME: "{{ keep_pools_user }}"
+            SSH_KEY_PUB: "{{ _kp_authorized_keys.content | b64decode | trim }}"
+            INSTALL_TARGET: qemu
+            SERIAL_CONSOLE: "{{ _console_serial | trim }}"
+            NEXUS_URL: "{{ nexus_url }}"
+          changed_when: true
+
+        - name: Rerun the rebuild over the installed root
+          command: bash {{ _kp_installer }}/provision.sh
+          environment: *kp_install_environment
+          register: _kp_rerun
+          changed_when: false
+          failed_when: false
+
+        - name: List the pools the rerun left imported
+          command: zpool list -H -o name
+          register: _kp_rerun_pools
+          changed_when: false
+
+        - name: The rerun refused before writing and left the pools exported
+          assert:
+            that:
+              - _kp_rerun.rc != 0
+              - "'already exists' in _kp_rerun.stderr"
+              - _kp_rerun_pools.stdout == ''
+            fail_msg: "rc={{ _kp_rerun.rc }}: {{ _kp_rerun.stderr_lines[-5:] }}; imported: {{ _kp_rerun_pools.stdout }}"
+
+    - name: Check the old root and switch to the new one
+      when: _keep_pools_phase == 'switch'
+      block:
+        - name: Check the old root after the install
+          include_tasks: "{{ _kp_repo }}/test/playbooks/tasks/_keep_pools_check.yml"
+          vars:
+            _kp_expected_release: "{{ keep_pools_from }}"
+            _kp_expected_root: "{{ _kp_old_root }}"
+            _kp_compare_fingerprint: true
+
+        - name: Read the pool's root to boot
+          command: zpool get -H -o value bootfs rpool
+          register: _kp_bootfs
+          changed_when: false
+
+        - name: The install left the old root as the one to boot
+          assert:
+            that: _kp_bootfs.stdout == _kp_old_root
+
+        - name: Read the new root's mount properties
+          command: zfs get -H -o value canmount,mountpoint {{ _kp_new_root }}
+          register: _kp_new_root_props
+          changed_when: false
+
+        - name: The new root mounts only when booted
+          assert:
+            that: _kp_new_root_props.stdout_lines == ['noauto', '/']
+
+        - name: Boot the new root
+          command: zpool set bootfs={{ _kp_new_root }} rpool
+          changed_when: true
+
+    - name: Reboot into the new root
+      when: _keep_pools_phase in ['switch', 'rollback']
+      import_role:
+        name: reboot
+        tasks_from: reboot
+
+    # The harness caches facts across playbook runs; the converges that follow
+    # must see the running release.
+    - name: Gather the new root's facts
+      when: _keep_pools_phase in ['switch', 'rollback']
+      setup:
+
+    - name: Check the new root
+      when: _keep_pools_phase in ['switch', 'rollback']
+      include_tasks: "{{ _kp_repo }}/test/playbooks/tasks/_keep_pools_check.yml"
+      vars:
+        _kp_expected_release: "{{ keep_pools_to }}"
+        _kp_expected_root: "{{ _kp_new_root }}"
+        # The boot roles' converge rewrites the ESP and the shared commandline.
+        _kp_compare_fingerprint: "{{ _keep_pools_phase == 'switch' }}"
+
+    - name: Roll back to the old root
+      when: _keep_pools_phase == 'rollback'
+      block:
+        - name: Boot the old root
+          command: zpool set bootfs={{ _kp_old_root }} rpool
+          changed_when: true
+
+        - name: Reboot into the old root
+          import_role:
+            name: reboot
+            tasks_from: reboot
+
+        - name: Gather the old root's facts
+          setup:
+
+        - name: Check the old root
+          include_tasks: "{{ _kp_repo }}/test/playbooks/tasks/_keep_pools_check.yml"
+          vars:
+            _kp_expected_release: "{{ keep_pools_from }}"
+            _kp_expected_root: "{{ _kp_old_root }}"
+            _kp_compare_fingerprint: false

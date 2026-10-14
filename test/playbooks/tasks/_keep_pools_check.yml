@@ -1,0 +1,93 @@
+# Checks after booting a root, for test/playbooks/_keep_pools.yml.
+# _kp_expected_release and _kp_expected_root name the root that should be
+# running; _kp_compare_fingerprint also requires the shared storage and
+# identity to read back exactly as they did before the install.
+- name: Read the running release
+  command: awk -F= '$1 == "VERSION_CODENAME" { print $2 }' /etc/os-release
+  register: _kp_release
+  changed_when: false
+
+- name: Read the running root
+  command: findmnt -no SOURCE /
+  register: _kp_root
+  changed_when: false
+
+- name: The expected root is running
+  assert:
+    that:
+      - _kp_release.stdout == _kp_expected_release
+      - _kp_root.stdout == _kp_expected_root
+
+# Every service on the shared storage needs the boot to complete: pool
+# imports, md assembly, the ESP and swap mounts, and the mount generator's
+# units for the shared datasets all report through this.
+- name: Wait for the boot to settle
+  command: systemctl is-system-running --wait  # noqa: command-instead-of-module
+  register: _kp_system_state
+  changed_when: false
+  failed_when: false
+
+- name: List failed units
+  command: systemctl --failed --no-legend --plain  # noqa: command-instead-of-module
+  register: _kp_failed_units
+  changed_when: false
+
+- name: The boot completed without failed units
+  assert:
+    that: _kp_system_state.stdout == 'running'
+    fail_msg: "{{ _kp_system_state.stdout }}: {{ _kp_failed_units.stdout }}"
+
+- name: Read the pool health
+  command: zpool status -x
+  register: _kp_pool_health
+  changed_when: false
+
+- name: Every pool imported healthy
+  assert:
+    that: _kp_pool_health.stdout == 'all pools are healthy'
+    fail_msg: "{{ _kp_pool_health.stdout }}"
+
+- name: List the imported pools
+  command: zpool list -H -o name
+  register: _kp_imported_pools
+  changed_when: false
+
+- name: Read the pools from before the install
+  slurp:
+    src: "{{ _kp_dir }}/pools"
+  register: _kp_expected_pools
+
+- name: Every pool imported
+  assert:
+    that: _kp_imported_pools.stdout_lines == (_kp_expected_pools.content | b64decode).splitlines()
+    fail_msg: "imported: {{ _kp_imported_pools.stdout_lines }}"
+
+- name: Read every canary
+  command: cat /mnt/kp_canary_{{ item }}/canary
+  register: _kp_canaries
+  changed_when: false
+  loop: "{{ _kp_imported_pools.stdout_lines }}"
+
+- name: Every pool's canary dataset mounted with its contents
+  assert:
+    that: _kp_canaries.results | map(attribute='stdout') | list == _kp_imported_pools.stdout_lines
+
+- name: Fingerprint the shared storage
+  command: bash {{ _kp_dir }}/keep_pools_fingerprint.sh {{ _kp_new_root }} {{ keep_pools_user }}
+  register: _kp_fingerprint
+  changed_when: false
+
+- name: Read the fingerprint from before the install
+  slurp:
+    src: "{{ _kp_dir }}/fingerprint.before"
+  register: _kp_fingerprint_before
+
+- name: The shared storage reads back as before the install
+  assert:
+    that: _kp_fingerprint.stdout == (_kp_fingerprint_before.content | b64decode | trim)
+    fail_msg: |-
+      before:
+      {{ _kp_fingerprint_before.content | b64decode }}
+      now:
+      {{ _kp_fingerprint.stdout }}
+  when: _kp_compare_fingerprint | bool

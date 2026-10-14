@@ -29,6 +29,7 @@ QEMU_HOST_SMOKE_SH = REPO_ROOT / "packer" / "aws" / "files" / "qemu_host_smoke.s
 QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_CHROOT_SH = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
+KEEP_POOLS_PLAYBOOK = REPO_ROOT / "test" / "playbooks" / "_keep_pools.yml"
 UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
 UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
@@ -508,6 +509,10 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     uploaded_role_files = re.findall(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)
     assert sorted(Path(path).name for path in uploaded_role_files) == sorted(staged)
     assert "homelab-source.tar" not in template
+
+    # The keep-pools fixture test stages the same set for its rebuild.
+    playbook_role_files = re.findall(r"^\s+- (roles/\S+)$", KEEP_POOLS_PLAYBOOK.read_text(), re.MULTILINE)
+    assert sorted(Path(path).name for path in playbook_role_files) == sorted(staged)
 
     # Every staged file the chroot install reads must be one provision.sh
     # stages: a role file or a target's extras.
