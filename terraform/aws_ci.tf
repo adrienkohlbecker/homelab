@@ -27,7 +27,7 @@ locals {
   # Add its codename here so lifecycle explicitly retires every remaining object.
   ci_qemu_retired_releases = toset([])
   ci_qemu_retired_prefixes = toset(flatten([
-    for release in local.ci_qemu_retired_releases : [for architecture in ["x86", "aarch64"] : "${architecture}/${release}/"]
+    for release in local.ci_qemu_retired_releases : [for architecture in ["x86", "arm"] : "${architecture}/${release}/"]
   ]))
   # Must match the namespace in packer/aws/files/cloudwatch_agent.json.
   ci_host_metrics_namespace      = "homelab-ci"

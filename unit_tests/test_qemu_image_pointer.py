@@ -56,7 +56,7 @@ class TestImageStore:
         assert upload.image_store("x86_64") == ("homelab-ci-images", "eu-central-1")
         assert upload.image_store("aarch64") == ("homelab-ci-images", "eu-central-1")
         assert upload.image_prefix("x86_64", "noble", "lab") == "x86/noble/lab"
-        assert upload.image_prefix("aarch64", "noble", "lab") == "aarch64/noble/lab"
+        assert upload.image_prefix("aarch64", "noble", "lab") == "arm/noble/lab"
         assert {"aarch64", "x86_64"} == upload.VALID_ARCHITECTURES
 
     def test_store_matches_terraform(self) -> None:
@@ -85,7 +85,7 @@ class TestValidateTarget:
             upload.validate_target(_args(architecture="x86_64"))
 
 
-@pytest.mark.parametrize(("architecture", "prefix"), [("x86_64", "x86"), ("aarch64", "aarch64")])
+@pytest.mark.parametrize(("architecture", "prefix"), [("x86_64", "x86"), ("aarch64", "arm")])
 def test_upload_targets_architecture_prefix(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], architecture: str, prefix: str
 ) -> None:
@@ -828,7 +828,7 @@ class TestResolveImage:
                 "300",
                 "s3",
                 "cp",
-                f"s3://{args.bucket}/aarch64/noble/lab/promoted.json",
+                f"s3://{args.bucket}/arm/noble/lab/promoted.json",
                 "-",
             ]
         ]
