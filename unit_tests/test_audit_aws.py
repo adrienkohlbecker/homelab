@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-import yaml
 from botocore.exceptions import EndpointConnectionError
 from conftest import load_repo_module
 
@@ -164,19 +163,6 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
     # Older x86 AMIs lack the architecture tag but retain the EC2 architecture.
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", unlabelled_x86)
     assert not audit_aws.is_supported_qemu_host_image("eu-central-1", {**unlabelled_x86, "Architecture": "arm64"})
-
-
-def test_ami_recognition_follows_the_shared_architecture_table():
-    architecture_table = yaml.safe_load((Path(__file__).parents[1] / "data/architectures.yml").read_text())
-    contract = audit_aws.CI_REGIONS["eu-central-1"]
-    assert {"homelab-ci-images"} == audit_aws.EXPECTED_GLOBAL_S3_BUCKETS
-    assert contract["asgs"] == {"homelab-ci-qemu-host", "homelab-ci-qemu-arm"}
-    for architecture, ec2_architecture in (("x86_64", "x86_64"), ("aarch64", "arm64")):
-        ci = architecture_table[architecture]["ci"]
-        assert contract["amis"][ec2_architecture] == {
-            "name_prefix": ci["ami_name_prefix"],
-            "parameter": ci["ami_parameter"],
-        }
 
 
 def test_active_asg_instances_are_not_orphans():

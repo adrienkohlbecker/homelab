@@ -2,7 +2,7 @@
 # [MISE] description="Read-only audit of the CI AWS account for unexpected billable resources"
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["boto3"]
+# dependencies = ["boto3", "pyyaml"]
 # ///
 """Read-only sweep for orphan resources in the homelab CI AWS account.
 
@@ -17,9 +17,11 @@ errors fail the sweep so an incomplete inventory cannot appear clean.
 """
 
 import sys
+from pathlib import Path
 from typing import Any
 
 import boto3
+import yaml
 from ami_retention import (
     AMI_RETAIN_PER_CATEGORY,
     ami_category,
@@ -33,17 +35,18 @@ from botocore.exceptions import BotoCoreError, ClientError
 # regions throttles, and a throttled describe that silently returns empty would
 # read as "no resources" -- exactly the false-clean an audit must avoid.
 CFG = Config(retries={"total_max_attempts": 10, "mode": "adaptive"})
+ARCHITECTURES = yaml.safe_load((Path(__file__).resolve().parents[2] / "data/architectures.yml").read_text())
+# EC2 reports aarch64 images as arm64.
+EC2_ARCHITECTURES = {"x86_64": "x86_64", "aarch64": "arm64"}
 CI_REGIONS: dict[str, dict[str, Any]] = {
     "eu-central-1": {
         "amis": {
-            "x86_64": {
-                "name_prefix": "homelab-ci-qemu-host",
-                "parameter": "/homelab-ci/ami/qemu-host/{ubuntu}",
-            },
-            "arm64": {
-                "name_prefix": "homelab-ci-qemu-host-aarch64",
-                "parameter": "/homelab-ci/ami/qemu-host/aarch64/{ubuntu}",
-            },
+            arch: {
+                "ec2_architecture": EC2_ARCHITECTURES[arch],
+                "name_prefix": facts["ci"]["ami_name_prefix"],
+                "parameter": facts["ci"]["ami_parameter"],
+            }
+            for arch, facts in ARCHITECTURES.items()
         },
         "asgs": {"homelab-ci-qemu-host", "homelab-ci-qemu-arm"},
     },
@@ -103,11 +106,8 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
         return False
     return any(
         tags.get("Name") == f"{ami['name_prefix']}-{tags['ubuntu']}"
-        and image.get("Architecture") == arch
-        and (
-            tags.get("architecture") == ("aarch64" if arch == "arm64" else arch)
-            or (arch == "x86_64" and "architecture" not in tags)
-        )
+        and image.get("Architecture") == ami["ec2_architecture"]
+        and (tags.get("architecture") == arch or (arch == "x86_64" and "architecture" not in tags))
         for arch, ami in contract["amis"].items()
     )
 
