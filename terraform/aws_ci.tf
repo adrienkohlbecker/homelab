@@ -30,9 +30,7 @@ locals {
     for release in local.ci_qemu_retired_releases : [for architecture in ["x86", "arm"] : "${architecture}/${release}/"]
   ]))
   # Must match the namespace in packer/aws/files/cloudwatch_agent.json.
-  ci_host_metrics_namespace      = "homelab-ci"
-  ci_qemu_x86_host_ami_parameter = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
-  ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
+  ci_host_metrics_namespace = "homelab-ci"
   # A bake promotes any catalog release's pointer, so the next release's AMI
   # exists before ci_host moves the launch templates onto it.
   ci_qemu_host_ami_parameter_arns = [
@@ -44,44 +42,41 @@ locals {
       # Instance-type-agnostic name: aws_autoscaling_group.name and
       # aws_launch_template.name are ForceNew, so encoding the type in the name
       # would churn the runner asg_name and IAM groupName condition on a resize.
-      name = "homelab-ci-qemu-x86"
+      name         = "homelab-ci-qemu-x86"
+      architecture = "x86_64"
       # 16 vCPU / 32 GiB / 950 GB NVMe, at 10 cells each plus room for the
       # _site_test guest. Six hosts use 96 of the 160-vCPU Frankfurt Spot
       # quota. max_size must match its gitlab_runner_aws_pools max_instances in
       # group_vars/physical_fox.yml.
-      instance_type           = "c8id.4xlarge"
-      instance_type_overrides = []
-      max_size                = 6
-      on_demand               = false
-      subnets                 = ["a", "b", "c"]
-      # Heavy CI I/O lands on the "d" family's local NVMe. The EBS root holds
-      # only the OS and baked toolchain on the gp3 free baseline.
-      root_volume_size       = 40
-      root_volume_iops       = 3000
-      root_volume_throughput = 125
-      extra_tags             = { architecture = "x86_64" }
+      instance_type = "c8id.4xlarge"
+      # Virtualized hosts run the cells' guests under nested KVM.
+      nested_virtualization = true
+      max_size              = 6
+      on_demand             = false
+      subnets               = ["a", "b", "c"]
+      # Heavy CI I/O lands on the "d" family's local NVMe.
+      scratch_volume = null
     }
     arm = {
-      name = "homelab-ci-qemu-arm"
+      name         = "homelab-ci-qemu-arm"
+      architecture = "aarch64"
       # a1.metal (16 vCPU / 32 GiB) is the only Graviton bare-metal size
       # small enough for the ~15-cell ARM lane; every newer metal type is 64+
       # vCPUs. Its Spot pool scores 1/10 and prices at On-Demand, and Frankfurt
       # On-Demand reliably yields one host per AZ, so the pool runs On-Demand
       # in the two AZs that offer the type. max_size must match
       # its gitlab_runner_aws_pools max_instances in group_vars/physical_fox.yml.
-      instance_type_overrides = ["a1.metal"]
-      max_size                = 2
-      on_demand               = true
-      subnets                 = ["a", "b"]
-      root_volume_size        = 40
+      instance_type = "a1.metal"
+      # Bare metal exposes KVM directly.
+      nested_virtualization = false
+      max_size              = 2
+      on_demand             = true
+      subnets               = ["a", "b"]
       # a1.metal has no instance store; homelab_ci_prepare_scratch mounts
       # this volume. IOPS/throughput sit just above the benchmark's
       # one-minute peaks (4.7k IOPS, 244 MiB/s), where baseline gp3 held
       # scratch at 100% utilization.
-      scratch_volume_size       = 250
-      scratch_volume_iops       = 6000
-      scratch_volume_throughput = 250
-      extra_tags                = { architecture = "aarch64" }
+      scratch_volume = { size = 250, iops = 6000, throughput = 250 }
     }
   }
   ci_qemu_image_read_statements = [
@@ -976,18 +971,20 @@ resource "aws_key_pair" "ci_operator" {
   tags = { role = "ci" }
 }
 
-# ─── Launch template: nested-qemu host pool ──────────────────────────────────
+# ─── Launch templates: one per nested-qemu host pool ─────────────────────────
 # GitLab Runner/fleeting owns desired capacity, and the host runs shell jobs
-# that launch qemu/KVM locally. The AMI is resolved through SSM
-# (ci_qemu_x86_host_ami_parameter), a pointer qemu-host-ami.sh creates and
-# promotes, so a host bake promotion never touches terraform.
-resource "aws_launch_template" "ci_qemu_x86_host" {
-  name                   = local.ci_qemu_pools.x86.name
-  description            = "homelab CI nested-qemu host"
+# that launch qemu/KVM locally. The AMI is resolved through the pool
+# architecture's SSM pointer, which qemu-host-ami.sh creates and promotes, so a
+# host bake promotion never touches terraform.
+resource "aws_launch_template" "ci_qemu" {
+  for_each = local.ci_qemu_pools
+
+  name                   = each.value.name
+  description            = "homelab CI ${each.key} qemu host"
   update_default_version = true
 
-  image_id      = "resolve:ssm:${local.ci_qemu_x86_host_ami_parameter}"
-  instance_type = local.ci_qemu_pools.x86.instance_type
+  image_id      = "resolve:ssm:${replace(local.ci_architectures[each.value.architecture].ci.ami_parameter, "{ubuntu}", local.ci_host_release)}"
+  instance_type = each.value.instance_type
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -1002,20 +999,44 @@ resource "aws_launch_template" "ci_qemu_x86_host" {
     instance_metadata_tags      = "enabled"
   }
 
-  cpu_options {
-    nested_virtualization = "enabled"
+  dynamic "cpu_options" {
+    for_each = each.value.nested_virtualization ? [true] : []
+
+    content {
+      nested_virtualization = "enabled"
+    }
   }
 
+  # The EBS root holds only the OS and baked toolchain on the gp3 free
+  # baseline.
   block_device_mappings {
     device_name = "/dev/sda1"
 
     ebs {
-      volume_size           = local.ci_qemu_pools.x86.root_volume_size
+      volume_size           = 40
       volume_type           = "gp3"
-      iops                  = local.ci_qemu_pools.x86.root_volume_iops
-      throughput            = local.ci_qemu_pools.x86.root_volume_throughput
+      iops                  = 3000
+      throughput            = 125
       encrypted             = true
       delete_on_termination = true
+    }
+  }
+
+  dynamic "block_device_mappings" {
+    for_each = each.value.scratch_volume[*]
+    iterator = scratch
+
+    content {
+      device_name = "/dev/sdf"
+
+      ebs {
+        volume_size           = scratch.value.size
+        volume_type           = "gp3"
+        iops                  = scratch.value.iops
+        throughput            = scratch.value.throughput
+        encrypted             = true
+        delete_on_termination = true
+      }
     }
   }
 
@@ -1032,19 +1053,29 @@ resource "aws_launch_template" "ci_qemu_x86_host" {
     content {
       resource_type = tag_spec.value
       tags = {
-        architecture = "x86_64"
+        architecture = each.value.architecture
         role         = "ci-qemu-host"
-        pool         = local.ci_qemu_pools.x86.name
+        pool         = each.value.name
       }
     }
   }
 
   tags = {
-    Name         = local.ci_qemu_pools.x86.name
-    architecture = "x86_64"
+    Name         = each.value.name
+    architecture = each.value.architecture
     role         = "ci"
-    pool         = local.ci_qemu_pools.x86.name
+    pool         = each.value.name
   }
+}
+
+moved {
+  from = aws_launch_template.ci_qemu_x86_host
+  to   = aws_launch_template.ci_qemu["x86"]
+}
+
+moved {
+  from = aws_launch_template.ci_qemu_arm_host
+  to   = aws_launch_template.ci_qemu["arm"]
 }
 
 resource "aws_autoscaling_group" "ci_qemu" {
@@ -1068,27 +1099,19 @@ resource "aws_autoscaling_group" "ci_qemu" {
 
     launch_template {
       launch_template_specification {
-        launch_template_id = { x86 = aws_launch_template.ci_qemu_x86_host.id, arm = aws_launch_template.ci_qemu_arm_host.id }[each.key]
+        launch_template_id = aws_launch_template.ci_qemu[each.key].id
         version            = "$Latest"
-      }
-
-      # The ARM pool overrides its launch-template instance type.
-      dynamic "override" {
-        for_each = each.value.instance_type_overrides
-
-        content {
-          instance_type = override.value
-        }
       }
     }
   }
 
   dynamic "tag" {
-    for_each = merge({
-      Name = each.value.name
-      role = "ci-qemu-host"
-      pool = each.value.name
-    }, each.value.extra_tags)
+    for_each = {
+      Name         = each.value.name
+      architecture = each.value.architecture
+      role         = "ci-qemu-host"
+      pool         = each.value.name
+    }
     iterator = asg_tag
 
     content {
@@ -1100,80 +1123,6 @@ resource "aws_autoscaling_group" "ci_qemu" {
 
   lifecycle {
     ignore_changes = [desired_capacity]
-  }
-}
-
-# ARM bare metal exposes KVM directly, so unlike the virtualized x86_64 hosts
-# this template deliberately has no nested-virtualization cpu_options block.
-resource "aws_launch_template" "ci_qemu_arm_host" {
-  name                   = local.ci_qemu_pools.arm.name
-  description            = "homelab CI ARM nested-qemu host"
-  update_default_version = true
-
-  image_id      = "resolve:ssm:${local.ci_qemu_arm_host_ami_parameter}"
-  instance_type = local.ci_qemu_pools.arm.instance_type_overrides[0]
-
-  instance_initiated_shutdown_behavior = "terminate"
-
-  iam_instance_profile {
-    arn = aws_iam_instance_profile.ci_qemu_host.arn
-  }
-
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 1
-    instance_metadata_tags      = "enabled"
-  }
-
-  block_device_mappings {
-    device_name = "/dev/sda1"
-
-    ebs {
-      volume_size           = local.ci_qemu_pools.arm.root_volume_size
-      volume_type           = "gp3"
-      iops                  = 3000
-      throughput            = 125
-      encrypted             = true
-      delete_on_termination = true
-    }
-  }
-
-  block_device_mappings {
-    device_name = "/dev/sdf"
-
-    ebs {
-      volume_size           = local.ci_qemu_pools.arm.scratch_volume_size
-      volume_type           = "gp3"
-      iops                  = local.ci_qemu_pools.arm.scratch_volume_iops
-      throughput            = local.ci_qemu_pools.arm.scratch_volume_throughput
-      encrypted             = true
-      delete_on_termination = true
-    }
-  }
-
-  vpc_security_group_ids = [aws_security_group.ci_qemu_host.id]
-  key_name               = aws_key_pair.ci_operator.key_name
-
-  dynamic "tag_specifications" {
-    for_each = toset(["instance", "volume"])
-    iterator = tag_spec
-
-    content {
-      resource_type = tag_spec.value
-      tags = {
-        architecture = "aarch64"
-        role         = "ci-qemu-host"
-        pool         = local.ci_qemu_pools.arm.name
-      }
-    }
-  }
-
-  tags = {
-    Name         = local.ci_qemu_pools.arm.name
-    architecture = "aarch64"
-    role         = "ci"
-    pool         = local.ci_qemu_pools.arm.name
   }
 }
 
