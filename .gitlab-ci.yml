@@ -143,57 +143,49 @@ unit_tests:
 # release ahead of switching ci_host, as QEMU_HOST_UBUNTU does for the
 # runner-host AMI. Hosted dind cannot reach Nexus, so the build uses upstream
 # apt. An optional no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit
-# secret. The image is built natively per architecture, and
-# CI_IMAGE_TAG_SUFFIX names it (-x86 or -arm).
-.ci_image:
+# secret. Each architecture builds natively on its own hosted runner; the arm
+# image lets hosted arm jobs (zbm_build) use the same toolchain.
+ci_image:
   stage: prepare
   extends: .manual_job
   image: docker:28.3.3
   services:
     - docker:28.3.3-dind
   timeout: 45m
+  parallel:
+    matrix:
+      - HOSTED_ARCH: x86
+        HOSTED_RUNNER: saas-linux-medium-amd64
+      # Free-plan namespaces only get the small arm64 runner (medium and large
+      # are Premium and Ultimate only).
+      - HOSTED_ARCH: arm
+        HOSTED_RUNNER: saas-linux-small-arm64
+  tags:
+    - $HOSTED_RUNNER
+  # Serialize and never cancel a possible :latest push.
+  resource_group: ci_image_$HOSTED_ARCH
+  interruptible: false
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
-    CI_IMAGE_TAG_SUFFIX: "-x86"
   script:
     - release="${CI_IMAGE_UBUNTU:-$CI_HOST_UBUNTU}"
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     # A missing cache is expected on a release's first build.
-    - docker pull "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX" || true
+    - docker pull "$CI_REGISTRY_IMAGE/ci:latest-$release-$HOSTED_ARCH" || true
     - |
       docker build ${MISE_GITHUB_TOKEN:+--secret id=mise_github_token,env=MISE_GITHUB_TOKEN} \
         --build-arg UBUNTU_RELEASE="$release" \
         --build-arg USE_NEXUS_MIRRORS=0 \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
-        --cache-from "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX" \
-        --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release$CI_IMAGE_TAG_SUFFIX" .
-    - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release$CI_IMAGE_TAG_SUFFIX"
+        --cache-from "$CI_REGISTRY_IMAGE/ci:latest-$release-$HOSTED_ARCH" \
+        --tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release-$HOSTED_ARCH" .
+    - docker push "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release-$HOSTED_ARCH"
     # Branch dispatches must not retarget what other pipelines pin.
     - |
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release$CI_IMAGE_TAG_SUFFIX" "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX"
-        docker push "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX"
+        docker tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release-$HOSTED_ARCH" "$CI_REGISTRY_IMAGE/ci:latest-$release-$HOSTED_ARCH"
+        docker push "$CI_REGISTRY_IMAGE/ci:latest-$release-$HOSTED_ARCH"
       fi
-
-ci_image_x86:
-  extends: .ci_image
-  tags:
-    - saas-linux-medium-amd64
-  # Serialize and never cancel a possible :latest push.
-  resource_group: ci_image_x86
-  interruptible: false
-
-# The arm image lets hosted arm64 jobs (zbm_build_arm) use the same toolchain.
-# Free-plan namespaces only get the small arm64 runner (medium and large are
-# Premium and Ultimate only).
-ci_image_arm:
-  extends: .ci_image
-  tags:
-    - saas-linux-small-arm64
-  resource_group: ci_image_arm
-  interruptible: false
-  variables:
-    CI_IMAGE_TAG_SUFFIX: "-arm"
 
 # Bake the AWS nested-qemu runner host AMIs, not guest fixtures. Each
 # architecture uses the same protected manual bake-and-promote path.
@@ -325,15 +317,25 @@ fox_image:
 # Manually rebuild ZFSBootMenu after a version or overlay change, verify the
 # artifacts, then pin the tarball. zbm:ci-build owns dind setup, cache, assertions,
 # and default-branch publication. The architecture comes from the runner, so the
-# arm job differs only in its runner, CI image, and serialization group.
-.zbm_build:
+# matrix entries differ only in their runner and CI image.
+zbm_build:
   stage: prepare
   extends:
     - .hosted
     - .manual_job
+  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-$HOSTED_ARCH
   services:
     - docker:28.3.3-dind
+  parallel:
+    matrix:
+      - HOSTED_ARCH: x86
+        HOSTED_RUNNER: saas-linux-medium-amd64
+      - HOSTED_ARCH: arm
+        HOSTED_RUNNER: saas-linux-small-arm64
+  tags:
+    - $HOSTED_RUNNER
   # Serialize the shared cache ref and never cancel a publish.
+  resource_group: zbm_build_$HOSTED_ARCH
   interruptible: false
   timeout: 60m
   variables:
@@ -349,16 +351,3 @@ fox_image:
       - zbm-build/**/*.sha256sum
   script:
     - mise run zbm:ci-build
-
-zbm_build_x86:
-  extends: .zbm_build
-  tags:
-    - saas-linux-medium-amd64
-  resource_group: zbm_build_x86
-
-zbm_build_arm:
-  extends: .zbm_build
-  image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-arm
-  tags:
-    - saas-linux-small-arm64
-  resource_group: zbm_build_arm
