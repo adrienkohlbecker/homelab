@@ -160,9 +160,8 @@ def test_supported_qemu_images_are_region_and_architecture_specific():
     assert audit_aws.is_supported_qemu_host_image("eu-central-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", arm)
     assert not audit_aws.is_supported_qemu_host_image("eu-west-1", x86)
-    # Older x86 AMIs lack the architecture tag but retain the EC2 architecture.
-    assert audit_aws.is_supported_qemu_host_image("eu-central-1", unlabelled_x86)
-    assert not audit_aws.is_supported_qemu_host_image("eu-central-1", {**unlabelled_x86, "Architecture": "arm64"})
+    # Every bake tags its architecture; an untagged AMI is not one of ours.
+    assert not audit_aws.is_supported_qemu_host_image("eu-central-1", unlabelled_x86)
 
 
 def test_active_asg_instances_are_not_orphans():

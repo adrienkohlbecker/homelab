@@ -38,19 +38,9 @@ CFG = Config(retries={"total_max_attempts": 10, "mode": "adaptive"})
 ARCHITECTURES = yaml.safe_load((Path(__file__).resolve().parents[2] / "data/architectures.yml").read_text())
 # EC2 reports aarch64 images as arm64.
 EC2_ARCHITECTURES = {"x86_64": "x86_64", "aarch64": "arm64"}
-CI_REGIONS: dict[str, dict[str, Any]] = {
-    "eu-central-1": {
-        "amis": {
-            arch: {
-                "ec2_architecture": EC2_ARCHITECTURES[arch],
-                "name_prefix": facts["ci"]["ami_name_prefix"],
-                "parameter": facts["ci"]["ami_parameter"],
-            }
-            for arch, facts in ARCHITECTURES.items()
-        },
-        "asgs": {"homelab-ci-qemu-x86", "homelab-ci-qemu-arm"},
-    },
-}
+# The CI's one region: its qemu-host AMIs, pointers, and pools.
+CI_REGION = "eu-central-1"
+CI_QEMU_ASGS = {"homelab-ci-qemu-x86", "homelab-ci-qemu-arm"}
 EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
 ECR_PREFIXES = ("docker-hub/", "github/", "gitlab/", "quay/")
 anomalies: list[str] = []  # human-readable lines, one per unexpected resource
@@ -95,8 +85,7 @@ def image_tags(image: dict) -> dict[str, str]:
 
 def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     """Return whether an AMI is eligible for automatic retention cleanup."""
-    contract = CI_REGIONS.get(region)
-    if contract is None:
+    if region != CI_REGION:
         return False
     tags = image_tags(image)
     # Any release's bake is supported; its own promotion pointer protects it.
@@ -105,25 +94,24 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     if "ubuntu" not in tags:
         return False
     return any(
-        tags.get("Name") == f"{ami['name_prefix']}-{tags['ubuntu']}"
-        and image.get("Architecture") == ami["ec2_architecture"]
-        and (tags.get("architecture") == arch or (arch == "x86_64" and "architecture" not in tags))
-        for arch, ami in contract["amis"].items()
+        tags.get("Name") == f"{facts['ci']['ami_name_prefix']}-{tags['ubuntu']}"
+        and image.get("Architecture") == EC2_ARCHITECTURES[arch]
+        and tags.get("architecture") == arch
+        for arch, facts in ARCHITECTURES.items()
     )
 
 
 def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str] | None:
     """Return qemu-host AMIs protected by their SSM promotion pointers."""
-    contract = CI_REGIONS.get(region)
-    if contract is None:
+    if region != CI_REGION:
         return set()
 
     ubuntus = {image_tags(image)["ubuntu"] for image in images}
     promoted: set[str] = set()
     ssm = client("ssm", region)
     for ubuntu in ubuntus:
-        for arch, ami in contract["amis"].items():
-            parameter = ami["parameter"].format(ubuntu=ubuntu)
+        for arch, facts in ARCHITECTURES.items():
+            parameter = facts["ci"]["ami_parameter"].format(ubuntu=ubuntu)
             try:
                 value = ssm.get_parameter(Name=parameter)["Parameter"]["Value"]
             except ClientError as error:
@@ -195,7 +183,7 @@ def audit_compute_inventory(region: str, groups: list[dict] | None, reservations
     """Report instances outside recognized ASGs, including their stray groups."""
     if groups is None or reservations is None:
         return
-    recognized = CI_REGIONS.get(region, {}).get("asgs", set())
+    recognized = CI_QEMU_ASGS if region == CI_REGION else set()
     active_ids = {
         instance["InstanceId"]
         for group in groups
@@ -325,12 +313,12 @@ def sweep_region(region):
 
 
 def main():
-    ident = client("sts", "eu-central-1").get_caller_identity()
+    ident = client("sts", CI_REGION).get_caller_identity()
     print(f"== AWS CI account audit — account {ident['Account']} as {ident['Arn']} ==\n")
 
     regions = safe(
         "regions",
-        lambda: client("ec2", "eu-central-1").describe_regions()["Regions"],
+        lambda: client("ec2", CI_REGION).describe_regions()["Regions"],
         default=None,
     )
     region_names = [region["RegionName"] for region in regions or []]
@@ -342,7 +330,7 @@ def main():
     # live in AWS S3).
     for b in paginated(
         "s3",
-        client("s3", "eu-central-1"),
+        client("s3", CI_REGION),
         "list_buckets",
         "Buckets",
     ):
