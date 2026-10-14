@@ -1071,7 +1071,14 @@ def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> N
     fake_bin = tmp_path / "bin"
     aws_log = tmp_path / "aws.log"
     _executable(fake_bin / "aws", '#!/bin/sh\nprintf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n')
-    env = dict(os.environ, AWS_TEST_LOG=str(aws_log), CI_JOB_ID="42", PATH=f"{fake_bin}:{os.environ['PATH']}")
+    # Set explicitly: GitLab exports CI_JOB_STATUS=running to every job's script.
+    env = dict(
+        os.environ,
+        AWS_TEST_LOG=str(aws_log),
+        CI_JOB_ID="42",
+        CI_JOB_STATUS="success",
+        PATH=f"{fake_bin}:{os.environ['PATH']}",
+    )
 
     result = subprocess.run(["bash", str(QEMU_HOST_AMI_CLEANUP_SH)], env=env, text=True, capture_output=True)
 
