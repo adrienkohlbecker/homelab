@@ -31,7 +31,7 @@
 # be scheduled.
 - name: _verify | A host without a pool schedules no backup timer  # noqa: command-instead-of-module
   when: zfs_autobackup_verify_pools.stdout_lines | length == 0
-  command: systemctl list-timers --all --no-legend zfs_autosnapshot.timer zfs_backup_freshness.timer
+  command: systemctl list-timers --all --no-legend zfs_autosnapshot.timer zfs_backup_pull.timer zfs_backup_freshness.timer
   register: zfs_autobackup_verify_timers
   changed_when: false
   failed_when: zfs_autobackup_verify_timers.stdout | trim | length > 0
@@ -129,81 +129,25 @@
       pause:
         seconds: 2
 
-    # The first run pulls full streams, the second incrementals. The replicas then
-    # carry autobackup:bak as a received property, so the second run must skip
-    # them (--exclude-received) instead of pulling the replica tree into itself --
+    # Each night snapshots, then pulls from its later timer: the first pull ships
+    # full streams, the second incrementals. The replicas then carry
+    # autobackup:bak as a received property, so the second night must skip them
+    # (--exclude-received) instead of pulling the replica tree into itself --
     # the same guard that keeps two peers from re-pulling each other's replicas.
-    # The offsite leg is paused, so the run exits 0 only if the local and onsite
-    # legs both succeed.
-    - name: _verify | Run the nightly backup with its onsite pull
-      command: /usr/local/bin/zfs_autosnapshot
+    # The offsite leg is paused, so each run exits 0 only if its leg succeeds.
+    - name: _verify | Run two nights of snapshots and onsite pulls
+      command:
+        argv: "{{ ['/usr/local/bin/zfs_autosnapshot'] + item.args }}"
       changed_when: true
       loop:
-        - full
-        - incremental
+        - {leg: full snapshot, args: []}
+        - {leg: full pull, args: [ --pull ]}
+        - {leg: incremental snapshot, args: []}
+        - {leg: incremental pull, args: [ --pull ]}
       loop_control:
+        label: "{{ item.leg }}"
         pause: 2
       become: true
-
-    # The nightly runs above found a fresh source snapshot at once (the source is
-    # this host, snapshotted just before). With nothing new, the bounded wait
-    # must run out, warn, and still pull.
-    - name: _verify | An onsite pull waits out a source with nothing new
-      command:
-        argv:
-          - /usr/local/bin/zfs_backup_onsite
-          - --wait-for-source
-          - "5"
-          - "{{ external_ips[zfs_autobackup_sources[0].host] }}"
-          - "{{ zfs_autobackup_sources[0].dest_dataset }}"
-      register: zfs_autobackup_verify_wait
-      changed_when: true
-      failed_when: >-
-        zfs_autobackup_verify_wait.rc != 0
-        or 'has no snapshot newer than' not in zfs_autobackup_verify_wait.stderr
-        or ((zfs_autobackup_verify_wait.end | to_datetime('%Y-%m-%d %H:%M:%S.%f'))
-            - (zfs_autobackup_verify_wait.start | to_datetime('%Y-%m-%d %H:%M:%S.%f'))).total_seconds() < 5
-      become: true
-
-    # An out-of-band snapshot of one dataset (a zfs_dataset retirement) must not
-    # release the wait for the others, which still match their replicas.
-    - name: _verify | Snapshot one source dataset out of band
-      shell: |
-        set -euo pipefail
-        zfs snapshot "rpool/zfs_autobackup_offsite_test@bak-$(date +%Y%m%d%H%M%S)"
-      args:
-        executable: /bin/bash
-      changed_when: true
-      become: true
-
-    - name: _verify | An onsite pull waits out the datasets an out-of-band snapshot skipped
-      command:
-        argv:
-          - /usr/local/bin/zfs_backup_onsite
-          - --wait-for-source
-          - "5"
-          - "{{ external_ips[zfs_autobackup_sources[0].host] }}"
-          - "{{ zfs_autobackup_sources[0].dest_dataset }}"
-      register: zfs_autobackup_verify_partial_wait
-      changed_when: true
-      failed_when: >-
-        zfs_autobackup_verify_partial_wait.rc != 0
-        or ((zfs_autobackup_verify_partial_wait.end | to_datetime('%Y-%m-%d %H:%M:%S.%f'))
-            - (zfs_autobackup_verify_partial_wait.start | to_datetime('%Y-%m-%d %H:%M:%S.%f'))).total_seconds() < 5
-      become: true
-
-    - name: _verify | The wait named the stale datasets, not the fresh one
-      vars:
-        warning: >-
-          {{ zfs_autobackup_verify_partial_wait.stderr_lines
-             | select('search', '^Warning: .* has no snapshot newer than its replica')
-             | first | default('') }}
-      assert:
-        that:
-          - "' rpool/services' in warning"
-          - "' rpool/zfs_autobackup_restore_source_test' in warning"
-          - "'rpool/zfs_autobackup_offsite_test' not in warning"
-        fail_msg: "{{ zfs_autobackup_verify_partial_wait.stderr_lines }}"
 
     - name: _verify | Read the newest bak snapshot of every pull source
       shell: |

@@ -14,22 +14,22 @@ run_step() {
   }
 }
 
-# --final: quiesce mode for the rebuild runbooks. Runs local snapshots and
-# onsite pulls but leaves zfs_autosnapshot.target
-# stopped afterwards, so no state writer restarts between the final snapshot
-# and the host being wiped/restored.
+# No argument: the nightly local leg, snapshotting this host's datasets.
+# --pull: the nightly onsite leg, from its own later timer once every host has
+# snapshotted: pull each source host's snapshots onto this host.
+# --final: quiesce mode for the rebuild runbooks. Runs both legs but leaves
+# zfs_autosnapshot.target stopped afterwards, so no state writer restarts
+# between the final snapshot and the host being wiped/restored.
+mode=${1:-}
 zfs_backup_local_args=()
-case "${1:-}" in
-  '') ;;
+case "$mode" in
+  '' | --pull) ;;
   --final) zfs_backup_local_args=(--no-resume) ;;
   *)
-    echo >&2 "Usage: zfs_autosnapshot [--final]"
+    echo >&2 "Usage: zfs_autosnapshot [--pull | --final]"
     exit 2
     ;;
 esac
-
-# create local snapshots
-run_step zfs_backup_local "${zfs_backup_local_args[@]}"
 
 # Gate offsite replication on the local snapshot succeeding. The offsite leg
 # rsyncs from this host's just-taken @bak- snapshots and picks the newest @bak-
@@ -39,18 +39,24 @@ run_step zfs_backup_local "${zfs_backup_local_args[@]}"
 # push a cross-dataset generation skew offsite, overwriting the previous,
 # consistent copy with a mixed one. So if the local step failed at all, skip
 # offsite and let the next run retry from a clean snapshot. (`failed` is already
-# bumped, so the run still exits 1 below for monitoring.)
-zfs_backup_local_ok=$((failed == 0))
+# bumped, so the run still exits 1 below for monitoring.) A pull-only run takes
+# no snapshot and so ships nothing offsite.
+zfs_backup_local_ok=0
+if [ "$mode" != --pull ]; then
+  run_step zfs_backup_local "${zfs_backup_local_args[@]}"
+  zfs_backup_local_ok=$((failed == 0))
+fi
 
 # pull each configured source host's snapshots onto this host
 # Unaffected by the gate above: each onsite leg pulls a *peer* host's own
 # snapshots (--no-snapshot --ssh-source), not the ones taken locally this run,
 # so a local-snapshot failure here doesn't make these copies inconsistent.
-# Wait up to 30 minutes for each source's own run to snapshot; see
-# zfs_backup_onsite.
+if [ -n "$mode" ]; then
 {% for src in zfs_autobackup_sources %}
-run_step zfs_backup_onsite --wait-for-source 1800 "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
+  run_step zfs_backup_onsite "{{ external_ips[src.host] }}" "{{ src.dest_dataset }}"
 {% endfor %}
+  : # keeps the block valid on a host that pulls from no source
+fi
 
 # Offsite sync is paused while bunk is unavailable.
 # sync each dataset to offsite synology
