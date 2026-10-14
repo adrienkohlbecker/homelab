@@ -7,6 +7,12 @@ set -euo pipefail
 # and delete what was created for it: its backstop schedule and Packer's
 # temporary key pair and security group. A finished bake leaves no instance,
 # so this does nothing.
+#
+# Packer copies the instance's tags onto the AMI, so a job stopped while the
+# AMI was being created also leaves an AMI carrying its job_id. Deregister it
+# and delete its snapshots, which AWS allows while both are still pending, but
+# only when CI_JOB_STATUS says the job did not succeed: a finished bake's AMI
+# carries the same tag.
 region=eu-central-1
 job_id=${CI_JOB_ID:?CI_JOB_ID is required}
 
@@ -37,3 +43,19 @@ while read -r id key groups; do
     fi
   done
 done <<<"$instances"
+
+if [ -n "${CI_JOB_STATUS:-}" ] && [ "$CI_JOB_STATUS" != success ]; then
+  images=$(aws ec2 describe-images --region "$region" --owners self \
+    --filters "Name=tag:job_id,Values=${job_id}" \
+    --query "Images[].[ImageId,join(',',BlockDeviceMappings[].Ebs.SnapshotId)]" \
+    --output text)
+  while read -r image snapshots; do
+    [ -n "$image" ] || continue
+    echo "deregistering unfinished AMI ${image}"
+    aws ec2 deregister-image --region "$region" --image-id "$image"
+    for snapshot in ${snapshots//,/ }; do
+      echo "deleting snapshot ${snapshot}"
+      aws ec2 delete-snapshot --region "$region" --snapshot-id "$snapshot"
+    done
+  done <<<"$images"
+fi
