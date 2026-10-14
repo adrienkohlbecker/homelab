@@ -31,7 +31,7 @@ locals {
   ]))
   # Must match the namespace in packer/aws/files/cloudwatch_agent.json.
   ci_host_metrics_namespace      = "homelab-ci"
-  ci_qemu_host_ami_parameter     = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
+  ci_qemu_x86_host_ami_parameter = replace(local.ci_architectures.x86_64.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
   ci_qemu_arm_host_ami_parameter = replace(local.ci_architectures.aarch64.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
   # A bake promotes any catalog release's pointer, so the next release's AMI
   # exists before ci_host moves the launch templates onto it.
@@ -40,7 +40,7 @@ locals {
     "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${replace(local.ci_architectures[pair[1]].ci.ami_parameter, "{ubuntu}", pair[0])}"
   ]
   ci_qemu_pools = {
-    role = {
+    x86 = {
       # Instance-type-agnostic name: aws_autoscaling_group.name and
       # aws_launch_template.name are ForceNew, so encoding the type in the name
       # would churn the runner asg_name and IAM groupName condition on a resize.
@@ -979,15 +979,15 @@ resource "aws_key_pair" "ci_operator" {
 # ─── Launch template: nested-qemu host pool ──────────────────────────────────
 # GitLab Runner/fleeting owns desired capacity, and the host runs shell jobs
 # that launch qemu/KVM locally. The AMI is resolved through SSM
-# (ci_qemu_host_ami_parameter), so a host bake promotion never touches
+# (ci_qemu_x86_host_ami_parameter), so a host bake promotion never touches
 # terraform.
-resource "aws_launch_template" "ci_qemu_host" {
-  name                   = local.ci_qemu_pools.role.name
+resource "aws_launch_template" "ci_qemu_x86_host" {
+  name                   = local.ci_qemu_pools.x86.name
   description            = "homelab CI nested-qemu host"
   update_default_version = true
 
-  image_id      = "resolve:ssm:${local.ci_qemu_host_ami_parameter}"
-  instance_type = local.ci_qemu_pools.role.instance_type
+  image_id      = "resolve:ssm:${local.ci_qemu_x86_host_ami_parameter}"
+  instance_type = local.ci_qemu_pools.x86.instance_type
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -1010,10 +1010,10 @@ resource "aws_launch_template" "ci_qemu_host" {
     device_name = "/dev/sda1"
 
     ebs {
-      volume_size           = local.ci_qemu_pools.role.root_volume_size
+      volume_size           = local.ci_qemu_pools.x86.root_volume_size
       volume_type           = "gp3"
-      iops                  = local.ci_qemu_pools.role.root_volume_iops
-      throughput            = local.ci_qemu_pools.role.root_volume_throughput
+      iops                  = local.ci_qemu_pools.x86.root_volume_iops
+      throughput            = local.ci_qemu_pools.x86.root_volume_throughput
       encrypted             = true
       delete_on_termination = true
     }
@@ -1033,21 +1033,31 @@ resource "aws_launch_template" "ci_qemu_host" {
       resource_type = tag_spec.value
       tags = {
         role = "ci-qemu-host"
-        pool = local.ci_qemu_pools.role.name
+        pool = local.ci_qemu_pools.x86.name
       }
     }
   }
 
   tags = {
-    Name = local.ci_qemu_pools.role.name
+    Name = local.ci_qemu_pools.x86.name
     role = "ci"
-    pool = local.ci_qemu_pools.role.name
+    pool = local.ci_qemu_pools.x86.name
   }
 }
 
 moved {
   from = aws_autoscaling_group.ci_qemu_arm
   to   = aws_autoscaling_group.ci_qemu["arm"]
+}
+
+moved {
+  from = aws_autoscaling_group.ci_qemu["role"]
+  to   = aws_autoscaling_group.ci_qemu["x86"]
+}
+
+moved {
+  from = aws_launch_template.ci_qemu_host
+  to   = aws_launch_template.ci_qemu_x86_host
 }
 
 resource "aws_autoscaling_group" "ci_qemu" {
@@ -1071,7 +1081,7 @@ resource "aws_autoscaling_group" "ci_qemu" {
 
     launch_template {
       launch_template_specification {
-        launch_template_id = each.key == "arm" ? aws_launch_template.ci_qemu_arm_host.id : aws_launch_template.ci_qemu_host.id
+        launch_template_id = { x86 = aws_launch_template.ci_qemu_x86_host.id, arm = aws_launch_template.ci_qemu_arm_host.id }[each.key]
         version            = "$Latest"
       }
 
