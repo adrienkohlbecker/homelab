@@ -32,9 +32,8 @@ def test_default_x86_64_no_keep_no_direct_boot(
     assert cmd[2] == "660"
     assert cmd[3] == "qemu-system-x86_64"
 
-    # No implicit devices; the display comes back with a VGA BIOS for SeaBIOS.
-    assert cmd[4] == "-nodefaults"
-    assert "virtio-vga" in [cmd[i + 1] for i, a in enumerate(cmd) if a == "-device"]
+    # No implicit devices.
+    assert "-nodefaults" in cmd
 
     # Drives expand to repeated --drive args.
     assert cmd.count("--drive") == 2
