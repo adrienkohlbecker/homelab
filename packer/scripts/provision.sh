@@ -775,16 +775,12 @@ fi
 # implies cachefile=none, so name the cache explicitly: the shipped zpool.cache
 # then lists rpool alongside the data pools.
 #
-# A rebuild forces the import: the old root last imported the pools under the
-# hostid ZFSBootMenu boots every root with (spl.spl_hostid on its command
-# line), not its own /etc/hostid.
-import_force=()
-if [ "$KEEP_POOLS" = 1 ]; then
-  import_force=(-f)
-fi
-zpool import "${import_force[@]}" -N -R /mnt -o cachefile=/etc/zfs/zpool.cache -d "$POOL_DEVICE_DIR" rpool
+# A rebuild imports unforced: the live environment now has the old root's
+# /etc/hostid, which matches the hostid ZFSBootMenu boots every root with
+# (0x00bab10c), so ZFS still refuses pools another running system holds.
+zpool import -N -R /mnt -o cachefile=/etc/zfs/zpool.cache -d "$POOL_DEVICE_DIR" rpool
 for pool in $extra_pools; do
-  zpool import "${import_force[@]}" -N -d "$POOL_DEVICE_DIR" "$pool"
+  zpool import -N -d "$POOL_DEVICE_DIR" "$pool"
 done
 
 # The new root stays at mountpoint=legacy until the install completes: ZBM
