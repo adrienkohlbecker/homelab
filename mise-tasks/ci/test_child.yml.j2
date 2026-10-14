@@ -10,7 +10,7 @@ stages:
   - {{ stage }}
 {% endfor %}
 
-.cell:
+.x86_cell:
   stage: test1
   needs: []
   # Qemu cells use protected shell runners; AWS hydrates S3 images while lab
@@ -41,7 +41,7 @@ stages:
     - mise run ci:bootstrap
 {% if image_oidc %}
     # The branch-safe cell role can only read promoted qemu bundles.
-    - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "{{ target }}-cell-$CI_JOB_ID" --cache-dir
+    - source mise-tasks/ci/aws-oidc.sh {{ cell_role_arn }} "{{ target }}-x86-cell-$CI_JOB_ID" --cache-dir
     # minimal downloads its cloud image directly and has no bundle to hydrate.
     - if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images "$VARIANT" --ubuntu "$UBUNTU"; fi
 {% endif %}
@@ -90,7 +90,7 @@ stages:
 # The leading stage gives the critical-path converge the first build id;
 # inherited needs:[] keeps it parallel with every cell.
 "_site_test:lab":
-  extends: .cell
+  extends: .x86_cell
   stage: site
   variables:
     VARIANT: lab
@@ -105,7 +105,7 @@ stages:
       exit $rc
 
 "_site_test:lab:noble":
-  extends: .cell
+  extends: .x86_cell
   stage: site
   variables:
     VARIANT: lab
@@ -121,7 +121,7 @@ stages:
 
 # Full-site check mode covers cross-role rendering and gates.
 "_site_check:lab":
-  extends: .cell
+  extends: .x86_cell
   stage: site
   variables:
     VARIANT: lab
@@ -139,7 +139,7 @@ stages:
 {% for cell in group.cells %}
 
 "{{ cell.spec }}":
-  extends: .cell
+  extends: .x86_cell
   stage: {{ group.stage }}
   variables:
     ROLE: {{ cell.role }}
@@ -159,7 +159,7 @@ stages:
 {% endfor %}
 {% for cell in arm_cells %}
 
-"{{ cell.spec }}:aarch64":
+"{{ cell.spec }}:arm":
   extends: .arm_cell
   variables:
     ROLE: {{ cell.role }}

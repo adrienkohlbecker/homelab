@@ -8,7 +8,7 @@
 # anonymous (public project) — only this publish path needs auth.
 #
 # Auth, by environment:
-#   GitLab CI:   CI_JOB_TOKEN (the zbm_build and zbm_build_arm jobs) — built-in write access to
+#   GitLab CI:   CI_JOB_TOKEN (the zbm_build_x86 and zbm_build_arm jobs) — built-in write access to
 #                this project's package registry, no standing secret. curl,
 #                not glab: glab only authenticates via PRIVATE-TOKEN/Bearer
 #                (a PAT shape job tokens are not valid as), while the

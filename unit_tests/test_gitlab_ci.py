@@ -30,19 +30,19 @@ def test_api_pipelines_run_regular_jobs() -> None:
 
 
 def test_lab_qemu_image_is_published_for_supported_releases() -> None:
-    assert PIPELINE[".qemu_image"]["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
+    assert PIPELINE[".qemu_image_x86"]["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
     # lab's persistent shell runner must not keep the bake role's token.
-    assert PIPELINE[".qemu_image"]["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
-    assert PIPELINE["qemu_image:lab"] == {
-        "extends": ".qemu_image",
-        "resource_group": "qemu_image_lab_$UBUNTU",
+    assert PIPELINE[".qemu_image_x86"]["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
+    assert PIPELINE["qemu_image:lab:x86"] == {
+        "extends": ".qemu_image_x86",
+        "resource_group": "qemu_image_lab_x86_$UBUNTU",
         "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote'],
     }
-    assert PIPELINE[".qemu_image"]["extends"] == ".protected_manual_job"
+    assert PIPELINE[".qemu_image_x86"]["extends"] == ".protected_manual_job"
     assert {
-        name.removeprefix("qemu_image:")
+        name.removeprefix("qemu_image:").removesuffix(":x86")
         for name in PIPELINE
-        if name.startswith("qemu_image:") and not name.endswith(":arm")
+        if name.startswith("qemu_image:") and name.endswith(":x86")
     } == IMAGE_STORE.VALID_MACHINES
 
 
@@ -111,7 +111,7 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
 
     assert lab == {
         "extends": ".qemu_image_arm",
-        "resource_group": "qemu_image_lab_aarch64_$UBUNTU",
+        "resource_group": "qemu_image_lab_arm_$UBUNTU",
         "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --upstream --promote'],
     }
     assert {

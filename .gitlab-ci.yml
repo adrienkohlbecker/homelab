@@ -175,15 +175,15 @@ unit_tests:
         docker push "$CI_REGISTRY_IMAGE/ci:latest-$release$CI_IMAGE_TAG_SUFFIX"
       fi
 
-ci_image:
+ci_image_x86:
   extends: .ci_image
   tags:
     - saas-linux-medium-amd64
   # Serialize and never cancel a possible :latest push.
-  resource_group: ci_image
+  resource_group: ci_image_x86
   interruptible: false
 
-# The arm64 image lets hosted arm64 jobs (zbm_build_arm) use the same toolchain.
+# The arm image lets hosted arm64 jobs (zbm_build_arm) use the same toolchain.
 # Free-plan namespaces only get the small arm64 runner (medium and large are
 # Premium and Ultimate only).
 ci_image_arm:
@@ -226,7 +226,7 @@ qemu_host_ami:
 # Promotion is global but verify-boots first, retains prior S3 versions, and
 # prints rollback instructions. Per-machine/release resource groups serialize
 # only builds that share an output path and pointer.
-.qemu_image:
+.qemu_image_x86:
   stage: prepare
   extends: .protected_manual_job
   # lab is both the sole KVM builder and the lab cells' local image store.
@@ -245,14 +245,14 @@ qemu_host_ami:
           - resolute
   before_script:
     - mise run ci:bootstrap
-    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-$CI_JOB_ID"
+    - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-x86-$CI_JOB_ID"
   # lab's shell runner keeps checkouts; do not leave the bake token behind.
   after_script:
     - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
 
-"qemu_image:lab":
-  extends: .qemu_image
-  resource_group: qemu_image_lab_$UBUNTU
+"qemu_image:lab:x86":
+  extends: .qemu_image_x86
+  resource_group: qemu_image_lab_x86_$UBUNTU
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
 
@@ -292,7 +292,7 @@ qemu_host_ami:
 
 "qemu_image:lab:arm":
   extends: .qemu_image_arm
-  resource_group: qemu_image_lab_aarch64_$UBUNTU
+  resource_group: qemu_image_lab_arm_$UBUNTU
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --upstream --promote
 
@@ -325,18 +325,15 @@ fox_image:
 # Manually rebuild ZFSBootMenu after a version or overlay change, verify the
 # artifacts, then pin the tarball. zbm:ci-build owns dind setup, cache, assertions,
 # and default-branch publication. The architecture comes from the runner, so the
-# arm64 job differs only in its runner, CI image, and serialization group.
-zbm_build:
+# arm job differs only in its runner, CI image, and serialization group.
+.zbm_build:
   stage: prepare
   extends:
     - .hosted
     - .manual_job
   services:
     - docker:28.3.3-dind
-  tags:
-    - saas-linux-medium-amd64
   # Serialize the shared cache ref and never cancel a publish.
-  resource_group: zbm_build
   interruptible: false
   timeout: 60m
   variables:
@@ -353,8 +350,14 @@ zbm_build:
   script:
     - mise run zbm:ci-build
 
+zbm_build_x86:
+  extends: .zbm_build
+  tags:
+    - saas-linux-medium-amd64
+  resource_group: zbm_build_x86
+
 zbm_build_arm:
-  extends: zbm_build
+  extends: .zbm_build
   image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-arm64
   tags:
     - saas-linux-small-arm64

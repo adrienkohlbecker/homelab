@@ -76,7 +76,7 @@ img="localhost/zbm-builder:v${ZBM_VERSION}-${arch}"
 # final image's layers as inline would). This makes cache hits granular at
 # the xbps-install layer level even across version bumps.
 # Default empty so local workstation builds stay self-contained; the
-# .gitlab-ci.yml zbm_build job sets ZBM_BUILDER_CACHE_REF explicitly.
+# .gitlab-ci.yml zbm_build jobs set ZBM_BUILDER_CACHE_REF explicitly.
 : "${ZBM_BUILDER_CACHE_REF:=}"
 cache_args=()
 if [ -n "$ZBM_BUILDER_CACHE_REF" ]; then

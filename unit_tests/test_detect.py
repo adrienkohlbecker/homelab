@@ -1199,14 +1199,14 @@ class TestRenderChildPipeline:
         assert doc["stages"] == ["test1", "test2"]
         # All cells run the qemu backend; the harness defaults to it, so there is
         # no HOMELAB_TEST_BACKEND variable.
-        assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
-        assert "HOMELAB_TEST_AWS_REGION" not in doc[".cell"]["variables"]
+        assert "HOMELAB_TEST_BACKEND" not in doc[".x86_cell"]["variables"]
+        assert doc[".x86_cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
+        assert "HOMELAB_TEST_AWS_REGION" not in doc[".x86_cell"]["variables"]
         assert doc[".arm_cell"]["tags"] == ["aws-shell-qemu-arm"]
         assert doc[".arm_cell"]["variables"]["ARCH"] == "aarch64"
         assert "HOMELAB_TEST_AWS_REGION" not in doc[".arm_cell"]["variables"]
         # No spot retry on the qemu targets.
-        assert "retry" not in doc[".cell"]
+        assert "retry" not in doc[".x86_cell"]
         # nginx:lab defaults to Noble; podman:lab:noble is explicit.
         assert doc["nginx:lab"]["variables"] == {"ROLE": "nginx", "VARIANT": "lab", "UBUNTU": "resolute"}
         assert doc["podman:lab:noble"]["variables"] == {
@@ -1214,15 +1214,15 @@ class TestRenderChildPipeline:
             "VARIANT": "lab",
             "UBUNTU": "noble",
         }
-        assert doc["nginx:lab"]["extends"] == ".cell"
+        assert doc["nginx:lab"]["extends"] == ".x86_cell"
         assert "_site_test:lab" not in doc
         assert "_site_check:lab" not in doc
         assert "no_cells" not in doc
 
     def test_cells_auto_run_by_default(self) -> None:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
-        assert "when" not in doc[".cell"]
-        assert "allow_failure" not in doc[".cell"]
+        assert "when" not in doc[".x86_cell"]
+        assert "allow_failure" not in doc[".x86_cell"]
 
     def test_no_cells_placeholder_runs_on_hosted_runner(self) -> None:
         # A no-cell pipeline does not consume a persistent or autoscaled qemu
@@ -1262,7 +1262,7 @@ class TestRenderChildPipeline:
         # _site_test must be picked before the matrix: it lives in a dedicated
         # `site` stage declared ahead of the cell stages, so GitLab (which seeds
         # build ids stage-by-stage) gives it the lowest id and a runner claims
-        # it first. needs:[] (from .cell) keeps it parallel, so the leading
+        # it first. needs:[] (from .x86_cell) keeps it parallel, so the leading
         # stage never gates the cells.
         doc = _render_child_doc(["nginx:lab", "podman:lab:resolute"], site_test=True)
         assert doc["stages"] == ["site", "test1", "test2"]
@@ -1272,7 +1272,7 @@ class TestRenderChildPipeline:
         for job in ("_site_test:lab", "_site_check:lab"):
             assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
         assert doc["_site_test:lab:noble"]["variables"] == {"VARIANT": "lab", "UBUNTU": "noble"}
-        assert doc[".cell"]["needs"] == []
+        assert doc[".x86_cell"]["needs"] == []
 
     def test_site_test_only_stage(self) -> None:
         # site_test with no cells still seeds a single leading `site` stage.
@@ -1290,7 +1290,7 @@ class TestRenderChildPipeline:
         assert "_site_test:lab:noble" not in doc
         assert "_site_check:lab" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
-        jobs = [k for k in doc if k not in ("default", "stages", ".cell", ".arm_cell")]
+        jobs = [k for k in doc if k not in ("default", "stages", ".x86_cell", ".arm_cell")]
         assert jobs == ["no_cells"]
 
     def test_arm_scaffold_uses_frankfurt_images_and_bounded_runtime(self) -> None:
@@ -1313,13 +1313,13 @@ class TestRenderChildPipeline:
             site_test=False,
         )
 
-        assert "apt:lab:aarch64" in doc
-        assert "boot:minimal:aarch64" not in doc
-        assert "fan2go:lab:aarch64" in doc
-        assert "nginx:lab:aarch64" not in doc
+        assert "apt:lab:arm" in doc
+        assert "boot:minimal:arm" not in doc
+        assert "fan2go:lab:arm" in doc
+        assert "nginx:lab:arm" not in doc
         assert doc["stages"][-1] == "arm"
-        assert "when" not in doc["apt:lab:aarch64"]
-        assert "allow_failure" not in doc["apt:lab:aarch64"]
+        assert "when" not in doc["apt:lab:arm"]
+        assert "allow_failure" not in doc["apt:lab:arm"]
 
     def test_arm_minimal_uses_upstream_cloud_image(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -1329,8 +1329,8 @@ class TestRenderChildPipeline:
 
         doc = _render_child_doc(["minimal_probe:minimal"], site_test=False)
 
-        assert "minimal_probe:minimal:aarch64" in doc
-        assert doc["minimal_probe:minimal:aarch64"]["variables"]["VARIANT"] == "minimal"
+        assert "minimal_probe:minimal:arm" in doc
+        assert doc["minimal_probe:minimal:arm"]["variables"]["VARIANT"] == "minimal"
         assert 'if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images' in "\n".join(
             doc[".arm_cell"]["before_script"]
         )
@@ -1343,55 +1343,55 @@ class TestRenderChildPipeline:
 
         doc = _render_child_doc(["release_probe:lab"], site_test=False)
 
-        assert doc["release_probe:lab:aarch64"]["variables"]["UBUNTU"] == "resolute"
-        assert doc["release_probe:lab:noble:aarch64"]["variables"]["UBUNTU"] == "noble"
+        assert doc["release_probe:lab:arm"]["variables"]["UBUNTU"] == "resolute"
+        assert doc["release_probe:lab:noble:arm"]["variables"]["UBUNTU"] == "noble"
 
     def test_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
         doc = _render_child_doc(specs, site_test=True)
         x86_jobs = [name for name in specs if name in doc]
         arm_jobs = {
-            f"{detect.cell_to_ci_spec(detect.TestCell(machine, codename, role))}:aarch64"
+            f"{detect.cell_to_ci_spec(detect.TestCell(machine, codename, role))}:arm"
             for role in detect.list_testable_roles()
             for machine, codename in detect.load_role_test_config(role).arm_cells
         }
 
         assert len(x86_jobs) == len(specs)
         assert arm_jobs
-        assert {name for name in doc if name.endswith(":aarch64")} == arm_jobs
+        assert {name for name in doc if name.endswith(":arm")} == arm_jobs
 
     def test_arm_lane_can_be_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HOMELAB_CI_ARM", "false")
         doc = _render_child_doc(detect._full_universe_specs(), site_test=True)
 
         assert "arm" not in doc["stages"]
-        assert not any(name.endswith(":aarch64") for name in doc)
+        assert not any(name.endswith(":arm") for name in doc)
 
     def test_lab_target_never_renders_arm_jobs(self) -> None:
         doc = _render_child_doc(["apt:lab"], site_test=False, target="lab")
 
         assert ".arm_cell" not in doc
-        assert not any(name.endswith(":aarch64") for name in doc)
+        assert not any(name.endswith(":arm") for name in doc)
 
     def test_lab_target_uses_shell_qemu_runner(self) -> None:
         doc = _render_child_doc(["nginx:lab"], site_test=False, target="lab")
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
-        assert doc[".cell"]["tags"] == ["lab-shell-qemu"]
+        assert doc[".x86_cell"]["tags"] == ["lab-shell-qemu"]
         # The harness defaults to the qemu backend, so no HOMELAB_TEST_BACKEND.
-        assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
+        assert "HOMELAB_TEST_BACKEND" not in doc[".x86_cell"]["variables"]
         # lab's shell runner is on the operator LAN: qemu guest, not in AWS.
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
-        assert "HOMELAB_TEST_AWS_REGION" not in doc[".cell"]["variables"]
+        assert doc[".x86_cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "false"
+        assert "HOMELAB_TEST_AWS_REGION" not in doc[".x86_cell"]["variables"]
         assert ".arm_cell" not in doc
         # lab's shell runner is not the baked AMI -- no /opt/mise to point at.
-        assert "MISE_DATA_DIR" not in doc[".cell"]["variables"]
-        assert "image" not in doc[".cell"]
+        assert "MISE_DATA_DIR" not in doc[".x86_cell"]["variables"]
+        assert "image" not in doc[".x86_cell"]
         # lab boots images from local disk: no OIDC, so id_tokens is dropped.
-        assert "id_tokens" not in doc[".cell"]
-        assert "retry" not in doc[".cell"]
+        assert "id_tokens" not in doc[".x86_cell"]
+        assert "retry" not in doc[".x86_cell"]
 
-        joined = "\n".join(doc[".cell"]["before_script"])
+        joined = "\n".join(doc[".x86_cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
         assert "CI_CELL_SSH_KEY" not in joined
         # lab boots images straight from /mnt/scratch/homelab_ci: no OIDC role
@@ -1409,33 +1409,33 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab"], site_test=True, target="aws_qemu")
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
-        assert doc[".cell"]["tags"] == ["aws-shell-qemu"]
-        assert "HOMELAB_TEST_BACKEND" not in doc[".cell"]["variables"]
+        assert doc[".x86_cell"]["tags"] == ["aws-shell-qemu"]
+        assert "HOMELAB_TEST_BACKEND" not in doc[".x86_cell"]["variables"]
         # Qemu backend but an AWS host: the guest egresses through AWS, so it
         # must take the in-region-mirror / public-DNS path.
-        assert doc[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
+        assert doc[".x86_cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == "true"
         # This target's shell host is the baked qemu-host AMI, so the cell points
         # mise/uv at the /opt caches to skip the toolchain re-download.
-        assert doc[".cell"]["variables"]["MISE_DATA_DIR"] == "/opt/mise"
-        assert doc[".cell"]["variables"]["UV_CACHE_DIR"] == "/opt/uv-cache"
-        assert doc[".cell"]["variables"]["UV_LINK_MODE"] == "copy"
-        assert "image" not in doc[".cell"]
-        assert doc[".cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
-        assert "retry" not in doc[".cell"]
-        assert doc["_site_test:lab"]["extends"] == ".cell"
+        assert doc[".x86_cell"]["variables"]["MISE_DATA_DIR"] == "/opt/mise"
+        assert doc[".x86_cell"]["variables"]["UV_CACHE_DIR"] == "/opt/uv-cache"
+        assert doc[".x86_cell"]["variables"]["UV_LINK_MODE"] == "copy"
+        assert "image" not in doc[".x86_cell"]
+        assert doc[".x86_cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
+        assert "retry" not in doc[".x86_cell"]
+        assert doc["_site_test:lab"]["extends"] == ".x86_cell"
         assert "tags" not in doc["_site_test:lab"]
-        assert doc["_site_test:lab:noble"]["extends"] == ".cell"
+        assert doc["_site_test:lab:noble"]["extends"] == ".x86_cell"
         assert "tags" not in doc["_site_test:lab:noble"]
-        assert doc["_site_check:lab"]["extends"] == ".cell"
+        assert doc["_site_check:lab"]["extends"] == ".x86_cell"
         assert "tags" not in doc["_site_check:lab"]
 
-        joined = "\n".join(doc[".cell"]["before_script"])
+        joined = "\n".join(doc[".x86_cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
         assert "CI_CELL_SSH_KEY" not in joined
         assert "ssh-add" not in joined
         assert detect.CELL_ROLE_ARN in joined
         expected_oidc = (
-            f'source mise-tasks/ci/aws-oidc.sh {detect.CELL_ROLE_ARN} "aws_qemu-cell-$CI_JOB_ID" --cache-dir'
+            f'source mise-tasks/ci/aws-oidc.sh {detect.CELL_ROLE_ARN} "aws_qemu-x86-cell-$CI_JOB_ID" --cache-dir'
         )
         assert expected_oidc in joined
         # aws_qemu reads from AWS S3 via OIDC -- never the lab MinIO mirror.
@@ -1567,8 +1567,8 @@ class TestCmdGitlab:
         child = tmp_path / "child.yml"
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
-        assert loaded[".cell"]["tags"] == [runner_tag]
-        assert loaded[".cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == in_aws
+        assert loaded[".x86_cell"]["tags"] == [runner_tag]
+        assert loaded[".x86_cell"]["variables"]["HOMELAB_TEST_IN_AWS"] == in_aws
 
     def test_aws_target_automatically_selects_arm(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(detect, "_full_universe_specs", lambda: ["apt:lab"])
@@ -1577,7 +1577,7 @@ class TestCmdGitlab:
         assert detect._cmd_gitlab(["--all", "--child-path", str(child)]) == 0
         loaded = detect.yaml.safe_load(child.read_text())
 
-        assert "apt:lab:aarch64" in loaded
+        assert "apt:lab:arm" in loaded
 
     def test_main_renders_child(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         child = tmp_path / "child.yml"
