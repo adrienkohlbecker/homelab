@@ -96,7 +96,7 @@ gitlab_runner_shell_enabled: true
 gitlab_runner_aws_pools:
   - suffix: aws-shell-qemu
     token: "{{ gitlab_runner_shell_token }}"
-    asg_name: homelab-ci-qemu-host
+    asg_name: homelab-ci-qemu-x86
     capacity: 1
     max_instances: 1
     idle_time: 15m

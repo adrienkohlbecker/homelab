@@ -48,7 +48,7 @@ CI_REGIONS: dict[str, dict[str, Any]] = {
             }
             for arch, facts in ARCHITECTURES.items()
         },
-        "asgs": {"homelab-ci-qemu-host", "homelab-ci-qemu-arm"},
+        "asgs": {"homelab-ci-qemu-x86", "homelab-ci-qemu-arm"},
     },
 }
 EXPECTED_GLOBAL_S3_BUCKETS = {"homelab-ci-images"}
