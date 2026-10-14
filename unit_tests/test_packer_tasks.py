@@ -667,7 +667,12 @@ def test_qemu_host_scratch_swap_rejects_malformed_memory(tmp_path: Path, memtota
 
 
 def _run_qemu_host_bake(
-    tmp_path: Path, *, promote: bool, resolved_ami: str = "ami-1234abcd", ubuntu: str | None = "noble"
+    tmp_path: Path,
+    *,
+    promote: bool,
+    resolved_ami: str = "ami-1234abcd",
+    ubuntu: str | None = "noble",
+    ci_job_id: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
     """Run an ARM qemu-host bake against fake packer/aws/sleep binaries.
 
@@ -691,7 +696,8 @@ def _run_qemu_host_bake(
         "  fi\n"
         "  previous=$argument\n"
         "done\n"
-        'printf \'{"builds":[{"artifact_id":"eu-central-1:ami-1234abcd"}]}\\n\' >"$manifest"\n',
+        'printf \'{"builds":[{"artifact_id":"eu-central-1:ami-1234abcd"}]}\\n\' >"$manifest"\n'
+        'echo "2026-10-14T13:00:00Z: ==> amazon-ebs.qemu_host: Instance ID: i-0abc123"\n',
     )
     _executable(
         fake_bin / "aws",
@@ -708,6 +714,9 @@ def _run_qemu_host_bake(
     _executable(fake_bin / "sleep", '#!/bin/sh\nprintf "%s\\n" "$*" >>"$SLEEP_TEST_LOG"\n')
     env = dict(os.environ)
     env.pop("CI", None)
+    env.pop("CI_JOB_ID", None)
+    if ci_job_id is not None:
+        env.update(CI="true", CI_JOB_ID=ci_job_id)
     env.pop("usage_ubuntu", None)
     if ubuntu is not None:
         env["usage_ubuntu"] = ubuntu
@@ -746,6 +755,28 @@ def test_qemu_host_arm_bake_selects_region_architecture_and_candidate_path(tmp_p
     describe = next(line for line in aws_log.read_text().splitlines() if "ec2 describe-images" in line)
     assert "--region eu-central-1" in describe
     assert "Name=tag:architecture,Values=aarch64" in describe
+
+
+def test_qemu_host_ci_bake_arms_and_disarms_the_backstop_from_packer_output(tmp_path: Path) -> None:
+    result, packer_log, aws_log, _sleep_log = _run_qemu_host_bake(tmp_path, promote=False, ci_job_id="42")
+
+    assert result.returncode == 0, result.stderr
+    # The after_script finds the build instance by this tag.
+    assert "qemu_host_job_id=42" in packer_log.read_text()
+    assert "Instance ID: i-0abc123" in result.stdout
+    calls = aws_log.read_text().splitlines()
+    assert any("ec2 create-tags --resources i-0abc123" in call for call in calls)
+    armed = next(i for i, call in enumerate(calls) if "scheduler create-schedule --name ci-bake-i-0abc123" in call)
+    disarmed = next(i for i, call in enumerate(calls) if "scheduler delete-schedule --name ci-bake-i-0abc123" in call)
+    assert armed < disarmed
+
+
+def test_qemu_host_local_bake_arms_no_backstop(tmp_path: Path) -> None:
+    result, packer_log, aws_log, _sleep_log = _run_qemu_host_bake(tmp_path, promote=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "qemu_host_job_id=local" in packer_log.read_text()
+    assert "scheduler" not in aws_log.read_text()
 
 
 def test_qemu_host_bake_defaults_to_the_ci_host_release(tmp_path: Path) -> None:

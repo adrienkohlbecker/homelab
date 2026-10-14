@@ -10,9 +10,9 @@ set -euo pipefail
 
 BAKE_SCHEDULER_ROLE_ARN="arn:aws:iam::000390721279:role/homelab-ci-cell-scheduler"
 BAKE_BACKSTOP_TTL_HOURS=3
-machine=qemu_host
 architecture="${usage_architecture:-x86_64}"
 build_id="${CI_PIPELINE_ID:-local}"
+job_id="${CI_JOB_ID:-local}"
 repo_root=$(git rev-parse --show-toplevel)
 ubuntu="${usage_ubuntu:-$(yq -r .variables.CI_HOST_UBUNTU "${repo_root}/.gitlab-ci.yml")}"
 
@@ -29,31 +29,12 @@ name_prefix=$(ci_value ami_name_prefix)
 param_template=$(ci_value ami_parameter)
 param=${param_template//\{ubuntu\}/$ubuntu}
 
-# CI job timeouts can skip packer's cleanup. Arm a self-deleting terminate
-# schedule for the build instance, then disarm it on normal exit.
+# A CI job killed before Packer's cleanup runs leaves the build instance
+# behind. The job's after_script terminates it on a cancel or timeout; this
+# schedule covers a job that dies without one, such as a runner crash. Armed as
+# soon as Packer prints the instance id, then disarmed on normal exit.
 bake_backstop_arm() {
-  [ -n "${CI:-}" ] || return 0
-
-  local iid="" waited=0
-  while [ "$waited" -lt 180 ]; do
-    iid=$(aws --region "$region" ec2 describe-instances \
-      --filters "Name=tag:build_id,Values=${build_id}" \
-      "Name=tag:machine,Values=${machine}" \
-      "Name=tag:ubuntu,Values=${ubuntu}" \
-      "Name=tag:architecture,Values=${architecture}" \
-      "Name=instance-state-name,Values=pending,running" \
-      --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null | awk '{print $1; exit}')
-    [ -n "$iid" ] && [ "$iid" != "None" ] && break
-    iid=""
-    sleep 5
-    waited=$((waited + 5))
-  done
-  if [ -z "$iid" ]; then
-    echo "bake-backstop: no build instance found for ${machine}/${architecture}/${ubuntu} in ${build_id}; not armed" >&2
-    return 0
-  fi
-
-  local expires schedule_name target
+  local iid=$1 expires schedule_name target
   expires=$(date -u -d "+${BAKE_BACKSTOP_TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%S 2>/dev/null ||
     date -u -v "+${BAKE_BACKSTOP_TTL_HOURS}H" +%Y-%m-%dT%H:%M:%S)
   schedule_name="ci-bake-${iid}"
@@ -84,10 +65,6 @@ print(json.dumps({
 }
 
 bake_backstop_disarm() {
-  if [ -n "$backstop_pid" ]; then
-    kill "$backstop_pid" 2>/dev/null || true
-    wait "$backstop_pid" 2>/dev/null || true
-  fi
   [ -f "$backstop_state" ] || return 0
   local schedule_name
   schedule_name=$(awk 'NR==1{print}' "$backstop_state")
@@ -194,23 +171,34 @@ fi
 
 manifest=$(mktemp)
 backstop_state=$(mktemp)
-backstop_pid=""
 trap 'bake_backstop_disarm; rm -f "$manifest" "$backstop_state"' EXIT
 rm -f "$manifest"
 
-bake_backstop_arm &
-backstop_pid=$!
-
-packer build \
-  -timestamp-ui \
-  -warn-on-undeclared-var \
-  "--on-error=${on_error}" \
-  -only="amazon-ebs.qemu_host" \
-  -var "architecture=${architecture}" \
-  -var "ubuntu_name=${ubuntu}" \
-  -var "qemu_host_build_id=${build_id}" \
-  -var "qemu_host_manifest_path=${manifest}" \
+packer_args=(
+  -timestamp-ui
+  -warn-on-undeclared-var
+  "--on-error=${on_error}"
+  -only="amazon-ebs.qemu_host"
+  -var "architecture=${architecture}"
+  -var "ubuntu_name=${ubuntu}"
+  -var "qemu_host_build_id=${build_id}"
+  -var "qemu_host_job_id=${job_id}"
+  -var "qemu_host_manifest_path=${manifest}"
   packer/aws
+)
+if [ -n "${CI:-}" ]; then
+  # Pass Packer's output through, arming the backstop on the line that names
+  # the build instance. Local runs keep Packer's interactive on-error prompt.
+  packer build "${packer_args[@]}" |
+    while IFS= read -r line || [ -n "$line" ]; do
+      printf '%s\n' "$line"
+      if [[ ! -s $backstop_state && $line =~ "Instance ID: "(i-[0-9a-f]+) ]]; then
+        bake_backstop_arm "${BASH_REMATCH[1]}"
+      fi
+    done
+else
+  packer build "${packer_args[@]}"
+fi
 
 ami=$(python3 -c '
 import json, sys

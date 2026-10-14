@@ -41,6 +41,12 @@ variable "qemu_host_build_id" {
   description = "Pipeline id (or 'local') stamped on the qemu-host AMI/snapshot/volume tags."
 }
 
+variable "qemu_host_job_id" {
+  type        = string
+  default     = "local"
+  description = "CI job id (or 'local') stamped on the build instance, for the job's after_script to find."
+}
+
 variable "qemu_host_manifest_path" {
   type        = string
   default     = "packer-qemu-host-manifest.json"
@@ -137,8 +143,8 @@ source "amazon-ebs" "qemu_host" {
   # qemu_host value in place; the Hetzner image is a separate target.
   tags            = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "${local.ci_architecture.ami_name_prefix}-${local.ubuntu_name}" })
   snapshot_tags   = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
-  run_tags        = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "packer-homelab-ci-qemu-host" })
-  run_volume_tags = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
+  run_tags        = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "packer-homelab-ci-qemu-host", job_id = var.qemu_host_job_id })
+  run_volume_tags = merge(local.qemu_host_common_tags, { machine = "qemu_host", job_id = var.qemu_host_job_id })
 }
 
 build {
