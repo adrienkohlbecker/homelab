@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import time
 import traceback
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
@@ -265,6 +265,8 @@ class LaunchOptions:
 
 
 SSH_WAIT_TIMEOUT = 120
+# Bound on a guest's poweroff: systemd's stop jobs, then qemu's exit.
+POWEROFF_TIMEOUT = 300
 # Boot-wait polling. The guest reaches sshd a few seconds in, so a 1s poll
 # would add up to a second per boot.
 BOOT_POLL_INTERVAL = 0.1
@@ -326,12 +328,15 @@ class Machine:
         vcpus: int | None = None,
         memory_mb: int | None = None,
         quiet_ansible: bool = False,
+        extra_disks: Sequence[Path] = (),
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
         launch carries launch.py-only qemu overrides. vcpus and memory_mb
         override the machine spec; quiet_ansible trims playbook output to
-        changes and failures.
+        changes and failures. extra_disks attaches another machine's disks
+        (its disk_paths) after a cloud-image machine's own, as a live
+        environment sees a host's disks.
         """
         self.launch = launch or LaunchOptions()
         self.quiet_ansible = quiet_ansible
@@ -350,7 +355,8 @@ class Machine:
         self.ssh_port = 0
         self.ssh_host = SSH_HOST
         self.vnc_port = None
-        self.qmp_socket = Path(f"/tmp/homelab-qmp-{os.getpid()}")
+        # Per machine as well as per process: one test may drive two machines.
+        self.qmp_socket = Path(f"/tmp/homelab-qmp-{os.getpid()}-{machine}")
         self.ssh_user = spec.ssh_user
         self.machine = machine
         self.role = role
@@ -358,6 +364,8 @@ class Machine:
         self.ubuntu_name = ubuntu_name
         self.machine_timeout = machine_timeout
         self.upstream_mirrors = upstream_mirrors
+        self.extra_disks = list(extra_disks)
+        self.disk_paths: list[Path] = []
         self.proc: subprocess.Popen[bytes] | None = None
         # Monotonic time the session must finish by; None for no limit.
         self.deadline: float | None = None
@@ -635,6 +643,8 @@ class Machine:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
         self._stage_ansible_controller()
+        # Every boot binds new host ports.
+        self._write_connection_inventory()
         self._last_ansible_cmd = cmd
         return run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env(), timeout=self.remaining())
 
@@ -643,8 +653,6 @@ class Machine:
 
         if self._ansible_staged:
             return
-
-        self._write_connection_inventory()
 
         for required_tree in ("group_vars", "host_vars", "roles", "data"):
             Path(required_tree).copy_into(self.workdir_path)
@@ -684,10 +692,30 @@ class Machine:
         # qemu's `-serial stdio` from competing with the terminal for
         # keystrokes.
         # Interrupts wait until self.proc is set, so stop() always sees qemu.
-        with self.boot_file.open("wb") as handle, interrupts_held():
+        # Appended, so a machine booted again (power_off) keeps every boot's log.
+        with self.boot_file.open("ab") as handle, interrupts_held():
             self.proc = subprocess.Popen(
                 cmd, stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT, start_new_session=True
             )
+
+    def power_off(self) -> None:
+        """Shut the guest down and wait for qemu to exit, keeping its disks.
+
+        The machine boots again from the same disks with boot(), after any
+        change to drives. The guest must be up: systemd stops every unit and
+        syncs the disks before qemu exits.
+        """
+        # The SSH session may die with the guest's sshd before it reports;
+        # qemu exiting is the evidence that counts.
+        self.ssh_command("sudo", "systemctl", "poweroff", "--no-block", check=False)
+        try:
+            self.wait(POWEROFF_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise TimeoutError(f"the guest did not power off within {POWEROFF_TIMEOUT}s") from None
+        self.proc = None
+        self._close_ssh_master()
+        # ensure_booted waits for the next qemu's pidfile.
+        self.pid_file.unlink(missing_ok=True)
 
     def ensure_booted(self) -> None:
         """Block until qemu writes its pidfile or the launch fails."""
@@ -1017,9 +1045,12 @@ class Machine:
                 size="20G",
                 backing_fmt="qcow2",
             )
+            # The machine's own disk first: the firmware boots the first
+            # bootable one, never extra_disks.
             self.drives = [
                 self._virtio_drive(str(disk_img)),
                 f"file={seed_img},if=virtio,format=raw",
+                *(self._virtio_drive(str(path)) for path in self.extra_disks),
             ]
             # x86_64 q35 can fall back to SeaBIOS; aarch64 virt requires UEFI.
             if self.arch != "x86_64":
@@ -1037,13 +1068,12 @@ class Machine:
             link_packer_artifacts(published, image_dir)
             os_src_paths, artifact_format = discover_packer_disks(image_dir)
 
-            os_disk_paths: list[str] = []
             for idx, src in enumerate(os_src_paths, start=1):
                 dest = self.workdir_path / f"packer-ubuntu-{idx}"
                 self._create_overlay(str(src), str(dest), backing_fmt=artifact_format)
-                os_disk_paths.append(str(dest))
+                self.disk_paths.append(dest)
 
-            self.drives = [self._virtio_drive(path) for path in os_disk_paths]
+            self.drives = [self._virtio_drive(str(path)) for path in self.disk_paths]
             shutil.copyfile(image_dir / "efivars.fd", self.workdir_path / "efivars.fd")
             self.drives += self._uefi_drives()
 
@@ -1282,7 +1312,7 @@ class Machine:
             "-device",
             "virtio-serial-pci,id=journal_bus",
             "-chardev",
-            f"file,id=journal,path={self.journal_file}",
+            f"file,id=journal,path={self.journal_file},append=on",
             "-device",
             "virtconsole,chardev=journal,bus=journal_bus.0",
             "-pidfile",

@@ -415,11 +415,11 @@ class TestAnsibleControllerStaging:
         (tmp_path / "test/playbooks/site.yml").write_text("fixture site\n")
         (tmp_path / "test/playbooks/_environment.yml").write_text("environment\n")
 
-        staged_calls = 0
+        inventory_writes = 0
 
         def write_connection_inventory(self: machine.Machine) -> None:
-            nonlocal staged_calls
-            staged_calls += 1
+            nonlocal inventory_writes
+            inventory_writes += 1
 
         def run_command(*args: object, **kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(exitcode=0, stdout=[])
@@ -431,9 +431,12 @@ class TestAnsibleControllerStaging:
         assert not (m.workdir_path / "roles").exists()
 
         m.ansible_command(str(m.workdir_path / "site.yml"))
+        (tmp_path / "test/playbooks/_environment.yml").write_text("edited after staging\n")
         m.ansible_command(str(m.workdir_path / "_environment.yml"))
 
-        assert staged_calls == 1
+        # Each run rewrites the connection ports, which change across boots;
+        # the controller inputs are staged once.
+        assert inventory_writes == 2
         assert (m.workdir_path / "roles").is_dir()
         assert (m.workdir_path / "_environment.yml").read_text() == "environment\n"
         assert (m.workdir_path / "site.yml").read_text() == "fixture site\n"
@@ -656,3 +659,45 @@ def test_sigterm_stops_a_cell_like_ctrl_c(machine_factory: Callable[..., machine
         assert m.run(terminated, "lab.testrole") == 130
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+def test_cloud_image_machine_attaches_extra_disks_after_its_own(
+    machine_factory: Callable[..., machine.Machine],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The firmware boots the machine's own disk, never one it borrows."""
+    cloud_image = tmp_path / "cloud.img"
+    cloud_image.touch()
+    monkeypatch.setattr(machine.Machine, "_ensure_minimal_cloudimg", lambda self: cloud_image)
+    monkeypatch.setattr(machine, "run_command", lambda *args, **kwargs: SimpleNamespace(exitcode=0, stdout=[]))
+    borrowed = [tmp_path / "packer-ubuntu-1", tmp_path / "packer-ubuntu-2"]
+
+    m = machine_factory(machine="minimal", extra_disks=borrowed)
+    m.prepare()
+
+    assert [drive.split(",")[0] for drive in m.drives] == [
+        f"file={m.workdir_path / 'disk.img'}",
+        f"file={m.workdir_path / 'seed.img'}",
+        *(f"file={path}" for path in borrowed),
+    ]
+
+
+def test_power_off_keeps_the_disks_for_the_next_boot(
+    machine_factory: Callable[..., machine.Machine],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    m = machine_factory()
+    commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(m, "ssh_command", lambda *cmd, check=True: commands.append(cmd))
+    monkeypatch.setattr(m, "_close_ssh_master", lambda: None)
+    m.proc = cast(subprocess.Popen, SimpleNamespace(wait=lambda timeout=None: 0))
+    m.pid_file.write_text("1\n")
+
+    m.power_off()
+
+    assert commands == [("sudo", "systemctl", "poweroff", "--no-block")]
+    assert m.proc is None
+    # ensure_booted must wait for the next qemu's pidfile, not find this one.
+    assert not m.pid_file.exists()
+    assert m.workdir_path.is_dir()

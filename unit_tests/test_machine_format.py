@@ -199,7 +199,7 @@ def test_journal_console_is_always_attached(machine_factory: Callable[..., machi
     cmd = " ".join(m._boot_command())
 
     assert "virtio-serial-pci,id=journal_bus" in cmd
-    assert f"file,id=journal,path={m.journal_file}" in cmd
+    assert f"file,id=journal,path={m.journal_file},append=on" in cmd
     assert "virtconsole,chardev=journal,bus=journal_bus.0" in cmd
 
 
