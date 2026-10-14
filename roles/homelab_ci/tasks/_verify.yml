@@ -1,5 +1,7 @@
 # Creating without an explicit mode makes the default ACL, rather than chmod,
-# responsible for granting the second publisher access despite umask 077.
+# responsible for granting the second publisher access despite umask 077. The
+# checks open the file rather than ask test(1): Resolute's uutils test ignores
+# supplementary groups.
 - name: _verify | Cross-publisher artifact access works
   shell: |
     set -euo pipefail
@@ -7,8 +9,8 @@
     trap "rm -rf ${probe}" EXIT
 
     runuser -u {{ ansible_user_id }} -- sh -c "umask 077; mkdir ${probe} && touch ${probe}/artifact"
-    ! runuser -u nobody -- test -r "${probe}/artifact"
-    runuser -u nobody -G homelab_ci -- test -r "${probe}/artifact"
+    ! runuser -u nobody -- cat "${probe}/artifact" 2>/dev/null
+    runuser -u nobody -G homelab_ci -- cat "${probe}/artifact"
     # The harness hardlinks each disk it boots; fs.protected_hardlinks only
     # lets the other identity do that through the group write the ACL grants.
     runuser -u nobody -G homelab_ci -- ln "${probe}/artifact" "${probe}/pinned"
@@ -75,11 +77,12 @@
       become: true
 
 # runuser initializes supplementary groups from /etc/group, as a new login
-# does. Hosts without a KVM device have nothing to open.
+# does. The redirect opens the device read-write, as QEMU does. Hosts without a
+# KVM device have nothing to open.
 - name: _verify | Operator can open the KVM device
   shell: |
     set -euo pipefail
-    [ ! -e /dev/kvm ] || runuser -u {{ ansible_user_id }} -- test -r /dev/kvm -a -w /dev/kvm
+    [ ! -e /dev/kvm ] || runuser -u {{ ansible_user_id }} -- sh -c ": <>/dev/kvm"
   args:
     executable: /bin/bash
   changed_when: false
