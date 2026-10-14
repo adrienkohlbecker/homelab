@@ -72,12 +72,16 @@
 # default mail_location cannot leak in. The fixture lives under /srv because
 # dovecot.service runs with PrivateTmp= and cannot see /var/tmp. The static
 # passdb accepts any username but only the password getmail must send after
-# normalization.
+# normalization. Noble ships Dovecot 2.3; later releases ship 2.4, whose
+# settings were renamed and which requires the version header.
 - name: _verify | Configure Dovecot as the Gmail stand-in
+  vars:
+    password: "{{ gmail_app_password | trim | replace(' ', '') }}"
   copy:
     dest: /etc/dovecot/dovecot.conf
     mode: "0644"
     content: |
+      {% if ansible_distribution_release == 'noble' %}
       protocols = imap
       listen = 127.0.0.1
       ssl = required
@@ -86,13 +90,35 @@
       ssl_dh = </usr/share/dovecot/dh.pem
       passdb {
         driver = static
-        args = password={{ gmail_app_password | trim | replace(' ', '') }}
+        args = password={{ password }}
       }
       userdb {
         driver = static
         args = uid={{ ansible_user_uid }} gid={{ ansible_user_gid }} home=/srv/getmail_verify
       }
       mail_location = maildir:/srv/getmail_verify/mail:LAYOUT=fs
+      {% else %}
+      dovecot_config_version = 2.4.0
+      dovecot_storage_version = 2.4.0
+      protocols = imap
+      listen = 127.0.0.1
+      ssl = required
+      ssl_server_cert_file = /srv/getmail_verify/server.crt
+      ssl_server_key_file = /srv/getmail_verify/server.key
+      passdb static {
+        passdb_static_password = {{ password }}
+      }
+      userdb static {
+        fields {
+          uid = {{ ansible_user_uid }}
+          gid = {{ ansible_user_gid }}
+          home = /srv/getmail_verify
+        }
+      }
+      mail_driver = maildir
+      mail_path = /srv/getmail_verify/mail
+      mailbox_list_layout = fs
+      {% endif %}
       namespace inbox {
         inbox = yes
         separator = /
