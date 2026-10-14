@@ -48,6 +48,13 @@ zbm_assert_core_listing() {
     fi
   done
 
+  # A baked hostid overrides upstream's default 0x00bab10c, which every root
+  # carries (zbm/dracut.conf.d/release.conf).
+  if awk '$9 == "etc/hostid" { found = 1 } END { exit !found }' "$listing"; then
+    echo "ZBM initramfs: embeds /etc/hostid; build it as a release image" >&2
+    return 1
+  fi
+
   for required in \
     "var/lib/dracut/hooks/cmdline/20-parse-i18n.sh" \
     "usr/bin/loadkeys" \
