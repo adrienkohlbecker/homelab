@@ -1409,7 +1409,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab"], site_test=True, target="aws_qemu")
         assert "tags" not in doc["default"]
         assert "image" not in doc["default"]
-        assert doc[".x86_cell"]["tags"] == ["aws-shell-qemu"]
+        assert doc[".x86_cell"]["tags"] == ["aws-shell-qemu-x86"]
         assert "HOMELAB_TEST_BACKEND" not in doc[".x86_cell"]["variables"]
         # Qemu backend but an AWS host: the guest egresses through AWS, so it
         # must take the in-region-mirror / public-DNS path.
@@ -1548,8 +1548,8 @@ class TestCmdGitlab:
         ("target", "runner_tag", "in_aws"),
         [
             pytest.param("lab", "lab-shell-qemu", "false", id="lab"),
-            pytest.param("aws_qemu", "aws-shell-qemu", "true", id="aws-qemu"),
-            pytest.param(None, "aws-shell-qemu", "true", id="default"),
+            pytest.param("aws_qemu", "aws-shell-qemu-x86", "true", id="aws-qemu"),
+            pytest.param(None, "aws-shell-qemu-x86", "true", id="default"),
         ],
     )
     def test_target_selection(

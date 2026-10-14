@@ -188,7 +188,7 @@ gitlab_runner_aws_pools:
   # ci_qemu_pools.role.max_size in terraform/aws_ci.tf, whose comment carries
   # the Spot-quota arithmetic. A two-minute idle_time keeps a worker for a
   # straggler in the next wave without retaining the burst across pushes.
-  - suffix: aws-shell-qemu
+  - suffix: aws-shell-qemu-x86
     token: !vault |
         $ANSIBLE_VAULT;1.2;AES256;prod
         30663764616365393564643165346265623231623666393737343536323938396163653933343438

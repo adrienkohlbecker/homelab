@@ -33,7 +33,7 @@ workflow:
         DETECT_RUNNER_TAG: lab-shell-qemu
     - when: always
       variables:
-        DETECT_RUNNER_TAG: aws-shell-qemu
+        DETECT_RUNNER_TAG: aws-shell-qemu-x86
 
 # Hosted jobs use the manually published CI image for CI_HOST_UBUNTU, the
 # release the runner hosts run. Bootstrap is normally a no-op, but installs

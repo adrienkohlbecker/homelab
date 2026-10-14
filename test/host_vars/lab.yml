@@ -94,7 +94,7 @@ netdata_packer_process_group_enabled: true
 # shell runner's placeholder token from group_vars/test.yml.
 gitlab_runner_shell_enabled: true
 gitlab_runner_aws_pools:
-  - suffix: aws-shell-qemu
+  - suffix: aws-shell-qemu-x86
     token: "{{ gitlab_runner_shell_token }}"
     asg_name: homelab-ci-qemu-x86
     capacity: 1

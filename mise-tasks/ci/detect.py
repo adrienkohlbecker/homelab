@@ -605,7 +605,7 @@ ARM_RUNNER_TAG = "aws-shell-qemu-arm"
 
 TARGETS = {
     "aws_qemu": {
-        "cell_runner_tag": "aws-shell-qemu",
+        "cell_runner_tag": "aws-shell-qemu-x86",
         "in_aws": True,
         "baked_toolchain": True,
         "image_oidc": True,
