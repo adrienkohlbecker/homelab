@@ -521,7 +521,11 @@ create_extra_pools() {
 # Fresh mode: wipe and partition the disks and create every pool on them,
 # leaving the pools exported and extra_pools naming the data pools.
 create_pools() {
-  zgenhostid -f
+  # ZFSBootMenu boots every root with its own hostid (spl.spl_hostid), which
+  # for our host-agnostic build is upstream's default. Creating the pools under
+  # it and giving the root the same /etc/hostid keeps the labels, the running
+  # kernel, and the root's initramfs in agreement, as upstream's guides do.
+  zgenhostid -f 0x00bab10c
 
   # Stale md members on the target disks would let udev's `mdadm --incremental`
   # re-assemble an array mid-partitioning and hold a member busy. Tear those
