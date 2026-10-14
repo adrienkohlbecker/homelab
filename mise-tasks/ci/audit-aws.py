@@ -35,7 +35,10 @@ from botocore.exceptions import BotoCoreError, ClientError
 # regions throttles, and a throttled describe that silently returns empty would
 # read as "no resources" -- exactly the false-clean an audit must avoid.
 CFG = Config(retries={"total_max_attempts": 10, "mode": "adaptive"})
-ARCHITECTURES = yaml.safe_load((Path(__file__).resolve().parents[2] / "data/architectures.yml").read_text())
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ARCHITECTURES = yaml.safe_load((REPO_ROOT / "data/architectures.yml").read_text())
+# The release the runner hosts run, as Terraform and qemu-host-ami.sh read it.
+CI_HOST_UBUNTU = yaml.safe_load((REPO_ROOT / ".gitlab-ci.yml").read_text())["variables"]["CI_HOST_UBUNTU"]
 # EC2 reports aarch64 images as arm64.
 EC2_ARCHITECTURES = {"x86_64": "x86_64", "aarch64": "arm64"}
 # The CI's one region: its qemu-host AMIs, pointers, and pools.
@@ -88,7 +91,8 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     if region != CI_REGION:
         return False
     tags = image_tags(image)
-    # Any release's bake is supported; its own promotion pointer protects it.
+    # Any release's bake is recognized; audit_ami_inventory flags the ones not
+    # built for CI_HOST_UBUNTU.
     if any(tags.get(key) != value for key, value in {"role": "ci-ami", "machine": "qemu_host"}.items()):
         return False
     if "ubuntu" not in tags:
@@ -101,29 +105,27 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     )
 
 
-def promoted_qemu_host_amis(region: str, images: list[dict]) -> set[str] | None:
-    """Return qemu-host AMIs protected by their SSM promotion pointers."""
+def promoted_qemu_host_amis(region: str) -> set[str] | None:
+    """Return the CI host release's qemu-host AMIs its SSM pointers protect."""
     if region != CI_REGION:
         return set()
 
-    ubuntus = {image_tags(image)["ubuntu"] for image in images}
     promoted: set[str] = set()
     ssm = client("ssm", region)
-    for ubuntu in ubuntus:
-        for arch, facts in ARCHITECTURES.items():
-            parameter = facts["ci"]["ami_parameter"].format(ubuntu=ubuntu)
-            try:
-                value = ssm.get_parameter(Name=parameter)["Parameter"]["Value"]
-            except ClientError as error:
-                code = error.response["Error"].get("Code", "Error")
-                if code == "ParameterNotFound":
-                    continue
-                errors.append(f"{region} promoted qemu-host {arch} {ubuntu}: {code}")
-                return None
-            except BotoCoreError as error:
-                errors.append(f"{region} promoted qemu-host {arch} {ubuntu}: {type(error).__name__}: {error}")
-                return None
-            promoted.add(value)
+    for arch, facts in ARCHITECTURES.items():
+        parameter = facts["ci"]["ami_parameter"].format(ubuntu=CI_HOST_UBUNTU)
+        try:
+            value = ssm.get_parameter(Name=parameter)["Parameter"]["Value"]
+        except ClientError as error:
+            code = error.response["Error"].get("Code", "Error")
+            if code == "ParameterNotFound":
+                continue
+            errors.append(f"{region} promoted qemu-host {arch} {CI_HOST_UBUNTU}: {code}")
+            return None
+        except BotoCoreError as error:
+            errors.append(f"{region} promoted qemu-host {arch} {CI_HOST_UBUNTU}: {type(error).__name__}: {error}")
+            return None
+        promoted.add(value)
     return promoted
 
 
@@ -138,11 +140,15 @@ def audit_ami_inventory(
 
     supported = [image for image in images if is_supported_qemu_host_image(region, image)]
     unsupported = [image for image in images if image not in supported]
-    promoted = promoted_qemu_host_amis(region, supported)
+    # Only the CI host release runs. A bake for another release, including one
+    # baked ahead of moving CI_HOST_UBUNTU, is reported until the move lands.
+    other_release = [image for image in supported if image_tags(image)["ubuntu"] != CI_HOST_UBUNTU]
+    current = [image for image in supported if image not in other_release]
+    promoted = promoted_qemu_host_amis(region) if current else set()
     if promoted is None:
         return
 
-    retained, strays = retention_plan(supported, promoted)
+    retained, strays = retention_plan(current, promoted)
     all_referenced = {sid for image in images for sid in snapshot_ids(image)}
 
     if images or snaps:
@@ -158,6 +164,14 @@ def audit_ami_inventory(
         )
         for image in unsupported
     )
+
+    for image in other_release:
+        anomalies.append(
+            f"[{region}] AMI {image['ImageId']} "
+            f"({ami_category(image)}, {image['CreationDate'][:10]}) "
+            f"-- not the CI host release {CI_HOST_UBUNTU}"
+        )
+        deletes.append(f"mise run packer:deregister-ami -- {image['ImageId']} {region}")
 
     for image in strays:
         anomalies.append(

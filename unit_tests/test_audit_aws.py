@@ -44,7 +44,7 @@ def test_unknown_ami_is_reported_without_cleanup(monkeypatch):
             "StartTime": datetime(2026, 7, 10, tzinfo=UTC),
         }
     ]
-    monkeypatch.setattr(audit_aws, "promoted_qemu_host_amis", lambda region, images: set())
+    monkeypatch.setattr(audit_aws, "promoted_qemu_host_amis", lambda region: set())
 
     audit_aws.audit_ami_inventory("eu-central-1", [unknown], snapshots)
 
@@ -229,3 +229,28 @@ def test_sweep_reports_only_unattached_volumes_and_addresses(monkeypatch):
         "[eu-central-1] unattached EBS volume vol-orphan (40GB)",
         "[eu-central-1] unassociated Elastic IP 192.0.2.2",
     ]
+
+
+def test_amis_of_other_releases_are_flagged_for_cleanup(monkeypatch):
+    def qemu_host(image_id, ubuntu):
+        tags = {
+            "Name": f"homelab-ci-qemu-host-x86-{ubuntu}",
+            "architecture": "x86_64",
+            "machine": "qemu_host",
+            "role": "ci-ami",
+            "ubuntu": ubuntu,
+        }
+        return image(image_id, tags=tags, snapshot_id=f"snap-{image_id}")
+
+    monkeypatch.setattr(audit_aws, "CI_HOST_UBUNTU", "resolute")
+    monkeypatch.setattr(audit_aws, "promoted_qemu_host_amis", lambda region: {"ami-host"})
+
+    audit_aws.audit_ami_inventory(
+        "eu-central-1", [qemu_host("ami-host", "resolute"), qemu_host("ami-old", "noble")], []
+    )
+
+    assert audit_aws.anomalies == [
+        "[eu-central-1] AMI ami-old (homelab-ci-qemu-host-x86-noble, 2026-07-10) -- not the CI host release resolute"
+    ]
+    assert audit_aws.deletes == ["mise run packer:deregister-ami -- ami-old eu-central-1"]
+    assert audit_aws.expected == ["[eu-central-1] 1 retained AMIs + 1 backing snapshots"]
