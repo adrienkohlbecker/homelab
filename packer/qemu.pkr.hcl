@@ -64,7 +64,8 @@ locals {
   ubuntu_release = local.ubuntu_catalog.releases[local.ubuntu_name]
   ubuntu_version = local.ubuntu_release.version
 
-  # Guest machine, NIC, and cloud-image token are shared with the qemu harness.
+  # Guest machine, NIC, display, and cloud-image token are shared with the
+  # qemu harness.
   architectures = yamldecode(file("${path.cwd}/data/architectures.yml"))
   guest         = local.architectures[local.arch].guest
 
@@ -74,16 +75,14 @@ locals {
   uart    = local.console.qemu_serial_console[local.arch]
 
   # aarch64's `virt` machine ships no default graphics or input devices, so VNC
-  # would be blank without these. q35 already has std VGA + PS/2 keyboard.
-  display_qemuargs = {
-    x86_64 = []
-    aarch64 = [
-      ["-device", "virtio-gpu-pci"],
-      ["-device", "qemu-xhci"],
-      ["-device", "usb-kbd"],
-      ["-device", "usb-tablet"],
-    ]
-  }[local.arch]
+  # would be blank without these. Packer keeps q35's defaults, std VGA and a
+  # PS/2 keyboard, so x86_64 needs neither.
+  display_qemuargs = local.arch == "aarch64" ? [
+    ["-device", local.guest.display_device],
+    ["-device", "qemu-xhci"],
+    ["-device", "usb-kbd"],
+    ["-device", "usb-tablet"],
+  ] : []
 
   accelerator = { linux = "kvm", darwin = "hvf" }[local.host_os]
 
