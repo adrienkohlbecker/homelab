@@ -107,11 +107,7 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
   # Python dependencies here, warming the persistent uv cache. The project-local
   # environment is build output and is removed with homelab-ci-build below;
   # concurrent jobs create their own environments from the shared cache.
-  sudo env \
-    MISE_DATA_DIR=/opt/mise \
-    UV_CACHE_DIR=/opt/uv-cache \
-    MISE_PYTHON_UV_VENV_AUTO=false \
-    PATH=/opt/mise/shims:/usr/local/bin:/usr/bin:/bin \
+  sudo env "${mise_environment[@]}" MISE_PYTHON_UV_VENV_AUTO=false \
     mise exec -- uv sync --locked --link-mode hardlink
   sudo env "${mise_environment[@]}" mise exec -- true
 )
