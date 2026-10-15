@@ -660,9 +660,9 @@ def render_child_pipeline(
 
     One x86 job per cell spec (``role:variant[:ubuntu]``), the ARM subset
     declared in role metadata, optional site-converge and keep-pools rebuild
-    jobs, and a no-op placeholder when no runtime job is selected. X86 cells are split evenly
-    across two display stages but run as one DAG (``needs: []``).
-
+    jobs, and a no-op placeholder when no runtime job is selected. X86 cells
+    are split evenly across two display stages but run as one DAG
+    (``needs: []``).
     """
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(_CHILD_TEMPLATE.parent)),
