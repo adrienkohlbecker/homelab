@@ -996,15 +996,6 @@ resource "aws_ssm_parameter" "ci_qemu_host_ami" {
   }
 }
 
-# Adopts the pointers earlier bakes created. Drop it once applied: a fresh
-# account has nothing to import.
-import {
-  for_each = local.ci_architectures
-
-  to = aws_ssm_parameter.ci_qemu_host_ami[each.key]
-  id = replace(each.value.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
-}
-
 # ─── Launch templates: one per nested-qemu host pool ─────────────────────────
 # GitLab Runner/fleeting owns desired capacity, and the host runs shell jobs
 # that launch qemu/KVM locally. The AMI is resolved through the pool
