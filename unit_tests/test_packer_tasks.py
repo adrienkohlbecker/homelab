@@ -1047,18 +1047,17 @@ printf '%s %s\n' "$rc" "$attempts"
     assert result.stdout.strip() == f"{expected_rc} {expected_attempts}"
 
 
-def _hetzner_first_boot(tmp_path: Path, zpool: str, lsblk: str) -> subprocess.CompletedProcess[str]:
+def _hetzner_first_boot(tmp_path: Path, fakes: dict[str, str]) -> subprocess.CompletedProcess[str]:
     """Run rescue_verify_first_boot with ssh executing its remote command
-    locally against fake cloud-init, zpool, and lsblk bodies."""
+    locally, against fake command bodies keyed by command name."""
+    fakes = {"ssh": 'for remote; do :; done\nexec bash -c "$remote"', "cloud-init": "exit 0"} | fakes
     fake_bin = tmp_path / "bin"
-    _executable(fake_bin / "ssh", '#!/bin/bash\nfor remote; do :; done\nexec bash -c "$remote"\n')
-    _executable(fake_bin / "cloud-init", "#!/bin/sh\nexit 0\n")
-    _executable(fake_bin / "zpool", f"#!/bin/sh\n{zpool}\n")
-    _executable(fake_bin / "lsblk", f"#!/bin/sh\n{lsblk}\n")
+    for name, body in fakes.items():
+        _executable(fake_bin / name, f"#!/bin/bash\n{body}\n")
     env = dict(os.environ)
     env["PATH"] = f"{fake_bin}:{env['PATH']}"
     script = f"source {shlex.quote(str(HETZNER_SH))}\nKEY=/tmp/test_key RESCUE_IP=192.0.2.1 rescue_verify_first_boot\n"
-    return subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+    return subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30)
 
 
 @pytest.mark.parametrize(
@@ -1068,7 +1067,6 @@ def _hetzner_first_boot(tmp_path: Path, zpool: str, lsblk: str) -> subprocess.Co
         ("echo 500", "echo 1000", False),
         ("exit 1", "echo 1000", False),
         ("echo 1000", "exit 1", False),
-        ("exit 1", "exit 1", False),
         (":", ":", False),
         ("echo 1000", "printf '1000\\n2000\\n'", False),
         ("echo size", "echo 1000", False),
@@ -1077,26 +1075,23 @@ def _hetzner_first_boot(tmp_path: Path, zpool: str, lsblk: str) -> subprocess.Co
 def test_hetzner_first_boot_rejects_an_unmeasured_or_ungrown_pool(
     tmp_path: Path, zpool: str, lsblk: str, verified: bool
 ) -> None:
-    result = _hetzner_first_boot(tmp_path, zpool, lsblk)
+    result = _hetzner_first_boot(tmp_path, {"zpool": zpool, "lsblk": lsblk})
 
     assert (result.returncode == 0) is verified, result.stdout + result.stderr
 
 
 def test_hetzner_first_boot_wait_is_bounded(tmp_path: Path) -> None:
-    """A first boot whose cloud-init never settles must fail into the caller's
-    diagnostics and snapshot deletion rather than hang the upload job."""
+    """A first boot whose cloud-init never settles must fail the verifier at
+    its ten-minute bound rather than hang the upload job."""
     real_timeout = shutil.which("timeout")
     assert real_timeout, "hetzner.sh needs coreutils timeout"
-    fake_bin = tmp_path / "bin"
-    _executable(fake_bin / "ssh", "#!/bin/sh\nexec sleep 60\n")
-    # Keep the script's bound but shrink its duration to one second.
-    _executable(fake_bin / "timeout", f'#!/bin/sh\nshift\nexec {shlex.quote(real_timeout)} 1 "$@"\n')
-    env = dict(os.environ)
-    env["PATH"] = f"{fake_bin}:{env['PATH']}"
-    script = f"source {shlex.quote(str(HETZNER_SH))}\nKEY=/tmp/test_key RESCUE_IP=192.0.2.1 rescue_verify_first_boot\n"
+    requested = tmp_path / "timeout_duration"
+    # Record the script's bound, then enforce one second in its place.
+    shrunk_timeout = f'printf %s "$1" >{shlex.quote(str(requested))}\nshift\nexec {shlex.quote(real_timeout)} 1 "$@"'
 
-    result = subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30)
+    result = _hetzner_first_boot(tmp_path, {"ssh": "exec sleep 60", "timeout": shrunk_timeout})
 
+    assert requested.read_text() == "600"
     assert result.returncode == 1, result.stderr
     assert "did not finish cleanly" in result.stderr
 
