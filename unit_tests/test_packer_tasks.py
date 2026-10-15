@@ -516,7 +516,8 @@ def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(
 
 def test_qemu_build_uploads_only_required_role_files() -> None:
     template = QEMU_TEMPLATE.read_text()
-    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", QEMU_PROVISION_SH.read_text(), re.MULTILINE)
+    provision = QEMU_PROVISION_SH.read_text()
+    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", provision, re.MULTILINE)
     assert role_files is not None
 
     staged = role_files.group(1).split()
@@ -532,7 +533,9 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     # stages: a role file or a target's extras.
     consumed = set(re.findall(r"\$\{CHROOT_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
     assert consumed, "chroot.sh no longer names any role file"
-    assert consumed <= {*staged, "homelab_guest_journal.service", "hetzner"}
+    target_extras = re.findall(r"^\w+\) install_files\+=\(([\w.-]+)\) ;;$", provision, re.MULTILINE)
+    assert target_extras, "provision.sh no longer stages any target extras"
+    assert consumed <= {*staged, *target_extras}
 
 
 def _ssh_public_key(tmp_path: Path, name: str) -> str:

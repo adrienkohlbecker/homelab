@@ -157,13 +157,9 @@ preflight() {
     ((keys)) || fail "SSH_KEY_PUB must hold at least one key"
   fi
 
-  for file in chroot.sh "${ROLE_FILES[@]}"; do
-    [ -f "$SCRIPTS_DIR/$file" ] || fail "required install file not found: $SCRIPTS_DIR/$file"
+  for file in "${install_files[@]}"; do
+    [ -e "$SCRIPTS_DIR/$file" ] || fail "required install file not found: $SCRIPTS_DIR/$file"
   done
-  case $INSTALL_TARGET in
-  qemu) [ -f "$SCRIPTS_DIR/homelab_guest_journal.service" ] || fail "homelab_guest_journal.service not found in $SCRIPTS_DIR" ;;
-  hetzner) [ -d "$SCRIPTS_DIR/hetzner" ] || fail "hetzner/ not found in $SCRIPTS_DIR" ;;
-  esac
 
   if [ "$KEEP_POOLS" = 1 ]; then
     # A rebuild keeps every disk as it is; a layout input would only suggest
@@ -219,6 +215,13 @@ preflight() {
 
 # Packer selects qemu or hetzner; direct callers get the bare-metal path.
 export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
+
+# chroot.sh and everything it installs, staged together in the new root.
+install_files=(chroot.sh "${ROLE_FILES[@]}")
+case $INSTALL_TARGET in
+qemu) install_files+=(homelab_guest_journal.service) ;;
+hetzner) install_files+=(hetzner) ;;
+esac
 
 # Never inferred from what the disks hold: a fresh install wipes them.
 export KEEP_POOLS="${KEEP_POOLS:-}"
@@ -864,14 +867,7 @@ fi
 chroot_files=/var/tmp/homelab_install
 rm -rf -- "/mnt${chroot_files:?}"
 mkdir -p "/mnt$chroot_files"
-cp "$SCRIPTS_DIR/chroot.sh" "/mnt$chroot_files/"
-for role_file in "${ROLE_FILES[@]}"; do
-  cp "$SCRIPTS_DIR/$role_file" "/mnt$chroot_files/"
-done
-case $INSTALL_TARGET in
-qemu) cp "$SCRIPTS_DIR/homelab_guest_journal.service" "/mnt$chroot_files/" ;;
-hetzner) cp -a "$SCRIPTS_DIR/hetzner" "/mnt$chroot_files/" ;;
-esac
+cp -RL "${install_files[@]/#/$SCRIPTS_DIR/}" "/mnt$chroot_files/"
 
 # dpkg fsyncs every unpacked file by default, which dominates the install's
 # wall-clock on network-backed disks (EBS on the AWS bake) and still costs
