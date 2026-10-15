@@ -113,6 +113,7 @@ rescue_create() {
 # key, so skip the rescue known_hosts.
 rescue_verify_first_boot() {
   local out pool part
+  # shellcheck disable=SC2016  # pool and part expand on the snapshot host
   out=$(timeout 600 ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ConnectTimeout=10 "root@$RESCUE_IP" \
     'cloud-init status --wait --long >&2 && pool=$(zpool list -Hp -o size rpool) && part=$(lsblk -bno SIZE /dev/disk/by-partlabel/rpool) && echo "$pool $part"') || {
