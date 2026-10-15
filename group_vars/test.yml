@@ -219,7 +219,9 @@ gitea_lfs_jwt_secret: dGVzdF9sZnNfand0X3NlY3JldF8zMmJ5dGVzX19fX18
 gitea_secret_key: changeme
 transmission_rpc_password: changeme
 samba_password: changeme
-gmail_app_password: changeme
+# Grouped and padded like a pasted Gmail app password, so getmail's _verify
+# proves the role normalizes it before the IMAP login.
+gmail_app_password: " change me\n"
 spouse_samba_password: changeme
 z2m_network_key: changeme
 mosquitto_accounts:
