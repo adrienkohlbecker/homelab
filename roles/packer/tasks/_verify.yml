@@ -1,4 +1,7 @@
-# Assertions for state set up by packer/scripts/{provision,chroot}.sh.
+# Assertions for state set up by packer/scripts/{provision,chroot}.sh, plus
+# the harness environment test/playbooks/_environment.yml gives every cell
+# (the DoT resolver): it has no role of its own, and this base-image cell
+# checks it once rather than on every converge.
 # Run automatically by test/testrole.py after the role-apply +
 # idempotence passes. Add new assertions here as packer code grows.
 
