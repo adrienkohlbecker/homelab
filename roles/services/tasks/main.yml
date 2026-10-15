@@ -1,5 +1,4 @@
 - name: Configure services datasets
-  when: services_dataset.enabled | default(true) | bool
   include_role:
     name: zfs_dataset
     tasks_from: dataset
@@ -15,7 +14,7 @@
       group: root
       mode: '0755'
       extra_properties: "{{ services_dataset.extra_properties | default({}) }}"
-  loop: "{{ services_datasets }}"
+  loop: "{{ services_datasets | selectattr('enabled') }}"
   loop_control:
     loop_var: services_dataset
     label: "{{ services_dataset.dataset }}"

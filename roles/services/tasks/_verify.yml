@@ -2,9 +2,7 @@
 # 4K recordsize must not be inherited from a conflicting parent value.
 
 - name: _verify | Expected properties set locally
-  when:
-    - zfs_root
-    - item.enabled | default(true) | bool
+  when: zfs_root
   vars:
     services_expected_properties: >-
       {{ {'mountpoint': item.mountpoint} | combine(item.extra_properties) }}
@@ -25,37 +23,33 @@
   failed_when: >-
     (services_verify_properties.stdout_lines | sort)
     != (services_expected_properties.items() | map('join', '\t') | sort)
-  loop: "{{ services_datasets }}"
+  loop: "{{ services_datasets | selectattr('enabled') }}"
   loop_control:
     label: "{{ item.dataset }}"
   become: true
 
 - name: _verify | Dataset mount contract passes
-  when:
-    - zfs_root
-    - item.enabled | default(true) | bool
+  when: zfs_root
   command:
     argv:
       - /usr/local/bin/zfs_check_mount
       - "{{ item.dataset }}"
       - "{{ item.mountpoint }}"
   changed_when: false
-  loop: "{{ services_datasets }}"
+  loop: "{{ services_datasets | selectattr('enabled') }}"
   loop_control:
     label: "{{ item.mountpoint }} <- {{ item.dataset }}"
   become: true
 
 - name: _verify | Mount status units are active
-  when:
-    - zfs_root
-    - item.enabled | default(true) | bool
+  when: zfs_root
   command:
     argv:
       - systemctl
       - is-active
       - "{{ item.mountpoint | zfs_mount_unit }}"
   changed_when: false
-  loop: "{{ services_datasets }}"
+  loop: "{{ services_datasets | selectattr('enabled') }}"
   loop_control:
     label: "{{ item.mountpoint | zfs_mount_unit }}"
   become: true
