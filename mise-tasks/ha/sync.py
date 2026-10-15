@@ -27,6 +27,7 @@ import getpass
 import glob
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -141,12 +142,23 @@ def enumerate_files(for_pull: bool = False) -> list[SyncFile]:
 
 
 def host_file(rel: str) -> bytes | None:
-    r = subprocess.run(
-        ["ssh", HOST, f"sudo cat {HOST_DIR}/{rel} 2>/dev/null"],
-        capture_output=True,
-        check=False,
-    )
-    return r.stdout if r.returncode == 0 else None
+    """File content on lab, or None only when lab confirms it does not exist.
+
+    Any other failure (ssh, sudo, permissions) aborts: read as "absent", it
+    would skip the divergence check and let the push overwrite GUI edits.
+    """
+    path = shlex.quote(f"{HOST_DIR}/{rel}")
+    # Exit 3 is ours alone: ssh fails with 255 and sudo/cat with 1.
+    script = shlex.quote(f"test -e {path} || exit 3; exec cat {path}")
+    r = subprocess.run(["ssh", HOST, f"sudo sh -c {script}"], capture_output=True, check=False)
+    if r.returncode == 3:
+        return None
+    if r.returncode != 0:
+        fail(
+            f"cannot read {HOST_DIR}/{rel} on {HOST} (exit {r.returncode}).\n"
+            f"{indent_block(r.stderr.decode(errors='replace').strip())}"
+        )
+    return r.stdout
 
 
 def validate_syntax(relpaths: list[str]) -> None:
@@ -326,7 +338,7 @@ def host_snapshot_tree(base: str) -> str:
         for file in enumerate_files(for_pull=True):
             content = host_file(file.rel)
             if content is None:
-                fail(f"cannot read {HOST_DIR}/{file.rel} on {HOST}")
+                fail(f"{HOST_DIR}/{file.rel} is missing on {HOST}")
             blob = git("hash-object", "-w", "--stdin", content=content)
             git("update-index", "--add", "--cacheinfo", f"100644,{blob},{file.rel}")
         return git("write-tree")

@@ -110,6 +110,26 @@ def test_unresolved_op_reference_falls_back_to_keychain(monkeypatch: pytest.Monk
     assert sync.ha_api_token() == "keychain-token"
 
 
+def test_host_read_tells_a_missing_file_from_a_failed_read(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_host_file_test")
+    monkeypatch.setattr(sync, "HOST_DIR", str(tmp_path))
+    run = subprocess.run
+
+    def local_ssh(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        # Run the remote command here, without ssh and sudo.
+        assert cmd[:2] == ["ssh", sync.HOST]
+        return run(["sh", "-c", cmd[2].removeprefix("sudo ")], **kwargs)
+
+    monkeypatch.setattr(sync.subprocess, "run", local_ssh)
+    (tmp_path / "scripts.yaml").write_bytes(b"{}\n")
+    (tmp_path / "unreadable.yaml").mkdir()
+
+    assert sync.host_file("scripts.yaml") == b"{}\n"
+    assert sync.host_file("automations.yaml") is None
+    with pytest.raises(SystemExit, match="Is a directory"):
+        sync.host_file("unreadable.yaml")
+
+
 def _git(cwd, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -362,6 +382,33 @@ def test_push_refuses_local_input_before_publishing(
 
     assert _git(clone, "rev-parse", "HEAD") == head
     assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
+
+
+def test_push_aborts_on_a_failed_host_read(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync, clone, _host = synced_clone
+    head = _git(clone, "rev-parse", "HEAD")
+    # The real reader, from a fresh load: the fixture replaced this module's copy.
+    monkeypatch.setattr(
+        sync, "host_file", load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_read_fail").host_file
+    )
+    run = subprocess.run
+
+    def ssh_drops(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        if cmd[0] == "ssh":
+            return subprocess.CompletedProcess(cmd, 255, b"", b"Connection reset by peer\n")
+        return run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", ssh_drops)
+    monkeypatch.setattr(sync, "upload_to_host", lambda files: pytest.fail("uploaded despite a failed host read"))
+    (clone / "scripts.yaml").write_text("local: edit\n")
+
+    with pytest.raises(SystemExit, match="Connection reset by peer"):
+        sync.do_push()
+
+    assert _git(clone, "rev-parse", "HEAD") == head
+    assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    assert _synced_commit(clone, sync) == (head, head)
     assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
 
 
