@@ -638,7 +638,8 @@ check_kept_pools() {
   # A failed check leaves the disks as they were found.
   trap 'umount "$old_root_dir" 2>/dev/null || true; zpool export -a' EXIT
 
-  zpool import -a -N -o readonly=on -R /mnt -d "$POOL_DEVICE_DIR"
+  zpool import -a -N -o readonly=on -R /mnt -d "$POOL_DEVICE_DIR" ||
+    fail "a kept pool did not import; if ZFS reports it in use from another system, re-stamp its labels per the Host ID section of notes/runbooks/zbm-recovery.md"
   zpool list -H rpool >/dev/null || fail "no rpool found in $POOL_DEVICE_DIR"
   extra_pools=$(zpool list -H -o name | grep -vx rpool || true)
   [ "$(zpool status -x)" = "all pools are healthy" ] || fail "a pool is unhealthy; see zpool status -x"
@@ -675,8 +676,8 @@ check_kept_pools() {
   fi
 
   # The identity and storage wiring the new root takes over. The fresh path
-  # generates these instead: a blank machine-id, the netplan
-  # stanza, and create_storage's fstab and mdadm.conf.
+  # generates these instead: a blank machine-id, the netplan stanza, and
+  # create_storage's fstab and mdadm.conf.
   kept_identity=$(mktemp -d)
   mkdir -p "$kept_identity"/etc/{ssh,mdadm}
   cp -a "$old_root_dir"/etc/{machine-id,fstab} "$kept_identity/etc/"
