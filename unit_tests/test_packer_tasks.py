@@ -501,13 +501,24 @@ def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(
     assert f"built on this {host} host as {foreign}" in result.stderr
 
 
+def _provision_role_files() -> list[str]:
+    """provision.sh's ROLE_FILES, the role-owned files every install stages."""
+    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", QEMU_PROVISION_SH.read_text(), re.MULTILINE)
+    assert role_files is not None
+    return role_files.group(1).split()
+
+
+def _provision_target_extras() -> dict[str, list[str]]:
+    """The install files provision.sh stages for a single INSTALL_TARGET, by target."""
+    arms = re.findall(r"^(\w+)\) install_files\+=\(([^)]*)\) ;;$", QEMU_PROVISION_SH.read_text(), re.MULTILINE)
+    assert arms, "provision.sh no longer stages any target extras"
+    return {target: files.split() for target, files in arms}
+
+
 def test_qemu_build_uploads_only_required_role_files() -> None:
     template = QEMU_TEMPLATE.read_text()
-    provision = QEMU_PROVISION_SH.read_text()
-    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", provision, re.MULTILINE)
-    assert role_files is not None
 
-    staged = role_files.group(1).split()
+    staged = _provision_role_files()
     uploaded_role_files = re.findall(r'"\$\{path\.cwd\}/(roles/[^"\n]+)"', template)
     assert sorted(Path(path).name for path in uploaded_role_files) == sorted(staged)
     assert "homelab-source.tar" not in template
@@ -516,8 +527,7 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     # stages: a role file or a target's extras.
     consumed = set(re.findall(r"\$\{CHROOT_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
     assert consumed, "chroot.sh no longer names any role file"
-    target_extras = re.findall(r"^\w+\) install_files\+=\(([\w.-]+)\) ;;$", provision, re.MULTILINE)
-    assert target_extras, "provision.sh no longer stages any target extras"
+    target_extras = [file for files in _provision_target_extras().values() for file in files]
     assert consumed <= {*staged, *target_extras}
 
 
@@ -527,11 +537,6 @@ def test_keep_pools_job_covers_the_staged_installer() -> None:
     patterns cover every staged file the harness's own full-universe patterns
     don't, and each pattern still names a staged file."""
     detect = load_repo_module("mise-tasks/ci/detect.py")
-    provision = QEMU_PROVISION_SH.read_text()
-    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", provision, re.MULTILINE)
-    qemu_extras = re.search(r"^qemu\) install_files\+=\(([\w.-]+)\) ;;$", provision, re.MULTILINE)
-    assert role_files is not None
-    assert qemu_extras is not None
 
     play = yaml.safe_load(KEEP_POOLS_PLAYBOOK.read_text())[0]
     (stage,) = [
@@ -542,7 +547,7 @@ def test_keep_pools_job_covers_the_staged_installer() -> None:
     ]
     staged = stage["loop"]
     assert sorted(Path(path).name for path in staged) == sorted(
-        ["provision.sh", "chroot.sh", *role_files.group(1).split(), qemu_extras.group(1)]
+        ["provision.sh", "chroot.sh", *_provision_role_files(), *_provision_target_extras()["qemu"]]
     )
 
     assert [
@@ -567,9 +572,7 @@ def _provision_preflight(tmp_path: Path, **overrides: str) -> subprocess.Complet
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     (scripts / "provision.sh").write_text(provision[: provision.index("\npreflight\n")] + "\npreflight\n")
-    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", provision, re.MULTILINE)
-    assert role_files is not None
-    for name in ["chroot.sh", "homelab_guest_journal.service", *role_files.group(1).split()]:
+    for name in ["chroot.sh", *_provision_role_files(), *_provision_target_extras()["qemu"]]:
         (scripts / name).touch()
     _executable(tmp_path / "bin" / "findmnt", "#!/bin/sh\necho ext4\n")
 
