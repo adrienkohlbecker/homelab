@@ -9,10 +9,8 @@ StartLimitIntervalSec=0
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-{% if services_sqlite_enabled | bool %}
 After=zfs_mount_mnt_services_sqlite.service
 Requires=zfs_mount_mnt_services_sqlite.service
-{% endif %}
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -59,9 +57,7 @@ ExecStart=/usr/bin/podman run \
     --env NO_COLOR=1 \
     --tz={{ system_timezone }} \
     --volume /mnt/services/homeassistant:/config \
-    {% if services_sqlite_enabled | bool %}
-    --volume {{ homeassistant_db_dir }}:/config/db \
-    {% endif %}
+    --volume /mnt/services/sqlite/homeassistant:/config/db \
     --publish 127.0.0.1:{{ service_ports.homeassistant }}:8123/tcp \
     {# Sonos S2 event-subscription callback; HomeKit pairing. Bound on the #}
     {# host's home-LAN address (not 0.0.0.0) so the iot-VLAN sub-iface #}

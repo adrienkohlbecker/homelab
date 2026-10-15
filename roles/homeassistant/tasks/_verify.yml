@@ -385,28 +385,11 @@
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
     _storage_service: homeassistant
-    _storage_mounts: [ services ]
-
-# Hosts without the sqlite dataset keep the recorder on the services dataset
-# and must not order on a mount unit that does not exist there.
-- name: _verify | Render the unit for a host without the sqlite dataset
-  set_fact:
-    _homeassistant_unit_without_sqlite: "{{ lookup('template', role_path ~ '/templates/homeassistant.service.j2') }}"
-  vars:
-    services_sqlite_enabled: false
-    zfs_root: true
-    zfs_has_services_mount: true
-
-- name: _verify | Unit keeps the recorder on the services dataset
-  assert:
-    that:
-      - "'zfs_mount_mnt_services_sqlite' not in _homeassistant_unit_without_sqlite"
-      - "'Requires=zfs_mount_mnt_services.service' in _homeassistant_unit_without_sqlite"
-      - "':/config/db' not in _homeassistant_unit_without_sqlite"
+    _storage_mounts: [ services, services_sqlite ]
 
 - name: _verify | Stat the recorder database
   stat:
-    path: "{{ homeassistant_db_dir }}/home-assistant_v2.db"
+    path: /mnt/services/sqlite/homeassistant/home-assistant_v2.db
   register: homeassistant_recorder_db
   become: true
 

@@ -32,8 +32,8 @@ zfs_has_scratch_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_media_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_data_mount: "{{ not (qemu_test | bool) }}"
 zfs_has_minio_mount: "{{ not (qemu_test | bool) }}"
-# Carve rpool/services/sqlite (roles/services) and keep Home Assistant's
-# recorder on it. Only hosts that run homeassistant enable it.
+# Carve rpool/services/sqlite (roles/services) for Home Assistant's recorder;
+# homeassistant requires it.
 services_sqlite_enabled: false
 zfs_root: true
 grub_bootloader: false

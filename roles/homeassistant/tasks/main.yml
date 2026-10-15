@@ -1,3 +1,12 @@
+# The recorder lives on the 4K-recordsize sqlite dataset roles/services carves.
+- name: Require the sqlite dataset
+  assert:
+    that: services_sqlite_enabled | bool
+    fail_msg: homeassistant keeps its recorder on rpool/services/sqlite; set services_sqlite_enabled.
+    quiet: true
+  tags:
+    - homeassistant
+
 # The `mac_iot` podman macvlan network gives HA an L2 presence on the IoT VLAN
 # so it can do mDNS/SSDP discovery of Sonos / HomeKit / Zigbee-bridge targets
 # and talk directly to IoT devices on the /24 (Philips airpurifier CoAP, etc.).
@@ -96,7 +105,7 @@
     mode: "0755"
   become: true
   loop:
-    - "{{ homeassistant_db_dir }}"
+    - /mnt/services/sqlite/homeassistant
     - /mnt/services/homeassistant/dashboards
     - /mnt/services/homeassistant/custom_components/hacs
     - /mnt/services/homeassistant/.storage
