@@ -215,26 +215,6 @@ def test_push_skips_reload_when_ha_rejects_the_config(monkeypatch: pytest.Monkey
     assert tags == ["advanced"]
 
 
-def test_push_without_token_never_uploads(monkeypatch: pytest.MonkeyPatch) -> None:
-    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_missing_token_test")
-    file = sync.SyncFile("scripts.yaml", "script.reload", sync.Direction.BOTH)
-    monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
-    monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
-    monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
-    monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old")
-    monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
-    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
-    monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
-    monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
-    monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
-    monkeypatch.setattr(sync, "ha_api_token", lambda: (_ for _ in ()).throw(SystemExit("no token")))
-    monkeypatch.setattr(sync, "upload_to_host", lambda files: pytest.fail("uploaded without token"))
-    with pytest.raises(SystemExit, match="no token"):
-        sync.do_push()
-
-
 def _git(cwd, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -355,6 +335,32 @@ def test_push_refuses_a_diverged_host_before_publishing_local_edits(synced_clone
     capture = _git(clone, "rev-parse", "origin/main")
     assert _git(clone, "show", f"{capture}:automations.yaml") == "- id: gui"
     assert _git(clone, "rev-parse", "HEAD~1") == capture
+
+
+@pytest.mark.parametrize(
+    ("edit", "refusal"),
+    [
+        ("broken: [yaml\n", "syntax errors"),
+        ("local: edit\n", "no Home Assistant API token"),
+    ],
+    ids=["syntax_error", "missing_token"],
+)
+def test_push_refuses_local_input_before_publishing(
+    synced_clone, monkeypatch: pytest.MonkeyPatch, edit: str, refusal: str
+) -> None:
+    sync, clone, _host = synced_clone
+    head = _git(clone, "rev-parse", "HEAD")
+    monkeypatch.delenv("HA_API_TOKEN", raising=False)
+    monkeypatch.setattr(sync.sys, "platform", "linux")
+    monkeypatch.setattr(sync, "upload_to_host", lambda files: pytest.fail("uploaded despite refusal"))
+    (clone / "scripts.yaml").write_text(edit)
+
+    with pytest.raises(SystemExit, match=refusal):
+        sync.do_push()
+
+    assert _git(clone, "rev-parse", "HEAD") == head
+    assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
 
 
 def test_pull_refuses_while_origin_awaits_push(synced_clone) -> None:

@@ -12,7 +12,7 @@ refuse host-side edits and retry a reload that failed after upload.
 
 pull: commit host files on top of origin, advance the tag to that capture,
 then rebase unpushed local commits onto it.
-push: commit local clone edits, validate changed files, upload to lab, reload
+push: validate changed files, commit local clone edits, upload to lab, reload
 domains or restart HA for files without a hot reload, then advance the tag.
 push --dry-run: compare the host to the working tree, validate and print what
 would change, but do not write to the host or move git refs.
@@ -489,9 +489,12 @@ def do_pull(rebase: bool = False) -> None:
 def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     """Upload clone edits to lab, reload HA, then advance the synced tag.
 
-    Every refusal happens before local edits are committed or anything reaches
-    origin: a commit published ahead of the tag makes `pull` refuse too, which
-    would leave neither command able to reconcile a diverged host.
+    Refusals on local input (host divergence, syntax, missing API token) happen
+    before local edits are committed or anything reaches origin: a commit
+    published ahead of the tag makes `pull` refuse too, which would leave
+    neither command able to reconcile a diverged host. HA's configuration check
+    needs the uploaded files, so it refuses after publishing; the tag stays put
+    and the next push retries.
     """
     assert_clone_present()
     if not dry_run:
@@ -537,15 +540,6 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
                 "pull replays them on top of the captured host edits."
             )
         sys.exit("\n".join(msg))
-    # Auto-commit any working-tree edits so `ha:sync push` works straight from
-    # a direct file edit in the clone without a manual git commit.
-    if not dry_run and commit_and_push("push: local edits"):
-        print("push: committed local edits")
-    if not changed and not pending:
-        if not dry_run and resolve_ref(f"refs/tags/{SYNCED_TAG}") != resolve_ref("HEAD"):
-            advance_synced_tag()
-        print("push: HEAD matches host, nothing to do")
-        return
     files = list(changed)
     reloads = {file.reload_service for file in [*files, *pending]}
     # Custom templates reload first: automations and template entities resolve
@@ -561,13 +555,22 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     relpaths = [file.rel for file in files]
     show_push_diff(changed)
     validate_syntax([file.rel for file in dict.fromkeys([*files, *pending])])
+    token = ha_api_token() if services and not dry_run else None
+    # Auto-commit any working-tree edits so `ha:sync push` works straight from
+    # a direct file edit in the clone without a manual git commit.
+    if not dry_run and commit_and_push("push: local edits"):
+        print("push: committed local edits")
+    if not changed and not pending:
+        if not dry_run and resolve_ref(f"refs/tags/{SYNCED_TAG}") != resolve_ref("HEAD"):
+            advance_synced_tag()
+        print("push: HEAD matches host, nothing to do")
+        return
     if dry_run:
         reload_desc = ", ".join(services) or "none"
         print(f"\n\033[1;33mdry-run\033[0m: would upload {relpaths}")
         print(f"\033[1;33mdry-run\033[0m: would advance {SYNCED_TAG} and trigger: {reload_desc}")
         print("\033[1;33mdry-run\033[0m: nothing written to host, no git refs moved, HA not reloaded.")
         return
-    token = ha_api_token() if services else None
     if files:
         upload_to_host(files)
         print(f"push: uploaded {relpaths}")
