@@ -1134,6 +1134,13 @@ class TestListTestableRoles:
         assert detect.list_testable_roles() == []
 
 
+# One site converge per release, named like a cell spec.
+SITE_TEST_JOBS = {
+    "_site_test:lab": detect.DEFAULT_UBUNTU,
+    **{f"_site_test:lab:{codename}": codename for codename in detect.OTHER_UBUNTUS},
+}
+
+
 def _render_child_doc(
     specs: list[str],
     site_test: bool,
@@ -1260,15 +1267,10 @@ class TestRenderChildPipeline:
 
     def test_site_test_job_added(self) -> None:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
-        assert "_site_test:lab" in doc
-        assert doc["_site_test:lab"]["timeout"] == "60m"
-        assert "_site_test:lab:noble" in doc
-        assert doc["_site_test:lab:noble"]["timeout"] == "60m"
-        noble_script = "\n".join(doc["_site_test:lab:noble"]["script"])
-        assert 'site_test.py --ubuntu "$UBUNTU" --timeout 3000' in noble_script
-        for codename in (detect.DEFAULT_UBUNTU, *detect.OTHER_UBUNTUS):
-            spec = detect.cell_to_ci_spec(detect.TestCell("lab", codename, "_site_test"))
-            assert doc[spec]["variables"]["UBUNTU"] == codename
+        for job, codename in SITE_TEST_JOBS.items():
+            assert doc[job]["timeout"] == "60m"
+            assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": codename}
+            assert 'site_test.py --ubuntu "$UBUNTU" --timeout 3000' in "\n".join(doc[job]["script"])
         assert "_site_check:lab" in doc
         assert doc["_site_check:lab"]["timeout"] == "35m"
         script = "\n".join(doc["_site_check:lab"]["script"])
@@ -1282,7 +1284,7 @@ class TestRenderChildPipeline:
         doc = _render_child_doc(["nginx:lab"], site_test=True)
         cell_script = "\n".join(doc["nginx:lab"]["script"])
         assert "nice -n 10 choom -n 500 -- mise exec --" in cell_script
-        for job in ("_site_test:lab", "_site_test:lab:noble", "_site_check:lab"):
+        for job in (*SITE_TEST_JOBS, "_site_check:lab"):
             script = "\n".join(doc[job]["script"])
             assert "nice" not in script
             assert "choom" not in script
@@ -1293,24 +1295,21 @@ class TestRenderChildPipeline:
         # build ids stage-by-stage) gives it the lowest id and a runner claims
         # it first. needs:[] (from .x86_cell) keeps it parallel, so the leading
         # stage never gates the cells.
-        doc = _render_child_doc(["nginx:lab", "podman:lab:resolute"], site_test=True)
+        doc = _render_child_doc(["nginx:lab", "podman:lab"], site_test=True)
         assert doc["stages"] == ["site", "test1", "test2"]
-        assert doc["_site_test:lab"]["stage"] == "site"
-        assert doc["_site_test:lab:noble"]["stage"] == "site"
-        assert doc["_site_check:lab"]["stage"] == "site"
-        for job in ("_site_test:lab", "_site_check:lab"):
-            assert doc[job]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
-        assert doc["_site_test:lab:noble"]["variables"] == {"VARIANT": "lab", "UBUNTU": "noble"}
+        for job in (*SITE_TEST_JOBS, "_site_check:lab"):
+            assert doc[job]["stage"] == "site"
+        assert doc["_site_check:lab"]["variables"] == {"VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
         assert doc[".x86_cell"]["needs"] == []
 
-    def test_keep_pools_job_rebuilds_a_noble_lab(self) -> None:
+    def test_keep_pools_job_rebuilds_a_non_default_lab(self) -> None:
         doc = _render_child_doc([], site_test=False, keep_pools_test=True)
         job = doc["_keep_pools_test:lab"]
         assert doc["stages"] == ["rebuild"]
         assert job["stage"] == "rebuild"
         assert job["extends"] == ".x86_cell"
         # The cell scaffold hydrates VARIANT for UBUNTU: the old root's release.
-        assert job["variables"] == {"VARIANT": "lab", "UBUNTU": "noble"}
+        assert job["variables"] == {"VARIANT": "lab", "UBUNTU": detect.OTHER_UBUNTUS[0]}
         script = "\n".join(job["script"])
         # --to defaults to the default release.
         assert 'keep_pools_test.py --from "$UBUNTU" --timeout 2400' in script
@@ -1320,17 +1319,12 @@ class TestRenderChildPipeline:
         # site_test with no cells still seeds a single leading `site` stage.
         doc = _render_child_doc([], site_test=True)
         assert doc["stages"] == ["site"]
-        assert doc["_site_test:lab"]["stage"] == "site"
-        assert doc["_site_test:lab:noble"]["stage"] == "site"
-        assert doc["_site_check:lab"]["stage"] == "site"
+        for job in (*SITE_TEST_JOBS, "_site_check:lab"):
+            assert doc[job]["stage"] == "site"
         assert "no_cells" not in doc
 
     def test_empty_gets_noop_placeholder(self) -> None:
         doc = _render_child_doc([], site_test=False)
-        assert "no_cells" in doc
-        assert "_site_test:lab" not in doc
-        assert "_site_test:lab:noble" not in doc
-        assert "_site_check:lab" not in doc
         # No cell jobs beyond the scaffolding + placeholder.
         jobs = [k for k in doc if k not in ("default", "stages", ".x86_cell", ".arm_cell")]
         assert jobs == ["no_cells"]
@@ -1385,7 +1379,7 @@ class TestRenderChildPipeline:
 
         doc = _render_child_doc(["release_probe:lab"], site_test=False)
 
-        assert doc["release_probe:lab:arm"]["variables"]["UBUNTU"] == "resolute"
+        assert doc["release_probe:lab:arm"]["variables"]["UBUNTU"] == detect.DEFAULT_UBUNTU
         assert doc["release_probe:lab:noble:arm"]["variables"]["UBUNTU"] == "noble"
 
     def test_packer_keeps_the_noble_arm_second_boot_cell(self) -> None:
@@ -1471,12 +1465,9 @@ class TestRenderChildPipeline:
         assert "image" not in doc[".x86_cell"]
         assert doc[".x86_cell"]["id_tokens"] == {"GITLAB_OIDC_TOKEN": {"aud": "sts.amazonaws.com"}}
         assert "retry" not in doc[".x86_cell"]
-        assert doc["_site_test:lab"]["extends"] == ".x86_cell"
-        assert "tags" not in doc["_site_test:lab"]
-        assert doc["_site_test:lab:noble"]["extends"] == ".x86_cell"
-        assert "tags" not in doc["_site_test:lab:noble"]
-        assert doc["_site_check:lab"]["extends"] == ".x86_cell"
-        assert "tags" not in doc["_site_check:lab"]
+        for job in (*SITE_TEST_JOBS, "_site_check:lab"):
+            assert doc[job]["extends"] == ".x86_cell"
+            assert "tags" not in doc[job]
 
         joined = "\n".join(doc[".x86_cell"]["before_script"])
         assert "HOMELAB_VAULT_PASSWORD_TEST" in joined
@@ -1492,9 +1483,8 @@ class TestRenderChildPipeline:
         assert "HOMELAB_CI_S3_ENDPOINT" not in joined
         assert 'if [ "$VARIANT" != "minimal" ]; then mise run ci:hydrate-qemu-images' in joined
         assert '"$VARIANT" --ubuntu "$UBUNTU"; fi' in joined
-        assert "--upstream-mirrors" not in "\n".join(doc["nginx:lab"]["script"])
-        assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab"]["script"])
-        assert "--upstream-mirrors" not in "\n".join(doc["_site_test:lab:noble"]["script"])
+        for job in ("nginx:lab", *SITE_TEST_JOBS):
+            assert "--upstream-mirrors" not in "\n".join(doc[job]["script"])
 
 
 class TestEmitGitlab:
