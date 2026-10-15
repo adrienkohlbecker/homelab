@@ -332,34 +332,40 @@ wipe_disks() {
   done
 }
 
+# Partition one disk with the layout every host shares
+# (notes/unified_disk_layout.md):
+#   1 = BIOS boot (EF02)
+#   2 = EFI (EF00)
+#   3 = swap (8200), SWAP_SIZE
+#   4 = podman store (8300), when PODMAN_SIZE is set
+#   6 = tank special-vdev member (BF01), when META_SIZE is set (mirror hosts)
+#   5 = rpool (BF00)
+# rpool is always number 5 and always carved last, so it grows into the rest of
+# the disk (a cloud-image deploy grows p5: cloud-init growpart, packer/hetzner);
+# the meta partition is carved before it so its number never shifts.
+#
+# Single-disk hosts use swap and podman as bare partitions; mirror hosts
+# assemble the per-disk ones into md arrays (swap raid1, podman raid5:
+# create_storage), and ZFS mirrors the meta partitions into tank's special vdev
+# (create_extra_tank_mouse). Swap is the disk-backed overflow behind the swap
+# role's zram (notes/swap_strategy.md), on a partition because swap on a zvol
+# can deadlock under memory pressure. The GPT names are for lsblk and gdisk:
+# consumers resolve by filesystem UUID, /dev/md path, or pool label, never by
+# partition label, which the mirror's disks share, except single-disk swap and
+# podman, where it is unique.
 partition_disk() {
   local disk="$1"
 
-  sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
-  sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"          # EFI (EF00 = EFI system partition)
-
-  # Swap partition (p3), sized by SWAP_SIZE, on every host. Single-disk hosts
-  # mkswap it directly; mirror hosts mdadm the per-disk p3s into a raid1
-  # (create_storage). A real partition is deadlock-free, unlike swap on a zvol.
-  sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk" # Swap (8200 = Linux Swap)
-
-  # Dedicated podman store partition (p4). Single-disk hosts carry a plain
-  # ext4 here; mirror hosts mdadm the per-disk p4s into a raid5
-  # (create_storage).
-  # 8300 = Linux filesystem.
+  sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk"
+  sgdisk -n2:1M:+1G -t2:EF00 -c2:efi "$disk"
+  sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk"
   if [ -n "$PODMAN_SIZE" ]; then
     sgdisk "-n4:0:+$PODMAN_SIZE" -t4:8300 -c4:podman "$disk"
   fi
-
-  # tank special-vdev member (p6, mirror only). Numbered 6 but carved before
-  # rpool so rpool stays number 5. mdadm-free -- ZFS mirrors the per-disk p6s
-  # into tank's special vdev (create_extra_tank_mouse). BF01 = Solaris /usr &
-  # Mac ZFS.
   if [ -n "$META_SIZE" ]; then
     sgdisk "-n6:0:+$META_SIZE" -t6:BF01 -c6:meta "$disk"
   fi
-
-  sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk" # rpool (BF00 = Solaris root), carved last so it grows to end
+  sgdisk -n5:0:0 -t5:BF00 -c5:rpool "$disk"
   sgdisk -p "$disk"
 }
 
@@ -391,8 +397,7 @@ create_storage() {
     udevadm settle --timeout=10
     efi_device=/dev/md/efi
 
-    # Disk-backed RAID1 swap avoids the memory-pressure deadlock risk of a ZFS
-    # zvol. mdadm.conf makes it available to the initramfs and swapon at boot.
+    # mdadm.conf makes the array available to the initramfs and swapon at boot.
     # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
     mdadm --create "${mdadm_create_opts[@]}" /dev/md/swap --name=swap --metadata=1.2 --level=raid1 --bitmap=none --raid-devices="$disks_count" $PARTITIONS_SWAP
     udevadm settle --timeout=10
@@ -515,30 +520,7 @@ create_extra_pools() {
 # PARTITIONS_* lists for create_storage, and COMMANDLINE exported for
 # chroot.sh's boot loader.
 create_pools() {
-  # Per-disk partition paths, computed once as space-delimited strings.
-  # One unified layout for every host (notes/unified_disk_layout.md):
-  #   1 = BIOS boot (EF02)
-  #   2 = EFI (EF00)
-  #   3 = swap (8200)
-  #   4 = podman store (8300, optional -- when PODMAN_SIZE is set)
-  #   6 = tank special-vdev member (BF01, mirror only -- when META_SIZE is set)
-  #   5 = rpool (BF00)
-  # rpool is always number 5 (single-disk and mirror) and always carved last
-  # (-n5:0:0) so it grows into the rest of the disk -- a cloud-image deploy grows
-  # p5 (cloud-init growpart, packer/hetzner). The mirror-only meta partition is numbered
-  # 6 but carved physically *before* rpool, so rpool's number never shifts with
-  # disk count. Each gets a GPT name (sgdisk -c) for readable lsblk/gdisk output;
-  # consumers resolve by filesystem UUID, /dev/md path, or pool label, never
-  # by-partlabel (non-unique across the mirror's identically-named disks) --
-  # except single-disk swap/podman, where by-partlabel IS unique (one disk).
-  #
-  # swap and podman are raw partitions on every host: single-disk gets a bare
-  # partition, mirror an mdadm array across the per-disk partitions (swap raid1,
-  # podman raid5 -- create_storage). The meta partition becomes tank's special vdev
-  # (create_extra_tank_mouse). Swap is the disk-backed *overflow* behind zram,
-  # which the swap role runs as the primary high-priority device
-  # (notes/swap_strategy.md); a real partition is deadlock-free, unlike swap on a
-  # zvol.
+  # partition_disk's partitions across the disks, as space-delimited strings.
   local d
   PARTITIONS_EFI=""
   PARTITIONS_SWAP=""

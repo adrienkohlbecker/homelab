@@ -264,10 +264,8 @@ EOF
   # the ESP content is mirrored. Single-disk variants get a single bare
   # "rEFInd" entry.
   #
-  # -p 2 is the ESP: provision.sh's layout is 1=bios(EF02), 2=efi(EF00),
-  # 3=swap, 4=podman, 5=rpool, 6=meta. Keep these efibootmgr -p values in sync
-  # with that order -- a stale -p (e.g. 1, the BIOS-boot partition) registers a
-  # boot entry the firmware can't load.
+  # -p 2 is the ESP in provision.sh's partition_disk layout. A stale -p (e.g. 1,
+  # the BIOS-boot partition) registers a boot entry the firmware can't load.
   if [ "$disks_count" -eq 1 ]; then
     efibootmgr -c -d "$DISKS" -p 2 \
       -L "rEFInd" \
