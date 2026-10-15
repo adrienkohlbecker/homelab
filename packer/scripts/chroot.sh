@@ -149,7 +149,7 @@ mkdir -p /boot/efi
 
 # Put ZBM and rEFInd on the ESP and register rEFInd with the firmware.
 install_boot_loader() {
-  local disks_count zbm_url expected_sum zbm_cmdline refind_name refind_fallback_name refind_timeout tmp idx disk
+  local disks_count zbm_url expected_sum zbm_cmdline refind_name refind_fallback_name refind_timeout idx disk
   disks_count=$(wc -w <<<"$DISKS")
 
   # rEFInd's EFI binary names. The shipped image runs on the build's arch, one
@@ -182,16 +182,14 @@ install_boot_loader() {
   # pull is anonymous.
   zbm_url="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-$ZBM_VERSION.tar.gz"
 
-  tmp=$(mktemp -d)
-
-  curl -fL --retry 3 --retry-connrefused -o "$tmp/zbm.tar.gz" "$zbm_url"
+  curl -fL --retry 3 --retry-connrefused -o /tmp/zbm.tar.gz "$zbm_url"
   expected_sum="$(curl -fsSL --retry 3 --retry-connrefused "$zbm_url.sha256sum" | awk '{print $1}')"
-  echo "$expected_sum  $tmp/zbm.tar.gz" | sha256sum -c -
-  tar -xzf "$tmp/zbm.tar.gz" -C "$tmp" --no-same-owner
+  echo "$expected_sum  /tmp/zbm.tar.gz" | sha256sum -c -
+  tar -xzf /tmp/zbm.tar.gz -C /tmp --no-same-owner
 
   mkdir -p /boot/efi/EFI/ZBM
-  mv "$tmp"/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
-  mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
+  mv /tmp/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
+  mv /tmp/cmdline /boot/efi/EFI/ZBM/
 
   zbm_cmdline=$(cat /boot/efi/EFI/ZBM/cmdline)
 
