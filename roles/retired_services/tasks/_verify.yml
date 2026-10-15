@@ -6,7 +6,6 @@
     - wolweb.service
     - mac_iot.service
     - console_noblank.service
-    - zfs_mount_mnt_services_sqlite.service
   register: retired_services_units
   failed_when: retired_services_units.status.LoadState != 'not-found'
   become: true
@@ -29,8 +28,6 @@
     - /etc/fluent-bit/services/wolweb.yaml
     - /mnt/services/wolweb
     - /etc/sysctl.d/30-macvlan.conf
-    - /mnt/services/sqlite
-    - /mnt/old_jammy
   register: retired_services_leftovers
   become: true
 
@@ -95,14 +92,4 @@
   register: retired_services_grub_cmdline
   changed_when: false
   failed_when: retired_services_grub_cmdline.rc != 1
-  become: true
-
-- name: _verify | Retired datasets are unmounted
-  command: zfs get -H -o value canmount,mounted {{ item }}
-  loop:
-    - rpool/services/sqlite
-    - rpool/ROOT/jammy
-  register: retired_services_dataset_state
-  changed_when: false
-  failed_when: retired_services_dataset_state.stdout_lines != ['off', 'no']
   become: true
