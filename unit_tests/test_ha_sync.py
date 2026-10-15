@@ -110,111 +110,6 @@ def test_unresolved_op_reference_falls_back_to_keychain(monkeypatch: pytest.Monk
     assert sync.ha_api_token() == "keychain-token"
 
 
-def test_push_retries_reload_after_upload_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_retry_test")
-    file = sync.SyncFile("scripts.yaml", "script.reload", sync.Direction.BOTH)
-    host_bytes = [b"old", b"new"]
-    uploads: list[list[object]] = []
-    reloads: list[tuple[str, str]] = []
-    tags: list[str] = []
-    monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
-    monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
-    monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
-    monkeypatch.setattr(sync, "resolve_ref", lambda ref: "old" if ref != "HEAD" else "new")
-    monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
-    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
-    monkeypatch.setattr(sync, "host_file", lambda rel: host_bytes[0])
-    monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
-    monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
-    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
-    monkeypatch.setattr(sync, "check_host_config", lambda token: None)
-    monkeypatch.setattr(sync, "upload_to_host", lambda files: uploads.append(files))
-    monkeypatch.setattr(sync, "advance_synced_tag", lambda: tags.append("advanced"))
-
-    def reload(service: str, token: str) -> None:
-        reloads.append((service, token))
-        if len(reloads) == 1:
-            raise RuntimeError("reload failed")
-
-    monkeypatch.setattr(sync, "_ha_post", reload)
-    with pytest.raises(RuntimeError, match="reload failed"):
-        sync.do_push()
-    assert uploads == [[file]]
-    assert tags == []
-
-    host_bytes[0] = b"new"
-    sync.do_push()
-    assert uploads == [[file]]
-    assert reloads == [("script.reload", "example-token"), ("script.reload", "example-token")]
-    assert tags == ["advanced"]
-
-
-def test_push_reloads_custom_templates_before_their_consumers(monkeypatch: pytest.MonkeyPatch) -> None:
-    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_reload_order_test")
-    files = [
-        sync.SyncFile("automations.yaml", "automation.reload", sync.Direction.BOTH),
-        sync.SyncFile("custom_templates/macros.jinja", "homeassistant.reload_custom_templates", sync.Direction.BOTH),
-        sync.SyncFile("scenes.yaml", "scene.reload", sync.Direction.BOTH),
-    ]
-    reloads: list[str] = []
-    monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
-    monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
-    monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
-    monkeypatch.setattr(sync, "resolve_ref", lambda ref: ref)
-    monkeypatch.setattr(sync, "enumerate_files", lambda: files)
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
-    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
-    monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
-    monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
-    monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
-    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
-    monkeypatch.setattr(sync, "check_host_config", lambda token: None)
-    monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
-    monkeypatch.setattr(sync, "advance_synced_tag", lambda: None)
-    monkeypatch.setattr(sync, "_ha_post", lambda service, token: reloads.append(service))
-
-    sync.do_push()
-
-    assert reloads == ["homeassistant.reload_custom_templates", "automation.reload", "scene.reload"]
-
-
-def test_push_skips_reload_when_ha_rejects_the_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_check_config_test")
-    file = sync.SyncFile("automations.yaml", "automation.reload", sync.Direction.BOTH)
-    reloads: list[str] = []
-    tags: list[str] = []
-    monkeypatch.setattr(sync, "assert_clone_present", lambda: None)
-    monkeypatch.setattr(sync, "sh", lambda *args, **kwargs: None)
-    monkeypatch.setattr(sync, "sync_clone_with_origin", lambda rebase=False: None)
-    monkeypatch.setattr(sync, "commit_and_push", lambda message: False)
-    monkeypatch.setattr(sync, "resolve_ref", lambda ref: ref)
-    monkeypatch.setattr(sync, "enumerate_files", lambda: [file])
-    monkeypatch.setattr(sync, "blob_at", lambda ref, rel: b"old")
-    monkeypatch.setattr(sync, "worktree_file", lambda rel: b"new")
-    monkeypatch.setattr(sync, "host_file", lambda rel: b"old")
-    monkeypatch.setattr(sync, "show_push_diff", lambda changed: None)
-    monkeypatch.setattr(sync, "validate_syntax", lambda paths: None)
-    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
-    monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
-    monkeypatch.setattr(sync, "advance_synced_tag", lambda: tags.append("advanced"))
-    monkeypatch.setattr(sync, "_ha_post", lambda service, token: reloads.append(service))
-    verdict = {"result": "invalid", "errors": "Invalid config for 'automation'"}
-
-    monkeypatch.setattr(sync.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(json.dumps(verdict).encode()))
-    with pytest.raises(SystemExit, match="Invalid config for 'automation'"):
-        sync.do_push()
-    assert reloads == []
-    assert tags == []
-
-    verdict = {"result": "valid", "errors": None}
-    sync.do_push()
-    assert reloads == ["automation.reload"]
-    assert tags == ["advanced"]
-
-
 def _git(cwd, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
 
@@ -247,7 +142,42 @@ def synced_clone(tmp_path, monkeypatch: pytest.MonkeyPatch):
         ],
     )
     monkeypatch.setattr(sync, "host_file", host.get)
+
+    def upload(files) -> None:
+        for file in files:
+            host[file.rel] = (clone / file.rel).read_bytes()
+
+    monkeypatch.setattr(sync, "upload_to_host", upload)
     return sync, clone, host
+
+
+def _stub_ha(monkeypatch: pytest.MonkeyPatch, sync) -> list[str]:
+    """Accept every configuration check and record the services called."""
+    reloads: list[str] = []
+    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
+    monkeypatch.setattr(sync, "check_host_config", lambda token: None)
+    monkeypatch.setattr(sync, "_ha_post", lambda service, token: reloads.append(service))
+    return reloads
+
+
+def _record_uploads(monkeypatch: pytest.MonkeyPatch, sync) -> list[list[str]]:
+    uploads: list[list[str]] = []
+    upload = sync.upload_to_host
+
+    def record(files) -> None:
+        uploads.append([file.rel for file in files])
+        upload(files)
+
+    monkeypatch.setattr(sync, "upload_to_host", record)
+    return uploads
+
+
+def _synced_commit(clone, sync) -> tuple[str, str]:
+    """The synced tag locally and on origin."""
+    return (
+        _git(clone, "rev-parse", sync.SYNCED_TAG),
+        _git(clone, "ls-remote", "origin", f"refs/tags/{sync.SYNCED_TAG}").split()[0],
+    )
 
 
 def test_pull_rebases_local_commits_onto_captured_host_edits(synced_clone) -> None:
@@ -303,16 +233,88 @@ def test_push_publishes_hand_made_commits_before_tagging(synced_clone, monkeypat
     sync, clone, _host = synced_clone
     (clone / "scripts.yaml").write_text("local: edit\n")
     _git(clone, "commit", "--quiet", "-am", "hand-made commit")
-    monkeypatch.setattr(sync, "ha_api_token", lambda: "example-token")
-    monkeypatch.setattr(sync, "check_host_config", lambda token: None)
-    monkeypatch.setattr(sync, "upload_to_host", lambda files: None)
-    monkeypatch.setattr(sync, "_ha_post", lambda service, token: None)
+    _stub_ha(monkeypatch, sync)
 
     sync.do_push()
 
     head = _git(clone, "rev-parse", "HEAD")
     assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
     assert _git(clone, "ls-remote", "origin", f"refs/tags/{sync.SYNCED_TAG}").split()[0] == head
+
+
+def test_push_retries_reload_after_reload_failure(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync, clone, host = synced_clone
+    baseline = _git(clone, "rev-parse", "HEAD")
+    _stub_ha(monkeypatch, sync)
+    uploads = _record_uploads(monkeypatch, sync)
+    reloads: list[str] = []
+
+    def reload(service: str, token: str) -> None:
+        reloads.append(service)
+        if len(reloads) == 1:
+            raise RuntimeError("reload failed")
+
+    monkeypatch.setattr(sync, "_ha_post", reload)
+    (clone / "scripts.yaml").write_text("new: script\n")
+
+    with pytest.raises(RuntimeError, match="reload failed"):
+        sync.do_push()
+    assert host["scripts.yaml"] == b"new: script\n"
+    assert _synced_commit(clone, sync) == (baseline, baseline)
+
+    sync.do_push()
+
+    head = _git(clone, "rev-parse", "HEAD")
+    assert uploads == [["scripts.yaml"]]
+    assert reloads == ["script.reload", "script.reload"]
+    assert _synced_commit(clone, sync) == (head, head)
+
+
+def test_push_reloads_custom_templates_before_their_consumers(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync, clone, _host = synced_clone
+    monkeypatch.setattr(
+        sync,
+        "SYNC_SPEC",
+        [
+            *sync.SYNC_SPEC,
+            ("scenes.yaml", "scene.reload", sync.Direction.BOTH),
+            ("custom_templates/*", "homeassistant.reload_custom_templates", sync.Direction.BOTH),
+        ],
+    )
+    reloads = _stub_ha(monkeypatch, sync)
+    (clone / "automations.yaml").write_text("- id: b\n")
+    (clone / "scenes.yaml").write_text("[]\n")
+    (clone / "custom_templates").mkdir()
+    (clone / "custom_templates/macros.jinja").write_text("{% macro greet() %}hi{% endmacro %}\n")
+
+    sync.do_push()
+
+    assert reloads == ["homeassistant.reload_custom_templates", "automation.reload", "scene.reload"]
+
+
+def test_push_skips_reload_when_ha_rejects_the_config(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync, clone, host = synced_clone
+    baseline = _git(clone, "rev-parse", "HEAD")
+    check_host_config = sync.check_host_config
+    reloads = _stub_ha(monkeypatch, sync)
+    monkeypatch.setattr(sync, "check_host_config", check_host_config)
+    verdict = {"result": "invalid", "errors": "Invalid config for 'automation'"}
+    monkeypatch.setattr(sync.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(json.dumps(verdict).encode()))
+    (clone / "automations.yaml").write_text("- id: b\n")
+
+    with pytest.raises(SystemExit, match="Invalid config for 'automation'"):
+        sync.do_push()
+    assert host["automations.yaml"] == b"- id: b\n"
+    assert reloads == []
+    assert _synced_commit(clone, sync) == (baseline, baseline)
+
+    # HA itself was at fault; once it accepts the same upload, the retry reloads.
+    verdict = {"result": "valid", "errors": None}
+    sync.do_push()
+
+    head = _git(clone, "rev-parse", "HEAD")
+    assert reloads == ["automation.reload"]
+    assert _synced_commit(clone, sync) == (head, head)
 
 
 def test_push_refuses_a_diverged_host_before_publishing_local_edits(synced_clone) -> None:
