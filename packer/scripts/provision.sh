@@ -38,12 +38,19 @@
 #    refuse to load it.
 set -euxo pipefail
 
-# DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, PODMAN_SIZE, META_SIZE, EXTRA_POOLS,
-# INSTALL_TARGET, SERIAL_CONSOLE, UBUNTU_NAME, and the optional NEXUS_URL come
-# from packer's shell-provisioner env block. Bare-metal callers export them by
-# hand. This script consumes the disk/pool vars, derives the UBUNTU_MIRROR*
-# URLs and the kernel COMMANDLINE, and passes the exported install vars through
-# to chroot.sh, whose environment contract is documented at its top.
+# Inputs come from packer's shell-provisioner env block; bare-metal callers
+# export them by hand:
+#  - every install: UBUNTU_NAME, INSTALL_TARGET (default bare_metal),
+#    SSH_KEY_PUB (unused on hetzner), and optionally TARGET_HOSTNAME with
+#    TARGET_USERNAME, NEXUS_URL, and KEEP_POOLS=1;
+#  - a fresh install: DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, PODMAN_SIZE,
+#    META_SIZE, EXTRA_POOLS, ZBM_VERSION, SERIAL_CONSOLE (qemu and hetzner),
+#    and optionally REFIND_DEB_URL with REFIND_DEB_SHA256;
+#  - a rebuild: optionally OLD_ROOT.
+# This script consumes the disk/pool vars, derives the UBUNTU_MIRROR* URLs and,
+# on a fresh install, the kernel COMMANDLINE, and passes the exported install
+# vars through to chroot.sh, whose environment contract is documented at its
+# top.
 
 # chroot.sh and the role-owned bootstrap files it consumes sit beside this
 # script: packer uploads them all to /home/vagrant, and a bare-metal install
