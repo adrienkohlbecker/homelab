@@ -27,8 +27,10 @@ fi
 
 # Linux: keep packer's ISO cache off the root FS; falls through to
 # packer's default (./packer_cache in cwd) on Mac. Linux builders keep raw
-# disks because ZFS already provides CoW; Mac ships qcow2. Neither compresses
-# the disks: the guest's ZFS pools already compress their blocks.
+# disks because ZFS already provides CoW. Mac ships qcow2, which records the
+# unwritten space in the image itself, so the fixture stays compact even
+# through a copy that fills in APFS sparse-file holes. Neither compresses the
+# disks: the guest's ZFS pools already compress their blocks.
 case "$(uname -s)" in
 Linux)
   export PACKER_CACHE_DIR="${HOMELAB_CI_DIR}/packer_cache"
