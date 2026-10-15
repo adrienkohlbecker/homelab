@@ -964,10 +964,17 @@ def test_qemu_host_bake_defaults_to_the_ci_host_release(tmp_path: Path) -> None:
 
 
 def test_qemu_host_promotion_waits_for_ssm_to_resolve_the_new_version(tmp_path: Path) -> None:
-    result, _packer_log, _aws_log, sleep_log = _run_qemu_host_bake(tmp_path, promote=True)
+    result, _packer_log, aws_log, sleep_log = _run_qemu_host_bake(tmp_path, promote=True)
 
     assert result.returncode == 0, result.stderr
     assert "Promoted /homelab-ci/ami/qemu-host/arm/noble -> ami-1234abcd (version 7)" in result.stdout
+    # The after_script keeps a finished bake by this tag, whether or not SSM
+    # has published the promotion by then.
+    calls = aws_log.read_text().splitlines()
+    marked = calls.index(
+        "--region eu-central-1 ec2 create-tags --resources ami-1234abcd --tags Key=bake_complete,Value=true"
+    )
+    assert marked < next(i for i, call in enumerate(calls) if "ssm put-parameter" in call)
     # The rollback command must restore the same validated data type.
     assert "--data-type aws:ec2:image --value ami-promoted --overwrite" in result.stdout
     assert not sleep_log.exists()
@@ -1348,7 +1355,21 @@ def test_qemu_host_cleanup_deletes_temporaries_of_a_job_stopped_before_launch(tm
     assert "ec2 delete-security-group --region eu-central-1 --group-id sg-packer" in calls
 
 
-UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0fade\n"', "ec2 deregister-image": r'printf "[]\n"'}
+def _describe_images(*images: dict) -> str:
+    """Answer describe-images by applying the call's --query to *images*, printed as AWS CLI text output."""
+    script = (
+        "import json, sys, jmespath\n"
+        "query = sys.argv[sys.argv.index('--query') + 1]\n"
+        "print(*jmespath.search(query, {'Images': json.loads(sys.argv[1])}), sep='\\t')\n"
+    )
+    return f'{shlex.quote(sys.executable)} -c {shlex.quote(script)} {shlex.quote(json.dumps(images))} "$@"'
+
+
+JOB_TAG = {"Key": "job_id", "Value": "42"}
+UNFINISHED_AMI = {
+    "ec2 describe-images": _describe_images({"ImageId": "ami-0fade", "Tags": [JOB_TAG]}),
+    "ec2 deregister-image": r'printf "[]\n"',
+}
 
 
 def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path) -> None:
@@ -1396,6 +1417,24 @@ def test_qemu_host_cleanup_keeps_an_ami_a_pointer_promoted(tmp_path: Path) -> No
     # cover every architecture's pointer for every release.
     for facts in yaml.safe_load((REPO_ROOT / "data" / "architectures.yml").read_text()).values():
         assert facts["ci"]["ami_parameter"].startswith(f"{path}/")
+
+
+def test_qemu_host_cleanup_keeps_a_finished_bake_whose_promotion_is_not_visible_yet(tmp_path: Path) -> None:
+    # SSM publishes an accepted pointer update after PutParameter returns, so a
+    # cancel during the promotion wait reads pointers that do not name the AMI
+    # yet; the bake marks the AMI finished before submitting the update.
+    finished = {"ImageId": "ami-0fade", "Tags": [JOB_TAG, {"Key": "bake_complete", "Value": "true"}]}
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path,
+        "canceled",
+        {
+            "ec2 describe-images": _describe_images(finished),
+            "ssm get-parameters-by-path": r'printf "ami-0x86\tami-0arm\n"',
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not any("deregister-image" in call for call in calls)
 
 
 def test_qemu_host_cleanup_keeps_the_ami_when_the_pointers_are_unreadable(tmp_path: Path) -> None:

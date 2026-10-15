@@ -204,6 +204,10 @@ manifest = json.load(open(sys.argv[1]))
 print(manifest["builds"][-1]["artifact_id"].split(":")[1])
 ' "$manifest")
 echo "==> Baked ${ami}"
+# The job's after_script deregisters this job's AMIs that lack this tag. Set it
+# before promotion: SSM publishes an accepted pointer update asynchronously, so
+# a cancel during the wait can find the pointer still naming the old AMI.
+aws --region "$region" ec2 create-tags --resources "$ami" --tags Key=bake_complete,Value=true
 
 if [ "${usage_promote:-false}" = "true" ]; then
   previous=$(promoted_ami)

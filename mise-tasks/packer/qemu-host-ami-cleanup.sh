@@ -11,12 +11,12 @@ set -euo pipefail
 #
 # Packer copies the instance's tags onto the AMI, so a job stopped while the
 # AMI was being created also leaves an AMI carrying its job_id. Deregister it
-# with its snapshots, which AWS allows while both are still pending, but
-# only when CI_JOB_STATUS says the job did not succeed: a finished bake's AMI
-# carries the same tag. A job can also fail after promoting its AMI, in the
-# promotion wait or the pruning that follows, so an AMI that any release's
-# qemu-host pointer names is kept, and so is every AMI when the pointers
-# cannot be read.
+# with its snapshots, which AWS allows while both are still pending, but only
+# when CI_JOB_STATUS says the job did not succeed and the AMI lacks the
+# bake_complete tag qemu-host-ami.sh sets before promoting: a job can still
+# fail or be cancelled while SSM publishes the promotion, or in the pruning
+# that follows. An AMI that any release's qemu-host pointer names is kept too,
+# and so is every AMI when the pointers cannot be read.
 region=eu-central-1
 job_filter="Name=tag:job_id,Values=${CI_JOB_ID:?CI_JOB_ID is required}"
 
@@ -50,7 +50,7 @@ done
 if [ "${CI_JOB_STATUS:-success}" != success ]; then
   images=$(aws ec2 describe-images --region "$region" --owners self \
     --filters "$job_filter" \
-    --query 'Images[].ImageId' --output text)
+    --query "Images[?!(Tags[?Key=='bake_complete'])].ImageId" --output text)
   [ -n "$images" ] || exit 0
   promoted=$(aws ssm get-parameters-by-path --region "$region" --path /homelab-ci/ami/qemu-host --recursive \
     --query 'Parameters[].Value' --output text) || {
