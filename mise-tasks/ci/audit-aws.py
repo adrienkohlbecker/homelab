@@ -93,9 +93,7 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     tags = image_tags(image)
     # Any release's bake is recognized; audit_ami_inventory flags the ones not
     # built for CI_HOST_UBUNTU.
-    if any(tags.get(key) != value for key, value in {"role": "ci-ami", "machine": "qemu_host"}.items()):
-        return False
-    if "ubuntu" not in tags:
+    if tags.get("role") != "ci-ami" or tags.get("machine") != "qemu_host" or "ubuntu" not in tags:
         return False
     return any(
         tags.get("Name") == f"{facts['ci']['ami_name_prefix']}-{tags['ubuntu']}"
