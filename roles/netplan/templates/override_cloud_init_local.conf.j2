@@ -5,3 +5,9 @@
 # ephemeral DHCP then waits out its timeout, fails the stage, and leaves dhcpcd
 # behind. Releases without the service ignore the ordering.
 After=netplan-configure.service
+
+[Service]
+# The trigger only queues the rename events, so ordering alone can still start
+# the stage before udev processes them. A settle timeout leaves the stage to
+# run rather than fail.
+ExecStartPre=-udevadm settle --timeout=30

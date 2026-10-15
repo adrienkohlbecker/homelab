@@ -206,3 +206,30 @@
         (netplan_verify_layered.stdout | from_yaml).keys() | sort
         == (netplan.ethernets.keys() | list + ['cloudinit0']) | sort
     fail_msg: "Unexpected merged netplan ethernets: {{ netplan_verify_layered.stdout }}"
+
+# Where cloud-init is installed (minimal), boot through its local stage with
+# the drop-in: the bounded udev settle must finish before the stage runs, and
+# the stage must still succeed.
+- name: _verify cloud-init | Reboot through cloud-init's local stage
+  when: netplan_cloud_init_local.stat.exists
+  import_role:
+    name: reboot
+    tasks_from: reboot
+
+- name: _verify cloud-init | Read cloud-init's local stage
+  when: netplan_cloud_init_local.stat.exists
+  systemd:
+    name: cloud-init-local.service
+  register: netplan_verify_cloud_init_local
+
+- name: _verify cloud-init | Confirm udev settled before the local stage succeeded
+  when: netplan_cloud_init_local.stat.exists
+  vars:
+    _netplan_local: "{{ netplan_verify_cloud_init_local.status }}"
+  assert:
+    that:
+      - _netplan_local.ActiveState == 'active'
+      - _netplan_local.ExecStartPre is search('udevadm settle .* status=0[/ ]')
+    fail_msg: |-
+      cloud-init-local: ActiveState={{ _netplan_local.ActiveState }}
+      ExecStartPre={{ _netplan_local.ExecStartPre }}
