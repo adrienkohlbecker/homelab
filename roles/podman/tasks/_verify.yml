@@ -221,23 +221,15 @@
   environment:
     XDG_RUNTIME_DIR: /run/user/{{ ansible_user_uid }}
   block:
-    - name: _verify | Read the registries the rootless user sees
-      command: podman info --format json
-      register: _podman_rootless_info
-      changed_when: false
-
     # A mirror failure falls back to docker.io silently, so a bare pull would
     # pass even when the rootless user cannot authenticate to the mirror. The
     # debug log names every source podman tries ("Trying to access") and every
-    # one it gives up on ("Accessing ... failed"); require the mirror to be
-    # tried and never abandoned. Hosts without a docker.io mirror just pull.
+    # one it gives up on ("Accessing ... failed"); require the fixture's mirror
+    # to be tried and never abandoned. Fixtures without a docker.io mirror just
+    # pull.
     - name: _verify | Pull a tiny image through the configured mirror
       vars:
-        _mirror: >-
-          {{ ((((_podman_rootless_info.stdout | from_json).registries.get('docker.io')
-                 or {}).get('Mirrors') or [])
-              | map(attribute='Location') | list + [''])
-             | first }}
+        _mirror: "{{ test_registry_mirrors.get('docker.io', '') }}"
         _mirror_lines: >-
           {{ _podman_rootless_pull.stderr_lines
              | select('search', (_mirror ~ '/') | regex_escape) | list }}
