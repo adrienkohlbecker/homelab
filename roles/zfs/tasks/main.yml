@@ -81,8 +81,17 @@
   tags:
     - zfs
 
-- name: Configure ARC module policy
-  import_tasks: arc.yml
+- name: Configure ARC
+  template:
+    src: zfs.conf.j2
+    dest: /etc/modprobe.d/zfs.conf
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+    validate: modprobe --config %s --showconfig
+  register: zfs_module_conf
+  become: true
   tags:
     - zfs
 
@@ -106,16 +115,18 @@
   tags:
     - zfs
 
-# The running kernel keeps ZBM's hostid from its command line, so only the
-# boot image needs the new file.
-- name: Rebuild boot images with the hostid
+# Module options take effect only when zfs.ko loads at boot, so a new module
+# policy also requests a reboot. A userspace update refreshes the image's
+# tools, and a new hostid its embedded copy, while the running kernel keeps
+# its loaded module and ZBM's command-line hostid.
+- name: Rebuild boot images
   import_role:
     name: boot
     tasks_from: initramfs_rebuild
   vars:
     boot_initramfs_args:
-      changed: '{{ zfs_hostid.changed }}'
-      reboot: false
+      changed: '{{ zfs_module_conf.changed or zfs_apt.changed or zfs_hostid.changed }}'
+      reboot: '{{ zfs_module_conf.changed }}'
   tags:
     - zfs
 
