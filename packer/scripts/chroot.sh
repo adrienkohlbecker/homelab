@@ -21,16 +21,12 @@ set -euxo pipefail
 # Package postinsts must not start services inside the incomplete target root.
 # The script explicitly enables the units the shipped image needs after their
 # configuration is in place; remove the temporary policy when the build exits.
+# The downloads below land in /tmp, arch-chroot's private tmpfs, which takes
+# them along on exit.
 printf '#!/bin/sh\nexit 101\n' >/usr/sbin/policy-rc.d
 chmod 0755 /usr/sbin/policy-rc.d
 
-cleanup() {
-  rm -f /usr/sbin/policy-rc.d
-  if [ -n "${tmp:-}" ]; then
-    rm -rf "$tmp"
-  fi
-}
-trap cleanup EXIT
+trap 'rm -f /usr/sbin/policy-rc.d' EXIT
 trap 'exit 130' INT TERM
 
 # Set a hostname
@@ -153,7 +149,7 @@ mkdir -p /boot/efi
 
 # Put ZBM and rEFInd on the ESP and register rEFInd with the firmware.
 install_boot_loader() {
-  local disks_count zbm_url expected_sum zbm_cmdline refind_name refind_fallback_name refind_timeout idx disk
+  local disks_count zbm_url expected_sum zbm_cmdline refind_name refind_fallback_name refind_timeout tmp idx disk
   disks_count=$(wc -w <<<"$DISKS")
 
   # rEFInd's EFI binary names. The shipped image runs on the build's arch, one
@@ -211,7 +207,6 @@ install_boot_loader() {
     curl -fL --retry 3 --retry-connrefused -o /tmp/refind.deb "$REFIND_DEB_URL"
     echo "$REFIND_DEB_SHA256  /tmp/refind.deb" | sha256sum -c -
     apt-get install --yes /tmp/refind.deb
-    rm /tmp/refind.deb
   else
     apt-get install --yes refind
   fi
