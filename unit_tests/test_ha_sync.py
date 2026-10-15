@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import subprocess
+from typing import Any
 
 import pytest
 from conftest import load_repo_module
@@ -115,7 +116,7 @@ def test_host_read_tells_a_missing_file_from_a_failed_read(tmp_path, monkeypatch
     monkeypatch.setattr(sync, "HOST_DIR", str(tmp_path))
     run = subprocess.run
 
-    def local_ssh(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+    def local_ssh(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
         # Run the remote command here, without ssh and sudo.
         assert cmd[:2] == ["ssh", sync.HOST]
         return run(["sh", "-c", cmd[2].removeprefix("sudo ")], **kwargs)
@@ -480,7 +481,7 @@ def test_push_aborts_on_a_failed_host_read(synced_clone, monkeypatch: pytest.Mon
     )
     run = subprocess.run
 
-    def ssh_drops(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+    def ssh_drops(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
         if cmd[0] == "ssh":
             return subprocess.CompletedProcess(cmd, 255, b"", b"Connection reset by peer\n")
         return run(cmd, **kwargs)
