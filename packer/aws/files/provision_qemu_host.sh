@@ -96,9 +96,6 @@ sudo install -dm 0755 /opt/mise /opt/uv-cache /etc/mise /tmp/homelab-ci-build
 sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
 (
   cd /tmp/homelab-ci-build
-  # mise install runs the project postinstall hook, whose uv sync fills the
-  # environment; pointing it at the shared cache keeps that from leaving the
-  # warm-up below nothing to fetch into /opt/uv-cache.
   mise_environment=(
     MISE_DATA_DIR=/opt/mise
     UV_CACHE_DIR=/opt/uv-cache
@@ -106,7 +103,8 @@ sudo mv /tmp/mise.toml /tmp/pyproject.toml /tmp/uv.lock /tmp/homelab-ci-build/
   )
   sudo env "${mise_environment[@]}" mise trust /tmp/homelab-ci-build/mise.toml
   sudo env "${mise_environment[@]}" mise install
-  # Warm the persistent uv cache through a project-local environment. The
+  # Outside a checkout the postinstall hook skips its uv sync, so install the
+  # Python dependencies here, warming the persistent uv cache. The project-local
   # environment is build output and is removed with homelab-ci-build below;
   # concurrent jobs create their own environments from the shared cache.
   sudo env \
