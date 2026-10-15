@@ -171,18 +171,18 @@
 
 # Nightly schedule: every host snapshots at 02:00 plus a randomized offset of
 # up to 5min, which the helper pins per host so the ordering is reproducible,
-# then pulls its sources at 02:15. Snapshotting finishes within about a minute,
-# so every source has its new @bak- by then; a pull that still runs first copies
-# the previous night, which the next pull catches up. lab pulls from pug and
-# pug from lab, each pull waking the other's disks, so keeping both legs inside
-# one hd-idle spindown window (-i 1200, 20min, on their HDDs) holds each host
-# to a single spin-up a night.
+# then pulls its sources at 02:15. Snapshotting and thinning take a few
+# minutes, so every source has its new @bak- by then; a pull that still runs
+# first copies the previous night, which the next pull catches up. lab pulls
+# from pug and pug from lab, each pull waking the other's disks, so keeping both
+# legs inside one hd-idle spindown window (-i 1200, 20min, on their HDDs) holds
+# each host to a single spin-up a night.
 #
-# Snapshotting hundreds of datasets or a first pull of a large source can run
-# for hours, so both units override the helper's 1h timeout with 23h, which
-# still ends before the next fire. Both set HOME because mbuffer reads
-# ~/.mbuffer and, with no HOME (systemd oneshots inherit none), warns
-# "HOME environment variable not set" on every stream.
+# Both units override the helper's 1h timeout with 23h, which still ends before
+# the next fire: a first pull of a large source runs for hours, and so does the
+# offsite leg the snapshot unit carries once it is unpaused. Both set HOME
+# because mbuffer reads ~/.mbuffer and, with no HOME (systemd oneshots inherit
+# none), warns "HOME environment variable not set" on every stream.
 - name: Schedule the zfs_autosnapshot timer
   import_role:
     name: systemd_timer
