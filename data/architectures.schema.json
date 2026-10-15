@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fahm.fr/schemas/architectures.json",
   "title": "Per-architecture facts",
-  "description": "Schema for data/architectures.yml, consumed by the qemu harness (test/machine.py), the Packer fixture and AWS host builds, the CI image tasks, and Terraform.",
+  "description": "Schema for data/architectures.yml.",
   "type": "object",
   "minProperties": 1,
   "propertyNames": { "enum": ["x86_64", "aarch64"] },

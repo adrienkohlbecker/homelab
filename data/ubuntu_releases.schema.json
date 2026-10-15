@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fahm.fr/schemas/ubuntu_releases.json",
   "title": "Ubuntu release catalog",
-  "description": "Schema for data/ubuntu_releases.yml, consumed by the qemu harness matrix (test/matrix.py), the Packer fixture and AWS host builds, and Terraform. `default` must name a key of `releases`; JSON Schema cannot express that, so consumers fail on lookup instead.",
+  "description": "Schema for data/ubuntu_releases.yml. `default` must name a key of `releases`; JSON Schema cannot express that, so consumers fail on lookup instead.",
   "type": "object",
   "additionalProperties": false,
   "required": ["default", "releases"],
