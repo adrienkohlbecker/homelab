@@ -72,22 +72,24 @@
   assert:
     that: _kp_canaries.results | map(attribute='stdout') | list == _kp_imported_pools.stdout_lines
 
-- name: Fingerprint the shared storage
-  command: bash {{ _kp_dir }}/keep_pools_fingerprint.sh {{ _kp_new_root }} {{ keep_pools_user }}
-  register: _kp_fingerprint
-  changed_when: false
-
-- name: Read the fingerprint from before the install
-  slurp:
-    src: "{{ _kp_dir }}/fingerprint.before"
-  register: _kp_fingerprint_before
-
-- name: The shared storage reads back as before the install
-  assert:
-    that: _kp_fingerprint.stdout == (_kp_fingerprint_before.content | b64decode | trim)
-    fail_msg: |-
-      before:
-      {{ _kp_fingerprint_before.content | b64decode }}
-      now:
-      {{ _kp_fingerprint.stdout }}
+- name: Compare the shared storage with before the install
   when: _kp_compare_fingerprint | bool
+  block:
+    - name: Fingerprint the shared storage
+      command: bash {{ _kp_dir }}/keep_pools_fingerprint.sh {{ _kp_new_root }} {{ keep_pools_user }}
+      register: _kp_fingerprint
+      changed_when: false
+
+    - name: Read the fingerprint from before the install
+      slurp:
+        src: "{{ _kp_dir }}/fingerprint.before"
+      register: _kp_fingerprint_before
+
+    - name: The shared storage reads back as before the install
+      assert:
+        that: _kp_fingerprint.stdout == (_kp_fingerprint_before.content | b64decode | trim)
+        fail_msg: |-
+          before:
+          {{ _kp_fingerprint_before.content | b64decode }}
+          now:
+          {{ _kp_fingerprint.stdout }}
