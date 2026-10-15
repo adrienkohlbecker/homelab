@@ -109,8 +109,8 @@ wait_for_promotion() {
   return 1
 }
 
-# Keep the promoted image plus the newest two provenance-tagged builds. The
-# shared planner also drives ci:audit-aws, so the two paths cannot disagree.
+# Keep the promoted image plus the newest two provenance-tagged builds of this
+# release, using the per-category retention planner ci:audit-aws also runs.
 prune_old_amis() {
   local name_tag="${name_prefix}-${ubuntu}" promoted stale image_id current matches
   local -a retention_args=()
