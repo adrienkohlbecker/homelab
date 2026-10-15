@@ -3,7 +3,7 @@
 #MISE description="Download the promoted qemu image bundle from S3 into the local harness cache"
 #USAGE arg "<machine>" help="Promoted qemu image bundle: lab"
 #USAGE complete "machine" run="printf 'lab\n'"
-#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="resolute"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" required=#true
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); defaults to this host and selects the image store"
 #USAGE flag "--build-id <build_id>" help="Hydrate an immutable build directly instead of reading promoted.json"
@@ -96,8 +96,8 @@ class DigestReader(BufferedIOBase):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("machine", choices=sorted(VALID_MACHINES))
-    # No catalog lookup: the script must run outside a checkout. An unknown
-    # codename fails at the pointer read; mise supplies the default.
+    # No catalog default or choices: the script must run outside a checkout.
+    # An unknown codename fails at the pointer read.
     parser.add_argument("--ubuntu", default=os.environ.get("usage_ubuntu"), required="usage_ubuntu" not in os.environ)
     parser.add_argument(
         "--architecture",

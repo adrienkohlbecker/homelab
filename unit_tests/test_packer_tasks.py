@@ -15,6 +15,7 @@ from pathlib import Path
 import machine
 import pytest
 import yaml
+from matrix import DEFAULT_UBUNTU
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_SH = REPO_ROOT / "mise-tasks" / "packer" / "build.sh"
@@ -36,6 +37,14 @@ UBUNTU_COMPLETION_TASKS = (
     BUILD_SH,
     REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh",
     QEMU_HOST_AMI_SH,
+    PUBLISH_QEMU_SH,
+    REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
+    REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
+)
+# Fixture tasks take their release default from the catalog at runtime, so a
+# default flip cannot leave one of them on the old release.
+CATALOG_DEFAULT_TASKS = (
+    BUILD_SH,
     PUBLISH_QEMU_SH,
     REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
     REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
@@ -64,8 +73,9 @@ def _environment(tmp_path: Path, ubuntus: str) -> dict[str, str]:
     return env
 
 
-def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
-    ubuntus = ("noble", "resolute")
+@pytest.mark.parametrize("requested", [("noble", "resolute"), ()])
+def test_build_runs_once_per_ubuntu(tmp_path: Path, requested: tuple[str, ...]) -> None:
+    ubuntus = requested or (DEFAULT_UBUNTU,)
     fake_bin = tmp_path / "bin"
     log = tmp_path / "packer.log"
     cache_log = tmp_path / "cache.log"
@@ -77,7 +87,10 @@ def test_build_runs_once_per_ubuntu(tmp_path: Path) -> None:
         'printf "%s\\n" "$*" >>"$PACKER_TEST_LOG"\n'
         'printf "%s\\n" "$PACKER_CACHE_DIR" >>"$PACKER_CACHE_LOG"\n',
     )
-    env = _environment(tmp_path, " ".join(ubuntus))
+    env = _environment(tmp_path, " ".join(requested))
+    if not requested:
+        # mise leaves usage_ubuntu unset when the flag has no default.
+        del env["usage_ubuntu"]
     env.update(
         PATH=f"{fake_bin}:{env['PATH']}",
         PACKER_CACHE_LOG=str(cache_log),
@@ -857,6 +870,25 @@ def test_ubuntu_completions_use_release_catalog() -> None:
         assert "printf 'noble\\nresolute\\n'" not in content
 
     assert "noble | resolute)" not in QEMU_HOST_AMI_SH.read_text()
+
+
+def test_fixture_tasks_have_no_codename_usage_default() -> None:
+    for task in CATALOG_DEFAULT_TASKS:
+        (flag,) = (line for line in task.read_text().splitlines() if line.startswith('#USAGE flag "--ubuntu'))
+        assert "default=" not in flag, task.name
+
+
+def test_publish_qemu_defaults_to_the_catalog_release(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    log = tmp_path / "mise.log"
+    _executable(fake_bin / "mise", '#!/bin/sh\nset -eu\nprintf "%s\\n" "$*" >>"$MISE_TEST_LOG"\n')
+    env = dict(os.environ, MISE_TEST_LOG=str(log), PATH=f"{fake_bin}:{os.environ['PATH']}", usage_machine="lab")
+    env.pop("usage_ubuntu", None)
+
+    result = subprocess.run(["bash", str(PUBLISH_QEMU_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+    assert result.returncode == 0, result.stderr
+    assert f"run packer:build lab --ubuntu {DEFAULT_UBUNTU}" in log.read_text().splitlines()
 
 
 def test_python_task_usage_headers_are_visible_to_mise() -> None:
