@@ -2,8 +2,9 @@
 # rebuilt as keep_pools_to by provision.sh KEEP_POOLS=1, run from a Minimal
 # cloud image standing in for the live ISO with the Lab disks attached.
 # Phases:
-#   prepare   on the old root: a canary dataset on every pool, and a
-#             fingerprint of the shared storage and host identity
+#   prepare   on the old root: login user ids no fresh install allocates, a
+#             canary dataset on every pool, and a fingerprint of the shared
+#             storage and host identity
 #   install   in the live stand-in: the rebuild, then a rerun that must fail
 #             closed without writing to the pools; neither may touch the
 #             firmware boot entries
@@ -28,6 +29,40 @@
     - name: Prepare the old root
       when: _keep_pools_phase == 'prepare'
       block:
+        # A fresh install allocates the login user the first free ids, so
+        # only ids it would not pick show the rebuild kept them. usermod
+        # refuses while the user runs the play: renumber before logins open.
+        - name: Renumber the login user at the next boot
+          copy:
+            dest: /etc/systemd/system/kp_renumber.service
+            content: |
+              [Unit]
+              Before=systemd-user-sessions.service
+              [Service]
+              Type=oneshot
+              ExecStart=/usr/sbin/groupmod -g 2001 {{ keep_pools_user }}
+              ExecStart=/usr/sbin/usermod -u 2001 {{ keep_pools_user }}
+              ExecStart=/usr/bin/chown -R {{ keep_pools_user }}: /home/{{ keep_pools_user }}
+              [Install]
+              WantedBy=multi-user.target
+            mode: "0644"
+
+        - name: Enable the renumbering
+          systemd:
+            name: kp_renumber.service
+            enabled: true
+            daemon_reload: true
+
+        - name: Reboot to renumber the login user
+          import_role:
+            name: reboot
+            tasks_from: reboot
+
+        - name: Renumber only once
+          systemd:
+            name: kp_renumber.service
+            enabled: false
+
         - name: Create the shared test dataset
           command: zfs create -o mountpoint={{ _kp_dir }} rpool/keep_pools_test
           args:
@@ -57,6 +92,14 @@
             content: "{{ item }}\n"
             mode: "0644"
           loop: "{{ _kp_pools.stdout_lines }}"
+
+        - name: Write a file only the login user can read
+          copy:
+            dest: "{{ _kp_dir }}/login_user_file"
+            content: "{{ keep_pools_user }}\n"
+            owner: "{{ keep_pools_user }}"
+            group: "{{ keep_pools_user }}"
+            mode: "0600"
 
         - name: Record the pools every root must import
           copy:

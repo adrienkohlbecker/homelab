@@ -74,6 +74,13 @@
     that: _kp_imported_pools.stdout_lines == (_kp_expected_pools.content | b64decode).splitlines()
     fail_msg: "imported: {{ _kp_imported_pools.stdout_lines }}"
 
+# The rebuild keeps the login user's ids, which own its files on the shared
+# storage.
+- name: The login user reads its own file on the shared storage
+  become: false
+  command: cat {{ _kp_dir }}/login_user_file
+  changed_when: false
+
 - name: Read every canary
   command: cat /mnt/kp_canary_{{ item }}/canary
   register: _kp_canaries
