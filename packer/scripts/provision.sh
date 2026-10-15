@@ -124,7 +124,7 @@ EOF
 # pools themselves once the tools that read them are installed
 # (check_kept_pools).
 preflight() {
-  local disk device pool key file var extra_disks_needed=0
+  local disk device pool key file var keys=0 extra_disks_needed=0
   local -a disks extra_disks
   local -A seen_disks=()
 
@@ -148,12 +148,13 @@ preflight() {
   # SSH_KEY_PUB must parse. The Hetzner image creates no login user; cloud-init
   # does on first boot.
   if [ "$INSTALL_TARGET" != hetzner ]; then
-    [ -n "${SSH_KEY_PUB:-}" ] || fail "SSH_KEY_PUB is required"
     while IFS= read -r key; do
       if [ -n "$key" ]; then
         ssh-keygen -l -f /dev/stdin <<<"$key" >/dev/null || fail "SSH_KEY_PUB holds an unusable key: $key"
+        keys=$((keys + 1))
       fi
-    done <<<"$SSH_KEY_PUB"
+    done <<<"${SSH_KEY_PUB:-}"
+    ((keys)) || fail "SSH_KEY_PUB must hold at least one key"
   fi
 
   for file in chroot.sh "${ROLE_FILES[@]}"; do

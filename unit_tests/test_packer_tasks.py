@@ -572,6 +572,15 @@ requires_ssh_keygen = pytest.mark.skipif(shutil.which("ssh-keygen") is None, rea
 
 
 @requires_ssh_keygen
+def test_provision_preflight_accepts_a_multi_line_key_list(tmp_path: Path) -> None:
+    keys = f"{_ssh_public_key(tmp_path, 'first')}\n\n{_ssh_public_key(tmp_path, 'second')}\n"
+
+    result = _provision_preflight(tmp_path, SSH_KEY_PUB=keys)
+
+    assert result.returncode == 0, result.stderr
+
+
+@requires_ssh_keygen
 @pytest.mark.parametrize("variable", ["TARGET_HOSTNAME", "TARGET_USERNAME"])
 def test_provision_preflight_rejects_an_empty_identity_override(tmp_path: Path, variable: str) -> None:
     """An empty override must not fall back to the image placeholder: a rebuild
@@ -580,6 +589,15 @@ def test_provision_preflight_rejects_an_empty_identity_override(tmp_path: Path, 
 
     assert result.returncode == 1
     assert f"invalid {variable} ''" in result.stderr
+
+
+@requires_ssh_keygen
+@pytest.mark.parametrize("keys", ["", "\n", "\n\n"])
+def test_provision_preflight_rejects_a_key_list_without_keys(tmp_path: Path, keys: str) -> None:
+    result = _provision_preflight(tmp_path, SSH_KEY_PUB=keys)
+
+    assert result.returncode == 1
+    assert "SSH_KEY_PUB must hold at least one key" in result.stderr
 
 
 @pytest.mark.parametrize("function", ["apt_update", "write_sources_list"])
