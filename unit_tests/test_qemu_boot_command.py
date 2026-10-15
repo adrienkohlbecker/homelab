@@ -32,7 +32,6 @@ def test_default_x86_64_no_keep_no_direct_boot(
     assert cmd[2] == "660"
     assert cmd[3] == "qemu-system-x86_64"
 
-    # No implicit devices.
     assert "-nodefaults" in cmd
 
     # Drives expand to repeated --drive args.

@@ -64,7 +64,7 @@ STOP_GRACE_SECONDS = 5
 
 TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
 GUEST_JOURNAL_UNIT_PATH = Path(__file__).parent / "homelab_guest_journal.service"
-# Guest machine, NIC, cloud-image token, and UEFI pairs per architecture,
+# Guest machine, NIC, display, cloud-image token, and UEFI pairs per architecture,
 # shared with the Packer fixture build and the CI image stores.
 ARCHITECTURES = yaml.safe_load((Path(__file__).parent.parent / "data" / "architectures.yml").read_text())
 # Extra -device flags for interactive (VNC) mode. q35 brings PS/2 / ICH9 USB,

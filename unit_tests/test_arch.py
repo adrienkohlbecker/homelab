@@ -7,7 +7,7 @@ import machine
 import pytest
 
 
-def test_every_shared_architecture_has_device_sets() -> None:
+def test_every_shared_architecture_has_keep_vm_devices() -> None:
     # Packer and the CI stores accept any architecture in the data file; the
     # harness must be able to boot each one.
     assert set(machine.ARCHITECTURES) == set(machine.KEEP_VM_DEVICES)
