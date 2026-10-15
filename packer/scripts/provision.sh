@@ -565,12 +565,6 @@ create_pools() {
     PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 5)"
   done
 
-  # ZFSBootMenu boots every root with its own hostid (spl.spl_hostid), which
-  # for our host-agnostic build is upstream's default. Creating the pools under
-  # it and giving the root the same /etc/hostid keeps the labels, the running
-  # kernel, and the root's initramfs in agreement, as upstream's guides do.
-  zgenhostid -f 0x00bab10c
-
   # Stale md members on the target disks would let udev's `mdadm --incremental`
   # re-assemble an array mid-partitioning and hold a member busy. Tear those
   # arrays down before wiping.
@@ -652,18 +646,15 @@ create_pools() {
 
 # Keep-pools mode: check the pools and the old root before anything on the
 # disks changes, and stage the old root's identity in kept_identity. Every pool
-# is imported read-only, which writes nothing to the disks, and with -f: the
-# old root last imported them under a hostid the live environment lacks. Leaves
-# the pools exported, extra_pools naming the data pools, and the old root's
-# /etc/hostid as the live environment's, for the read-write import that
-# follows to record in the pool labels.
+# is imported read-only, which writes nothing to the disks. Leaves the pools
+# exported and extra_pools naming the data pools.
 check_kept_pools() {
   local available user_ids
   old_root_dir=$(mktemp -d)
   # A failed check leaves the disks as they were found.
   trap 'umount "$old_root_dir" 2>/dev/null || true; zpool export -a' EXIT
 
-  zpool import -a -N -f -o readonly=on -R /mnt -d "$POOL_DEVICE_DIR"
+  zpool import -a -N -o readonly=on -R /mnt -d "$POOL_DEVICE_DIR"
   zpool list -H rpool >/dev/null || fail "no rpool found in $POOL_DEVICE_DIR"
   extra_pools=$(zpool list -H -o name | grep -vx rpool || true)
   [ "$(zpool status -x)" = "all pools are healthy" ] || fail "a pool is unhealthy; see zpool status -x"
@@ -685,7 +676,7 @@ check_kept_pools() {
 
   # zfsutil: the old root's mountpoint is /, not legacy.
   mount -t zfs -o ro,zfsutil "$OLD_ROOT" "$old_root_dir"
-  for file in hostid machine-id fstab; do
+  for file in machine-id fstab; do
     [ -s "$old_root_dir/etc/$file" ] || fail "$OLD_ROOT has no /etc/$file"
   done
   compgen -G "$old_root_dir/etc/ssh/ssh_host_*_key" >/dev/null || fail "$OLD_ROOT has no SSH host keys"
@@ -700,11 +691,11 @@ check_kept_pools() {
   fi
 
   # The identity and storage wiring the new root takes over. The fresh path
-  # generates these instead: zgenhostid, a blank machine-id, the netplan
+  # generates these instead: a blank machine-id, the netplan
   # stanza, and create_storage's fstab and mdadm.conf.
   kept_identity=$(mktemp -d)
   mkdir -p "$kept_identity"/etc/{ssh,mdadm}
-  cp -a "$old_root_dir"/etc/{hostid,machine-id,fstab} "$kept_identity/etc/"
+  cp -a "$old_root_dir"/etc/{machine-id,fstab} "$kept_identity/etc/"
   cp -a "$old_root_dir"/etc/ssh/ssh_host_* "$kept_identity/etc/ssh/"
   if [ -d "$old_root_dir/etc/netplan" ]; then
     cp -a "$old_root_dir/etc/netplan" "$kept_identity/etc/"
@@ -716,7 +707,6 @@ check_kept_pools() {
   umount "$old_root_dir"
   zpool export -a
   trap - EXIT
-  cp "$kept_identity/etc/hostid" /etc/hostid
 }
 
 export DEBIAN_FRONTEND=noninteractive
@@ -747,7 +737,7 @@ apt_update
 
 # A pool already imported in the live environment is a mistake: a fresh
 # install would wipe its disks or collide with its name, and a rebuild imports
-# every pool itself, under the old root's hostid. Checked once the tools above
+# every pool itself, under ZFSBootMenu's hostid. Checked once the tools above
 # can list pools, before the environment's storage policy changes.
 imported_pools=$(zpool list -H -o name)
 [ -z "$imported_pools" ] ||
@@ -771,6 +761,11 @@ fi
 # mid-partition. Live environment only -- the new root gets its own mdadm.conf.
 printf 'AUTO -all\n' >/etc/mdadm/mdadm.conf
 
+# Pools are created, and kept pools imported, under the hostid ZFSBootMenu
+# boots every root with, which the new root takes too. Why that hostid:
+# roles/zfs/tasks/main.yml.
+zgenhostid -f 0x00bab10c
+
 if [ "$KEEP_POOLS" = 1 ]; then
   check_kept_pools
 else
@@ -781,10 +776,6 @@ fi
 # rpool comes back with a temporary mountpoint of /mnt. An altroot import
 # implies cachefile=none, so name the cache explicitly: the shipped zpool.cache
 # then lists rpool alongside the data pools.
-#
-# A rebuild imports unforced: the live environment now has the old root's
-# /etc/hostid, which matches the hostid ZFSBootMenu boots every root with
-# (0x00bab10c), so ZFS still refuses pools another running system holds.
 zpool import -N -R /mnt -o cachefile=/etc/zfs/zpool.cache -d "$POOL_DEVICE_DIR" rpool
 for pool in $extra_pools; do
   zpool import -N -d "$POOL_DEVICE_DIR" "$pool"
@@ -818,15 +809,15 @@ debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" "${debootstrap_script
   exit "$rc"
 }
 
+# The identity and storage wiring go in place before chroot.sh installs the
+# packages that read them: the initramfs embeds hostid and mdadm.conf.
+cp /etc/hostid /mnt/etc
 if [ "$KEEP_POOLS" = 1 ]; then
-  # The old root's identity, storage wiring, and netplan, in place before
-  # chroot.sh installs the packages that read it: the initramfs embeds hostid
-  # and mdadm.conf, openssh-server keeps existing host keys, mdadm an existing
-  # mdadm.conf, and systemd an existing machine-id.
+  # The old root's identity, storage wiring, and netplan: openssh-server keeps
+  # existing host keys, mdadm an existing mdadm.conf, and systemd an existing
+  # machine-id.
   cp -a "$kept_identity/etc" /mnt/
 else
-  # /etc/hostid must match the one ZFS saw at pool creation.
-  cp /etc/hostid /mnt/etc
   create_storage
 
   # Configure networking. Match by name glob so the same image works under any
