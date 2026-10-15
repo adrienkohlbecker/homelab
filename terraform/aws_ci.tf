@@ -7,9 +7,9 @@
 # scheduler role, and the account budget. Changing an instance type or Spot
 # policy happens here, never in test/.
 #
-# First-apply bootstrap (GitLab cutover): notes/archive/ci_aws_test_cells.md,
-# "Bootstrap". The launch templates resolve the qemu-host AMI pointers, which
-# only a qemu_host_ami bake creates.
+# A fresh account applies in one pass: the qemu-host AMI pointers start on
+# Canonical's stock image, and runner hosts launch the baked image once
+# qemu_host_ami has promoted both architectures.
 
 locals {
   ci_architectures  = yamldecode(file("${path.module}/../data/architectures.yml"))
@@ -971,11 +971,46 @@ resource "aws_key_pair" "ci_operator" {
   tags = { role = "ci" }
 }
 
+# ─── Qemu-host AMI pointers ──────────────────────────────────────────────────
+# Create-only: an ASG resolves its launch template's pointer even at zero
+# capacity, so a fresh account needs the pointer before the first bake. The
+# seed is Canonical's stock image because an aws:ec2:image value must name a
+# real AMI; `qemu-host-ami.sh --promote` owns the value from then on. Moving
+# CI_HOST_UBUNTU renames these, so import the new release's baked pointers.
+
+data "aws_ssm_parameter" "ci_canonical_ubuntu_ami" {
+  for_each = local.ci_architectures
+
+  name = "/aws/service/canonical/ubuntu/server/${local.ci_ubuntu_catalog.releases[local.ci_host_release].version}/stable/current/${each.value.guest.cloud_image_suffix}/hvm/ebs-gp3/ami-id"
+}
+
+resource "aws_ssm_parameter" "ci_qemu_host_ami" {
+  for_each = local.ci_architectures
+
+  name      = replace(each.value.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
+  type      = "String"
+  data_type = "aws:ec2:image"
+  value     = data.aws_ssm_parameter.ci_canonical_ubuntu_ami[each.key].value
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+# Adopts the pointers earlier bakes created. Drop it once applied: a fresh
+# account has nothing to import.
+import {
+  for_each = local.ci_architectures
+
+  to = aws_ssm_parameter.ci_qemu_host_ami[each.key]
+  id = replace(each.value.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
+}
+
 # ─── Launch templates: one per nested-qemu host pool ─────────────────────────
 # GitLab Runner/fleeting owns desired capacity, and the host runs shell jobs
 # that launch qemu/KVM locally. The AMI is resolved through the pool
-# architecture's SSM pointer, which qemu-host-ami.sh creates and promotes, so a
-# host bake promotion never touches terraform.
+# architecture's SSM pointer, which qemu-host-ami.sh promotes, so a host bake
+# promotion never touches terraform.
 resource "aws_launch_template" "ci_qemu" {
   for_each = local.ci_qemu_pools
 
@@ -983,7 +1018,7 @@ resource "aws_launch_template" "ci_qemu" {
   description            = "homelab CI ${each.key} qemu host"
   update_default_version = true
 
-  image_id      = "resolve:ssm:${replace(local.ci_architectures[each.value.architecture].ci.ami_parameter, "{ubuntu}", local.ci_host_release)}"
+  image_id      = "resolve:ssm:${aws_ssm_parameter.ci_qemu_host_ami[each.value.architecture].name}"
   instance_type = each.value.instance_type
 
   instance_initiated_shutdown_behavior = "terminate"
