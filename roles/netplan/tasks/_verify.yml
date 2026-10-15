@@ -84,85 +84,6 @@
   changed_when: false
   become: true
 
-# The role's wait-online drop-in must gate network-online.target on the uplink
-# even when the NIC appears after Netplan's generator ran, as it does under the
-# Resolute Dracut initrd and on cloud images. network-online.target is passive,
-# so a probe unit pulls it into the boot like production services do and
-# records the routing table when network-online dependents start.
-# Wait-online's success proves it did not time out, and on Resolute that a DNS
-# server was also usable.
-- name: _verify boot | Install a network-online probe unit
-  copy:
-    dest: /etc/systemd/system/netplan_online_probe.service
-    content: |
-      [Unit]
-      Wants=network-online.target
-      After=network-online.target
-
-      [Service]
-      Type=oneshot
-      RemainAfterExit=yes
-      ExecStart=/usr/sbin/ip -json route show default
-      StandardOutput=truncate:/run/netplan_online_probe.json
-
-      [Install]
-      WantedBy=multi-user.target
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-
-- name: _verify boot | Enable the network-online probe
-  systemd:
-    name: netplan_online_probe.service
-    enabled: true
-    daemon_reload: true
-  become: true
-
-- name: _verify boot | Reboot to exercise boot-time wait-online generation
-  import_role:
-    name: reboot
-    tasks_from: reboot
-
-# SSH readiness does not imply the probe ran: it queues behind wait-online,
-# which may still be waiting for a DNS server. The drop-in pins wait-online's
-# --timeout=120, so this 150-second bound covers a timed-out wait as well.
-- name: _verify boot | Wait for the network-online probe to finish
-  systemd:
-    name: netplan_online_probe.service
-  register: netplan_verify_probe_state
-  until: netplan_verify_probe_state.status.ActiveState in ['active', 'failed']
-  retries: 30
-  delay: 5
-  failed_when: netplan_verify_probe_state.status.ActiveState != 'active'
-
-- name: _verify boot | Read the default route seen by network-online dependents
-  slurp:
-    src: /run/netplan_online_probe.json
-  register: netplan_verify_online_probe
-  become: true
-
-- name: _verify boot | Read the wait-online outcome
-  systemd:
-    name: systemd-networkd-wait-online.service
-  register: netplan_verify_wait_online
-
-# Wait-online is a RemainAfterExit oneshot, so ActiveState active already
-# means it exited successfully.
-- name: _verify boot | Confirm network-online waited for the uplink
-  vars:
-    _netplan_probe_routes: "{{ netplan_verify_online_probe.content | b64decode | from_json }}"
-    _netplan_wait_online: "{{ netplan_verify_wait_online.status }}"
-  assert:
-    that:
-      - _netplan_wait_online.ActiveState == 'active'
-      - _netplan_probe_routes | length > 0
-    fail_msg: |-
-      network-online.target must wait for a default-route uplink.
-      Routes seen by the probe: {{ _netplan_probe_routes }}
-      wait-online: ActiveState={{ _netplan_wait_online.ActiveState }}
-      ExecStart={{ _netplan_wait_online.ExecStart }}
-
 # Where cloud-init owns networking (fox), its origin stays and the managed one
 # layers over it. Dropping the managed origin replays a cloud image's first
 # converge through the transaction.
@@ -207,29 +128,104 @@
         == (netplan.ethernets.keys() | list + ['cloudinit0']) | sort
     fail_msg: "Unexpected merged netplan ethernets: {{ netplan_verify_layered.stdout }}"
 
-# Where cloud-init is installed (minimal), boot through its local stage with
-# the drop-in: the bounded udev settle must finish before the stage runs, and
-# the stage must still succeed.
-- name: _verify cloud-init | Reboot through cloud-init's local stage
-  when: netplan_cloud_init_local.stat.exists
+
+# The role's wait-online drop-in must gate network-online.target on the uplink
+# even when the NIC appears after Netplan's generator ran, as it does under the
+# Resolute Dracut initrd and on cloud images. network-online.target is passive,
+# so a probe unit pulls it into the boot like production services do and
+# records the routing table when network-online dependents start.
+# Wait-online's success proves it did not time out, and on Resolute that a DNS
+# server was also usable.
+- name: _verify boot | Install a network-online probe unit
+  copy:
+    dest: /etc/systemd/system/netplan_online_probe.service
+    content: |
+      [Unit]
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/ip -json route show default
+      StandardOutput=truncate:/run/netplan_online_probe.json
+
+      [Install]
+      WantedBy=multi-user.target
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify boot | Enable the network-online probe
+  systemd:
+    name: netplan_online_probe.service
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: _verify boot | Reboot through wait-online generation and cloud-init
   import_role:
     name: reboot
     tasks_from: reboot
 
-- name: _verify cloud-init | Read cloud-init's local stage
-  when: netplan_cloud_init_local.stat.exists
+# SSH readiness does not imply the probe ran: it queues behind wait-online,
+# which may still be waiting for a DNS server. The drop-in pins wait-online's
+# --timeout=120, so this 150-second bound covers a timed-out wait as well.
+- name: _verify boot | Wait for the network-online probe to finish
   systemd:
-    name: cloud-init-local.service
-  register: netplan_verify_cloud_init_local
+    name: netplan_online_probe.service
+  register: netplan_verify_probe_state
+  until: netplan_verify_probe_state.status.ActiveState in ['active', 'failed']
+  retries: 30
+  delay: 5
+  failed_when: netplan_verify_probe_state.status.ActiveState != 'active'
 
-- name: _verify cloud-init | Confirm udev settled before the local stage succeeded
-  when: netplan_cloud_init_local.stat.exists
+- name: _verify boot | Read the default route seen by network-online dependents
+  slurp:
+    src: /run/netplan_online_probe.json
+  register: netplan_verify_online_probe
+  become: true
+
+- name: _verify boot | Read the wait-online outcome
+  systemd:
+    name: systemd-networkd-wait-online.service
+  register: netplan_verify_wait_online
+
+# Wait-online is a RemainAfterExit oneshot, so ActiveState active already
+# means it exited successfully.
+- name: _verify boot | Confirm network-online waited for the uplink
   vars:
-    _netplan_local: "{{ netplan_verify_cloud_init_local.status }}"
+    _netplan_probe_routes: "{{ netplan_verify_online_probe.content | b64decode | from_json }}"
+    _netplan_wait_online: "{{ netplan_verify_wait_online.status }}"
   assert:
     that:
-      - _netplan_local.ActiveState == 'active'
-      - _netplan_local.ExecStartPre is search('udevadm settle .* status=0[/ ]')
+      - _netplan_wait_online.ActiveState == 'active'
+      - _netplan_probe_routes | length > 0
     fail_msg: |-
-      cloud-init-local: ActiveState={{ _netplan_local.ActiveState }}
-      ExecStartPre={{ _netplan_local.ExecStartPre }}
+      network-online.target must wait for a default-route uplink.
+      Routes seen by the probe: {{ _netplan_probe_routes }}
+      wait-online: ActiveState={{ _netplan_wait_online.ActiveState }}
+      ExecStart={{ _netplan_wait_online.ExecStart }}
+
+# Where the layering converge found cloud-init (minimal), the reboot above also
+# ran its local stage with the drop-in: the bounded udev settle must finish
+# before the stage runs, and the stage must still succeed.
+- name: _verify cloud-init | Check the local stage after the reboot
+  when: netplan_cloud_init_local.stat.exists
+  block:
+    - name: _verify cloud-init | Read cloud-init's local stage
+      systemd:
+        name: cloud-init-local.service
+      register: netplan_verify_cloud_init_local
+
+    - name: _verify cloud-init | Confirm udev settled before the local stage succeeded
+      vars:
+        _netplan_local: "{{ netplan_verify_cloud_init_local.status }}"
+      assert:
+        that:
+          - _netplan_local.ActiveState == 'active'
+          - _netplan_local.ExecStartPre is search('udevadm settle .* status=0[/ ]')
+        fail_msg: |-
+          cloud-init-local: ActiveState={{ _netplan_local.ActiveState }}
+          ExecStartPre={{ _netplan_local.ExecStartPre }}
