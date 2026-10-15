@@ -20,8 +20,7 @@ packer {
 
 variable "ubuntu_name" {
   type        = string
-  default     = null
-  description = "Ubuntu release name; defaults to .gitlab-ci.yml's CI_HOST_UBUNTU."
+  description = "Ubuntu release codename; qemu-host-ami.sh defaults it to .gitlab-ci.yml's CI_HOST_UBUNTU."
 }
 
 variable "architecture" {
@@ -56,8 +55,7 @@ variable "qemu_host_manifest_path" {
 locals {
   versions       = yamldecode(file("${path.cwd}/group_vars/all/versions.yml"))
   ubuntu_catalog = yamldecode(file("${path.cwd}/data/ubuntu_releases.yml"))
-  ubuntu_name    = coalesce(var.ubuntu_name, yamldecode(file("${path.cwd}/.gitlab-ci.yml")).variables.CI_HOST_UBUNTU)
-  ubuntu_version = local.ubuntu_catalog.releases[local.ubuntu_name].version
+  ubuntu_version = local.ubuntu_catalog.releases[var.ubuntu_name].version
   # AMI naming is shared with qemu-host-ami.sh, the audit, and
   # Terraform's launch templates.
   architecture_data = yamldecode(file("${path.cwd}/data/architectures.yml"))[var.architecture]
@@ -92,7 +90,7 @@ locals {
 
   qemu_host_common_tags = {
     role         = "ci-ami"
-    ubuntu       = local.ubuntu_name
+    ubuntu       = var.ubuntu_name
     architecture = var.architecture
     build_id     = var.qemu_host_build_id
   }
@@ -113,7 +111,7 @@ source "amazon-ebs" "qemu_host" {
   }
   source_ami_filter {
     filters = {
-      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-${local.ubuntu_name}-${local.ubuntu_version}-${local.architecture_config.ami_architecture}-server-*"
+      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-${local.architecture_config.ami_architecture}-server-*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
@@ -134,14 +132,14 @@ source "amazon-ebs" "qemu_host" {
     delete_on_termination = true
   }
 
-  ami_name                = "${local.ci_architecture.ami_name_prefix}-${local.ubuntu_name}-{{timestamp}}"
-  ami_description         = "homelab CI nested-qemu runner host (${var.architecture}, ${local.ubuntu_name})"
+  ami_name                = "${local.ci_architecture.ami_name_prefix}-${var.ubuntu_name}-{{timestamp}}"
+  ami_description         = "homelab CI nested-qemu runner host (${var.architecture}, ${var.ubuntu_name})"
   ami_virtualization_type = "hvm"
   ena_support             = true
 
   # Keep machine explicit in each map so every artifact documents its
   # qemu_host value in place; the Hetzner image is a separate target.
-  tags            = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "${local.ci_architecture.ami_name_prefix}-${local.ubuntu_name}" })
+  tags            = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "${local.ci_architecture.ami_name_prefix}-${var.ubuntu_name}" })
   snapshot_tags   = merge(local.qemu_host_common_tags, { machine = "qemu_host" })
   run_tags        = merge(local.qemu_host_common_tags, { machine = "qemu_host", Name = "packer-homelab-ci-qemu-host", job_id = var.qemu_host_job_id })
   run_volume_tags = merge(local.qemu_host_common_tags, { machine = "qemu_host", job_id = var.qemu_host_job_id })
