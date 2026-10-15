@@ -405,7 +405,6 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
   # capacity: cloud-init's growpart module grows p5 on every boot (growpart
   # relocates the backup header), and zfs_expand_rpool.service then grows the
   # pool into it.
-  zpool set autoexpand=on rpool
   install -m 0755 "${CHROOT_FILES}/hetzner/zfs_expand_rpool.sh" /usr/local/sbin/zfs_expand_rpool
   install -m 0644 "${CHROOT_FILES}/hetzner/zfs_expand_rpool.service" /etc/systemd/system/
   systemctl enable zfs_expand_rpool.service

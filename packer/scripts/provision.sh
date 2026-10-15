@@ -567,11 +567,15 @@ create_pools() {
 
   # Create the zpool. $LAYOUT is "" (single) or "mirror"; $PARTITIONS_RPOOL
   # is the space-separated rpool partitions — both intentionally unquoted
-  # so the shell word-splits them into the zpool args.
+  # so the shell word-splits them into the zpool args. Hetzner's rpool gets
+  # the autoexpand=on that fox's zfs_pool_properties assert.
+  local autoexpand=off
+  [ "$INSTALL_TARGET" != hetzner ] || autoexpand=on
 
   # shellcheck disable=SC2086
   zpool create -f \
     -o ashift=12 \
+    -o autoexpand="$autoexpand" \
     -o autotrim=on \
     -o compatibility=openzfs-2.1-linux \
     -O casesensitivity=sensitive \
