@@ -107,29 +107,37 @@ rescue_create() {
   }
 }
 
-# First boot must finish cloud-init cleanly, and zfs_expand_rpool.service must
-# grow rpool into the partition growpart widened. The image's default user is
-# root, keyed with this run's temporary key; the snapshot presents a new host
-# key, so skip the rescue known_hosts.
+# First boot must finish cloud-init cleanly, growpart must widen rpool's
+# partition to the disk end, and zfs_expand_rpool.service must grow rpool into
+# it. The image's default user is root, keyed with this run's temporary key;
+# the snapshot presents a new host key, so skip the rescue known_hosts.
 rescue_verify_first_boot() {
-  local out pool part
+  local out pool start part disk
+  # The inverse lsblk listing prints the partition's start sector and size,
+  # then its parent disk's size; the unquoted echo joins them on one line.
   # shellcheck disable=SC2016  # the measurements run on the snapshot host
   out=$(timeout 600 ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ConnectTimeout=10 "root@$RESCUE_IP" \
-    'cloud-init status --wait --long >&2 && echo "$(zpool list -Hp -o size rpool) $(lsblk -bno SIZE /dev/disk/by-partlabel/rpool)"') || {
+    'cloud-init status --wait --long >&2 && echo $(zpool list -Hp -o size rpool) $(lsblk -bnrso START,SIZE /dev/disk/by-partlabel/rpool)') || {
     echo "first boot: cloud-init did not finish cleanly within 10 minutes" >&2
     return 1
   }
-  [[ $out =~ ^([1-9][0-9]*)\ ([1-9][0-9]*)$ ]] || {
+  [[ $out =~ ^([1-9][0-9]*)\ ([1-9][0-9]*)\ ([1-9][0-9]*)\ ([1-9][0-9]*)$ ]] || {
     echo "first boot: rpool could not be measured: $out" >&2
     return 1
   }
-  pool=${BASH_REMATCH[1]} part=${BASH_REMATCH[2]}
+  pool=${BASH_REMATCH[1]} start=${BASH_REMATCH[2]} part=${BASH_REMATCH[3]} disk=${BASH_REMATCH[4]}
   if ((pool * 100 < part * 95)); then
     echo "first boot: rpool is $pool bytes on a $part-byte partition; it did not grow" >&2
     return 1
   fi
-  echo "==> first boot verified: cloud-init done, rpool $pool bytes on $part"
+  # Only the 33-sector backup GPT follows a grown partition; allow 4 MiB for
+  # alignment.
+  if ((start * 512 + part + 4 * 1024 * 1024 < disk)); then
+    echo "first boot: rpool's partition ends $((disk - start * 512 - part)) bytes before the $disk-byte disk end; growpart did not widen it" >&2
+    return 1
+  fi
+  echo "==> first boot verified: cloud-init done, rpool $pool bytes on $part, partition reaches the $disk-byte disk end"
 }
 
 # Rebuild the temporary server from the new snapshot and require a live sshd

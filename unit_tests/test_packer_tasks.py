@@ -1060,16 +1060,23 @@ def _hetzner_first_boot(tmp_path: Path, fakes: dict[str, str]) -> subprocess.Com
     return subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30)
 
 
+# lsblk -s output for a grown rpool partition: start sector and size, then the
+# parent disk, whose end lies just past the partition's backup GPT.
+GROWN_LSBLK = "printf '2048 1000000000\\n 1001065472\\n'"
+
+
 @pytest.mark.parametrize(
     ("zpool", "lsblk", "verified"),
     [
-        ("echo 1000", "echo 1000", True),
-        ("echo 500", "echo 1000", False),
-        ("exit 1", "echo 1000", False),
-        ("echo 1000", "exit 1", False),
+        ("echo 990000000", GROWN_LSBLK, True),
+        ("echo 500000000", GROWN_LSBLK, False),
+        # The pool fills its partition, but growpart left the disk's tail unused.
+        ("echo 990000000", "printf '2048 1000000000\\n 4000000000\\n'", False),
+        ("exit 1", GROWN_LSBLK, False),
+        ("echo 990000000", "exit 1", False),
         (":", ":", False),
-        ("echo 1000", "printf '1000\\n2000\\n'", False),
-        ("echo size", "echo 1000", False),
+        ("echo 990000000", "printf '2048 1000000000\\n'", False),
+        ("echo size", GROWN_LSBLK, False),
     ],
 )
 def test_hetzner_first_boot_rejects_an_unmeasured_or_ungrown_pool(
