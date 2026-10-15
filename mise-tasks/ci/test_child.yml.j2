@@ -88,13 +88,15 @@ stages:
 {% if site_test %}
 
 # The leading stage gives the critical-path converge the first build id;
-# inherited needs:[] keeps it parallel with every cell.
-"_site_test:lab":
+# inherited needs:[] keeps it parallel with every cell. One converge per
+# release, named like a cell spec, default release first.
+{% for ubuntu in [default_ubuntu] + other_ubuntus %}
+"_site_test:lab{{ '' if ubuntu == default_ubuntu else ':' ~ ubuntu }}":
   extends: .x86_cell
   stage: site
   variables:
     VARIANT: lab
-    UBUNTU: {{ default_ubuntu }}
+    UBUNTU: {{ ubuntu }}
   timeout: 60m
   script:
     # timeout backstops the harness's own deadline; 60s permits VM teardown.
@@ -104,21 +106,7 @@ stages:
       echo "harness exit code: $rc"
       exit $rc
 
-"_site_test:lab:noble":
-  extends: .x86_cell
-  stage: site
-  variables:
-    VARIANT: lab
-    UBUNTU: noble
-  timeout: 60m
-  script:
-    # timeout backstops the harness's own deadline; 60s permits VM teardown.
-    - |
-      rc=0
-      mise exec -- timeout --kill-after=30s 3060 test/site_test.py --ubuntu "$UBUNTU" --timeout 3000 || rc=$?
-      echo "harness exit code: $rc"
-      exit $rc
-
+{% endfor %}
 # Full-site check mode covers cross-role rendering and gates.
 "_site_check:lab":
   extends: .x86_cell
@@ -137,14 +125,15 @@ stages:
 {% endif %}
 {% if keep_pools_test %}
 
-# A live-ISO rebuild with KEEP_POOLS=1: a Noble Lab fixture rebuilt as the
-# default release from a Minimal stand-in, then switched to and rolled back.
+# A live-ISO rebuild with KEEP_POOLS=1: a Lab fixture of another release
+# rebuilt as the default release from a Minimal stand-in, then switched to and
+# rolled back.
 "_keep_pools_test:lab":
   extends: .x86_cell
   stage: rebuild
   variables:
     VARIANT: lab
-    UBUNTU: noble
+    UBUNTU: {{ other_ubuntus | first }}
   timeout: 45m
   script:
     # timeout backstops the harness's own deadline; 60s permits VM teardown.

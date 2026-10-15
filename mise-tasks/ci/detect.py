@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from matrix import (
     DEFAULT_UBUNTU,
+    UBUNTU_RELEASES,
     TestCell,
     build_dispatch_matrix,
     build_test_matrix,
@@ -705,6 +706,7 @@ def render_child_pipeline(
         cell_role_arn=CELL_ROLE_ARN,
         arm_runner_tag=ARM_RUNNER_TAG,
         default_ubuntu=DEFAULT_UBUNTU,
+        other_ubuntus=[codename for codename in UBUNTU_RELEASES if codename != DEFAULT_UBUNTU],
     )
 
 
