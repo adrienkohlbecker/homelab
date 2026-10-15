@@ -113,15 +113,15 @@ rescue_create() {
 # key, so skip the rescue known_hosts.
 rescue_verify_first_boot() {
   local out pool part
-  # shellcheck disable=SC2016  # pool and part expand on the snapshot host
+  # shellcheck disable=SC2016  # the measurements run on the snapshot host
   out=$(timeout 600 ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ConnectTimeout=10 "root@$RESCUE_IP" \
-    'cloud-init status --wait --long >&2 && pool=$(zpool list -Hp -o size rpool) && part=$(lsblk -bno SIZE /dev/disk/by-partlabel/rpool) && echo "$pool $part"') || {
-    echo "first boot: cloud-init did not finish cleanly within 10 minutes or rpool could not be measured" >&2
+    'cloud-init status --wait --long >&2 && echo "$(zpool list -Hp -o size rpool) $(lsblk -bno SIZE /dev/disk/by-partlabel/rpool)"') || {
+    echo "first boot: cloud-init did not finish cleanly within 10 minutes" >&2
     return 1
   }
   [[ $out =~ ^([1-9][0-9]*)\ ([1-9][0-9]*)$ ]] || {
-    echo "first boot: unreadable rpool size probe: $out" >&2
+    echo "first boot: rpool could not be measured: $out" >&2
     return 1
   }
   pool=${BASH_REMATCH[1]} part=${BASH_REMATCH[2]}
