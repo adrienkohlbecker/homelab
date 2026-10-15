@@ -19,6 +19,23 @@ set -euo pipefail
 # and so is every AMI when the pointers cannot be read.
 region=eu-central-1
 job_filter="Name=tag:job_id,Values=${CI_JOB_ID:?CI_JOB_ID is required}"
+# What could not be removed. The rest of the cleanup still runs, then the job
+# fails naming it.
+leftovers=()
+
+# EC2 refuses a group with DependencyViolation until the terminated instance's
+# network interface is released, which can lag the termination waiter. Retry
+# that for up to two minutes; any other error fails at once.
+delete_security_group() {
+  local error
+  for _ in $(seq 1 12); do
+    error=$(aws ec2 delete-security-group --region "$region" --group-id "$1" 2>&1 >/dev/null) && return 0
+    [[ $error == *DependencyViolation* ]] || break
+    sleep 10
+  done
+  echo "$error" >&2
+  return 1
+}
 
 # shutting-down too: Packer may have been killed while terminating it.
 instances=$(aws ec2 describe-instances --region "$region" \
@@ -44,18 +61,20 @@ group_ids=$(aws ec2 describe-security-groups --region "$region" --filters "$job_
   --query 'SecurityGroups[].GroupId' --output text)
 for group in $group_ids; do
   echo "deleting security group ${group}"
-  aws ec2 delete-security-group --region "$region" --group-id "$group"
+  delete_security_group "$group" || leftovers+=("security group ${group}")
 done
 
-if [ "${CI_JOB_STATUS:-success}" != success ]; then
+clean_unfinished_amis() {
+  local images promoted image
   images=$(aws ec2 describe-images --region "$region" --owners self \
     --filters "$job_filter" \
     --query "Images[?!(Tags[?Key=='bake_complete'])].ImageId" --output text)
-  [ -n "$images" ] || exit 0
+  [ -n "$images" ] || return 0
   promoted=$(aws ssm get-parameters-by-path --region "$region" --path /homelab-ci/ami/qemu-host --recursive \
     --query 'Parameters[].Value' --output text) || {
     echo "cannot read the qemu-host AMI pointers; keeping every AMI of job ${CI_JOB_ID}" >&2
-    exit 1
+    leftovers+=("unchecked AMIs ${images}")
+    return 0
   }
   for image in $images; do
     if grep -qwF "$image" <<<"$promoted"; then
@@ -63,6 +82,14 @@ if [ "${CI_JOB_STATUS:-success}" != success ]; then
       continue
     fi
     echo "deregistering unfinished AMI ${image}"
-    "$(dirname "${BASH_SOURCE[0]}")/deregister-ami.sh" "$image" "$region"
+    "$(dirname "${BASH_SOURCE[0]}")/deregister-ami.sh" "$image" "$region" || leftovers+=("AMI ${image}")
   done
+}
+if [ "${CI_JOB_STATUS:-success}" != success ]; then
+  clean_unfinished_amis
+fi
+
+if [ "${#leftovers[@]}" -gt 0 ]; then
+  printf 'left behind by job %s: %s\n' "$CI_JOB_ID" "${leftovers[@]}" >&2
+  exit 1
 fi

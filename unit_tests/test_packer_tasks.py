@@ -1299,6 +1299,7 @@ def _run_qemu_host_cleanup(
         fake_bin / "aws",
         f'#!/bin/sh\nprintf "%s\\n" "$*" >>"$AWS_TEST_LOG"\ncase "$*" in\n{cases}esac\n',
     )
+    _executable(fake_bin / "sleep", "#!/bin/sh\n")
     env = dict(
         os.environ,
         AWS_TEST_LOG=str(aws_log),
@@ -1370,6 +1371,52 @@ UNFINISHED_AMI = {
     "ec2 describe-images": _describe_images({"ImageId": "ami-0fade", "Tags": [JOB_TAG]}),
     "ec2 deregister-image": r'printf "[]\n"',
 }
+
+
+def _security_group_in_use_until(attempt: int) -> str:
+    """Answer delete-security-group with DependencyViolation before the *attempt*-th call."""
+    return (
+        f'[ "$(grep -c delete-security-group "$AWS_TEST_LOG")" -ge {attempt} ] || '
+        '{ echo "An error occurred (DependencyViolation) when calling the DeleteSecurityGroup operation" >&2; exit 254; }'
+    )
+
+
+def test_qemu_host_cleanup_retries_a_security_group_still_in_use(tmp_path: Path) -> None:
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path, "canceled", {**PACKER_TEMPORARIES, "ec2 delete-security-group": _security_group_in_use_until(3)}
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert sum(call.startswith("ec2 delete-security-group") for call in calls) == 3
+
+
+def test_qemu_host_cleanup_finishes_the_rest_before_failing_on_a_security_group(tmp_path: Path) -> None:
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path,
+        "failed",
+        {
+            **PACKER_TEMPORARIES,
+            **UNFINISHED_AMI,
+            "ec2 delete-security-group": _security_group_in_use_until(100),
+            "ssm get-parameters-by-path": r'printf "ami-0x86\n"',
+        },
+    )
+
+    assert result.returncode == 1
+    assert "left behind by job 42: security group sg-packer" in result.stderr
+    # Bounded: the group is still in use after the retries.
+    assert sum(call.startswith("ec2 delete-security-group") for call in calls) == 12
+    assert "ec2 delete-key-pair --region eu-central-1 --key-name packer_key" in calls
+    assert any("deregister-image --image-id ami-0fade" in call for call in calls)
+
+
+def test_qemu_host_cleanup_does_not_retry_other_security_group_errors(tmp_path: Path) -> None:
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path, "canceled", {**PACKER_TEMPORARIES, "ec2 delete-security-group": "exit 254"}
+    )
+
+    assert result.returncode == 1
+    assert sum(call.startswith("ec2 delete-security-group") for call in calls) == 1
 
 
 def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path) -> None:
@@ -1444,4 +1491,5 @@ def test_qemu_host_cleanup_keeps_the_ami_when_the_pointers_are_unreadable(tmp_pa
 
     assert result.returncode != 0
     assert "keeping every AMI of job 42" in result.stderr
+    assert "left behind by job 42: unchecked AMIs ami-0fade" in result.stderr
     assert not any("deregister-image" in call for call in calls)
