@@ -44,7 +44,7 @@ while read -r id key groups; do
   done
 done <<<"$instances"
 
-if [ -n "${CI_JOB_STATUS:-}" ] && [ "$CI_JOB_STATUS" != success ]; then
+if [ "${CI_JOB_STATUS:-success}" != success ]; then
   images=$(aws ec2 describe-images --region "$region" --owners self \
     --filters "Name=tag:job_id,Values=${job_id}" \
     --query "Images[].[ImageId,join(',',BlockDeviceMappings[].Ebs.SnapshotId)]" \

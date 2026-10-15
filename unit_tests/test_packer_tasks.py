@@ -1133,26 +1133,48 @@ def test_minimal_fixture_mirrors_journal_with_the_same_unit_as_packer_fixtures()
     assert ["systemctl", "mask", "--now", "serial-getty@hvc0.service"] in user_data["runcmd"]
 
 
-def test_qemu_host_cleanup_reaps_the_jobs_build_instance_and_packer_temporaries(tmp_path: Path) -> None:
+def _run_qemu_host_cleanup(
+    tmp_path: Path, job_status: str, responses: dict[str, str] | None = None
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run the cleanup against a fake aws and return its result and aws calls.
+
+    *responses* maps a substring of the aws arguments to the shell command that
+    answers it; any other call prints nothing and succeeds.
+    """
     fake_bin = tmp_path / "bin"
     aws_log = tmp_path / "aws.log"
+    cases = "".join(f'*"{pattern}"*) {action} ;;\n' for pattern, action in (responses or {}).items())
     _executable(
         fake_bin / "aws",
-        "#!/bin/sh\n"
-        'printf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n'
-        'case "$*" in\n'
-        '*"ec2 describe-instances"*) printf "i-0abc\\tpacker_key\\tsg-packer,sg-shared\\n" ;;\n'
-        '*"--group-ids sg-packer"*) printf "packer_6acf\\n" ;;\n'
-        '*"--group-ids sg-shared"*) printf "homelab-ci-qemu-host\\n" ;;\n'
-        '*"scheduler delete-schedule"*) exit 254 ;;\n'
-        "esac\n",
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >>"$AWS_TEST_LOG"\ncase "$*" in\n{cases}esac\n',
     )
-    env = dict(os.environ, AWS_TEST_LOG=str(aws_log), CI_JOB_ID="42", PATH=f"{fake_bin}:{os.environ['PATH']}")
+    env = dict(
+        os.environ,
+        AWS_TEST_LOG=str(aws_log),
+        CI_JOB_ID="42",
+        CI_JOB_STATUS=job_status,
+        PATH=f"{fake_bin}:{os.environ['PATH']}",
+    )
 
-    result = subprocess.run(["bash", str(QEMU_HOST_AMI_CLEANUP_SH)], env=env, text=True, capture_output=True)
+    result = subprocess.run(
+        ["bash", str(QEMU_HOST_AMI_CLEANUP_SH)], cwd=REPO_ROOT, env=env, text=True, capture_output=True
+    )
+    return result, aws_log.read_text().splitlines()
+
+
+def test_qemu_host_cleanup_reaps_the_jobs_build_instance_and_packer_temporaries(tmp_path: Path) -> None:
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path,
+        "canceled",
+        {
+            "ec2 describe-instances": r'printf "i-0abc\tpacker_key\tsg-packer,sg-shared\n"',
+            "--group-ids sg-packer": r'printf "packer_6acf\n"',
+            "--group-ids sg-shared": r'printf "homelab-ci-qemu-host\n"',
+            "scheduler delete-schedule": "exit 254",
+        },
+    )
 
     assert result.returncode == 0, result.stderr
-    calls = aws_log.read_text().splitlines()
     assert "Name=tag:job_id,Values=42" in calls[0]
     order = [
         "ec2 terminate-instances --region eu-central-1 --instance-ids i-0abc",
@@ -1165,35 +1187,14 @@ def test_qemu_host_cleanup_reaps_the_jobs_build_instance_and_packer_temporaries(
     assert not any("sg-shared" in call and "delete-security-group" in call for call in calls)
 
 
-def _run_qemu_host_cleanup(tmp_path: Path, job_status: str) -> list[str]:
-    """Run the cleanup with a fake aws that reports one unfinished AMI for the job."""
-    fake_bin = tmp_path / "bin"
-    aws_log = tmp_path / "aws.log"
-    _executable(
-        fake_bin / "aws",
-        "#!/bin/sh\n"
-        'printf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n'
-        'case "$*" in\n'
-        '*"ec2 describe-images"*) printf "ami-0half\\tsnap-0half\\n" ;;\n'
-        "esac\n",
-    )
-    env = dict(
-        os.environ,
-        AWS_TEST_LOG=str(aws_log),
-        CI_JOB_ID="42",
-        CI_JOB_STATUS=job_status,
-        PATH=f"{fake_bin}:{os.environ['PATH']}",
-    )
+UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0half\tsnap-0half\n"'}
 
-    result = subprocess.run(["bash", str(QEMU_HOST_AMI_CLEANUP_SH)], env=env, text=True, capture_output=True)
+
+@pytest.mark.parametrize("job_status", ["failed", "canceled"])
+def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path, job_status: str) -> None:
+    result, calls = _run_qemu_host_cleanup(tmp_path, job_status, UNFINISHED_AMI)
 
     assert result.returncode == 0, result.stderr
-    return aws_log.read_text().splitlines()
-
-
-def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path) -> None:
-    calls = _run_qemu_host_cleanup(tmp_path, "canceled")
-
     describe = next(call for call in calls if call.startswith("ec2 describe-images"))
     assert "--owners self" in describe
     assert "Name=tag:job_id,Values=42" in describe
@@ -1201,28 +1202,9 @@ def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: P
     assert "ec2 delete-snapshot --region eu-central-1 --snapshot-id snap-0half" in calls
 
 
-def test_qemu_host_cleanup_keeps_a_finished_bakes_ami(tmp_path: Path) -> None:
-    calls = _run_qemu_host_cleanup(tmp_path, "success")
-
-    assert not any(
-        call.startswith(("ec2 describe-images", "ec2 deregister-image", "ec2 delete-snapshot")) for call in calls
-    )
-
-
 def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> None:
-    fake_bin = tmp_path / "bin"
-    aws_log = tmp_path / "aws.log"
-    _executable(fake_bin / "aws", '#!/bin/sh\nprintf "%s\\n" "$*" >>"$AWS_TEST_LOG"\n')
-    # Set explicitly: GitLab exports CI_JOB_STATUS=running to every job's script.
-    env = dict(
-        os.environ,
-        AWS_TEST_LOG=str(aws_log),
-        CI_JOB_ID="42",
-        CI_JOB_STATUS="success",
-        PATH=f"{fake_bin}:{os.environ['PATH']}",
-    )
-
-    result = subprocess.run(["bash", str(QEMU_HOST_AMI_CLEANUP_SH)], env=env, text=True, capture_output=True)
+    # A finished bake leaves no instance, and its AMI carries the job's tag.
+    result, calls = _run_qemu_host_cleanup(tmp_path, "success", UNFINISHED_AMI)
 
     assert result.returncode == 0, result.stderr
-    assert [call.split()[1] for call in aws_log.read_text().splitlines()] == ["describe-instances"]
+    assert [call.split()[1] for call in calls] == ["describe-instances"]
