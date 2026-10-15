@@ -90,6 +90,23 @@ def test_preserves_ha_owned_bookkeeping_and_subentry_ids() -> None:
     assert entry["subentries"][0]["subentry_id"] == "ha-minted-id"
 
 
+def test_raises_a_short_timeout_keeping_entry_and_subentry_ids() -> None:
+    registry = _registry()
+    sce.reconcile(registry, sce.build_entry(_args(), "hunter2"))
+    entry = registry["data"]["entries"][0]
+    entry["entry_id"] = "ha-entry-id"
+    entry["options"] = {"timeout": 5}
+    entry["subentries"][0]["subentry_id"] = "ha-minted-id"
+
+    assert sce.reconcile(registry, sce.build_entry(_args(), "hunter2")) is True
+
+    entry = registry["data"]["entries"][0]
+    assert entry["options"] == {"timeout": 60}
+    assert entry["entry_id"] == "ha-entry-id"
+    assert entry["subentries"][0]["subentry_id"] == "ha-minted-id"
+    assert sce.reconcile(registry, sce.build_entry(_args(), "hunter2")) is False
+
+
 def test_adopts_a_yaml_imported_entry_without_rewriting_it() -> None:
     registry = _registry()
     sce.reconcile(registry, sce.build_entry(_args(), "hunter2"))
