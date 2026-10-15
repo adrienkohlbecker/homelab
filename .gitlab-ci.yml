@@ -139,12 +139,12 @@ unit_tests:
 
 # Manually publish Dockerfile per release and architecture as
 # ci:<sha>-<release>-<arch>; only master also moves ci:latest-<release>-<arch>.
-# The build defaults to CI_HOST_UBUNTU, and CI_IMAGE_UBUNTU builds another
-# release ahead of switching ci_host, as QEMU_HOST_UBUNTU does for the
-# runner-host AMI. Hosted dind cannot reach Nexus, so the build uses upstream
-# apt. An optional no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit
-# secret. Each architecture builds natively on its own hosted runner; the arm
-# image lets hosted arm jobs (zbm_build) use the same toolchain.
+# The build defaults to CI_HOST_UBUNTU; NEXT_UBUNTU builds the next release
+# ahead of switching it, as it does for the runner-host AMI. Hosted dind cannot
+# reach Nexus, so the build uses upstream apt. An optional no-scope
+# MISE_GITHUB_TOKEN is mounted only as a BuildKit secret. Each architecture
+# builds natively on its own hosted runner; the arm image lets hosted arm jobs
+# (zbm_build) use the same toolchain.
 ci_image:
   stage: prepare
   extends: .manual_job
@@ -168,7 +168,7 @@ ci_image:
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
   script:
-    - release="${CI_IMAGE_UBUNTU:-$CI_HOST_UBUNTU}"
+    - release="${NEXT_UBUNTU:-$CI_HOST_UBUNTU}"
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     # A missing cache is expected on a release's first build.
     - docker pull "$CI_REGISTRY_IMAGE/ci:latest-$release-$HOSTED_ARCH" || true
@@ -209,9 +209,9 @@ qemu_host_ami:
   script:
     - mise run packer:init
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"
-    # The bake defaults to CI_HOST_UBUNTU. QEMU_HOST_UBUNTU bakes and promotes
-    # another release's pointer ahead of switching it.
-    - mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" ${QEMU_HOST_UBUNTU:+--ubuntu "$QEMU_HOST_UBUNTU"} --promote
+    # The bake defaults to CI_HOST_UBUNTU. NEXT_UBUNTU bakes and promotes the
+    # next release's pointer ahead of switching CI_HOST_UBUNTU.
+    - mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" ${NEXT_UBUNTU:+--ubuntu "$NEXT_UBUNTU"} --promote
   # A cancel or timeout kills Packer before its own cleanup.
   after_script:
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-cleanup-$CI_JOB_ID" --region "$AWS_REGION"

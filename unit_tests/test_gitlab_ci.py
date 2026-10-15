@@ -59,7 +59,7 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     assert job["script"][-2:] == [
         'source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"',
         'mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" '
-        '${QEMU_HOST_UBUNTU:+--ubuntu "$QEMU_HOST_UBUNTU"} --promote',
+        '${NEXT_UBUNTU:+--ubuntu "$NEXT_UBUNTU"} --promote',
     ]
 
 
@@ -67,7 +67,7 @@ def test_ci_image_builds_and_tags_one_release() -> None:
     script = PIPELINE["ci_image"]["script"]
     build = next(line for line in script if line.startswith("docker build"))
 
-    assert script[0] == 'release="${CI_IMAGE_UBUNTU:-$CI_HOST_UBUNTU}"'
+    assert script[0] == 'release="${NEXT_UBUNTU:-$CI_HOST_UBUNTU}"'
     assert '--build-arg UBUNTU_RELEASE="$release"' in build
     assert '--tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release-$HOSTED_ARCH"' in build
     assert "FROM ubuntu:${UBUNTU_RELEASE}\n" in (ROOT / "Dockerfile").read_text()
