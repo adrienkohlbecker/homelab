@@ -1,8 +1,9 @@
-# Every postfix start syncs /etc/resolv.conf into the queue directory for
-# chrooted services, keeping the source's owner, then warns when that copy is
-# not owned by root. Resolute's stub resolv.conf belongs to systemd-resolve.
-# The sync skips a copy whose size and mtime already match the source, so
-# seeding a root-owned one first leaves it in place.
+# On Resolute, every postfix start syncs /etc/resolv.conf into the queue
+# directory for chrooted services, keeping the source's owner, then warns when
+# that copy is not owned by root; the stub resolv.conf belongs to
+# systemd-resolve. The sync skips a copy whose size and mtime already match the
+# source, so seeding a root-owned one first leaves it in place. Noble's
+# instance setup copies the file as root, so the seed changes nothing there.
 #
 # WantedBy and PartOf rerun the seed ahead of every postfix start and restart.
 [Unit]
