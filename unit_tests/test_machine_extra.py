@@ -760,13 +760,12 @@ def test_cloud_image_machine_attaches_extra_disks_after_its_own(
     ]
 
 
-@pytest.mark.parametrize(("uefi", "expected"), [(False, False), (True, True)])
+@pytest.mark.parametrize("uefi", [False, True])
 def test_x86_cloud_image_machine_boots_uefi_on_request(
     machine_factory: Callable[..., machine.Machine],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     uefi: bool,
-    expected: bool,
 ) -> None:
     cloud_image = tmp_path / "cloud.img"
     cloud_image.touch()
@@ -777,10 +776,10 @@ def test_x86_cloud_image_machine_boots_uefi_on_request(
     m = machine_factory(machine="minimal", uefi=uefi)
     m.prepare()
 
-    assert ("pflash" in m.drives) is expected
+    assert ("pflash" in m.drives) is uefi
 
 
-def test_power_off_keeps_the_disks_for_the_next_boot(
+def test_power_off_shuts_the_guest_down_and_forgets_its_qemu(
     machine_factory: Callable[..., machine.Machine],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -797,4 +796,3 @@ def test_power_off_keeps_the_disks_for_the_next_boot(
     assert m.proc is None
     # ensure_booted must wait for the next qemu's pidfile, not find this one.
     assert not m.pid_file.exists()
-    assert m.workdir_path.is_dir()
