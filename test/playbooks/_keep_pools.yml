@@ -123,8 +123,9 @@
           changed_when: true
 
         # Every write to a pool, the new root included, commits a new
-        # uberblock. zdb reads them off the exported pools without importing.
-        # The switch phase compares the rest of the shared storage.
+        # uberblock. zdb reads them off the exported pools without importing;
+        # a pool left imported drops out of the list. The switch phase
+        # compares the rest of the shared storage.
         - name: Fingerprint the pools the install left
           shell: &kp_pools_fingerprint |
             set -euo pipefail
@@ -170,21 +171,15 @@
               after:
               {{ _kp_boot_variables_after.stdout }}
 
-        - name: List the pools the rerun left imported
-          command: zpool list -H -o name
-          register: _kp_rerun_pools
-          changed_when: false
-
-        - name: The rerun refused before writing and left the pools exported
+        - name: The rerun refused without writing to the pools
           assert:
             that:
               - _kp_rerun.rc != 0
               - "'already exists' in _kp_rerun.stderr"
-              - _kp_rerun_pools.stdout == ''
               - _kp_rerun_fingerprint.rc == 0
               - _kp_rerun_fingerprint.stdout == _kp_installed_pools.stdout
             fail_msg: |-
-              rc={{ _kp_rerun.rc }}: {{ _kp_rerun.stderr_lines[-5:] }}; imported: {{ _kp_rerun_pools.stdout }}
+              rc={{ _kp_rerun.rc }}: {{ _kp_rerun.stderr_lines[-5:] }}
               after the install:
               {{ _kp_installed_pools.stdout }}
               after the rerun:
