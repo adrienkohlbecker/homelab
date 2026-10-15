@@ -1,0 +1,4 @@
+# Noble: the packaged master.cf runs smtp and relay chrooted, so delivery
+# depends on the chroot copies postfix syncs at start.
+ubuntu:
+  - noble

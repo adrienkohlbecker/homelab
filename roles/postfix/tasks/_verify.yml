@@ -1,6 +1,6 @@
-# The qemu fixture has no usable relay credentials, so verify the local wiring:
-# parsing, effective parameters, maps, aliases, listener state, and sender
-# qualification through a locally injected message.
+# The qemu fixture has no usable relay credentials, so verify the local wiring
+# (parsing, effective parameters, maps, aliases, listener state), then point
+# the relay at a local receiver and deliver a locally injected message to it.
 - name: _verify | Plain SMTP disables TLS
   vars:
     smtp_port: 25
@@ -59,15 +59,6 @@
   changed_when: false
   become: true
 
-# qmgr logs the qualified sender when the message enters the active queue, so
-# this exercise does not depend on the intentionally unavailable relay.
-- name: _verify | Inject a local root-origin probe through BSD mailx
-  command: mail -s "postfix _verify sender-qualification probe" root
-  args:
-    stdin: "probe\n"
-  changed_when: false
-  become: true
-
 - name: _verify | No SMTP listener is exposed
   command: ss -H -ltn sport = :25
   register: _postfix_smtp_listener
@@ -77,11 +68,74 @@
   changed_when: false
   become: true
 
-- name: _verify | Probe's envelope sender was qualified with the host name
-  command: journalctl -t postfix/qmgr --no-pager
-  register: _postfix_qmgr
-  until: ('from=<root@' ~ inventory_hostname ~ '>') in _postfix_qmgr.stdout
-  retries: 10
-  delay: 1
+- name: _verify | Install the local SMTP receiver
+  apt:
+    pkg: python3-aiosmtpd
+    cache_valid_time: 3600
+  become: true
+
+# Logs each envelope it accepts. The greeting name differs from myhostname, or
+# Postfix would refuse the delivery as looping back to itself.
+- name: _verify | Start the local SMTP receiver
+  command:
+    argv:
+      - systemd-run
+      - --unit=postfix_verify_receiver
+      - python3
+      - -c
+      - |
+        import threading
+
+        from aiosmtpd.controller import Controller
+
+
+        class Handler:
+            async def handle_DATA(self, server, session, envelope):
+                print(f"from=<{envelope.mail_from}> to=<{','.join(envelope.rcpt_tos)}>", flush=True)
+                return "250 OK"
+
+
+        Controller(Handler(), hostname="127.0.0.1", port=2525, server_hostname="receiver.invalid").start()
+        threading.Event().wait()
+  changed_when: false
+  become: true
+
+# A bracketed name skips the MX lookup but still resolves through DNS, which a
+# chrooted smtp (Noble's packaged master.cf) reads from the queue directory's
+# resolv.conf copy. Without relay credentials for this nexthop, no TLS and no
+# AUTH are attempted.
+- name: _verify | Point the relay at the local receiver
+  command:
+    argv:
+      - postconf
+      - -e
+      - relayhost = [localhost]:2525
+      - smtp_tls_security_level = none
+      - smtp_tls_wrappermode = no
+  changed_when: false
+  become: true
+
+- name: _verify | Reload Postfix with the local relay
+  command: postfix reload
+  changed_when: false
+  become: true
+
+- name: _verify | Inject a local root-origin probe through BSD mailx
+  command: mail -s "postfix _verify delivery probe" root
+  args:
+    stdin: "probe\n"
+  changed_when: false
+  become: true
+
+# The generic map rewrites only a host-qualified sender, so receiving the public
+# identity proves qualification, rewriting, aliasing, and relay delivery.
+- name: _verify | Receiver got the probe from the rewritten sender for the aliased recipient
+  command: journalctl -u postfix_verify_receiver --output=cat --no-pager
+  register: _postfix_receiver
+  until: >-
+    ('from=<' ~ inventory_hostname ~ '@' ~ email_domain ~ '> to=<' ~ root_email ~ '>')
+    in _postfix_receiver.stdout
+  retries: 15
+  delay: 2
   changed_when: false
   become: true

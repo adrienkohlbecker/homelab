@@ -71,25 +71,21 @@
         label: "{{ item.name }}"
       register: postfix_cfg
 
-    # Every start copies resolv.conf and friends into the queue directory for
-    # chrooted daemons, keeping each source's owner. No master.cf service runs
-    # chrooted, and Resolute's stub resolv.conf belongs to systemd-resolve, so
-    # each start warned "not owned by root". An empty SYNC_CHROOT skips the copy.
-    - name: Skip the chroot file sync
-      copy:
-        dest: /etc/default/postfix
-        content: |
-          SYNC_CHROOT=""
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-        validate: sh -n %s
-
-    - name: Remove the unused chroot file copies
+    # Nothing ships /etc/default/postfix; an empty SYNC_CHROOT there would skip
+    # the start-time chroot sync that Noble's chrooted smtp and relay need.
+    - name: Remove local Postfix start defaults
       file:
-        path: /var/spool/postfix/etc
+        path: /etc/default/postfix
         state: absent
+      register: postfix_default
+
+    - name: Seed a root-owned resolv.conf for the Postfix chroot
+      import_role:
+        name: systemd_unit
+        tasks_from: unit
+      vars:
+        systemd_unit_args:
+          src: postfix_chroot_resolv.service
 
     - name: Enable postfix
       systemd:
@@ -97,5 +93,5 @@
         enabled: true
         state: >-
           {{ 'restarted'
-             if postfix_cfg.changed or postfix_apt.changed
+             if postfix_cfg.changed or postfix_apt.changed or postfix_default.changed
              else 'started' }}
