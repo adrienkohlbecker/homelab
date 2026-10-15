@@ -34,26 +34,13 @@ QEMU_CHROOT_SH = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
 KEEP_POOLS_PLAYBOOK = REPO_ROOT / "test" / "playbooks" / "_keep_pools.yml"
 UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
-UBUNTU_COMPLETION_TASKS = (
-    BUILD_SH,
-    REPO_ROOT / "mise-tasks" / "packer" / "hetzner.sh",
-    QEMU_HOST_AMI_SH,
-    PUBLISH_QEMU_SH,
-    REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
-    REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
-)
-# Fixture tasks take their release default from the catalog at runtime, so a
-# default flip cannot leave one of them on the old release.
-CATALOG_DEFAULT_TASKS = (
-    BUILD_SH,
-    PUBLISH_QEMU_SH,
-    REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
-    REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
-)
-PYTHON_USAGE_TASKS = (
-    REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py",
-    REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py",
-)
+UPLOAD_S3_PY = REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"
+PYTHON_USAGE_TASKS = (UPLOAD_S3_PY, REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py")
+UBUNTU_COMPLETION_TASKS = (BUILD_SH, HETZNER_SH, QEMU_HOST_AMI_SH, PUBLISH_QEMU_SH, *PYTHON_USAGE_TASKS)
+# No fixture task pins a codename as its USAGE release default, so a default
+# flip cannot leave one on the old release: build, publish and upload resolve
+# the catalog default at runtime, and hydration requires an explicit release.
+NO_USAGE_RELEASE_DEFAULT_TASKS = (BUILD_SH, PUBLISH_QEMU_SH, *PYTHON_USAGE_TASKS)
 
 
 def _executable(path: Path, content: str) -> None:
@@ -434,7 +421,7 @@ def _upload_fixture(tmp_path: Path, tar_tail: str = "") -> tuple[list[str], dict
         AWS_CALL_LOG=str(aws_calls),
     )
     argv = [
-        str(REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"),
+        str(UPLOAD_S3_PY),
         "lab",
         "--ubuntu",
         "noble",
@@ -499,7 +486,7 @@ def test_upload_qemu_preflight_rejects_foreign_architecture_without_touching_s3(
 
     result = subprocess.run(
         [
-            str(REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"),
+            str(UPLOAD_S3_PY),
             "lab",
             "--architecture",
             foreign,
@@ -956,7 +943,7 @@ def test_ubuntu_completions_use_release_catalog() -> None:
 
 
 def test_fixture_tasks_have_no_codename_usage_default() -> None:
-    for task in CATALOG_DEFAULT_TASKS:
+    for task in NO_USAGE_RELEASE_DEFAULT_TASKS:
         (flag,) = (line for line in task.read_text().splitlines() if line.startswith('#USAGE flag "--ubuntu'))
         assert "default=" not in flag, task.name
 
