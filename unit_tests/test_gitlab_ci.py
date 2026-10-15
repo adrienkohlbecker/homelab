@@ -5,7 +5,6 @@ from conftest import load_repo_module
 
 ROOT = Path(__file__).parents[1]
 PIPELINE = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
-UBUNTU_RELEASES = yaml.safe_load((ROOT / "data/ubuntu_releases.yml").read_text())["releases"]
 IMAGE_STORE = load_repo_module("mise-tasks/ci/qemu_image_store.py")
 
 
@@ -63,14 +62,19 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     ]
 
 
-def test_ci_image_builds_and_tags_one_release() -> None:
-    script = PIPELINE["ci_image"]["script"]
-    build = next(line for line in script if line.startswith("docker build"))
+def test_hosted_jobs_pull_a_tag_ci_image_publishes() -> None:
+    ci_image = PIPELINE["ci_image"]
+    zbm_build = PIPELINE["zbm_build"]
+    # Without NEXT_UBUNTU, ci_image publishes the CI_HOST_UBUNTU image.
+    assert ci_image["script"][0] == 'release="${NEXT_UBUNTU:-$CI_HOST_UBUNTU}"'
+    script = "\n".join(ci_image["script"]).replace("$release", "$CI_HOST_UBUNTU")
+    published = [script.replace("$HOSTED_ARCH", entry["HOSTED_ARCH"]) for entry in ci_image["parallel"]["matrix"]]
+    pulled = [PIPELINE[".hosted"]["image"]] + [
+        zbm_build["image"].replace("$HOSTED_ARCH", entry["HOSTED_ARCH"]) for entry in zbm_build["parallel"]["matrix"]
+    ]
 
-    assert script[0] == 'release="${NEXT_UBUNTU:-$CI_HOST_UBUNTU}"'
-    assert '--build-arg UBUNTU_RELEASE="$release"' in build
-    assert '--tag "$CI_REGISTRY_IMAGE/ci:$CI_COMMIT_SHA-$release-$HOSTED_ARCH"' in build
-    assert "FROM ubuntu:${UBUNTU_RELEASE}\n" in (ROOT / "Dockerfile").read_text()
+    for image in pulled:
+        assert any(f'docker push "{image}"' in pushes for pushes in published), image
 
 
 def test_fox_image_builds_and_labels_one_release() -> None:
@@ -78,7 +82,7 @@ def test_fox_image_builds_and_labels_one_release() -> None:
 
     # packer:hetzner labels and prunes snapshots by its own --ubuntu, so an
     # omitted flag would publish another release's build under its default.
-    assert job["variables"]["FOX_UBUNTU"] in UBUNTU_RELEASES
+    assert job["variables"]["FOX_UBUNTU"] in yaml.safe_load((ROOT / "data/ubuntu_releases.yml").read_text())["releases"]
     assert job["script"][-2:] == [
         'mise run packer:build hetzner --ubuntu "$FOX_UBUNTU"',
         'mise run packer:hetzner --ubuntu "$FOX_UBUNTU"',
