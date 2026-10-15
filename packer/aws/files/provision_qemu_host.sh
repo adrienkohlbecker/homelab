@@ -26,7 +26,6 @@ read -r -a qemu_packages <<<"$QEMU_PACKAGES"
 
 sudo install -dm 755 /etc/apt/keyrings
 sudo apt-get update -qq
-
 (
   # mdadm's postinst starts its monitoring timers. Keep the image build quiet;
   # systemd will activate the enabled timers normally when an instance boots.
