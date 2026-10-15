@@ -3,7 +3,7 @@
 #MISE interactive=true
 #USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename (default: .gitlab-ci.yml's CI_HOST_UBUNTU)"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
-#USAGE flag "--architecture <architecture>" help="Target architecture (x86_64 or aarch64); selects the region from data/architectures.yml" default="x86_64"
+#USAGE flag "--architecture <architecture>" help="Target architecture (x86_64 or aarch64); selects the AMI name and pointer from data/architectures.yml" default="x86_64"
 #USAGE flag "--promote" help="After a successful bake, update the architecture-specific qemu-host AMI pointer"
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
