@@ -63,7 +63,7 @@
   shell: |
     set -euo pipefail
     printf '%08x\n' "$(cat /sys/module/spl/parameters/spl_hostid)"
-    od -An -tx4 /etc/hostid | tr -d ' '
+    hostid
     device=$(zpool list -HvPL rpool | awk '$1 ~ "^/dev/" && !seen { print $1; seen = 1 }')
     zdb -l "$device" | awk '$1 == "hostid:" && !seen { printf "%08x\n", $2; seen = 1 }'
   args:
