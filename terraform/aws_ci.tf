@@ -860,17 +860,10 @@ resource "aws_iam_role_policy" "ci_bake" {
           }
         }
       },
-      # Candidate write + current promotion of the nested-qemu host AMI
-      # parameter — the last SSM-based pointer a bake promotes. The qemu base
-      # images themselves ride S3: the bundle and its promoted.json pointer
-      # object are both plain s3:PutObject (WriteQemuImages below).
       {
         Sid    = "PromoteAmi"
         Effect = "Allow"
-        Action = [
-          "ssm:PutParameter", "ssm:GetParameter",
-          "ssm:DescribeParameters", "ssm:AddTagsToResource",
-        ]
+        Action = ["ssm:PutParameter", "ssm:GetParameter"]
         # Any catalog release, so the next release's AMI exists before
         # CI_HOST_UBUNTU moves the launch templates onto it.
         Resource = [
