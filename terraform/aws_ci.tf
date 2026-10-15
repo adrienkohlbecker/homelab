@@ -1071,17 +1071,13 @@ resource "aws_launch_template" "ci_qemu" {
   vpc_security_group_ids = [aws_security_group.ci_qemu_host.id]
   key_name               = aws_key_pair.ci_operator.key_name
 
-  dynamic "tag_specifications" {
-    for_each = toset(["instance", "volume"])
-    iterator = tag_spec
-
-    content {
-      resource_type = tag_spec.value
-      tags = {
-        architecture = each.value.architecture
-        role         = "ci-qemu-host"
-        pool         = each.value.name
-      }
+  # Instances take their tags from the ASG, which propagates them at launch.
+  tag_specifications {
+    resource_type = "volume"
+    tags = {
+      architecture = each.value.architecture
+      role         = "ci-qemu-host"
+      pool         = each.value.name
     }
   }
 
