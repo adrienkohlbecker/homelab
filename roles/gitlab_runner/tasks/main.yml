@@ -88,6 +88,7 @@
               region = eu-central-1
             validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
           become: true
+          register: gitlab_runner_aws_config
 
         - name: Render gitlab_runner AWS credentials
           copy:
@@ -102,6 +103,7 @@
               aws_secret_access_key = {{ gitlab_runner_aws_qemu_secret_access_key }}
             validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' %s
           become: true
+          register: gitlab_runner_aws_credentials
 
     - name: Render Fleeting static SSH keys
       when: gitlab_runner_aws_pools | selectattr('ssh_key', 'defined') | list | length > 0
@@ -154,8 +156,9 @@
           name: gitlab_runner
 
     # Runner notices config changes, but an existing autoscaler's connector
-    # keeps the settings and private key loaded when its taskscaler started.
-    # Restart to apply either one.
+    # keeps the settings and private key loaded when its taskscaler started,
+    # and the AWS plugin keeps the region and credentials it read at startup.
+    # Restart to apply any of them.
     - name: Manage gitlab_runner.service
       import_role:
         name: systemd_unit
@@ -167,4 +170,6 @@
             {{ gitlab_runner_binary.changed
                or gitlab_runner_fleeting_aws_binary.changed
                or (gitlab_runner_config.changed | default(false))
+               or (gitlab_runner_aws_config.changed | default(false))
+               or (gitlab_runner_aws_credentials.changed | default(false))
                or (gitlab_runner_aws_ssh_keys.changed | default(false)) }}
