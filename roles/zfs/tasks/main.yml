@@ -282,13 +282,13 @@
   tags:
     - zfs
 
-# Own the pool-level properties the install set at creation (autotrim=on on the
-# SSD-backed pools; autoexpand=on on a grow-on-first-boot Hetzner rpool) so an
-# ansible-from-stock-Ubuntu host owns them rather than inheriting them from the
-# bootstrap scripts. Read-then-set via `zpool get`/`set` rather than
-# community.general.zpool: that module can create AND destroy pools -- too sharp
-# an edge to point at the prod pools holding every household dataset. `zpool
-# set` can only change a property (it cannot lose a pool).
+# Own the pool-level properties (autotrim=on on the SSD-backed pools, which the
+# install also sets at creation; autoexpand=on on a grow-on-first-boot Hetzner
+# rpool) so an ansible-from-stock-Ubuntu host owns them rather than inheriting
+# them from the bootstrap scripts. Read-then-set via `zpool get`/`set` rather
+# than community.general.zpool: that module can create AND destroy pools -- too
+# sharp an edge to point at the prod pools holding every household dataset.
+# `zpool set` can only change a property (it cannot lose a pool).
 #
 # The root dataset's autobackup:bak rides the same loop: a root restored via
 # `zfs recv` can keep autobackup:bak=true with source=received, which

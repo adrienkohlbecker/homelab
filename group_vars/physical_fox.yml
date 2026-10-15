@@ -42,9 +42,9 @@ ubuntu_mirror_security: https://mirror.hetzner.com/ubuntu/security/
 
 zfs_arc_min: 0
 zfs_arc_max: 536870912
-# rpool carries autoexpand=on + autotrim=on from its creation in provision.sh;
-# both are set live, the zfs role asserts them. zfs_expand_rpool.service, not
-# autoexpand, grows the pool into growpart's widened partition on boot.
+# The zfs role sets both on rpool: autotrim=on, which provision.sh also sets at
+# creation, and autoexpand=on. zfs_expand_rpool.service, not autoexpand, grows
+# the pool into growpart's widened partition on boot.
 zfs_pool_properties:
   - { pool: rpool, name: autotrim, value: "on" }
   - { pool: rpool, name: autoexpand, value: "on" }
