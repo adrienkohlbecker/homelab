@@ -60,12 +60,12 @@ locals {
   # Terraform's launch templates.
   architecture_data = yamldecode(file("${path.cwd}/data/architectures.yml"))[var.architecture]
   ci_architecture   = local.architecture_data.ci
-  # The image smoke test boots the harness's guest machine type and firmware.
+  # Canonical's AMI names use the cloud-image architecture token, and the
+  # image smoke test boots the harness's guest machine type and firmware.
   guest_architecture = local.architecture_data.guest
 
   architecture_table = {
     x86_64 = {
-      ami_architecture   = "amd64"
       builder_instance   = "c6a.xlarge"
       qemu_packages      = "qemu-system-x86 ovmf"
       qemu_system_binary = "qemu-system-x86_64"
@@ -74,7 +74,6 @@ locals {
       smoke_cpu          = "max"
     }
     aarch64 = {
-      ami_architecture   = "arm64"
       builder_instance   = "c7g.xlarge"
       qemu_packages      = "qemu-system-arm qemu-efi-aarch64"
       qemu_system_binary = "qemu-system-aarch64"
@@ -111,7 +110,7 @@ source "amazon-ebs" "qemu_host" {
   }
   source_ami_filter {
     filters = {
-      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-${local.architecture_config.ami_architecture}-server-*"
+      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-${var.ubuntu_name}-${local.ubuntu_version}-${local.guest_architecture.cloud_image_suffix}-server-*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
