@@ -1162,20 +1162,29 @@ def _run_qemu_host_cleanup(
     return result, aws_log.read_text().splitlines()
 
 
+PACKER_TEMPORARIES = {
+    "ec2 describe-key-pairs": r'printf "packer_key\n"',
+    "ec2 describe-security-groups": r'printf "sg-packer\n"',
+}
+
+
 def test_qemu_host_cleanup_reaps_the_jobs_build_instance_and_packer_temporaries(tmp_path: Path) -> None:
     result, calls = _run_qemu_host_cleanup(
         tmp_path,
         "canceled",
         {
-            "ec2 describe-instances": r'printf "i-0abc\tpacker_key\tsg-packer,sg-shared\n"',
-            "--group-ids sg-packer": r'printf "packer_6acf\n"',
-            "--group-ids sg-shared": r'printf "homelab-ci-qemu-host\n"',
+            "ec2 describe-instances": r'printf "i-0abc\n"',
             "scheduler delete-schedule": "exit 254",
+            **PACKER_TEMPORARIES,
         },
     )
 
     assert result.returncode == 0, result.stderr
-    assert "Name=tag:job_id,Values=42" in calls[0]
+    describes = [call for call in calls if call.startswith("ec2 describe-")]
+    assert len(describes) == 4
+    assert all("Name=tag:job_id,Values=42" in call for call in describes)
+    # Packer's own cleanup may have been killed after it asked to terminate.
+    assert "shutting-down" in next(call for call in describes if call.startswith("ec2 describe-instances"))
     order = [
         "ec2 terminate-instances --region eu-central-1 --instance-ids i-0abc",
         "scheduler delete-schedule --region eu-central-1 --name ci-bake-i-0abc",
@@ -1184,7 +1193,15 @@ def test_qemu_host_cleanup_reaps_the_jobs_build_instance_and_packer_temporaries(
         "ec2 delete-security-group --region eu-central-1 --group-id sg-packer",
     ]
     assert [call for call in calls if any(call.startswith(step) for step in order)] == order
-    assert not any("sg-shared" in call and "delete-security-group" in call for call in calls)
+
+
+def test_qemu_host_cleanup_deletes_temporaries_of_a_job_stopped_before_launch(tmp_path: Path) -> None:
+    result, calls = _run_qemu_host_cleanup(tmp_path, "canceled", PACKER_TEMPORARIES)
+
+    assert result.returncode == 0, result.stderr
+    assert not any(call.startswith(("ec2 terminate-instances", "ec2 wait")) for call in calls)
+    assert "ec2 delete-key-pair --region eu-central-1 --key-name packer_key" in calls
+    assert "ec2 delete-security-group --region eu-central-1 --group-id sg-packer" in calls
 
 
 UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0half\tsnap-0half\n"'}
@@ -1207,4 +1224,8 @@ def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> N
     result, calls = _run_qemu_host_cleanup(tmp_path, "success", UNFINISHED_AMI)
 
     assert result.returncode == 0, result.stderr
-    assert [call.split()[1] for call in calls] == ["describe-instances"]
+    assert [call.split()[1] for call in calls] == [
+        "describe-instances",
+        "describe-key-pairs",
+        "describe-security-groups",
+    ]
