@@ -385,6 +385,40 @@ def test_push_refuses_local_input_before_publishing(
     assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
 
 
+@pytest.mark.parametrize("rel", ["scripts.yaml", "blueprints/automation/notify.yaml"], ids=["literal", "globbed"])
+def test_push_refuses_a_deletion_lab_still_holds(synced_clone, monkeypatch: pytest.MonkeyPatch, rel: str) -> None:
+    sync, clone, host = synced_clone
+    monkeypatch.setattr(
+        sync, "SYNC_SPEC", [*sync.SYNC_SPEC, ("blueprints/automation/*", "automation.reload", sync.Direction.BOTH)]
+    )
+    blueprint = clone / "blueprints/automation/notify.yaml"
+    blueprint.parent.mkdir(parents=True)
+    blueprint.write_text("blueprint: {}\n")
+    _git(clone, "add", "-A")
+    _git(clone, "commit", "--quiet", "-m", "blueprint")
+    _git(clone, "push", "--quiet", "origin", "main")
+    _git(clone, "tag", "-f", sync.SYNCED_TAG)
+    _git(clone, "push", "--quiet", "--force", "origin", sync.SYNCED_TAG)
+    host["blueprints/automation/notify.yaml"] = blueprint.read_bytes()
+    head = _git(clone, "rev-parse", "HEAD")
+    _stub_ha(monkeypatch, sync)
+    (clone / rel).unlink()
+
+    with pytest.raises(SystemExit, match=f"cannot delete files from lab.*\n  {re.escape(rel)}\n"):
+        sync.do_push()
+    assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    assert _synced_commit(clone, sync) == (head, head)
+
+    # Once removed from lab by hand, the deletion is published and tagged.
+    del host[rel]
+    sync.do_push()
+
+    pushed = _git(clone, "rev-parse", "HEAD")
+    assert pushed != head
+    assert rel not in _git(clone, "ls-tree", "-r", "--name-only", pushed).splitlines()
+    assert _synced_commit(clone, sync) == (pushed, pushed)
+
+
 def test_push_aborts_on_a_failed_host_read(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:
     sync, clone, _host = synced_clone
     head = _git(clone, "rev-parse", "HEAD")

@@ -141,6 +141,13 @@ def enumerate_files(for_pull: bool = False) -> list[SyncFile]:
     return files
 
 
+def deleted_since_sync() -> list[str]:
+    """Pushed files present at the synced tag but gone from the clone working tree."""
+    pathspecs = [f":(glob){pattern}" for pattern, _, direction in SYNC_SPEC if direction is not Direction.PULL]
+    diff = ["git", "diff", "--name-only", "--diff-filter=D", SYNCED_TAG, "--", *pathspecs]
+    return sh(diff, cwd=CLONE).stdout.splitlines()
+
+
 def host_file(rel: str) -> bytes | None:
     """File content on lab, or None only when lab confirms it does not exist.
 
@@ -561,6 +568,15 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
                 "pull replays them on top of the captured host edits."
             )
         sys.exit("\n".join(msg))
+    # Push only uploads, so tagging a deletion lab still holds would record it
+    # as synced while HA keeps loading the old file.
+    if undeleted := [rel for rel in deleted_since_sync() if host_file(rel) is not None]:
+        sys.exit(
+            "refusing: push cannot delete files from lab; these are gone from the clone but still on lab:\n"
+            + "\n".join(f"  {rel}" for rel in undeleted)
+            + f"\nrestore them, or remove them (and anything including them) from {HOST}:{HOST_DIR} by hand, "
+            "then retry push."
+        )
     files = list(changed)
     reloads = {file.reload_service for file in [*files, *pending]}
     # Custom templates reload first: automations and template entities resolve
