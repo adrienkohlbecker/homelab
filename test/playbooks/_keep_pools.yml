@@ -225,10 +225,7 @@
     - name: Boot and check the new root
       when: _keep_pools_phase in ['switch', 'rollback']
       block:
-        # The helper elevates only its reboot command: polling through the
-        # sudo context can wedge on one the reboot severed.
         - name: Reboot into the new root
-          become: false
           import_role:
             name: reboot
             tasks_from: reboot
@@ -255,7 +252,6 @@
           changed_when: true
 
         - name: Reboot into the old root
-          become: false
           import_role:
             name: reboot
             tasks_from: reboot

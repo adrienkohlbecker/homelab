@@ -11,3 +11,9 @@ def test_production_reboot_goes_through_logind() -> None:
     command = jinja2.Template(task["reboot"]["reboot_command"])
 
     assert command.render(qemu_test=False) == "/usr/bin/sudo -n /usr/bin/systemctl reboot"
+
+
+def test_reboot_polls_through_the_unelevated_context() -> None:
+    task = yaml.safe_load(Path("roles/reboot/tasks/reboot.yml").read_text())[0]
+
+    assert task["become"] is False

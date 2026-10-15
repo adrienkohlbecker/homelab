@@ -1,5 +1,6 @@
 # Mitogen can retain a severed sudo.root context when a become-elevated reboot
-# severs SSH. Elevate only systemctl so Ansible polls through the base context.
+# severs SSH. Elevate only systemctl so Ansible polls through the base context,
+# even under a caller's elevated block or play.
 #
 # Production reboots through logind so the DNS reboot guard's block lock can
 # stop them on systemd 257+ (Resolute); Noble's logind ignores root's own
@@ -7,6 +8,7 @@
 # that guard on their only DNS server, so they start reboot.target through
 # PID1, which has no inhibitors and needs no polkit.
 - name: Reboot and wait for the host to return
+  become: false
   reboot:
     reboot_command: >-
       /usr/bin/sudo -n /usr/bin/systemctl
