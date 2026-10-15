@@ -77,12 +77,6 @@
     - name: Rebuild from the live environment
       when: _keep_pools_phase == 'install'
       block:
-        - name: Create the installer directory
-          file:
-            path: "{{ _kp_installer }}"
-            state: directory
-            mode: "0755"
-
         - name: Stage the installer and its inputs
           copy:
             src: "{{ _kp_repo }}/{{ item }}"
