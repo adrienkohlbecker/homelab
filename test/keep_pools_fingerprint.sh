@@ -1,10 +1,11 @@
 #!/bin/bash
 # Print the shared state a keep-pools rebuild must leave untouched, in a form
 # that reads the same from either release's root: partition tables, md arrays,
-# the ESP's files, the firmware boot entries, pool layouts and health, datasets
-# other than the new root, active swap, the shared rpool/ROOT properties, and
-# the host identity the new root carries over. $1 names the new root, left out
-# of the dataset list; $2 is the login user.
+# the ESP's files, pool layouts and health, datasets other than the new root,
+# active swap, the shared rpool/ROOT properties, and the host identity the new
+# root carries over. $1 names the new root, left out of the dataset list; $2 is
+# the login user. The firmware boot entries are checked in the live
+# environment, whose NVRAM the rebuild runs against.
 set -euo pipefail
 
 new_root=$1
@@ -31,17 +32,6 @@ echo "== esp"
 # Each release pads findmnt columns differently.
 findmnt -no FSTYPE,UUID /boot/efi | awk '{ print $1, $2 }'
 find /boot/efi -type f -exec sha256sum {} + | sort -k2
-
-# The boot order, and each entry's partition and loader: each release's
-# efibootmgr renders the same device path differently.
-echo "== efi boot entries"
-efibootmgr | awk '
-  /^BootOrder:/ { print; next }
-  /^Boot[0-9A-F][0-9A-F][0-9A-F][0-9A-F]/ {
-    disk = match($0, /HD\([^)]*\)/) ? substr($0, RSTART, RLENGTH) : ""
-    loader = match($0, /\\EFI\\[^)]*/) ? substr($0, RSTART, RLENGTH) : ""
-    print $1, disk, loader
-  }'
 
 echo "== pools"
 zpool list -H -o name,guid

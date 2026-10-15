@@ -329,6 +329,7 @@ class Machine:
         memory_mb: int | None = None,
         quiet_ansible: bool = False,
         extra_disks: Sequence[Path] = (),
+        uefi: bool = False,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
@@ -336,7 +337,8 @@ class Machine:
         override the machine spec; quiet_ansible trims playbook output to
         changes and failures. extra_disks attaches another machine's disks
         (its disk_paths) after a cloud-image machine's own, as a live
-        environment sees a host's disks.
+        environment sees a host's disks. uefi boots a cloud-image machine
+        under UEFI on x86_64 too, as such a live environment boots.
         """
         self.launch = launch or LaunchOptions()
         self.quiet_ansible = quiet_ansible
@@ -365,6 +367,7 @@ class Machine:
         self.machine_timeout = machine_timeout
         self.upstream_mirrors = upstream_mirrors
         self.extra_disks = list(extra_disks)
+        self.uefi = uefi
         self.disk_paths: list[Path] = []
         self.proc: subprocess.Popen[bytes] | None = None
         # Monotonic time the session must finish by; None for no limit.
@@ -1053,7 +1056,7 @@ class Machine:
                 *(self._virtio_drive(str(path)) for path in self.extra_disks),
             ]
             # x86_64 q35 can fall back to SeaBIOS; aarch64 virt requires UEFI.
-            if self.arch != "x86_64":
+            if self.uefi or self.arch != "x86_64":
                 self.drives += self._uefi_drives()
         else:
             # Artifact-backed variants overlay every disk Packer published,
@@ -1168,24 +1171,19 @@ class Machine:
 
         - {workdir}/efivars.fd, copied from the packer image for ZFS
           variants so bootloader entries survive across runs;
-        - else a fresh empty file sized to the code blob.
-
-        qemu pflash requires CODE and VARS to be the same size, and EDK2 builds
-        aren't uniform: aarch64 EDK2 ships at 64 MiB, x86_64 OVMF typically at
-        4 MiB.
+        - else a fresh copy of the pair's VARS template, which fixes the
+          store's size and layout for that CODE build.
         """
         host_os = platform.system().lower()
         try:
-            code_path = Path(self.guest["uefi_firmware"][host_os]["code"])
+            firmware = self.guest["uefi_firmware"][host_os]
         except KeyError:
             raise RuntimeError(f"No {self.arch} UEFI firmware is defined for {host_os} hosts") from None
-        packer_vars = self.workdir_path / "efivars.fd"
-        if packer_vars.exists():
-            vars_path = packer_vars
-        else:
+        code_path = Path(firmware["code"])
+        vars_path = self.workdir_path / "efivars.fd"
+        if not vars_path.exists():
             vars_path = self.workdir_path / "uefi-vars.fd"
-            with vars_path.open("wb") as handle:
-                handle.truncate(code_path.stat().st_size)
+            shutil.copyfile(firmware["vars"], vars_path)
         return [
             f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
             f"file={vars_path},if=pflash,unit=1,format=raw",

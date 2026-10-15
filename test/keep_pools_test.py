@@ -102,6 +102,7 @@ def run_keep_pools_test(lab: Machine, *, to_release: str) -> None:
             machine_timeout=int(remaining),
             quiet_ansible=True,
             extra_disks=lab.disk_paths,
+            uefi=True,
         )
         with live.session(live.machine_timeout):
             live.ensure_booted()

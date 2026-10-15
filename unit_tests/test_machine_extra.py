@@ -235,23 +235,24 @@ class TestDiscoverPackerDisks:
 
 
 class TestUefiDrives:
-    def test_creates_blank_vars_sized_to_code(
+    def test_copies_the_vars_template_without_a_packer_store(
         self,
         machine_factory: Callable[..., machine.Machine],
         tmp_path: Path,
     ) -> None:
         code = tmp_path / "code.fd"
-        code.write_bytes(b"code")
+        template = tmp_path / "vars.fd"
+        template.write_bytes(b"vars")
         instance = machine_factory(host_arch="aarch64")
-        instance.guest = {"uefi_firmware": {"darwin": {"code": str(code)}}}
+        instance.guest = {"uefi_firmware": {"darwin": {"code": str(code), "vars": str(template)}}}
 
         drives = instance._uefi_drives()
 
-        blank_vars = instance.workdir_path / "uefi-vars.fd"
-        assert blank_vars.read_bytes() == b"\0" * len(b"code")
+        fresh_vars = instance.workdir_path / "uefi-vars.fd"
+        assert fresh_vars.read_bytes() == b"vars"
         assert drives == [
             f"file={code},if=pflash,unit=0,format=raw,readonly=on",
-            f"file={blank_vars},if=pflash,unit=1,format=raw",
+            f"file={fresh_vars},if=pflash,unit=1,format=raw",
         ]
 
 
@@ -681,6 +682,26 @@ def test_cloud_image_machine_attaches_extra_disks_after_its_own(
         f"file={m.workdir_path / 'seed.img'}",
         *(f"file={path}" for path in borrowed),
     ]
+
+
+@pytest.mark.parametrize(("uefi", "expected"), [(False, False), (True, True)])
+def test_x86_cloud_image_machine_boots_uefi_on_request(
+    machine_factory: Callable[..., machine.Machine],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    uefi: bool,
+    expected: bool,
+) -> None:
+    cloud_image = tmp_path / "cloud.img"
+    cloud_image.touch()
+    monkeypatch.setattr(machine.Machine, "_ensure_minimal_cloudimg", lambda self: cloud_image)
+    monkeypatch.setattr(machine, "run_command", lambda *args, **kwargs: SimpleNamespace(exitcode=0, stdout=[]))
+    monkeypatch.setattr(machine.Machine, "_uefi_drives", lambda self: ["pflash"])
+
+    m = machine_factory(machine="minimal", uefi=uefi)
+    m.prepare()
+
+    assert ("pflash" in m.drives) is expected
 
 
 def test_power_off_keeps_the_disks_for_the_next_boot(

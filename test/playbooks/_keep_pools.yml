@@ -5,7 +5,8 @@
 #   prepare   on the old root: a canary dataset on every pool, and a
 #             fingerprint of the shared storage and host identity
 #   install   in the live stand-in: the rebuild, then a rerun that must fail
-#             closed without writing to the pools
+#             closed without writing to the pools; neither may touch the
+#             firmware boot entries
 #   switch    on the Lab disks alone: the old root still boots and the shared
 #             storage is unchanged; switch to the new root and check it
 #   rollback  reboot the converged new root, then switch back to the old one
@@ -97,6 +98,18 @@
             src: "/home/{{ ansible_ssh_user }}/.ssh/authorized_keys"
           register: _kp_authorized_keys
 
+        # The live stand-in boots under UEFI, as a live ISO does on the host,
+        # so the rebuild could register boot entries; it must leave them.
+        - name: Read the firmware boot variables before the install
+          shell: &kp_boot_variables |
+            set -euo pipefail
+            cd /sys/firmware/efi/efivars
+            sha256sum Boot*-8be4df61-93ca-11d2-aa0d-00e098032b8c
+          args:
+            executable: /bin/bash
+          register: _kp_boot_variables_before
+          changed_when: false
+
         - name: Rebuild the host
           command: bash {{ _kp_installer }}/provision.sh
           environment: &kp_install_environment
@@ -141,6 +154,22 @@
           register: _kp_rerun_fingerprint
           changed_when: false
           failed_when: false
+
+        - name: Read the firmware boot variables after the rerun
+          shell: *kp_boot_variables
+          args:
+            executable: /bin/bash
+          register: _kp_boot_variables_after
+          changed_when: false
+
+        - name: Neither run touched the firmware boot entries
+          assert:
+            that: _kp_boot_variables_after.stdout == _kp_boot_variables_before.stdout
+            fail_msg: |-
+              before:
+              {{ _kp_boot_variables_before.stdout }}
+              after:
+              {{ _kp_boot_variables_after.stdout }}
 
         - name: List the pools the rerun left imported
           command: zpool list -H -o name
