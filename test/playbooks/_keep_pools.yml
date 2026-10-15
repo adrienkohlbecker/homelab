@@ -162,26 +162,27 @@
           command: zpool set bootfs={{ _kp_new_root }} rpool
           changed_when: true
 
-    - name: Reboot into the new root
+    - name: Boot and check the new root
       when: _keep_pools_phase in ['switch', 'rollback']
-      import_role:
-        name: reboot
-        tasks_from: reboot
+      block:
+        - name: Reboot into the new root
+          import_role:
+            name: reboot
+            tasks_from: reboot
 
-    # The harness caches facts across playbook runs; the converges that follow
-    # must see the running release.
-    - name: Gather the new root's facts
-      when: _keep_pools_phase in ['switch', 'rollback']
-      setup:
+        # The harness caches facts across playbook runs; the converges that
+        # follow the switch must see the running release.
+        - name: Gather the new root's facts
+          when: _keep_pools_phase == 'switch'
+          setup:
 
-    - name: Check the new root
-      when: _keep_pools_phase in ['switch', 'rollback']
-      include_tasks: "{{ _kp_repo }}/test/playbooks/tasks/_keep_pools_check.yml"
-      vars:
-        _kp_expected_release: "{{ keep_pools_to }}"
-        _kp_expected_root: "{{ _kp_new_root }}"
-        # The boot roles' converge rewrites the ESP and the shared commandline.
-        _kp_compare_fingerprint: "{{ _keep_pools_phase == 'switch' }}"
+        - name: Check the new root
+          include_tasks: "{{ _kp_repo }}/test/playbooks/tasks/_keep_pools_check.yml"
+          vars:
+            _kp_expected_release: "{{ keep_pools_to }}"
+            _kp_expected_root: "{{ _kp_new_root }}"
+            # The boot roles' converge rewrites the ESP and the shared commandline.
+            _kp_compare_fingerprint: "{{ _keep_pools_phase == 'switch' }}"
 
     - name: Roll back to the old root
       when: _keep_pools_phase == 'rollback'
@@ -194,9 +195,6 @@
           import_role:
             name: reboot
             tasks_from: reboot
-
-        - name: Gather the old root's facts
-          setup:
 
         - name: Check the old root
           include_tasks: "{{ _kp_repo }}/test/playbooks/tasks/_keep_pools_check.yml"
