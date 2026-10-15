@@ -18,3 +18,17 @@
     label: "{{ item.pool }} autotrim=off"
   changed_when: true
   become: true
+
+# Embed another hostid in the boot images, so the converge must restore
+# /etc/hostid and rebuild them. The running kernel keeps ZBM's command-line
+# hostid, so the pools stay as they are meanwhile.
+- name: _setup | Embed a stale hostid in the boot images
+  when: zfs_root
+  shell: |
+    set -euo pipefail
+    zgenhostid -f 0x0badc0de
+    {{ initramfs_rebuild_command }}
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true

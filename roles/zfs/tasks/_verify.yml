@@ -78,6 +78,41 @@
     that: _zfs_verify_hostids.stdout_lines == ['00bab10c'] * 3
     fail_msg: "kernel, /etc/hostid, rpool: {{ _zfs_verify_hostids.stdout_lines }}"
 
+# _setup embedded another hostid in the boot images, which the role's rebuild
+# must replace. Without ZBM's hostid, the root's boot image imports rpool under
+# its embedded copy: a stale one refuses the unforced import of the pool the
+# last boot left active, or stamps itself on the labels of an exported one.
+- name: _verify | Boot once without ZBM's hostid
+  when: zfs_root
+  become: true
+  block:
+    - name: _verify | Hostid boot | Turn off ZBM's hostid for the next boot
+      replace:
+        path: /boot/efi/EFI/refind/refind.conf
+        regexp: ' zbm\.skip"$'
+        replace: ' zbm.skip zbm.set_hostid=0"'
+
+    - name: _verify | Hostid boot | Reboot
+      import_role:
+        name: reboot
+        tasks_from: reboot
+
+    - name: _verify | Hostid boot | Read the kernel and rpool hostids
+      shell: |
+        set -euo pipefail
+        printf '%08x\n' "$(cat /sys/module/spl/parameters/spl_hostid)"
+        device=$(zpool list -HvPL rpool | awk '$1 ~ "^/dev/" && !seen { print $1; seen = 1 }')
+        zdb -l "$device" | awk '$1 == "hostid:" && !seen { printf "%08x\n", $2; seen = 1 }'
+      args:
+        executable: /bin/bash
+      register: _zfs_verify_fallback_hostids
+      changed_when: false
+
+    - name: _verify | Hostid boot | The boot image imported rpool under the ZBM hostid
+      assert:
+        that: _zfs_verify_fallback_hostids.stdout_lines == ['00000000', '00bab10c']
+        fail_msg: "kernel, rpool: {{ _zfs_verify_fallback_hostids.stdout_lines }}"
+
 # --- Mount generator ---
 
 # Check the initial refresh before child creation triggers another zed update.
