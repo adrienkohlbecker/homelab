@@ -103,13 +103,10 @@ def is_supported_qemu_host_image(region: str, image: dict) -> bool:
     )
 
 
-def promoted_qemu_host_amis(region: str) -> set[str] | None:
+def promoted_qemu_host_amis() -> set[str] | None:
     """Return the CI host release's qemu-host AMIs its SSM pointers protect."""
-    if region != CI_REGION:
-        return set()
-
     promoted: set[str] = set()
-    ssm = client("ssm", region)
+    ssm = client("ssm", CI_REGION)
     for arch, facts in ARCHITECTURES.items():
         parameter = facts["ci"]["ami_parameter"].format(ubuntu=CI_HOST_UBUNTU)
         try:
@@ -118,10 +115,10 @@ def promoted_qemu_host_amis(region: str) -> set[str] | None:
             code = error.response["Error"].get("Code", "Error")
             if code == "ParameterNotFound":
                 continue
-            errors.append(f"{region} promoted qemu-host {arch} {CI_HOST_UBUNTU}: {code}")
+            errors.append(f"{CI_REGION} promoted qemu-host {arch} {CI_HOST_UBUNTU}: {code}")
             return None
         except BotoCoreError as error:
-            errors.append(f"{region} promoted qemu-host {arch} {CI_HOST_UBUNTU}: {type(error).__name__}: {error}")
+            errors.append(f"{CI_REGION} promoted qemu-host {arch} {CI_HOST_UBUNTU}: {type(error).__name__}: {error}")
             return None
         promoted.add(value)
     return promoted
@@ -142,7 +139,7 @@ def audit_ami_inventory(
     # baked ahead of moving CI_HOST_UBUNTU, is reported until the move lands.
     other_release = [image for image in supported if image_tags(image)["ubuntu"] != CI_HOST_UBUNTU]
     current = [image for image in supported if image not in other_release]
-    promoted = promoted_qemu_host_amis(region) if current else set()
+    promoted = promoted_qemu_host_amis() if current else set()
     if promoted is None:
         return
 

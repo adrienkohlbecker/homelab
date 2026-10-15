@@ -44,7 +44,7 @@ def test_unknown_ami_is_reported_without_cleanup(monkeypatch):
             "StartTime": datetime(2026, 7, 10, tzinfo=UTC),
         }
     ]
-    monkeypatch.setattr(audit_aws, "promoted_qemu_host_amis", lambda region: set())
+    monkeypatch.setattr(audit_aws, "promoted_qemu_host_amis", lambda: set())
 
     audit_aws.audit_ami_inventory("eu-central-1", [unknown], snapshots)
 
@@ -243,7 +243,7 @@ def test_amis_of_other_releases_are_flagged_for_cleanup(monkeypatch):
         return image(image_id, tags=tags, snapshot_id=f"snap-{image_id}")
 
     monkeypatch.setattr(audit_aws, "CI_HOST_UBUNTU", "resolute")
-    monkeypatch.setattr(audit_aws, "promoted_qemu_host_amis", lambda region: {"ami-host"})
+    monkeypatch.setattr(audit_aws, "promoted_qemu_host_amis", lambda: {"ami-host"})
 
     audit_aws.audit_ami_inventory(
         "eu-central-1", [qemu_host("ami-host", "resolute"), qemu_host("ami-old", "noble")], []
