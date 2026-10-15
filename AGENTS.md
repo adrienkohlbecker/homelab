@@ -104,7 +104,7 @@ Prefer these over re-implementing boilerplate. Call them with `tasks_from` and a
 | `apt_source` | `tasks_from: {configure,remove}` | deb822 source + scoped signing key + optional series pin; `apt_source_<name>_changed` |
 | `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
 | `boot` | `import_role: name: boot, tasks_from: {cmdline,initramfs_provider,initramfs_rebuild}` | kernel cmdline fragment; release image generator + policy; image rebuild with an optional reboot request (boot's `main.yml` is a real role entry point) |
-| `zfs_dataset` | `tasks_from: dataset` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts |
+| `zfs_dataset` | `tasks_from: {dataset,remove}` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts; retirement that keeps the dataset's snapshots |
 
 ## Podman Service Conventions
 
