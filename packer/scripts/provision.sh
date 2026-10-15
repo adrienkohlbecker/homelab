@@ -524,8 +524,51 @@ create_extra_pools() {
 }
 
 # Fresh mode: wipe and partition the disks and create every pool on them,
-# leaving the pools exported and extra_pools naming the data pools.
+# leaving the pools exported, extra_pools naming the data pools, and the
+# PARTITIONS_* lists for create_storage.
 create_pools() {
+  # Per-disk partition paths, computed once as space-delimited strings.
+  # One unified layout for every host (notes/unified_disk_layout.md):
+  #   1 = BIOS boot (EF02)
+  #   2 = EFI (EF00)
+  #   3 = swap (8200)
+  #   4 = podman store (8300, optional -- when PODMAN_SIZE is set)
+  #   6 = tank special-vdev member (BF01, mirror only -- when META_SIZE is set)
+  #   5 = rpool (BF00)
+  # rpool is always number 5 (single-disk and mirror) and always carved last
+  # (-n5:0:0) so it grows into the rest of the disk -- a cloud-image deploy grows
+  # p5 (cloud-init growpart, packer/hetzner). The mirror-only meta partition is numbered
+  # 6 but carved physically *before* rpool, so rpool's number never shifts with
+  # disk count. Each gets a GPT name (sgdisk -c) for readable lsblk/gdisk output;
+  # consumers resolve by filesystem UUID, /dev/md path, or pool label, never
+  # by-partlabel (non-unique across the mirror's identically-named disks) --
+  # except single-disk swap/podman, where by-partlabel IS unique (one disk).
+  #
+  # swap and podman are raw partitions on every host: single-disk gets a bare
+  # partition, mirror an mdadm array across the per-disk partitions (swap raid1,
+  # podman raid5 -- create_storage). The meta partition becomes tank's special vdev
+  # (create_extra_tank_mouse). Swap is the disk-backed *overflow* behind zram,
+  # which the swap role runs as the primary high-priority device
+  # (notes/swap_strategy.md); a real partition is deadlock-free, unlike swap on a
+  # zvol.
+  local d
+  PARTITIONS_EFI=""
+  PARTITIONS_SWAP=""
+  PARTITIONS_PODMAN=""
+  PARTITIONS_META=""
+  PARTITIONS_RPOOL=""
+  for d in $DISKS; do
+    PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
+    PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
+    if [ -n "$PODMAN_SIZE" ]; then
+      PARTITIONS_PODMAN+="${PARTITIONS_PODMAN:+ }$(partdev "$d" 4)"
+    fi
+    if [ -n "$META_SIZE" ]; then
+      PARTITIONS_META+="${PARTITIONS_META:+ }$(partdev "$d" 6)"
+    fi
+    PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 5)"
+  done
+
   # ZFSBootMenu boots every root with its own hostid (spl.spl_hostid), which
   # for our host-agnostic build is upstream's default. Creating the pools under
   # it and giving the root the same /etc/hostid keeps the labels, the running
@@ -679,47 +722,6 @@ check_kept_pools() {
   trap - EXIT
   cp "$kept_identity/etc/hostid" /etc/hostid
 }
-
-# Per-disk partition paths, computed once as space-delimited strings.
-# One unified layout for every host (notes/unified_disk_layout.md):
-#   1 = BIOS boot (EF02)
-#   2 = EFI (EF00)
-#   3 = swap (8200)
-#   4 = podman store (8300, optional -- when PODMAN_SIZE is set)
-#   6 = tank special-vdev member (BF01, mirror only -- when META_SIZE is set)
-#   5 = rpool (BF00)
-# rpool is always number 5 (single-disk and mirror) and always carved last
-# (-n5:0:0) so it grows into the rest of the disk -- a cloud-image deploy grows
-# p5 (cloud-init growpart, packer/hetzner). The mirror-only meta partition is numbered
-# 6 but carved physically *before* rpool, so rpool's number never shifts with
-# disk count. Each gets a GPT name (sgdisk -c) for readable lsblk/gdisk output;
-# consumers resolve by filesystem UUID, /dev/md path, or pool label, never
-# by-partlabel (non-unique across the mirror's identically-named disks) --
-# except single-disk swap/podman, where by-partlabel IS unique (one disk).
-#
-# swap and podman are raw partitions on every host: single-disk gets a bare
-# partition, mirror an mdadm array across the per-disk partitions (swap raid1,
-# podman raid5 -- create_storage). The meta partition becomes tank's special vdev
-# (create_extra_tank_mouse). Swap is the disk-backed *overflow* behind zram,
-# which the swap role runs as the primary high-priority device
-# (notes/swap_strategy.md); a real partition is deadlock-free, unlike swap on a
-# zvol.
-PARTITIONS_EFI=""
-PARTITIONS_SWAP=""
-PARTITIONS_PODMAN=""
-PARTITIONS_META=""
-PARTITIONS_RPOOL=""
-for d in ${DISKS:-}; do
-  PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
-  PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
-  if [ -n "$PODMAN_SIZE" ]; then
-    PARTITIONS_PODMAN+="${PARTITIONS_PODMAN:+ }$(partdev "$d" 4)"
-  fi
-  if [ -n "$META_SIZE" ]; then
-    PARTITIONS_META+="${PARTITIONS_META:+ }$(partdev "$d" 6)"
-  fi
-  PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 5)"
-done
 
 export DEBIAN_FRONTEND=noninteractive
 
