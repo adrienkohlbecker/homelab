@@ -1348,21 +1348,21 @@ def test_qemu_host_cleanup_deletes_temporaries_of_a_job_stopped_before_launch(tm
     assert "ec2 delete-security-group --region eu-central-1 --group-id sg-packer" in calls
 
 
-UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0half\tsnap-0half\n"'}
+UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0fade\n"', "ec2 deregister-image": r'printf "[]\n"'}
 
 
 def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path) -> None:
     # Pointers name only other AMIs, one sharing the unfinished AMI's prefix.
     result, calls = _run_qemu_host_cleanup(
-        tmp_path, "failed", {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0half0\tami-0x86\n"'}
+        tmp_path, "failed", {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0fade0\tami-0x86\n"'}
     )
 
     assert result.returncode == 0, result.stderr
     describe = next(call for call in calls if call.startswith("ec2 describe-images"))
     assert "--owners self" in describe
     assert "Name=tag:job_id,Values=42" in describe
-    assert "ec2 deregister-image --region eu-central-1 --image-id ami-0half" in calls
-    assert "ec2 delete-snapshot --region eu-central-1 --snapshot-id snap-0half" in calls
+    deregister = next(call for call in calls if call.startswith("--region eu-central-1 ec2 deregister-image"))
+    assert "--image-id ami-0fade --delete-associated-snapshots" in deregister
 
 
 def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> None:
@@ -1383,12 +1383,12 @@ def test_qemu_host_cleanup_keeps_an_ami_a_pointer_promoted(tmp_path: Path) -> No
     result, calls = _run_qemu_host_cleanup(
         tmp_path,
         "canceled",
-        {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0x86\tami-0arm\nami-0half\n"'},
+        {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0x86\tami-0arm\nami-0fade\n"'},
     )
 
     assert result.returncode == 0, result.stderr
-    assert "keeping promoted AMI ami-0half" in result.stdout
-    assert not any(call.startswith(("ec2 deregister-image", "ec2 delete-snapshot")) for call in calls)
+    assert "keeping promoted AMI ami-0fade" in result.stdout
+    assert not any("deregister-image" in call for call in calls)
     (lookup,) = [call for call in calls if call.startswith("ssm")]
     path = "/homelab-ci/ami/qemu-host"
     assert f"--path {path} --recursive" in lookup
@@ -1405,4 +1405,4 @@ def test_qemu_host_cleanup_keeps_the_ami_when_the_pointers_are_unreadable(tmp_pa
 
     assert result.returncode != 0
     assert "keeping every AMI of job 42" in result.stderr
-    assert not any(call.startswith(("ec2 deregister-image", "ec2 delete-snapshot")) for call in calls)
+    assert not any("deregister-image" in call for call in calls)

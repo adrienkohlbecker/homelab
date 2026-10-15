@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # Packer copies the instance's tags onto the AMI, so a job stopped while the
 # AMI was being created also leaves an AMI carrying its job_id. Deregister it
-# and delete its snapshots, which AWS allows while both are still pending, but
+# with its snapshots, which AWS allows while both are still pending, but
 # only when CI_JOB_STATUS says the job did not succeed: a finished bake's AMI
 # carries the same tag. A job can also fail after promoting its AMI, in the
 # promotion wait or the pruning that follows, so an AMI that any release's
@@ -50,25 +50,19 @@ done
 if [ "${CI_JOB_STATUS:-success}" != success ]; then
   images=$(aws ec2 describe-images --region "$region" --owners self \
     --filters "$job_filter" \
-    --query "Images[].[ImageId,join(',',BlockDeviceMappings[].Ebs.SnapshotId)]" \
-    --output text)
+    --query 'Images[].ImageId' --output text)
   [ -n "$images" ] || exit 0
   promoted=$(aws ssm get-parameters-by-path --region "$region" --path /homelab-ci/ami/qemu-host --recursive \
     --query 'Parameters[].Value' --output text) || {
     echo "cannot read the qemu-host AMI pointers; keeping every AMI of job ${CI_JOB_ID}" >&2
     exit 1
   }
-  while read -r image snapshots; do
-    [ -n "$image" ] || continue
+  for image in $images; do
     if grep -qwF "$image" <<<"$promoted"; then
       echo "keeping promoted AMI ${image}"
       continue
     fi
     echo "deregistering unfinished AMI ${image}"
-    aws ec2 deregister-image --region "$region" --image-id "$image"
-    for snapshot in ${snapshots//,/ }; do
-      echo "deleting snapshot ${snapshot}"
-      aws ec2 delete-snapshot --region "$region" --snapshot-id "$snapshot"
-    done
-  done <<<"$images"
+    "$(dirname "${BASH_SOURCE[0]}")/deregister-ami.sh" "$image" "$region"
+  done
 fi
