@@ -71,14 +71,6 @@
         label: "{{ item.name }}"
       register: postfix_cfg
 
-    # Nothing ships /etc/default/postfix; an empty SYNC_CHROOT there would skip
-    # the start-time chroot sync that Noble's chrooted smtp and relay need.
-    - name: Remove local Postfix start defaults
-      file:
-        path: /etc/default/postfix
-        state: absent
-      register: postfix_default
-
     - name: Seed a root-owned resolv.conf for the Postfix chroot
       import_role:
         name: systemd_unit
@@ -93,5 +85,5 @@
         enabled: true
         state: >-
           {{ 'restarted'
-             if postfix_cfg.changed or postfix_apt.changed or postfix_default.changed
+             if postfix_cfg.changed or postfix_apt.changed
              else 'started' }}
