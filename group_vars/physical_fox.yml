@@ -185,7 +185,7 @@ gitlab_runner_aws_pools:
   # those are held back on every worker because _site_test shares the pool:
   # its 12-GiB guest can land on any one of them. Capacity evidence is in
   # notes/ci_aws_nested_qemu_cells.md. max_instances stays equal to
-  # ci_qemu_pools.role.max_size in terraform/aws_ci.tf, whose comment carries
+  # ci_qemu_pools.x86.max_size in terraform/aws_ci.tf, whose comment carries
   # the Spot-quota arithmetic. A two-minute idle_time keeps a worker for a
   # straggler in the next wave without retaining the burst across pushes.
   - suffix: aws-shell-qemu-x86
