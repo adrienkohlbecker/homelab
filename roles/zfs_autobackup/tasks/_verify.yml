@@ -236,7 +236,7 @@
     # unreachable from the fixture, so the no-skip path targets an unresolvable host
     # and we assert it reached the rsync stage (the printed invocation), not its outcome.
     - name: _verify | Latest bak snapshot on the offsite-gate dataset
-      shell: set -euo pipefail; zfs list -t snapshot -o name -s creation -r rpool/zfs_autobackup_offsite_test | awk -F@ '/@bak-/ {s=$2} END {print s}'
+      shell: set -euo pipefail; zfs list -t snapshot -o name -s creation -d 1 rpool/zfs_autobackup_offsite_test | awk -F@ '/@bak-/ {s=$2} END {print s}'
       args:
         executable: /bin/bash
       changed_when: false
@@ -331,6 +331,19 @@
       changed_when: false
       become: true
 
+    # The retirement shape: a canmount=off child whose final snapshot is newer
+    # than every parent snapshot. The parent's transfer must still read its own
+    # newest snapshot, not a path that exists only under the child.
+    - name: _verify | Give the offsite-gate dataset a retired child with a newer snapshot
+      shell: |
+        set -euo pipefail
+        zfs create -o canmount=off rpool/zfs_autobackup_offsite_test/retired
+        zfs snapshot rpool/zfs_autobackup_offsite_test/retired@bak-29991231235959
+      args:
+        executable: /bin/bash
+      changed_when: true
+      become: true
+
     - name: _verify | Offsite gate does NOT skip after a change
       command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_offsite_test
       changed_when: false
@@ -343,8 +356,12 @@
         that:
           - "'skipping offsite sync' not in zfs_autobackup_verify_gate_nochange.stdout"
           - "'rsync' in zfs_autobackup_verify_gate_nochange.stdout"
+          - >-
+            ' /mnt/zfs_autobackup_offsite_test/.zfs/snapshot/' ~ zfs_autobackup_verify_gate_snap.stdout ~ '/ '
+            in zfs_autobackup_verify_gate_nochange.stdout
         fail_msg: >-
-          offsite gate failed to proceed to rsync after a change
+          offsite gate failed to proceed to rsync from the parent's newest
+          @{{ zfs_autobackup_verify_gate_snap.stdout }} after a change
           (rc={{ zfs_autobackup_verify_gate_nochange.rc }},
           stdout={{ zfs_autobackup_verify_gate_nochange.stdout }})
 

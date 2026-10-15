@@ -36,8 +36,10 @@ zfs_check_mount "$DATASET" "$MOUNTPOINT"
 # awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
 # creation (ascending), so the last @bak- line is the newest. A bare
 # grep would exit 1 (tripping pipefail) on a dataset with no @bak-
-# snapshot yet -- awk just yields an empty string.
-LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r "$DATASET" | awk -F@ '/@bak-/ {s=$2} END {print s}')
+# snapshot yet -- awk just yields an empty string. -d 1 keeps the list to
+# this dataset's own snapshots: a descendant snapshotted later (a retired
+# child's final snapshot) would name a path absent from its .zfs/snapshot.
+LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -d 1 "$DATASET" | awk -F@ '/@bak-/ {s=$2} END {print s}')
 
 # A freshly-tagged or just-thinned dataset has no @bak- snapshot. Skip it
 # cleanly rather than rsyncing the empty path ".zfs/snapshot//" (the whole
