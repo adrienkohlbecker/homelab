@@ -225,7 +225,7 @@ qemu_host_ami:
 # Promotion is global but verify-boots first, retains prior S3 versions, and
 # prints rollback instructions. Per-machine/release resource groups serialize
 # only builds that share an output path and pointer.
-.qemu_image_x86:
+"qemu_image:lab:x86":
   stage: prepare
   extends: .protected_manual_job
   # lab is both the sole KVM builder and the lab cells' local image store.
@@ -234,6 +234,7 @@ qemu_host_ami:
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
+  resource_group: qemu_image_lab_x86_$UBUNTU
   # Cancellation can leave a half-published bundle.
   interruptible: false
   timeout: 90m
@@ -245,20 +246,16 @@ qemu_host_ami:
   before_script:
     - mise run ci:bootstrap
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-x86-$CI_JOB_ID"
+  script:
+    - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
   # lab's shell runner keeps checkouts; do not leave the bake token behind.
   after_script:
     - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
 
-"qemu_image:lab:x86":
-  extends: .qemu_image_x86
-  resource_group: qemu_image_lab_x86_$UBUNTU
-  script:
-    - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote
-
 # Build native aarch64 fixtures on the Frankfurt ARM pool. Every mutable path is
 # job-local on the ephemeral instance-store-backed checkout. This reduces
 # accidental cross-job state reuse; the shared runner is not a security boundary.
-.qemu_image_arm:
+"qemu_image:lab:arm":
   stage: prepare
   extends: .protected_manual_job
   tags:
@@ -266,6 +263,7 @@ qemu_host_ami:
   id_tokens:
     GITLAB_OIDC_TOKEN:
       aud: sts.amazonaws.com
+  resource_group: qemu_image_lab_arm_$UBUNTU
   interruptible: false
   timeout: 90m
   parallel:
@@ -286,14 +284,10 @@ qemu_host_ami:
     - mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$PACKER_PLUGIN_PATH" "$MISE_DATA_DIR" "$UV_CACHE_DIR" "$HOMELAB_CI_DIR" "$(dirname "$AWS_CONFIG_FILE")"
     - mise run ci:bootstrap
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-image-arm-$CI_JOB_ID" --cache-dir
-  after_script:
-    - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
-
-"qemu_image:lab:arm":
-  extends: .qemu_image_arm
-  resource_group: qemu_image_lab_arm_$UBUNTU
   script:
     - mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --upstream --promote
+  after_script:
+    - rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"
 
 # Build fox's ZFS-root disk on lab, stream it through a temporary Hetzner rescue
 # server, and retain the two newest snapshots. The published project-global

@@ -35,15 +35,14 @@ def test_api_pipelines_run_regular_jobs() -> None:
 
 
 def test_lab_qemu_image_is_published_for_supported_releases() -> None:
-    assert PIPELINE[".qemu_image_x86"]["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
+    job = PIPELINE["qemu_image:lab:x86"]
+
+    assert job["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
     # lab's persistent shell runner must not keep the bake role's token.
-    assert PIPELINE[".qemu_image_x86"]["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
-    assert PIPELINE["qemu_image:lab:x86"] == {
-        "extends": ".qemu_image_x86",
-        "resource_group": "qemu_image_lab_x86_$UBUNTU",
-        "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote'],
-    }
-    assert PIPELINE[".qemu_image_x86"]["extends"] == ".protected_manual_job"
+    assert job["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
+    assert job["resource_group"] == "qemu_image_lab_x86_$UBUNTU"
+    assert job["script"] == ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --promote']
+    assert job["extends"] == ".protected_manual_job"
     assert {
         name.removeprefix("qemu_image:").removesuffix(":x86")
         for name in PIPELINE
@@ -97,15 +96,14 @@ def test_fox_image_builds_and_labels_one_release() -> None:
 
 
 def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
-    scaffold = PIPELINE[".qemu_image_arm"]
-    lab = PIPELINE["qemu_image:lab:arm"]
+    job = PIPELINE["qemu_image:lab:arm"]
 
-    assert scaffold["extends"] == ".protected_manual_job"
+    assert job["extends"] == ".protected_manual_job"
     assert PIPELINE[".protected_manual_job"]["rules"] == [
         {"if": '$CI_COMMIT_REF_PROTECTED == "true"', "when": "manual", "allow_failure": True}
     ]
-    assert scaffold["tags"] == ["aws-shell-qemu-arm"]
-    assert scaffold["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
+    assert job["tags"] == ["aws-shell-qemu-arm"]
+    assert job["parallel"]["matrix"] == [{"UBUNTU": ["noble", "resolute"]}]
     for variable in (
         "HOME",
         "XDG_CONFIG_HOME",
@@ -116,15 +114,14 @@ def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
         "AWS_CONFIG_FILE",
         "AWS_SHARED_CREDENTIALS_FILE",
     ):
-        assert "$CI_JOB_ID" in scaffold["variables"][variable]
-    assert "--region" not in scaffold["before_script"][-1]
-    assert scaffold["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
+        assert "$CI_JOB_ID" in job["variables"][variable]
+    assert "--region" not in job["before_script"][-1]
+    assert job["after_script"] == ['rm -f "$CI_PROJECT_DIR/.aws_web_identity_token"']
 
-    assert lab == {
-        "extends": ".qemu_image_arm",
-        "resource_group": "qemu_image_lab_arm_$UBUNTU",
-        "script": ['mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --upstream --promote'],
-    }
+    assert job["resource_group"] == "qemu_image_lab_arm_$UBUNTU"
+    assert job["script"] == [
+        'mise run packer:publish-qemu lab --ubuntu "$UBUNTU" --architecture aarch64 --upstream --promote'
+    ]
     assert {
         name.removeprefix("qemu_image:").removesuffix(":arm")
         for name in PIPELINE
