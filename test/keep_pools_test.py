@@ -21,9 +21,6 @@ from machine import Machine, imagedir_for_host, sweep_stale_workdirs
 from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import phase, positive_seconds
 
-# The roles that write the state every root shares: the ESP's rEFInd and ZBM,
-# and the kernel command line on rpool/ROOT.
-SHARED_BOOT_ROLES = ("boot", "refind")
 ROLE = "_keep_pools"
 
 
@@ -59,8 +56,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def run_keep_pools_test(lab: Machine, *, timeout: int, to_release: str) -> None:
-    playbook = "_keep_pools.yml"
+def run_keep_pools_test(lab: Machine, *, to_release: str) -> None:
     site = str(lab.workdir_path / "site.yml")
     environment = str(lab.workdir_path / "_environment.yml")
     test_vars = (
@@ -74,10 +70,12 @@ def run_keep_pools_test(lab: Machine, *, timeout: int, to_release: str) -> None:
         f"keep_pools_hostname={lab.machine}",
     )
 
-    def lab_playbook(keep_pools_phase: str) -> None:
-        lab.ansible_command(str(lab.workdir_path / playbook), *test_vars, "-e", f"_keep_pools_phase={keep_pools_phase}")
+    def run_phase(machine: Machine, keep_pools_phase: str) -> None:
+        machine.ansible_command(
+            str(machine.workdir_path / "_keep_pools.yml"), *test_vars, "-e", f"_keep_pools_phase={keep_pools_phase}"
+        )
 
-    with lab.session(timeout):
+    with lab.session(lab.machine_timeout):
         lab.ensure_booted()
         lab.ensure_ssh()
         lab.ensure_system_running()
@@ -89,16 +87,19 @@ def run_keep_pools_test(lab: Machine, *, timeout: int, to_release: str) -> None:
         with phase(f"converge zfs ({lab.ubuntu_name})"):
             lab.ansible_command(site, "-e", "_test_role_under_test=zfs")
         with phase("prepare"):
-            lab_playbook("prepare")
+            run_phase(lab, "prepare")
         with phase("power off"):
             lab.power_off()
 
+        # lab.session() set the deadline the live session must also meet.
+        remaining = lab.remaining()
+        assert remaining is not None
         live = Machine(
             machine="minimal",
             role=ROLE,
             keep_vm=False,
             ubuntu_name=to_release,
-            machine_timeout=int(lab.remaining() or timeout),
+            machine_timeout=int(remaining),
             quiet_ansible=True,
             extra_disks=lab.disk_paths,
         )
@@ -107,7 +108,7 @@ def run_keep_pools_test(lab: Machine, *, timeout: int, to_release: str) -> None:
             live.ensure_ssh()
             live.ensure_cloud_init()
             with phase("install"):
-                live.ansible_command(str(live.workdir_path / playbook), *test_vars, "-e", "_keep_pools_phase=install")
+                run_phase(live, "install")
             # A clean exit, so qemu flushes the Lab disks' overlays.
             with phase("power off live environment"):
                 live.power_off()
@@ -117,18 +118,20 @@ def run_keep_pools_test(lab: Machine, *, timeout: int, to_release: str) -> None:
             lab.ensure_booted()
             lab.ensure_ssh()
         with phase("switch"):
-            lab_playbook("switch")
+            run_phase(lab, "switch")
 
         # The new root is a fresh install: it needs the fixture's test
         # connectivity before anything converges on it.
         with phase(f"_environment ({to_release})"):
             lab.ansible_command(environment)
-        for role in SHARED_BOOT_ROLES:
+        # The roles that write the state every root shares: the ESP's rEFInd
+        # and ZBM, and the kernel command line on rpool/ROOT.
+        for role in ("boot", "refind"):
             with phase(f"converge {role} ({to_release})"):
                 lab.ansible_command(site, "-e", f"_test_role_under_test={role}")
 
         with phase("rollback"):
-            lab_playbook("rollback")
+            run_phase(lab, "rollback")
 
 
 def main() -> int:
@@ -146,7 +149,7 @@ def main() -> int:
     )
 
     return lab.run(
-        lambda: run_keep_pools_test(lab, timeout=args.timeout, to_release=args.to_release),
+        lambda: run_keep_pools_test(lab, to_release=args.to_release),
         "keep_pools_test",
     )
 
