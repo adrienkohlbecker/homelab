@@ -8,10 +8,11 @@
 # snapshot records that empty state, and the dataset is left unmounted
 # (canmount=off) with its mount unit and mountpoint directory removed. Every
 # local snapshot is kept and the dataset's autobackup:bak selection is left
-# alone: whether the final state replicates depends on that selection and on
-# which backup jobs are enabled. A selected dataset's history then thins like
-# any other's until the operator sets autobackup:bak=false on the source and
-# its replicas (freezing it) and destroys them by hand.
+# alone, so a selected dataset's snapshots, the final empty one included, reach
+# its zfs-autobackup replicas like any other's, and its history thins until the
+# operator sets autobackup:bak=false on the source and its replicas (freezing
+# it) and destroys them by hand. The offsite rsync skips canmount=off datasets,
+# so the offsite copy keeps the contents of the last sync before retirement.
 #
 # On a non-ZFS host the mountpoint is a plain directory and is deleted.
 #

@@ -416,34 +416,18 @@
           stdout={{ zfs_autobackup_verify_gate_nosnap.stdout }},
           stderr={{ zfs_autobackup_verify_gate_nosnap.stderr }})
 
-    # A retired dataset (canmount=off, never mounted) skips the mount check and
-    # ships its newest snapshot through a temporary read-only snapshot mount,
-    # which the script must clean up even when the transfer fails.
-    - name: _verify | Run the offsite script against a retired dataset
+    # A retired dataset (canmount=off, never mounted) skips the whole offsite
+    # leg, ahead of the mount check it would fail. Exiting 0 also proves no
+    # rsync ran, since the unreachable destination would fail it.
+    - name: _verify | Retired dataset skips the offsite sync
       command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/zfs_autobackup_restore_source_test/nomount
       changed_when: false
-      failed_when: false
       register: zfs_autobackup_verify_offsite_retired
+      failed_when: >-
+        zfs_autobackup_verify_offsite_retired.rc != 0
+        or 'is retired (canmount=off), skipping offsite sync'
+        not in zfs_autobackup_verify_offsite_retired.stdout
       become: true
-
-    - name: _verify | List ZFS mounts after the retired-dataset transfer
-      command: findmnt --types zfs --noheadings --output SOURCE
-      changed_when: false
-      register: zfs_autobackup_verify_offsite_retired_mounts
-
-    - name: _verify | Retired dataset reaches rsync from a snapshot mount and leaves none behind
-      assert:
-        that:
-          - "'is not the mount' not in zfs_autobackup_verify_offsite_retired.stderr"
-          - "'--out-format=dataset=rpool/zfs_autobackup_restore_source_test/nomount' in zfs_autobackup_verify_offsite_retired.stdout"
-          - "'/.zfs/snapshot/' not in zfs_autobackup_verify_offsite_retired.stdout"
-          - zfs_autobackup_verify_offsite_retired_mounts.stdout_lines | select('search', 'nomount@') | list | length == 0
-        fail_msg: >-
-          offsite leg mishandled a retired dataset
-          (rc={{ zfs_autobackup_verify_offsite_retired.rc }},
-          stdout={{ zfs_autobackup_verify_offsite_retired.stdout }},
-          stderr={{ zfs_autobackup_verify_offsite_retired.stderr }},
-          mounts={{ zfs_autobackup_verify_offsite_retired_mounts.stdout_lines }})
 
     # Functional round-trip for zfs_backup_restore from the replica the onsite pull
     # produced: the selected history range, a dataset the restore must leave

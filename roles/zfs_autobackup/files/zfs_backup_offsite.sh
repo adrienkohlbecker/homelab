@@ -15,8 +15,15 @@ fi
 
 DESTPATH=${DATASET//\//_}
 
+# canmount=off marks a dataset retired by the zfs_dataset remove helper, whose
+# final snapshot is empty. Syncing it with --delete would wipe the offsite copy
+# of its pre-retirement contents, so that copy is left as it stands.
+if [ "$(zfs get canmount -H -o value "$DATASET")" = off ]; then
+  echo "$DATASET is retired (canmount=off), skipping offsite sync"
+  exit 0
+fi
+
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
-CANMOUNT=$(zfs get canmount -H -o value "$DATASET")
 
 # Validate the mount first, ahead of every skip path below (no-snapshot and the
 # change-gate): a broken mount is a fault the offsite run must surface
@@ -24,11 +31,7 @@ CANMOUNT=$(zfs get canmount -H -o value "$DATASET")
 # exits 1 for monitoring), and skipping ahead of it would let a degraded
 # /mnt/services or /mnt/data be silently reported as an up-to-date skip. The
 # check is sub-second, so paying it on skip nights costs nothing.
-# canmount=off marks a dataset retired by the zfs_dataset remove helper: it is
-# never mounted, and its snapshots alone carry its state.
-if [ "$CANMOUNT" != off ]; then
-  zfs_check_mount "$DATASET" "$MOUNTPOINT"
-fi
+zfs_check_mount "$DATASET" "$MOUNTPOINT"
 
 # awk collapses the grep|tail|cut pipeline: snapshots arrive sorted by
 # creation (ascending), so the last @bak- line is the newest. A bare
@@ -61,16 +64,7 @@ if [ -f "$MARKER_FILE" ] && [ -z "$(find "$MARKER_FILE" -mmin +43200 -print)" ];
   fi
 fi
 
-# A retired dataset has no live mount to reach .zfs/snapshot through, so mount
-# the snapshot itself read-only for the transfer.
-if [ "$CANMOUNT" = off ]; then
-  SNAPSHOT_DIR=$(mktemp -d)
-  trap 'rmdir "$SNAPSHOT_DIR"' EXIT
-  mount -t zfs -o ro "$DATASET@$LAST_SNAPSHOT" "$SNAPSHOT_DIR"
-  trap 'umount "$SNAPSHOT_DIR" && rmdir "$SNAPSHOT_DIR"' EXIT
-else
-  SNAPSHOT_DIR="${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT"
-fi
+SNAPSHOT_DIR="${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT"
 
 # rsync's running progress is helpful when an operator runs this by hand but is
 # just \r-spam in the journal when the timer runs it, so only request it when
