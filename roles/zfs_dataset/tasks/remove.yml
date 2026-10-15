@@ -84,12 +84,9 @@
         - name: remove | Snapshot the dataset before emptying it
           shell: |
             set -euo pipefail
-            stamp=$(date +%Y%m%d%H%M%S)
-            zfs snapshot "{{ zfs_dataset_args.dataset }}@bak-$stamp"
-            echo "$stamp"
+            zfs snapshot "{{ zfs_dataset_args.dataset }}@bak-$(date +%Y%m%d%H%M%S)"
           args:
             executable: /bin/bash
-          register: _zfs_dataset_remove_kept
           changed_when: true
           become: true
 
@@ -110,9 +107,7 @@
         - name: remove | Take the final snapshot
           shell: |
             set -euo pipefail
-            while [ "$(date +%Y%m%d%H%M%S)" = "{{ _zfs_dataset_remove_kept.stdout }}" ]; do
-              sleep 0.1
-            done
+            sleep 1
             zfs snapshot "{{ zfs_dataset_args.dataset }}@bak-$(date +%Y%m%d%H%M%S)"
           args:
             executable: /bin/bash
