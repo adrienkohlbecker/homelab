@@ -197,34 +197,34 @@
           (sources={{ zfs_autobackup_verify_pull_sources.stdout_lines }},
           replicas={{ zfs_autobackup_verify_pull_replicas.stdout_lines }})
 
-    # Functional check for the quiesce path: --no-resume must snapshot but leave
-    # zfs_autosnapshot.target stopped (the rebuild runbooks depend on state
-    # writers NOT restarting after the final pre-wipe snapshot).
+    # Functional check for the quiesce path the rebuild runbooks run: --final
+    # must snapshot but leave zfs_autosnapshot.target stopped, so no state writer
+    # restarts after the final pre-wipe snapshot.
     - name: _verify | Wait out the snapshot-name second (bak-%Y%m%d%H%M%S)
       pause:
         seconds: 2
 
-    - name: _verify | Run a local backup with --no-resume
-      command: /usr/local/bin/zfs_backup_local --no-resume
-      changed_when: false
+    - name: _verify | Run the final quiesced backup
+      command: /usr/local/bin/zfs_autosnapshot --final
+      changed_when: true
       become: true
 
-    - name: _verify | Read zfs_autosnapshot.target state after --no-resume  # noqa: command-instead-of-module
+    - name: _verify | Read zfs_autosnapshot.target state after --final  # noqa: command-instead-of-module
       command: systemctl is-active zfs_autosnapshot.target
       changed_when: false
       failed_when: false
       register: zfs_autobackup_verify_target_state
       become: true
 
-    - name: _verify | Target stayed stopped after --no-resume
+    - name: _verify | Target stayed stopped after --final
       assert:
         that:
           - zfs_autobackup_verify_target_state.stdout | trim == 'inactive'
         fail_msg: >-
-          zfs_backup_local --no-resume left zfs_autosnapshot.target
+          zfs_autosnapshot --final left zfs_autosnapshot.target
           {{ zfs_autobackup_verify_target_state.stdout }} (expected inactive)
 
-    - name: _verify | Restart the target the --no-resume run left down
+    - name: _verify | Restart the target the --final run left down
       systemd:
         name: zfs_autosnapshot.target
         state: started
