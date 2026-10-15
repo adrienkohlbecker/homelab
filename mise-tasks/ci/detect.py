@@ -687,6 +687,8 @@ def render_child_pipeline(
             cell_groups.append({"stage": "test2", "cells": cells[mid:]})
     else:
         cell_groups = []
+    # The rebuild needs a release besides the default to rebuild from.
+    keep_pools_test = keep_pools_test and bool(OTHER_UBUNTUS)
     # Stage order gives the critical-path site job the lowest build id; needs:[]
     # keeps every stage parallel. Empty pipelines still need one stage.
     cell_stages = [g["stage"] for g in cell_groups]

@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--from",
         dest="from_release",
-        default=OTHER_UBUNTUS[0],
+        default=next(iter(OTHER_UBUNTUS), None),
         choices=sorted(UBUNTU_RELEASES),
         help="Release of the Lab fixture's root (default: %(default)s)",
     )
@@ -51,6 +51,8 @@ def parse_args() -> argparse.Namespace:
         help="Overall timeout (default: %(default)s)",
     )
     args = parser.parse_args()
+    if args.from_release is None:
+        parser.error("the release catalog has no release besides the default to rebuild from")
     if args.from_release == args.to_release:
         parser.error("--from and --to must name different releases")
     return args

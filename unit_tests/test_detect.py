@@ -1314,6 +1314,13 @@ class TestRenderChildPipeline:
         assert 'keep_pools_test.py --from "$UBUNTU" --timeout 2400' in script
         assert "no_cells" not in doc
 
+    def test_single_release_catalog_has_no_keep_pools_job(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(detect, "OTHER_UBUNTUS", ())
+        doc = _render_child_doc([], site_test=False, keep_pools_test=True)
+        assert "_keep_pools_test:lab" not in doc
+        assert doc["stages"] == ["test1"]
+        assert "no_cells" in doc
+
     def test_site_test_only_stage(self) -> None:
         # site_test with no cells still seeds a single leading `site` stage.
         doc = _render_child_doc([], site_test=True)
