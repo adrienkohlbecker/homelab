@@ -2,20 +2,9 @@
 """
 Keep-pools rebuild of the Lab integration fixture from a live environment.
 
-Boots a Lab fixture of the old release and converges the zfs role on it, as on
-a production host, then powers it off. A Minimal cloud image of the new
-release stands in for the live ISO: it boots with the Lab disks attached and
-runs packer/scripts/provision.sh with KEEP_POOLS=1, then reruns it, which must
-refuse before writing. The Lab disks then boot alone. The old root must still
-be the one that boots, with the shared state unchanged -- partition tables, md
-array members, ESP files, firmware boot entries, pool layouts, datasets, swap,
-the shared kernel command line, and the host identity. Switched to, the new
-root must boot with every pool and dataset in place and the old root's
-identity: hostid, machine-id, SSH host keys, and the login user's ids. The
-boot and refind roles then converge on the new root, which rewrites the shared
-ESP and kernel command line, and the test reboots into it once more before
-rolling back to the old root. test/playbooks/_keep_pools.yml holds the
-assertions.
+Rebuilds a zfs-converged Lab fixture of the old release as the new one with
+packer/scripts/provision.sh KEEP_POOLS=1, run from a Minimal stand-in for the
+live ISO; test/playbooks/_keep_pools.yml holds the phases and assertions.
 
 Not covered: the bare_metal install target (the fixture installs as qemu, to
 keep the harness's journal mirror), a single-disk host such as pug, x86_64
