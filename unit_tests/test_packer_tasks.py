@@ -552,10 +552,12 @@ def test_keep_pools_job_covers_the_staged_installer() -> None:
         assert any(re.fullmatch(pattern, path) for path in staged), pattern
 
 
-def _ssh_public_key(tmp_path: Path, name: str) -> str:
-    key = tmp_path / name
-    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
-    return key.with_suffix(".pub").read_text().strip()
+# Valid public keys whose private halves were discarded: preflight only parses
+# them.
+SSH_PUBLIC_KEYS = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICy9BM2iVejzgsO9J8tNGIImfqZtAsE0IJcHxUWnAj6D fixture_one",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHqE70lL/w/SKAYIlKLZivtLl5c8Jeqk5fJh4f4YugqA fixture_two",
+)
 
 
 def _provision_preflight(tmp_path: Path, **overrides: str) -> subprocess.CompletedProcess[str]:
@@ -579,7 +581,7 @@ def _provision_preflight(tmp_path: Path, **overrides: str) -> subprocess.Complet
         "KEEP_POOLS": "1",
         "TARGET_HOSTNAME": "lab",
         "TARGET_USERNAME": "operator",
-        "SSH_KEY_PUB": _ssh_public_key(tmp_path, "operator"),
+        "SSH_KEY_PUB": SSH_PUBLIC_KEYS[0],
         **overrides,
     }
     return subprocess.run(["bash", str(scripts / "provision.sh")], env=env, text=True, capture_output=True, check=False)
@@ -590,7 +592,7 @@ requires_ssh_keygen = pytest.mark.skipif(shutil.which("ssh-keygen") is None, rea
 
 @requires_ssh_keygen
 def test_provision_preflight_accepts_a_multi_line_key_list(tmp_path: Path) -> None:
-    keys = f"{_ssh_public_key(tmp_path, 'first')}\n\n{_ssh_public_key(tmp_path, 'second')}\n"
+    keys = f"{SSH_PUBLIC_KEYS[0]}\n\n{SSH_PUBLIC_KEYS[1]}\n"
 
     result = _provision_preflight(tmp_path, SSH_KEY_PUB=keys)
 
