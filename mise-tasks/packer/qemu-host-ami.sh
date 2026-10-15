@@ -11,8 +11,6 @@ set -euo pipefail
 BAKE_SCHEDULER_ROLE_ARN="arn:aws:iam::000390721279:role/homelab-ci-cell-scheduler"
 BAKE_BACKSTOP_TTL_HOURS=3
 architecture="${usage_architecture:-x86_64}"
-build_id="${CI_PIPELINE_ID:-local}"
-job_id="${CI_JOB_ID:-local}"
 repo_root=$(git rev-parse --show-toplevel)
 ubuntu="${usage_ubuntu:-$(yq -r .variables.CI_HOST_UBUNTU "${repo_root}/.gitlab-ci.yml")}"
 
@@ -181,8 +179,8 @@ packer_args=(
   -only="amazon-ebs.qemu_host"
   -var "architecture=${architecture}"
   -var "ubuntu_name=${ubuntu}"
-  -var "qemu_host_build_id=${build_id}"
-  -var "qemu_host_job_id=${job_id}"
+  -var "qemu_host_build_id=${CI_PIPELINE_ID:-local}"
+  -var "qemu_host_job_id=${CI_JOB_ID:-local}"
   -var "qemu_host_manifest_path=${manifest}"
   packer/aws
 )
