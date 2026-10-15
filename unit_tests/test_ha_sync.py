@@ -385,6 +385,41 @@ def test_push_refuses_local_input_before_publishing(
     assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
 
 
+@pytest.mark.parametrize("gui_edit", [False, True], ids=["untouched", "gui_edit"])
+def test_push_replaces_an_upload_ha_rejected(synced_clone, monkeypatch: pytest.MonkeyPatch, gui_edit: bool) -> None:
+    sync, clone, host = synced_clone
+    check_host_config = sync.check_host_config
+    reloads = _stub_ha(monkeypatch, sync)
+    monkeypatch.setattr(sync, "check_host_config", check_host_config)
+    verdict = {"result": "invalid", "errors": "Invalid config for 'automation'"}
+    monkeypatch.setattr(sync.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(json.dumps(verdict).encode()))
+    (clone / "automations.yaml").write_text("- id: broken\n")
+    with pytest.raises(SystemExit, match="Invalid config"):
+        sync.do_push()
+    assert host["automations.yaml"] == b"- id: broken\n"
+    # Capturing the rejected upload as a GUI edit would bury the fix.
+    with pytest.raises(SystemExit, match="origin changes await push"):
+        sync.do_pull()
+
+    if gui_edit:
+        host["automations.yaml"] = b"- id: gui\n"
+    (clone / "automations.yaml").write_text("- id: fixed\n")
+    verdict = {"result": "valid", "errors": None}
+
+    if gui_edit:
+        with pytest.raises(SystemExit, match="host diverged"):
+            sync.do_push()
+        assert host["automations.yaml"] == b"- id: gui\n"
+        return
+    sync.do_push()
+
+    head = _git(clone, "rev-parse", "HEAD")
+    assert host["automations.yaml"] == b"- id: fixed\n"
+    assert reloads == ["automation.reload"]
+    assert _synced_commit(clone, sync) == (head, head)
+    assert sync.resolve_ref(sync.UPLOAD_REF) is None
+
+
 @pytest.mark.parametrize("rel", ["scripts.yaml", "blueprints/automation/notify.yaml"], ids=["literal", "globbed"])
 def test_push_refuses_a_deletion_lab_still_holds(synced_clone, monkeypatch: pytest.MonkeyPatch, rel: str) -> None:
     sync, clone, host = synced_clone

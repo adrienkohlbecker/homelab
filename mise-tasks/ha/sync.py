@@ -43,6 +43,10 @@ HOST = "lab"
 HOST_DIR = "/mnt/services/homeassistant"
 HA_URL = "https://homeassistant.lab.fahm.fr"
 SYNCED_TAG = "last_synced_to_host"
+# Local ref to the commit uploaded last, kept until SYNCED_TAG confirms it. A
+# host still holding exactly that upload (say, one HA rejected) is no GUI edit,
+# so the next push may replace it.
+UPLOAD_REF = "refs/ha_sync/unconfirmed_upload"
 # Expanded by lab's shell at upload time; see upload_to_host.
 BACKUP_SUFFIX = '-S ".$$.$(date +%Y-%m-%d@%H:%M:%S)~"'
 KEYCHAIN_SERVICE = "homelab-homeassistant-api-token"
@@ -326,6 +330,7 @@ def advance_synced_tag(commit: str = "HEAD") -> None:
     """Publish the applied commit before moving the local marker."""
     sh(["git", "push", "origin", "--force", f"{commit}:refs/tags/{SYNCED_TAG}"], cwd=CLONE)
     sh(["git", "tag", "-f", SYNCED_TAG, commit], cwd=CLONE)
+    sh(["git", "update-ref", "-d", UPLOAD_REF], cwd=CLONE)
 
 
 def host_snapshot_tree(base: str) -> str:
@@ -530,7 +535,8 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     #   clone_bytes -- content in the clone working tree, which is what gets
     #                  uploaded and, after commit_and_push, what HEAD holds
     #   host_bytes  -- content on lab, or None if not deployed yet
-    # diverged   = host content differs from both tag and clone
+    #   upload_bytes -- content of an upload not yet confirmed by the tag
+    # diverged   = host content differs from tag, clone and unconfirmed upload
     # changed    = host content differs from clone (missing-on-host counts)
     # pending    = clone content differs from the last successfully reloaded tag
     diverged: list[str] = []
@@ -540,6 +546,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
         clone_bytes = worktree_file(file.rel)
         tag_bytes = blob_at(SYNCED_TAG, file.rel)
         host_bytes = host_file(file.rel)
+        upload_bytes = blob_at(UPLOAD_REF, file.rel)
         # Push-only files (pull=False) are repo-authoritative: the host copy is
         # never captured back (do_pull skips them), so a host/tag mismatch must
         # not block the push -- a pull can't resolve it (it would deadlock: the
@@ -550,7 +557,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
             file.pull
             and tag_bytes is not None
             and host_bytes is not None
-            and host_bytes not in (tag_bytes, clone_bytes)
+            and host_bytes not in (tag_bytes, clone_bytes, upload_bytes)
         ):
             diverged.append(file.rel)
             continue
@@ -609,6 +616,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
         print("\033[1;33mdry-run\033[0m: nothing written to host, no git refs moved, HA not reloaded.")
         return
     if files:
+        sh(["git", "update-ref", UPLOAD_REF, "HEAD"], cwd=CLONE)
         upload_to_host(files)
         print(f"push: uploaded {relpaths}")
     if token is not None:
