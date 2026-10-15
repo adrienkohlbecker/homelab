@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -964,6 +965,25 @@ def test_hetzner_first_boot_rejects_an_unmeasured_or_ungrown_pool(
     result = _hetzner_first_boot(tmp_path, zpool, lsblk)
 
     assert (result.returncode == 0) is verified, result.stdout + result.stderr
+
+
+def test_hetzner_first_boot_wait_is_bounded(tmp_path: Path) -> None:
+    """A first boot whose cloud-init never settles must fail into the caller's
+    diagnostics and snapshot deletion rather than hang the upload job."""
+    real_timeout = shutil.which("timeout")
+    assert real_timeout, "hetzner.sh needs coreutils timeout"
+    fake_bin = tmp_path / "bin"
+    _executable(fake_bin / "ssh", "#!/bin/sh\nexec sleep 60\n")
+    # Keep the script's bound but shrink its duration to one second.
+    _executable(fake_bin / "timeout", f'#!/bin/sh\nshift\nexec {shlex.quote(real_timeout)} 1 "$@"\n')
+    env = dict(os.environ)
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    script = f"source {shlex.quote(str(HETZNER_SH))}\nKEY=/tmp/test_key RESCUE_IP=192.0.2.1 rescue_verify_first_boot\n"
+
+    result = subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30)
+
+    assert result.returncode == 1, result.stderr
+    assert "did not finish cleanly" in result.stderr
 
 
 def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:

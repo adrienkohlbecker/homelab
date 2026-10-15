@@ -113,10 +113,10 @@ rescue_create() {
 # snapshot presents a new host key, so skip the rescue known_hosts.
 rescue_verify_first_boot() {
   local out pool part
-  out=$(ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  out=$(timeout 600 ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ConnectTimeout=10 "root@$RESCUE_IP" \
     'cloud-init status --wait --long >&2 && pool=$(zpool list -Hp -o size rpool) && part=$(lsblk -bno SIZE /dev/disk/by-partlabel/rpool) && echo "$pool $part"') || {
-    echo "first boot: cloud-init did not finish cleanly or rpool could not be measured" >&2
+    echo "first boot: cloud-init did not finish cleanly within 10 minutes or rpool could not be measured" >&2
     return 1
   }
   [[ $out =~ ^([1-9][0-9]*)\ ([1-9][0-9]*)$ ]] || {
