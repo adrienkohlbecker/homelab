@@ -5,6 +5,7 @@ from conftest import load_repo_module
 
 ROOT = Path(__file__).parents[1]
 PIPELINE = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text())
+UBUNTU_RELEASES = yaml.safe_load((ROOT / "data/ubuntu_releases.yml").read_text())["releases"]
 IMAGE_STORE = load_repo_module("mise-tasks/ci/qemu_image_store.py")
 
 
@@ -12,6 +13,11 @@ def test_ansible_config_is_global() -> None:
     assert PIPELINE["variables"]["ANSIBLE_CONFIG"] == "$CI_PROJECT_DIR/ansible.cfg"
     assert "HOMELAB_CI_ARM" not in PIPELINE["variables"]
     assert PIPELINE["detect"]["script"][-1] == 'mise run ci:detect --target "$HOMELAB_CI_TARGET"'
+
+
+def test_ci_host_release_is_in_the_catalog() -> None:
+    # Packer and Terraform resolve the runner-host release through the catalog.
+    assert PIPELINE["variables"]["CI_HOST_UBUNTU"] in UBUNTU_RELEASES
 
 
 def test_child_pipeline_forwards_pipeline_variables() -> None:
@@ -82,7 +88,7 @@ def test_fox_image_builds_and_labels_one_release() -> None:
 
     # packer:hetzner labels and prunes snapshots by its own --ubuntu, so an
     # omitted flag would publish another release's build under its default.
-    assert job["variables"]["FOX_UBUNTU"] in yaml.safe_load((ROOT / "data/ubuntu_releases.yml").read_text())["releases"]
+    assert job["variables"]["FOX_UBUNTU"] in UBUNTU_RELEASES
     assert job["script"][-2:] == [
         'mise run packer:build hetzner --ubuntu "$FOX_UBUNTU"',
         'mise run packer:hetzner --ubuntu "$FOX_UBUNTU"',
