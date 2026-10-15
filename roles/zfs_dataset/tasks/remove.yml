@@ -148,8 +148,9 @@
               canmount: 'off'
           become: true
 
-    # Setting canmount=off above unmounts the dataset; this catches one
-    # already set off that is still mounted.
+    # Setting canmount=off above unmounts the dataset or fails while it is
+    # busy. One set off by hand with zfs set -u, or mounted with
+    # mount -o zfsutil, stays mounted; this unmounts it.
     - name: remove | Unmount the dataset
       when:
         - _zfs_dataset_remove_state.rc == 0
