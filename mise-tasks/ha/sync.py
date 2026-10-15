@@ -8,14 +8,12 @@ Bidirectional sync for Home Assistant GUI YAML.
 
 The gitignored ha_gui_config clone is the source of truth for these files.
 `last_synced_to_host` records the clone commit applied on lab, so push can
-refuse host-side edits and retry a reload that failed after upload.
+refuse host-side edits and retry an upload HA rejected or failed to reload.
 
 pull: commit host files on top of origin, advance the tag to that capture,
 then rebase unpushed local commits onto it.
 push: validate changed files, commit local clone edits, upload to lab, reload
 domains or restart HA for files without a hot reload, then advance the tag.
-push --dry-run: compare the host to the working tree, validate and print what
-would change, but do not write to the host or move git refs.
 
 Both pull and push bring the clone up to date with origin first, fast-forward
 only, so that `last_synced_to_host` stays unambiguous about what is running on
@@ -271,12 +269,7 @@ def blob_at(ref: str, filename: str) -> bytes | None:
 
 
 def worktree_file(filename: str) -> bytes | None:
-    """File content from the clone working tree, or None if absent.
-
-    push compares against the working tree (uncommitted edits included) rather
-    than the HEAD blob: it validates and decides whether to refuse before
-    auto-committing, and `--dry-run` never commits at all.
-    """
+    """File content from the clone working tree, or None if absent."""
     try:
         return (CLONE / filename).read_bytes()
     except OSError:
@@ -517,12 +510,8 @@ def do_pull(rebase: bool = False) -> None:
 def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     """Upload clone edits to lab, reload HA, then advance the synced tag.
 
-    Refusals on local input (host divergence, syntax, missing API token) happen
-    before local edits are committed or anything reaches origin: a commit
-    published ahead of the tag makes `pull` refuse too, which would leave
-    neither command able to reconcile a diverged host. HA's configuration check
-    needs the uploaded files, so it refuses after publishing; the tag stays put
-    and the next push retries.
+    Every refusal HA need not judge comes before publishing, since a commit on
+    origin ahead of the tag also makes `pull` refuse.
     """
     assert_clone_present()
     if not dry_run:
