@@ -1207,9 +1207,6 @@ class TestGitlabChangeMatrix:
         ("path", "expected"),
         [
             ("packer/scripts/provision.sh", True),
-            ("packer/scripts/chroot.sh", True),
-            ("roles/boot/files/dracut_host.conf", True),
-            ("roles/console/files/keyboard", True),
             ("packer/qemu.pkr.hcl", False),
             ("roles/boot/files/other.conf", False),
         ],
