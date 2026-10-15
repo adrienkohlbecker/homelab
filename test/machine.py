@@ -860,24 +860,31 @@ class Machine:
         self.ssh_command("sudo", "cloud-init", "status", "--wait", check=False)
 
     def _ssh_banner_ready(self) -> bool:
-        """Probe the SSH port once. Return True iff a non-empty banner arrives."""
+        """Probe the SSH port once. Return True iff sshd's identification
+        line (RFC 4253's "SSH-protoversion-softwareversion") arrives."""
 
         # qemu's hostfwd accepts before sshd listens, then sends nothing or
-        # drops the connection, so only a banner proves sshd is up. OSError
-        # covers the refused, reset, and timed-out cases alike. Once the
-        # guest's network is up a refused probe fails fast, so polling stays
-        # tight. Before that, slirp keeps retrying an abandoned probe's SYN
-        # (first after ~3s, on 0.5s ticks) and delivers it once sshd listens,
-        # as a connection that never authenticates. sshd >= 9.8 penalises
-        # those (1s each, decaying in real time, active past 15s), so a burst
-        # of short abandoned probes locks the harness out. Holding each probe
-        # through slirp's first retry caps abandonment well under one per
-        # second.
+        # drops the connection, and an sshd refusing the source under
+        # PerSourcePenalties or MaxStartups sends "Not allowed at this time"
+        # before closing, so only the identification line proves sshd will
+        # take a session. OSError covers the refused, reset, and timed-out
+        # cases alike. Once the guest's network is up a refused probe fails
+        # fast, so polling stays tight. Before that, slirp keeps retrying an
+        # abandoned probe's SYN (first after ~3s, on 0.5s ticks) and delivers
+        # it once sshd listens, as a connection that never authenticates.
+        # sshd >= 9.8 penalises those (1s each, decaying in real time, active
+        # past 15s), so a burst of short abandoned probes locks the harness
+        # out. Holding each probe through slirp's first retry caps abandonment
+        # well under one per second.
         try:
-            with socket.create_connection((self.ssh_host, self.ssh_port), timeout=3.5) as sock:
-                return bool(sock.recv(1024).strip())
+            with (
+                socket.create_connection((self.ssh_host, self.ssh_port), timeout=3.5) as sock,
+                sock.makefile("rb") as stream,
+            ):
+                line = stream.readline(255)
         except OSError:
             return False
+        return line.startswith(b"SSH-") and line.endswith(b"\n")
 
     def run(self, test: Callable[[], None], label: str | None) -> int:
         """Run an entry point's *test* with output mirrored to the run log.

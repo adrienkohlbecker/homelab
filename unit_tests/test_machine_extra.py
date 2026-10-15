@@ -629,6 +629,39 @@ class TestQmpTransport:
             m._qmp("query-vnc")
 
 
+@pytest.mark.parametrize(
+    ("chunks", "ready"),
+    [
+        ([b"SSH-2.0-OpenSSH_9.9\r\n"], True),
+        # One identification line split across TCP segments.
+        ([b"SSH-2", b".0-OpenSSH_9.9\r\n"], True),
+        # sshd refusing the source under PerSourcePenalties or MaxStartups.
+        ([b"Not allowed at this time\r\n"], False),
+        # qemu's hostfwd accepting before sshd listens, then hanging up.
+        ([], False),
+        ([b"SSH-2.0-Open"], False),
+    ],
+)
+def test_ssh_probe_requires_an_identification_line(
+    machine_factory: Callable[..., machine.Machine], chunks: list[bytes], ready: bool
+) -> None:
+    m = machine_factory()
+    with socket.create_server((machine.SSH_HOST, 0)) as server:
+        m.ssh_port = server.getsockname()[1]
+
+        def serve() -> None:
+            conn, _ = server.accept()
+            with conn:
+                for chunk in chunks:
+                    conn.sendall(chunk)
+                    time.sleep(0.05)
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        assert m._ssh_banner_ready() is ready
+        thread.join(5)
+
+
 class TestWait:
     @pytest.fixture
     def m(self, machine_factory: Callable[..., machine.Machine]) -> Iterator[machine.Machine]:
