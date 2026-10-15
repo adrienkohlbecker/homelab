@@ -1,5 +1,9 @@
+import os
+import subprocess
 from pathlib import Path
+from string import Template
 
+import pytest
 import yaml
 from conftest import load_repo_module
 
@@ -60,11 +64,11 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
         {"QEMU_HOST_ARCHITECTURE": "aarch64"},
     ]
     assert job["resource_group"] == "ami-qemu-host-$QEMU_HOST_ARCHITECTURE"
-    assert job["script"][-2:] == [
+    assert {
         'source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"',
         'mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" '
         '${NEXT_UBUNTU:+--ubuntu "$NEXT_UBUNTU"} --promote',
-    ]
+    } <= set(job["script"])
 
 
 def test_qemu_host_ami_cleanup_runs_after_a_script_timeout() -> None:
@@ -85,20 +89,37 @@ def test_qemu_host_ami_cleanup_runs_after_a_script_timeout() -> None:
     assert after_script > 10
 
 
-def test_hosted_jobs_pull_a_tag_ci_image_publishes() -> None:
-    ci_image = PIPELINE["ci_image"]
-    zbm_build = PIPELINE["zbm_build"]
-    # Without NEXT_UBUNTU, ci_image publishes the CI_HOST_UBUNTU image.
-    assert ci_image["script"][0] == 'release="${NEXT_UBUNTU:-$CI_HOST_UBUNTU}"'
-    script = "\n".join(ci_image["script"]).replace("$release", "$CI_HOST_UBUNTU")
-    archs = [entry["HOSTED_ARCH"] for entry in PIPELINE[".hosted_arch"]["parallel"]["matrix"]]
-    assert ".hosted_arch" in ci_image["extends"]
-    assert ".hosted_arch" in zbm_build["extends"]
-    published = [script.replace("$HOSTED_ARCH", arch) for arch in archs]
-    pulled = [PIPELINE[".hosted"]["image"]] + [zbm_build["image"].replace("$HOSTED_ARCH", arch) for arch in archs]
+@pytest.mark.parametrize("next_ubuntu", [None, "noble"])
+def test_ci_image_builds_and_publishes_the_selected_release(tmp_path: Path, next_ubuntu: str | None) -> None:
+    docker = tmp_path / "docker"
+    docker.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >>"$DOCKER_LOG"\n')
+    docker.chmod(0o755)
+    env = {
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "DOCKER_LOG": str(tmp_path / "docker.log"),
+        "CI_HOST_UBUNTU": PIPELINE["variables"]["CI_HOST_UBUNTU"],
+        "CI_REGISTRY_IMAGE": "registry.example/homelab",
+        "CI_COMMIT_SHA": "0abc",
+        "CI_COMMIT_BRANCH": "master",
+        "CI_DEFAULT_BRANCH": "master",
+        "HOSTED_ARCH": "x86",
+    }
+    if next_ubuntu:
+        env["NEXT_UBUNTU"] = next_ubuntu
+    release = next_ubuntu or env["CI_HOST_UBUNTU"]
 
-    for image in pulled:
-        assert any(f'docker push "{image}"' in pushes for pushes in published), image
+    subprocess.run(["bash", "-ec", "\n".join(PIPELINE["ci_image"]["script"])], env=env, check=True)
+
+    calls = (tmp_path / "docker.log").read_text().splitlines()
+    (build,) = [call for call in calls if call.startswith("build ")]
+    assert f"--build-arg UBUNTU_RELEASE={release} " in build
+    pushes = {call.removeprefix("push ") for call in calls if call.startswith("push ")}
+    assert pushes == {f"registry.example/homelab/ci:{tag}-{release}-x86" for tag in ("0abc", "latest")}
+    if not next_ubuntu:
+        # Hosted jobs pull the tag the default build moves.
+        assert ".hosted_arch" in PIPELINE["zbm_build"]["extends"]
+        pulled = {PIPELINE[".hosted"]["image"], PIPELINE["zbm_build"]["image"]}
+        assert {Template(image).substitute(env) for image in pulled} <= pushes
 
 
 def test_fox_image_release_is_in_the_catalog() -> None:
