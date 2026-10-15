@@ -1014,17 +1014,6 @@ resource "aws_ssm_parameter" "ci_qemu_host_ami" {
   }
 }
 
-# State migration from per-architecture keys; remove once applied.
-moved {
-  from = aws_ssm_parameter.ci_qemu_host_ami["x86_64"]
-  to   = aws_ssm_parameter.ci_qemu_host_ami["x86_64/resolute"]
-}
-
-moved {
-  from = aws_ssm_parameter.ci_qemu_host_ami["aarch64"]
-  to   = aws_ssm_parameter.ci_qemu_host_ami["aarch64/resolute"]
-}
-
 # ─── Launch templates: one per nested-qemu host pool ─────────────────────────
 # GitLab Runner/fleeting owns desired capacity, and the host runs shell jobs
 # that launch qemu/KVM locally. The AMI is resolved through the pool
