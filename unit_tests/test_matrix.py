@@ -96,11 +96,14 @@ class TestRoleMeta:
 
     def test_arm_cells_read_declared_subset(self) -> None:
         _make_role("svc", {"machines": {"lab": None, "minimal": None}, "arm": ["lab", "minimal"]})
-        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "resolute"), ("minimal", "resolute"))
+        assert matrix.load_role_test_config("svc").arm_cells == (
+            ("lab", matrix.DEFAULT_UBUNTU),
+            ("minimal", matrix.DEFAULT_UBUNTU),
+        )
 
     def test_arm_cells_accept_a_release_suffix(self) -> None:
         _make_role("svc", {"arm": ["lab", "lab:noble"]})
-        assert matrix.load_role_test_config("svc").arm_cells == (("lab", "resolute"), ("lab", "noble"))
+        assert matrix.load_role_test_config("svc").arm_cells == (("lab", matrix.DEFAULT_UBUNTU), ("lab", "noble"))
 
     @pytest.mark.parametrize(
         ("arm", "error"),
