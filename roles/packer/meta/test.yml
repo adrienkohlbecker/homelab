@@ -1,8 +1,10 @@
 # Noble ships a different image: initramfs-tools builds the generic boot image,
 # and rEFInd comes from the pinned release package. ARM Lab boots the shipped
-# rEFInd a second time under stock edk2 (see tasks/_verify.yml).
+# rEFInd a second time under stock edk2 (see tasks/_verify.yml); the Noble ARM
+# cell is the one that proves the baked pin survives that boot.
 base_prerequisites: false
 arm:
   - lab
+  - lab:noble
 ubuntu:
   - noble
