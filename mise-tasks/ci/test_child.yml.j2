@@ -139,7 +139,7 @@ stages:
     # timeout backstops the harness's own deadline; 60s permits VM teardown.
     - |
       rc=0
-      mise exec -- timeout --kill-after=30s 2460 test/keep_pools_test.py --from "$UBUNTU" --to {{ default_ubuntu }} --timeout 2400 || rc=$?
+      mise exec -- timeout --kill-after=30s 2460 test/keep_pools_test.py --from "$UBUNTU" --timeout 2400 || rc=$?
       echo "harness exit code: $rc"
       exit $rc
 {% endif %}

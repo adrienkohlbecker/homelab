@@ -29,7 +29,7 @@ import argparse
 import sys
 
 from machine import Machine, imagedir_for_host, sweep_stale_workdirs
-from matrix import UBUNTU_RELEASES
+from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
 from utils import phase, positive_seconds
 
 # The roles that write the state every root shares: the ESP's rEFInd and ZBM,
@@ -46,14 +46,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--from",
         dest="from_release",
-        default="noble",
+        default=next(codename for codename in UBUNTU_RELEASES if codename != DEFAULT_UBUNTU),
         choices=sorted(UBUNTU_RELEASES),
         help="Release of the Lab fixture's root (default: %(default)s)",
     )
     parser.add_argument(
         "--to",
         dest="to_release",
-        default="resolute",
+        default=DEFAULT_UBUNTU,
         choices=sorted(UBUNTU_RELEASES),
         help="Release installed beside it, and the live environment's (default: %(default)s)",
     )

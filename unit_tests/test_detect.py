@@ -1310,7 +1310,8 @@ class TestRenderChildPipeline:
         # The cell scaffold hydrates VARIANT for UBUNTU: the old root's release.
         assert job["variables"] == {"VARIANT": "lab", "UBUNTU": "noble"}
         script = "\n".join(job["script"])
-        assert f'keep_pools_test.py --from "$UBUNTU" --to {detect.DEFAULT_UBUNTU} --timeout 2400' in script
+        # --to defaults to the default release.
+        assert 'keep_pools_test.py --from "$UBUNTU" --timeout 2400' in script
         assert "no_cells" not in doc
 
     def test_site_test_only_stage(self) -> None:
