@@ -466,24 +466,12 @@ EXTRA_ZPOOL_OPTS=(
   -m none
 )
 
-pop_extra_disks() {
-  local n=$1 pool=$2 i
-  POPPED_EXTRA_DISKS=()
-  for ((i = 0; i < n; i++)); do
-    ((${#EXTRA_DISK_QUEUE[@]})) || fail "ran out of EXTRA_DISKS while allocating $n for $pool"
-    POPPED_EXTRA_DISKS+=("${EXTRA_DISK_QUEUE[0]}")
-    EXTRA_DISK_QUEUE=("${EXTRA_DISK_QUEUE[@]:1}")
-  done
-}
-
 create_extra_dozer() {
-  pop_extra_disks 2 dozer
-  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "${POPPED_EXTRA_DISKS[@]}"
+  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "$1" "$2"
 }
 
 create_extra_tank_mouse() {
-  pop_extra_disks 4 tank_mouse
-  local tm1=${POPPED_EXTRA_DISKS[0]} tm2=${POPPED_EXTRA_DISKS[1]} tank3=${POPPED_EXTRA_DISKS[2]} tank4=${POPPED_EXTRA_DISKS[3]}
+  local tm1=$1 tm2=$2 tank3=$3 tank4=$4 tm
   local special_args=()
   for tm in "$tm1" "$tm2"; do
     sgdisk -n1:0:+1014M -t1:BF01 "$tm"
@@ -511,14 +499,22 @@ create_extra_tank_mouse() {
     mouse mirror "$(partdev "$tm1" 2)" "$(partdev "$tm2" 2)"
 }
 
+# Hand EXTRA_DISKS to EXTRA_POOLS in order; preflight checked the names and
+# the disk count.
 create_extra_pools() {
   local pool
-  read -r -a EXTRA_DISK_QUEUE <<<"$EXTRA_DISKS"
+  # shellcheck disable=SC2086  # word-split the disk list into positional args
+  set -- $EXTRA_DISKS
   for pool in $EXTRA_POOLS; do
-    case "$pool" in
-    dozer) create_extra_dozer ;;
-    tank_mouse) create_extra_tank_mouse ;;
-    *) fail "unknown EXTRA_POOLS entry '$pool'" ;;
+    case $pool in
+    dozer)
+      create_extra_dozer "$1" "$2"
+      shift 2
+      ;;
+    tank_mouse)
+      create_extra_tank_mouse "$1" "$2" "$3" "$4"
+      shift 4
+      ;;
     esac
   done
 }
