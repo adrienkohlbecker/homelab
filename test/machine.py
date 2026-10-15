@@ -16,7 +16,7 @@ import traceback
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
+from typing import BinaryIO, NamedTuple
 
 import ansible_mitogen
 import yaml
@@ -53,10 +53,10 @@ PIDFILE_NAME = "pid"
 # One line of `info usernet` per hostfwd: protocol, fd, host address and port,
 # guest address and port.
 _HOSTFWD_RE = re.compile(r"(TCP|UDP)\[HOST_FORWARD\]\s+\d+\s+\S+\s+(\d+)\s+\S+\s+(\d+)")
-# Bound on reaching qemu's QMP socket and on each reply. qemu writes its
-# pidfile before it opens the monitor, so the first connects can be refused,
-# and greets only once machine init finishes, which a CI host booting a dozen
-# cells at once stretches well past a few seconds.
+# Bound on one QMP exchange, from reaching qemu's socket to the command's
+# reply. qemu writes its pidfile before it opens the monitor, so the first
+# connects can be refused, and greets only once machine init finishes, which a
+# CI host booting a dozen cells at once stretches well past a few seconds.
 QMP_TIMEOUT = 60
 # How long stop() lets qemu shut down on SIGTERM before SIGKILL.
 STOP_GRACE_SECONDS = 5
@@ -726,48 +726,78 @@ class Machine:
         deadline = time.monotonic() + IDFILE_TIMEOUT
         id_path = self.pid_file
         while not id_path.exists():
-            if self.proc and (returncode := self.proc.poll()) is not None:
-                raise RuntimeError(
-                    f"Launching machine failed (qemu wrapper exited with {returncode}); see {self.boot_file}"
-                )
+            self._raise_if_qemu_exited()
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
             self.remaining()
             sleep_tick(BOOT_POLL_INTERVAL)
         self._read_host_ports()
 
-    def _qmp_connect(self) -> socket.socket:
+    def _raise_if_qemu_exited(self) -> None:
+        """Fail at once, pointing at the boot console, when qemu has exited."""
+        if self.proc and (returncode := self.proc.poll()) is not None:
+            raise RuntimeError(
+                f"Launching machine failed (qemu wrapper exited with {returncode}); see {self.boot_file}"
+            )
+
+    def _qmp_wait(self, step: str, deadline: float) -> float:
+        """Seconds the next blocking QMP *step* may take: the rest of the
+        exchange's *deadline*, capped by the session's.
+
+        Past the session deadline this raises its bare TimeoutError, which
+        run() reports as the cell timing out; past the exchange's, a
+        TimeoutError naming *step*.
+        """
+        left = deadline - time.monotonic()
+        if (session := self.remaining()) is not None:
+            left = min(left, session)
+        if left <= 0:
+            raise TimeoutError(f"QMP {step} got no reply within {QMP_TIMEOUT}s")
+        return left
+
+    def _qmp_connect(self, deadline: float) -> socket.socket:
         """Connect to qemu's QMP socket, retrying until the monitor is up."""
-        deadline = time.monotonic() + QMP_TIMEOUT
         while True:
+            wait = self._qmp_wait("connect", deadline)
             sock = socket.socket(socket.AF_UNIX)
-            sock.settimeout(QMP_TIMEOUT)
+            sock.settimeout(wait)
             try:
                 sock.connect(str(self.qmp_socket))
                 return sock
             except FileNotFoundError, ConnectionRefusedError:
                 sock.close()
-                if time.monotonic() > deadline:
-                    raise
+                self._raise_if_qemu_exited()
                 time.sleep(0.1)
 
+    def _qmp_reply(self, sock: socket.socket, replies: BinaryIO, step: str, deadline: float) -> dict:
+        """Read QMP messages until *step*'s reply, skipping the greeting and
+        asynchronous events, which carry no "return" or "error"."""
+        while True:
+            sock.settimeout(self._qmp_wait(step, deadline))
+            try:
+                line = replies.readline()
+            except TimeoutError:
+                # A bare socket "timed out" would read as the session
+                # deadline in run(); name the step unless that is what passed.
+                self.remaining()
+                raise TimeoutError(f"QMP {step} got no reply within {QMP_TIMEOUT}s") from None
+            if not line:
+                self._raise_if_qemu_exited()
+                raise RuntimeError(f"qemu closed its monitor during QMP {step}; see {self.boot_file}")
+            if {"return", "error"} & (message := json.loads(line)).keys():
+                return message
+
     def _qmp(self, command: str, arguments: dict | None = None) -> object:
-        """Run one QMP command against this VM and return its result."""
+        """Run one QMP command against this VM and return its result.
+
+        QMP_TIMEOUT bounds the whole exchange, and the session deadline caps
+        every blocking step, so a stalled monitor cannot outlast either.
+        """
         deadline = time.monotonic() + QMP_TIMEOUT
-        with self._qmp_connect() as sock:
-            replies = sock.makefile("rb")
+        with self._qmp_connect(deadline) as sock, sock.makefile("rb") as replies:
             for request in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments or {}}):
                 sock.sendall(json.dumps(request).encode() + b"\n")
-                # The greeting and asynchronous events carry no "return". The
-                # socket timeout bounds each read, not a steady run of events.
-                # It raises a bare "timed out" that run() would report as the
-                # session deadline, so both cases name the QMP command.
-                try:
-                    while not ({"return", "error"} & (message := json.loads(replies.readline())).keys()):
-                        if time.monotonic() > deadline:
-                            raise TimeoutError
-                except TimeoutError:
-                    raise TimeoutError(f"QMP {request['execute']} got no reply within {QMP_TIMEOUT}s") from None
+                message = self._qmp_reply(sock, replies, request["execute"], deadline)
                 if "error" in message:
                     raise RuntimeError(f"QMP {request['execute']} failed: {message['error']}")
             return message["return"]

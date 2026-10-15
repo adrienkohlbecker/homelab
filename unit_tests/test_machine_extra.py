@@ -512,12 +512,19 @@ class TestQmpTransport:
 
     @staticmethod
     def _serve(
-        path: Path, replies: list[dict], *, delay: float, events: int = 1, greeting_delay: float = 0
+        path: Path,
+        replies: list[dict],
+        *,
+        delay: float,
+        events: int = 1,
+        greeting_delay: float = 0,
+        linger: float = 0,
     ) -> threading.Thread:
         """Bind *path* after *delay* (as qemu opens its monitor after the
         pidfile) and answer one connection: greeting after *greeting_delay*
         (as qemu greets after machine init), capabilities, *events*
-        asynchronous events 50ms apart, then *replies* to the command."""
+        asynchronous events 50ms apart, then *replies* to the command, and
+        hang up after *linger* more seconds."""
 
         def run() -> None:
             time.sleep(delay)
@@ -542,6 +549,7 @@ class TestQmpTransport:
                         time.sleep(0.05)
                     for reply in replies:
                         send(reply)
+                    time.sleep(linger)
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
@@ -582,7 +590,42 @@ class TestQmpTransport:
 
     def test_a_monitor_that_never_opens_times_out(self, m: machine.Machine, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(machine, "QMP_TIMEOUT", 0.3)
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(TimeoutError, match="QMP connect got no reply"):
+            m._qmp("query-vnc")
+
+    def test_silence_after_a_late_greeting_ends_at_the_exchange_deadline(
+        self, m: machine.Machine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Each read waits only for what is left of QMP_TIMEOUT, not a fresh
+        QMP_TIMEOUT after the last message."""
+        monkeypatch.setattr(machine, "QMP_TIMEOUT", 0.6)
+        self._serve(m.qmp_socket, [], delay=0, events=0, greeting_delay=0.4, linger=5)
+        start = time.monotonic()
+        with pytest.raises(TimeoutError, match="QMP query-vnc got no reply"):
+            m._qmp("query-vnc")
+        assert time.monotonic() - start < 0.9
+
+    def test_the_session_deadline_caps_every_read(self, m: machine.Machine) -> None:
+        """The session's bare TimeoutError, which run() reports as the cell
+        timing out, fires long before QMP_TIMEOUT."""
+        m.deadline = time.monotonic() + 0.3
+        self._serve(m.qmp_socket, [], delay=0, events=0, linger=5)
+        start = time.monotonic()
+        with pytest.raises(TimeoutError) as excinfo:
+            m._qmp("query-vnc")
+        assert str(excinfo.value) == ""
+        assert time.monotonic() - start < 1
+
+    def test_qemu_exiting_before_the_monitor_opens_fails_at_once(self, m: machine.Machine) -> None:
+        m.proc = cast(subprocess.Popen, SimpleNamespace(poll=lambda: 1))
+        start = time.monotonic()
+        with pytest.raises(RuntimeError, match=r"qemu wrapper exited with 1.*\.boot\.ansi"):
+            m._qmp("query-vnc")
+        assert time.monotonic() - start < 1
+
+    def test_a_monitor_closing_mid_exchange_points_at_the_boot_console(self, m: machine.Machine) -> None:
+        self._serve(m.qmp_socket, [], delay=0, events=0)
+        with pytest.raises(RuntimeError, match=r"closed its monitor during QMP query-vnc; see .*\.boot\.ansi"):
             m._qmp("query-vnc")
 
 
