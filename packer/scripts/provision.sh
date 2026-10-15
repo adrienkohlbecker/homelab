@@ -159,7 +159,11 @@ preflight() {
   fi
 
   for file in "${install_files[@]}"; do
-    [ -e "$SCRIPTS_DIR/$file" ] || fail "required install file not found: $SCRIPTS_DIR/$file"
+    if [[ $file == */ ]]; then
+      [ -d "$SCRIPTS_DIR/$file" ] || fail "required install directory not found: $SCRIPTS_DIR/$file"
+    else
+      [ -f "$SCRIPTS_DIR/$file" ] || fail "required install file not found: $SCRIPTS_DIR/$file"
+    fi
   done
 
   if [ "$KEEP_POOLS" = 1 ]; then
@@ -217,11 +221,12 @@ preflight() {
 # Packer selects qemu or hetzner; direct callers get the bare-metal path.
 export INSTALL_TARGET="${INSTALL_TARGET:-bare_metal}"
 
-# chroot.sh and everything it installs, staged together in the new root.
+# chroot.sh and everything it installs, staged together in the new root. A
+# trailing slash marks a directory.
 install_files=(chroot.sh "${ROLE_FILES[@]}")
 case $INSTALL_TARGET in
 qemu) install_files+=(homelab_guest_journal.service) ;;
-hetzner) install_files+=(hetzner) ;;
+hetzner) install_files+=(hetzner/) ;;
 esac
 
 # Never inferred from what the disks hold: a fresh install wipes them.

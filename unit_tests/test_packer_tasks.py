@@ -527,7 +527,7 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     # stages: a role file or a target's extras.
     consumed = set(re.findall(r"\$\{CHROOT_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
     assert consumed, "chroot.sh no longer names any role file"
-    target_extras = [file for files in _provision_target_extras().values() for file in files]
+    target_extras = [file.rstrip("/") for files in _provision_target_extras().values() for file in files]
     assert consumed <= {*staged, *target_extras}
 
 
@@ -565,15 +565,17 @@ SSH_PUBLIC_KEYS = (
 )
 
 
-def _provision_preflight(tmp_path: Path, **overrides: str) -> subprocess.CompletedProcess[str]:
+def _provision_preflight(
+    tmp_path: Path, *, swapped: str | None = None, **overrides: str
+) -> subprocess.CompletedProcess[str]:
     """Run provision.sh through its preflight call: a qemu keep-pools rebuild
-    from a non-ZFS live root, with every install file staged beside it."""
+    from a non-ZFS live root, with every install file staged beside it. The
+    install file named by swapped is staged as a directory if it is a file and
+    the reverse."""
     provision = QEMU_PROVISION_SH.read_text()
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     (scripts / "provision.sh").write_text(provision[: provision.index("\npreflight\n")] + "\npreflight\n")
-    for name in ["chroot.sh", *_provision_role_files(), *_provision_target_extras()["qemu"]]:
-        (scripts / name).touch()
     _executable(tmp_path / "bin" / "findmnt", "#!/bin/sh\necho ext4\n")
 
     env = {
@@ -587,6 +589,11 @@ def _provision_preflight(tmp_path: Path, **overrides: str) -> subprocess.Complet
         "SSH_KEY_PUB": SSH_PUBLIC_KEYS[0],
         **overrides,
     }
+    for name in ["chroot.sh", *_provision_role_files(), *_provision_target_extras().get(env["INSTALL_TARGET"], [])]:
+        if name.endswith("/") != (name.rstrip("/") == swapped):
+            (scripts / name).mkdir()
+        else:
+            (scripts / name).touch()
     return subprocess.run(["bash", str(scripts / "provision.sh")], env=env, text=True, capture_output=True, check=False)
 
 
@@ -611,6 +618,26 @@ def test_provision_preflight_rejects_an_empty_identity_override(tmp_path: Path, 
 
     assert result.returncode == 1
     assert f"invalid {variable} ''" in result.stderr
+
+
+@requires_ssh_keygen
+@pytest.mark.parametrize(
+    ("install_target", "swapped", "message"),
+    [
+        ("qemu", "chroot.sh", "required install file not found"),
+        ("qemu", "keyboard", "required install file not found"),
+        ("hetzner", "hetzner", "required install directory not found"),
+    ],
+)
+def test_provision_preflight_rejects_an_install_file_of_the_wrong_type(
+    tmp_path: Path, install_target: str, swapped: str, message: str
+) -> None:
+    """Caught here, before a fresh install wipes the disks, rather than when
+    staging or running it."""
+    result = _provision_preflight(tmp_path, swapped=swapped, INSTALL_TARGET=install_target)
+
+    assert result.returncode == 1
+    assert f"{message}: {tmp_path / 'scripts' / swapped}" in result.stderr
 
 
 def test_provision_preflight_rejects_an_unknown_keep_pools_value(tmp_path: Path) -> None:
