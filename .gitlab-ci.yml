@@ -136,21 +136,8 @@ unit_tests:
     - mise run test
     - mise run test:fluentbit-lua
 
-# Manually publish Dockerfile per release and architecture as
-# ci:<sha>-<release>-<arch>; only master also moves ci:latest-<release>-<arch>.
-# The build defaults to CI_HOST_UBUNTU; NEXT_UBUNTU builds the next release
-# ahead of switching it, as it does for the runner-host AMI. Hosted dind cannot
-# reach Nexus, so the build uses upstream apt. An optional no-scope
-# MISE_GITHUB_TOKEN is mounted only as a BuildKit secret. Each architecture
-# builds natively on its own hosted runner; the arm image lets hosted arm jobs
-# (zbm_build) use the same toolchain.
-ci_image:
-  stage: prepare
-  extends: .manual_job
-  image: docker:28.3.3
-  services:
-    - docker:28.3.3-dind
-  timeout: 45m
+# One job per architecture, each native on its own hosted runner.
+.hosted_arch:
   parallel:
     matrix:
       - HOSTED_ARCH: x86
@@ -161,6 +148,23 @@ ci_image:
         HOSTED_RUNNER: saas-linux-small-arm64
   tags:
     - $HOSTED_RUNNER
+
+# Manually publish Dockerfile per release and architecture as
+# ci:<sha>-<release>-<arch>; only master also moves ci:latest-<release>-<arch>.
+# The build defaults to CI_HOST_UBUNTU; NEXT_UBUNTU builds the next release
+# ahead of switching it, as it does for the runner-host AMI. Hosted dind cannot
+# reach Nexus, so the build uses upstream apt. An optional no-scope
+# MISE_GITHUB_TOKEN is mounted only as a BuildKit secret. The arm image lets
+# hosted arm jobs (zbm_build) use the same toolchain.
+ci_image:
+  stage: prepare
+  extends:
+    - .manual_job
+    - .hosted_arch
+  image: docker:28.3.3
+  services:
+    - docker:28.3.3-dind
+  timeout: 45m
   # Serialize and never cancel a possible :latest push.
   resource_group: ci_image_$HOSTED_ARCH
   interruptible: false
@@ -326,17 +330,10 @@ zbm_build:
   extends:
     - .hosted
     - .manual_job
+    - .hosted_arch
   image: $CI_REGISTRY_IMAGE/ci:latest-$CI_HOST_UBUNTU-$HOSTED_ARCH
   services:
     - docker:28.3.3-dind
-  parallel:
-    matrix:
-      - HOSTED_ARCH: x86
-        HOSTED_RUNNER: saas-linux-medium-amd64
-      - HOSTED_ARCH: arm
-        HOSTED_RUNNER: saas-linux-small-arm64
-  tags:
-    - $HOSTED_RUNNER
   # Serialize the shared cache ref and never cancel a publish.
   resource_group: zbm_build_$HOSTED_ARCH
   interruptible: false

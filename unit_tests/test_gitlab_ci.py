@@ -74,10 +74,11 @@ def test_hosted_jobs_pull_a_tag_ci_image_publishes() -> None:
     # Without NEXT_UBUNTU, ci_image publishes the CI_HOST_UBUNTU image.
     assert ci_image["script"][0] == 'release="${NEXT_UBUNTU:-$CI_HOST_UBUNTU}"'
     script = "\n".join(ci_image["script"]).replace("$release", "$CI_HOST_UBUNTU")
-    published = [script.replace("$HOSTED_ARCH", entry["HOSTED_ARCH"]) for entry in ci_image["parallel"]["matrix"]]
-    pulled = [PIPELINE[".hosted"]["image"]] + [
-        zbm_build["image"].replace("$HOSTED_ARCH", entry["HOSTED_ARCH"]) for entry in zbm_build["parallel"]["matrix"]
-    ]
+    archs = [entry["HOSTED_ARCH"] for entry in PIPELINE[".hosted_arch"]["parallel"]["matrix"]]
+    assert ".hosted_arch" in ci_image["extends"]
+    assert ".hosted_arch" in zbm_build["extends"]
+    published = [script.replace("$HOSTED_ARCH", arch) for arch in archs]
+    pulled = [PIPELINE[".hosted"]["image"]] + [zbm_build["image"].replace("$HOSTED_ARCH", arch) for arch in archs]
 
     for image in pulled:
         assert any(f'docker push "{image}"' in pushes for pushes in published), image
