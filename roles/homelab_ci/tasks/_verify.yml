@@ -9,7 +9,10 @@
     trap "rm -rf ${probe}" EXIT
 
     runuser -u {{ ansible_user_id }} -- sh -c "umask 077; mkdir ${probe} && touch ${probe}/artifact"
-    ! runuser -u nobody -- cat "${probe}/artifact" 2>/dev/null
+    if runuser -u nobody -- cat "${probe}/artifact" >/dev/null 2>&1; then
+      echo "Artifact is readable without homelab_ci membership" >&2
+      exit 1
+    fi
     runuser -u nobody -G homelab_ci -- cat "${probe}/artifact"
     # The harness hardlinks each disk it boots; fs.protected_hardlinks only
     # lets the other identity do that through the group write the ACL grants.
