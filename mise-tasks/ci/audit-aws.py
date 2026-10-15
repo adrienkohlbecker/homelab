@@ -160,19 +160,12 @@ def audit_ami_inventory(
         for image in unsupported
     )
 
-    for image in other_release:
+    removable = [(image, f"not the CI host release {CI_HOST_UBUNTU}") for image in other_release] + [
+        (image, f"beyond newest {AMI_RETAIN_PER_CATEGORY} supported builds") for image in strays
+    ]
+    for image, reason in removable:
         anomalies.append(
-            f"[{region}] AMI {image['ImageId']} "
-            f"({ami_category(image)}, {image['CreationDate'][:10]}) "
-            f"-- not the CI host release {CI_HOST_UBUNTU}"
-        )
-        deletes.append(f"mise run packer:deregister-ami -- {image['ImageId']} {region}")
-
-    for image in strays:
-        anomalies.append(
-            f"[{region}] stray AMI {image['ImageId']} "
-            f"({ami_category(image)}, {image['CreationDate'][:10]}) "
-            f"-- beyond newest {AMI_RETAIN_PER_CATEGORY} supported builds"
+            f"[{region}] AMI {image['ImageId']} ({ami_category(image)}, {image['CreationDate'][:10]}) -- {reason}"
         )
         deletes.append(f"mise run packer:deregister-ami -- {image['ImageId']} {region}")
 
