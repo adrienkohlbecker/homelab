@@ -339,12 +339,7 @@ if [ "$INSTALL_TARGET" = "hetzner" ]; then
   # growpart at rpool's partition.
   install -m 0644 "${CHROOT_FILES}/hetzner/99-hetzner.cfg" /etc/cloud/cloud.cfg.d/
 
-  # The image ships at 60G but deploys onto cpx22's ~76G, leaving rpool's
-  # partition (p5, last on disk) short with the GPT backup header mid-disk. The
-  # preceding 40G Podman partition stays fixed while p5 takes the added
-  # capacity: cloud-init's growpart module grows p5 on every boot (growpart
-  # relocates the backup header), and zfs_expand_rpool.service then grows the
-  # pool into it.
+  # rpool (p5, last on disk) grows into the deployed disk; see the unit.
   install -m 0755 "${CHROOT_FILES}/hetzner/zfs_expand_rpool.sh" /usr/local/sbin/zfs_expand_rpool
   install -m 0644 "${CHROOT_FILES}/hetzner/zfs_expand_rpool.service" /etc/systemd/system/
   systemctl enable zfs_expand_rpool.service
