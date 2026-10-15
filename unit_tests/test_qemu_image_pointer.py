@@ -24,6 +24,7 @@ from typing import Any
 
 import pytest
 from conftest import load_repo_module
+from matrix import DEFAULT_UBUNTU, OTHER_UBUNTUS
 
 upload = load_repo_module("mise-tasks/packer/upload-s3.py", name="upload_s3")
 hydrate = load_repo_module("mise-tasks/ci/hydrate-qemu-images.py", name="hydrate_qemu_images")
@@ -83,6 +84,42 @@ class TestValidateTarget:
 
         with pytest.raises(SystemExit, match="built on this aarch64 host as x86_64"):
             upload.validate_target(_args(architecture="x86_64"))
+
+
+class TestParseArgs:
+    @pytest.mark.parametrize(
+        ("usage_ubuntu", "argv", "expected"),
+        [
+            (None, [], DEFAULT_UBUNTU),
+            ("", [], DEFAULT_UBUNTU),
+            (OTHER_UBUNTUS[0], [], OTHER_UBUNTUS[0]),
+            (OTHER_UBUNTUS[0], ["--ubuntu", DEFAULT_UBUNTU], DEFAULT_UBUNTU),
+        ],
+        ids=["unset", "empty", "env", "cli_over_env"],
+    )
+    def test_release_selects_the_artifact_directory(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        usage_ubuntu: str | None,
+        argv: list[str],
+        expected: str,
+    ) -> None:
+        # Uploading without --ubuntu must pick the release packer:build
+        # defaults to, or the bundle lands under a prefix nothing hydrates.
+        if usage_ubuntu is None:
+            monkeypatch.delenv("usage_ubuntu", raising=False)
+        else:
+            monkeypatch.setenv("usage_ubuntu", usage_ubuntu)
+        monkeypatch.delenv("usage_artifact_dir", raising=False)
+        monkeypatch.setenv("HOMELAB_CI_DIR", str(tmp_path))
+        monkeypatch.setattr(upload, "default_build_id", lambda: "build")
+        monkeypatch.setattr("sys.argv", ["upload-s3.py", "lab", *argv])
+
+        args = upload.parse_args()
+
+        assert args.ubuntu == expected
+        assert upload.artifact_dir(args) == (tmp_path / expected / "lab").resolve()
 
 
 @pytest.mark.parametrize(("architecture", "prefix"), [("x86_64", "x86"), ("aarch64", "arm")])
