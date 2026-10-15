@@ -58,7 +58,7 @@ FULL_UNIVERSE_PATTERNS: list[str] = [
     r"mise\.toml",
     r"pyproject\.toml",
     r"uv\.lock",
-    r"data/network_topology\.(yml|schema\.json)",
+    r"data/network_topology\.yml",
     # Selects the image store every AWS cell hydrates from.
     r"data/architectures\.yml",
     # Sets the default release and release set behind every cell.
