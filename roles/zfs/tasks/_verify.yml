@@ -55,33 +55,49 @@
 
 # --- Hostid ---
 
-# ZFS refuses an unforced import of a pool whose labels carry another hostid.
-# After the reboot above, ZBM's command-line hostid, the hostid the root falls
-# back to without it, and the one rpool's labels record must all agree.
-- name: _verify | Read the kernel, root, and rpool hostids
+- name: _verify | Read the kernel hostid
+  when: zfs_root
+  command: cat /sys/module/spl/parameters/spl_hostid
+  register: _zfs_verify_hostid
+  changed_when: false
+
+- name: _verify | The kernel runs with ZBM's hostid
+  when: zfs_root
+  assert:
+    that: _zfs_verify_hostid.stdout | int == 0x00bab10c
+    fail_msg: "spl_hostid: {{ '%08x' | format(_zfs_verify_hostid.stdout | int) }}"
+
+# Drift /etc/hostid and the copy the boot images embed, then converge again.
+# The ARC options and packages have already settled, so only the hostid change
+# can trigger the boot images' rebuild that the boot below depends on.
+- name: _verify | Embed a stale hostid in the boot images
   when: zfs_root
   shell: |
     set -euo pipefail
-    printf '%08x\n' "$(cat /sys/module/spl/parameters/spl_hostid)"
-    hostid
-    device=$(zpool list -HvPL rpool | awk '$1 ~ "^/dev/" && !seen { print $1; seen = 1 }')
-    zdb -l "$device" | awk '$1 == "hostid:" && !seen { printf "%08x\n", $2; seen = 1 }'
+    zgenhostid -f 0x0badc0de
+    {{ initramfs_rebuild_command }}
   args:
     executable: /bin/bash
-  register: _zfs_verify_hostids
-  changed_when: false
+  changed_when: true
   become: true
 
-- name: _verify | The kernel, root, and rpool share the ZBM hostid
+- name: _verify | Converge with only the hostid drifted
+  when: zfs_root
+  import_role:
+    name: zfs
+    tasks_from: main
+
+- name: _verify | Only the hostid could trigger the rebuild
   when: zfs_root
   assert:
-    that: _zfs_verify_hostids.stdout_lines == ['00bab10c'] * 3
-    fail_msg: "kernel, /etc/hostid, rpool: {{ _zfs_verify_hostids.stdout_lines }}"
+    that:
+      - zfs_hostid.changed
+      - not zfs_module_conf.changed
+      - not zfs_apt.changed
 
-# _setup embedded another hostid in the boot images, which the role's rebuild
-# must replace. Without ZBM's hostid, the root's boot image imports rpool under
-# its embedded copy: a stale one refuses the unforced import of the pool the
-# last boot left active, or stamps itself on the labels of an exported one.
+# Without ZBM's hostid, the root's boot image imports rpool under its embedded
+# copy: a stale one refuses the unforced import of the pool the last boot left
+# active, or stamps itself on the labels of an exported one.
 - name: _verify | Boot once without ZBM's hostid
   when: zfs_root
   become: true
