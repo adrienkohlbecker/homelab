@@ -520,16 +520,15 @@ create_extra_pools() {
 
 # Fresh mode: wipe and partition the disks and create every pool on them,
 # leaving the pools exported, extra_pools naming the data pools, the
-# PARTITIONS_* lists for create_storage, and COMMANDLINE exported for
-# chroot.sh's boot loader.
+# PARTITIONS_EFI/SWAP/PODMAN lists for create_storage, and COMMANDLINE
+# exported for chroot.sh's boot loader.
 create_pools() {
   # partition_disk's partitions across the disks, as space-delimited strings.
-  local d
+  # create_extra_tank_mouse, called below, reads PARTITIONS_META.
+  local d PARTITIONS_META="" PARTITIONS_RPOOL=""
   PARTITIONS_EFI=""
   PARTITIONS_SWAP=""
   PARTITIONS_PODMAN=""
-  PARTITIONS_META=""
-  PARTITIONS_RPOOL=""
   for d in $DISKS; do
     PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
     PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
