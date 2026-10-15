@@ -1,6 +1,6 @@
-# Datasets carved under rpool/services on every zfs_root host. Both the
-# zfs_dataset helper and _verify.yml consume this list, so one entry updates
-# convergence and verification.
+# Datasets carved under rpool/services on zfs_root hosts where their `enabled`
+# holds. Both the zfs_dataset helper and _verify.yml consume this list, so one
+# entry updates convergence and verification.
 #
 # The sqlite child, carved only where services_sqlite_enabled, sets
 # recordsize=4K for Home Assistant's write-heavy recorder. It matches SQLite's
