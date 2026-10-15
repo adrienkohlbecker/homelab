@@ -219,12 +219,12 @@ resource "hcloud_server" "fox" {
     package_upgrade: true
     # Stop cloud-init from owning /etc/hosts: Hetzner's vendor-data sets
     # manage_etc_hosts: true, which renders /etc/hosts from a template on the
-    # instance's first boot (once per instance since cloud-init 26.1), ahead of
-    # the ansible `hostname` role's hosts.j2. A cloud.cfg.d drop-in can't
-    # override it -- vendor-data outranks /etc/cloud/cloud.cfg.d -- but
-    # user-data outranks vendor-data, so pin it off here. fox itself predates
-    # this key (user_data is immutable on a live server), so its first boot
-    # after a rebuild still renders the template until converge replaces it.
+    # instance's first boot, ahead of the ansible `hostname` role's hosts.j2. A
+    # cloud.cfg.d drop-in can't override it -- vendor-data outranks
+    # /etc/cloud/cloud.cfg.d -- but user-data outranks vendor-data, so pin it
+    # off here. fox itself predates this key (user_data is immutable on a live
+    # server), so its first boot after a rebuild still renders the template
+    # until converge replaces it.
     manage_etc_hosts: false
     users:
       - name: ak
