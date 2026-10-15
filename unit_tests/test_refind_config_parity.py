@@ -39,7 +39,7 @@ def _canonical_menuentry(block: str) -> tuple[str, ...]:
         block = _without_block(block, 'submenuentry "Show ZFSBootMenu (backup)"')
 
     replacements = {
-        "$ZBM_CMDLINE $COMMANDLINE": "<launch_cmdline>",
+        "$zbm_cmdline $COMMANDLINE": "<launch_cmdline>",
         "{{ _zbm_launch_cmdline }}": "<launch_cmdline>",
     }
     for source, replacement in replacements.items():

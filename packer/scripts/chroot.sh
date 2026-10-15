@@ -33,27 +33,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# Arch-derived constants: rEFInd EFI binary names + ZBM tarball arch
-# token. The build VM and the shipped image are always the same arch,
-# so detecting via `uname -m` here is equivalent to passing in from
-# packer. Fail loud on unsupported arches; a new arch also needs its
-# entry in data/architectures.yml.
-ZBM_ARCH=$(uname -m)
-case $ZBM_ARCH in
-x86_64)
-  REFIND_NAME=refind_x64.efi
-  REFIND_FALLBACK_NAME=BOOTX64.EFI
-  ;;
-aarch64)
-  REFIND_NAME=refind_aa64.efi
-  REFIND_FALLBACK_NAME=BOOTAA64.EFI
-  ;;
-*)
-  echo >&2 "Unsupported arch: $ZBM_ARCH"
-  exit 1
-  ;;
-esac
-
 # Set a hostname
 
 echo "$HOSTNAME" >/etc/hostname
@@ -174,8 +153,21 @@ mkdir -p /boot/efi
 
 # Put ZBM and rEFInd on the ESP and register rEFInd with the firmware.
 install_boot_loader() {
-  local disks_count
+  local disks_count zbm_url expected_sum zbm_cmdline refind_name refind_fallback_name refind_timeout idx disk
   disks_count=$(wc -w <<<"$DISKS")
+
+  # rEFInd's EFI binary names. The shipped image runs on the build's arch, one
+  # provision.sh admits.
+  case $(uname -m) in
+  x86_64)
+    refind_name=refind_x64.efi
+    refind_fallback_name=BOOTX64.EFI
+    ;;
+  aarch64)
+    refind_name=refind_aa64.efi
+    refind_fallback_name=BOOTAA64.EFI
+    ;;
+  esac
 
   mount /boot/efi
 
@@ -187,26 +179,25 @@ install_boot_loader() {
   #
   # Only the unified ZBM EFI image (/EFI/ZBM/VMLINUZ.EFI) and its cmdline are
   # installed; older tarballs also carry an unused components-mode kernel +
-  # initrd. rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on
-  # aarch64 ($REFIND_NAME, derived from `uname -m` above).
+  # initrd.
   #
   # The registry path is project 83079143 = akohlbecker/homelab (numeric id
   # keeps the path free of an encoded slash); the project is public, so the
   # pull is anonymous.
-  ZBM_URL="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-$ZBM_VERSION.tar.gz"
+  zbm_url="https://gitlab.com/api/v4/projects/83079143/packages/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-$ZBM_VERSION.tar.gz"
 
   tmp=$(mktemp -d)
 
-  curl -fL --retry 3 --retry-connrefused -o "$tmp/zbm.tar.gz" "$ZBM_URL"
-  EXPECTED_SUM="$(curl -fsSL --retry 3 --retry-connrefused "$ZBM_URL.sha256sum" | awk '{print $1}')"
-  echo "$EXPECTED_SUM  $tmp/zbm.tar.gz" | sha256sum -c -
+  curl -fL --retry 3 --retry-connrefused -o "$tmp/zbm.tar.gz" "$zbm_url"
+  expected_sum="$(curl -fsSL --retry 3 --retry-connrefused "$zbm_url.sha256sum" | awk '{print $1}')"
+  echo "$expected_sum  $tmp/zbm.tar.gz" | sha256sum -c -
   tar -xzf "$tmp/zbm.tar.gz" -C "$tmp" --no-same-owner
 
   mkdir -p /boot/efi/EFI/ZBM
   mv "$tmp"/zfsbootmenu.EFI /boot/efi/EFI/ZBM/VMLINUZ.EFI
   mv "$tmp"/cmdline /boot/efi/EFI/ZBM/
 
-  ZBM_CMDLINE=$(cat /boot/efi/EFI/ZBM/cmdline)
+  zbm_cmdline=$(cat /boot/efi/EFI/ZBM/cmdline)
 
   # Configure rEFInd
 
@@ -232,18 +223,18 @@ install_boot_loader() {
   # "Restore Defaults") still boots from the ESP. refind-install does
   # not write here by default on Debian/Ubuntu.
   mkdir -p /boot/efi/EFI/BOOT
-  cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
+  cp "/boot/efi/EFI/refind/$refind_name" "/boot/efi/EFI/BOOT/$refind_fallback_name"
 
   # Menu countdown, matching the role's refind_timeout (a converge overwrites
   # this file with that value): 3 on hosts, -1 (boot the default unless a key
   # is held) on qemu fixtures, where nobody watches the menu.
-  REFIND_TIMEOUT=3
+  refind_timeout=3
   if [ "$INSTALL_TARGET" = "qemu" ]; then
-    REFIND_TIMEOUT=-1
+    refind_timeout=-1
   fi
 
   cat <<EOF >/boot/efi/EFI/refind/refind.conf
-timeout $REFIND_TIMEOUT
+timeout $refind_timeout
 default_selection "Ubuntu (ZBM)"
 dont_scan_dirs EFI:/EFI/ZBM
 
@@ -251,9 +242,9 @@ dont_scan_dirs EFI:/EFI/ZBM
 # hand.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
-    options "$ZBM_CMDLINE $COMMANDLINE zbm.prefer=rpool!! zbm.skip"
+    options "$zbm_cmdline $COMMANDLINE zbm.prefer=rpool!! zbm.skip"
     submenuentry "Show ZFSBootMenu" {
-      options "$ZBM_CMDLINE $COMMANDLINE zbm.show"
+      options "$zbm_cmdline $COMMANDLINE zbm.show"
     }
 }
 EOF
@@ -285,14 +276,14 @@ EOF
   if [ "$disks_count" -eq 1 ]; then
     efibootmgr -c -d "$DISKS" -p 2 \
       -L "rEFInd" \
-      -l "\\EFI\\refind\\${REFIND_NAME}"
+      -l "\\EFI\\refind\\${refind_name}"
   else
     idx=0
     # shellcheck disable=SC2086  # word-splitting on DISKS is the point
     for disk in $DISKS; do
       efibootmgr -c -d "$disk" -p 2 \
         -L "rEFInd (disk ${idx})" \
-        -l "\\EFI\\refind\\${REFIND_NAME}"
+        -l "\\EFI\\refind\\${refind_name}"
       idx=$((idx + 1))
     done
   fi
