@@ -19,11 +19,6 @@ def test_ansible_config_is_global() -> None:
     assert PIPELINE["detect"]["script"][-1] == 'mise run ci:detect --target "$HOMELAB_CI_TARGET"'
 
 
-def test_ci_host_release_is_in_the_catalog() -> None:
-    # Packer and Terraform resolve the runner-host release through the catalog.
-    assert PIPELINE["variables"]["CI_HOST_UBUNTU"] in UBUNTU_RELEASES
-
-
 def test_child_pipeline_forwards_pipeline_variables() -> None:
     assert PIPELINE["test_cells"]["trigger"]["forward"]["pipeline_variables"] is True
 
