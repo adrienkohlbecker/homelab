@@ -1,7 +1,7 @@
 # Hosted GitLab CI image, manually published as $CI_REGISTRY_IMAGE/ci:latest-<release>-<arch>.
 # Copied manifests invalidate their dependency layers when the toolchain moves.
-# The ci_image jobs pass the release they publish (CI_HOST_UBUNTU unless
-# overridden); later steps read the codename from /etc/os-release.
+# The ci_image jobs pass the release they publish; later steps read the
+# codename from /etc/os-release.
 ARG UBUNTU_RELEASE
 FROM ubuntu:${UBUNTU_RELEASE}
 ENV DEBIAN_FRONTEND=noninteractive

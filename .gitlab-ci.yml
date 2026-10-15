@@ -19,7 +19,8 @@ variables:
   ANSIBLE_CONFIG: $CI_PROJECT_DIR/ansible.cfg
   # Release of the CI runner hosts and hosted job images. Bake and promote the
   # new release's AMIs and images first (NEXT_UBUNTU on qemu_host_ami and
-  # ci_image), or new CI hosts cannot launch.
+  # ci_image), or new CI hosts cannot launch; terraform/aws_ci.tf's AMI
+  # pointer section lists the switch's import blocks.
   CI_HOST_UBUNTU: resolute
 
 # GitLab expands tags before job rules:variables, so select the runner tag at
@@ -151,11 +152,9 @@ unit_tests:
 
 # Manually publish Dockerfile per release and architecture as
 # ci:<sha>-<release>-<arch>; only master also moves ci:latest-<release>-<arch>.
-# The build defaults to CI_HOST_UBUNTU; NEXT_UBUNTU builds the next release
-# ahead of switching it, as it does for the runner-host AMI. Hosted dind cannot
-# reach Nexus, so the build uses upstream apt. An optional no-scope
-# MISE_GITHUB_TOKEN is mounted only as a BuildKit secret. The arm image lets
-# hosted arm jobs (zbm_build) use the same toolchain.
+# Hosted dind cannot reach Nexus, so the build uses upstream apt. An optional
+# no-scope MISE_GITHUB_TOKEN is mounted only as a BuildKit secret. The arm
+# image lets hosted arm jobs (zbm_build) use the same toolchain.
 ci_image:
   stage: prepare
   extends:
@@ -217,8 +216,6 @@ qemu_host_ami:
   script:
     - mise run packer:init
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"
-    # The bake defaults to CI_HOST_UBUNTU. NEXT_UBUNTU bakes and promotes the
-    # next release's pointer ahead of switching CI_HOST_UBUNTU.
     - mise run packer:qemu-host-ami --architecture "$QEMU_HOST_ARCHITECTURE" ${NEXT_UBUNTU:+--ubuntu "$NEXT_UBUNTU"} --promote
   # A cancel or timeout kills Packer before its own cleanup.
   after_script:
