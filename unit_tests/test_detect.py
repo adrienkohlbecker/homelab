@@ -1231,8 +1231,8 @@ class TestRenderChildPipeline:
         assert "HOMELAB_TEST_AWS_REGION" not in doc[".arm_cell"]["variables"]
         # No spot retry on the qemu targets.
         assert "retry" not in doc[".x86_cell"]
-        # nginx:lab defaults to Noble; podman:lab:noble is explicit.
-        assert doc["nginx:lab"]["variables"] == {"ROLE": "nginx", "VARIANT": "lab", "UBUNTU": "resolute"}
+        # nginx:lab takes the default release; podman:lab:noble is explicit.
+        assert doc["nginx:lab"]["variables"] == {"ROLE": "nginx", "VARIANT": "lab", "UBUNTU": detect.DEFAULT_UBUNTU}
         assert doc["podman:lab:noble"]["variables"] == {
             "ROLE": "podman",
             "VARIANT": "lab",
