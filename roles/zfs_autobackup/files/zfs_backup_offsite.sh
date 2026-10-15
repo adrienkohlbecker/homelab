@@ -66,8 +66,6 @@ if [ -f "$MARKER_FILE" ] && [ -z "$(find "$MARKER_FILE" -mmin +43200 -print)" ];
   fi
 fi
 
-SNAPSHOT_DIR="${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT"
-
 # rsync's running progress is helpful when an operator runs this by hand but is
 # just \r-spam in the journal when the timer runs it, so only request it when
 # stdout is a tty. (zfs-autobackup auto-detects this itself; rsync does not.)
@@ -125,7 +123,7 @@ rsync_cmd=(rsync
   --exclude /var/crash
   --exclude "*@*:*:*~"
   --exclude ".config/homelab/vault-pass-*"
-  "$SNAPSHOT_DIR/" "ak@$OFFSITE_IP:$DESTPATH")
+  "${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH")
 printf '$%s\n' "$(printf ' %q' "${rsync_cmd[@]}")"
 "${rsync_cmd[@]}"
 
