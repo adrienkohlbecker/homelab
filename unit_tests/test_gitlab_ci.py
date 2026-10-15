@@ -77,11 +77,13 @@ def test_qemu_host_ami_cleanup_runs_after_a_script_timeout() -> None:
         )
     )
 
-    # GitLab runs after_script on a timeout only when the script's own deadline
-    # expires inside the job's, and the cleanup's instance-terminated wait
-    # alone can take ten minutes.
     assert script + after_script < total
-    assert after_script > 10
+    # aws ec2 wait instance-terminated polls 40 times, 15 seconds apart.
+    assert after_script * 60 > 40 * 15
+    oidc, cleanup = job["after_script"]
+    assert oidc.startswith("source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake ")
+    assert cleanup == "mise run packer:qemu-host-ami-cleanup"
+    assert (ROOT / "mise-tasks/packer/qemu-host-ami-cleanup.sh").is_file()
 
 
 @pytest.mark.parametrize("next_ubuntu", [None, "noble"])
