@@ -7,10 +7,11 @@
 # keeps the contents as they stand, the live dataset is emptied, a final @bak-
 # snapshot records that empty state, and the dataset is left unmounted
 # (canmount=off) with its mount unit and mountpoint directory removed. Every
-# snapshot is kept and autobackup:bak is left alone, so the onsite and offsite
-# legs carry the final state. The history then thins like any other dataset's
-# until the operator sets autobackup:bak=false on the source and its replicas
-# (freezing it) and destroys them by hand.
+# local snapshot is kept and the dataset's autobackup:bak selection is left
+# alone: whether the final state replicates depends on that selection and on
+# which backup jobs are enabled. A selected dataset's history then thins like
+# any other's until the operator sets autobackup:bak=false on the source and
+# its replicas (freezing it) and destroys them by hand.
 #
 # On a non-ZFS host the mountpoint is a plain directory and is deleted.
 #
