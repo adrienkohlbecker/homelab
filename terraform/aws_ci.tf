@@ -31,12 +31,6 @@ locals {
   ]))
   # Must match the namespace in packer/aws/files/cloudwatch_agent.json.
   ci_host_metrics_namespace = "homelab-ci"
-  # A bake promotes any catalog release's pointer, so the next release's AMI
-  # exists before ci_host moves the launch templates onto it.
-  ci_qemu_host_ami_parameter_arns = [
-    for pair in setproduct(keys(local.ci_ubuntu_catalog.releases), keys(local.ci_architectures)) :
-    "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${replace(local.ci_architectures[pair[1]].ci.ami_parameter, "{ubuntu}", pair[0])}"
-  ]
   ci_qemu_pools = {
     x86 = {
       # Instance-type-agnostic name: aws_autoscaling_group.name and
@@ -881,7 +875,12 @@ resource "aws_iam_role_policy" "ci_bake" {
           "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
           "ssm:DescribeParameters", "ssm:AddTagsToResource",
         ]
-        Resource = local.ci_qemu_host_ami_parameter_arns
+        # Any catalog release, so the next release's AMI exists before
+        # CI_HOST_UBUNTU moves the launch templates onto it.
+        Resource = [
+          for pair in setproduct(keys(local.ci_ubuntu_catalog.releases), keys(local.ci_architectures)) :
+          "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${replace(local.ci_architectures[pair[1]].ci.ami_parameter, "{ubuntu}", pair[0])}"
+        ]
       },
       {
         Sid    = "PublishQemuImages"
