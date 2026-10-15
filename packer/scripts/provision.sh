@@ -819,35 +819,34 @@ debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" "${debootstrap_script
 }
 
 if [ "$KEEP_POOLS" = 1 ]; then
-  # The old root's identity and storage wiring, in place before chroot.sh
-  # installs the packages that read it: the initramfs embeds hostid and
-  # mdadm.conf, openssh-server keeps existing host keys, mdadm an existing
+  # The old root's identity, storage wiring, and netplan, in place before
+  # chroot.sh installs the packages that read it: the initramfs embeds hostid
+  # and mdadm.conf, openssh-server keeps existing host keys, mdadm an existing
   # mdadm.conf, and systemd an existing machine-id.
   cp -a "$kept_identity/etc" /mnt/
 else
   # /etc/hostid must match the one ZFS saw at pool creation.
   cp /etc/hostid /mnt/etc
   create_storage
-fi
 
-# Configure networking. Match by name glob so the same image works under any
-# qemu device topology (packer's vs. testrole's direct-kernel boot give the NIC
-# different kernel names — ens3/ens4/etc.) and on bare metal
-# (eno1/enp0s31f6/...). All Predictable Network Interface Names start with
-# "en"; only old-style "eth*" is excluded, which requires net.ifnames=0 on
-# modern Ubuntu and so is essentially extinct.
-#
-# Multi-NIC hosts: this stanza claims every "en*" interface as "primary", so
-# each onboard NIC will DHCP independently. Bonded / LACP setups need
-# bare-metal callers to overwrite this file with an explicit netplan before
-# first boot.
-#
-# Skipped on hetzner: cloud-init's datasource owns networking there, exactly
-# as on the stock hcloud image, and a competing static netplan would fight
-# cloud-init's generated one. A rebuild keeps the old root's netplan.
-if [ "$INSTALL_TARGET" != hetzner ] && [ "$KEEP_POOLS" != 1 ]; then
-  mkdir -p /mnt/etc/netplan
-  cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
+  # Configure networking. Match by name glob so the same image works under any
+  # qemu device topology (packer's vs. testrole's direct-kernel boot give the
+  # NIC different kernel names — ens3/ens4/etc.) and on bare metal
+  # (eno1/enp0s31f6/...). All Predictable Network Interface Names start with
+  # "en"; only old-style "eth*" is excluded, which requires net.ifnames=0 on
+  # modern Ubuntu and so is essentially extinct.
+  #
+  # Multi-NIC hosts: this stanza claims every "en*" interface as "primary", so
+  # each onboard NIC will DHCP independently. Bonded / LACP setups need
+  # bare-metal callers to overwrite this file with an explicit netplan before
+  # first boot.
+  #
+  # Skipped on hetzner: cloud-init's datasource owns networking there, exactly
+  # as on the stock hcloud image, and a competing static netplan would fight
+  # cloud-init's generated one.
+  if [ "$INSTALL_TARGET" != hetzner ]; then
+    mkdir -p /mnt/etc/netplan
+    cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
 network:
   version: 2
   ethernets:
@@ -857,6 +856,7 @@ network:
       dhcp4: true
       dhcp-identifier: mac
 EOF
+  fi
 fi
 
 # Stage chroot.sh and everything it installs in one directory inside the new
