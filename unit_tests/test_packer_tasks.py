@@ -535,6 +535,53 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     assert consumed <= {*staged, "homelab_guest_journal.service", "hetzner"}
 
 
+def _ssh_public_key(tmp_path: Path, name: str) -> str:
+    key = tmp_path / name
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
+    return key.with_suffix(".pub").read_text().strip()
+
+
+def _provision_preflight(tmp_path: Path, **overrides: str) -> subprocess.CompletedProcess[str]:
+    """Run provision.sh through its preflight call: a qemu keep-pools rebuild
+    from a non-ZFS live root, with every install file staged beside it."""
+    provision = QEMU_PROVISION_SH.read_text()
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "provision.sh").write_text(provision[: provision.index("\npreflight\n")] + "\npreflight\n")
+    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", provision, re.MULTILINE)
+    assert role_files is not None
+    for name in ["chroot.sh", "homelab_guest_journal.service", *role_files.group(1).split()]:
+        (scripts / name).touch()
+    _executable(tmp_path / "bin" / "findmnt", "#!/bin/sh\necho ext4\n")
+
+    env = {
+        "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}",
+        "UBUNTU_NAME": "resolute",
+        "INSTALL_TARGET": "qemu",
+        "SERIAL_CONSOLE": "console=ttyAMA0",
+        "KEEP_POOLS": "1",
+        "TARGET_HOSTNAME": "lab",
+        "TARGET_USERNAME": "operator",
+        "SSH_KEY_PUB": _ssh_public_key(tmp_path, "operator"),
+        **overrides,
+    }
+    return subprocess.run(["bash", str(scripts / "provision.sh")], env=env, text=True, capture_output=True, check=False)
+
+
+requires_ssh_keygen = pytest.mark.skipif(shutil.which("ssh-keygen") is None, reason="ssh-keygen unavailable")
+
+
+@requires_ssh_keygen
+@pytest.mark.parametrize("variable", ["TARGET_HOSTNAME", "TARGET_USERNAME"])
+def test_provision_preflight_rejects_an_empty_identity_override(tmp_path: Path, variable: str) -> None:
+    """An empty override must not fall back to the image placeholder: a rebuild
+    would then look up and create the wrong login user."""
+    result = _provision_preflight(tmp_path, **{variable: ""})
+
+    assert result.returncode == 1
+    assert f"invalid {variable} ''" in result.stderr
+
+
 @pytest.mark.parametrize("function", ["apt_update", "write_sources_list"])
 def test_chroot_apt_helpers_twin_provision(function: str) -> None:
     """chroot.sh keeps copies of provision.sh's apt helpers rather than sharing

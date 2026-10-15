@@ -230,9 +230,10 @@ export KEEP_POOLS="${KEEP_POOLS:-}"
 # callers override both via TARGET_HOSTNAME / TARGET_USERNAME (distinct
 # names: the live-USB shell already sets HOSTNAME) so the installed
 # system boots as the real host with the real operator user and no
-# vagrant user is ever created.
-export HOSTNAME="${TARGET_HOSTNAME:-ubuntu}"
-export USERNAME="${TARGET_USERNAME:-vagrant}"
+# vagrant user is ever created. Only an unset override takes the
+# placeholder; preflight rejects an empty one.
+export HOSTNAME="${TARGET_HOSTNAME-ubuntu}"
+export USERNAME="${TARGET_USERNAME-vagrant}"
 
 preflight
 
