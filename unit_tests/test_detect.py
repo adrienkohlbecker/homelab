@@ -1141,7 +1141,9 @@ def _render_child_doc(
     keep_pools_test: bool = False,
 ) -> dict:
     """Render test_child.yml.j2 and parse it back to a dict for assertions."""
-    return detect.yaml.safe_load(detect.render_child_pipeline(specs, site_test, keep_pools_test, target=target))
+    return detect.yaml.safe_load(
+        detect.render_child_pipeline(specs, site_test=site_test, keep_pools_test=keep_pools_test, target=target)
+    )
 
 
 class TestGitlabChangeMatrix:
@@ -1499,7 +1501,15 @@ class TestEmitGitlab:
     @pytest.mark.parametrize("target", ["aws_qemu", "lab"])
     def test_writes_child_with_cells(self, tmp_path: Path, target: str) -> None:
         child = tmp_path / "child.yml"
-        rc = detect._emit_gitlab(["zfs:lab", "zfs:pug"], False, False, str(child), {}, lambda *_: None, target=target)
+        rc = detect._emit_gitlab(
+            ["zfs:lab", "zfs:pug"],
+            str(child),
+            {},
+            lambda *_: None,
+            site_test=False,
+            keep_pools_test=False,
+            target=target,
+        )
         assert rc == 0
         loaded = detect.yaml.safe_load(child.read_text())
         assert "zfs:lab" in loaded
@@ -1511,7 +1521,14 @@ class TestEmitGitlab:
         # the rest longest-first. The child YAML preserves that job order.
         child = tmp_path / "child.yml"
         runtimes = {"a:lab": 100.0, "b:lab": 300.0}
-        detect._emit_gitlab(["a:lab", "b:lab", "c:lab"], False, False, str(child), runtimes, lambda *_: None)
+        detect._emit_gitlab(
+            ["a:lab", "b:lab", "c:lab"],
+            str(child),
+            runtimes,
+            lambda *_: None,
+            site_test=False,
+            keep_pools_test=False,
+        )
         text = child.read_text()
         order = [text.index(f'"{name}":') for name in ("c:lab", "b:lab", "a:lab")]
         assert order == sorted(order)

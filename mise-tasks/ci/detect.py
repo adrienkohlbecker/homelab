@@ -651,8 +651,9 @@ def _arm_specs(specs: list[str], target: str) -> list[str]:
 
 def render_child_pipeline(
     specs: list[str],
+    *,
     site_test: bool,
-    keep_pools_test: bool = False,
+    keep_pools_test: bool,
     target: str = "aws_qemu",
 ) -> str:
     """Render the generated child-pipeline YAML from test_child.yml.j2.
@@ -712,12 +713,12 @@ def render_child_pipeline(
 
 def _emit_gitlab(
     specs: list[str],
-    site_test: bool,
-    keep_pools_test: bool,
     child_path: str,
     runtimes: dict[str, float],
     log,
     *,
+    site_test: bool,
+    keep_pools_test: bool,
     target: str = "aws_qemu",
 ) -> int:
     """Write the generated child-pipeline YAML.
@@ -730,7 +731,9 @@ def _emit_gitlab(
     """
     specs = sort_specs_by_runtime(specs, runtimes)
 
-    Path(child_path).write_text(render_child_pipeline(specs, site_test, keep_pools_test, target=target))
+    Path(child_path).write_text(
+        render_child_pipeline(specs, site_test=site_test, keep_pools_test=keep_pools_test, target=target)
+    )
 
     log(f"target={target} runner={TARGETS[target]['cell_runner_tag']}")
     log(f"matrix={json.dumps(specs)}")
@@ -875,11 +878,11 @@ def _cmd_gitlab(args: list[str]) -> int:
         log("mode: --all (full universe)")
         return _emit_gitlab(
             _full_universe_specs(),
-            True,
-            True,
             opts.child_path,
             runtimes,
             log,
+            site_test=True,
+            keep_pools_test=True,
             target=opts.target,
         )
 
@@ -893,11 +896,11 @@ def _cmd_gitlab(args: list[str]) -> int:
             log("ROLES=ALL -> full universe")
             return _emit_gitlab(
                 _full_universe_specs(),
-                True,
-                True,
                 opts.child_path,
                 runtimes,
                 log,
+                site_test=True,
+                keep_pools_test=True,
                 target=opts.target,
             )
         # SITE names the full-fleet converge, which no role token can: it is a
@@ -910,11 +913,11 @@ def _cmd_gitlab(args: list[str]) -> int:
         cells = build_dispatch_matrix(role_tokens) if role_tokens else []
         return _emit_gitlab(
             cells_to_ci_specs(cells),
-            site_test,
-            False,
             opts.child_path,
             runtimes,
             log,
+            site_test=site_test,
+            keep_pools_test=False,
             target=opts.target,
         )
 
@@ -922,11 +925,11 @@ def _cmd_gitlab(args: list[str]) -> int:
     specs, site_test, keep_pools_test = _gitlab_change_matrix(green, log)
     return _emit_gitlab(
         specs,
-        site_test,
-        keep_pools_test,
         opts.child_path,
         runtimes,
         log,
+        site_test=site_test,
+        keep_pools_test=keep_pools_test,
         target=opts.target,
     )
 
