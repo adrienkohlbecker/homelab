@@ -385,6 +385,23 @@ def test_push_refuses_local_input_before_publishing(
     assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
 
 
+def test_dry_run_push_writes_nothing(synced_clone, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    sync, clone, host = synced_clone
+    head = _git(clone, "rev-parse", "HEAD")
+    monkeypatch.setattr(sync, "ha_api_token", lambda: pytest.fail("dry run asked for the API token"))
+    monkeypatch.setattr(sync, "upload_to_host", lambda files: pytest.fail("dry run uploaded"))
+    (clone / "scripts.yaml").write_text("local: edit\n")
+
+    sync.do_push(dry_run=True)
+
+    assert "would upload ['scripts.yaml']" in capsys.readouterr().out
+    assert host["scripts.yaml"] == b"{}\n"
+    assert _git(clone, "rev-parse", "HEAD") == head
+    assert _git(clone, "ls-remote", "origin", "refs/heads/main").split()[0] == head
+    assert _synced_commit(clone, sync) == (head, head)
+    assert _git(clone, "status", "--porcelain") == "M scripts.yaml"
+
+
 @pytest.mark.parametrize("gui_edit", [False, True], ids=["untouched", "gui_edit"])
 def test_push_replaces_an_upload_ha_rejected(synced_clone, monkeypatch: pytest.MonkeyPatch, gui_edit: bool) -> None:
     sync, clone, host = synced_clone
