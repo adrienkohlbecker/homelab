@@ -67,6 +67,24 @@ def test_qemu_host_ami_uses_one_architecture_matrix_and_promotion_flow() -> None
     ]
 
 
+def test_qemu_host_ami_cleanup_runs_after_a_script_timeout() -> None:
+    job = PIPELINE["qemu_host_ami"]
+    script, after_script, total = (
+        int(duration.removesuffix("m"))
+        for duration in (
+            job["variables"]["RUNNER_SCRIPT_TIMEOUT"],
+            job["variables"]["RUNNER_AFTER_SCRIPT_TIMEOUT"],
+            job["timeout"],
+        )
+    )
+
+    # GitLab runs after_script on a timeout only when the script's own deadline
+    # expires inside the job's, and the cleanup's instance-terminated wait
+    # alone can take ten minutes.
+    assert script + after_script < total
+    assert after_script > 10
+
+
 def test_hosted_jobs_pull_a_tag_ci_image_publishes() -> None:
     ci_image = PIPELINE["ci_image"]
     zbm_build = PIPELINE["zbm_build"]

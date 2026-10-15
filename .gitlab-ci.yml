@@ -208,7 +208,12 @@ qemu_host_ami:
       - QEMU_HOST_ARCHITECTURE: aarch64
   resource_group: ami-qemu-host-$QEMU_HOST_ARCHITECTURE
   interruptible: false
-  timeout: 60m
+  # GitLab skips after_script when the job itself times out, so the script
+  # stops first and leaves the cleanup its up-to-ten-minute termination wait.
+  timeout: 80m
+  variables:
+    RUNNER_SCRIPT_TIMEOUT: 60m
+    RUNNER_AFTER_SCRIPT_TIMEOUT: 15m
   script:
     - mise run packer:init
     - source mise-tasks/ci/aws-oidc.sh arn:aws:iam::000390721279:role/homelab-ci-bake "qemu-host-ami-$CI_JOB_ID" --region "$AWS_REGION"

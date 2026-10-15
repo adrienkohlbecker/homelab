@@ -903,9 +903,9 @@ resource "aws_iam_role_policy" "ci_bake" {
         Resource = "${aws_s3_bucket.ci_qemu_images.arn}/*"
       },
       # Per-bake one-time termination schedules (mise-tasks/packer/
-      # qemu-host-ami.sh): a CI job-timeout SIGKILL bypasses the wrapper's
-      # on-error cleanup, so the schedule is the only thing that reaps an
-      # orphaned build instance.
+      # qemu-host-ami.sh): a job that dies without its after_script, such as
+      # on a runner crash, leaves the schedule as the only thing that reaps
+      # an orphaned build instance.
       {
         Sid      = "BakeSchedules"
         Effect   = "Allow"
