@@ -48,23 +48,12 @@ def test_qemu_imagedir_uses_configured_root(tmp_path: Path, monkeypatch: pytest.
 EXCLUDE_FROM_TIME_MACHINE = machine._exclude_from_time_machine
 
 
-@pytest.mark.parametrize(("system", "excluded"), [("Darwin", True), ("Linux", False)])
-def test_qemu_imagedir_is_excluded_from_time_machine_on_macos(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system: str, excluded: bool
-) -> None:
-    calls: list[Path] = []
-    monkeypatch.setenv("HOMELAB_CI_DIR", str(tmp_path / "homelab_ci"))
-    monkeypatch.setattr(machine.platform, "system", lambda: system)
-    monkeypatch.setattr(machine, "_exclude_from_time_machine", calls.append)
-
-    machine.imagedir_for_host()
-
-    assert calls == ([tmp_path / "homelab_ci"] if excluded else [])
-
-
-@pytest.mark.parametrize(("xattr_rc", "runs_tmutil"), [(1, True), (0, False)])
-def test_time_machine_exclusion_runs_tmutil_only_when_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, xattr_rc: int, runs_tmutil: bool
+@pytest.mark.parametrize(
+    ("system", "xattr_rc", "commands"),
+    [("Darwin", 1, ["xattr", "tmutil"]), ("Darwin", 0, ["xattr"]), ("Linux", 1, [])],
+)
+def test_qemu_imagedir_is_excluded_from_time_machine_once_on_macos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system: str, xattr_rc: int, commands: list[str]
 ) -> None:
     calls: list[list[str]] = []
 
@@ -72,10 +61,14 @@ def test_time_machine_exclusion_runs_tmutil_only_when_missing(
         calls.append(cmd)
         return subprocess.CompletedProcess(cmd, xattr_rc if cmd[0] == "xattr" else 0)
 
+    imagedir = tmp_path / "homelab_ci"
+    monkeypatch.setenv("HOMELAB_CI_DIR", str(imagedir))
+    monkeypatch.setattr(machine.platform, "system", lambda: system)
     monkeypatch.setattr(machine.subprocess, "run", run)
+    monkeypatch.setattr(machine, "_exclude_from_time_machine", EXCLUDE_FROM_TIME_MACHINE)
 
-    EXCLUDE_FROM_TIME_MACHINE(tmp_path)
+    machine.imagedir_for_host()
 
-    assert [cmd[0] for cmd in calls] == (["xattr", "tmutil"] if runs_tmutil else ["xattr"])
-    if runs_tmutil:
-        assert calls[1] == ["tmutil", "addexclusion", str(tmp_path)]
+    assert [cmd[0] for cmd in calls] == commands
+    if "tmutil" in commands:
+        assert calls[1] == ["tmutil", "addexclusion", str(imagedir)]
