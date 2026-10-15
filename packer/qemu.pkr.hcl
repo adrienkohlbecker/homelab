@@ -68,13 +68,10 @@ locals {
   architectures = yamldecode(file("${path.cwd}/data/architectures.yml"))
   guest         = local.architectures[local.arch].guest
 
-  # The installer bakes the same serial console the boot role later owns, per
-  # INSTALL_TARGET: fixtures add the harness's terminal hints.
+  # The installer bakes the same serial console the boot role later owns:
+  # Hetzner the bare UART, fixtures the harness's terminal hints before it.
   console = yamldecode(file("${path.cwd}/group_vars/all/console.yml"))
-  serial_console = {
-    qemu    = "${local.console.qemu_test_console_tty} ${local.console.qemu_serial_console[local.arch]}"
-    hetzner = local.console.qemu_serial_console[local.arch]
-  }
+  uart    = local.console.qemu_serial_console[local.arch]
 
   # aarch64's `virt` machine ships no default graphics or input devices, so VNC
   # would be blank without these. q35 already has std VGA + PS/2 keyboard.
@@ -282,7 +279,7 @@ build {
       "NEXUS_URL"         = local.nexus_url
       "SSH_KEY_PUB"       = join("\n", local.vagrant_ssh_keys)
       "INSTALL_TARGET"    = source.name == "hetzner" ? "hetzner" : "qemu"
-      "SERIAL_CONSOLE"    = local.serial_console[source.name == "hetzner" ? "hetzner" : "qemu"]
+      "SERIAL_CONSOLE"    = source.name == "hetzner" ? local.uart : "${local.console.qemu_test_console_tty} ${local.uart}"
       "ZBM_VERSION"       = local.versions.zfsbootmenu_release[local.arch].version
       "REFIND_DEB_URL"    = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].url : ""
       "REFIND_DEB_SHA256" = local.ubuntu_name == "noble" ? local.versions.refind_noble_release[local.arch].sha256 : ""
