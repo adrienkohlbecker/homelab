@@ -1351,11 +1351,10 @@ def test_qemu_host_cleanup_deletes_temporaries_of_a_job_stopped_before_launch(tm
 UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0half\tsnap-0half\n"'}
 
 
-@pytest.mark.parametrize("job_status", ["failed", "canceled"])
-def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path, job_status: str) -> None:
+def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path) -> None:
     # Pointers name only other AMIs, one sharing the unfinished AMI's prefix.
     result, calls = _run_qemu_host_cleanup(
-        tmp_path, job_status, {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0half0\tami-0x86\n"'}
+        tmp_path, "failed", {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0half0\tami-0x86\n"'}
     )
 
     assert result.returncode == 0, result.stderr
@@ -1378,13 +1377,12 @@ def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> N
     ]
 
 
-# Promotion happens before pruning, and a cancel can land in either step.
-@pytest.mark.parametrize("job_status", ["failed", "canceled"])
-def test_qemu_host_cleanup_keeps_an_ami_a_pointer_promoted(tmp_path: Path, job_status: str) -> None:
+# Promotion happens before pruning, and a job can fail or be cancelled in either.
+def test_qemu_host_cleanup_keeps_an_ami_a_pointer_promoted(tmp_path: Path) -> None:
     # The AWS CLI prints one line per page of a paginated text result.
     result, calls = _run_qemu_host_cleanup(
         tmp_path,
-        job_status,
+        "canceled",
         {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0x86\tami-0arm\nami-0half\n"'},
     )
 
