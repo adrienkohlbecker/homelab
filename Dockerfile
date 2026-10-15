@@ -6,7 +6,8 @@ ARG UBUNTU_RELEASE
 FROM ubuntu:${UBUNTU_RELEASE}
 ENV DEBIAN_FRONTEND=noninteractive
 
-# CI builds use Nexus by default; external builds set USE_NEXUS_MIRRORS=0 and
+# The default routes apt through Nexus for builds on the lab network. The
+# hosted ci_image jobs cannot reach Nexus, so they set USE_NEXUS_MIRRORS=0 and
 # retain Ubuntu's stock sources. Python dependencies always resolve from the
 # indexes pinned in uv.lock.
 ARG USE_NEXUS_MIRRORS=1
