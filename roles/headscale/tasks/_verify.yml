@@ -47,9 +47,8 @@
     _headscale_nft.stdout is not search('udp dport ' ~ service_ports.headscale_stun ~ ' .*dnat (ip6 )?to [[]')
   become: true
 
-# A restart is where stale port forwards surface: netavark 1.16 left a
-# 0.0.0.0 + [::] publish pair's DNAT rules ahead of the next container's, so
-# both published ports pointed at the stopped container's address.
+# A restart is where stale port forwards surface (see the STUN publish in
+# headscale.service.j2).
 - name: _verify | Restart headscale
   systemd:
     name: headscale.service
