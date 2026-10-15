@@ -96,15 +96,11 @@
     - zfs
 
 # ZFSBootMenu boots every root with the hostid it imported rpool under
-# (spl.spl_hostid), and the root's imports stamp that hostid on the pool
-# labels. Our ZBM build bakes in none (zbm/dracut.conf.d/release.conf), so on
-# pools provision.sh created, or migrated per the Host ID section of
-# notes/runbooks/zbm-recovery.md, it is upstream's default 0x00bab10c. An
-# active pool still labelled with another hostid keeps it: ZBM adopts the
-# labels' hostid, and only that migration re-stamps them. The root's own
-# /etc/hostid, which its boot image embeds, applies only when a root boots
-# without ZBM's hostid. Keeping it the same lets that boot, or a recovery
-# import, take the pools unforced.
+# (spl.spl_hostid): upstream's default 0x00bab10c, as our build bakes in none,
+# unless rpool's labels still carry another. The root's /etc/hostid, which its
+# boot image embeds, applies only when a root boots without ZBM's hostid;
+# matching it lets that boot, or a recovery import, take the pools unforced.
+# Pool history and re-stamping: Host ID section of notes/runbooks/zbm-recovery.md.
 - name: Set the ZFSBootMenu hostid  # noqa: require-validate
   when: zfs_root
   copy:
