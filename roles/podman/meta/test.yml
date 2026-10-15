@@ -4,8 +4,7 @@
 #
 # Lab cells run single-disk: _setup frees a member of the fixture's podman
 # RAID5 so the store lands on one raw partition, as on pug and fox. Every other
-# role's Lab cell converges podman on the mdadm array. Minimal exercises the
-# root-filesystem fallback on a host without a ZFS root.
+# role's Lab cell converges podman on the mdadm array.
 machines:
   lab:
   minimal:
@@ -13,4 +12,5 @@ ubuntu:
   - noble
 skip:
   "minimal:noble": >-
-    Lab covers the Noble install path; Minimal Resolute covers root storage.
+    Lab covers the Noble install path; Minimal Resolute covers the
+    root-filesystem fallback on a host without a ZFS root.

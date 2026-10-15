@@ -1,7 +1,6 @@
 # Lab covers ZFSBootMenu hosts and Minimal GRUB hosts without a ZFS root; both
 # must come back from a deliberate panic unattended. x86 Minimal boots SeaBIOS,
-# so only the UEFI cells exercise EFI pstore. Lab Noble covers the
-# initramfs-tools boot image.
+# so only the UEFI cells exercise EFI pstore.
 machines:
   lab:
   minimal:

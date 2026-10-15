@@ -1,8 +1,6 @@
 # Lab drives the snapshot, pull, restore, and freshness paths on its pools.
 # Minimal has neither a ZFS root nor a pool: the identity and tooling converge
-# without a backup timer. Noble: pipx installs zfs-autobackup on the older
-# Python, and the backup, pull, and restore paths drive OpenZFS 2.2
-# send/receive.
+# without a backup timer.
 machines:
   lab:
   minimal:
@@ -10,5 +8,6 @@ ubuntu:
   - noble
 skip:
   "minimal:noble": >-
-    Lab Noble covers the older pipx and OpenZFS paths; Minimal Resolute covers
-    the host without a pool.
+    Lab Noble covers pipx installing zfs-autobackup on the older Python and
+    the backup, pull, and restore paths on OpenZFS 2.2 send/receive; Minimal
+    Resolute covers the host without a pool.

@@ -1,6 +1,4 @@
-# Lab exercises the full LAN/VIP fixture; Minimal covers the cloud-image base.
-# Lab Noble pairs the ruleset with netavark's iptables-nft driver (Resolute
-# uses native nftables) and the pre-1.12 aardvark-dns UDP DNS path.
+# Lab exercises the full LAN/VIP fixture.
 machines:
   lab:
   minimal:
@@ -8,5 +6,6 @@ ubuntu:
   - noble
 skip:
   "minimal:noble": >-
-    Lab Noble covers the release-divergent netavark firewall driver; Minimal
+    Lab Noble pairs the ruleset with netavark's iptables-nft driver (Resolute
+    uses native nftables) and the pre-1.12 aardvark-dns UDP DNS path; Minimal
     Resolute covers the cloud-image base.
