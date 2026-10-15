@@ -868,7 +868,7 @@ resource "aws_iam_role_policy" "ci_bake" {
         Sid    = "PromoteAmi"
         Effect = "Allow"
         Action = [
-          "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters",
+          "ssm:PutParameter", "ssm:GetParameter",
           "ssm:DescribeParameters", "ssm:AddTagsToResource",
         ]
         # Any catalog release, so the next release's AMI exists before
@@ -877,6 +877,14 @@ resource "aws_iam_role_policy" "ci_bake" {
           for pair in setproduct(keys(local.ci_ubuntu_catalog.releases), keys(local.ci_architectures)) :
           "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter${replace(local.ci_architectures[pair[1]].ci.ami_parameter, "{ubuntu}", pair[0])}"
         ]
+      },
+      # qemu-host-ami-cleanup.sh reads every pointer in one recursive call,
+      # which IAM authorizes against the path itself.
+      {
+        Sid      = "ReadAmiPointers"
+        Effect   = "Allow"
+        Action   = "ssm:GetParametersByPath"
+        Resource = "arn:aws:ssm:${local.ci_aws_region}:${local.ci_account_id}:parameter/homelab-ci/ami/qemu-host"
       },
       {
         Sid    = "PublishQemuImages"

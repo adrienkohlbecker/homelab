@@ -1227,7 +1227,7 @@ def test_qemu_host_cleanup_deletes_temporaries_of_a_job_stopped_before_launch(tm
     result, calls = _run_qemu_host_cleanup(tmp_path, "canceled", PACKER_TEMPORARIES)
 
     assert result.returncode == 0, result.stderr
-    assert not any(call.startswith(("ec2 terminate-instances", "ec2 wait")) for call in calls)
+    assert not any(call.startswith(("ec2 terminate-instances", "ec2 wait", "ssm")) for call in calls)
     assert "ec2 delete-key-pair --region eu-central-1 --key-name packer_key" in calls
     assert "ec2 delete-security-group --region eu-central-1 --group-id sg-packer" in calls
 
@@ -1237,8 +1237,9 @@ UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0half\tsnap-0half\n"'}
 
 @pytest.mark.parametrize("job_status", ["failed", "canceled"])
 def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path, job_status: str) -> None:
+    # Pointers name only other AMIs, one sharing the unfinished AMI's prefix.
     result, calls = _run_qemu_host_cleanup(
-        tmp_path, job_status, {**UNFINISHED_AMI, "ssm get-parameters": r'printf "0\n"'}
+        tmp_path, job_status, {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0half0\tami-0x86\n"'}
     )
 
     assert result.returncode == 0, result.stderr
@@ -1264,24 +1265,30 @@ def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> N
 # Promotion happens before pruning, and a cancel can land in either step.
 @pytest.mark.parametrize("job_status", ["failed", "canceled"])
 def test_qemu_host_cleanup_keeps_an_ami_a_pointer_promoted(tmp_path: Path, job_status: str) -> None:
+    # The AWS CLI prints one line per page of a paginated text result.
     result, calls = _run_qemu_host_cleanup(
-        tmp_path, job_status, {**UNFINISHED_AMI, "ssm get-parameters": r'printf "1\n"'}
+        tmp_path,
+        job_status,
+        {**UNFINISHED_AMI, "ssm get-parameters-by-path": r'printf "ami-0x86\tami-0arm\nami-0half\n"'},
     )
 
     assert result.returncode == 0, result.stderr
     assert "keeping promoted AMI ami-0half" in result.stdout
     assert not any(call.startswith(("ec2 deregister-image", "ec2 delete-snapshot")) for call in calls)
-    lookup = next(call for call in calls if call.startswith("ssm get-parameters"))
-    assert "Parameters[?Value=='ami-0half']" in lookup
-    # A NEXT_UBUNTU bake promotes another release's pointer.
-    for release in yaml.safe_load(UBUNTU_CATALOG.read_text())["releases"]:
-        for architecture in ("x86", "arm"):
-            assert f"/homelab-ci/ami/qemu-host/{architecture}/{release}" in lookup
+    (lookup,) = [call for call in calls if call.startswith("ssm")]
+    path = "/homelab-ci/ami/qemu-host"
+    assert f"--path {path} --recursive" in lookup
+    # A NEXT_UBUNTU bake promotes another release's pointer, so the path must
+    # cover every architecture's pointer for every release.
+    for facts in yaml.safe_load((REPO_ROOT / "data" / "architectures.yml").read_text()).values():
+        assert facts["ci"]["ami_parameter"].startswith(f"{path}/")
 
 
 def test_qemu_host_cleanup_keeps_the_ami_when_the_pointers_are_unreadable(tmp_path: Path) -> None:
-    result, calls = _run_qemu_host_cleanup(tmp_path, "failed", {**UNFINISHED_AMI, "ssm get-parameters": "exit 254"})
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path, "failed", {**UNFINISHED_AMI, "ssm get-parameters-by-path": "exit 254"}
+    )
 
     assert result.returncode != 0
-    assert "keeping ami-0half" in result.stderr
+    assert "keeping every AMI of job 42" in result.stderr
     assert not any(call.startswith(("ec2 deregister-image", "ec2 delete-snapshot")) for call in calls)

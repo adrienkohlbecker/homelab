@@ -48,28 +48,19 @@ for group in $group_ids; do
 done
 
 if [ "${CI_JOB_STATUS:-success}" != success ]; then
-  repo_root=$(git rev-parse --show-toplevel)
-  templates=$(yq -r '.[].ci.ami_parameter' "${repo_root}/data/architectures.yml")
-  releases=$(yq -r '.releases | keys | .[]' "${repo_root}/data/ubuntu_releases.yml")
-  pointers=()
-  for template in $templates; do
-    for release in $releases; do
-      pointers+=("${template//\{ubuntu\}/$release}")
-    done
-  done
-
   images=$(aws ec2 describe-images --region "$region" --owners self \
     --filters "$job_filter" \
     --query "Images[].[ImageId,join(',',BlockDeviceMappings[].Ebs.SnapshotId)]" \
     --output text)
+  [ -n "$images" ] || exit 0
+  promoted=$(aws ssm get-parameters-by-path --region "$region" --path /homelab-ci/ami/qemu-host --recursive \
+    --query 'Parameters[].Value' --output text) || {
+    echo "cannot read the qemu-host AMI pointers; keeping every AMI of job ${CI_JOB_ID}" >&2
+    exit 1
+  }
   while read -r image snapshots; do
     [ -n "$image" ] || continue
-    references=$(aws ssm get-parameters --region "$region" --names "${pointers[@]}" \
-      --query "length(Parameters[?Value=='${image}'])" --output text) || {
-      echo "cannot read the qemu-host AMI pointers; keeping ${image}" >&2
-      exit 1
-    }
-    if [ "$references" != 0 ]; then
+    if grep -qwF "$image" <<<"$promoted"; then
       echo "keeping promoted AMI ${image}"
       continue
     fi
