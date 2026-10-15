@@ -4,13 +4,9 @@
 # Terraform. Keys are uname-style architecture names.
 #
 # guest.cloud_image_suffix is the architecture token in Ubuntu cloud-image names.
-# guest.uefi_firmware maps a lowercase `uname -s` host OS to the UEFI CODE/VARS
-# pair Packer builders, CI hosts, and the harness load on it: Ubuntu's packages
-# (ovmf, qemu-efi-aarch64) on Linux, Homebrew's qemu on macOS. Packer bakes the
-# VARS store into fixtures, so the harness must load the paired CODE. A missing
-# host OS is an unsupported builder for that architecture.
-# ci.ami_parameter is an SSM parameter name template; `{ubuntu}` is replaced by
-# the Ubuntu codename.
+# guest.uefi_firmware pairs come from Ubuntu's packages (ovmf, qemu-efi-aarch64)
+# on Linux and Homebrew's qemu on macOS. Packer bakes the VARS store into
+# fixtures, so the harness must load the paired CODE.
 x86_64:
   guest:
     machine_type: q35
