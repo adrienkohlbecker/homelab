@@ -781,7 +781,6 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool, boo
     log(f"comparing {base[:12]}..{head_short}: {len(changed)} file(s) changed")
 
     classification = classify_changed_files(changed)
-    keep_pools_test = any(KEEP_POOLS_RE.match(path) for path in changed)
 
     if classification.full_universe_paths:
         log("full-universe paths changed:")
@@ -826,7 +825,11 @@ def _gitlab_change_matrix(green: dict | None, log) -> tuple[list[str], bool, boo
     else:
         log("no role-relevant changes; matrix will be empty")
 
-    return cells_to_ci_specs(build_test_matrix(roles_sorted, release_cells)), "site.yml" in changed, keep_pools_test
+    return (
+        cells_to_ci_specs(build_test_matrix(roles_sorted, release_cells)),
+        "site.yml" in changed,
+        any(KEEP_POOLS_RE.match(path) for path in changed),
+    )
 
 
 def _cmd_gitlab(args: list[str]) -> int:
