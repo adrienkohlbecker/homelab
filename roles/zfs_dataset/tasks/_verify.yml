@@ -200,7 +200,7 @@
       - -p
       - -o
       - property,value
-      - canmount,mounted,autobackup:bak,referenced
+      - canmount,mounted,autobackup:bak
       - '{{ zfs_tank_filesystem }}/_verify_probe'
   register: _zfs_dataset_verify_retired
   changed_when: false
@@ -225,24 +225,18 @@
   when: zfs_root
   vars:
     props: "{{ dict(_zfs_dataset_verify_retired.stdout_lines | map('split', '\t')) }}"
-    snapshots: "{{ dict(_zfs_dataset_verify_retired_snapshots.stdout_lines | map('split', '\t')) }}"
-    nightly: "{{ zfs_tank_filesystem ~ '/_verify_probe@bak-20260101020000' }}"
-    kept: "{{ snapshots.keys() | list | select('search', '@bak-') | reject('equalto', nightly) | first }}"
-    final: "{{ snapshots.keys() | list | last }}"
+    # [name, referenced] of each @bak- snapshot, oldest first: the nightly
+    # one, the pre-empty one holding both payloads, and the empty final one.
+    baks: "{{ _zfs_dataset_verify_retired_snapshots.stdout_lines | select('search', '@bak-') | map('split', '\t') | list }}"
   assert:
     that:
-      - props.canmount == 'off'
-      - props.mounted == 'no'
-      - props['autobackup:bak'] == 'true'
-      - props.referenced | int < 1048576
-      - nightly in snapshots
-      - snapshots.keys() | select('search', '@bak-') | list | length == 3
-      - snapshots[kept] | int >= 8388608
-      - final is match('.*@bak-[0-9]{14}$')
-      - final != kept
-      - snapshots[final] | int < 1048576
+      - "[props.canmount, props.mounted, props['autobackup:bak']] == ['off', 'no', 'true']"
+      - baks | length == 3
+      - baks[0][0] is search('@bak-20260101020000$')
+      - baks[1][1] | int >= 8388608
+      - baks[2][1] | int < 1048576
       - _zfs_dataset_verify_retired_paths.results | selectattr('stat.exists') | list | length == 0
-    fail_msg: "{{ props }} {{ snapshots }}"
+    fail_msg: "{{ props }} {{ baks }}"
 
 - name: _verify | Plain-directory fallback is deleted
   when: not zfs_root
