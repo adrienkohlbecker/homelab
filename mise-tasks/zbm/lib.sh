@@ -48,8 +48,8 @@ zbm_assert_core_listing() {
     fi
   done
 
-  # A baked hostid overrides upstream's default 0x00bab10c, which every root
-  # carries (zbm/dracut.conf.d/release.conf).
+  # A baked hostid overrides upstream's default 0x00bab10c, which our pools and
+  # roots use (roles/zfs/tasks/main.yml).
   if awk '$9 == "etc/hostid" { found = 1 } END { exit !found }' "$listing"; then
     echo "ZBM initramfs: embeds /etc/hostid; build it as a release image" >&2
     return 1
