@@ -46,10 +46,16 @@ for index in "${!properties[@]}"; do
   fi
 done
 
-# Cross-check the live mount table: a single findmnt that matches only when
-# DATASET is the zfs source AND it is mounted at MOUNTPOINT. The exit code
-# is the whole test -- no separate source string-compare to drift.
-findmnt --source "$DATASET" --mountpoint "$MOUNTPOINT" --noheadings --types zfs >/dev/null || {
+# Cross-check the live mount table: findmnt matches only when DATASET is the
+# zfs source mounted at MOUNTPOINT. It also matches a mount shadowed by a later
+# one, so the device visible at the path must be the dataset's.
+dataset_devno=$(findmnt --source "$DATASET" --mountpoint "$MOUNTPOINT" --types zfs \
+  --first-only --noheadings --raw --output MAJ:MIN) || {
   echo >&2 "Error: zfs dataset $DATASET is not the mount at $MOUNTPOINT"
   exit 1
 }
+visible_devno=$(mountpoint --fs-devno "$MOUNTPOINT")
+if [ "$visible_devno" != "$dataset_devno" ]; then
+  echo >&2 "Error: $MOUNTPOINT shows device $visible_devno, not $DATASET ($dataset_devno): another mount shadows it"
+  exit 1
+fi

@@ -153,10 +153,24 @@
   changed_when: false
   become: true
 
+- name: _verify | Mount guard rejects the shadowed probe
+  when: zfs_root
+  command: /usr/local/bin/zfs_check_mount {{ zfs_tank_filesystem }}/_verify_probe /mnt/_verify_probe
+  register: _zfs_dataset_verify_shadow_check
+  changed_when: false
+  failed_when: _zfs_dataset_verify_shadow_check.rc == 0 or 'shadows it' not in _zfs_dataset_verify_shadow_check.stderr
+  become: true
+
 - name: _verify | Unmount the shadowing tmpfs
   when: zfs_root
   command: umount --types tmpfs /mnt/_verify_probe
   changed_when: true
+  become: true
+
+- name: _verify | Mount guard accepts the probe once unshadowed
+  when: zfs_root
+  command: /usr/local/bin/zfs_check_mount {{ zfs_tank_filesystem }}/_verify_probe /mnt/_verify_probe
+  changed_when: false
   become: true
 
 - name: _verify | Probe kept its contents and mount unit
