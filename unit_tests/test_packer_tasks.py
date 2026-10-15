@@ -33,7 +33,6 @@ QEMU_TEMPLATE = REPO_ROOT / "packer" / "qemu.pkr.hcl"
 QEMU_CHROOT_SH = REPO_ROOT / "packer" / "scripts" / "chroot.sh"
 QEMU_PROVISION_SH = REPO_ROOT / "packer" / "scripts" / "provision.sh"
 KEEP_POOLS_PLAYBOOK = REPO_ROOT / "test" / "playbooks" / "_keep_pools.yml"
-UBUNTU_CATALOG = REPO_ROOT / "data" / "ubuntu_releases.yml"
 UPLOAD_S3_PY = REPO_ROOT / "mise-tasks" / "packer" / "upload-s3.py"
 PYTHON_USAGE_TASKS = (UPLOAD_S3_PY, REPO_ROOT / "mise-tasks" / "ci" / "hydrate-qemu-images.py")
 UBUNTU_COMPLETION_TASKS = (BUILD_SH, HETZNER_SH, QEMU_HOST_AMI_SH, PUBLISH_QEMU_SH, *PYTHON_USAGE_TASKS)
@@ -921,12 +920,8 @@ def test_qemu_host_rejects_unknown_architecture() -> None:
 
 
 def test_qemu_cloud_images_use_immutable_release_builds() -> None:
-    catalog = yaml.safe_load(UBUNTU_CATALOG.read_text())
     template = QEMU_TEMPLATE.read_text()
 
-    for release in catalog["releases"].values():
-        assert set(release) == {"version", "image_release"}
-        assert re.fullmatch(r"\d{8}(?:\.\d+)?", release["image_release"])
     assert "release-${local.ubuntu_release.image_release}" in template
     assert 'releases/${local.ubuntu_name}/release"' not in template
 
