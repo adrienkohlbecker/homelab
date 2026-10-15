@@ -5,7 +5,7 @@
 #   prepare   on the old root: a canary dataset on every pool, and a
 #             fingerprint of the shared storage and host identity
 #   install   in the live stand-in: the rebuild, then a rerun that must fail
-#             closed
+#             closed without writing to the pools
 #   switch    on the Lab disks alone: the old root still boots and the shared
 #             storage is unchanged; switch to the new root and check it
 #   rollback  reboot the converged new root, then switch back to the old one
@@ -110,10 +110,35 @@
             NEXUS_URL: "{{ nexus_url }}"
           changed_when: true
 
+        # Every write to a pool, the new root included, commits a new
+        # uberblock. zdb reads them off the exported pools without importing.
+        # The switch phase compares the rest of the shared storage.
+        - name: Fingerprint the pools the install left
+          shell: &kp_pools_fingerprint |
+            set -euo pipefail
+            pools=$(zpool import -d /dev/disk/by-partuuid | awk '$1 == "pool:" { print $2 }')
+            [ -n "$pools" ]
+            for pool in $pools; do
+              echo "== $pool"
+              zdb -e -p /dev/disk/by-partuuid -u "$pool"
+            done
+          args:
+            executable: /bin/bash
+          register: _kp_installed_pools
+          changed_when: false
+
         - name: Rerun the rebuild over the installed root
           command: bash {{ _kp_installer }}/provision.sh
           environment: *kp_install_environment
           register: _kp_rerun
+          changed_when: false
+          failed_when: false
+
+        - name: Fingerprint the pools the rerun left
+          shell: *kp_pools_fingerprint
+          args:
+            executable: /bin/bash
+          register: _kp_rerun_fingerprint
           changed_when: false
           failed_when: false
 
@@ -128,7 +153,14 @@
               - _kp_rerun.rc != 0
               - "'already exists' in _kp_rerun.stderr"
               - _kp_rerun_pools.stdout == ''
-            fail_msg: "rc={{ _kp_rerun.rc }}: {{ _kp_rerun.stderr_lines[-5:] }}; imported: {{ _kp_rerun_pools.stdout }}"
+              - _kp_rerun_fingerprint.rc == 0
+              - _kp_rerun_fingerprint.stdout == _kp_installed_pools.stdout
+            fail_msg: |-
+              rc={{ _kp_rerun.rc }}: {{ _kp_rerun.stderr_lines[-5:] }}; imported: {{ _kp_rerun_pools.stdout }}
+              after the install:
+              {{ _kp_installed_pools.stdout }}
+              after the rerun:
+              {{ _kp_rerun_fingerprint.stdout }}
 
     - name: Check the old root and switch to the new one
       when: _keep_pools_phase == 'switch'
