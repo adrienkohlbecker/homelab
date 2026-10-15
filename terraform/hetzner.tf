@@ -146,9 +146,10 @@ resource "hcloud_network_subnet" "hetzner" {
 
 # fox's boot image: the latest ZFS-root snapshot published by `mise run
 # packer:hetzner`, which uploads the disk image `mise run packer:build hetzner`
-# produces (mechanic 2 -- see notes/archive/fox_zfs_root_image.md). The build labels
-# each snapshot os=ubuntu-zfs,ubuntu=<release>; we select on os + release (NOT a
-# per-host role) so the same image can back multiple Hetzner servers later.
+# produces (mechanic 2 -- see notes/archive/fox_zfs_root_image.md). The upload
+# labels each snapshot ubuntu=<release> and adds os=ubuntu-zfs once it passes
+# boot verification; we select on os + release (NOT a per-host role) so the
+# same image can back multiple Hetzner servers later.
 # most_recent picks the newest, so a rebuild is consumed automatically on the
 # next (re)create; with_status=available avoids a half-published snapshot.
 # NB: paired with ignore_changes=[image] on the server below — a freshly built

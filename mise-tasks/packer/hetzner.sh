@@ -161,8 +161,9 @@ rescue_verify_boot() { # IMGID
 
   echo "snapshot $imgid failed boot verification at $RESCUE_IP" >&2
   rescue_collect_diagnostics
-  echo "    deleting the bad snapshot so terraform never selects it" >&2
-  hcloud image delete "$imgid" >/dev/null 2>&1 || true
+  echo "    deleting the rejected snapshot" >&2
+  hcloud image delete "$imgid" >/dev/null ||
+    echo "    WARNING: could not delete rejected snapshot $imgid; it lacks os=ubuntu-zfs, so terraform cannot select it, but delete it by hand" >&2
   exit 1
 }
 
@@ -195,13 +196,15 @@ rescue_collect_diagnostics() {
   ' >&2 2>&1 || true
 }
 
+# Terraform selects on os=ubuntu-zfs, so the snapshot gets that label only
+# once it passes boot verification.
 rescue_snapshot() { # UBUNTU
   local ubuntu="$1" imgid
   echo "==> powering off + snapshotting"
   hcloud server poweroff "$SERVER" >/dev/null
   imgid=$(hcloud server create-image "$SERVER" --type snapshot \
     --description "ubuntu-zfs-${ubuntu}-$(date '+%Y%m%d%H%M%S')" \
-    --label "os=ubuntu-zfs" --label "ubuntu=${ubuntu}" |
+    --label "ubuntu=${ubuntu}" |
     awk '/^Image/{print $2; exit}')
   [ -n "$imgid" ] || {
     echo "could not determine the created snapshot image id" >&2
@@ -210,6 +213,7 @@ rescue_snapshot() { # UBUNTU
   echo "==> snapshot image id=$imgid (available)"
 
   rescue_verify_boot "$imgid"
+  hcloud image add-label "$imgid" os=ubuntu-zfs >/dev/null
   mise run packer:hcloud-prune-snapshots -- "os=ubuntu-zfs,ubuntu=$ubuntu"
 
   echo "==> DONE. Snapshot $imgid labelled os=ubuntu-zfs,ubuntu=$ubuntu (boot-verified)."

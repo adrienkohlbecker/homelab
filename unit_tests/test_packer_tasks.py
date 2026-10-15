@@ -1103,6 +1103,60 @@ def test_hetzner_first_boot_wait_is_bounded(tmp_path: Path) -> None:
     assert "did not finish cleanly" in result.stderr
 
 
+def _hetzner_snapshot(
+    tmp_path: Path, first_boot_rc: int, delete_rc: int = 0
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run rescue_snapshot against a logging fake hcloud and mise, with the
+    boot poll's remote probes stubbed; return the result and the call log."""
+    log = tmp_path / "calls.log"
+    fake_bin = tmp_path / "bin"
+    _executable(
+        fake_bin / "hcloud",
+        f"""#!/bin/bash
+echo "hcloud $*" >>{shlex.quote(str(log))}
+case "$1 $2" in
+"server create-image") echo "Image 4242 created from Server 7" ;;
+"image delete") exit {delete_rc} ;;
+esac
+""",
+    )
+    _executable(fake_bin / "mise", f'#!/bin/bash\necho "mise $*" >>{shlex.quote(str(log))}\n')
+    env = dict(os.environ)
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    script = f"""
+source {shlex.quote(str(HETZNER_SH))}
+RESCUE_ID=7 RESCUE_IP=192.0.2.1
+sleep() {{ :; }}
+rescue_sshd_up() {{ :; }}
+rescue_verify_first_boot() {{ return {first_boot_rc}; }}
+rescue_collect_diagnostics() {{ :; }}
+rescue_snapshot resolute
+"""
+    result = subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True, timeout=30)
+    return result, log.read_text().splitlines()
+
+
+def test_hetzner_snapshot_is_selectable_only_after_boot_verification(tmp_path: Path) -> None:
+    result, calls = _hetzner_snapshot(tmp_path, first_boot_rc=0)
+
+    assert result.returncode == 0, result.stderr
+    (create,) = [call for call in calls if call.startswith("hcloud server create-image")]
+    assert "ubuntu=resolute" in create
+    assert "os=ubuntu-zfs" not in create
+    published = calls.index("hcloud image add-label 4242 os=ubuntu-zfs")
+    assert calls.index("hcloud server rebuild packer-hetzner-upload --image 4242") < published
+    assert calls[published + 1].startswith("mise run packer:hcloud-prune-snapshots")
+
+
+def test_hetzner_rejected_snapshot_reports_a_failed_deletion(tmp_path: Path) -> None:
+    result, calls = _hetzner_snapshot(tmp_path, first_boot_rc=1, delete_rc=1)
+
+    assert result.returncode == 1
+    assert "hcloud image delete 4242" in calls
+    assert not [call for call in calls if "add-label" in call or call.startswith("mise")]
+    assert "could not delete rejected snapshot 4242" in result.stderr
+
+
 def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
     """Rebuild the AMI's hydrate tree from provision's installs and run it.
 
