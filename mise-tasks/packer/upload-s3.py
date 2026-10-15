@@ -3,7 +3,7 @@
 #MISE description="Bundle a published packer qemu artifact and upload it to the S3 image bucket"
 #USAGE arg "<machine>" help="Packer source/artifact name: lab"
 #USAGE complete "machine" run="printf 'lab\n'"
-#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename" default="noble"
+#USAGE flag "--ubuntu <ubuntu>" help="Ubuntu release codename (default: data/ubuntu_releases.yml's default)"
 #USAGE complete "ubuntu" run="yq -r '.releases | keys | .[]' data/ubuntu_releases.yml"
 #USAGE flag "--architecture <architecture>" help="Guest architecture (x86_64 or aarch64); must match this build host, which is the default, and selects the image store"
 #USAGE flag "--build-id <build_id>" help="Immutable S3 build id; default is pipeline.job in CI or timestamp + current git SHA"
@@ -136,7 +136,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ubuntu",
         choices=sorted(UBUNTU_RELEASES),
-        default=os.environ.get("usage_ubuntu", DEFAULT_UBUNTU),
+        default=os.environ.get("usage_ubuntu") or DEFAULT_UBUNTU,
     )
     parser.add_argument(
         "--architecture",
