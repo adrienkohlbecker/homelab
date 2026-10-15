@@ -113,6 +113,61 @@
     creates: /mnt/_verify_probe/late.bin
   become: true
 
+# A filesystem mounted over the probe is what the delete would traverse, while
+# the snapshot would capture only the probe: retirement must refuse, leaving
+# both untouched.
+- name: _verify | Refuse to retire the probe under a shadowing mount
+  when: zfs_root
+  block:
+    # ansible.posix.mount would treat the mounted probe path as already done.
+    - name: _verify | Mount a tmpfs over the probe
+      command: mount -t tmpfs _verify_shadow /mnt/_verify_probe  # noqa: command-instead-of-module
+      changed_when: true
+      become: true
+
+    - name: _verify | Write into the shadowing tmpfs
+      command: touch /mnt/_verify_probe/shadow
+      changed_when: true
+      become: true
+
+    - name: _verify | Retire the shadowed probe through the production helper
+      vars:
+        zfs_dataset_args:
+          dataset: '{{ zfs_tank_filesystem }}/_verify_probe'
+          mountpoint: /mnt/_verify_probe
+      import_tasks: remove.yml
+
+    - name: _verify | Reject a retirement that went ahead
+      fail:
+        msg: Retirement emptied a probe shadowed by another mount
+
+  rescue:
+    - name: _verify | Require the mount guard to refuse
+      assert:
+        that: ansible_failed_task.name == 'remove | Assert the dataset is what is mounted'
+        fail_msg: "Expected the mount guard to refuse, got {{ ansible_failed_task.name | default('<unknown>') }}"
+
+- name: _verify | Shadowing tmpfs kept its contents
+  when: zfs_root
+  command: test -e /mnt/_verify_probe/shadow
+  changed_when: false
+  become: true
+
+- name: _verify | Unmount the shadowing tmpfs
+  when: zfs_root
+  command: umount --types tmpfs /mnt/_verify_probe
+  changed_when: true
+  become: true
+
+- name: _verify | Probe kept its contents and mount unit
+  when: zfs_root
+  command: test -e {{ item }}
+  loop:
+    - /mnt/_verify_probe/late.bin
+    - /etc/systemd/system/{{ '/mnt/_verify_probe' | zfs_mount_unit }}
+  changed_when: false
+  become: true
+
 - name: _verify | Retire the probe through the production helper
   vars:
     zfs_dataset_args:

@@ -28,14 +28,6 @@
 - name: remove | Retire the dataset
   when: zfs_root
   block:
-    - name: remove | Retire the dataset mount unit
-      import_role:
-        name: systemd_unit
-        tasks_from: remove
-      vars:
-        systemd_unit_args:
-          dest: "{{ zfs_dataset_args.mountpoint | zfs_mount_unit }}"
-
     - name: remove | Read the dataset mount state
       command:
         argv:
@@ -54,19 +46,20 @@
         and 'dataset does not exist' not in _zfs_dataset_remove_state.stderr
       become: true
 
-    - name: remove | Empty the dataset and stop mounting it
+    # Guard the delete before anything changes: it must only ever see the
+    # dataset, never the parent directory underneath an unmounted mountpoint
+    # nor another filesystem mounted over the dataset. A not-yet-retired
+    # dataset that is not the visible mount fails here rather than being left
+    # unmountable with its contents still live. Only the mount table is
+    # checked: zfs_check_mount's live-service contract (readonly=off) does
+    # not hold for a dataset already frozen by hand, and a read-only one
+    # with contents left fails the delete below instead.
+    - name: remove | Guard the dataset mount
       when:
         - _zfs_dataset_remove_state.rc == 0
         - _zfs_dataset_remove_state.stdout_lines[0] != 'off'
       block:
-        # Guard the delete: it must only ever see the dataset, never the parent
-        # directory underneath an unmounted mountpoint. A not-yet-retired
-        # dataset that is not mounted fails here rather than being left
-        # unmountable with its contents still live. Only the mount table is
-        # checked: zfs_check_mount's live-service contract (readonly=off) does
-        # not hold for a dataset already frozen by hand, and a read-only one
-        # with contents left fails the delete below instead.
-        - name: remove | Assert the dataset is what is mounted
+        - name: remove | Find the dataset mount
           command:
             argv:
               - findmnt
@@ -77,9 +70,39 @@
               - --types
               - zfs
               - --noheadings
+              - --raw
+              - --output
+              - MAJ:MIN
+          register: _zfs_dataset_remove_mount
           changed_when: false
           become: true
 
+        # findmnt also matches a mount shadowed by a later one, so the
+        # device visible at the path must be the dataset's.
+        - name: remove | Assert the dataset is what is mounted
+          command:
+            argv:
+              - mountpoint
+              - --fs-devno
+              - "{{ zfs_dataset_args.mountpoint }}"
+          register: _zfs_dataset_remove_visible
+          changed_when: false
+          failed_when: _zfs_dataset_remove_visible.stdout != _zfs_dataset_remove_mount.stdout
+          become: true
+
+    - name: remove | Retire the dataset mount unit
+      import_role:
+        name: systemd_unit
+        tasks_from: remove
+      vars:
+        systemd_unit_args:
+          dest: "{{ zfs_dataset_args.mountpoint | zfs_mount_unit }}"
+
+    - name: remove | Empty the dataset and stop mounting it
+      when:
+        - _zfs_dataset_remove_state.rc == 0
+        - _zfs_dataset_remove_state.stdout_lines[0] != 'off'
+      block:
         # Keeps what changed since the last nightly @bak-. Host-local time, as
         # zfs-autobackup names its own snapshots.
         - name: remove | Snapshot the dataset before emptying it
