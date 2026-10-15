@@ -128,6 +128,68 @@
         == (netplan.ethernets.keys() | list + ['cloudinit0']) | sort
     fail_msg: "Unexpected merged netplan ethernets: {{ netplan_verify_layered.stdout }}"
 
+# Where cloud-init is installed (minimal), stage the rename race the drop-in
+# closes: a set-name origin like Hetzner's renames the NIC once
+# netplan-configure writes its .link file. Delaying that service lets an
+# unordered local stage start first, and delaying the NIC's udev events lets
+# an unsettled one start before the rename; either then sees the old name. A
+# probe appended after the drop-in's settle records the names it starts with.
+- name: _verify cloud-init | Stage a delayed boot-time NIC rename
+  when: netplan_cloud_init_local.stat.exists
+  become: true
+  block:
+    - name: _verify cloud-init | Seed a netplan origin that renames the NIC
+      copy:
+        dest: /etc/netplan/60-rename.yaml
+        content: |
+          network:
+            version: 2
+            ethernets:
+              cloud_uplink:
+                match:
+                  macaddress: "{{ ansible_facts.default_ipv4.macaddress }}"
+                set-name: uplink0
+                dhcp4: true
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: _verify cloud-init | Delay udev processing of the NIC add events
+      copy:
+        dest: /etc/udev/rules.d/10-netplan-rename-delay.rules
+        content: |
+          SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="{{ ansible_facts.default_ipv4.macaddress }}", PROGRAM="/usr/bin/sleep 5"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: _verify cloud-init | Create netplan-configure's drop-in directory
+      file:
+        path: /etc/systemd/system/netplan-configure.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: _verify cloud-init | Delay netplan-configure
+      copy:
+        dest: /etc/systemd/system/netplan-configure.service.d/zz_netplan_delay.conf
+        content: |
+          [Service]
+          ExecStartPre=/usr/bin/sleep 5
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: _verify cloud-init | Record the NIC names the local stage starts with
+      copy:
+        dest: /etc/systemd/system/cloud-init-local.service.d/zz_netplan_probe.conf
+        content: |
+          [Service]
+          ExecStartPre=/bin/sh -c "ls /sys/class/net >/run/netplan_cloud_init_local_links"
+        owner: root
+        group: root
+        mode: "0644"
 
 # The role's wait-online drop-in must gate network-online.target on the uplink
 # even when the NIC appears after Netplan's generator ran, as it does under the
@@ -208,24 +270,32 @@
       wait-online: ActiveState={{ _netplan_wait_online.ActiveState }}
       ExecStart={{ _netplan_wait_online.ExecStart }}
 
-# Where the layering converge found cloud-init (minimal), the reboot above also
-# ran its local stage with the drop-in: the bounded udev settle must finish
-# before the stage runs, and the stage must still succeed.
+# The reboot above ran cloud-init's local stage with the drop-in: the bounded
+# udev settle must finish before the stage runs, the stage must still succeed,
+# and it must start with the NIC already renamed.
 - name: _verify cloud-init | Check the local stage after the reboot
   when: netplan_cloud_init_local.stat.exists
   block:
+    # systemctl show prints one ExecStartPre line per command, where the
+    # systemd module keeps only the last.
     - name: _verify cloud-init | Read cloud-init's local stage
-      systemd:
-        name: cloud-init-local.service
+      command: systemctl show cloud-init-local.service --property=ActiveState,ExecStartPre  # noqa: command-instead-of-module
       register: netplan_verify_cloud_init_local
+      changed_when: false
 
-    - name: _verify cloud-init | Confirm udev settled before the local stage succeeded
+    - name: _verify cloud-init | Read the NIC names the local stage started with
+      slurp:
+        src: /run/netplan_cloud_init_local_links
+      register: netplan_verify_cloud_init_links
+
+    - name: _verify cloud-init | Confirm the local stage ran after udev renamed the NIC
       vars:
-        _netplan_local: "{{ netplan_verify_cloud_init_local.status }}"
+        _netplan_links: "{{ netplan_verify_cloud_init_links.content | b64decode | split }}"
       assert:
         that:
-          - _netplan_local.ActiveState == 'active'
-          - _netplan_local.ExecStartPre is search('udevadm settle .* status=0[/ ]')
+          - "'ActiveState=active' in netplan_verify_cloud_init_local.stdout_lines"
+          - netplan_verify_cloud_init_local.stdout is search('udevadm settle .* status=0[/ ]')
+          - "'uplink0' in _netplan_links"
         fail_msg: |-
-          cloud-init-local: ActiveState={{ _netplan_local.ActiveState }}
-          ExecStartPre={{ _netplan_local.ExecStartPre }}
+          {{ netplan_verify_cloud_init_local.stdout }}
+          NICs at stage start: {{ _netplan_links }}
