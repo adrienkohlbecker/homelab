@@ -15,6 +15,7 @@ from pathlib import Path
 import machine
 import pytest
 import yaml
+from conftest import load_repo_module
 from matrix import DEFAULT_UBUNTU
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -525,10 +526,6 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     assert sorted(Path(path).name for path in uploaded_role_files) == sorted(staged)
     assert "homelab-source.tar" not in template
 
-    # The keep-pools fixture test stages the same set for its rebuild.
-    playbook_role_files = re.findall(r"^\s+- (roles/\S+)$", KEEP_POOLS_PLAYBOOK.read_text(), re.MULTILINE)
-    assert sorted(Path(path).name for path in playbook_role_files) == sorted(staged)
-
     # Every staged file the chroot install reads must be one provision.sh
     # stages: a role file or a target's extras.
     consumed = set(re.findall(r"\$\{CHROOT_FILES\}/([\w.-]+)", QEMU_CHROOT_SH.read_text()))
@@ -536,6 +533,37 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     target_extras = re.findall(r"^\w+\) install_files\+=\(([\w.-]+)\) ;;$", provision, re.MULTILINE)
     assert target_extras, "provision.sh no longer stages any target extras"
     assert consumed <= {*staged, *target_extras}
+
+
+def test_keep_pools_job_covers_the_staged_installer() -> None:
+    """The keep-pools rebuild stages exactly what a qemu install reads, and the
+    CI job runs whenever one of those files changes: detect.py's keep-pools
+    patterns cover every staged file the harness's own full-universe patterns
+    don't, and each pattern still names a staged file."""
+    detect = load_repo_module("mise-tasks/ci/detect.py")
+    provision = QEMU_PROVISION_SH.read_text()
+    role_files = re.search(r"^ROLE_FILES=\(([^)]*)\)$", provision, re.MULTILINE)
+    qemu_extras = re.search(r"^qemu\) install_files\+=\(([\w.-]+)\) ;;$", provision, re.MULTILINE)
+    assert role_files is not None
+    assert qemu_extras is not None
+
+    play = yaml.safe_load(KEEP_POOLS_PLAYBOOK.read_text())[0]
+    (stage,) = [
+        task
+        for entry in play["tasks"]
+        for task in entry.get("block", [entry])
+        if task["name"] == "Stage the installer and its inputs"
+    ]
+    staged = stage["loop"]
+    assert sorted(Path(path).name for path in staged) == sorted(
+        ["provision.sh", "chroot.sh", *role_files.group(1).split(), qemu_extras.group(1)]
+    )
+
+    assert [
+        path for path in staged if not detect.KEEP_POOLS_RE.match(path) and not detect.FULL_UNIVERSE_RE.match(path)
+    ] == []
+    for pattern in detect.KEEP_POOLS_PATTERNS:
+        assert any(re.fullmatch(pattern, path) for path in staged), pattern
 
 
 def _ssh_public_key(tmp_path: Path, name: str) -> str:
