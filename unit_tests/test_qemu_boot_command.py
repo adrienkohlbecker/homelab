@@ -105,7 +105,7 @@ def test_linux_aarch64_uses_kvm(
     assert "virtio-net,romfile=,netdev=user.0" in cmd
 
 
-def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
+def test_keep_vm_x86_64_uses_minimal_keep_devices(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     m = machine_factory(host_arch="x86_64", keep_vm=True, machine_timeout=600)
@@ -115,16 +115,19 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
     # A kept VM runs unwrapped, until the operator stops it.
     assert cmd[0] == "qemu-system-x86_64"
 
-    # x86_64 q35 has PS/2 / ICH9 USB by default; only usb-tablet is added
-    # (absolute mouse for VNC).
     # VNC on the first free loopback display + French keyboard layout.
     display_idx = cmd.index("-display")
     assert cmd[display_idx + 1] == f"vnc={machine.SSH_HOST}:0,to=99"
     assert cmd[cmd.index("-k") + 1] == "fr"
 
-    # usb-tablet is the only -device addition for keep_vm on x86_64.
+    # q35 brings a PS/2 keyboard and USB controllers, so usb-tablet (absolute
+    # mouse for VNC) is the only device keep_vm adds.
+    plain = machine_factory(host_arch="x86_64")
+    _setup(plain)
+    plain_cmd = plain._boot_command()
     devices = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-device"]
-    assert "usb-tablet" in devices
+    plain_devices = [plain_cmd[i + 1] for i, a in enumerate(plain_cmd) if a == "-device"]
+    assert sorted(devices) == sorted([*plain_devices, "usb-tablet"])
 
 
 def test_keep_vm_display_window_uses_local_qemu_backend(
@@ -134,6 +137,7 @@ def test_keep_vm_display_window_uses_local_qemu_backend(
     _setup(m)
     cmd = m._boot_command()
 
+    # The fixture pins Darwin, whose window backend is cocoa.
     display_idx = cmd.index("-display")
     assert cmd[display_idx + 1] == "cocoa"
     assert not any(a.startswith("vnc=") for a in cmd)

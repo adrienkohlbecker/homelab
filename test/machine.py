@@ -67,9 +67,9 @@ GUEST_JOURNAL_UNIT_PATH = Path(__file__).parent / "homelab_guest_journal.service
 # Guest machine, NIC, display, cloud-image token, and UEFI pairs per architecture,
 # shared with the Packer fixture build and the CI image stores.
 ARCHITECTURES = yaml.safe_load((Path(__file__).parent.parent / "data" / "architectures.yml").read_text())
-# Extra -device flags for interactive (VNC) mode. q35 brings PS/2 / ICH9 USB,
-# so x86_64 only needs usb-tablet for an absolute mouse; aarch64 virt has no
-# default input.
+# Extra -device flags for interactive (VNC) mode. q35 brings a PS/2 keyboard
+# and, with the machine's usb=on, ICH9 USB, so x86_64 only needs usb-tablet for
+# an absolute mouse; aarch64 virt has no default input.
 KEEP_VM_DEVICES = {
     "x86_64": ("-device", "usb-tablet"),
     "aarch64": ("-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"),
@@ -1252,11 +1252,6 @@ class Machine:
         accel = "hvf" if platform.system() == "Darwin" else "kvm"
 
         if self.keep_vm:
-            # q35 has a PS/2 keyboard by default but USB is opt-in
-            # (machine flag usb=on, applied below); usb-tablet then attaches
-            # to the built-in EHCI/UHCI for absolute-coordinate mouse.
-            # aarch64 virt has no default input devices, so it needs the
-            # xhci + usb-kbd set from KEEP_VM_DEVICES.
             display_backend = "cocoa" if platform.system() == "Darwin" else "gtk"
             display_args = [
                 "-display",
@@ -1304,10 +1299,9 @@ class Machine:
             "-device",
             "virtio-rng-pci,rng=rng0",
             "-machine",
-            # usb=on enables q35's built-in EHCI/UHCI controllers; needed
-            # for usb-tablet under --keep-vm. Default-off has no cost when
-            # usb-tablet isn't attached. virt machine ignores the flag and
-            # uses qemu-xhci added above instead.
+            # usb=on gives q35 the built-in USB controllers KEEP_VM_DEVICES'
+            # usb-tablet attaches to; virt ignores it, bringing its own
+            # qemu-xhci there.
             f"type={self.guest['machine_type']},accel={accel},usb=on",
             # splash-time is the edk2 front-page timeout (fw_cfg
             # etc/boot-menu-wait); without it ArmVirtQemu waits its 5s
