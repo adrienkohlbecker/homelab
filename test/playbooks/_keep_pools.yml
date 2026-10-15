@@ -91,17 +91,10 @@
             - roles/console/files/keyboard
             - test/homelab_guest_journal.service
 
-        # Under become, ansible_user_id names root.
-        - name: Read the live environment's login user
-          command: id -un
-          become: false
-          register: _kp_live_user
-          changed_when: false
-
         # The live stand-in authorizes the same key as the Lab fixture.
         - name: Read the authorized key
           slurp:
-            src: "/home/{{ _kp_live_user.stdout }}/.ssh/authorized_keys"
+            src: "/home/{{ ansible_ssh_user }}/.ssh/authorized_keys"
           register: _kp_authorized_keys
 
         - name: Rebuild the host
