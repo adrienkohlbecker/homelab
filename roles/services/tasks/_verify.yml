@@ -53,3 +53,11 @@
   loop_control:
     label: "{{ item.mountpoint | zfs_mount_unit }}"
   become: true
+
+# Extra vars passed as key=value arrive as strings, so "false" must still leave
+# the sqlite child out.
+- name: _verify | A string false flag skips the sqlite dataset
+  vars:
+    services_sqlite_enabled: 'false'
+  assert:
+    that: services_datasets | selectattr('enabled') | map(attribute='dataset') | list == ['rpool/services']

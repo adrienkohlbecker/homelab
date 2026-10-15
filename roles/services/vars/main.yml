@@ -25,7 +25,7 @@ services_datasets:
       'autobackup:bak': 'true'
   - dataset: rpool/services/sqlite
     mountpoint: /mnt/services/sqlite
-    enabled: "{{ services_sqlite_enabled }}"
+    enabled: "{{ services_sqlite_enabled | bool }}"
     extra_properties:
       'autobackup:bak': 'true'
       recordsize: '4096'
