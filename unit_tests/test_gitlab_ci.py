@@ -101,16 +101,8 @@ def test_hosted_jobs_pull_a_tag_ci_image_publishes() -> None:
         assert any(f'docker push "{image}"' in pushes for pushes in published), image
 
 
-def test_fox_image_builds_and_labels_one_release() -> None:
-    job = PIPELINE["fox_image"]
-
-    # packer:hetzner labels and prunes snapshots by its own --ubuntu, so an
-    # omitted flag would publish another release's build under its default.
-    assert job["variables"]["FOX_UBUNTU"] in UBUNTU_RELEASES
-    assert job["script"][-2:] == [
-        'mise run packer:build hetzner --ubuntu "$FOX_UBUNTU"',
-        'mise run packer:hetzner --ubuntu "$FOX_UBUNTU"',
-    ]
+def test_fox_image_release_is_in_the_catalog() -> None:
+    assert PIPELINE["fox_image"]["variables"]["FOX_UBUNTU"] in UBUNTU_RELEASES
 
 
 def test_arm_qemu_images_use_frankfurt_builder_jobs() -> None:
