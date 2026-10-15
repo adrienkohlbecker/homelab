@@ -931,6 +931,41 @@ printf '%s %s\n' "$rc" "$attempts"
     assert result.stdout.strip() == f"{expected_rc} {expected_attempts}"
 
 
+def _hetzner_first_boot(tmp_path: Path, zpool: str, lsblk: str) -> subprocess.CompletedProcess[str]:
+    """Run rescue_verify_first_boot with ssh executing its remote command
+    locally against fake cloud-init, zpool, and lsblk bodies."""
+    fake_bin = tmp_path / "bin"
+    _executable(fake_bin / "ssh", '#!/bin/bash\nfor remote; do :; done\nexec bash -c "$remote"\n')
+    _executable(fake_bin / "cloud-init", "#!/bin/sh\nexit 0\n")
+    _executable(fake_bin / "zpool", f"#!/bin/sh\n{zpool}\n")
+    _executable(fake_bin / "lsblk", f"#!/bin/sh\n{lsblk}\n")
+    env = dict(os.environ)
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    script = f"source {shlex.quote(str(HETZNER_SH))}\nKEY=/tmp/test_key RESCUE_IP=192.0.2.1 rescue_verify_first_boot\n"
+    return subprocess.run(["bash", "-c", script], cwd=REPO_ROOT, env=env, text=True, capture_output=True)
+
+
+@pytest.mark.parametrize(
+    ("zpool", "lsblk", "verified"),
+    [
+        ("echo 1000", "echo 1000", True),
+        ("echo 500", "echo 1000", False),
+        ("exit 1", "echo 1000", False),
+        ("echo 1000", "exit 1", False),
+        ("exit 1", "exit 1", False),
+        (":", ":", False),
+        ("echo 1000", "printf '1000\\n2000\\n'", False),
+        ("echo size", "echo 1000", False),
+    ],
+)
+def test_hetzner_first_boot_rejects_an_unmeasured_or_ungrown_pool(
+    tmp_path: Path, zpool: str, lsblk: str, verified: bool
+) -> None:
+    result = _hetzner_first_boot(tmp_path, zpool, lsblk)
+
+    assert (result.returncode == 0) is verified, result.stdout + result.stderr
+
+
 def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
     """Rebuild the AMI's hydrate tree from provision's installs and run it.
 

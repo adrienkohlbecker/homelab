@@ -115,11 +115,15 @@ rescue_verify_first_boot() {
   local out pool part
   out=$(ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o ConnectTimeout=10 "root@$RESCUE_IP" \
-    'cloud-init status --wait --long >&2 && echo "$(zpool list -Hp -o size rpool) $(lsblk -bno SIZE /dev/disk/by-partlabel/rpool)"') || {
-    echo "first boot: cloud-init did not finish cleanly" >&2
+    'cloud-init status --wait --long >&2 && pool=$(zpool list -Hp -o size rpool) && part=$(lsblk -bno SIZE /dev/disk/by-partlabel/rpool) && echo "$pool $part"') || {
+    echo "first boot: cloud-init did not finish cleanly or rpool could not be measured" >&2
     return 1
   }
-  read -r pool part <<<"$out"
+  [[ $out =~ ^([1-9][0-9]*)\ ([1-9][0-9]*)$ ]] || {
+    echo "first boot: unreadable rpool size probe: $out" >&2
+    return 1
+  }
+  pool=${BASH_REMATCH[1]} part=${BASH_REMATCH[2]}
   if ((pool * 100 < part * 95)); then
     echo "first boot: rpool is $pool bytes on a $part-byte partition; it did not grow" >&2
     return 1
