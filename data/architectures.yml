@@ -1,7 +1,5 @@
 # yaml-language-server: $schema=architectures.schema.json
-# Per-architecture facts shared by the qemu harness (test/machine.py), the qemu
-# fixture build (packer/qemu.pkr.hcl), the CI image tasks, the AWS audit, and
-# Terraform. Keys are uname-style architecture names.
+# Per-architecture facts, keyed by uname-style architecture name.
 #
 # guest.cloud_image_suffix is the architecture token in Ubuntu cloud-image names.
 # guest.uefi_firmware pairs come from Ubuntu's packages (ovmf, qemu-efi-aarch64)
