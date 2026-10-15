@@ -20,9 +20,11 @@
 
 # Every service on the shared storage needs the boot to complete: pool
 # imports, md assembly, the ESP and swap mounts, and the mount generator's
-# units for the shared datasets all report through this.
+# units for the shared datasets all report through this. Bounded as the
+# harness bounds it (SYSTEM_RUNNING_WAIT_TIMEOUT in test/machine.py), so a
+# wedged start fails here with its pending jobs.
 - name: Wait for the boot to settle
-  command: systemctl is-system-running --wait  # noqa: command-instead-of-module
+  command: timeout 600 systemctl is-system-running --wait
   register: _kp_system_state
   changed_when: false
   failed_when: false
@@ -32,10 +34,20 @@
   register: _kp_failed_units
   changed_when: false
 
+- name: List pending jobs
+  command: systemctl list-jobs --no-legend  # noqa: command-instead-of-module
+  register: _kp_pending_jobs
+  changed_when: false
+
 - name: The boot completed without failed units
   assert:
     that: _kp_system_state.stdout == 'running'
-    fail_msg: "{{ _kp_system_state.stdout }}: {{ _kp_failed_units.stdout }}"
+    fail_msg: |-
+      rc={{ _kp_system_state.rc }} state={{ _kp_system_state.stdout }}
+      failed units:
+      {{ _kp_failed_units.stdout }}
+      pending jobs:
+      {{ _kp_pending_jobs.stdout }}
 
 - name: Read the pool health
   command: zpool status -x
