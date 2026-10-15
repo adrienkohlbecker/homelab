@@ -582,7 +582,6 @@ def _provision_preflight(
         "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}",
         "UBUNTU_NAME": "resolute",
         "INSTALL_TARGET": "qemu",
-        "SERIAL_CONSOLE": "console=ttyAMA0",
         "KEEP_POOLS": "1",
         "TARGET_HOSTNAME": "lab",
         "TARGET_USERNAME": "operator",
@@ -638,6 +637,23 @@ def test_provision_preflight_rejects_an_install_file_of_the_wrong_type(
 
     assert result.returncode == 1
     assert f"{message}: {tmp_path / 'scripts' / swapped}" in result.stderr
+
+
+@requires_ssh_keygen
+@pytest.mark.parametrize("variable", ["DISKS", "SERIAL_CONSOLE"])
+def test_provision_preflight_rejects_a_fresh_install_input_in_a_rebuild(tmp_path: Path, variable: str) -> None:
+    result = _provision_preflight(tmp_path, **{variable: "set"})
+
+    assert result.returncode == 1
+    assert f"unset {variable}" in result.stderr
+
+
+@requires_ssh_keygen
+def test_provision_preflight_requires_a_serial_console_for_a_fresh_qemu_install(tmp_path: Path) -> None:
+    result = _provision_preflight(tmp_path, KEEP_POOLS="")
+
+    assert result.returncode == 1
+    assert "INSTALL_TARGET=qemu requires SERIAL_CONSOLE" in result.stderr
 
 
 def test_provision_preflight_rejects_an_unknown_keep_pools_value(tmp_path: Path) -> None:

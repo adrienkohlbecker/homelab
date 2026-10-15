@@ -119,7 +119,6 @@
             TARGET_USERNAME: "{{ keep_pools_user }}"
             SSH_KEY_PUB: "{{ _kp_authorized_keys.content | b64decode | trim }}"
             INSTALL_TARGET: qemu
-            SERIAL_CONSOLE: "{{ _console_serial | trim }}"
             NEXUS_URL: "{{ nexus_url }}"
           changed_when: true
 

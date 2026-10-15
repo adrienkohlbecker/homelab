@@ -138,8 +138,6 @@ preflight() {
   [[ $KEEP_POOLS =~ ^1?$ ]] || fail "KEEP_POOLS must be empty or 1 (got '$KEEP_POOLS')"
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu|hetzner)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')"
-  [ "$INSTALL_TARGET" = bare_metal ] || [ -n "${SERIAL_CONSOLE:-}" ] ||
-    fail "INSTALL_TARGET=$INSTALL_TARGET requires SERIAL_CONSOLE"
   [ "${TARGET_HOSTNAME+set}" = "${TARGET_USERNAME+set}" ] ||
     fail "TARGET_HOSTNAME and TARGET_USERNAME must be set together"
   [[ $UBUNTU_NAME =~ ^[a-z]+$ ]] || fail "UBUNTU_NAME must be a release codename (got '$UBUNTU_NAME')"
@@ -167,10 +165,10 @@ preflight() {
   done
 
   if [ "$KEEP_POOLS" = 1 ]; then
-    # A rebuild keeps every disk as it is; a layout input would only suggest
-    # otherwise.
-    for var in DISKS EXTRA_DISKS LAYOUT SWAP_SIZE PODMAN_SIZE META_SIZE EXTRA_POOLS; do
-      [ -z "${!var+set}" ] || fail "KEEP_POOLS=1 keeps the disks and pools as they are; unset $var"
+    # A rebuild keeps every disk as it is, and the kernel command line with
+    # them; a layout or console input would only suggest otherwise.
+    for var in DISKS EXTRA_DISKS LAYOUT SWAP_SIZE PODMAN_SIZE META_SIZE EXTRA_POOLS SERIAL_CONSOLE; do
+      [ -z "${!var+set}" ] || fail "KEEP_POOLS=1 keeps the disks, pools, and kernel command line as they are; unset $var"
     done
     [ "$INSTALL_TARGET" != hetzner ] || fail "KEEP_POOLS=1 rebuilds a bare_metal host or a qemu fixture, not a hetzner image"
     # The rebuilt root is a real host: its name and login user are not the
@@ -181,6 +179,8 @@ preflight() {
     return 0
   fi
 
+  [ "$INSTALL_TARGET" = bare_metal ] || [ -n "${SERIAL_CONSOLE:-}" ] ||
+    fail "INSTALL_TARGET=$INSTALL_TARGET requires SERIAL_CONSOLE"
   # Optional layout features may be empty but must be set explicitly.
   : "${EXTRA_DISKS?}" "${LAYOUT?}" "${PODMAN_SIZE?}" "${META_SIZE?}" "${EXTRA_POOLS?}"
   : "${DISKS:?}" "${SWAP_SIZE:?}" "${ZBM_VERSION:?}"
@@ -270,20 +270,6 @@ else
   UBUNTU_MIRROR_SECURITY=$UBUNTU_MIRROR_SECURITY_UPSTREAM
 fi
 export UBUNTU_MIRROR UBUNTU_MIRROR_SECURITY UBUNTU_MIRROR_UPSTREAM UBUNTU_MIRROR_SECURITY_UPSTREAM
-
-# The kernel command line ZBM boots the new roots with: the
-# org.zfsbootmenu:commandline property on rpool/ROOT, and the rEFInd menu's
-# options, which chroot.sh writes. Every target keeps VGA output. QEMU fixtures
-# add SERIAL_CONSOLE, the serial console verify-boot reads, and disable
-# mitigations in disposable nested-KVM cells; Hetzner lists its SERIAL_CONSOLE
-# before tty0, so the VGA console keeps /dev/console. Bare-metal lab and pug
-# have no UART. The boot role owns the final prod command line.
-case $INSTALL_TARGET in
-qemu) COMMANDLINE="console=tty0 $SERIAL_CONSOLE mitigations=off" ;;
-hetzner) COMMANDLINE="$SERIAL_CONSOLE console=tty0" ;;
-*) COMMANDLINE="console=tty0" ;;
-esac
-export COMMANDLINE
 
 # Map (disk, partition number) to the kernel/udev partition device.
 # vd*/sd*/hd* tack the digit on directly; nvme/mmcblk/loop/md need a
@@ -525,8 +511,9 @@ create_extra_pools() {
 }
 
 # Fresh mode: wipe and partition the disks and create every pool on them,
-# leaving the pools exported, extra_pools naming the data pools, and the
-# PARTITIONS_* lists for create_storage.
+# leaving the pools exported, extra_pools naming the data pools, the
+# PARTITIONS_* lists for create_storage, and COMMANDLINE exported for
+# chroot.sh's boot loader.
 create_pools() {
   # Per-disk partition paths, computed once as space-delimited strings.
   # One unified layout for every host (notes/unified_disk_layout.md):
@@ -635,7 +622,20 @@ create_pools() {
     -m none \
     rpool $LAYOUT $PARTITIONS_RPOOL
 
-  # Every root under rpool/ROOT inherits the command line.
+  # The kernel command line ZBM boots the new roots with: the
+  # org.zfsbootmenu:commandline property on rpool/ROOT, which every root under
+  # it inherits, and the rEFInd menu's options, which chroot.sh writes. Every
+  # target keeps VGA output. QEMU fixtures add SERIAL_CONSOLE, the serial
+  # console verify-boot reads, and disable mitigations in disposable nested-KVM
+  # cells; Hetzner lists its SERIAL_CONSOLE before tty0, so the VGA console
+  # keeps /dev/console. Bare-metal lab and pug have no UART. The boot role owns
+  # the final prod command line.
+  case $INSTALL_TARGET in
+  qemu) COMMANDLINE="console=tty0 $SERIAL_CONSOLE mitigations=off" ;;
+  hetzner) COMMANDLINE="$SERIAL_CONSOLE console=tty0" ;;
+  *) COMMANDLINE="console=tty0" ;;
+  esac
+  export COMMANDLINE
   zfs create -o canmount=off -o mountpoint=none rpool/ROOT
   zfs set org.zfsbootmenu:commandline="$COMMANDLINE" rpool/ROOT
 
