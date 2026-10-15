@@ -462,10 +462,6 @@ EXTRA_ZPOOL_OPTS=(
   -m none
 )
 
-create_extra_dozer() {
-  zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "$1" "$2"
-}
-
 create_extra_tank_mouse() {
   local tm1=$1 tm2=$2 tank3=$3 tank4=$4 tm
   local special_args=()
@@ -504,7 +500,7 @@ create_extra_pools() {
   for pool in $EXTRA_POOLS; do
     case $pool in
     dozer)
-      create_extra_dozer "$1" "$2"
+      zpool create -f -o autotrim=on "${EXTRA_ZPOOL_OPTS[@]}" dozer mirror "$1" "$2"
       shift 2
       ;;
     tank_mouse)
