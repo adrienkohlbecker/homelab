@@ -107,10 +107,10 @@ rescue_create() {
   }
 }
 
-# First boot must finish cloud-init cleanly and grow rpool into the partition
-# growpart widened (the image's runcmd; cloud-init's resizefs cannot). The
-# image's default user is root, keyed with this run's temporary key; the
-# snapshot presents a new host key, so skip the rescue known_hosts.
+# First boot must finish cloud-init cleanly, and zfs_expand_rpool.service must
+# grow rpool into the partition growpart widened. The image's default user is
+# root, keyed with this run's temporary key; the snapshot presents a new host
+# key, so skip the rescue known_hosts.
 rescue_verify_first_boot() {
   local out pool part
   out=$(timeout 600 ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -131,7 +131,8 @@ rescue_verify_first_boot() {
   echo "==> first boot verified: cloud-init done, rpool $pool bytes on $part"
 }
 
-# Rebuild the temporary server from the new snapshot and require a live sshd.
+# Rebuild the temporary server from the new snapshot and require a live sshd
+# and a clean first boot; delete the snapshot otherwise.
 rescue_verify_boot() { # IMGID
   local imgid="$1" waited=0
   echo "==> verifying boot: rebuilding server $RESCUE_ID from snapshot $imgid"
