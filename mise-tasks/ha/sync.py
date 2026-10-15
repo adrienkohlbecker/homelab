@@ -268,10 +268,14 @@ def assert_clone_present() -> None:
         )
 
 
+def clone_status() -> str:
+    """Porcelain status of the clone working tree; empty when clean."""
+    return sh(["git", "status", "--porcelain"], cwd=CLONE).stdout
+
+
 def assert_clean_working_tree() -> None:
-    r = sh(["git", "status", "--porcelain"], cwd=CLONE)
-    if r.stdout.strip():
-        sys.exit(f"refusing: clone working tree has uncommitted changes:\n{r.stdout}\ncommit or stash first.")
+    if status := clone_status():
+        sys.exit(f"refusing: clone working tree has uncommitted changes:\n{status}\ncommit or stash first.")
 
 
 def commit_and_push(message: str) -> bool:
@@ -280,7 +284,7 @@ def commit_and_push(message: str) -> bool:
     main is pushed even from a clean tree: hand-made commits must reach origin
     before the tag names them, or a later pull would see origin lagging the tag.
     """
-    committed = bool(sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip())
+    committed = bool(clone_status())
     if committed:
         sh(["git", "add", "-A"], cwd=CLONE)
         sh(["git", "commit", "-m", message], cwd=CLONE)
@@ -534,7 +538,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
         msg.append("\nrun `mise run ha:sync pull` to capture host-side edits, then retry push.")
-        if sh(["git", "status", "--porcelain"], cwd=CLONE).stdout.strip():
+        if clone_status():
             msg.append(
                 f"pull needs a clean working tree: commit the local edits in {CLONE} first; "
                 "pull replays them on top of the captured host edits."
