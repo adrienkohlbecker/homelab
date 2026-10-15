@@ -82,7 +82,10 @@ def build_entry(args: argparse.Namespace, password: str) -> dict[str, Any]:
         "entry_id": entry_id,
         "minor_version": 1,
         "modified_at": EPOCH,
-        "options": {"timeout": args.timeout},
+        # HA's own DEFAULT_TIMEOUT. The legacy notify.<name> action checks the
+        # connection once at startup and never retries, so a tighter value drops
+        # the action whenever the relay greets slowly during a restart.
+        "options": {"timeout": 60},
         "pref_disable_new_entities": False,
         "pref_disable_polling": False,
         "source": "user",
@@ -182,10 +185,6 @@ def main() -> int:
     parser.add_argument("--sender-name", required=True)
     parser.add_argument("--username", required=True)
     parser.add_argument("--recipient", action="append", required=True)
-    # HA's own DEFAULT_TIMEOUT. The legacy notify.<name> action checks the
-    # connection once at startup and never retries, so a tighter value drops
-    # the action whenever the relay greets slowly during a restart.
-    parser.add_argument("--timeout", type=int, default=60)
     parser.add_argument(
         "--check",
         action="store_true",

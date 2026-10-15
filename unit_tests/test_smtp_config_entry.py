@@ -25,7 +25,6 @@ def _args(**overrides: Any) -> SimpleNamespace:
         "sender_name": "Home Assistant",
         "username": "ha@example.org",
         "recipient": ["ops@example.org"],
-        "timeout": 5,
     }
     return SimpleNamespace(**(defaults | overrides))
 
