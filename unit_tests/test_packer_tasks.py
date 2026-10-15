@@ -1209,7 +1209,9 @@ UNFINISHED_AMI = {"ec2 describe-images": r'printf "ami-0half\tsnap-0half\n"'}
 
 @pytest.mark.parametrize("job_status", ["failed", "canceled"])
 def test_qemu_host_cleanup_removes_an_unfinished_ami_of_a_failed_job(tmp_path: Path, job_status: str) -> None:
-    result, calls = _run_qemu_host_cleanup(tmp_path, job_status, UNFINISHED_AMI)
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path, job_status, {**UNFINISHED_AMI, "ssm get-parameters": r'printf "0\n"'}
+    )
 
     assert result.returncode == 0, result.stderr
     describe = next(call for call in calls if call.startswith("ec2 describe-images"))
@@ -1229,3 +1231,29 @@ def test_qemu_host_cleanup_is_a_no_op_after_a_finished_bake(tmp_path: Path) -> N
         "describe-key-pairs",
         "describe-security-groups",
     ]
+
+
+# Promotion happens before pruning, and a cancel can land in either step.
+@pytest.mark.parametrize("job_status", ["failed", "canceled"])
+def test_qemu_host_cleanup_keeps_an_ami_a_pointer_promoted(tmp_path: Path, job_status: str) -> None:
+    result, calls = _run_qemu_host_cleanup(
+        tmp_path, job_status, {**UNFINISHED_AMI, "ssm get-parameters": r'printf "1\n"'}
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "keeping promoted AMI ami-0half" in result.stdout
+    assert not any(call.startswith(("ec2 deregister-image", "ec2 delete-snapshot")) for call in calls)
+    lookup = next(call for call in calls if call.startswith("ssm get-parameters"))
+    assert "Parameters[?Value=='ami-0half']" in lookup
+    # A NEXT_UBUNTU bake promotes another release's pointer.
+    for release in yaml.safe_load(UBUNTU_CATALOG.read_text())["releases"]:
+        for architecture in ("x86", "arm"):
+            assert f"/homelab-ci/ami/qemu-host/{architecture}/{release}" in lookup
+
+
+def test_qemu_host_cleanup_keeps_the_ami_when_the_pointers_are_unreadable(tmp_path: Path) -> None:
+    result, calls = _run_qemu_host_cleanup(tmp_path, "failed", {**UNFINISHED_AMI, "ssm get-parameters": "exit 254"})
+
+    assert result.returncode != 0
+    assert "keeping ami-0half" in result.stderr
+    assert not any(call.startswith(("ec2 deregister-image", "ec2 delete-snapshot")) for call in calls)

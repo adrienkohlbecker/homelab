@@ -13,7 +13,10 @@ set -euo pipefail
 # AMI was being created also leaves an AMI carrying its job_id. Deregister it
 # and delete its snapshots, which AWS allows while both are still pending, but
 # only when CI_JOB_STATUS says the job did not succeed: a finished bake's AMI
-# carries the same tag.
+# carries the same tag. A job can also fail after promoting its AMI, in the
+# promotion wait or the pruning that follows, so an AMI that any release's
+# qemu-host pointer names is kept, and so is every AMI when the pointers
+# cannot be read.
 region=eu-central-1
 job_filter="Name=tag:job_id,Values=${CI_JOB_ID:?CI_JOB_ID is required}"
 
@@ -45,12 +48,31 @@ for group in $group_ids; do
 done
 
 if [ "${CI_JOB_STATUS:-success}" != success ]; then
+  repo_root=$(git rev-parse --show-toplevel)
+  templates=$(yq -r '.[].ci.ami_parameter' "${repo_root}/data/architectures.yml")
+  releases=$(yq -r '.releases | keys | .[]' "${repo_root}/data/ubuntu_releases.yml")
+  pointers=()
+  for template in $templates; do
+    for release in $releases; do
+      pointers+=("${template//\{ubuntu\}/$release}")
+    done
+  done
+
   images=$(aws ec2 describe-images --region "$region" --owners self \
     --filters "$job_filter" \
     --query "Images[].[ImageId,join(',',BlockDeviceMappings[].Ebs.SnapshotId)]" \
     --output text)
   while read -r image snapshots; do
     [ -n "$image" ] || continue
+    references=$(aws ssm get-parameters --region "$region" --names "${pointers[@]}" \
+      --query "length(Parameters[?Value=='${image}'])" --output text) || {
+      echo "cannot read the qemu-host AMI pointers; keeping ${image}" >&2
+      exit 1
+    }
+    if [ "$references" != 0 ]; then
+      echo "keeping promoted AMI ${image}"
+      continue
+    fi
     echo "deregistering unfinished AMI ${image}"
     aws ec2 deregister-image --region "$region" --image-id "$image"
     for snapshot in ${snapshots//,/ }; do
