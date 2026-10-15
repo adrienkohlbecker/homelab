@@ -86,10 +86,8 @@
     or _gitlab_runner_settled.status.NRestarts != "0"
   become: true
 
-
 # The AWS plugin reads its region once at startup, so a converge that repairs
 # only the region file must restart the runner for the repair to take effect.
-# Re-importing the role is out of contract on prod; the fixture is ephemeral.
 - name: _verify | Drift the AWS region file
   copy:
     dest: /mnt/services/gitlab_runner/.aws/config
