@@ -100,6 +100,15 @@
   changed_when: false
   become: true
 
+# systemd-run returns before the receiver binds; mail injected earlier would
+# be deferred past the receipt wait below.
+- name: _verify | Wait for the receiver's SMTP greeting
+  wait_for:
+    host: 127.0.0.1
+    port: 2525
+    search_regex: 220 receiver\.invalid
+    timeout: 30
+
 # A bracketed name skips the MX lookup but still resolves through DNS, which a
 # chrooted smtp (Noble's packaged master.cf) reads from the queue directory's
 # resolv.conf copy. Without relay credentials for this nexthop, no TLS and no
