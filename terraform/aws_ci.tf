@@ -6,10 +6,6 @@
 # image bucket, ECR cache, SSM AMI pointers, shared IAM/OIDC, the bake
 # scheduler role, and the account budget. Changing an instance type or Spot
 # policy happens here, never in test/.
-#
-# A fresh account applies in one pass: the qemu-host AMI pointers start on
-# Canonical's stock image, and runner hosts launch the baked image once
-# qemu_host_ami has promoted both architectures.
 
 locals {
   ci_architectures  = yamldecode(file("${path.module}/../data/architectures.yml"))
