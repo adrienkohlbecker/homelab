@@ -10,10 +10,11 @@ set -euxo pipefail
 # upstream URLs, and, for the boot loader, DISKS, COMMANDLINE (the kernel
 # command line for rEFInd's options), ZBM_VERSION, and optionally
 # REFIND_DEB_URL/REFIND_DEB_SHA256 (a pinned rEFInd package; empty installs the
-# distribution's). A rebuild (KEEP_POOLS=1) shares the old root's ESP and
-# firmware entries, which the boot and refind roles rewrite on its first
-# converge, so it skips the boot loader and takes none of its inputs; it passes
-# USER_UID/USER_GID when the login user exists in the old root.
+# distribution's). provision.sh also exports its apt_update and
+# write_sources_list functions. A rebuild (KEEP_POOLS=1) shares the old root's
+# ESP and firmware entries, which the boot and refind roles rewrite on its
+# first converge, so it skips the boot loader and takes none of its inputs; it
+# passes USER_UID/USER_GID when the login user exists in the old root.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -31,53 +32,6 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
-
-# Twin of provision.sh's apt_update; see the comment there.
-apt_update() {
-  local attempt
-  for attempt in 1 2 3 4 5; do
-    if apt-get update --error-on=any; then
-      return 0
-    fi
-    echo "apt-get update attempt ${attempt} failed; retrying in $((attempt * 5))s" >&2
-    sleep "$((attempt * 5))"
-  done
-  echo "apt-get update failed after 5 attempts" >&2
-  return 1
-}
-
-# Twin of provision.sh's write_sources_list; see the comments there.
-write_sources_list() {
-  local deb_arch
-  deb_arch=$(dpkg --print-architecture)
-
-  truncate -s0 /etc/apt/sources.list
-  mkdir -p /etc/apt/sources.list.d
-
-  cat <<EOF >/etc/apt/sources.list.d/ubuntu.sources
-Architectures: $deb_arch
-Components: main universe restricted multiverse
-Languages: none
-X-Repolib-Name: ubuntu
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-Suites: $1 $1-updates $1-backports
-Types: deb
-URIs: $2
-EOF
-
-  cat <<EOF >/etc/apt/sources.list.d/ubuntu-security.sources
-Architectures: $deb_arch
-Components: main universe restricted multiverse
-Languages: none
-X-Repolib-Name: ubuntu-security
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-Suites: $1-security
-Types: deb
-URIs: $3
-EOF
-
-  find /var/lib/apt/lists -type f -delete
-}
 
 # Arch-derived constants: rEFInd EFI binary names + ZBM tarball arch
 # token. The build VM and the shipped image are always the same arch,

@@ -603,19 +603,6 @@ def test_provision_preflight_rejects_a_key_list_without_keys(tmp_path: Path, key
     assert "SSH_KEY_PUB must hold at least one key" in result.stderr
 
 
-@pytest.mark.parametrize("function", ["apt_update", "write_sources_list"])
-def test_chroot_apt_helpers_twin_provision(function: str) -> None:
-    """chroot.sh keeps copies of provision.sh's apt helpers rather than sharing
-    a sourced library; the copies must not drift apart."""
-
-    def body(path: Path) -> list[str]:
-        match = re.search(rf"^{function}\(\) \{{\n(.*?)^\}}$", path.read_text(), re.MULTILINE | re.DOTALL)
-        assert match is not None, f"{function} not found in {path.name}"
-        return [line for line in match.group(1).splitlines() if not line.lstrip().startswith("#")]
-
-    assert body(QEMU_CHROOT_SH) == body(QEMU_PROVISION_SH)
-
-
 @pytest.mark.parametrize(("architecture", "installs_key"), [("x86_64", False), ("aarch64", True)])
 def test_qemu_host_static_key_is_arm_only(tmp_path: Path, architecture: str, installs_key: bool) -> None:
     provision = QEMU_HOST_PROVISION_SH.read_text()

@@ -60,8 +60,8 @@ fail() {
 # download (Nexus restart, dropped packet), leaving a partial cache that makes a
 # later install fail with a baffling "Unable to locate package". --error-on=any
 # turns a failed fetch into a non-zero exit. apt retries each file itself; the
-# loop absorbs a mirror outage that outlasts those retries. chroot.sh keeps a
-# twin.
+# loop absorbs a mirror outage that outlasts those retries. Exported to
+# chroot.sh.
 apt_update() {
   local attempt
   for attempt in 1 2 3 4 5; do
@@ -77,7 +77,7 @@ apt_update() {
 
 # Write deb822 apt sources for release $1 from archive mirror $2 and security
 # mirror $3, matching both the stock layout and what roles/apt converges to.
-# chroot.sh keeps a twin for the new root's sources.
+# Exported to chroot.sh for the new root's sources.
 write_sources_list() {
   # Twin of the sources roles/apt/tasks/configure.yml writes, byte for byte
   # apart from the mirror URLs, so a first converge changes only the mirror.
@@ -884,7 +884,8 @@ fi
 # in the image. It mounts into the caller's namespace, though, and a mount
 # chroot.sh adds itself (/boot/efi) would outlive it and block the unmount of
 # /mnt below; the private mount namespace takes every one of them down on exit.
-# The exported install variables flow straight through.
+# The exported install variables and apt helpers flow straight through.
+export -f apt_update write_sources_list
 CHROOT_FILES=$chroot_files unshare --mount --propagation private \
   arch-chroot /mnt bash "$chroot_files/chroot.sh" </dev/null
 
