@@ -37,7 +37,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 CFG = Config(retries={"total_max_attempts": 10, "mode": "adaptive"})
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ARCHITECTURES = yaml.safe_load((REPO_ROOT / "data/architectures.yml").read_text())
-# The release the runner hosts run, as Terraform and qemu-host-ami.sh read it.
 CI_HOST_UBUNTU = yaml.safe_load((REPO_ROOT / ".gitlab-ci.yml").read_text())["variables"]["CI_HOST_UBUNTU"]
 # EC2 reports aarch64 images as arm64.
 EC2_ARCHITECTURES = {"x86_64": "x86_64", "aarch64": "arm64"}
