@@ -613,6 +613,13 @@ def test_provision_preflight_rejects_an_empty_identity_override(tmp_path: Path, 
     assert f"invalid {variable} ''" in result.stderr
 
 
+def test_provision_preflight_rejects_an_unknown_keep_pools_value(tmp_path: Path) -> None:
+    result = _provision_preflight(tmp_path, KEEP_POOLS="yes")
+
+    assert result.returncode == 1
+    assert "KEEP_POOLS must be empty or 1 (got 'yes')" in result.stderr
+
+
 @requires_ssh_keygen
 @pytest.mark.parametrize("keys", ["", "\n", "\n\n"])
 def test_provision_preflight_rejects_a_key_list_without_keys(tmp_path: Path, keys: str) -> None:

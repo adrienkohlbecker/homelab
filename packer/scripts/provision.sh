@@ -135,6 +135,7 @@ preflight() {
   [ "$(findmnt -no FSTYPE /)" != zfs ] ||
     fail "the running root is on ZFS; provision.sh runs from a live environment or a build VM, never an installed host"
 
+  [[ $KEEP_POOLS =~ ^1?$ ]] || fail "KEEP_POOLS must be empty or 1 (got '$KEEP_POOLS')"
   [[ $INSTALL_TARGET =~ ^(bare_metal|qemu|hetzner)$ ]] ||
     fail "INSTALL_TARGET must be bare_metal, qemu, or hetzner (got '$INSTALL_TARGET')"
   [ "$INSTALL_TARGET" = bare_metal ] || [ -n "${SERIAL_CONSOLE:-}" ] ||
@@ -225,7 +226,6 @@ esac
 
 # Never inferred from what the disks hold: a fresh install wipes them.
 export KEEP_POOLS="${KEEP_POOLS:-}"
-[[ $KEEP_POOLS =~ ^1?$ ]] || fail "KEEP_POOLS must be empty or 1 (got '$KEEP_POOLS')"
 
 # Placeholder hostname for the shipped image — the deploy step
 # (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
