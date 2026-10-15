@@ -221,11 +221,7 @@ description = "Validate data/*.yml against their JSON Schemas"
 # check-jsonschema is a project dep (not `uvx`-fetched) so `uv sync`
 # installs it from the warm /opt/uv-cache; uvx would re-resolve and
 # download it from the index on every CI run.
-run = [
-  "check-jsonschema --schemafile data/architectures.schema.json data/architectures.yml",
-  "check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml",
-  "check-jsonschema --schemafile data/ubuntu_releases.schema.json data/ubuntu_releases.yml",
-]
+run = 'for schema in data/*.schema.json; do check-jsonschema --schemafile "$schema" "${schema%.schema.json}.yml" || exit 1; done'
 
 [tasks."lint:markdown"]
 description = "Lint tracked Markdown files"
