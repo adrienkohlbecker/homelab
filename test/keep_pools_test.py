@@ -18,7 +18,7 @@ import argparse
 import sys
 
 from machine import Machine, imagedir_for_host, sweep_stale_workdirs
-from matrix import DEFAULT_UBUNTU, UBUNTU_RELEASES
+from matrix import DEFAULT_UBUNTU, OTHER_UBUNTUS, UBUNTU_RELEASES
 from utils import phase, positive_seconds
 
 ROLE = "_keep_pools"
@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--from",
         dest="from_release",
-        default=next(codename for codename in UBUNTU_RELEASES if codename != DEFAULT_UBUNTU),
+        default=OTHER_UBUNTUS[0],
         choices=sorted(UBUNTU_RELEASES),
         help="Release of the Lab fixture's root (default: %(default)s)",
     )

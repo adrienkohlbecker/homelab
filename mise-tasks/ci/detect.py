@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test"))
 from matrix import (
     DEFAULT_UBUNTU,
-    UBUNTU_RELEASES,
+    OTHER_UBUNTUS,
     TestCell,
     build_dispatch_matrix,
     build_test_matrix,
@@ -677,6 +677,9 @@ def render_child_pipeline(
     target_config = TARGETS[target]
     cells = [ci_spec_to_cell(s)._asdict() | {"spec": s} for s in specs]
     arm_cells = [ci_spec_to_cell(s)._asdict() | {"spec": s} for s in _arm_specs(specs, target)]
+    site_cells = [
+        TestCell(machine="lab", ubuntu=codename, role="_site_test") for codename in (DEFAULT_UBUNTU, *OTHER_UBUNTUS)
+    ]
     if cells:
         mid = (len(cells) + 1) // 2
         cell_groups = [{"stage": "test1", "cells": cells[:mid]}]
@@ -695,6 +698,7 @@ def render_child_pipeline(
     return template.render(
         cells=cells,
         arm_cells=arm_cells,
+        site_cells=[cell._asdict() | {"spec": cell_to_ci_spec(cell)} for cell in site_cells],
         cell_groups=cell_groups,
         stages=stages,
         site_test=site_test,
@@ -707,7 +711,7 @@ def render_child_pipeline(
         cell_role_arn=CELL_ROLE_ARN,
         arm_runner_tag=ARM_RUNNER_TAG,
         default_ubuntu=DEFAULT_UBUNTU,
-        other_ubuntus=[codename for codename in UBUNTU_RELEASES if codename != DEFAULT_UBUNTU],
+        other_ubuntus=OTHER_UBUNTUS,
     )
 
 

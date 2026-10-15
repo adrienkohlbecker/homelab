@@ -89,14 +89,14 @@ stages:
 
 # The leading stage gives the critical-path converge the first build id;
 # inherited needs:[] keeps it parallel with every cell. One converge per
-# release, named like a cell spec, default release first.
-{% for ubuntu in [default_ubuntu] + other_ubuntus %}
-"_site_test:lab{{ '' if ubuntu == default_ubuntu else ':' ~ ubuntu }}":
+# release, default release first.
+{% for site in site_cells %}
+"{{ site.spec }}":
   extends: .x86_cell
   stage: site
   variables:
-    VARIANT: lab
-    UBUNTU: {{ ubuntu }}
+    VARIANT: {{ site.machine }}
+    UBUNTU: {{ site.ubuntu }}
   timeout: 60m
   script:
     # timeout backstops the harness's own deadline; 60s permits VM teardown.

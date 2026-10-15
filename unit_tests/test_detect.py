@@ -1266,7 +1266,7 @@ class TestRenderChildPipeline:
         assert doc["_site_test:lab:noble"]["timeout"] == "60m"
         noble_script = "\n".join(doc["_site_test:lab:noble"]["script"])
         assert 'site_test.py --ubuntu "$UBUNTU" --timeout 3000' in noble_script
-        for codename in detect.UBUNTU_RELEASES:
+        for codename in (detect.DEFAULT_UBUNTU, *detect.OTHER_UBUNTUS):
             spec = detect.cell_to_ci_spec(detect.TestCell("lab", codename, "_site_test"))
             assert doc[spec]["variables"]["UBUNTU"] == codename
         assert "_site_check:lab" in doc

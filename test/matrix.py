@@ -24,6 +24,7 @@ UBUNTU_RELEASES: dict[str, str] = {
     codename: release["version"] for codename, release in _UBUNTU_CATALOG["releases"].items()
 }
 DEFAULT_UBUNTU: str = _UBUNTU_CATALOG["default"]
+OTHER_UBUNTUS: tuple[str, ...] = tuple(codename for codename in UBUNTU_RELEASES if codename != DEFAULT_UBUNTU)
 # The qemu fixtures machine.py can boot.
 MACHINES = ("minimal", "lab")
 DEFAULT_MACHINES = ("lab",)
