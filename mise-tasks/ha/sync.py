@@ -251,8 +251,8 @@ def worktree_file(filename: str) -> bytes | None:
     """File content from the clone working tree, or None if absent.
 
     push compares against the working tree (uncommitted edits included) rather
-    than the HEAD blob: it decides whether to refuse before auto-committing, and
-    `--dry-run` never commits at all.
+    than the HEAD blob: it validates and decides whether to refuse before
+    auto-committing, and `--dry-run` never commits at all.
     """
     try:
         return (CLONE / filename).read_bytes()
@@ -428,7 +428,7 @@ def _print_diff_header(label: str) -> None:
 
 
 def show_push_diff(changed: dict[SyncFile, bytes | None]) -> None:
-    """For each file about to be pushed, print a colored diff host->HEAD."""
+    """For each file about to be pushed, print a colored diff host->clone."""
     for file, host_bytes in changed.items():
         with tempfile.NamedTemporaryFile(suffix=f"_{Path(file.rel).name}") as host_tmp:
             host_tmp.write(host_bytes or b"")
@@ -507,18 +507,18 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     if resolve_ref(f"refs/tags/{SYNCED_TAG}") is None:
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:sync pull` once to establish the baseline.")
     # Per-file state model:
-    #   tag_bytes  -- content at last_synced_to_host, or None if new to sync
-    #   head_bytes -- content in the clone working tree, which is what gets
-    #                 uploaded and, after commit_and_push, what HEAD holds
-    #   host_bytes -- content on lab, or None if not deployed yet
-    # diverged   = host content differs from both tag and HEAD
-    # changed    = host content differs from HEAD (missing-on-host counts)
+    #   tag_bytes   -- content at last_synced_to_host, or None if new to sync
+    #   clone_bytes -- content in the clone working tree, which is what gets
+    #                  uploaded and, after commit_and_push, what HEAD holds
+    #   host_bytes  -- content on lab, or None if not deployed yet
+    # diverged   = host content differs from both tag and clone
+    # changed    = host content differs from clone (missing-on-host counts)
     # pending    = clone content differs from the last successfully reloaded tag
     diverged: list[str] = []
     changed: dict[SyncFile, bytes | None] = {}
     pending: list[SyncFile] = []
     for file in enumerate_files():
-        head_bytes = worktree_file(file.rel)
+        clone_bytes = worktree_file(file.rel)
         tag_bytes = blob_at(SYNCED_TAG, file.rel)
         host_bytes = host_file(file.rel)
         # Push-only files (pull=False) are repo-authoritative: the host copy is
@@ -527,12 +527,17 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
         # role seeds a dashboards/ placeholder that differs from the repo). Only
         # guard divergence for round-tripped files, where a stale host/GUI edit
         # would otherwise be clobbered.
-        if file.pull and tag_bytes is not None and host_bytes is not None and host_bytes not in (tag_bytes, head_bytes):
+        if (
+            file.pull
+            and tag_bytes is not None
+            and host_bytes is not None
+            and host_bytes not in (tag_bytes, clone_bytes)
+        ):
             diverged.append(file.rel)
             continue
-        if host_bytes != head_bytes:
+        if host_bytes != clone_bytes:
             changed[file] = host_bytes
-        if tag_bytes != head_bytes:
+        if tag_bytes != clone_bytes:
             pending.append(file)
     if diverged:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
@@ -567,7 +572,7 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     if not changed and not pending:
         if not dry_run and resolve_ref(f"refs/tags/{SYNCED_TAG}") != resolve_ref("HEAD"):
             advance_synced_tag()
-        print("push: HEAD matches host, nothing to do")
+        print("push: clone matches host, nothing to do")
         return
     if dry_run:
         reload_desc = ", ".join(services) or "none"
