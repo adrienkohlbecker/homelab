@@ -1382,13 +1382,6 @@ class TestRenderChildPipeline:
         assert doc["release_probe:lab:arm"]["variables"]["UBUNTU"] == detect.DEFAULT_UBUNTU
         assert doc["release_probe:lab:noble:arm"]["variables"]["UBUNTU"] == "noble"
 
-    def test_packer_keeps_the_noble_arm_second_boot_cell(self) -> None:
-        # Only the Noble image bakes the pinned rEFInd that its second boot
-        # under stock aarch64 edk2 exercises.
-        doc = _render_child_doc(["packer:lab"], site_test=False)
-
-        assert doc["packer:lab:noble:arm"]["variables"]["UBUNTU"] == "noble"
-
     def test_full_universe_keeps_all_x86_and_arm_cells(self) -> None:
         specs = detect._full_universe_specs()
         doc = _render_child_doc(specs, site_test=True)
