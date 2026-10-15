@@ -122,21 +122,18 @@
               canmount: 'off'
           become: true
 
+    # Setting canmount=off above unmounts the dataset; this catches one
+    # already set off that is still mounted.
     - name: remove | Unmount the dataset
       when:
         - _zfs_dataset_remove_state.rc == 0
-        - _zfs_dataset_remove_state.stdout_lines[1] == 'yes'
+        - _zfs_dataset_remove_state.stdout_lines == ['off', 'yes']
       command:
         argv:
           - zfs
           - unmount
           - "{{ zfs_dataset_args.dataset }}"
-      register: _zfs_dataset_remove_unmount
-      changed_when: _zfs_dataset_remove_unmount.rc == 0
-      # canmount=off unmounts on its own; an already-unmounted dataset is fine.
-      failed_when: >-
-        _zfs_dataset_remove_unmount.rc != 0
-        and 'not currently mounted' not in _zfs_dataset_remove_unmount.stderr
+      changed_when: true
       become: true
 
     # rmdir refuses a non-empty directory, so anything written underneath the
