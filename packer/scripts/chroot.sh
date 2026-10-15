@@ -87,11 +87,11 @@ apt-mark hold 'grub*'
 # Defer image generation until the storage and console configuration is ready.
 # Dracut kernel hooks invoke dracut directly, while initramfs-tools hooks use
 # update-initramfs; divert the selected backend so every postinst is deferred.
-# Twin of initramfs_use_dracut in group_vars/all/main.yml: every release after
-# Noble uses Dracut.
+# Twin of initramfs_use_dracut and initramfs_packages in group_vars/all/main.yml:
+# every release after Noble uses Dracut.
 case "$UBUNTU_NAME" in
 noble)
-  initramfs_generator=initramfs-tools
+  initramfs_packages=(initramfs-tools)
   initramfs_command=/usr/sbin/update-initramfs
   zfs_initramfs_package=zfs-initramfs
   initramfs_policy_source="${CHROOT_FILES}/modules_most"
@@ -100,7 +100,10 @@ noble)
   initramfs_build=(update-initramfs -c -k all)
   ;;
 *)
-  initramfs_generator=dracut
+  # dracut-core accepts 3cpio for its cpio dependency, but
+  # dracut-initramfs-restore runs cpio to unpack the shutdown image, without
+  # which the pools are not exported at shutdown.
+  initramfs_packages=(dracut cpio)
   initramfs_command=/usr/bin/dracut
   zfs_initramfs_package=zfs-dracut
   initramfs_policy_source="${CHROOT_FILES}/dracut_host.conf"
@@ -114,7 +117,7 @@ dpkg-divert --local --rename --add "$initramfs_command"
 ln -s /bin/true "$initramfs_command"
 
 # Bootstrap the release GA kernel.
-apt-get install --yes "$initramfs_generator" linux-generic
+apt-get install --yes "${initramfs_packages[@]}" linux-generic
 
 # Install required packages
 

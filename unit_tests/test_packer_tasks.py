@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -12,6 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import jinja2
 import machine
 import pytest
 import yaml
@@ -529,6 +531,27 @@ def test_qemu_build_uploads_only_required_role_files() -> None:
     assert consumed, "chroot.sh no longer names any role file"
     target_extras = [file.rstrip("/") for files in _provision_target_extras().values() for file in files]
     assert consumed <= {*staged, *target_extras}
+
+
+@pytest.mark.parametrize(("release", "use_dracut"), [("noble", False), ("resolute", True)])
+def test_chroot_installs_the_initramfs_packages_a_converge_would(release: str, use_dracut: bool) -> None:
+    """The image boots and shuts down unconverged, so it needs the generator's
+    full package set from the start: on Dracut, cpio to export the pools at
+    shutdown."""
+    group_vars = yaml.safe_load((REPO_ROOT / "group_vars" / "all" / "main.yml").read_text())
+    converged = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(group_vars["initramfs_packages"])
+    expected = ast.literal_eval(converged.render(initramfs_use_dracut=use_dracut, zfs_root=True))
+
+    chroot = QEMU_CHROOT_SH.read_text()
+    arms = re.search(r'^case "\$UBUNTU_NAME" in\n(.*?)^esac$', chroot, re.MULTILINE | re.DOTALL)
+    assert arms is not None
+    noble_arm, other_arm = arms.group(1).split("\n  ;;\n")[:2]
+    arm = noble_arm if release == "noble" else other_arm
+    packages = re.search(r"^  initramfs_packages=\(([^)]*)\)$", arm, re.MULTILINE)
+    zfs_package = re.search(r"^  zfs_initramfs_package=(\S+)$", arm, re.MULTILINE)
+    assert packages is not None
+    assert zfs_package is not None
+    assert sorted([*packages.group(1).split(), zfs_package.group(1)]) == sorted(expected)
 
 
 def test_keep_pools_job_covers_the_staged_installer() -> None:
