@@ -972,19 +972,40 @@ resource "aws_key_pair" "ci_operator" {
 
 # ─── Qemu-host AMI pointers ──────────────────────────────────────────────────
 # Create-only: an ASG resolves its launch template's pointer even at zero
-# capacity, so a fresh account needs the pointer before the first bake. The
-# seed is Canonical's stock image because an aws:ec2:image value must name a
-# real AMI; `qemu-host-ami.sh --promote` owns the value from then on. Moving
-# CI_HOST_UBUNTU renames these, so import the new release's baked pointers.
+# capacity, so a fresh account applies in one pass with the pointer seeded
+# from Canonical's stock image (an aws:ec2:image value must name a real AMI).
+# `qemu-host-ami.sh --promote` owns the value from then on.
+#
+# Keys are "<architecture>/<CI_HOST_UBUNTU>". To switch releases, bake and
+# promote both architectures with NEXT_UBUNTU first, which creates the new
+# release's pointers outside terraform. Then commit the CI_HOST_UBUNTU change
+# with one import block per architecture, so the plan adopts those pointers
+# rather than failing to create them (ParameterAlreadyExists):
+#
+#   import {
+#     to = aws_ssm_parameter.ci_qemu_host_ami["x86_64/noble"]
+#     id = "/homelab-ci/ami/qemu-host/x86/noble"
+#   }
+#
+# The outgoing release's keys leave the configuration, so the same plan
+# destroys its pointers and the launch templates move to the new ones. To keep
+# the old pointers as a rollback target, `mise run tf state rm` their
+# addresses before applying; switching back then imports them again.
+
+locals {
+  ci_qemu_host_pointers = {
+    for architecture, facts in local.ci_architectures : "${architecture}/${local.ci_host_release}" => facts
+  }
+}
 
 data "aws_ssm_parameter" "ci_canonical_ubuntu_ami" {
-  for_each = local.ci_architectures
+  for_each = local.ci_qemu_host_pointers
 
   name = "/aws/service/canonical/ubuntu/server/${local.ci_ubuntu_catalog.releases[local.ci_host_release].version}/stable/current/${each.value.guest.cloud_image_suffix}/hvm/ebs-gp3/ami-id"
 }
 
 resource "aws_ssm_parameter" "ci_qemu_host_ami" {
-  for_each = local.ci_architectures
+  for_each = local.ci_qemu_host_pointers
 
   name      = replace(each.value.ci.ami_parameter, "{ubuntu}", local.ci_host_release)
   type      = "String"
@@ -994,6 +1015,17 @@ resource "aws_ssm_parameter" "ci_qemu_host_ami" {
   lifecycle {
     ignore_changes = [value]
   }
+}
+
+# State migration from per-architecture keys; remove once applied.
+moved {
+  from = aws_ssm_parameter.ci_qemu_host_ami["x86_64"]
+  to   = aws_ssm_parameter.ci_qemu_host_ami["x86_64/resolute"]
+}
+
+moved {
+  from = aws_ssm_parameter.ci_qemu_host_ami["aarch64"]
+  to   = aws_ssm_parameter.ci_qemu_host_ami["aarch64/resolute"]
 }
 
 # ─── Launch templates: one per nested-qemu host pool ─────────────────────────
@@ -1008,7 +1040,7 @@ resource "aws_launch_template" "ci_qemu" {
   description            = "homelab CI ${each.key} qemu host"
   update_default_version = true
 
-  image_id      = "resolve:ssm:${aws_ssm_parameter.ci_qemu_host_ami[each.value.architecture].name}"
+  image_id      = "resolve:ssm:${aws_ssm_parameter.ci_qemu_host_ami["${each.value.architecture}/${local.ci_host_release}"].name}"
   instance_type = each.value.instance_type
 
   instance_initiated_shutdown_behavior = "terminate"
