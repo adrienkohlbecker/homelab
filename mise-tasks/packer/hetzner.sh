@@ -214,7 +214,7 @@ rescue_snapshot() { # UBUNTU
 
   rescue_verify_boot "$imgid"
   hcloud image add-label "$imgid" os=ubuntu-zfs >/dev/null
-  mise run packer:hcloud-prune-snapshots -- "os=ubuntu-zfs,ubuntu=$ubuntu"
+  mise run packer:hcloud-prune-snapshots -- "$ubuntu"
 
   echo "==> DONE. Snapshot $imgid labelled os=ubuntu-zfs,ubuntu=$ubuntu (boot-verified)."
   echo "    Terraform's data.hcloud_image picks the newest matching snapshot automatically;"

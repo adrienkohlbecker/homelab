@@ -43,3 +43,27 @@ def test_anomaly_without_cleanup_has_no_cleanup_section(monkeypatch, capsys) -> 
     output = capsys.readouterr().out
     assert "server leak" in output
     assert "Suggested cleanup" not in output
+
+
+def test_snapshot_retention_matches_the_prune(monkeypatch, capsys) -> None:
+    """Keep the newest release's newest two plus the running image, as the
+    prune after that release's bake does; an older release's unused snapshots
+    are strays even when newer than the running image."""
+    snaps = [
+        {"id": 7, "created": "2026-10-16", "labels": {"os": "ubuntu-zfs", "ubuntu": "stoat"}},
+        {"id": 6, "created": "2026-10-15", "labels": {"os": "ubuntu-zfs", "ubuntu": "resolute"}},
+        {"id": 4, "created": "2026-10-11", "labels": {"os": "ubuntu-zfs", "ubuntu": "resolute"}},
+        {"id": 2, "created": "2026-10-09", "labels": {"os": "ubuntu-zfs", "ubuntu": "noble"}},
+    ]
+    servers = [{"name": "fox", "status": "running", "server_type": {"name": "cpx22"}, "image": {"id": 4}}]
+    for name in ("anomalies", "deletes", "expected"):
+        monkeypatch.setattr(audit_hetzner, name, [])
+    monkeypatch.setattr(audit_hetzner, "preflight", lambda: servers)
+    monkeypatch.setattr(
+        audit_hetzner, "hcloud_list", lambda resource, *flags: snaps if flags == ("--type", "snapshot") else []
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        audit_hetzner.main()
+
+    assert audit_hetzner.deletes == ["hcloud image delete 6", "hcloud image delete 2"]

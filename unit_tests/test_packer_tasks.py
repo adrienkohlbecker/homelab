@@ -1224,6 +1224,42 @@ def test_hetzner_rejected_snapshot_reports_a_failed_deletion(tmp_path: Path) -> 
     assert "could not delete rejected snapshot 4242" in result.stderr
 
 
+def test_hcloud_prune_sweeps_a_superseded_release(tmp_path: Path) -> None:
+    """A release switch must not strand the previous release's snapshots:
+    keep only the published release's newest two and the running image."""
+    log = tmp_path / "calls.log"
+    snaps = [
+        {"id": 6, "labels": {"os": "ubuntu-zfs", "ubuntu": "resolute"}},
+        {"id": 5, "labels": {"os": "ubuntu-zfs", "ubuntu": "resolute"}},
+        {"id": 4, "labels": {"os": "ubuntu-zfs", "ubuntu": "resolute"}},
+        {"id": 3, "labels": {"os": "ubuntu-zfs", "ubuntu": "resolute"}},
+        {"id": 2, "labels": {"os": "ubuntu-zfs", "ubuntu": "noble"}},
+        {"id": 1, "labels": {"os": "ubuntu-zfs", "ubuntu": "noble"}},
+    ]
+    servers = [{"name": "fox", "status": "running", "image": {"id": 4}}]
+    _executable(
+        tmp_path / "bin" / "hcloud",
+        f"""#!/bin/bash
+echo "hcloud $*" >>{shlex.quote(str(log))}
+case "$1 $2" in
+"image list") echo {shlex.quote(json.dumps(snaps))} ;;
+"server list") echo {shlex.quote(json.dumps(servers))} ;;
+esac
+""",
+    )
+    env = dict(os.environ, usage_ubuntu="resolute")
+    env["PATH"] = f"{tmp_path / 'bin'}:{env['PATH']}"
+    script = REPO_ROOT / "mise-tasks" / "packer" / "hcloud-prune-snapshots.sh"
+    result = subprocess.run([str(script)], env=env, text=True, capture_output=True, timeout=30, check=False)
+
+    assert result.returncode == 0, result.stderr
+    calls = log.read_text().splitlines()
+    (listing,) = [call for call in calls if call.startswith("hcloud image list")]
+    assert "--selector os=ubuntu-zfs " in listing
+    deleted = sorted(int(call.split()[-1]) for call in calls if call.startswith("hcloud image delete"))
+    assert deleted == [1, 2, 3]
+
+
 def test_qemu_host_prehydrate_tree_is_self_contained(tmp_path: Path) -> None:
     """Rebuild the AMI's hydrate tree from provision's installs and run it.
 

@@ -12,8 +12,9 @@ standing footprint is:
   - the `fox` server (cpx22) -- the off-home Headscale/DERP VPS (terraform/
     hetzner.tf, notes/headscale_mesh_redesign.md);
   - its two reserved primary IPs (`fox` v4 + `fox_v6`), both attached to fox;
-  - the newest couple of `os=ubuntu-zfs` disk snapshots that back fox's boot
-    image (published by `mise run packer:hetzner`, pruned to newest-2);
+  - the newest couple of `os=ubuntu-zfs` disk snapshots of the last-published
+    release, plus the one fox boots from (published by `mise run
+    packer:hetzner`, which prunes to exactly that set);
   - free scaffolding: the `hetzner` network, the `fox` firewall, the `laptop`
     SSH key.
 
@@ -128,21 +129,25 @@ def main():
         else:
             expected.append(f"primary IP {p['name']} {p['ip']} (ipv6, unassigned -- free, but cruft)")
 
-    # ── Snapshots: keep newest-2 of the ubuntu-zfs family + any in-use image; ──
-    # everything else is a billable stray the prune normally clears.
+    # ── Snapshots: keep newest-2 of the last-published release + any in-use ──
+    # image; everything else is a billable stray the prune normally clears.
+    # The newest snapshot's release stands in for the one packer:hetzner last
+    # published, which is what its prune keeps.
     snaps = hcloud_list("image", "--type", "snapshot")
     family = sorted(
         (i for i in snaps if i.get("labels", {}).get("os") == "ubuntu-zfs"),
         key=lambda i: i.get("created", ""),
         reverse=True,
     )
-    keep = {i["id"] for i in family[:2]} | in_use
+    latest = family[0]["labels"].get("ubuntu") if family else None
+    release = [i for i in family if i["labels"].get("ubuntu") == latest]
+    keep = {i["id"] for i in release[:2]} | in_use
     for i in family:
         desc = f"snapshot {i['id']} ({gb(i)}, {i.get('created', '')[:10]}, {i.get('description', '')!r})"
         if i["id"] in keep:
             expected.append(desc)
         else:
-            anomalies.append(f"{desc} -- ubuntu-zfs snapshot past the newest-2 prune horizon")
+            anomalies.append(f"{desc} -- ubuntu-zfs snapshot past the prune horizon (newest 2 of {latest} + in-use)")
             deletes.append(f"hcloud image delete {i['id']}")
     for i in (i for i in snaps if i.get("labels", {}).get("os") != "ubuntu-zfs"):
         anomalies.append(
