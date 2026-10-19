@@ -1,6 +1,5 @@
 # Physical Pug host configuration. QEMU Pug fixtures inherit storage and test
 # behavior through inventory groups instead of loading these hardware settings.
-zfs_arc_min: 1073741824
 zfs_arc_max: 4294967296
 
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.

@@ -8,7 +8,6 @@ refind_zbm_artifact:
 ssh_public_keys_additional: |
   command="rrsync /mnt/data/MacbookPro/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-x11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoV1GKxsIUqLzdCBrFsNDNJomw8NF3d8EwcJACkm1Qk rsync_to_lab
 
-zfs_arc_min: 1073741824   # 1 GiB — let ARC shrink under pressure so qemu VMs can wire
 zfs_arc_max: 4294967296   # 4 GiB — halved from 8 to free headroom for 6 concurrent CI VMs
 # zram is the primary swap; the 16G RAID1 partition in storage_lab.yml is the
 # deadlock-free-by-coldness overflow (notes/swap_strategy.md).

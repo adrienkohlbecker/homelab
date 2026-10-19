@@ -16,7 +16,6 @@ lm_sensors_config: |
 journald_storage: volatile
 ssh_public_keys: |
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
-zfs_arc_min: 268435456
 zfs_arc_max: 536870912
 # Nobody watches a fixture's boot menu; skip rEFInd's countdown on every
 # (re)boot, as the baked image does.

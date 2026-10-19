@@ -40,7 +40,6 @@ cloud_init_managed: true
 ubuntu_mirror: https://mirror.hetzner.com/ubuntu/packages/
 ubuntu_mirror_security: https://mirror.hetzner.com/ubuntu/security/
 
-zfs_arc_min: 0
 zfs_arc_max: 536870912
 # The zfs role sets both on rpool: autotrim=on, which provision.sh also sets at
 # creation, and autoexpand=on. zfs_expand_rpool.service, not autoexpand, grows
