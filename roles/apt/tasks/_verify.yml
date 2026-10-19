@@ -1,3 +1,8 @@
+- name: _verify | Mark the start of the apt update check
+  command: date +@%s
+  register: _apt_verify_since
+  changed_when: false
+
 # Functional check: every configured suite serves valid signed metadata.
 # --error-on=any turns transient warnings (one unreachable suite, stale
 # Release.gpg) into a non-zero exit; the apt module's update_cache lets
@@ -5,4 +10,25 @@
 - name: _verify | Apt-get update succeeds (--error-on=any)  # noqa: command-instead-of-module
   command: apt-get update --error-on=any
   changed_when: false
+  become: true
+
+# The Ubuntu Pro apt hook queues both units with --no-block; let any queued
+# job finish before reading the journal, so a start the hook managed to queue
+# has logged by then.
+- name: _verify | Wait for the apt hook's queued jobs  # noqa: command-instead-of-module
+  command: systemctl list-jobs --no-legend --plain
+  register: _apt_verify_jobs
+  until: _apt_verify_jobs.stdout is not search('apt-news|esm-cache')
+  retries: 30
+  delay: 2
+  changed_when: false
+  become: true
+
+- name: _verify | The apt update started no Ubuntu Pro unit
+  command: >-
+    journalctl --quiet --output cat --since {{ _apt_verify_since.stdout }}
+    --unit apt-news.service --unit esm-cache.service
+  register: _apt_verify_pro_journal
+  changed_when: false
+  failed_when: _apt_verify_pro_journal.rc != 0 or _apt_verify_pro_journal.stdout | length > 0
   become: true

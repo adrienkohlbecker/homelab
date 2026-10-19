@@ -63,6 +63,21 @@
   tags:
     - apt
 
+# ubuntu-pro-client's apt hook starts these on every apt update to fetch APT
+# news and ESM package caches for an unattached host. The package stays:
+# removing it takes update-notifier-common, whose notify-reboot-required is
+# what flags kernel and libc upgrades in /var/run/reboot-required.
+- name: Mask the Ubuntu Pro APT news and ESM cache units
+  systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - apt-news.service
+    - esm-cache.service
+  become: true
+  tags:
+    - apt
+
 # Use apt-get directly (not the apt module's update_cache) so that
 # --error-on=any turns a half-broken suite into a hard fail at apply
 # time. The apt module's update_cache silently tolerates partial-suite
