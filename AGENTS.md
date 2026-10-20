@@ -54,7 +54,7 @@ Role authoring — conventions, adding a service, helper roles, Podman units —
 
 ### `notes/` private notes
 
-Notes link into the code with `../` paths (`../roles/...`), resolved from `homelab/notes`; `mise run lint:notes` runs the notes repository's own lint.
+Notes link into the code with forge URLs (`https://gitlab.com/akohlbecker/homelab/-/blob/master/<path>`): the notes repository lives in the vault, where `../` paths break. `mise run lint:notes` runs its lint.
 
 ## Testing
 
