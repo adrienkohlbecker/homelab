@@ -24,7 +24,7 @@
       "Bash(security find-generic-password:*)",
       "Bash(mise run wg:show:*)",
       "Bash(op read:*)",
-      "Bash(op item:*)"
+      "Bash(op item get:*)"
     ]
   },
   "hooks": {

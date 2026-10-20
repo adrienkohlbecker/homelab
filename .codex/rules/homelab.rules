@@ -89,10 +89,18 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["op", ["read", "item"]],
+    pattern = ["op", "read"],
     decision = "forbidden",
     justification = "Prints 1Password secrets",
     match = ["op read op://Lab/x/password"],
+)
+
+prefix_rule(
+    pattern = ["op", "item", "get"],
+    decision = "forbidden",
+    justification = "Prints 1Password secrets; listing and searching item metadata is fine",
+    match = ["op item get x --fields password"],
+    not_match = ["op item list --vault Lab"],
 )
 
 prefix_rule(
