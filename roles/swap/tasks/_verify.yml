@@ -76,28 +76,17 @@
   become: true
   register: _swap_verify_partition_dev
 
-- name: _verify | Partition swap device is active
+- name: _verify | Partition swap active at the overflow priority
   when: swap_partition is defined
   vars:
-    _names: "{{ _swap_verify_swapon.stdout_lines | map('split') | map('first') | list }}"
+    _dev: "{{ _swap_verify_partition_dev.stdout | trim }}"
+    _prios: "{{ _swap_verify_swapon.stdout_lines | map('split') | selectattr('0', 'equalto', _dev) | map(attribute='1') | map('int') | list }}"
   assert:
     that:
-      - (_swap_verify_partition_dev.stdout | trim) in _names
+      - _prios == [10]
     fail_msg: >-
-      partition swap device {{ _swap_verify_partition_dev.stdout | trim }}
-      (for {{ swap_partition }}) not active: {{ _swap_verify_swapon.stdout }}
-
-- name: _verify | Overflow swap priority is below zram
-  when: swap_partition is defined
-  vars:
-    _overflow_lines: "{{ _swap_verify_swapon.stdout_lines | reject('search', 'zram') | list }}"
-  assert:
-    that:
-      - _overflow_lines | length >= 1
-      - _overflow_lines | map('split') | map(attribute='1') | map('int') | max < 100
-    fail_msg: >-
-      Overflow swap priority must be below zram (100), got:
-      {{ _swap_verify_swapon.stdout }}
+      partition swap device {{ _dev }} (for {{ swap_partition }}) not active
+      at priority 10: {{ _swap_verify_swapon.stdout }}
 
 # A size or algorithm change must apply without a reboot, through the swap
 # unit restart. The values sit below every fixture's RAM and differ from the
