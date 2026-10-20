@@ -228,11 +228,12 @@ description = "Lint tracked Markdown files"
 run = "lint/git_ls_existing.sh '*.md' | xargs -0 markdownlint-cli2"
 
 [tasks."lint:notes"]
-description = "Lint the notes/ clone if present (delegates to its own mise lint; skipped when absent, e.g. CI)"
-# notes/ is a private repo cloned in-place + gitignored, absent in CI and any
-# checkout that didn't populate it. Guard on the clone existing so the public
-# repo's lint never depends on the private one -- notes self-lints via its own mise.
-run = "if [ -d notes/.git ]; then cd notes && mise run lint; else echo 'lint:notes: notes/ clone absent, skipping'; fi"
+description = "Lint the notes/ repository if present (delegates to its own mise lint; skipped when absent, e.g. CI)"
+# notes/ is a gitignored symlink to the private notes repository, absent in CI
+# and on machines without it. Guard on it existing so the public repo's lint
+# never depends on the private one -- notes self-lints via its own mise. -e, not
+# -d: the notes repository's .git is a gitdir file.
+run = "if [ -e notes/.git ]; then cd notes && mise run lint; else echo 'lint:notes: notes/ absent, skipping'; fi"
 
 [tasks."lint:toml"]
 description = "Check TOML formatting (taplo)"
@@ -285,8 +286,8 @@ description = "Fix Markdown formatting in tracked files"
 run = "lint/git_ls_existing.sh '*.md' | xargs -0 markdownlint-cli2 --fix"
 
 [tasks."fmt:notes"]
-description = "Fix Markdown formatting in the notes/ clone if present (skipped when absent)"
-run = "if [ -d notes/.git ]; then cd notes && mise run fmt; else echo 'fmt:notes: notes/ clone absent, skipping'; fi"
+description = "Fix Markdown formatting in the notes/ repository if present (skipped when absent)"
+run = "if [ -e notes/.git ]; then cd notes && mise run fmt; else echo 'fmt:notes: notes/ absent, skipping'; fi"
 
 [tasks."fmt:toml"]
 description = "Format TOML files (taplo)"

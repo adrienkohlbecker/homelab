@@ -85,9 +85,9 @@ A new service role mirrors a recent sibling and wires these shared places:
 - **GUI YAML:** automations, scripts, and scenes live in `roles/homeassistant/files/ha_gui_config`, a gitignored clone of a private repo. Change them only through `mise run ha:sync` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py) documents the modes) — never `scp` or live edits on the host.
 - **`.storage` config:** follow the tier ladder in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md) and record the choice there.
 
-### `notes/` private clone
+### `notes/` private notes
 
-`notes/` is a gitignored, independent clone of the private [adrienkohlbecker/homelab_notes](https://github.com/adrienkohlbecker/homelab_notes) — not a submodule. Notes content must never land in this public repo. Commit and push inside `notes/` (a hook stamps each commit with a `Code: homelab@<sha>` trailer); in worktrees `notes/` is a symlink to the main checkout's single clone. Every note opens with YAML frontmatter carrying `status` and `created_at` (enforced by the notes pre-commit hook). Statuses: `runbook` (active procedures) · `current` (deployed state) · `planned` (near-term) · `deferred` (valid, not imminent) · `rejected` (kept for context) · `completed` (outcome in code/git) · `reference` (static lookup). Archived notes live in `notes/archive/`.
+`notes/` is a gitignored symlink, in every checkout and worktree, to the private homelab notes repository; layout, frontmatter statuses, and commit rules follow the `project_notes` skill. Notes content must never land in this public repo. Notes link into the code with `../` paths (`../roles/...`), resolved from `homelab/notes`; `mise run lint:notes` runs the notes repository's own lint (markdownlint, frontmatter, links). Archived notes live in `notes/archive/`.
 
 ### Helper roles
 

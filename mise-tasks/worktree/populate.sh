@@ -69,12 +69,3 @@ fi
 if command -v uv >/dev/null && [ -f "$wt/pyproject.toml" ]; then
   uv sync --project "$wt" --quiet
 fi
-
-# notes/ is a single shared clone the main checkout owns (gitignored; see the repo
-# .gitignore). Every worktree symlinks to it, so notes written from any worktree
-# land on the one notes history -- no per-worktree clone, branch, or merge. Skipped
-# when the main checkout has no notes clone (fresh setup, or a CI checkout that
-# never populated it).
-if [ -d "$repo/notes/.git" ]; then
-  symlink_missing notes
-fi
