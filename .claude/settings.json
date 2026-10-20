@@ -10,7 +10,8 @@
       "Bash(mise run tf apply:*)",
       "Bash(mise run tf destroy:*)",
       "Bash(mise run ha:sync push:*)",
-      "Bash(mise run ha:sync sync:*)"
+      "Bash(mise run ha:sync sync:*)",
+      "Bash(git push:*)"
     ],
     "deny": [
       "Bash(./vault-client.sh:*)",

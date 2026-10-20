@@ -24,6 +24,14 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Publishes commits to the public GitHub origin",
+    match = ["git push", "git push origin master"],
+    not_match = ["git pull"],
+)
+
+prefix_rule(
     pattern = ["mise", "run", "tf", ["apply", "destroy"]],
     decision = "prompt",
     justification = "Changes DNS and cloud resources",
