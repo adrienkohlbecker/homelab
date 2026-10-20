@@ -27,7 +27,7 @@ Ansible-driven configuration for my home infrastructure: two bare-metal Ubuntu s
 | `terraform/` | DNS, cloud resources, and supporting infrastructure |
 | `test/`, `unit_tests/` | End-to-end QEMU harness and unit tests |
 | `mise-tasks/`, `mise.toml` | Tool pinning, environment, and task entrypoints |
-| `notes/` | Long-form design notes referenced from code comments (private clone, gitignored) |
+| `notes/` | Long-form design notes referenced from code comments (gitignored symlink to the private notes repository; see [AGENTS.md](AGENTS.md)) |
 | `vault-client.sh`, `ansible.cfg` | Vault identity lookup and Ansible runtime configuration |
 
 ## Common workflows
