@@ -30,10 +30,10 @@
 - name: Assert the partition carries a clean swap signature
   when: swap_partition is defined
   assert:
-    that: swap_partition_blkid.stdout | default('') == 'swap'
+    that: swap_partition_blkid.stdout == 'swap'
     fail_msg: >-
       {{ swap_partition }} is not a clean swap device (blkid
-      TYPE={{ swap_partition_blkid.stdout | default('<none>') }},
+      TYPE={{ swap_partition_blkid.stdout or '<none>' }},
       rc={{ swap_partition_blkid.rc }}).
       {{ 'rc=8 means ambivalent/multiple on-disk signatures -- wipefs the device first.'
          if swap_partition_blkid.rc == 8
