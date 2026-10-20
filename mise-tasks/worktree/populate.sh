@@ -69,3 +69,11 @@ fi
 if command -v uv >/dev/null && [ -f "$wt/pyproject.toml" ]; then
   uv sync --project "$wt" --quiet
 fi
+
+# notes/ links to the private notes repository (dotfiles project_notes). The
+# global post-checkout hook links plain-git and Claude Code worktrees, but the
+# Codex app runs git with core.hooksPath=/dev/null, so link explicitly here.
+# A no-op when already linked, and skipped where project_notes isn't installed.
+if command -v project_notes >/dev/null; then
+  project_notes link --repo "$wt"
+fi
