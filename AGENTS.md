@@ -4,7 +4,7 @@
 
 This is a home environment, not a corporate production site. Tie-breakers when the Hard Rules don't decide a question:
 
-- **Maintainability beats ambition.** The operator is also the on-call — an elegant rewrite they can't debug at 11pm is a regression. Simple problems get simple solutions; complex ones may warrant structure — a layered role system, a multi-stage pipeline — but it must stay coherent and followable, expressing rather than obscuring what it does.
+- **Maintainability beats ambition.** The operator is also the on-call — an elegant rewrite they can't debug at 11pm is a regression.
 - **Wife-acceptance-factor is real.** Household-depended services (home-assistant, z2m, media, dns) have higher cost-of-failure than operator-only infra. Visible breakage outweighs elegance.
 - **Not everything must be codified.** Codify the *platform* — the service, its reverse proxy, its secrets, its backups. But state that lives in a service's own UI/DB — Uptime-Kuma monitors, Healthchecks checks — is an accepted exception: configure it in the app and let it ride the ZFS snapshots, with the intent captured in a runbook. Don't contort Ansible (fragile sqlite seeds, unofficial APIs) to own monitor definitions.
 
@@ -16,8 +16,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - **Don't drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state. See [roles/AGENTS.md](roles/AGENTS.md) *Podman Service Conventions*. (lint: `podman-service-templates`)
 - **Don't default required service inputs in `vars/main.yml`** — role vars sit *above* inventory vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in inventory vars (see *Inventory layout*) and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* inventory vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
 - **Don't change prod (`hosts.ini` `[prod]`: `lab`, `pug`, `fox`, `bunk`, `udm`) without explicit ack.** A change is anything whose effect lands on a prod host or an external service, wherever the command runs: mutating commands over SSH, `mise run ansible` without `--check`, `mise run ha:sync push|sync`, `mise run tf apply`, and pushes to origin. See *Production*.
-- **Don't put prod command output, personal or household details, or content from `notes/` or `roles/homeassistant/files/ha_gui_config` into commits or commit messages.** This repository is public on GitHub.
-- **Don't add tautological checks to role `_verify.yml` files.** A check that only confirms a converge task wrote the requested file or value proves nothing beyond Ansible's own result. Exercise the consuming binary or service and assert observable behavior; if no meaningful functional assertion is possible, omit the check.
+- **Don't put content from `notes/` or `roles/homeassistant/files/ha_gui_config` into commits or commit messages.** This repository is public on GitHub.
 
 ## Development Commands
 
@@ -31,7 +30,7 @@ Repository map and bootstrap: [README.md](README.md).
 
 **Never set `no_log: true`.** Applies run interactively on the operator's workstation, never captured to a file or CI log — hiding the diff only makes failures harder to debug. (lint: `no-no-log`)
 
-**Ansible `shell:` blocks** start with `set -euo pipefail` and declare `executable: /bin/bash` (lint: `shell-strict-mode`; `_setup`/`_verify` exempt). Collapse `… | head` pipelines into `awk` (SIGPIPE under `pipefail`). No apostrophes inside `shell:`/`command:` block scalars, even in `#` comments — ansible's shlex pass reads `'` as an opening quote and fails task loading; YAML-level comments outside the scalar are fine.
+**Ansible `shell:` blocks** start with `set -euo pipefail` and declare `executable: /bin/bash` (lint: `shell-strict-mode`; `_setup`/`_verify` exempt). No apostrophes inside `shell:`/`command:` block scalars, even in `#` comments — ansible's shlex pass reads `'` as an opening quote and fails task loading; YAML-level comments outside the scalar are fine.
 
 ## Repo Conventions
 
@@ -55,7 +54,7 @@ Role authoring — conventions, adding a service, helper roles, Podman units —
 
 ### `notes/` private notes
 
-`notes/` is a gitignored symlink, in every checkout and worktree, to the private homelab notes repository; layout, frontmatter statuses, and commit rules follow the `project_notes` skill. Notes content must never land in this public repo. Notes link into the code with `../` paths (`../roles/...`), resolved from `homelab/notes`; `mise run lint:notes` runs the notes repository's own lint (markdownlint, frontmatter, links). Archived notes live in `notes/archive/`.
+Notes link into the code with `../` paths (`../roles/...`), resolved from `homelab/notes`; `mise run lint:notes` runs the notes repository's own lint.
 
 ## Testing
 
@@ -64,7 +63,6 @@ The harness lives in `test/` (synchronous Python: one cell, one VM, one process)
 - Run the harness through mise: `mise run test:role -- <role>` and `mise run test:all` (`test/testrole.py`, and GNU parallel over `test/matrix.py`'s cell list). Only mise's environment puts the patched `qemu-hvf` first on `PATH`; called directly, the scripts pick stock QEMU and Resolute fixtures hang until timeout. `test:role` defaults to the first `machines:` entry in the role's `meta/test.yml`, else `lab`; `test:all` fans out role × machine in parallel. Flags: `--machine {minimal,lab}`, `--ubuntu <codename>`, `--keep`, `--verbose` (stream every command; by default the terminal shows only role-tagged phase lines and the transcript goes to `test/out/`), `test:all --retry-failed` (reruns failed cells and starts any an interrupt skipped). Pass `test:all`'s `--jobs N` after `--`, since `mise run` consumes its own `--jobs`. Each cell runs `_setup` → `--check` on the fresh fixture → converge → a second converge that must report no changes → `_verify`, so every role must survive a first-run check and be idempotent. Exit codes: `0` success, `1` converge, `124` timeout, `125` idempotence, `130` cancelled. Failed-run artifacts → `test/out/<machine>.<ubuntu>.<role>.*.ansi`.
 - Replay a kept fixture with the `ansible-playbook` command printed by `testrole.py --keep`; add `--start-at-task 'TASK NAME'` or `--step` to resume within the phase. The command uses the staged playbook and roles, so rerun `test:role` after editing repository code. `mise run ansible` targets production and must not be used for fixture recovery.
 - `mise run test` runs pytest over `unit_tests/` (harness, CI detect, lint rules, filter plugins). The pre-push hook runs only lint, so run it before pushing changes to that code.
-- **Flake policy:** every wait in the harness is bounded — a stuck boot surfaces as a quick failure, never a silent hang. Don't paper over flakes with auto-retry; fix the unbounded wait.
 
 ## Continuous Integration
 
@@ -89,7 +87,3 @@ Two passwords, two scopes:
 - `test` — vault id for inline `!vault` values in `group_vars/test.yml` and test-host vars. Available to CI as `HOMELAB_VAULT_PASSWORD_TEST` — never put a prod-blast-radius credential there.
 
 New values: `encrypt_string --encrypt-vault-id prod` (or `test`). Never commit decrypted values (lint: `lint:secrets` scans history with gitleaks; reviewed hits are fingerprinted in `.gitleaksignore`). Password lookup and bootstrap: [notes/runbooks/vault_setup.md](notes/runbooks/vault_setup.md).
-
-## Someday
-
-Open follow-ups live in [notes/SOMEDAY.md](notes/SOMEDAY.md) — backlog notes, not standing instructions; don't enact one without explicit operator confirmation.
