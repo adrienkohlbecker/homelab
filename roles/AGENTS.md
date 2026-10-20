@@ -11,8 +11,10 @@ Conventions for writing roles under `roles/`. The root [AGENTS.md](../AGENTS.md)
   - `tasks/_setup.yml` — pre-role fixture bringup. Never runs against prod.
   - `tasks/_verify.yml` — post-converge assertions, required in every role (lint: `require-role-verify`). Assert what the consuming binary or service observably does, never just that converge wrote what it was told; omit a check that can't. Only invoked by the harness against a qemu VM — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](console/tasks/_verify.yml)). Fixture VMs are ephemeral: no end-of-run teardown — only mid-run resets that a later check in the same file depends on.
 - **Check mode:** every test cell runs `--check` on a fresh fixture first (see root *Testing*), and it predicts user, group, directory, and unit creation. `<svc>_user.uid`/`.gid` come from `static_service_ids`, so they are published even then, and local-source `copy`/`template` and `file: state=directory` pass against predicted paths and owners. Gate only tasks whose module needs the predicted state on the host (`remote_src` copies, `unarchive`, `authorized_key`) and start/restart on `not (ansible_check_mode and (...changed))` over the pending results, so a real run never silently skips. `ansible_check_mode` reflects only the CLI flag: under task-level `check_mode: true` in `_verify` these guards don't fire, so import only the task file under test, assert on its published results, and keep `check_mode: false` out of that file unless something else gates it.
-- Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope. (lint, warning only: `prefer-import`)
+- Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh `vars:` scope (`set_fact` still persists across iterations, so reset a conditional fact at the top). (lint, warning only: `prefer-import`)
 - Static fixture playbooks under `test/playbooks/` must set `tasks_from` on every `import_role`. Their dependencies are named role entrypoints, never an implicit `tasks/main.yml`; the dynamic `site.yml` driver is the exception because it deliberately exercises the role under test through its normal entrypoint. (lint: `require-named-role-entrypoint`)
+- Never arch-skip a whole role (`meta: end_play`, a top-level `ansible_architecture` gate); gate only the arch-specific tasks, so aarch64 cells still exercise the rest.
+- Gate release features by excluding old releases (`!= 'noble'`, `not in ['jammy', 'noble']`), never `== '<current>'`.
 - For state-mutating tasks that should run once, gate with `args: creates: <sentinel>` not `changed_when: false`.
 - **Never branch a task `when:` on `inventory_hostname`** — a new host silently misses a hardcoded list. Set a `<svc>_enabled` flag in the host's inventory vars and read it as `<svc>_enabled | default(false)`. Play-level `hosts:` patterns in `site.yml` are the legitimate exception. (lint: `no-inventory-hostname-when`)
 
@@ -29,7 +31,7 @@ Conventions for writing roles under `roles/`. The root [AGENTS.md](../AGENTS.md)
 A new service role mirrors a recent sibling and wires these shared places:
 
 - **Play:** `site.yml` is a layer ladder; add the role at the first layer whose guarantees it needs (placement rule in the file header), keeping dataset producers ahead of consumers.
-- **Pin:** the image tag (or artifact URL and sha256) goes in `group_vars/all/versions.yml`.
+- **Pin:** the image tag (or artifact URL and sha256) goes in `group_vars/all/versions.yml`. Prefer a multi-arch tag — prod is x86_64, local and `arm:` CI cells are aarch64 — and gate an amd64-only image and its probes on `ansible_architecture == 'x86_64'`.
 - **Inventory:** required inputs are asserted by the role and set in both the prod inventory vars and the test ones (`group_vars/test.yml` or `test/host_vars/`), or the fixture's `assert:` fails. Gate per-host enablement with `<svc>_enabled` (see root *Inventory layout*).
 - **Tests:** a functional `tasks/_verify.yml`, plus `meta/test.yml` when the role needs cells beyond the default Lab one (see root *Continuous Integration*).
 - **Ports:** operator-reachable ports (host `--publish` or loopback binds) live in `service_ports:` in `group_vars/all/main.yml` — check it for collisions. Container-to-container traffic over podman networks stays as inline literals, and so does the container side of a `--publish` (or a role variable when two files must agree) — never a `service_ports` entry.
@@ -67,6 +69,8 @@ Rationale: [notes/podman_conventions.md](../notes/podman_conventions.md).
   1. app-native `*_FILE` — `--secret=<n>,type=mount,target=<basename>` + `--env XXX_FILE=/run/secrets/<basename>`; never lands in env;
   2. linuxserver `FILE__<VARNAME>` — s6-overlay reads the file at startup;
   3. `type=env,target=VAR` — last resort, visible to `podman inspect`.
+
+  `*_FILE`/`FILE__` expansion reaches only the app's own processes, not `podman exec` or `--health-cmd`: read `/run/secrets/<basename>` there.
 - **User namespacing**, in order:
   1. `--user {{ <svc>_user.uid }}:{{ <svc>_user.gid }}` (default; no mapping) whenever the app doesn't insist on `id -u == 0`;
   2. linuxserver `PUID`/`PGID` — s6-overlay aligns the baked-in `abc` user;
