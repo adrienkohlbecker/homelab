@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/worktree_remove.sh"
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.agents/hooks/worktree_remove.sh\"; [ -x \"$f\" ] || exit 0; exec \"$f\""
           }
         ]
       }
@@ -54,7 +54,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.agents/hooks/validate_on_edit.sh"
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.agents/hooks/validate_on_edit.sh\"; [ -x \"$f\" ] || exit 0; exec \"$f\"",
+            "timeout": 60
           }
         ]
       }

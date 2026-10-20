@@ -31,7 +31,10 @@ fi
 
 if [ "$label" = ansible-lint ]; then
   workdir=$root
-  cmd=(mise run lint:ansible-changed)
+  # Lint only the edited file. `lint:ansible-changed` diffs against
+  # origin/master and would re-lint every unpushed YAML file on each edit.
+  # ANSIBLE_DEPRECATION_WARNINGS mirrors the lint:ansible task in mise.toml.
+  cmd=(mise exec -- env ANSIBLE_DEPRECATION_WARNINGS=False ansible-lint -- "$file")
 else
   workdir="$root/terraform"
   # Fresh worktrees may not have provider plugins yet.
@@ -43,6 +46,12 @@ cd "$workdir" || exit 0
 
 if out=$("${cmd[@]}" 2>&1); then
   exit 0
+fi
+
+# Keep the injected context small; the head carries the violations.
+max_chars=4000
+if [ "${#out}" -gt "$max_chars" ]; then
+  out=$(printf '%s\n... (truncated from %s chars; rerun the command for the rest)' "${out:0:max_chars}" "${#out}")
 fi
 
 msg=$(printf '%s failed (%s):\n%s' "$label" "$workdir" "$out")
