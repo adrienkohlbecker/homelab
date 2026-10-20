@@ -73,7 +73,10 @@ fi
 # notes/ links to the private notes repository (dotfiles project_notes). The
 # global post-checkout hook links plain-git and Claude Code worktrees, but the
 # Codex app runs git with core.hooksPath=/dev/null, so link explicitly here.
-# A no-op when already linked, and skipped where project_notes isn't installed.
-if command -v project_notes >/dev/null; then
-  project_notes link --repo "$wt"
+# A no-op when already linked, and skipped where project_notes isn't installed
+# (~/.local/bin is spelled out: the GUI-launched app may lack it on PATH).
+# Best-effort, like the hook: a notes problem must not fail worktree setup.
+notes_cli=$(command -v project_notes || echo "$HOME/.local/bin/project_notes")
+if [ -x "$notes_cli" ]; then
+  "$notes_cli" link --repo "$wt" || echo "worktree:populate: project_notes link failed; notes/ not linked" >&2
 fi
