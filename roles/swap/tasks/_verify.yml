@@ -55,12 +55,11 @@
 # Catches the generator silently falling back to its default size (e.g. a
 # size key the installed version doesn't honor). Expected = min(configured,
 # MemTotal); zram rounds down by a page, so allow a small band.
-# SIZE (field 3, bytes) comes directly from swapon --show --bytes; no slurp needed.
 - name: _verify | Zram device sized per config (capped at RAM)
   vars:
-    _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first | default('') }}"
+    _zram_line: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | first }}"
     _expected_mb: "{{ [(swap_zram_size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
-    _actual_mb: "{{ ((_zram_line.split()[2] | default('0')) | int) // 1048576 }}"
+    _actual_mb: "{{ (_zram_line.split()[2] | int) // 1048576 }}"
   assert:
     that:
       - _actual_mb | int >= (_expected_mb | float * 0.95) | int
