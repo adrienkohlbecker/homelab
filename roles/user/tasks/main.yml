@@ -57,7 +57,7 @@
 
 # adm owns most of /var/log (syslog, auth.log, journal via systemd-journal),
 # so membership lets the operator tail logs over SSH without sudo -- the
-# diagnostic reads CLAUDE.md treats as pre-authorized. append is load-bearing:
+# diagnostic reads AGENTS.md treats as pre-authorized. append is load-bearing:
 # without it `groups:` replaces the supplementary set and would strip sudo.
 - name: Set login shell and log access
   user:
