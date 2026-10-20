@@ -60,14 +60,13 @@
 # fresh create, which would break --keep re-runs.
 - name: _verify | Create throwaway user
   command: >-
-    /usr/local/bin/gitea admin user create
+    runuser -u git -- /usr/local/bin/gitea admin user create
     --username verify --random-password
     --email verify@verify.invalid
     --config /etc/gitea/app.ini
   environment:
     GITEA_WORK_DIR: /mnt/services/gitea
   become: true
-  become_user: git
   register: _gitea_user_create
   changed_when: _gitea_user_create.rc == 0
   failed_when: >-
@@ -80,7 +79,7 @@
 # --keep re-runs don't collide with the "name already used" check.
 - name: _verify | Generate an access token for the throwaway user
   command: >-
-    /usr/local/bin/gitea admin user generate-access-token
+    runuser -u git -- /usr/local/bin/gitea admin user generate-access-token
     --username verify
     --token-name verify_{{ ansible_date_time.epoch }}
     --scopes all --raw
@@ -88,7 +87,6 @@
   environment:
     GITEA_WORK_DIR: /mnt/services/gitea
   become: true
-  become_user: git
   register: _gitea_token
   changed_when: false
 
@@ -195,10 +193,90 @@
 
 - name: _verify | Git ls-remote over SSH (exercises gitea-serv + authorized_keys)  # noqa: command-instead-of-module
   command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
-  environment:
+  environment: &gitea_verify_ssh_env
     GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=publickey -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
     GIT_TERMINAL_PROMPT: "0"
   changed_when: false
+
+# Reinstall: the OS (and with it the git account) is rebuilt while
+# /mnt/services persists. The re-converge must find authorized_keys
+# already in the git home rather than rebuilding it from the DB.
+- name: _verify | Stop git processes to drop the git account
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - gitea
+    - user@{{ static_service_ids.git }}.service
+  become: true
+
+- name: _verify | Drop the git account, keeping its home  # noqa: command-instead-of-module
+  command: userdel git
+  become: true
+  changed_when: true
+
+- name: _verify | Converge after the simulated reinstall
+  import_tasks: main.yml
+
+- name: _verify | Reinstall kept authorized_keys on persistent storage
+  assert:
+    that:
+      - not gitea_authorized_keys.changed
+
+- name: _verify | Git ls-remote over SSH after the reinstall  # noqa: command-instead-of-module
+  command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
+  environment: *gitea_verify_ssh_env
+  changed_when: false
+
+# Migration: a running gitea whose git home is still /home/git, with the
+# keys file there. The converge must stop gitea to move the home, start it
+# again, and rebuild the keys file in the new home from the DB.
+- name: _verify | Stop git processes to restore the legacy home
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+  loop:
+    - gitea
+    - user@{{ static_service_ids.git }}.service
+  become: true
+
+- name: _verify | Restore the legacy home and its keys  # noqa: command-instead-of-module
+  shell: |
+    set -euo pipefail
+    install -d -o git -g git -m 0750 /home/git
+    mv /mnt/services/gitea/.ssh /home/git/.ssh
+    usermod --home /home/git git
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: true
+
+- name: _verify | Start gitea under the legacy home
+  systemd:
+    name: gitea
+    state: started
+  become: true
+
+- name: _verify | Converge from the legacy home
+  import_tasks: main.yml
+
+- name: _verify | Migration rebuilt authorized_keys in the new home
+  assert:
+    that:
+      - gitea_authorized_keys.changed
+
+# Without the legacy keys, the probe below can only pass through the new home.
+- name: _verify | Remove the legacy home
+  file:
+    path: /home/git
+    state: absent
+  become: true
+
+- name: _verify | Git ls-remote over SSH after the migration  # noqa: command-instead-of-module
+  command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
+  environment: *gitea_verify_ssh_env
+  changed_when: false
+
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:

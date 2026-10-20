@@ -21,6 +21,10 @@ ROOT_URL = https://gitea.{{ inventory_hostname }}.{{ domain }}/
 # (it has historically tracked RUN_USER) doesn't silently rewrite every
 # clone URL we hand out.
 SSH_USER = git
+# The default tracks $HOME, which a hand-run `sudo -u git gitea admin ...`
+# may not set; pin it to the git home (the work dir, see tasks/main.yml)
+# so every writer targets the file sshd reads.
+SSH_ROOT_PATH = /mnt/services/gitea/.ssh
 # Back up ~git/.ssh/authorized_keys before each rewrite. Gitea rebuilds
 # the file from the DB on every key add/remove; a bad rewrite (missing
 # command= prefix) silently exposes a bash shell at git@. The backup
