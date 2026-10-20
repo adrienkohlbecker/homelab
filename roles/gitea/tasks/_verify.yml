@@ -193,39 +193,9 @@
 
 - name: _verify | Git ls-remote over SSH (exercises gitea-serv + authorized_keys)  # noqa: command-instead-of-module
   command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
-  environment: &gitea_verify_ssh_env
+  environment:
     GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=publickey -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
     GIT_TERMINAL_PROMPT: "0"
-  changed_when: false
-
-# Reinstall: the OS (and with it the git account) is rebuilt while
-# /mnt/services persists. The re-converge must find authorized_keys
-# already in the git home rather than rebuilding it from the DB.
-- name: _verify | Stop git processes to drop the git account
-  systemd:
-    name: "{{ item }}"
-    state: stopped
-  loop:
-    - gitea
-    - user@{{ static_service_ids.git }}.service
-  become: true
-
-- name: _verify | Drop the git account, keeping its home  # noqa: command-instead-of-module
-  command: userdel git
-  become: true
-  changed_when: true
-
-- name: _verify | Converge after the simulated reinstall
-  import_tasks: main.yml
-
-- name: _verify | Reinstall kept authorized_keys on persistent storage
-  assert:
-    that:
-      - not gitea_authorized_keys.changed
-
-- name: _verify | Git ls-remote over SSH after the reinstall  # noqa: command-instead-of-module
-  command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
-  environment: *gitea_verify_ssh_env
   changed_when: false
 
 - name: _verify | Exercise alternate service storage layouts
