@@ -121,33 +121,6 @@
   tags:
     - gitea
 
-# Gitea rewrites authorized_keys only when a key changes, so a home restored
-# without the file locks out every SSH push while the DB still holds the
-# keys. Rebuild it from the DB; on a fresh install this writes an empty
-# file. Runs after the unit is up because `gitea web` migrates the DB schema
-# the CLI requires. runuser from root, unlike become_user, leaves no
-# interpreter running as git that would block account changes.
-- name: Regenerate missing SSH authorized_keys
-  command:
-    argv:
-      - runuser
-      - -u
-      - git
-      - --
-      - /usr/local/bin/gitea
-      - admin
-      - regenerate
-      - keys
-      - --config
-      - /etc/gitea/app.ini
-    creates: /mnt/services/gitea/.ssh/authorized_keys
-  environment:
-    GITEA_WORK_DIR: /mnt/services/gitea
-  become: true
-  register: gitea_authorized_keys
-  tags:
-    - gitea
-
 - name: Configure nginx
   import_role:
     name: nginx
