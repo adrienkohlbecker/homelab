@@ -72,5 +72,5 @@ Then report each host/unit in order, omitting empty sections:
 4. Netdata alerts touching the unit.
 5. Recent role changes, last five commits, with unpushed marker.
 
-Keep the normal report around 80 lines. When noisy, collapse errors/alerts to
-counts and top phrases so the operator can choose the next drill-down.
+Keep the report scannable. When noisy, collapse errors/alerts to counts and
+top phrases so the operator can choose the next drill-down.
