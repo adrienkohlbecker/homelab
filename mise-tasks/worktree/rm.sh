@@ -11,4 +11,18 @@ set -euo pipefail
 
 repo=$(main_worktree)
 wt=$(resolve_side_worktree "$repo" "$usage_worktree")
+
+# mise runs tasks from the repo root, so the caller's directory is
+# MISE_ORIGINAL_CWD. Removing the directory an agent session runs in strands
+# it: every later hook and command fails.
+for dir in "${MISE_ORIGINAL_CWD:-$PWD}" "${CLAUDE_PROJECT_DIR:-}"; do
+  [ -n "$dir" ] && [ -d "$dir" ] || continue
+  dir=$(cd -- "$dir" && pwd -P)
+  case "$dir/" in
+  "$wt"/*)
+    echo "${worktree_task}: refusing to remove $wt: $dir is inside it; run this from the main worktree" >&2
+    exit 1
+    ;;
+  esac
+done
 remove_clean_worktree "$repo" "$wt"
