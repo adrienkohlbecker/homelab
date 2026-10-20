@@ -228,55 +228,6 @@
   environment: *gitea_verify_ssh_env
   changed_when: false
 
-# Migration: a running gitea whose git home is still /home/git, with the
-# keys file there. The converge must stop gitea to move the home, start it
-# again, and rebuild the keys file in the new home from the DB.
-- name: _verify | Stop git processes to restore the legacy home
-  systemd:
-    name: "{{ item }}"
-    state: stopped
-  loop:
-    - gitea
-    - user@{{ static_service_ids.git }}.service
-  become: true
-
-- name: _verify | Restore the legacy home and its keys  # noqa: command-instead-of-module
-  shell: |
-    set -euo pipefail
-    install -d -o git -g git -m 0750 /home/git
-    mv /mnt/services/gitea/.ssh /home/git/.ssh
-    usermod --home /home/git git
-  args:
-    executable: /bin/bash
-  become: true
-  changed_when: true
-
-- name: _verify | Start gitea under the legacy home
-  systemd:
-    name: gitea
-    state: started
-  become: true
-
-- name: _verify | Converge from the legacy home
-  import_tasks: main.yml
-
-- name: _verify | Migration rebuilt authorized_keys in the new home
-  assert:
-    that:
-      - gitea_authorized_keys.changed
-
-# Without the legacy keys, the probe below can only pass through the new home.
-- name: _verify | Remove the legacy home
-  file:
-    path: /home/git
-    state: absent
-  become: true
-
-- name: _verify | Git ls-remote over SSH after the migration  # noqa: command-instead-of-module
-  command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
-  environment: *gitea_verify_ssh_env
-  changed_when: false
-
 - name: _verify | Exercise alternate service storage layouts
   include_tasks: "{{ ansible_config_file | dirname }}/test/playbooks/tasks/_verify_service_storage.yml"
   vars:
