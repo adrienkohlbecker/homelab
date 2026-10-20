@@ -117,7 +117,7 @@ Rationale: [notes/podman_conventions.md](notes/podman_conventions.md).
   2. `curl`/`wget` already in the image — grep the Dockerfile first;
   3. Python `urllib.request` in JSON-array form, which survives the systemd→podman handoff: `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:PORT/"]'`.
 
-  A distroless image (none today) gets a bind-mounted static curl and a JSON-array `--health-cmd`, since it has no `/bin/sh`.
+  A distroless image gets a bind-mounted static curl and a JSON-array `--health-cmd`, since it has no `/bin/sh`.
 - **Secrets**, in order:
   1. app-native `*_FILE` — `--secret=<n>,type=mount,target=<basename>` + `--env XXX_FILE=/run/secrets/<basename>`; never lands in env;
   2. linuxserver `FILE__<VARNAME>` — s6-overlay reads the file at startup;
