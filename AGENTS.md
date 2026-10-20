@@ -83,6 +83,7 @@ A new service role mirrors a recent sibling and wires these shared places:
 ### Home Assistant
 
 - **GUI YAML:** automations, scripts, and scenes live in `roles/homeassistant/files/ha_gui_config`, a gitignored clone of a private repo. Change them only through `mise run ha:sync` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py) documents the modes) — never `scp` or live edits on the host.
+- **Debugging:** start from live data with `mise run ha:history -- '<entity glob>' --since 2h` (read-only recorder states, plus the automations and scripts referencing each entity), and account for every automation acting on the entity before concluding.
 - **`.storage` config:** follow the tier ladder in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md) and record the choice there.
 
 ### `notes/` private notes
