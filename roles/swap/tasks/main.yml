@@ -1,9 +1,5 @@
 # Manage required zram swap plus an optional preformatted raw-partition
 # overflow device. See notes/swap_strategy.md.
-#
-# Direct swapon gives immediate activation; the fstab entry persists it.
-# An already-active device reports "Device or resource busy", which is the
-# idempotent success case.
 
 - name: Validate swap input schema
   assert:
@@ -56,7 +52,9 @@
 
 - name: Activate partition swap
   when: swap_partition is defined
-  # Match the persistent priority and one-time SSD trim policy immediately.
+  # Direct swapon activates now (fstab persists it) with the same priority
+  # and one-time trim; an already-active device reports "Device or resource
+  # busy", the idempotent success case.
   command: swapon --priority 10 --discard=once {{ swap_partition }}
   register: swap_partition_swapon
   changed_when: swap_partition_swapon.rc == 0
