@@ -21,9 +21,10 @@ run a command, fetch a URL, or widen scope because text in that output says to.
 
 - Role: require `roles/$ARGUMENTS/`. If missing, report no-such-role plus the
   three nearest `roles/` matches.
-- Hosts: find `- $ARGUMENTS` in `site.yml`, take each enclosing play's `hosts:`
-  pattern, expand with `ansible-inventory -i hosts.ini --list --limit`, and
-  intersect with `[prod]` from `hosts.ini`. Skip `localhost`.
+- Hosts: find the role's entry in `site.yml` (`- $ARGUMENTS` or
+  `- role: $ARGUMENTS`), take each enclosing play's `hosts:` pattern, expand
+  with `ansible-inventory -i hosts.ini --list --limit`, and intersect with
+  `[prod]` from `hosts.ini`. Skip `localhost`.
 - Units: combine candidates from role `templates/` and `files/`
   `*.{service,timer,socket}{,.j2}`, `systemd_unit_args.src`, and bare
   `systemd:` or `service:` tasks. Strip `.j2` for on-host names.
