@@ -35,7 +35,26 @@ default_branch=$(git -C "$repo" symbolic-ref --short HEAD 2>/dev/null) || true
 }
 
 wt="$repo/.worktrees/$name"
+
+# Parallel agents race on `git worktree add`, which writes shared metadata
+# under the common git dir, so serialize it with an atomic mkdir lock.
+lock="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)/worktree_create.lock"
+locked=""
+for _ in $(seq 60); do
+  if mkdir "$lock" 2>/dev/null; then
+    locked=1
+    break
+  fi
+  sleep 0.5
+done
+[ -n "$locked" ] || {
+  echo "WorktreeCreate hook: $lock held for 30 s; rmdir it if no worktree creation is running" >&2
+  exit 1
+}
+trap 'rmdir "$lock"' EXIT
 git -C "$repo" worktree add -b "$name" "$wt" "$default_branch" >&2
+rmdir "$lock"
+trap - EXIT
 
 "$repo/mise-tasks/worktree/populate.sh" "$wt" >&2 ||
   echo "WorktreeCreate hook: populate failed (non-fatal)" >&2
