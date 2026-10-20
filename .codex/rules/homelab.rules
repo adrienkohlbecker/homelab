@@ -17,6 +17,13 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["uv", "run", "ansible-playbook"],
+    decision = "prompt",
+    justification = "Converges hosts through the project venv",
+    match = ["uv run ansible-playbook site.yml --limit lab"],
+)
+
+prefix_rule(
     pattern = ["mise", "run", "tf", ["apply", "destroy"]],
     decision = "prompt",
     justification = "Changes DNS and cloud resources",
@@ -63,6 +70,14 @@ prefix_rule(
     justification = "Prints decrypted vault content",
     match = ["ansible-vault view group_vars/prod.yml"],
     not_match = ["ansible-vault encrypt_string --encrypt-vault-id test"],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", "ansible-vault", ["view", "decrypt", "edit"]],
+    decision = "forbidden",
+    justification = "Prints decrypted vault content through the project venv",
+    match = ["uv run ansible-vault view group_vars/prod.yml"],
+    not_match = ["uv run ansible-vault encrypt_string --encrypt-vault-id test"],
 )
 
 prefix_rule(

@@ -19,6 +19,7 @@
       "Bash(ansible-vault edit:*)",
       "Bash(uv run ansible-vault view:*)",
       "Bash(uv run ansible-vault decrypt:*)",
+      "Bash(uv run ansible-vault edit:*)",
       "Bash(security find-generic-password:*)",
       "Bash(mise run wg:show:*)",
       "Bash(op read:*)",
