@@ -6,7 +6,7 @@ Conventions for writing roles under `roles/`. The root [AGENTS.md](../AGENTS.md)
 
 **Load-bearing idioms** — these break silently if missed:
 
-- Gate test-only branches on `qemu_test`, set by the test inventory's `test` group.
+- Gate test-only branches on `qemu_test` (set by the test inventory's `test` group) only as a last resort, for what a fixture lacks (hardware, a live network peer, clock sync) — never to dodge a failing path — and say in a comment what goes untested.
 - Per-role test hooks live alongside the role's tasks:
   - `tasks/_setup.yml` — pre-role fixture bringup. Never runs against prod.
   - `tasks/_verify.yml` — post-converge assertions, required in every role (lint: `require-role-verify`). Assert what the consuming binary or service observably does, never just that converge wrote what it was told; omit a check that can't. Only invoked by the harness against a qemu VM — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](console/tasks/_verify.yml)). Fixture VMs are ephemeral: no end-of-run teardown — only mid-run resets that a later check in the same file depends on.

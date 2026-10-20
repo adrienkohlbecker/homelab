@@ -23,7 +23,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 Repository map and bootstrap: [README.md](README.md).
 
 - **op:// env refs only resolve under `op run --`.** File-based tasks under `mise-tasks/` see the literal `op://…` string. A task that needs a secret is a toml task with the reference in task-scoped `env` and `run = 'op run -- …'`, so it never materializes in unrelated tasks — canonical `[tasks."tf"]`.
-- Lint: `mise run lint` runs every linter in parallel; `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). A git `pre-push` hook (installed by `mise.toml` `[hooks]`) runs the full `mise run lint`.
+- Lint: `mise run lint` runs every linter in parallel; `mise run fmt` applies fixes (`fmt:ansible` = `ansible-lint --fix` — prefer over hand-editing). Inner-loop: prefer `mise run lint:ansible-changed` (~4s; override base via `LINT_BASE=<ref>`) over full `lint:ansible` (~40s). A git `pre-push` hook (installed by `mise.toml` `[hooks]`) runs the full `mise run lint`. Full lint is expected clean — there is no `.ansible-lint-ignore`, and scaffolding registers take the `<role>_` prefix — so a failure that also reproduces on the base ref is pre-existing: report it, don't chase it. Scope a full run with `mise run lint:ansible roles/<role>`, and read lint output whole, not through `| tail`.
 - Skills, hooks, and agent permission gates: [.agents/README.md](.agents/README.md).
 
 ## Coding Style & Naming Conventions
