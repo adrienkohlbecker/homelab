@@ -12,8 +12,8 @@ This is a home environment, not a corporate production site. Tie-breakers when t
 
 Load-bearing negatives, up-front so a fresh session sees them first.
 
-- **Don't use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See *Helper roles → systemd_unit*. (lint: `no-handlers`)
-- **Don't drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state. See *Podman Service Conventions*. (lint: `podman-service-templates`)
+- **Don't use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See [roles/AGENTS.md](roles/AGENTS.md) *Helper roles → systemd_unit*. (lint: `no-handlers`)
+- **Don't drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state. See [roles/AGENTS.md](roles/AGENTS.md) *Podman Service Conventions*. (lint: `podman-service-templates`)
 - **Don't default required service inputs in `vars/main.yml`** — role vars sit *above* inventory vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in inventory vars (see *Inventory layout*) and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* inventory vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
 - **Don't change prod (`hosts.ini` `[prod]`: `lab`, `pug`, `fox`, `bunk`, `udm`) without explicit ack.** A change is anything whose effect lands on a prod host or an external service, wherever the command runs: mutating commands over SSH, `mise run ansible` without `--check`, `mise run ha:sync push|sync`, `mise run tf apply`, and pushes to origin. See *Production*.
 - **Don't put prod command output, personal or household details, or content from `notes/` or `roles/homeassistant/files/ha_gui_config` into commits or commit messages.** This repository is public on GitHub.
@@ -35,6 +35,8 @@ Repository map and bootstrap: [README.md](README.md).
 
 ## Repo Conventions
 
+Role authoring — conventions, adding a service, helper roles, Podman units — lives in [roles/AGENTS.md](roles/AGENTS.md). Claude Code loads it once it reads a file under `roles/`; read it first when that hasn't happened (Codex, or scaffolding a new role).
+
 ### Inventory layout
 
 `hosts.ini` (prod) and `test/inventory.ini` (qemu fixtures) share host names — the `lab` fixture takes its prod host's identity — so vars are split by which inventory may load them:
@@ -45,41 +47,6 @@ Repository map and bootstrap: [README.md](README.md).
 - `test/host_vars/<host>.yml` — fixture-only settings, loaded only through `test/inventory.ini`.
 - Root `host_vars/` — only hosts absent from the test inventory (`bunk`). The harness copies it beside every playbook, so a `host_vars/lab.yml` would leak prod settings into the Lab fixture; [unit_tests/test_inventory_layout.py](unit_tests/test_inventory_layout.py) rejects it.
 
-### Role conventions
-
-**Load-bearing idioms** — these break silently if missed:
-
-- Gate test-only branches on `qemu_test`, set by the test inventory's `test` group.
-- Per-role test hooks live alongside the role's tasks:
-  - `tasks/_setup.yml` — pre-role fixture bringup. Never runs against prod.
-  - `tasks/_verify.yml` — post-converge assertions, required in every role (lint: `require-role-verify`). Only invoked by the harness against a qemu VM — never against prod. That contract lets scaffolding sit alongside real tasks without a `when: qemu_test` gate. Rebooting inside `_verify` is fine for next-boot state (canonical [roles/console/tasks/_verify.yml](roles/console/tasks/_verify.yml)). Fixture VMs are ephemeral: no end-of-run teardown — only mid-run resets that a later check in the same file depends on.
-- **Check mode:** every test cell runs `--check` on a fresh fixture first (see *Testing*), and it predicts user, group, directory, and unit creation. `<svc>_user.uid`/`.gid` come from `static_service_ids`, so they are published even then, and local-source `copy`/`template` and `file: state=directory` pass against predicted paths and owners. Gate only tasks whose module needs the predicted state on the host (`remote_src` copies, `unarchive`, `authorized_key`) and start/restart on `not (ansible_check_mode and (...changed))` over the pending results, so a real run never silently skips. `ansible_check_mode` reflects only the CLI flag: under task-level `check_mode: true` in `_verify` these guards don't fire, so import only the task file under test, assert on its published results, and keep `check_mode: false` out of that file unless something else gates it.
-- Prefer `import_role`/`import_tasks` over `include_*`. Fall back to `include_*` only for genuinely dynamic name/vars, then wrap the loop body in a per-iteration `include_tasks` for fresh scope. (lint, warning only: `prefer-import`)
-- Static fixture playbooks under `test/playbooks/` must set `tasks_from` on every `import_role`. Their dependencies are named role entrypoints, never an implicit `tasks/main.yml`; the dynamic `site.yml` driver is the exception because it deliberately exercises the role under test through its normal entrypoint. (lint: `require-named-role-entrypoint`)
-- For state-mutating tasks that should run once, gate with `args: creates: <sentinel>` not `changed_when: false`.
-- **Never branch a task `when:` on `inventory_hostname`** — a new host silently misses a hardcoded list. Set a `<svc>_enabled` flag in the host's inventory vars and read it as `<svc>_enabled | default(false)`. Play-level `hosts:` patterns in `site.yml` are the legitimate exception. (lint: `no-inventory-hostname-when`)
-
-**Style:**
-
-- Every task within a role carries the role name as a tag, even when the role invocation is already tagged, so task files stay independently reusable. `_`-prefixed test scaffolding, helper roles, and task files other roles call through `tasks_from` are exempt; their callers supply the tag scope. (lint: `require-role-tag`)
-- Centralize every pinned upstream version — container image tags, downloadable artifacts (debs/tarballs/binaries), and package-manager pins — in [group_vars/all/versions.yml](group_vars/all/versions.yml): full URL adjacent to its sha256, keyed by `ansible_architecture` (`x86_64`/`aarch64`) for multi-arch assets. Roles consume the pin by var name (ansible resolves vars globally); a role's `vars/main.yml` keeps only derived/computed values (e.g. arch-selected binary names, paths built from a version), never the raw pin.
-- Every config-writing `copy:`/`template:` carries a best-effort `validate:` that parses the rendered file. Omit rather than invent a fake one. Safe as `validate:` args but don't lift into `command:`/`shell:` — embedded quotes break task loading. (lint, warning only: `require-validate`)
-- Every file-writing task sets `backup: true` (lint: `require-backup`; test scaffolding and `_`-roles exempt; exceptions carry `# noqa: require-backup`). Keep it on secret-rendering templates too: backups inherit the source mode, are pruned after 7 days by [roles/cleanup](roles/cleanup), and are excluded from the offsite replica.
-- `/mnt/services/<svc>/` is service *state* (configs, DBs, secrets — rides ZFS snapshots). Service *code* from the repo belongs at `/opt/<svc>/`. Canonical: [roles/homepage/tasks/main.yml](roles/homepage/tasks/main.yml).
-
-### Adding a service
-
-A new service role mirrors a recent sibling and wires these shared places:
-
-- **Play:** `site.yml` is a layer ladder; add the role at the first layer whose guarantees it needs (placement rule in the file header), keeping dataset producers ahead of consumers.
-- **Pin:** the image tag (or artifact URL and sha256) goes in `group_vars/all/versions.yml`.
-- **Inventory:** required inputs are asserted by the role and set in both the prod inventory vars and the test ones (`group_vars/test.yml` or `test/host_vars/`), or the fixture's `assert:` fails. Gate per-host enablement with `<svc>_enabled` (see *Inventory layout*).
-- **Tests:** a functional `tasks/_verify.yml`, plus `meta/test.yml` when the role needs cells beyond the default Lab one (see *Continuous Integration*).
-- **Ports:** operator-reachable ports (host `--publish` or loopback binds) live in `service_ports:` in `group_vars/all/main.yml` — check it for collisions. Container-to-container traffic over podman networks stays as inline literals, and so does the container side of a `--publish` (or a role variable when two files must agree) — never a `service_ports` entry.
-- **Datasets:** per-site gates are `zfs_has_<name>_mount:` (services/scratch/media/data/minio) in the same file. Consumers gate bind-mounts on the flag; producers create datasets unconditionally and never read it — test fixtures flip every flag `false`, so a gated producer would no-op there.
-- **Vhost:** an `nginx_site` call (see *Helper roles*).
-- **Bookmark:** user-facing services get a `homepage_bookmarks` entry under the right section in [roles/homepage/vars/main.yml](roles/homepage/vars/main.yml), shaped `{ name: …, abbr: XX, sub: <subdomain>, icon: <selfh.st name> }` (add `host:` for another host's service). [bookmarks.yaml.j2](roles/homepage/templates/bookmarks.yaml.j2) renders it to `icon: sh-<icon>.png` and `href: https://<sub>.<host>.{{ domain }}/`, and falls back to the abbr tile when `icon:` is omitted.
-
 ### Home Assistant
 
 - **GUI YAML:** automations, scripts, and scenes live in `roles/homeassistant/files/ha_gui_config`, a gitignored clone of a private repo. Change them only through `mise run ha:sync` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py) documents the modes) — never `scp` or live edits on the host.
@@ -89,44 +56,6 @@ A new service role mirrors a recent sibling and wires these shared places:
 ### `notes/` private notes
 
 `notes/` is a gitignored symlink, in every checkout and worktree, to the private homelab notes repository; layout, frontmatter statuses, and commit rules follow the `project_notes` skill. Notes content must never land in this public repo. Notes link into the code with `../` paths (`../roles/...`), resolved from `homelab/notes`; `mise run lint:notes` runs the notes repository's own lint (markdownlint, frontmatter, links). Archived notes live in `notes/archive/`.
-
-### Helper roles
-
-Prefer these over re-implementing boilerplate. Call them with `tasks_from` and a single `*_args` dict, passing any `condition` inside it rather than as `when:` on the import. Entry points that publish no result (the `remove` ones) take no `condition`; gate those with `when:`. Authoring contract (empty `main.yml`, `condition`, removal entry points, tag scope) and full API: [notes/helper-roles-reference.md](notes/helper-roles-reference.md).
-
-| Helper | Entry point | Exposes / creates |
-|--------|-------------|-------------------|
-| `service_user` | `tasks_from: user` | `<svc>_user.uid`/`.gid`; `/mnt/services/<svc>` dir |
-| `systemd_unit` | `tasks_from: {install,unit,remove}` | unit/drop-in install results; repository-owned unit lifecycle and removal |
-| `systemd_timer` | `tasks_from: {install,remove}` | paired `.service`+`.timer` units |
-| `apt_source` | `tasks_from: {configure,remove}` | deb822 source + scoped signing key + optional series pin; `apt_source_<name>_changed` |
-| `nginx_site` | `import_role: name: nginx, tasks_from: site` | vhost with TLS/HSTS/CSP + optional Authelia |
-| `boot` | `import_role: name: boot, tasks_from: {cmdline,initramfs_provider,initramfs_rebuild}` | kernel cmdline fragment; release image generator + policy; image rebuild with an optional reboot request (boot's `main.yml` is a real role entry point) |
-| `zfs_dataset` | `tasks_from: {dataset,remove}` | ZFS filesystem + mount unit, or a plain mountpoint on non-ZFS hosts; retirement that keeps the dataset's snapshots |
-
-## Podman Service Conventions
-
-Rationale: [notes/podman_conventions.md](notes/podman_conventions.md).
-
-- **Images:** use canonical upstream names in service templates (`docker.io/sonatype/nexus3:3.91.1`, not `nexus.lab.fahm.fr/docker.io/…`); mirror redirection belongs in `registries.conf` + the `--upstream-mirrors` test flag.
-- **Unit skeleton:** `lint:podman-service-templates` requires the shared notify/cidfile/journald skeleton (`Type=notify`, `--sdnotify=healthy`, `--cidfile`, `--log-driver journald`, …) in every `*.service.j2` — mirror a sibling unit rather than writing one from scratch.
-- **Healthchecks:** every `*.service.j2` declares `--health-cmd` and `--health-startup-cmd` (lint: `podman-service-templates`), preferring in order:
-  1. a service-native CLI — `mosquitto_sub -t ...`, `dig +short @127.0.0.1`;
-  2. `curl`/`wget` already in the image — grep the Dockerfile first;
-  3. Python `urllib.request` in JSON-array form, which survives the systemd→podman handoff: `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:PORT/"]'`.
-
-  A distroless image gets a bind-mounted static curl and a JSON-array `--health-cmd`, since it has no `/bin/sh`.
-- **Secrets**, in order:
-  1. app-native `*_FILE` — `--secret=<n>,type=mount,target=<basename>` + `--env XXX_FILE=/run/secrets/<basename>`; never lands in env;
-  2. linuxserver `FILE__<VARNAME>` — s6-overlay reads the file at startup;
-  3. `type=env,target=VAR` — last resort, visible to `podman inspect`.
-- **User namespacing**, in order:
-  1. `--user {{ <svc>_user.uid }}:{{ <svc>_user.gid }}` (default; no mapping) whenever the app doesn't insist on `id -u == 0`;
-  2. linuxserver `PUID`/`PGID` — s6-overlay aligns the baked-in `abc` user;
-  3. fake-root uidmap — `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (canonical [roles/jellyfin/](roles/jellyfin/)). When the entrypoint drops to a baked-in non-root uid, allocate a dedicated host user and add a `+N:<uid>:1` override (canonical [roles/nexus/](roles/nexus/)).
-- **PID 1 / `--init`:** add `--init` (right after `--name`) only when the image runs the application directly as PID 1 — a bare Go/Java/.NET/node binary as `ENTRYPOINT`; podman's `catatonit` then reaps children and forwards `SIGTERM` (canonical [roles/adguard/](roles/adguard/), [roles/jellyfin/](roles/jellyfin/)). Skip it when the image ships its own init — s6-overlay `/init` (every `linuxserver/*`, home-assistant), `dumb-init`/`tini`, or an entrypoint that `exec`s a supervisor. Check, don't guess: `sudo podman image inspect <img> --format '{{json .Config.Entrypoint}}'`, and read the script if it's a shell wrapper.
-- **systemd scope:** new timers and services are system-scope; reach for user-scope (linger) only when fundamentally required. `systemd-analyze security <unit>` lists cheap hardening wins.
-- **Inter-container DNS:** containers reach co-located podman services via `<name>.dns.podman` (aardvark-dns), never a host port or hard-coded IP. Producer and consumer each create the `containers.podman.podman_network` (idempotent); it needs the netavark backend with `disable_dns: false`. Canonical: [roles/mosquitto/](roles/mosquitto) (producer) + [roles/z2m/](roles/z2m) (consumer). Target the network name or gateway IP, never an `ethN` index.
 
 ## Testing
 
