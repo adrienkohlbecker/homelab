@@ -38,7 +38,7 @@ fi
 
 # Mirror the tree:
 #  --filter dir-merge .gitignore -> skip everything git ignores, per directory
-#     (notes/ private clone, .venv, packer/artifacts, test/out, ...). Excluded
+#     (notes/ symlink, .venv, packer/artifacts, test/out, ...). Excluded
 #     paths are also protected from --delete on the receiver, so they survive.
 #  --exclude /out.log /vault.sh  -> local-only files .gitignore does not cover.
 #  --delete                      -> the remote is a throwaway mirror; prune stale.

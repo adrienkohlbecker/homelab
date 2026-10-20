@@ -6,9 +6,8 @@
 # shellcheck disable=SC2154  # usage_worktree injected by mise from the #USAGE spec
 
 # Integrates a worktree into master, keeping history strictly linear.
-# notes/ is a shared gitignored clone (not tracked), so there is no submodule
-# history to reconcile -- worktree:update rebases the worktree onto master, and
-# master then fast-forwards onto its post-rebase HEAD commit. Targeting the
+# worktree:update rebases the worktree onto master, and master then
+# fast-forwards onto its post-rebase HEAD commit. Targeting the
 # commit (not a branch ref) lets detached worktrees merge too. The --ff-only
 # guarantees no merge commit: if the rebase didn't make HEAD a descendant of
 # master (e.g. master moved during a manual conflict resolution), it halts

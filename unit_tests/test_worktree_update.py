@@ -1,18 +1,17 @@
 """Integration tests for mise-tasks/worktree/update.sh (the wt:update task).
 
 update.sh brings a worktree's code branch current with master. notes/ is a
-shared gitignored clone the main checkout owns (every worktree symlinks to
-it -- see mise-tasks/worktree/populate.sh), not a tracked submodule, so the
+gitignored symlink to a separate repository, not a tracked submodule, so the
 update is a plain `git rebase master`: no gitlink to reconcile, and the notes
-clone must come through entirely untouched.
+repository must come through entirely untouched.
 
 These tests build real git fixtures -- a superproject on master with a
-gitignored notes clone, a linked worktree with the populate-style notes
-symlink -- and run the actual script, asserting:
+repo-local notes repository standing in for the external one, a linked
+worktree with a notes symlink to it -- and run the actual script, asserting:
 
   * the worktree is clean (`git status --porcelain` empty),
   * the code branch is rebased onto master,
-  * the notes symlink and the notes clone's history are untouched,
+  * the notes symlink and the notes repository's history are untouched,
   * a genuine code conflict halts (set -e) instead of being resolved away.
 
 The script is only validated by shellcheck/shfmt otherwise; this locks in
@@ -37,7 +36,7 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is requ
 
 
 class Sandbox:
-    """A throwaway git universe: a superproject, its notes clone, a worktree.
+    """A throwaway git universe: a superproject, a notes repository, a worktree.
 
     All git runs use a hermetic environment (no user/system config, fixed
     identity, no signing) so the suite never touches the operator's real
