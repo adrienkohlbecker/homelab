@@ -58,6 +58,13 @@ REQUIRE_SIGNIN_VIEW = true
 # CLI on the host (e.g. `gitea admin user create ... --admin`).
 ENABLE_PASSWORD_SIGNIN_FORM = false
 
+# `git push` to a missing user/org repo creates it instead of failing.
+# DEFAULT_PUSH_CREATE_PRIVATE stays at its default (true), so a repo
+# created this way is private until made public in the UI.
+[repository]
+ENABLE_PUSH_CREATE_USER = true
+ENABLE_PUSH_CREATE_ORG = true
+
 [cron.update_checker]
 ENABLED = false
 

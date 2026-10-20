@@ -135,6 +135,32 @@
     GIT_TERMINAL_PROMPT: "0"
   changed_when: true
 
+# Push-to-create: pushing to a repo that does not exist yet creates it
+# (ENABLE_PUSH_CREATE_USER) as private (DEFAULT_PUSH_CREATE_PRIVATE). The
+# epoch suffix keeps --keep re-runs on a fresh repo name.
+- name: _verify | Push to a missing repo  # noqa: command-instead-of-module
+  command: >-
+    git -C /tmp/gitea_verify_clone push
+    http://verify:{{ _gitea_token.stdout | trim }}@127.0.0.1:{{ service_ports.gitea }}/verify/push_create_{{ ansible_date_time.epoch }}.git
+    main
+  environment:
+    GIT_TERMINAL_PROMPT: "0"
+  changed_when: true
+
+- name: _verify | Read the push-created repo via API
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/repos/verify/push_create_{{ ansible_date_time.epoch }}
+    url_username: verify
+    url_password: "{{ _gitea_token.stdout | trim }}"
+    force_basic_auth: true
+  register: _gitea_push_created
+
+- name: _verify | Push-created repo is private
+  assert:
+    that:
+      - _gitea_push_created.json.private
+      - _gitea_push_created.json.default_branch == 'main'
+
 # SSH roundtrip: the HTTP path above exercises gitea's own listener;
 # this exercises a different code path -- host sshd matching the
 # pubkey in ~git/.ssh/authorized_keys (rewritten by gitea on key
