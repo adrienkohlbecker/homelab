@@ -67,6 +67,12 @@
   tags:
     - minio
 
+# One dataset for every bucket: the fs-backend MinIO refuses to start
+# with any mount under /mnt/minio ("Cross-device mounts detected"), and
+# objects rename in from .minio.sys/tmp, so a bucket on its own dataset
+# fails every PutObject with EXDEV. A sub-mount added under a running
+# server only fails writes until the next restart, then crash-loops. A
+# bucket that needs its own snapshot policy needs its own instance.
 - name: Provision the minio dataset
   import_role:
     name: zfs_dataset
