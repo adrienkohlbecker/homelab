@@ -16,7 +16,8 @@ symlink -- and run the actual script, asserting:
   * a genuine code conflict halts (set -e) instead of being resolved away.
 
 The script is only validated by shellcheck/shfmt otherwise; this locks in
-its behaviour.
+its behaviour. The same fixture covers finish.sh (wt:finish): merge, then
+remove the worktree only when the merge succeeded.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UPDATE_SH = REPO_ROOT / "mise-tasks" / "worktree" / "update.sh"
+FINISH_SH = REPO_ROOT / "mise-tasks" / "worktree" / "finish.sh"
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
 
@@ -128,9 +130,12 @@ class Sandbox:
         self.git("commit", "-q", "-m", msg or f"master: {fname}", cwd=self.repo)
 
     # -- run the script under test --
-    def run_update(self, name: str = "feat") -> subprocess.CompletedProcess[str]:
+    def run_task(self, script: Path, name: str = "feat") -> subprocess.CompletedProcess[str]:
         env = dict(self.env, usage_worktree=name)
-        return subprocess.run(["bash", str(UPDATE_SH)], cwd=str(self.repo), env=env, text=True, capture_output=True)
+        return subprocess.run(["bash", str(script)], cwd=str(self.repo), env=env, text=True, capture_output=True)
+
+    def run_update(self, name: str = "feat") -> subprocess.CompletedProcess[str]:
+        return self.run_task(UPDATE_SH, name)
 
     # -- invariants --
     def assert_code_rebased(self, branch: str = "feat") -> None:
@@ -231,3 +236,34 @@ def test_errors_when_worktree_missing(sandbox: Sandbox) -> None:
 
     assert result.returncode != 0
     assert "no worktree found" in result.stderr
+
+
+def test_finish_merges_then_removes_worktree(sandbox: Sandbox) -> None:
+    base = sandbox.build_repo()
+    sandbox.add_worktree(base)
+    sandbox.wt_code_commit("a.txt", "a")
+
+    result = sandbox.run_task(FINISH_SH)
+
+    assert result.returncode == 0, result.stderr
+    assert (sandbox.repo / "a.txt").read_text() == "a\n", "master did not fast-forward onto the worktree"
+    assert not sandbox.wt.exists(), "worktree directory was not removed"
+    assert sandbox.git("branch", "--list", "feat", cwd=sandbox.repo).stdout == "", "branch was not deleted"
+
+
+def test_finish_keeps_worktree_when_merge_halts(sandbox: Sandbox) -> None:
+    """A failed merge stops finish before worktree:rm. The main worktree being off
+    master fails the merge while the side worktree stays clean, so worktree:rm's
+    own dirty-tree guard would not have saved it."""
+    base = sandbox.build_repo()
+    sandbox.add_worktree(base)
+    sandbox.wt_code_commit("a.txt", "a")
+    sandbox.git("checkout", "-q", "-b", "sidebar", cwd=sandbox.repo)
+    master_before = sandbox.rev("master", cwd=sandbox.repo)
+
+    result = sandbox.run_task(FINISH_SH)
+
+    assert result.returncode != 0
+    assert sandbox.wt.is_dir(), "worktree was removed despite the failed merge"
+    assert sandbox.git("branch", "--list", "feat", cwd=sandbox.repo).stdout.strip(), "branch was deleted"
+    assert sandbox.rev("master", cwd=sandbox.repo) == master_before

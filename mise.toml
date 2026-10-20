@@ -313,8 +313,8 @@ run = 'ansible-playbook site.yml "$@"'
 description = "ansible-playbook --check against site.yml (forwards args)"
 run = 'ansible-playbook site.yml --check "$@"'
 
-# worktree:add / worktree:rm / worktree:merge / worktree:update live under
-# mise-tasks/worktree/ so shellcheck and shfmt cover them. The populate helper
+# worktree:add / rm / merge / finish / update live under mise-tasks/worktree/
+# so shellcheck and shfmt cover them. The populate helper
 # is factored out separately so Claude Code's WorktreeCreate hook can call it
 # directly.
 
