@@ -230,6 +230,9 @@ mosquitto_accounts:
   homeassistant:
     password: changeme
     salt: changeme
+  kuma:
+    password: changeme
+    salt: changeme
 seerr_smtp_from: changeme@example.com
 seerr_smtp_username: changeme
 seerr_smtp_password: changeme

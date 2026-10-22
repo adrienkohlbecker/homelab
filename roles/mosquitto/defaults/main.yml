@@ -1,0 +1,8 @@
+# Topic rules per mosquitto_accounts user, in mosquitto's acl_file syntax.
+# Accounts not listed here keep read/write on every topic (`topic readwrite #`).
+mosquitto_acl:
+  # Kuma stores this password in its own DB to watch Zigbee2MQTT's retained
+  # bridge state; read-only on that one topic keeps a leaked monitor
+  # credential from driving devices or the bridge.
+  kuma:
+    - topic read zigbee2mqtt/bridge/state

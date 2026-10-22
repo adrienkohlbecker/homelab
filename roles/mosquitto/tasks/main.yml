@@ -86,6 +86,16 @@
         backup: true
       register: mosquitto_pwfile
 
+    - name: Configure mosquitto topic ACLs
+      template:
+        src: aclfile.j2
+        dest: /mnt/services/mosquitto/config/aclfile
+        owner: mosquitto
+        group: mosquitto
+        mode: "0640"
+        backup: true
+      register: mosquitto_aclfile
+
     # No validate: -- mosquitto only parses its config at full broker startup; the
     # offline --test-config flag landed in broker 2.1 and the image pins 2.0.21, so
     # there is no host-side parser. A startup parse failure is caught by the unit's
@@ -118,6 +128,6 @@
   vars:
     systemd_unit_args:
       src: mosquitto.service.j2
-      restart: "{{ mosquitto_conf.changed or mosquitto_pwfile.changed }}"
+      restart: "{{ mosquitto_conf.changed or mosquitto_pwfile.changed or mosquitto_aclfile.changed }}"
   tags:
     - mosquitto

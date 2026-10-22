@@ -1,0 +1,10 @@
+
+# {{ ansible_managed }}
+
+{% for username in mosquitto_accounts %}
+user {{ username }}
+{% for rule in mosquitto_acl.get(username, ['topic readwrite #']) %}
+{{ rule }}
+{% endfor %}
+
+{% endfor %}

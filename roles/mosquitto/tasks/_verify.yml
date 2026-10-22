@@ -4,8 +4,10 @@
   register: mosquitto_volumes_before
   changed_when: false
 
-# Peer containers exercise the consumer DNS path and every password-file entry.
-# Retained messages must survive the clean shutdown used by ZFS snapshots.
+# Peer containers exercise the consumer DNS path and every full-access
+# password-file entry; accounts restricted by mosquitto_acl get their own
+# probes below. Retained messages must survive the clean shutdown used by ZFS
+# snapshots.
 - name: _verify | Each account publishes a retained message via DNS
   command: >-
     podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
@@ -20,9 +22,20 @@
   retries: 15
   delay: 2
   changed_when: false
-  loop: "{{ mosquitto_accounts | dict2items }}"
+  loop: "{{ mosquitto_accounts | dict2items | rejectattr('key', 'in', mosquitto_acl) }}"
   loop_control:
     label: "{{ item.key }}"
+
+- name: _verify | Publish a retained bridge state as z2m
+  command: >-
+    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
+    mosquitto_pub -h mosquitto.dns.podman -p 1883
+    -u z2m -P {{ mosquitto_accounts.z2m.password | quote }}
+    -t zigbee2mqtt/bridge/state -m '{"state":"online"}' -r
+  args:
+    expand_argument_vars: false
+  become: true
+  changed_when: false
 
 - name: _verify | Restart the broker
   systemd:
@@ -44,23 +57,64 @@
   retries: 15
   delay: 2
   changed_when: false
-  loop: "{{ mosquitto_accounts | dict2items }}"
+  loop: "{{ mosquitto_accounts | dict2items | rejectattr('key', 'in', mosquitto_acl) }}"
   loop_control:
     label: "{{ item.key }}"
 
-- name: _verify | Broker resolves and answers on the kuma network
+# Kuma's MQTT monitor connects over the kuma network with a read-only account.
+- name: _verify | Kuma reads the retained bridge state over the kuma network
   command: >-
     podman run --rm --image-volume=ignore --network kuma {{ mosquitto_image }}
     mosquitto_sub -h mosquitto.dns.podman -p 1883
-    -u z2m -P {{ mosquitto_accounts.z2m.password | quote }}
+    -u kuma -P {{ mosquitto_accounts.kuma.password | quote }}
+    -t zigbee2mqtt/bridge/state -C 1 -W 3
+  args:
+    expand_argument_vars: false
+  become: true
+  register: mosquitto_kuma_read
+  until: mosquitto_kuma_read.rc == 0 and mosquitto_kuma_read.stdout == '{"state":"online"}'
+  retries: 15
+  delay: 2
+  changed_when: false
+
+- name: _verify | Kuma cannot read other topics
+  command: >-
+    podman run --rm --image-volume=ignore --network kuma {{ mosquitto_image }}
+    mosquitto_sub -h mosquitto.dns.podman -p 1883
+    -u kuma -P {{ mosquitto_accounts.kuma.password | quote }}
     -t homelab/verify/z2m -C 1 -W 3
   args:
     expand_argument_vars: false
   become: true
-  register: mosquitto_kuma_network
-  until: mosquitto_kuma_network.rc == 0 and mosquitto_kuma_network.stdout == 'ok'
-  retries: 15
-  delay: 2
+  register: mosquitto_kuma_other
+  failed_when: mosquitto_kuma_other.rc == 0 or mosquitto_kuma_other.stdout | length > 0
+  changed_when: false
+
+# The broker drops a denied QoS 0 publish without telling the client, so the
+# exit code says nothing; the retained state read back below is the check.
+- name: _verify | Kuma attempts to overwrite the bridge state
+  command: >-
+    podman run --rm --image-volume=ignore --network kuma {{ mosquitto_image }}
+    mosquitto_pub -h mosquitto.dns.podman -p 1883
+    -u kuma -P {{ mosquitto_accounts.kuma.password | quote }}
+    -t zigbee2mqtt/bridge/state -m '{"state":"offline"}' -r
+  args:
+    expand_argument_vars: false
+  become: true
+  failed_when: false
+  changed_when: false
+
+- name: _verify | Bridge state is unchanged after the Kuma publish
+  command: >-
+    podman run --rm --image-volume=ignore --network homeassistant {{ mosquitto_image }}
+    mosquitto_sub -h mosquitto.dns.podman -p 1883
+    -u z2m -P {{ mosquitto_accounts.z2m.password | quote }}
+    -t zigbee2mqtt/bridge/state -C 1 -W 3
+  args:
+    expand_argument_vars: false
+  become: true
+  register: mosquitto_bridge_state
+  failed_when: mosquitto_bridge_state.stdout != '{"state":"online"}'
   changed_when: false
 
 - name: _verify | Broker logs its startup through native syslog
