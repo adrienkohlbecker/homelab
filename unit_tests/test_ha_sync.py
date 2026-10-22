@@ -310,7 +310,7 @@ def test_push_reloads_custom_templates_before_their_consumers(synced_clone, monk
 
     sync.do_push()
 
-    assert reloads == ["homeassistant.reload_custom_templates", "automation.reload", "scene.reload"]
+    assert reloads == ["homeassistant.reload_custom_templates", "scene.reload", "automation.reload"]
 
 
 def test_push_skips_reload_when_ha_rejects_the_config(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:

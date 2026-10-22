@@ -576,13 +576,19 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
     files = list(changed)
     reloads = {file.reload_service for file in [*files, *pending]}
     # Custom templates reload first: automations and template entities resolve
-    # their macro imports when they reload.
+    # their macro imports when they reload. Automations reload last: the reload
+    # starts their reconcile runs, which then see the new scripts and helpers,
+    # and a later script reload cannot cancel a script those runs are waiting on.
     services = (
         ["homeassistant.restart"]
         if "homeassistant.restart" in reloads
         else sorted(
             (reload for reload in reloads if reload),
-            key=lambda service: (service != "homeassistant.reload_custom_templates", service),
+            key=lambda service: (
+                service != "homeassistant.reload_custom_templates",
+                service == "automation.reload",
+                service,
+            ),
         )
     )
     relpaths = [file.rel for file in files]
