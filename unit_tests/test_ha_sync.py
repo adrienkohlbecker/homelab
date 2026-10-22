@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -66,6 +67,25 @@ def test_upload_creates_only_nested_parent_directories(monkeypatch: pytest.Monke
         "sudo install -d -o homeassistant -g homeassistant -m 0755 /mnt/services/homeassistant/dashboards && "
     )
     assert "-m 0644 -b" in nested
+
+
+def test_restore_reinstalls_previous_content_and_removes_added_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    sync = load_repo_module("mise-tasks/ha/sync.py", name="ha_sync_restore_test")
+    commands: list[list[str]] = []
+    staged: list[bytes] = []
+
+    def record(cmd: list[str]) -> None:
+        commands.append(cmd)
+        if cmd[0] == "scp":
+            staged.append(Path(cmd[2]).read_bytes())
+
+    monkeypatch.setattr(sync, "sh", record)
+
+    sync.restore_host({"automations.yaml": b"- id: a\n", "blueprints/automation/new.yaml": None})
+
+    assert staged == [b"- id: a\n"]
+    assert commands[1][2].endswith("/mnt/services/homeassistant/automations.yaml && sudo rm -f " + commands[0][3][4:])
+    assert commands[2] == ["ssh", "lab", "sudo rm -f /mnt/services/homeassistant/blueprints/automation/new.yaml"]
 
 
 def test_upload_backups_match_the_ansible_backup_pruner() -> None:
@@ -169,6 +189,15 @@ def synced_clone(tmp_path, monkeypatch: pytest.MonkeyPatch):
             host[file.rel] = (clone / file.rel).read_bytes()
 
     monkeypatch.setattr(sync, "upload_to_host", upload)
+
+    def restore(previous: dict[str, bytes | None]) -> None:
+        for rel, content in previous.items():
+            if content is None:
+                host.pop(rel, None)
+            else:
+                host[rel] = content
+
+    monkeypatch.setattr(sync, "restore_host", restore)
     return sync, clone, host
 
 
@@ -325,7 +354,9 @@ def test_push_skips_reload_when_ha_rejects_the_config(synced_clone, monkeypatch:
 
     with pytest.raises(SystemExit, match="Invalid config for 'automation'"):
         sync.do_push()
-    assert host["automations.yaml"] == b"- id: b\n"
+    # The next HA restart must not load what HA just rejected.
+    assert host["automations.yaml"] == b"- id: a\n"
+    assert sync.resolve_ref(sync.UPLOAD_REF) is None
     assert reloads == []
     assert _synced_commit(clone, sync) == (baseline, baseline)
 
@@ -336,6 +367,27 @@ def test_push_skips_reload_when_ha_rejects_the_config(synced_clone, monkeypatch:
     head = _git(clone, "rev-parse", "HEAD")
     assert reloads == ["automation.reload"]
     assert _synced_commit(clone, sync) == (head, head)
+
+
+def test_push_restores_lab_after_a_failed_upload(synced_clone, monkeypatch: pytest.MonkeyPatch) -> None:
+    sync, clone, host = synced_clone
+    reloads = _stub_ha(monkeypatch, sync)
+    upload = sync.upload_to_host
+
+    def fail_midway(files) -> None:
+        upload(files[:1])
+        raise subprocess.CalledProcessError(1, ["scp"])
+
+    monkeypatch.setattr(sync, "upload_to_host", fail_midway)
+    (clone / "automations.yaml").write_text("- id: b\n")
+    (clone / "scripts.yaml").write_text("new: script\n")
+
+    with pytest.raises(subprocess.CalledProcessError):
+        sync.do_push()
+
+    assert host == {"automations.yaml": b"- id: a\n", "scripts.yaml": b"{}\n"}
+    assert sync.resolve_ref(sync.UPLOAD_REF) is None
+    assert reloads == []
 
 
 def test_push_refuses_a_diverged_host_before_publishing_local_edits(synced_clone) -> None:
@@ -414,8 +466,8 @@ def test_push_replaces_an_upload_ha_rejected(synced_clone, monkeypatch: pytest.M
     (clone / "automations.yaml").write_text("- id: broken\n")
     with pytest.raises(SystemExit, match="Invalid config"):
         sync.do_push()
-    assert host["automations.yaml"] == b"- id: broken\n"
-    # Capturing the rejected upload as a GUI edit would bury the fix.
+    assert host["automations.yaml"] == b"- id: a\n"
+    # The rejected commit awaits a push, so a pull cannot bury the fix.
     with pytest.raises(SystemExit, match="origin changes await push"):
         sync.do_pull()
 

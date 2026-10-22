@@ -350,6 +350,12 @@ def host_snapshot_tree(base: str) -> str:
 
 
 def upload_to_host(files: list[SyncFile]) -> None:
+    """Install each file's clone copy on lab."""
+    for file in files:
+        install_on_host(CLONE / file.rel, file.rel)
+
+
+def install_on_host(source: Path, rel: str) -> None:
     """Upload via /tmp, then sudo install with owner, mode, and backup.
 
     The backup takes Ansible's `<name>.<pid>.<YYYY-MM-DD@HH:MM:SS>~` form, stamped
@@ -358,24 +364,34 @@ def upload_to_host(files: list[SyncFile]) -> None:
     """
     # Match the role's 0644 stubs so sync and converge do not fight over modes.
     # Synced GUI YAML contains no secrets; those stay in secrets.yaml.
-    pid = os.getpid()
-    for file in files:
-        safe = file.rel.replace("/", "_")
-        tmp_remote = f"/tmp/.ha_sync_{pid}_{safe}"
-        sh(["scp", "-q", str(CLONE / file.rel), f"{HOST}:{tmp_remote}"])
-        # The role owns HOST_DIR at 0750; only create nested directories here.
-        parent = file.rel.rpartition("/")[0]
-        ensure_parent = (
-            f"sudo install -d -o homeassistant -g homeassistant -m 0755 {HOST_DIR}/{parent} && " if parent else ""
-        )
-        sh(
-            [
-                "ssh",
-                HOST,
-                f"{ensure_parent}sudo install -o homeassistant -g homeassistant -m 0644 -b {BACKUP_SUFFIX} "
-                f"{tmp_remote} {HOST_DIR}/{file.rel} && sudo rm -f {tmp_remote}",
-            ]
-        )
+    safe = rel.replace("/", "_")
+    tmp_remote = f"/tmp/.ha_sync_{os.getpid()}_{safe}"
+    sh(["scp", "-q", str(source), f"{HOST}:{tmp_remote}"])
+    # The role owns HOST_DIR at 0750; only create nested directories here.
+    parent = rel.rpartition("/")[0]
+    ensure_parent = (
+        f"sudo install -d -o homeassistant -g homeassistant -m 0755 {HOST_DIR}/{parent} && " if parent else ""
+    )
+    sh(
+        [
+            "ssh",
+            HOST,
+            f"{ensure_parent}sudo install -o homeassistant -g homeassistant -m 0644 -b {BACKUP_SUFFIX} "
+            f"{tmp_remote} {HOST_DIR}/{rel} && sudo rm -f {tmp_remote}",
+        ]
+    )
+
+
+def restore_host(previous: dict[str, bytes | None]) -> None:
+    """Put back what lab held before an upload; None removes a file it added."""
+    with tempfile.TemporaryDirectory() as tmp:
+        for rel, content in previous.items():
+            if content is None:
+                sh(["ssh", HOST, f"sudo rm -f {HOST_DIR}/{rel}"])
+                continue
+            source = Path(tmp) / rel.replace("/", "_")
+            source.write_bytes(content)
+            install_on_host(source, rel)
 
 
 def ha_api_token() -> str:
@@ -416,12 +432,16 @@ def _ha_post(service: str, token: str) -> None:
         raise RuntimeError(f"{service} failed; retry `mise run ha:sync push` after fixing HA: {e}") from e
 
 
+class ConfigRejected(Exception):
+    """HA's check_config refused the configuration on lab's disk."""
+
+
 def check_host_config(token: str) -> None:
-    """Fail unless HA accepts the configuration now on lab's disk.
+    """Raise ConfigRejected unless HA accepts the configuration now on lab's disk.
 
     HA can only check its own files, so this runs after the upload and before
-    any reload or restart: a rejected config is never loaded, and the tag stays
-    put so the next push retries.
+    any reload or restart; the caller puts the previous files back, so neither
+    a reload nor the next HA restart loads a rejected config.
     """
     req = urllib.request.Request(
         f"{HA_URL}/api/config/core/check_config",
@@ -432,11 +452,7 @@ def check_host_config(token: str) -> None:
     with urllib.request.urlopen(req, timeout=60) as resp:
         result = json.load(resp)
     if result.get("result") != "valid":
-        fail(
-            "HA rejected the uploaded configuration; nothing was reloaded.\n"
-            f"{indent_block(str(result.get('errors') or result))}\n"
-            "fix the clone and run `mise run ha:sync push` again."
-        )
+        raise ConfigRejected(str(result.get("errors") or result))
     print("push: HA configuration check passed")
 
 
@@ -613,12 +629,36 @@ def do_push(dry_run: bool = False, rebase: bool = False) -> None:
             advance_synced_tag()
         print("push: clone matches host, nothing to do")
         return
+    previous_upload = resolve_ref(UPLOAD_REF)
+
+    def undo_upload() -> None:
+        restore_host({file.rel: changed[file] for file in files})
+        if previous_upload:
+            sh(["git", "update-ref", UPLOAD_REF, previous_upload], cwd=CLONE)
+        else:
+            sh(["git", "update-ref", "-d", UPLOAD_REF], cwd=CLONE)
+
     if files:
         sh(["git", "update-ref", UPLOAD_REF, "HEAD"], cwd=CLONE)
-        upload_to_host(files)
+        try:
+            upload_to_host(files)
+        except subprocess.CalledProcessError:
+            # A half-done upload would leave lab with a mix of old and new files.
+            undo_upload()
+            raise
         print(f"push: uploaded {relpaths}")
     if token is not None:
-        check_host_config(token)
+        try:
+            check_host_config(token)
+        except ConfigRejected as rejected:
+            if files:
+                undo_upload()
+            fail(
+                "HA rejected the uploaded configuration; "
+                f"{'lab has its previous files back and ' if files else ''}nothing was reloaded.\n"
+                f"{indent_block(str(rejected))}\n"
+                "fix the clone and run `mise run ha:sync push` again."
+            )
     if services == ["homeassistant.restart"]:
         print("at least one changed file requires a restart -- restarting homeassistant")
     for service in services:
