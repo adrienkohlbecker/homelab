@@ -33,6 +33,21 @@
   tags:
     - mosquitto
 
+# Kuma's own network, so its MQTT monitor reaches `mosquitto.dns.podman`
+# without Kuma joining the HA backend bridge. Dual-homing the broker rather
+# than Kuma sidesteps aardvark's multi-network resolver ordering: mosquitto
+# resolves no names, while Kuma keeps a single DNS view. Mirrors the kuma
+# role's definition so whichever role converges first creates it.
+- name: Create kuma podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: kuma
+    disable_dns: false
+    state: present
+  become: true
+  tags:
+    - mosquitto
+
 - name: Set up mosquitto system user, group, and config dir
   import_role:
     name: service_user

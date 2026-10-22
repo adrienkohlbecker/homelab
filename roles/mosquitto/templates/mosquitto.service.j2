@@ -53,6 +53,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/mosquitto/data:/mosquitto/data \
     --user {{ mosquitto_user.uid }}:{{ mosquitto_user.gid }} \
     --network homeassistant \
+    --network kuma \
     --health-cmd {{ ["mosquitto_sub", "-p", "1880", "-t", "healthcheck", "-E", "-i", "probe", "-W", "3"] | json_argv }} \
     --health-startup-cmd {{ ["mosquitto_sub", "-p", "1880", "-t", "healthcheck", "-E", "-i", "probe", "-W", "3"] | json_argv }} \
     --health-startup-interval "1s" \

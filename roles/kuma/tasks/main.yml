@@ -19,6 +19,8 @@
   tags:
     - kuma
 
+# mosquitto also joins this network for Kuma's MQTT monitor and creates it with
+# the same definition (roles/mosquitto/tasks/main.yml).
 - name: Create kuma podman network
   when: not ansible_check_mode
   containers.podman.podman_network:

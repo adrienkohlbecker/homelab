@@ -48,6 +48,21 @@
   loop_control:
     label: "{{ item.key }}"
 
+- name: _verify | Broker resolves and answers on the kuma network
+  command: >-
+    podman run --rm --image-volume=ignore --network kuma {{ mosquitto_image }}
+    mosquitto_sub -h mosquitto.dns.podman -p 1883
+    -u z2m -P {{ mosquitto_accounts.z2m.password | quote }}
+    -t homelab/verify/z2m -C 1 -W 3
+  args:
+    expand_argument_vars: false
+  become: true
+  register: mosquitto_kuma_network
+  until: mosquitto_kuma_network.rc == 0 and mosquitto_kuma_network.stdout == 'ok'
+  retries: 15
+  delay: 2
+  changed_when: false
+
 - name: _verify | Broker logs its startup through native syslog
   command: >-
     journalctl --boot --no-pager --output=cat --lines=1
