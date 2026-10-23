@@ -206,9 +206,8 @@
     - homeassistant
 
 # sensors.yaml / templates.yaml / plants.yaml / custom_templates/macros.jinja
-# and the
-# blueprint sources live in the ha_gui_config clone, deployed by
-# `mise run ha:sync push` (see AGENTS.md > Home Assistant).
+# and the blueprint sources live in the Home Assistant config repository,
+# deployed by its sync task (see AGENTS.md > Home Assistant).
 # This task only touches the include-targets HA reads at startup; their
 # absence would log "file not found" before the operator runs the first sync.
 # HA owns these files thereafter and rewrites them at 0644 whenever they are
@@ -244,11 +243,12 @@
     - homeassistant
 
 # YAML-mode Lovelace dashboards (registered under `lovelace:` in
-# configuration.yaml) are deployed by `mise run ha:sync push`. A missing
-# dashboard file logs a per-dashboard error until the first sync, and the
-# "Ensure files exist" touch above leaves an empty file that fails Lovelace
-# validation -- so seed a minimal *valid* placeholder instead. force: false so
-# ha:sync's deployed copy is authoritative and converge never re-clobbers it.
+# configuration.yaml) are deployed by the Home Assistant config repository's
+# sync task. A missing dashboard file logs a per-dashboard error until the
+# first sync, and the "Ensure files exist" touch above leaves an empty file
+# that fails Lovelace validation -- so seed a minimal *valid* placeholder
+# instead. force: false so the synced copy is authoritative and converge never
+# re-clobbers it.
 - name: Seed dashboard placeholder
   copy:
     dest: /mnt/services/homeassistant/dashboards/{{ item.filename }}

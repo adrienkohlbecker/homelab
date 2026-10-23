@@ -299,7 +299,7 @@ description = "tofu (forwards subcommand + args)"
 dir = "{{config_root}}/terraform"
 # UptimeRobot account API key. Task-scoped rather than in the repo-wide [env]:
 # `op run --` resolves every op:// ref in its environment, so a global entry
-# would materialize this key inside unrelated tasks (ha:sync, ci:*) that have no
+# would materialize this key inside unrelated tasks (ci:*) that have no
 # business holding it. The provider consumes its native variable only after
 # `op run --` resolves the reference for this task.
 env = { UPTIMEROBOT_API_KEY = "op://Lab/2fm4dcx43zxith3mltbtn5lsdq/password" }

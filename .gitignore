@@ -1,9 +1,6 @@
 /.worktrees
-# Private data owned by other workflows rather than this repo: notes/ is a
-# symlink to the private notes repository (dotfiles project_notes), and
-# ha_gui_config is an in-place clone of the Home Assistant GUI config.
+# Symlink to the private notes repository (dotfiles project_notes).
 /notes
-/roles/homeassistant/files/ha_gui_config
 __pycache__
 .vscode
 test/out.tsv

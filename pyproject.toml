@@ -38,7 +38,7 @@ venvPath = "."
 venv = ".venv"
 # Mirrors pytest's pythonpath: unit_tests import test-harness modules
 # (machine, testrole, ...) as top-level names.
-extraPaths = ["test", "mise-tasks/ci", "mise-tasks/ha"]
+extraPaths = ["test", "mise-tasks/ci"]
 # First three are pyright's defaults (setting exclude replaces them); notes/
 # and zbm-build/ are gitignored in-place clones with their own tooling.
 exclude = ["**/node_modules", "**/__pycache__", "**/.*", "notes", "zbm-build"]

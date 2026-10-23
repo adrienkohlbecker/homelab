@@ -17,8 +17,8 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 - **Don't use Ansible handlers for service restarts.** Handlers run at end-of-play and break the required ordering between image pulls, unit writes, and lifecycle changes. Repository-owned units use `systemd_unit`'s inline `tasks_from: unit`; package-owned units use role-local `systemd` tasks. Drive restart/reload state from registered `*.changed` results. See [roles/AGENTS.md](roles/AGENTS.md) *Helper roles → systemd_unit*. (lint: `no-handlers`)
 - **Don't drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state. See [roles/AGENTS.md](roles/AGENTS.md) *Podman Service Conventions*. (lint: `podman-service-templates`)
 - **Don't default required service inputs in `vars/main.yml`** — role vars sit *above* inventory vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in inventory vars (see *Inventory layout*) and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values since it sits *below* inventory vars. Canonical: [roles/gitlab_runner/defaults/main.yml](roles/gitlab_runner/defaults/main.yml).
-- **Don't change prod (`hosts.ini` `[prod]`: `lab`, `pug`, `fox`, `bunk`, `udm`) without explicit ack.** A change is anything whose effect lands on a prod host or an external service, wherever the command runs: mutating commands over SSH, `mise run ansible` without `--check`, `mise run ha:sync push|sync`, `mise run tf apply`, and pushes to origin. See *Production*.
-- **Don't put content from `notes/` or `roles/homeassistant/files/ha_gui_config` into commits or commit messages.** This repository is public on GitHub.
+- **Don't change prod (`hosts.ini` `[prod]`: `lab`, `pug`, `fox`, `bunk`, `udm`) without explicit ack.** A change is anything whose effect lands on a prod host or an external service, wherever the command runs: mutating commands over SSH, `mise run ansible` without `--check`, `mise run tf apply`, and pushes to origin. See *Production*.
+- **Don't put content from `notes/` or the private Home Assistant config repository into commits or commit messages.** This repository is public on GitHub.
 
 ## Development Commands
 
@@ -52,8 +52,7 @@ Role authoring — conventions, adding a service, helper roles, Podman units —
 
 ### Home Assistant
 
-- **GUI YAML:** automations, scripts, and scenes live in `roles/homeassistant/files/ha_gui_config`, a gitignored clone of a private repo. Change them only through `mise run ha:sync` ([mise-tasks/ha/sync.py](mise-tasks/ha/sync.py) documents the modes) — never `scp` or live edits on the host.
-- **Debugging:** start from live data with `mise run ha:history -- '<entity glob>' --since 2h` (read-only recorder states, plus the automations and scripts referencing each entity), and account for every automation acting on the entity before concluding.
+- **Config files:** automations, scripts, scenes, helpers, blueprints, and YAML dashboards live in their own private repository, checked out at `~/Work/homeassistant`, with the tooling that deploys and debugs them. Work on them there, under its AGENTS.md. This role owns the service, `configuration.yaml`, and the placeholder include files.
 - **`.storage` config:** follow the tier ladder in [notes/runbooks/homeassistant_gui_config.md](notes/runbooks/homeassistant_gui_config.md) and record the choice there.
 
 ### `notes/` private notes

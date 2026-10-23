@@ -39,14 +39,6 @@ prefix_rule(
     not_match = ["mise run tf plan"],
 )
 
-prefix_rule(
-    pattern = ["mise", "run", "ha:sync", ["push", "sync"]],
-    decision = "prompt",
-    justification = "Deploys Home Assistant config to lab",
-    match = ["mise run ha:sync push"],
-    not_match = ["mise run ha:sync pull"],
-)
-
 # The dry-run wrapper always passes --check, so it runs without approval.
 prefix_rule(
     pattern = ["mise", "run", "ansible:check"],
