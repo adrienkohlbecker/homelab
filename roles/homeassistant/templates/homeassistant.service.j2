@@ -46,7 +46,7 @@ ExecStart=/usr/bin/podman run \
     --user {{ homeassistant_user.uid }}:{{ homeassistant_user.gid }} \
     --entrypoint /etc/services.d/home-assistant/run \
 {% for net in homeassistant_networks %}
-    --network={{ net.name }}:interface_name={{ net.interface_name }}{{ (',mac=' ~ net.mac) if net.mac is defined else '' }} \
+    --network={{ net.name }}:interface_name={{ net.interface_name }}{{ (',mac=' ~ net.mac) if net.mac is defined else '' }}{{ (',ip=' ~ net.ip) if net.ip is defined else '' }} \
 {% endfor %}
     --env HOME=/config \
     {# The image's UV_SYSTEM_PYTHON targets its root-owned system site. #}

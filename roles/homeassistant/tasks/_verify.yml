@@ -174,9 +174,9 @@
     )
   become: true
 
-# Netavark allocates HA's IoT address from the network's ip_range, so this
-# proves the role derived the pool from this host's topology /28.
-- name: _verify | Homeassistant mac_iot address lies in the topology-derived pool
+# HA's IoT address is pinned inside the network's ip_range, so this proves
+# both the pin and that the role derived the pool from this host's topology /28.
+- name: _verify | Homeassistant mac_iot address is its pinned one in the topology-derived pool
   command:
     argv:
       - podman
@@ -187,7 +187,13 @@
   register: _homeassistant_mac_iot_ip
   changed_when: false
   failed_when: >-
-    not (_homeassistant_mac_iot_ip.stdout | trim | ansible.utils.ipaddr(
+    _homeassistant_mac_iot_ip.stdout | trim != (
+      homeassistant_networks
+      | selectattr('name', 'equalto', 'mac_iot')
+      | map(attribute='ip')
+      | first
+    )
+    or not (_homeassistant_mac_iot_ip.stdout | trim | ansible.utils.ipaddr(
       network | host_vlan_block(inventory_hostname, 'iot') | ansible.utils.ipsubnet(29, 1)
     ))
   become: true

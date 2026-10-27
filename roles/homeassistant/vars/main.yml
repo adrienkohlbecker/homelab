@@ -9,9 +9,13 @@ homeassistant_networks:
   # adapter (see core.network.j2 + main.yml).
   - name: homeassistant
     interface_name: eth0
-  # mac_iot: HA's L2 presence on the IoT VLAN. Netavark allocates its address
-  # from the topology-derived /29 (see tasks/main.yml); discovery uses
-  # mDNS/UPnP identity and nothing downstream keys on a specific IP.
+  # mac_iot: HA's L2 presence on the IoT VLAN, in the topology-derived /29
+  # (see tasks/main.yml).
+  #
+  # ip IS pinned: Philips purifiers keep one CoAP observer per source
+  # address and never drop one whose address went away, so each address
+  # netavark handed out on a recreate left a dead observer on every
+  # purifier, ARPed for before each notification.
   #
   # mac IS pinned: without it podman mints a fresh random MAC every
   # container recreate (unit restart / image bump), UniFi sees that as
@@ -21,6 +25,7 @@ homeassistant_networks:
   - name: mac_iot
     interface_name: eth1
     mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname ~ '_homeassistant') }}"
+    ip: "{{ network | host_vlan_block(inventory_hostname, 'iot') | ansible.utils.ipsubnet(29, 1) | ansible.utils.ipmath(4) }}"
 
 # Inputs for the SMTP config-entry reconciler, which the role runs twice -- a
 # read-only check, then the write it gates. One definition so the two can never
