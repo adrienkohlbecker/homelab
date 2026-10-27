@@ -362,6 +362,158 @@
   tags:
     - homeassistant
 
+# The Philips AirPurifier integration and its aioairctrl library run from
+# patched forks that confirm purifier commands and recover silent connections.
+# HACS still lists the integration, so an update there installs upstream; the
+# version checks put the forks back on the next converge and leave a matching
+# install alone. Rationale and rollback: notes/philips_airpurifier_forks.md.
+- name: Download the Philips AirPurifier integration archive
+  get_url:
+    url: "{{ homeassistant_philips_airpurifier_archive.url }}"
+    checksum: "sha256:{{ homeassistant_philips_airpurifier_archive.sha256 }}"
+    dest: /var/cache/homeassistant_philips_airpurifier.tar.gz
+    mode: "0644"
+    owner: root
+    group: root
+  register: homeassistant_philips_download
+  become: true
+  tags:
+    - homeassistant
+
+- name: Read the installed Philips AirPurifier integration manifest
+  slurp:
+    src: /mnt/services/homeassistant/custom_components/philips_airpurifier_coap/manifest.json
+  register: homeassistant_philips_manifest
+  failed_when: false
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create the Philips AirPurifier integration directory
+  file:
+    path: /mnt/services/homeassistant/custom_components/philips_airpurifier_coap
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Install the Philips AirPurifier integration
+  when:
+    - not (ansible_check_mode and (homeassistant_user.changed or homeassistant_philips_download.changed))
+    - >-
+      (homeassistant_philips_manifest.content | default('e30=') | b64decode | from_json).version | default('')
+      != homeassistant_philips_airpurifier_archive.version
+  unarchive:
+    src: /var/cache/homeassistant_philips_airpurifier.tar.gz
+    remote_src: true
+    dest: /mnt/services/homeassistant/custom_components/philips_airpurifier_coap
+    extra_opts:
+      - --strip-components=3
+      - --wildcards
+      - "*/custom_components/philips_airpurifier_coap/*"
+    owner: homeassistant
+    group: homeassistant
+  register: homeassistant_philips_install
+  become: true
+  tags:
+    - homeassistant
+
+# A config directory without .HA_VERSION reads to HA as an upgrade from 0.7.7,
+# and its first start deletes deps/, taking the wheel below with it. Seed the
+# file with the image's version; HA rewrites it on every upgrade.
+- name: Record the Home Assistant version of a fresh config directory
+  when: not (ansible_check_mode and homeassistant_user.changed)
+  copy:
+    content: "{{ homeassistant_image.split(':') | last }}"
+    dest: /mnt/services/homeassistant/.HA_VERSION
+    force: false
+    backup: true
+    owner: homeassistant
+    group: homeassistant
+    mode: "0644"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create the Home Assistant wheel cache
+  file:
+    path: /var/cache/homeassistant_wheels
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  register: homeassistant_wheel_cache
+  become: true
+  tags:
+    - homeassistant
+
+# The local file name carries the version, as uv requires a valid wheel name.
+- name: Download the aioairctrl wheel
+  when: not (ansible_check_mode and homeassistant_wheel_cache.changed)
+  get_url:
+    url: "{{ homeassistant_aioairctrl_wheel.url }}"
+    checksum: "sha256:{{ homeassistant_aioairctrl_wheel.sha256 }}"
+    dest: "/var/cache/homeassistant_wheels/aioairctrl-{{ homeassistant_aioairctrl_wheel.version }}-py3-none-any.whl"
+    mode: "0644"
+    owner: root
+    group: root
+  register: homeassistant_aioairctrl_download
+  become: true
+  tags:
+    - homeassistant
+
+# Both run in the HA image as HA's user, so the wheel lands in the user site of
+# the image's Python under /config/deps, where HA's requirement check finds it
+# and treats the integration's `aioairctrl==<version>` pin as satisfied.
+- name: Read the installed aioairctrl version
+  when: >-
+    not (ansible_check_mode and (homeassistant_user.changed or homeassistant_image_changed
+    or not homeassistant_podman_available))
+  command: >-
+    podman run --rm --network none
+    --user {{ homeassistant_user.uid }}:{{ homeassistant_user.gid }}
+    --env PYTHONUSERBASE=/config/deps
+    --volume /mnt/services/homeassistant:/config:ro
+    --entrypoint python3
+    {{ homeassistant_image }}
+    -c "import importlib.metadata as m; print(m.version('aioairctrl'))"
+  register: homeassistant_aioairctrl_installed
+  changed_when: false
+  failed_when: homeassistant_aioairctrl_installed.rc not in [0, 1]
+  check_mode: false
+  become: true
+  tags:
+    - homeassistant
+
+- name: Install the aioairctrl wheel
+  when:
+    - >-
+      not (ansible_check_mode and (homeassistant_image_changed or not homeassistant_podman_available
+      or homeassistant_aioairctrl_download.changed))
+    - homeassistant_aioairctrl_installed.stdout | default('') != homeassistant_aioairctrl_wheel.version
+  command: >-
+    podman run --rm --network none
+    --user {{ homeassistant_user.uid }}:{{ homeassistant_user.gid }}
+    --unsetenv UV_SYSTEM_PYTHON
+    --env PYTHONUSERBASE=/config/deps
+    --env HOME=/config
+    --volume /mnt/services/homeassistant:/config
+    --volume /var/cache/homeassistant_wheels:/wheels:ro
+    --entrypoint sh
+    {{ homeassistant_image }}
+    -c 'python3 -m uv pip install --quiet --offline --no-deps --upgrade --python python3
+    --target "$(python3 -c "import site; print(site.getusersitepackages())")"
+    "/wheels/aioairctrl-{{ homeassistant_aioairctrl_wheel.version }}-py3-none-any.whl"'
+  register: homeassistant_aioairctrl_install
+  # Runs only when the installed version differs, so it always changes.
+  changed_when: true
+  become: true
+  tags:
+    - homeassistant
+
 # The Philips integration provides the `pap:` icon set but lacks matching
 # glyphs for some dashboard air-quality metrics. Keep the additions outside the
 # HACS-managed source and restore them after integration updates.
@@ -468,7 +620,7 @@
   vars:
     systemd_unit_args:
       src: homeassistant.service.j2
-      restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed or homeassistant_silam_pollen_patch.changed }}"
+      restart: "{{ homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed or homeassistant_http_storage.changed or homeassistant_silam_pollen_patch.changed or homeassistant_philips_install.changed or homeassistant_aioairctrl_install.changed }}"
   tags:
     - homeassistant
 
