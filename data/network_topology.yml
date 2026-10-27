@@ -193,6 +193,7 @@ static_leases:
   daikin_tv:               { ip: 10.123.4.30, site: home, vlan: iot }
   apollo_air_1:            { ip: 10.123.4.31, site: home, vlan: iot }
   open_co2:                { ip: 10.123.4.32, site: home, vlan: iot }
+  homeassistant:           { ip: 10.123.4.33, site: home, vlan: iot }
 
   iphone_adrien: { ip: 10.123.5.10, site: home, vlan: trusted }
 

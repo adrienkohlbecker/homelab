@@ -14,9 +14,9 @@
 # (lab: the netplan-named `iot` subinterface). The network takes its subnet and
 # gateway from that parent's gathered IPv4 fact; its container pool is the
 # upper /29 of this host's slot-indexed IoT /28 from data/network_topology.yml
-# (lab: .136/29, 8 container slots), and HA takes a fixed address in it. HA
-# attaches via --network=mac_iot (see homeassistant_networks in
-# vars/main.yml).
+# (lab: .136/29, 8 container slots). HA itself takes the fixed address of its
+# static_leases entry instead, and attaches via --network=mac_iot (see
+# homeassistant_networks in vars/main.yml).
 - name: Validate homeassistant IoT macvlan inputs
   vars:
     _homeassistant_iot_block: "{{ network | host_vlan_block(inventory_hostname, 'iot') }}"

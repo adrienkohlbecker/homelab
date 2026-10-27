@@ -174,9 +174,7 @@
     )
   become: true
 
-# HA's IoT address is pinned inside the network's ip_range, so this proves
-# both the pin and that the role derived the pool from this host's topology /28.
-- name: _verify | Homeassistant mac_iot address is its pinned one in the topology-derived pool
+- name: _verify | Homeassistant mac_iot address is its pinned static lease
   command:
     argv:
       - podman
@@ -193,9 +191,6 @@
       | map(attribute='ip')
       | first
     )
-    or not (_homeassistant_mac_iot_ip.stdout | trim | ansible.utils.ipaddr(
-      network | host_vlan_block(inventory_hostname, 'iot') | ansible.utils.ipsubnet(29, 1)
-    ))
   become: true
 
 # Exercise the complete nginx-proxied path.
