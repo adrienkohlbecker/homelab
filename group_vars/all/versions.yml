@@ -149,13 +149,13 @@ homeassistant_hacs_archive:
 # kongo09/aioairctrl 0.3.1). `version` is the integration manifest's version
 # and the wheel's package version; the role reinstalls when they differ.
 homeassistant_philips_airpurifier_archive:
-  url: "{{ mirror_github }}/adrienkohlbecker/philips-airpurifier-coap/releases/download/v0.37-ak2/philips-airpurifier-coap-v0.37-ak2.tar.gz"
-  sha256: "e0e02757d2b1ac5803a2fcd17013e93f7041460e50bed5084d341b73503e40fe"
-  version: "v0.37+ak2"
+  url: "{{ mirror_github }}/adrienkohlbecker/philips-airpurifier-coap/releases/download/v0.37-ak3/philips-airpurifier-coap-v0.37-ak3.tar.gz"
+  sha256: "16663070778813eea795077cd21dc01ab4e2f44d5ced33334e9b65049f37c16c"
+  version: "v0.37+ak3"
 homeassistant_aioairctrl_wheel:
-  url: "{{ mirror_github }}/adrienkohlbecker/aioairctrl/releases/download/v0.3.1-ak2/aioairctrl-0.3.1-ak2.whl"
-  sha256: "57bb39e75d7585e4c5318d978e4199f7eafdfd8feca895f1828f6618713de81b"
-  version: "0.3.1+ak2"
+  url: "{{ mirror_github }}/adrienkohlbecker/aioairctrl/releases/download/v0.3.1-ak3/aioairctrl-0.3.1-ak3.whl"
+  sha256: "14354823d79e819fcd99cfe4213d191d943986ca7d605846ac11e7b51bb2d6a0"
+  version: "0.3.1+ak3"
 
 # Jellyfin SSO/OIDC plugin (9p4/jellyfin-plugin-sso), arch-independent managed
 # .NET. Keep targetAbi at or below jellyfin_image; moving the server below 10.11
