@@ -1,6 +1,6 @@
 # AWS-backed CI nested-qemu fleets (notes/ci_aws_nested_qemu_cells.md and
-# notes/ci_aws_arm_qemu_cells.md): role tests run on scale-to-zero hosts in
-# Frankfurt (Spot x86_64, On-Demand ARM metal), each scaled by fleeting-plugin-aws on fox. Cells hydrate a
+# notes/ci_aws_arm_qemu_cells.md): role tests run on scale-to-zero Spot hosts in
+# Frankfurt, each scaled by fleeting-plugin-aws on fox. Cells hydrate a
 # promoted qemu image bundle and boot it under KVM. This file owns the platform
 # the harness does not: VPC, security group, host launch templates and ASGs,
 # image bucket, ECR cache, SSM AMI pointers, shared IAM/OIDC, the bake
@@ -37,36 +37,27 @@ locals {
       # 16 vCPU / 32 GiB / 950 GB NVMe, at 10 cells each plus room for the
       # _site_test guest. Six hosts use 96 of the 160-vCPU Frankfurt Spot
       # quota. max_size must match its gitlab_runner_aws_pools max_instances in
-      # group_vars/physical_fox.yml.
-      instance_type = "c8id.4xlarge"
+      # group_vars/physical_fox.yml. Heavy CI I/O lands on the "d" family's
+      # local NVMe.
+      instance_types = ["c8id.4xlarge"]
       # Virtualized hosts run the cells' guests under nested KVM.
       nested_virtualization = true
       max_size              = 6
-      on_demand             = false
-      subnets               = ["a", "b", "c"]
-      # Heavy CI I/O lands on the "d" family's local NVMe.
-      scratch_volume = null
     }
     arm = {
       name         = "homelab-ci-qemu-arm"
       architecture = "aarch64"
-      # a1.metal (16 vCPU / 32 GiB) is the only Graviton bare-metal size
-      # small enough for the ~15-cell ARM lane; every newer metal type is 64+
-      # vCPUs. Its Spot pool scores 1/10 and prices at On-Demand, and Frankfurt
-      # On-Demand reliably yields one host per AZ, so the pool runs On-Demand
-      # in the two AZs that offer the type. max_size must match
-      # its gitlab_runner_aws_pools max_instances in group_vars/physical_fox.yml.
-      instance_type = "a1.metal"
+      # Graviton virtual instances cannot host KVM, and the smallest current
+      # Graviton metal is 64 vCPUs: one host covers the ~15-cell ARM lane at
+      # the validated 78-cell ceiling and fills the rest of the Spot quota.
+      # Graviton2/3 "d" metal types share the 64-vCPU / 128-GiB-minimum /
+      # dual-NVMe host contract, so price-capacity-optimized Spot picks
+      # across all four. max_size must match its gitlab_runner_aws_pools
+      # max_instances in group_vars/physical_fox.yml.
+      instance_types = ["c6gd.metal", "c7gd.metal", "m6gd.metal", "m7gd.metal"]
       # Bare metal exposes KVM directly.
       nested_virtualization = false
-      max_size              = 2
-      on_demand             = true
-      subnets               = ["a", "b"]
-      # a1.metal has no instance store; homelab_ci_prepare_scratch mounts
-      # this volume. IOPS/throughput sit just above the benchmark's
-      # one-minute peaks (4.7k IOPS, 244 MiB/s), where baseline gp3 held
-      # scratch at 100% utilization.
-      scratch_volume = { size = 250, iops = 6000, throughput = 250 }
+      max_size              = 1
     }
   }
   ci_qemu_image_read_statements = [
@@ -1026,8 +1017,9 @@ resource "aws_launch_template" "ci_qemu" {
   description            = "homelab CI ${each.key} qemu host"
   update_default_version = true
 
-  image_id      = "resolve:ssm:${aws_ssm_parameter.ci_qemu_host_ami["${each.value.architecture}/${local.ci_host_release}"].name}"
-  instance_type = each.value.instance_type
+  image_id = "resolve:ssm:${aws_ssm_parameter.ci_qemu_host_ami["${each.value.architecture}/${local.ci_host_release}"].name}"
+  # The ASG's overrides choose the launched type; this is only the default.
+  instance_type = each.value.instance_types[0]
 
   instance_initiated_shutdown_behavior = "terminate"
 
@@ -1065,24 +1057,6 @@ resource "aws_launch_template" "ci_qemu" {
     }
   }
 
-  dynamic "block_device_mappings" {
-    for_each = each.value.scratch_volume[*]
-    iterator = scratch
-
-    content {
-      device_name = "/dev/sdf"
-
-      ebs {
-        volume_size           = scratch.value.size
-        volume_type           = "gp3"
-        iops                  = scratch.value.iops
-        throughput            = scratch.value.throughput
-        encrypted             = true
-        delete_on_termination = true
-      }
-    }
-  }
-
   # Public IPv4 comes from the subnet default. The manager is outside the VPC,
   # so no network_interfaces block here: keep the SG/subnet on top-level fields
   # and let the ASG choose an AZ.
@@ -1117,12 +1091,12 @@ resource "aws_autoscaling_group" "ci_qemu" {
   protect_from_scale_in = true
   health_check_type     = "EC2"
   suspended_processes   = ["AZRebalance"]
-  vpc_zone_identifier   = [for zone in each.value.subnets : aws_subnet.ci[zone].id]
+  vpc_zone_identifier   = [for subnet in aws_subnet.ci : subnet.id]
 
   mixed_instances_policy {
     instances_distribution {
       on_demand_base_capacity                  = 0
-      on_demand_percentage_above_base_capacity = each.value.on_demand ? 100 : 0
+      on_demand_percentage_above_base_capacity = 0
       spot_allocation_strategy                 = "price-capacity-optimized"
     }
 
@@ -1130,6 +1104,14 @@ resource "aws_autoscaling_group" "ci_qemu" {
       launch_template_specification {
         launch_template_id = aws_launch_template.ci_qemu[each.key].id
         version            = "$Latest"
+      }
+
+      dynamic "override" {
+        for_each = each.value.instance_types
+
+        content {
+          instance_type = override.value
+        }
       }
     }
   }

@@ -203,8 +203,8 @@ gitlab_runner_aws_pools:
     max_instances: 6
     idle_time: 2m
     acquire_timeout: 10m0s
-  # Up to two On-Demand a1.metal workers (one per AZ offering the type) at
-  # the benchmark-validated 20 cells each; one covers the whole ARM lane. The
+  # One Spot Graviton metal worker covers the whole ARM lane up to the
+  # validated 78-cell density ceiling (notes/ci_aws_arm_qemu_cells.md). The
   # acquisition bound leaves room for cold bare-metal readiness.
   - suffix: aws-shell-qemu-arm
     token: !vault |
@@ -218,8 +218,8 @@ gitlab_runner_aws_pools:
         39613932313665326466303337383963303438616133666335643265333337336663313933336134
         36393935326638643135
     asg_name: homelab-ci-qemu-arm
-    capacity: 20
-    max_instances: 2
+    capacity: 78
+    max_instances: 1
     idle_time: 2m
     acquire_timeout: 20m0s
     ssh_key: !vault |
