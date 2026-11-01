@@ -180,8 +180,7 @@
 #
 # Both units override the helper's 1h timeout with 23h, which still ends before
 # the next fire: a first pull of a large source runs for hours, and so does the
-# offsite leg the snapshot unit carries once it is unpaused. Both set HOME
-# because mbuffer reads ~/.mbuffer and, with no HOME (systemd oneshots inherit
+# offsite leg the snapshot unit carries. Both set HOME because mbuffer reads ~/.mbuffer and, with no HOME (systemd oneshots inherit
 # none), warns "HOME environment variable not set" on every stream.
 - name: Schedule the zfs_autosnapshot timer
   import_role:

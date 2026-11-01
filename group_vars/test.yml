@@ -86,6 +86,9 @@ etc_hosts_entries:
 # automatically pick up the gsub.
 network: "{{ prod_network | to_yaml | replace('10.123', '10.234') | from_yaml }}"
 
+# No bunk answers a fixture; roles/zfs_autobackup _verify renders the enabled leg.
+bunk_offsite_enabled: false
+
 mac_addresses:
   pug: 65:42:08:08:89:a5
   lab_i210: 20:08:e9:30:e7:e9

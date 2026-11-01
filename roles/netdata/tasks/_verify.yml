@@ -520,5 +520,47 @@
       {{ _instances | map(attribute='recipient') | list }}.
   loop: "{{ _netdata_managed_alarms }}"
 
+- name: _verify | Load the production defaults for variant checks
+  include_vars:
+    file: "{{ role_path }}/defaults/main.yml"
+    name: _netdata_defaults
+
+- name: _verify | Resolve expected charts with the offsite link enabled
+  vars:
+    bunk_offsite_enabled: true
+    wireguard_peers:
+      bunk:
+        keepalive_from:
+          - "{{ inventory_hostname }}"
+  assert:
+    that: "'wireguard_bunk_peer' in _netdata_defaults.netdata_expected_charts"
+
+- name: _verify | Resolve expected charts with the offsite link disabled
+  vars:
+    bunk_offsite_enabled: false
+    wireguard_peers:
+      bunk:
+        keepalive_from:
+          - "{{ inventory_hostname }}"
+  assert:
+    that: _netdata_defaults.netdata_expected_charts == {}
+
+- name: _verify | Resolve expected charts without a keepalive peer
+  vars:
+    bunk_offsite_enabled: true
+    wireguard_peers: {}
+  assert:
+    that: _netdata_defaults.netdata_expected_charts == {}
+
+- name: _verify | Bunk handshake alarm follows the offsite link flag
+  vars:
+    _enabled: "{{ lookup('template', 'wireguard_alerts.conf.j2', template_vars={'bunk_offsite_enabled': true}) }}"
+    _disabled: "{{ lookup('template', 'wireguard_alerts.conf.j2', template_vars={'bunk_offsite_enabled': false}) }}"
+  assert:
+    that:
+      - "'public_key=' ~ (wireguard_keys.bunk.public_key | replace('=', ':')) in _enabled"
+      - "'template: wireguard_bunk_peer_handshake_stale' in _enabled"
+      - "'template:' not in _disabled"
+
 - name: _verify | Probe plugin capabilities across a package version change
   import_tasks: _verify_plugin_caps.yml

@@ -134,7 +134,7 @@
     # autobackup:bak as a received property, so the second night must skip them
     # (--exclude-received) instead of pulling the replica tree into itself --
     # the same guard that keeps two peers from re-pulling each other's replicas.
-    # The offsite leg is paused, so each run exits 0 only if its leg succeeds.
+    # Fixtures disable the offsite leg, so each run exits 0 only if its leg succeeds.
     - name: _verify | Run two nights of snapshots and onsite pulls
       command:
         argv: "{{ ['/usr/local/bin/zfs_autosnapshot'] + item.args }}"
@@ -702,4 +702,37 @@
     - name: _verify | Freshness check skips a deliberately retired dataset
       command: /usr/local/bin/zfs_backup_freshness
       changed_when: false
+      become: true
+
+    # Fixtures disable the offsite leg because no bunk answers them. Render it
+    # enabled to prove a pull-only run stays out of it and the snapshot leg
+    # dispatches it; the unreachable destination fails the run past rsync.
+    - name: _verify | Render the nightly script with the offsite leg enabled
+      template:
+        src: zfs_autosnapshot.sh.j2
+        dest: /tmp/zfs_autosnapshot_offsite
+        mode: "0755"
+        validate: bash -n %s
+      vars:
+        bunk_offsite_enabled: true
+        zfs_autobackup_sources: []
+      become: true
+
+    - name: _verify | A pull-only run ships nothing offsite
+      command: /tmp/zfs_autosnapshot_offsite --pull
+      changed_when: false
+      register: zfs_autobackup_verify_offsite_pull
+      failed_when: >-
+        zfs_autobackup_verify_offsite_pull.rc != 0
+        or 'rsync' in zfs_autobackup_verify_offsite_pull.stdout
+        or 'Error' in zfs_autobackup_verify_offsite_pull.stderr
+      become: true
+
+    - name: _verify | The snapshot leg dispatches the offsite sync
+      command: timeout 60 /tmp/zfs_autosnapshot_offsite
+      changed_when: true
+      register: zfs_autobackup_verify_offsite_nightly
+      failed_when: >-
+        zfs_autobackup_verify_offsite_nightly.rc == 0
+        or '/etc/zfs_autobackup_ssh_config' not in zfs_autobackup_verify_offsite_nightly.stdout
       become: true
