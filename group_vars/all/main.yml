@@ -310,7 +310,10 @@ wireguard_peers:
     # now resolves to fox's tailnet IP (100.64.0.x). wg0 is the underlay the
     # tailnet rides on, so it must dial the public IP directly or it deadlocks.
     public_endpoint: "{{ fox_endpoint }}:51820"
-    keepalive_from: [ lab, pug ]
+    # bunk dials out too while it sits behind the home NAT: fox's vaulted
+    # bunk_endpoint is the Bonniers address, so fox only learns the live one
+    # from bunk's own keepalive.
+    keepalive_from: [ lab, pug, bunk ]
 
 podman_default_network: 10.88.0.0/16
 # First range of netavark's default_subnet_pools — every named bridge
