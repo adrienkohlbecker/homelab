@@ -14,7 +14,8 @@
 # hand. Setting autobackup:bak=false on the source stops new snapshots but does
 # not freeze the replicas: zfs-autobackup keeps thinning targets missing from
 # its selection. The offsite rsync skips canmount=off datasets, so the offsite
-# copy keeps the contents of the last sync before retirement.
+# copy keeps the contents of the last sync before retirement until the dataset
+# is destroyed or deselected, when zfs_backup_offsite_prune drops that copy.
 #
 # On a non-ZFS host the mountpoint is a plain directory and is deleted.
 #

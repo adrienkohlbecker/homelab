@@ -77,6 +77,10 @@ if ((zfs_backup_local_ok)); then
       sleep 10
     fi
   done
+  # Only after a fully clean run, so a host in trouble never deletes offsite.
+  if ((failed == 0)); then
+    run_step zfs_backup_offsite_prune "{{ external_ips.bunk }}"
+  fi
 elif ((snapshot)); then
   echo >&2 "Error: local snapshot step failed; skipping offsite replication to avoid pushing a cross-dataset generation skew over last night's consistent copy"
 fi

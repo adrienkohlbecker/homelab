@@ -103,6 +103,7 @@
     - zfs_backup_local
     - zfs_backup_onsite
     - zfs_backup_offsite
+    - zfs_backup_offsite_prune
     - zfs_backup_freshness
   register: zfs_autobackup_scripts
   become: true

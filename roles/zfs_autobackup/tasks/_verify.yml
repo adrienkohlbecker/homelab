@@ -749,3 +749,93 @@
         zfs_autobackup_verify_offsite_nightly.rc == 0
         or '/etc/zfs_autobackup_ssh_config' not in zfs_autobackup_verify_offsite_nightly.stdout
       become: true
+
+    # Prune against the real forced-command wrapper bunk runs, over loopback, so
+    # this proves rrsync lets the deletion through as well as what it removes.
+    # The freshness dataset was deselected above, so its tree must go too.
+    - name: _verify | Create the offsite login user
+      user:
+        name: ak
+      become: true
+
+    - name: _verify | Download the pinned rrsync
+      get_url:
+        url: "{{ rrsync_artifact.url }}"
+        dest: /var/tmp/offsite_rrsync
+        checksum: "sha256:{{ rrsync_artifact.sha256 }}"
+        mode: "0755"
+      become: true
+
+    - name: _verify | Create the offsite root trees
+      file:
+        path: "/var/tmp/offsite_root/{{ item }}"
+        state: directory
+        owner: ak
+        mode: "0755"
+      loop:
+        - rpool_zfs_autobackup_offsite_test/keep
+        - rpool_zfs_autobackup_restore_source_test_nomount/keep
+        - rpool_zfs_autobackup_freshness_test/drop
+        - rpool_destroyed_dataset/nested/drop
+        - "@eaDir/keep"
+      become: true
+
+    - name: _verify | Restrict the backup key to rrsync on the offsite root
+      authorized_key:
+        user: ak
+        key: "{{ zfs_autobackup_verify_root_pubkey.content | b64decode }}"
+        key_options: command="/var/tmp/offsite_rrsync -wo /var/tmp/offsite_root",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
+      become: true
+
+    - name: _verify | Create the zfs stub directory
+      file:
+        path: /var/tmp/zfs_stub
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: _verify | Create a zfs stub reporting no selected dataset
+      copy:
+        dest: /var/tmp/zfs_stub/zfs
+        content: "#!/bin/sh\nexit 0\n"
+        mode: "0755"
+      become: true
+
+    - name: _verify | An empty selection refuses to prune
+      command: /usr/local/bin/zfs_backup_offsite_prune 127.0.0.1
+      environment:
+        PATH: "/var/tmp/zfs_stub:{{ ansible_env.PATH }}"
+      changed_when: false
+      register: zfs_autobackup_verify_prune_empty
+      failed_when: >-
+        zfs_autobackup_verify_prune_empty.rc == 0
+        or 'refusing to prune' not in zfs_autobackup_verify_prune_empty.stderr
+      become: true
+
+    - name: _verify | Prune the offsite root
+      command: /usr/local/bin/zfs_backup_offsite_prune 127.0.0.1
+      changed_when: true
+      become: true
+
+    - name: _verify | List the pruned offsite root
+      find:
+        paths: /var/tmp/offsite_root
+        file_type: directory
+        hidden: true
+      register: zfs_autobackup_verify_prune_listing
+      become: true
+
+    - name: _verify | Prune dropped only the trees of unselected datasets
+      vars:
+        _remaining: "{{ zfs_autobackup_verify_prune_listing.files | map(attribute='path') | map('basename') | sort }}"
+      assert:
+        that:
+          - _remaining == ['@eaDir', 'rpool_zfs_autobackup_offsite_test', 'rpool_zfs_autobackup_restore_source_test_nomount']
+        fail_msg: "unexpected trees after prune: {{ _remaining }}"
+
+    - name: _verify | Prune kept the contents of selected trees
+      stat:
+        path: /var/tmp/offsite_root/rpool_zfs_autobackup_offsite_test/keep
+      register: zfs_autobackup_verify_prune_kept
+      failed_when: not zfs_autobackup_verify_prune_kept.stat.exists
+      become: true
