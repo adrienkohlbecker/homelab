@@ -3,6 +3,9 @@
 # per run and multiplexes them over one master.
 # ZFS streams are already compressed; prefer hardware-accelerated AES-GCM while
 # retaining OpenSSH's remaining configured ciphers as fallbacks.
+# Noble's client predates WarnWeakCrypto, set for bunk below.
+IgnoreUnknown WarnWeakCrypto
+
 Host *
     BatchMode yes
     Ciphers ^aes128-gcm@openssh.com
@@ -19,3 +22,10 @@ Host *
     ServerAliveInterval 30
     ConnectTimeout 10
     StrictHostKeyChecking accept-new
+
+# Only the offsite rsync logs in as ak. bunk's DSM sshd (OpenSSH 8.2) has no
+# post-quantum key exchange, so the warning would otherwise reach the nightly
+# unit's stderr on every dataset. Matching the user keeps it for onsite peers
+# and survives bunk changing address.
+Match user ak
+    WarnWeakCrypto no-pq-kex

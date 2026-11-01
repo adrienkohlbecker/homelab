@@ -1,3 +1,16 @@
+- name: _verify | Resolve the weak-crypto warning for offsite and onsite logins
+  command: ssh -G -F /etc/zfs_autobackup_ssh_config {{ item.user }}@offsite.invalid
+  changed_when: false
+  register: zfs_autobackup_verify_weak_crypto
+  failed_when: ('warnweakcrypto ' ~ item.expected) not in zfs_autobackup_verify_weak_crypto.stdout_lines
+  when: ansible_distribution_release != 'noble'
+  loop:
+    - {user: ak, expected: 'no'}
+    - {user: zfs_autobackup, expected: 'yes'}
+  loop_control:
+    label: "{{ item.user }}"
+  become: true
+
 # Every host can authenticate with the backup identity: authorize its key for
 # the source-side user and log in over loopback through the backup SSH client
 # config, as the onsite pulls and offsite rsync do.
