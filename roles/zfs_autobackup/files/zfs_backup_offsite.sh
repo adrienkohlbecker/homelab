@@ -23,6 +23,15 @@ if [ "$(zfs get canmount -H -o value "$DATASET")" = off ]; then
   exit 0
 fi
 
+# A release migration keeps the old root tagged until its window closes. It
+# shares mountpoint=/ with the running root, so its snapshots are not reachable
+# through the mountpoint's .zfs directory; only the onsite replica covers it.
+# The running root is always mounted, so this cannot hide a broken mount.
+if [[ "$DATASET" == rpool/ROOT/* ]] && [ "$(zfs get mounted -H -o value "$DATASET")" = no ]; then
+  echo "$DATASET is an inactive boot environment, skipping offsite sync"
+  exit 0
+fi
+
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
 
 # Validate the mount first, ahead of every skip path below (no-snapshot and the

@@ -446,6 +446,28 @@
         not in zfs_autobackup_verify_offsite_retired.stdout
       become: true
 
+    # An old root awaiting the end of a release-migration window shares
+    # mountpoint=/ with the running root. Exiting 0 proves no rsync ran.
+    - name: _verify | Create an inactive boot environment
+      command: zfs create -o canmount=noauto -o mountpoint=/ rpool/ROOT/zfs_autobackup_inactive_test
+      changed_when: true
+      become: true
+
+    - name: _verify | Inactive boot environment skips the offsite sync
+      command: timeout 30 /usr/local/bin/zfs_backup_offsite offsite.invalid rpool/ROOT/zfs_autobackup_inactive_test
+      changed_when: false
+      register: zfs_autobackup_verify_offsite_inactive
+      failed_when: >-
+        zfs_autobackup_verify_offsite_inactive.rc != 0
+        or 'is an inactive boot environment, skipping offsite sync'
+        not in zfs_autobackup_verify_offsite_inactive.stdout
+      become: true
+
+    - name: _verify | Remove the inactive boot environment
+      command: zfs destroy rpool/ROOT/zfs_autobackup_inactive_test
+      changed_when: true
+      become: true
+
     # Functional round-trip for zfs_backup_restore from the replica the onsite pull
     # produced: the selected history range, a dataset the restore must leave
     # unmounted, a replica clone restored as an independent filesystem, and the
