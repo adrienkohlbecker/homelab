@@ -96,6 +96,10 @@ fi
 # .config/homelab/vault-pass-* exclude does the same for ansible vault
 # passwords installed on a builder (mise run lab:sync): plaintext keys have no
 # business on the NAS, which sits outside the ansible-managed hardening.
+# The *.photoslibrary search exclude drops a Spotlight index macOS can rebuild.
+# It churns thousands of long-named files in one directory, and --fuzzy compares
+# each new file's name against every name there: about a second per file on
+# bunk's CPU, which stalls the sync for hours after a pause.
 #
 # --timeout measures rsync-protocol inactivity, not tree-walk duration. The
 # 1800-second bound tolerates bunk's longest legitimate traversal stalls while
@@ -132,6 +136,7 @@ rsync_cmd=(rsync
   --exclude /var/crash
   --exclude "*@*:*:*~"
   --exclude ".config/homelab/vault-pass-*"
+  --exclude "*.photoslibrary/database/search/"
   "${MOUNTPOINT%/}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:$DESTPATH")
 printf '$%s\n' "$(printf ' %q' "${rsync_cmd[@]}")"
 "${rsync_cmd[@]}"

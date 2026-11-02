@@ -839,3 +839,60 @@
       register: zfs_autobackup_verify_prune_kept
       failed_when: not zfs_autobackup_verify_prune_kept.stat.exists
       become: true
+
+    # A real sync through the same rrsync. The index already on the offsite side
+    # stands in for one synced before the exclude, which --delete-excluded purges.
+    - name: _verify | Remount the dataset the unmount test left down
+      command: zfs mount rpool/zfs_autobackup_offsite_test
+      changed_when: true
+      become: true
+
+    - name: _verify | Create a Photos library tree on the offsite-gate dataset
+      file:
+        path: /mnt/zfs_autobackup_offsite_test/Test.photoslibrary/database/search
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: _verify | Fill the Photos library
+      copy:
+        dest: "/mnt/zfs_autobackup_offsite_test/Test.photoslibrary/database/{{ item }}"
+        content: "{{ item }}\n"
+        mode: "0644"
+      loop:
+        - Photos.sqlite
+        - search/index
+      become: true
+
+    - name: _verify | Snapshot the Photos library
+      command: zfs snapshot rpool/zfs_autobackup_offsite_test@bak-offsite-exclude
+      changed_when: true
+      become: true
+
+    - name: _verify | Create the previously synced search index offsite
+      file:
+        path: /var/tmp/offsite_root/rpool_zfs_autobackup_offsite_test/Test.photoslibrary/database/search
+        state: directory
+        owner: ak
+        mode: "0755"
+      become: true
+
+    - name: _verify | Sync the dataset offsite
+      command: /usr/local/bin/zfs_backup_offsite 127.0.0.1 rpool/zfs_autobackup_offsite_test
+      changed_when: true
+      become: true
+
+    - name: _verify | Read the synced Photos library
+      find:
+        paths: /var/tmp/offsite_root/rpool_zfs_autobackup_offsite_test/Test.photoslibrary/database
+        file_type: any
+      register: zfs_autobackup_verify_offsite_library
+      become: true
+
+    - name: _verify | The sync keeps the library and purges its search index
+      vars:
+        _synced: "{{ zfs_autobackup_verify_offsite_library.files | map(attribute='path') | map('basename') | sort }}"
+      assert:
+        that:
+          - _synced == ['Photos.sqlite']
+        fail_msg: "unexpected Photos library content offsite: {{ _synced }}"
