@@ -198,6 +198,9 @@ static_leases:
   homeassistant:           { ip: 10.123.4.33, site: home, vlan: iot }
 
   iphone_adrien: { ip: 10.123.5.10, site: home, vlan: trusted }
+  iphone_marie: { ip: 10.123.5.11, site: home, vlan: trusted }
+  macbook_adrien: { ip: 10.123.5.12, site: home, vlan: trusted }
+  macbook_marie: { ip: 10.123.5.13, site: home, vlan: trusted }
 
   dahua_vto_entrance:  { ip: 10.123.6.10, site: home, vlan: intercom }
   dahua_vto_apartment: { ip: 10.123.6.11, site: home, vlan: intercom }
