@@ -40,24 +40,26 @@
             format: json_lines
   become: true
 
-# The dummy inputs never finish, so the fixture always ends by signal: SIGTERM
-# (rc 124) normally exits within a second, but fluent-bit intermittently
-# ignores it and is killed (rc 137). Records are flushed long before either
-# signal, and the assertions below judge them, so a forced kill is accepted
-# rather than failing the cell on a shutdown hang the fixture does not test.
+# --foreground stops timeout from following SIGTERM with SIGCONT. Fluent Bit
+# 5.1 handles SIGTERM by calling localtime() on its main thread, and its
+# SIGCONT handler calls localtime() again; a SIGCONT landing in between
+# re-enters glibc tzset_lock and deadlocks the thread until SIGKILL. With
+# SIGTERM alone the exit takes the one-second grace, so a forced kill stays
+# fatal as a real shutdown hang.
 - name: _verify | Run fluent-bit extension fixture
   command:
     argv:
       - timeout
+      - --foreground
       - --signal=TERM
-      - --kill-after=5
+      - --kill-after=15
       - "4"
       - /opt/fluent-bit/bin/fluent-bit
       - --config
       - "/tmp/fluent-bit-{{ fluentbit_verify_args.name }}-verify.yaml"
   register: fluentbit_verify_result
   changed_when: false
-  failed_when: fluentbit_verify_result.rc not in [0, 124, 137]
+  failed_when: fluentbit_verify_result.rc not in [0, 124]
   become: true
 
 # The fixture runs the daemon detached from journald, so the live-daemon Lua
