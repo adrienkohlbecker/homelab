@@ -28,4 +28,3 @@ esac
 git -C "$repo" worktree add -b "$usage_name" "$wt" "$usage_base"
 wt=$(cd "$wt" && pwd)
 "$repo/mise-tasks/worktree/populate.sh" "$wt"
-code --new-window "$wt"
