@@ -1,0 +1,5 @@
+{# Input for wireguard_reresolve: public key, DNS-named endpoint, wg address.
+   Same-site peers are left out because they dial their physical address. #}
+{% for peer_name, peer in wireguard_peers.items() if peer.dynamic_endpoint is defined and peer_name != inventory_hostname and network.hosts[peer_name].site != network.hosts[inventory_hostname].site %}
+{{ wireguard_keys[peer_name].public_key }} {{ peer.dynamic_endpoint }} {{ network.hosts[peer_name].wireguard }}
+{% endfor %}

@@ -45,6 +45,7 @@
     pkg:
       - wireguard
       - iproute2
+      - iputils-ping
     cache_valid_time: 3600
   become: true
   register: wireguard_apt
@@ -76,5 +77,44 @@
     enabled: true
     state: "{{ 'restarted' if wireguard_apt.changed or wireguard_cfg.changed else 'started' }}"
   become: true
+  tags:
+    - wireguard
+
+- name: Install the wireguard endpoint re-resolve script
+  copy:
+    src: wireguard_reresolve
+    dest: /usr/local/sbin/wireguard_reresolve
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - wireguard
+
+- name: List the peers with DNS-named endpoints
+  template:
+    src: wg0_dynamic_peers.j2
+    dest: /etc/wireguard/wg0_dynamic_peers
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: awk 'NF != 3 { exit 1 }' %s
+  become: true
+  tags:
+    - wireguard
+
+- name: Schedule the wireguard endpoint re-resolve timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: wireguard_reresolve
+      description: Re-resolve DNS-named wireguard endpoints
+      on_calendar: "*:0/5"
+      exec_start: /usr/local/sbin/wireguard_reresolve
   tags:
     - wireguard

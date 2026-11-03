@@ -59,6 +59,12 @@ Endpoint = {{ peer_host.physical }}:{{ service_ports.wireguard }}
    in the vault, not in DNS), so wg-quick never resolves a name at bring-up and
    there's no template-time dig. A bracketed IPv6 literal would pass through fine. #}
 Endpoint = {{ peer.public_endpoint }}
+{% elif peer.dynamic_endpoint is defined and not own_is_server %}
+{# A DNS-named endpoint is for roaming clients only, which resolve it when they
+   connect. On a server wg-quick would retry it forever at bring-up, holding back
+   every peer and whatever orders after wg0, so wireguard_reresolve sets it there
+   once the interface is up. #}
+Endpoint = {{ peer.dynamic_endpoint }}
 {% endif %}
 {% if render_peer_name in peer.get('keepalive_from', []) %}
 PersistentKeepalive = 25

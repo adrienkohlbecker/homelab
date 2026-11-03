@@ -4,13 +4,16 @@
 # `mise run ansible --tags wireguard`.
 
 # Roaming clients never converge (mise run wg:show renders their config), so
-# their MTU branch is the one check made on the rendered template.
-- name: _verify | Roaming client config pins a fragmentation-safe MTU
+# their MTU and endpoint branches are the checks made on the rendered template.
+- name: _verify | Roaming client config pins its MTU and dials both endpoint kinds
   vars:
     own_peer_name: laptop
     _wireguard_roaming_conf: "{{ lookup('template', 'wg.conf.j2') }}"
   assert:
-    that: "'MTU = 1280' in _wireguard_roaming_conf"
+    that:
+      - "'MTU = 1280' in _wireguard_roaming_conf"
+      - "('Endpoint = ' ~ wireguard_peers.lab.public_endpoint) in _wireguard_roaming_conf"
+      - "('Endpoint = ' ~ wireguard_peers.fox.dynamic_endpoint) in _wireguard_roaming_conf"
 
 # One `wg show wg0 dump` carries the whole live interface + peer table as
 # tab-separated columns, so the scalar probes below parse a single register
@@ -37,8 +40,9 @@
 
 # The test inventory deliberately gives same-site server pom no public
 # endpoint, so its live endpoint must come from network topology. Cross-site
-# fox dials its public endpoint, with a keepalive because it lists the Lab
-# fixture in keepalive_from.
+# fox has a DNS name that nothing resolves yet: wg0 came up anyway, with no
+# endpoint for fox, and a keepalive because it lists the Lab fixture in
+# keepalive_from.
 - name: _verify | Assert peer endpoints and fox keepalive
   vars:
     peer_fields: "{{ wireguard_dump.stdout_lines[1:] | map('split', '\t') | list }}"
@@ -51,14 +55,86 @@
       - pom_peer_fields | length == 1
       - pom_peer_fields[0][2] == expected_pom_endpoint
       - fox_peer_fields | length == 1
-      - fox_peer_fields[0][2] == wireguard_peers.fox.public_endpoint
+      - fox_peer_fields[0][2] == '(none)'
       - fox_peer_fields[0][7] == '25'
     fail_msg: >-
       pom endpoint {{ pom_peer_fields[0][2] | default('(missing)') }} (expected
       {{ expected_pom_endpoint }}); fox endpoint
-      {{ fox_peer_fields[0][2] | default('(missing)') }} (expected
-      {{ wireguard_peers.fox.public_endpoint }}) with keepalive
-      {{ fox_peer_fields[0][7] | default('(missing)') }} (expected 25)
+      {{ fox_peer_fields[0][2] | default('(missing)') }} (expected none) with
+      keepalive {{ fox_peer_fields[0][7] | default('(missing)') }} (expected 25)
+
+- name: _verify | Re-resolve follows a DNS change on a peer with no live session
+  vars:
+    fox_name: "{{ wireguard_peers.fox.dynamic_endpoint.split(':')[0] }}"
+    expected_pom_endpoint: "{{ network.hosts.pom.physical }}:{{ service_ports.wireguard }}"
+  shell: |
+    set -euo pipefail
+    endpoint() { wg show wg0 endpoints | awk -v key="$1" '$1 == key { print $2 }'; }
+    systemctl is-active wireguard_reresolve.timer
+
+    echo "192.0.2.50 {{ fox_name }}" >> /etc/hosts
+    systemctl start wireguard_reresolve.service
+    test "$(endpoint '{{ wireguard_keys.fox.public_key }}')" = 192.0.2.50:51820
+
+    sed -i "s/^192.0.2.50 /192.0.2.51 /" /etc/hosts
+    systemctl start wireguard_reresolve.service
+    test "$(endpoint '{{ wireguard_keys.fox.public_key }}')" = 192.0.2.51:51820
+
+    test "$(endpoint '{{ wireguard_keys.pom.public_key }}')" = {{ expected_pom_endpoint }}
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+# A real peer in a namespace, with no keepalive, so only the script's own packet
+# can start the handshake. Once the session is live a DNS change must not move
+# it: that would break a peer reaching us through NAT.
+- name: _verify | Re-resolve starts a handshake, then leaves the live session alone
+  vars:
+    own_address: "{{ network.hosts[inventory_hostname].wireguard }}"
+  shell: |
+    set -euo pipefail
+    endpoint() { wg show wg0 endpoints | awk -v key="$1" '$1 == key { print $2 }'; }
+
+    peer_key=$(wg genkey)
+    peer_public=$(printf "%s" "$peer_key" | wg pubkey)
+    ip netns add wgpeer
+    ip link add wgpeer0 type veth peer name wgpeer1 netns wgpeer
+    ip addr add 198.18.0.1/30 dev wgpeer0
+    ip link set wgpeer0 up
+    ip -n wgpeer addr add 198.18.0.2/30 dev wgpeer1
+    ip -n wgpeer link set wgpeer1 up
+    ip -n wgpeer link add wg1 type wireguard
+    printf "%s" "$peer_key" | ip netns exec wgpeer wg set wg1 listen-port 51820 \
+      private-key /dev/stdin peer "$(wg show wg0 public-key)" allowed-ips {{ own_address }}/32
+    ip -n wgpeer addr add 198.18.1.2/32 dev wg1
+    ip -n wgpeer link set wg1 up
+    ip -n wgpeer route add {{ own_address }}/32 dev wg1
+
+    wg set wg0 peer "$peer_public" allowed-ips 198.18.1.2/32
+    ip route add 198.18.1.2/32 dev wg0
+    echo "198.18.0.2 wireguard-peer.test" >> /etc/hosts
+    echo "$peer_public wireguard-peer.test:51820 198.18.1.2" >> /etc/wireguard/wg0_dynamic_peers
+    systemctl start wireguard_reresolve.service
+
+    latest=0
+    for _ in $(seq 1 10); do
+      latest=$(wg show wg0 latest-handshakes | awk -v key="$peer_public" '$1 == key { print $2 }')
+      if [ "$latest" != 0 ]; then
+        break
+      fi
+      sleep 1
+    done
+    test "$latest" != 0
+    test "$(endpoint "$peer_public")" = 198.18.0.2:51820
+
+    sed -i "s/^198.18.0.2 /198.18.0.99 /" /etc/hosts
+    systemctl start wireguard_reresolve.service
+    test "$(endpoint "$peer_public")" = 198.18.0.2:51820
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
 
 - name: _verify | Assert interface carries its topology address
   vars:

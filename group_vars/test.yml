@@ -98,10 +98,11 @@ mac_addresses:
 
 # 5-peer test fixture (lab/pug/pom + fox + laptop). pom is same-site with
 # no public endpoint to exercise the topology-derived LAN endpoint; fox is
-# cross-site (hetzner) with a public endpoint and keepalive from lab, as in
-# prod, to exercise the AllowedIPs physical-/32, Endpoint, and keepalive
-# branches; laptop is a roaming peer with no endpoint to exercise the client
-# [Peer] branch — plain /32, no Endpoint, no keepalive — in wg.conf.j2.
+# cross-site (hetzner) with a keepalive from lab and, unlike prod, a DNS-named
+# endpoint, the only cross-site slot for the re-resolve path, to exercise the
+# AllowedIPs physical-/32, dynamic endpoint, and keepalive branches; laptop is a
+# roaming peer with no endpoint to exercise the client [Peer] branch — plain
+# /32, no Endpoint, no keepalive — in wg.conf.j2.
 wireguard_peers:
   lab:
     public_endpoint: 192.0.2.1:51823
@@ -109,7 +110,7 @@ wireguard_peers:
     public_endpoint: 192.0.2.1:51823
   pom: {}
   fox:
-    public_endpoint: 192.0.2.2:51820
+    dynamic_endpoint: wireguard-dynamic.test:51820
     keepalive_from: [ lab ]
   laptop: {}
 
