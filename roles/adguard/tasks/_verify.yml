@@ -96,6 +96,14 @@
   changed_when: false
   failed_when: (network.hosts.bunk.physical in adguard_verify_bunk.stdout_lines) != (network.hosts.bunk.site == 'home')
 
+# Only the address is local: other record types under bunk still come from the
+# public zone, here through the test zone's wildcard MX.
+- name: _verify | Other record types under bunk reach the public zone
+  command: dig +short +timeout=2 +tries=2 @{{ ansible_facts.default_ipv4.address }} dsm.bunk.{{ domain }} MX
+  register: adguard_verify_bunk_mx
+  changed_when: false
+  failed_when: adguard_verify_bunk_mx.stdout == ''
+
 # Recursive resolution through the DoH upstream chain -- every other dig
 # here hits a local rewrite, so without this a broken upstream config
 # (bad DoH URL, bootstrap failure) would pass _verify while real client

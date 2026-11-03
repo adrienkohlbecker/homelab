@@ -160,6 +160,13 @@ user_rules:
   - '||internal^$dnsrewrite=NXDOMAIN'
   - '||test^$dnsrewrite=NXDOMAIN'
   - '||home.arpa^$dnsrewrite=NXDOMAIN'
+{# bunk answers on the LAN only while the topology places it at home. At another
+   site it stays on its public tailnet record, like fox. This covers its
+   subdomains and, unlike a rewrite, leaves other record types to the public zone:
+   a matching rewrite answers those with nothing. #}
+{% if network.hosts.bunk.site == 'home' %}
+  - '||bunk.{{ domain }}^$dnstype=A,dnsrewrite=NOERROR;A;{{ external_ips.bunk }}'
+{% endif %}
 dhcp:
   enabled: false
   interface_name: ""
@@ -201,9 +208,7 @@ filtering:
     - domain: adguard.home
       answer: 127.0.0.1
       enabled: true
-{# bunk answers on the LAN only while the topology places it at home. At another
-   site it stays on its public tailnet record, like fox below. #}
-{% for host in ['pug', 'lab'] + (['bunk'] if network.hosts.bunk.site == 'home' else []) %}
+{% for host in ['pug', 'lab'] %}
     - domain: {{ host }}.{{ domain }}
       answer: {{ external_ips[host] }}
       enabled: true
