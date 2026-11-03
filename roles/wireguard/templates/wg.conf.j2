@@ -17,10 +17,6 @@ Address = {{ own_address }}/32
 {% if not own_is_server %}
 MTU = 1280
 {% endif %}
-{# Table = auto is wg-quick's default; pinned to document that wg-quick owns
-   route installation -- the full-restart-on-change task and the
-   _verify kernel-route guard both depend on it, not on `wg syncconf`. #}
-Table = auto
 ListenPort = {{ service_ports.wireguard }}
 {# No DNS line: wg0 is a split-tunnel break-glass backbone (peer /32s only),
    so DNS = the adguard VIP would point the device at a resolver outside AllowedIPs
