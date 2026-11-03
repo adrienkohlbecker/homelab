@@ -107,6 +107,21 @@
             state: reloaded
           become: true
 
+    # Mirrors roles/user. DSM ships no visudo to validate with. The rrsync keys
+    # can't reach this: their forced command allows no shell. ansible_become_pass
+    # stays in host_vars so a DSM update that drops this file gets it back.
+    - name: Sudo without password  # noqa: require-validate
+      copy:
+        dest: "/etc/sudoers.d/{{ ansible_user_id }}"
+        content: "{{ ansible_user_id }} ALL=(ALL) NOPASSWD:ALL\n"
+        backup: true
+        owner: root
+        group: root
+        mode: "0400"
+      become: true
+      tags:
+        - sudo
+
     - name: Configure wireguard
       tags:
         - wireguard
