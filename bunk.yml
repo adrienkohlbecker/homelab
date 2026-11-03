@@ -185,6 +185,139 @@
             name: tailscale
             tasks_from: register
 
+    # DSM has no certbot package or hook into its certificate store, so bunk uses
+    # acme.sh. Its deploy hook logs in through a temporary admin user and, with no
+    # description set, replaces DSM's default certificate in place. Let's Encrypt
+    # is explicit because the acme.sh default is not in the CAA records.
+    - name: Configure the DSM certificate
+      tags:
+        - acme
+      vars:
+        acme_home: /usr/local/share/acme.sh
+        acme_domain: "{{ inventory_hostname }}.{{ domain }}"
+        acme_domain_conf: "{{ acme_home }}/{{ acme_domain }}_ecc/{{ acme_domain }}.conf"
+        acme_path: /usr/syno/sbin:/usr/syno/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      block:
+        - name: Download the pinned acme.sh
+          get_url:
+            url: "{{ acme_sh_artifact.url }}"
+            dest: "{{ ansible_user_dir }}/.cache/acme.sh.tar.gz"
+            checksum: "sha256:{{ acme_sh_artifact.sha256 }}"
+            mode: "0644"
+
+        # Through bash because DSM mounts /tmp noexec.
+        - name: Install acme.sh
+          shell: |
+            set -euo pipefail
+            source_dir=$(mktemp -d)
+            trap "rm -rf $source_dir" EXIT
+            tar -xzf {{ ansible_user_dir }}/.cache/acme.sh.tar.gz -C "$source_dir" --strip-components=1
+            cd "$source_dir"
+            bash ./acme.sh --install --nocron --noprofile --home {{ acme_home }} --accountemail {{ root_email }}
+            touch {{ acme_home }}/.installed_{{ acme_sh_artifact.version }}
+          args:
+            executable: /bin/bash
+            creates: "{{ acme_home }}/.installed_{{ acme_sh_artifact.version }}"
+          become: true
+
+        - name: Check for the acme.sh home
+          stat:
+            path: "{{ acme_home }}"
+          register: bunk_acme_home
+          become: true
+
+        - name: Configure and schedule acme.sh
+          when: bunk_acme_home.stat.exists
+          block:
+            - name: Write the Cloudflare token  # noqa: require-validate
+              copy:
+                dest: "{{ acme_home }}/cloudflare.env"
+                content: "CF_Token={{ cloudflare_api_token }}\n"
+                owner: root
+                group: root
+                mode: "0600"
+                backup: true
+              become: true
+
+            # A fixed wait because acme.sh otherwise polls public DNS-over-HTTPS
+            # resolvers, whose names AdGuard's blocklist answers with 0.0.0.0, until
+            # it gives up after 20 minutes. Renewals reuse the saved value.
+            - name: Issue the certificate
+              shell: |
+                set -euo pipefail
+                set -a
+                . {{ acme_home }}/cloudflare.env
+                set +a
+                {{ acme_home }}/acme.sh --issue --home {{ acme_home }} --server letsencrypt \
+                  --keylength ec-256 --dns dns_cf --dnssleep 30 -d {{ acme_domain }} -d "*.{{ acme_domain }}"
+              args:
+                executable: /bin/bash
+                creates: "{{ acme_home }}/{{ acme_domain }}_ecc/fullchain.cer"
+              become: true
+
+            # The domain's saved deploy hook is what makes renewals deploy, so a
+            # run interrupted before it is recorded deploys again here.
+            - name: Deploy the certificate to DSM
+              shell: |
+                set -euo pipefail
+                if grep -q "^Le_DeployHook=.*synology_dsm" {{ acme_domain_conf }}; then
+                  exit 0
+                fi
+                PATH={{ acme_path }} SYNO_USE_TEMP_ADMIN=1 {{ acme_home }}/acme.sh --deploy --home {{ acme_home }} \
+                  --ecc -d {{ acme_domain }} --deploy-hook synology_dsm
+                echo acme_deployed
+              args:
+                executable: /bin/bash
+              register: bunk_acme_deploy
+              changed_when: "'acme_deployed' in bunk_acme_deploy.stdout"
+              become: true
+
+            # A timer because DSM rewrites /etc/crontab. Persistent catches up
+            # after downtime, and acme.sh only renews once a certificate is due.
+            - name: Write the renewal units  # noqa: require-validate
+              copy:
+                dest: "/usr/local/lib/systemd/system/{{ item.name }}"
+                content: "{{ item.content }}"
+                owner: root
+                group: root
+                mode: "0644"
+                backup: true
+              loop:
+                - name: acme_renew.service
+                  content: |
+                    [Unit]
+                    Description=Renew and deploy the DSM certificate
+                    After=network-online.target
+
+                    [Service]
+                    Type=oneshot
+                    Environment=PATH={{ acme_path }}
+                    EnvironmentFile={{ acme_home }}/cloudflare.env
+                    ExecStart={{ acme_home }}/acme.sh --cron --home {{ acme_home }}
+                - name: acme_renew.timer
+                  content: |
+                    [Unit]
+                    Description=Renew and deploy the DSM certificate daily
+
+                    [Timer]
+                    OnCalendar=*-*-* 09:13:00
+                    Persistent=true
+
+                    [Install]
+                    WantedBy=timers.target
+              loop_control:
+                label: "{{ item.name }}"
+              register: bunk_acme_units
+              become: true
+
+            - name: Enable the renewal timer
+              systemd:
+                name: acme_renew.timer
+                enabled: true
+                state: started
+                daemon_reload: "{{ bunk_acme_units.changed }}"
+              become: true
+
     - name: Configure Ghostty terminfo
       tags:
         - terminfo

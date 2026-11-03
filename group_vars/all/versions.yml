@@ -236,6 +236,12 @@ rrsync_artifact:
   url: "https://raw.githubusercontent.com/RsyncProject/rsync/v3.4.1/support/rrsync"
   sha256: "0bb743f8155907ed2a337c12a4672c67269e372803939ec98dac497edc714c9b"
 
+# acme.sh: issues and deploys bunk's DSM certificate.
+acme_sh_artifact:
+  version: "3.1.6"  # 2026-09-20
+  url: "https://github.com/acmesh-official/acme.sh/archive/refs/tags/3.1.6.tar.gz"
+  sha256: "0d3f9000ac44a6331314742a88c475f79134e24fc991997883652adc59efc486"
+
 # zfs-autobackup: pip-installed; version consumed by the install + _verify.
 zfs_autobackup_version: "3.3"  # 2024-12-17
 

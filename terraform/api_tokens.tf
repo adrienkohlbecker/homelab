@@ -30,9 +30,9 @@ locals {
   }
 }
 
-# DNS:Write + Zone:Read on the prod certificate zone -- enough for certbot's DNS-01
-# challenge (write _acme-challenge TXT, list zones to find the FQDN's
-# parent), nothing else.
+# DNS:Write + Zone:Read on the prod certificate zone -- enough for the DNS-01
+# challenge of certbot and bunk's acme.sh (write _acme-challenge TXT, list zones
+# to find the FQDN's parent), nothing else.
 #
 # Bootstrap / rotation (the latter via `-replace=`):
 #   mise run tf -- apply [-replace=cloudflare_account_token.certbot]
@@ -40,7 +40,7 @@ locals {
 #     | ansible-vault encrypt_string --encrypt-vault-id prod \
 #         --stdin-name cloudflare_api_token
 #   # replace cloudflare_api_token in group_vars/prod.yml with the envelope
-#   mise run ansible --tags certbot
+#   mise run ansible --tags certbot,acme
 # The role's "Exercise renewal" task dry-runs the new credential end-to-end on apply.
 resource "cloudflare_account_token" "certbot" {
   account_id = local.cloudflare_account_id
