@@ -286,7 +286,7 @@ wireguard_peers:
   bunk:
     # bunk_endpoint is its DDNS name, a public record that never resolves through
     # wg0 or the tailnet. See wg.conf.j2 for how servers and clients each use it.
-    dynamic_endpoint: "{{ bunk_endpoint }}:51820"
+    dynamic_endpoint: "{{ bunk_endpoint }}:51823"
     # Lab, pug, and fox are the consumers of the bunk offsite link (nightly
     # zfs autobackup: lab/pug push their datasets, fox rsyncs its own). Having
     # each send a 25s PersistentKeepalive keeps its view of bunk's
@@ -312,9 +312,9 @@ wireguard_peers:
     # now resolves to fox's tailnet IP (100.64.0.x). wg0 is the underlay the
     # tailnet rides on, so it must dial the public IP directly or it deadlocks.
     public_endpoint: "{{ fox_endpoint }}:51820"
-    # bunk dials out too while it sits behind the home NAT, which forwards
-    # nothing to it: fox only learns a working address and port from bunk's own
-    # keepalive, and wireguard_reresolve leaves that alone while it is live.
+    # bunk dials out too while it sits behind the home NAT: its keepalive gives
+    # fox a working address and port without waiting on DDNS or a forward, and
+    # wireguard_reresolve leaves that alone while it is live.
     keepalive_from: [ lab, pug, bunk ]
 
 podman_default_network: 10.88.0.0/16
