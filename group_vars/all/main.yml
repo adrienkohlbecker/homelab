@@ -315,7 +315,7 @@ wireguard_peers:
     # bunk dials out too while it sits behind the home NAT: its keepalive gives
     # fox a working address and port without waiting on DDNS or a forward, and
     # wireguard_reresolve leaves that alone while it is live.
-    keepalive_from: [ lab, pug, bunk ]
+    keepalive_from: "{{ ['lab', 'pug'] + (['bunk'] if network.hosts.bunk.site == 'home' else []) }}"
 
 podman_default_network: 10.88.0.0/16
 # First range of netavark's default_subnet_pools — every named bridge

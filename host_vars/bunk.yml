@@ -5,6 +5,8 @@ ansible_python_interpreter: /usr/local/bin/python3.9
 # falling back. Force piped (dd over the ssh session) to skip both and silence
 # the warnings.
 ansible_ssh_transfer_method: piped
+# bunk moves between sites, so its address follows data/network_topology.yml.
+ansible_ssh_host: "{{ external_ips.bunk }}"
 ansible_become_pass: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
           31323465343565656262643331303439656635393061343335356135373164326565653339326238
