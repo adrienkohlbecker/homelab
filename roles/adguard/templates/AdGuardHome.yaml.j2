@@ -201,7 +201,9 @@ filtering:
     - domain: adguard.home
       answer: 127.0.0.1
       enabled: true
-{% for host in ['pug', 'lab'] %}
+{# bunk answers on the LAN only while the topology places it at home. At another
+   site it stays on its public tailnet record, like fox below. #}
+{% for host in ['pug', 'lab'] + (['bunk'] if network.hosts.bunk.site == 'home' else []) %}
     - domain: {{ host }}.{{ domain }}
       answer: {{ external_ips[host] }}
       enabled: true
