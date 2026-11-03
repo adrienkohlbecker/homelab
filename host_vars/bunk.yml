@@ -36,15 +36,20 @@ bunk_offsite_backup_sources:
   - name: fox
     public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDyYBrn9Im8oTbstBQZseVT+KhO4hLU6QbcJhcPiQ2ug root@fox
 
-# Tailscale mesh: bunk is the Bonniers subnet router + exit node, enrolled into
+# Tailscale mesh: bunk is its site's subnet router + exit node, enrolled into
 # headscale by bunk.yml (`mise run ansible --limit bunk --tags tailscale`),
 # not the tailscale role -- bunk is DSM (no apt). The Tailscale package is
 # installed via Package Center (operator runbook); bunk.yml configures it and
 # reuses the role's shared registration. The control-plane constants
 # (tailscale_login_server / _headscale_host / _headscale_user) live in
 # group_vars/prod.yml; these are bunk-specific.
-tailscale_advertise_routes:
-  - "{{ prod_network.sites.bonniers.cidr }}"
+#
+# At home it advertises nothing: lab and pug's /18 already covers the site, and
+# a more specific route here would pull roaming clients' home traffic, including
+# the DNS VIP, through the NAS with no failover.
+tailscale_advertise_routes: >-
+  {{ [] if network.hosts.bunk.site == 'home'
+     else [prod_network.sites[network.hosts.bunk.site].cidr] }}
 # DSM package binary path (vs lab/pug's apt-installed `tailscale` on PATH).
 tailscale_bin: /var/packages/Tailscale/target/bin/tailscale
 # Pin a distinct underlay port so bunk has a stable public endpoint at Bonniers:
