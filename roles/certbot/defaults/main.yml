@@ -1,3 +1,8 @@
 # Additional FQDN SANs beyond the host name and its wildcard, such as
 # apex-zone service names. SAN changes trigger reissuance on the next apply.
 certbot_extra_sans: []
+
+# Certificates on hosts without their own netdata, as { name, source } x509check
+# jobs, so that a renewal failing there still raises an expiry alarm here. Only
+# expiry matters and sources may be addresses, so the chain and name go unverified.
+certbot_x509check_remote: []

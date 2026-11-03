@@ -4,3 +4,9 @@ jobs:
     source: file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
     check_full_chain: yes
     autodetection_retry: 60
+{% for job in certbot_x509check_remote %}
+  - name: {{ job.name }}
+    source: {{ job.source }}
+    tls_skip_verify: yes
+    autodetection_retry: 60
+{% endfor %}

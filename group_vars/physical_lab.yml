@@ -164,9 +164,10 @@ netdata_collectors:
   # - go.d:collector:web_log:nginx # is down when no http requests have been made recently, let's skip alerting on this
   - go.d:collector:wireguard:wireguard
   # No apex (https://{{ domain }}/) site to monitor -- nginx only serves
-  # subdomain hosts. The certbot role's x509check.conf.j2 ships only the
-  # host_cert job; this list intentionally mirrors that.
+  # subdomain hosts. This list mirrors the jobs of the certbot role's
+  # x509check.conf.j2: host_cert and certbot_x509check_remote.
   - go.d:collector:x509check:host_cert
+  - go.d:collector:x509check:bunk_dsm
   - go.d:collector:zfspool:zfspool
 netdata_zfspool_thresholds:
   rpool: [ 85, 90, 95 ]
@@ -225,6 +226,10 @@ certbot_extra_sans:
   - auth.{{ domain }}
   # The shared DoT name follows the DNS VIP between lab and pug.
   - dns.{{ domain }}
+
+certbot_x509check_remote:
+  - name: bunk_dsm
+    source: "https://{{ external_ips.bunk }}:5001"
 
 # Home exit/subnet router paired with pug. The advertised physical partition is
 # less specific than Trusted WiFi's DHCP route, keeping on-site traffic local.
