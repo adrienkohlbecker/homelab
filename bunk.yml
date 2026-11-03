@@ -83,6 +83,30 @@
       tags:
         - authorized_keys
 
+    # roles/ssh doesn't run here either. Password login would skip the 2FA on the
+    # DSM account, and a DSM update or Terminal setting can rewrite sshd_config,
+    # so this asserts the one directive rather than templating the whole file.
+    - name: Disable SSH password login
+      tags:
+        - sshd
+      block:
+        - name: Set PasswordAuthentication
+          lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: '^#?PasswordAuthentication\s'
+            line: PasswordAuthentication no
+            backup: true
+            validate: /usr/bin/sshd -t -f %s
+          become: true
+          register: bunk_sshd_config
+
+        - name: Reload sshd
+          when: bunk_sshd_config.changed
+          systemd:
+            name: sshd
+            state: reloaded
+          become: true
+
     - name: Configure wireguard
       tags:
         - wireguard
