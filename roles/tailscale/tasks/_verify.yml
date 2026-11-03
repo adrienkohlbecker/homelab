@@ -53,6 +53,32 @@
       advertised={{ _tailscale_node.available_routes | default([], true) | sort }}
       approved={{ _tailscale_node.approved_routes | default([], true) | sort }}
 
+# An exit-only node advertises no subnet routes: registering with an empty list
+# must clear the fixture's route on both the client and headscale.
+- name: _verify | Register with no subnet routes
+  import_role:
+    name: tailscale
+    tasks_from: register
+  vars:
+    tailscale_advertise_routes: []
+
+- name: _verify | Headscale offers only the exit routes
+  vars:
+    _tailscale_exit_only_node: >-
+      {{ (_tailscale_exit_only_nodes.stdout | default('[]', true) | from_json)
+         | selectattr('given_name', 'eq', ansible_hostname | lower)
+         | first | default({}) }}
+    _tailscale_exit_routes: [ 0.0.0.0/0, '::/0' ]
+  command: podman exec headscale headscale nodes list -o json
+  register: _tailscale_exit_only_nodes
+  changed_when: false
+  retries: 15
+  delay: 2
+  until: >-
+    (_tailscale_exit_routes | symmetric_difference(_tailscale_exit_only_node.available_routes | default([], true))) | length == 0
+    and (_tailscale_exit_routes | symmetric_difference(_tailscale_exit_only_node.approved_routes | default([], true))) | length == 0
+  become: true
+
 # A non-ZFS host has no snapshot target or services dataset, so the loaded
 # daemon must carry no ordering, binding, or install link to any ZFS unit.
 - name: _verify | Tailscaled carries no ZFS unit dependencies on a non-ZFS root

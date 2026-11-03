@@ -1,7 +1,11 @@
 ---
-# Host-overridable knobs. Required subnet routes live in inventory vars and
-# environment-specific control-plane inputs live in group_vars/{prod,test};
-# tasks/register.yml asserts both.
+# Host-overridable knobs. Environment-specific control-plane inputs live in
+# group_vars/{prod,test}; tasks/register.yml asserts them.
+
+# Subnet routes to advertise. A node with none still offers an exit node. The
+# firewall role opens its tailnet forwarding only when the host's inventory
+# defines this, since it can't see these defaults, so subnet routers set it there.
+tailscale_advertise_routes: []
 
 # WireGuard underlay port. Nodes behind one NAT need distinct forwarded ports;
 # single-NAT-tenant nodes keep Tailscale's default.
