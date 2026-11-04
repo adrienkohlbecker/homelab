@@ -244,10 +244,11 @@ tailscale_wan_direct: true
 nginx_static_proxies_enabled: true
 
 # NUT shutdown-ladder wake (see group_vars/physical_pug.yml for the full ladder and
-# notes/ups_shutdown_ladder.md for the design): the card cuts Group 1 at 300s on
-# battery -- no later than pug's own 300s timer -- so any outage long enough
-# to shut pug down ends in lab's forced reboot, and lab's boot-time wake_peers
-# leg is what brings pug back.
+# notes/ups_shutdown_ladder.md for the design): the card cuts Group 1 at 720s on
+# battery -- after lab's 600s timer plus its ~83s poweroff, and no later than
+# pug's own 1200s timer -- so any outage long enough to shut pug down ends in
+# lab's forced reboot, and lab's boot-time wake_peers leg is what brings pug back.
+nut_onbatt_shutdown_delay: 600
 nut_wake_peers:
   - "{{ mac_addresses.pug }}"
 
